@@ -36,7 +36,7 @@ data_params['max_stars'] = 4
 print(data_params)
 
 # draw data
-n_stars = 64
+n_stars = 2018
 star_dataset = \
     star_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
@@ -101,8 +101,8 @@ def get_loss():
         avg_loss += loss.sum() / loader.dataset.n_images
 
     return avg_loss
-
-for epoch in range(2):
+print('training')
+for epoch in range(200):
 
     t0 = time.time()
     avg_loss = get_loss()
