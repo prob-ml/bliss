@@ -42,6 +42,8 @@ def psf_at_points(x, y, psf_fit_file):
         (gridi, gridj) = meshgrid(range(nrb), range(ncb))
 
         if psfimgs is None:
+            print(k)
+            print(hdu['rnrow'][k])
             psfimgs = [zeros_like(hdu["rrows"][k][0]) for xy in broadcast(x, y)]
             (outh, outw) = (hdu["rnrow"][k][0], hdu["rncol"][k][0])
 

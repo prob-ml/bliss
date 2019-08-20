@@ -1,8 +1,6 @@
 import numpy as np
 import timeit
 
-import matplotlib.pyplot as plt
-
 import torch
 import torch.optim as optim
 
@@ -21,7 +19,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print('torch version: ', torch.__version__)
 
 # load PSF
-psf_fit_file = './../celeste_net/sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
+psf_fit_file = './sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
 print('psf file: \n', psf_fit_file)
 
 # set seed
