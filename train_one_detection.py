@@ -7,6 +7,7 @@ import torch.optim as optim
 import sdss_psf
 import star_datasets_lib
 import starnet_vae_lib
+import objectives_lib
 
 import time
 
@@ -15,6 +16,7 @@ import json
 from torch.distributions import normal
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print('device: ', device)
 
 print('torch version: ', torch.__version__)
 
@@ -72,28 +74,18 @@ def get_loss():
 
     for _, data in enumerate(loader):
         # get data
-        true_fluxes = data['fluxes'][:, 0]
-        true_locs = data['locs'][:, 0, :]
+        true_fluxes = data['fluxes']
+        true_locs = data['locs']
         true_n_stars = data['n_stars']
         images = data['image']
 
         # optimizer
         optimizer.zero_grad()
 
-        # forward
-        logit_locs_mean, logit_locs_logvar, \
-            log_flux_mean, log_flux_logvar = \
-                star_rnn.forward_once(images, \
-                                        h_i = torch.zeros(images.shape[0], 180))
-
         # get loss
-        logit_locs_q = normal.Normal(loc = logit_locs_mean, \
-                                    scale = torch.exp(0.5 * logit_locs_logvar))
-        log_flux_q = normal.Normal(loc = log_flux_mean, \
-                                    scale = torch.exp(0.5 * log_flux_logvar))
-
-        loss = -logit_locs_q.log_prob(true_locs).sum(dim = 1) - \
-                    log_flux_q.log_prob(true_fluxes)
+        loss = \
+            objectives_lib.get_invKL_loss(star_rnn, images, true_fluxes, \
+                                            true_locs, true_n_stars)
 
         loss.mean().backward()
         optimizer.step()
