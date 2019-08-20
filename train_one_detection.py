@@ -36,7 +36,7 @@ data_params['max_stars'] = 4
 print(data_params)
 
 # draw data
-n_stars = 2018
+n_stars = 2048
 star_dataset = \
     star_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
@@ -92,7 +92,7 @@ def get_loss():
         log_flux_q = normal.Normal(loc = log_flux_mean, \
                                     scale = torch.exp(0.5 * log_flux_logvar))
 
-        loss = logit_locs_q.log_prob(true_locs).sum(dim = 1) + \
+        loss = -logit_locs_q.log_prob(true_locs).sum(dim = 1) - \
                     log_flux_q.log_prob(true_fluxes)
 
         loss.mean().backward()
@@ -101,7 +101,9 @@ def get_loss():
         avg_loss += loss.sum() / loader.dataset.n_images
 
     return avg_loss
+
 print('training')
+
 for epoch in range(200):
 
     t0 = time.time()
