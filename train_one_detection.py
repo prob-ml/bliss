@@ -32,8 +32,8 @@ _ = torch.manual_seed(24534)
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
-data_params['min_stars'] = 0
-data_params['max_stars'] = 4
+data_params['min_stars'] = 1
+data_params['max_stars'] = 1
 
 print(data_params)
 
@@ -43,11 +43,11 @@ star_dataset = \
     star_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
                             n_stars = n_stars,
-                            use_fresh_data = True,
+                            use_fresh_data = False,
                             add_noise = True)
 
 # get loader
-batchsize = 64
+batchsize = 2048
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -85,7 +85,7 @@ def get_loss():
         # get loss
         loss = \
             objectives_lib.get_invKL_loss(star_rnn, images, true_fluxes, \
-                                            true_locs, true_n_stars)
+                                            true_locs, true_n_stars)[0]
 
         loss.mean().backward()
         optimizer.step()
