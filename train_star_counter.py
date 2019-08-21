@@ -1,5 +1,4 @@
 import numpy as np
-import timeit
 
 import torch
 import torch.optim as optim
