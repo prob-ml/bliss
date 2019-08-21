@@ -56,7 +56,7 @@ class StarEncoder(nn.Module):
             nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
 
-            nn.Linear(enc_hidden, 6)
+            nn.Linear(enc_hidden, 7)
         )
 
     def forward(self, h):
@@ -68,8 +68,10 @@ class StarEncoder(nn.Module):
         log_flux_mean = h[:, 4]
         log_flux_logvar = h[:, 5]
 
+        p_star = torch.sigmoid(h[:, 6])
+
         return logit_locs_mean, logit_locs_logvar, \
-                    log_flux_mean, log_flux_logvar
+                    log_flux_mean, log_flux_logvar, p_star
 
 class StarRNN(nn.Module):
     def __init__(self, slen, n_bands):
