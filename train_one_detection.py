@@ -33,7 +33,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['min_stars'] = 1
-data_params['max_stars'] = 1
+data_params['max_stars'] = 4
 
 print(data_params)
 
