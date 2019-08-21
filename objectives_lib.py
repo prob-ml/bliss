@@ -14,12 +14,16 @@ def get_invKL_loss(star_rnn, images, true_fluxes, true_locs, true_n_stars):
         log_flux_mean, log_flux_logvar = \
             star_rnn.forward_once(images, h_i)
     # get loss
-    logit_locs_q = normal.Normal(loc = logit_locs_mean, \
-                                scale = torch.exp(0.5 * logit_locs_logvar))
-    log_flux_q = normal.Normal(loc = log_flux_mean, \
-                                scale = torch.exp(0.5 * log_flux_logvar))
+    logit_locs_q = normal.Normal(loc = logit_locs_mean.unsqueeze(1), \
+                                scale = torch.exp(0.5 * logit_locs_logvar).unsqueeze(1))
+    log_flux_q = normal.Normal(loc = log_flux_mean.unsqueeze(1), \
+                                scale = torch.exp(0.5 * log_flux_logvar).unsqueeze(1))
 
-    loss = -logit_locs_q.log_prob(true_locs[:, 0, :]).sum(dim = 1) - \
-                log_flux_q.log_prob(true_fluxes[:, 0])
+    # locs loss
+    locs_loss_all = - logit_locs_q.log_prob(true_locs).sum(dim = 2)
+    (locs_loss, perm) = torch.min(locs_loss_all, 1)
 
-    return loss
+    seq_tensor = torch.LongTensor([i for i in range(images.shape[0])])
+    fluxes_loss = - log_flux_q.log_prob(true_fluxes)[seq_tensor, perm]
+
+    return locs_loss + fluxes_loss
