@@ -30,7 +30,7 @@ def eval_star_counter_loss(star_counter, train_loader,
 
     for _, data in enumerate(train_loader):
         images = data['image'].to(device)
-        true_n_stars = data['n_stars']
+        true_n_stars = data['n_stars'].to(device)
 
         if train:
             star_counter.train()
