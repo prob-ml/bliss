@@ -38,7 +38,7 @@ data_params['max_stars'] = 4
 print(data_params)
 
 # draw data
-n_stars = 2048
+n_stars = 60000
 star_dataset = \
     star_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
@@ -47,7 +47,7 @@ star_dataset = \
                             add_noise = True)
 
 # get loader
-batchsize = n_stars
+batchsize = 64
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -101,6 +101,9 @@ for epoch in range(200):
     t0 = time.time()
     avg_loss = get_loss()
     elapsed = time.time() - t0
+
+    # draw fresh data
+    loader.dataset.set_params_and_images()
 
     print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, elapsed))

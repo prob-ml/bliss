@@ -1,4 +1,6 @@
 from numpy import *
+
+# needs fitsio version 0.9.12
 import fitsio
 
 

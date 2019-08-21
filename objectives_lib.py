@@ -7,12 +7,12 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def get_invKL_loss(star_rnn, images, true_fluxes, true_locs, true_n_stars):
     # loss for the first detection only right now
 
+    h_i = torch.zeros(images.shape[0], star_rnn.hidden_length).to(device)
+
     # forward
     logit_locs_mean, logit_locs_logvar, \
         log_flux_mean, log_flux_logvar = \
-            star_rnn.forward_once(images, \
-                                    h_i = torch.zeros(images.shape[0], 180).to(device))
-
+            star_rnn.forward_once(images, h_i)
     # get loss
     logit_locs_q = normal.Normal(loc = logit_locs_mean, \
                                 scale = torch.exp(0.5 * logit_locs_logvar))
