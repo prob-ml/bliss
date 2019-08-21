@@ -1,37 +1,54 @@
 import torch
 
-from torch.distributions import normal
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+def isnan(x):
+    return x != x
 
-def logit(x):
-    return torch.log(x) - torch.log(1 - x)
+def get_one_hot_encoding_from_int(z, n_classes):
+    z_one_hot = torch.zeros(len(z), n_classes).to(device)
+    z_one_hot.scatter_(1, z.view(-1, 1), 1)
+    z_one_hot = z_one_hot.view(len(z), n_classes)
 
-def get_invKL_loss(star_rnn, images, true_fluxes, true_locs, true_n_stars):
-    # loss for the first detection only right now
+    return z_one_hot
 
-    h_i = torch.zeros(images.shape[0], star_rnn.hidden_length).to(device)
+def get_categorical_loss(log_probs, true_n_stars):
+    assert torch.all(log_probs <= 0)
+    assert log_probs.shape[0] == len(true_n_stars)
+    max_detections = log_probs.shape[1]
 
-    # forward
-    logit_locs_mean, logit_locs_logvar, \
-        log_flux_mean, log_flux_logvar, p_star = \
-            star_rnn.forward_once(images, h_i)
-    # get loss
-    logit_locs_q = normal.Normal(loc = logit_locs_mean.unsqueeze(1), \
-                                scale = torch.exp(0.5 * logit_locs_logvar).unsqueeze(1))
-    log_flux_q = normal.Normal(loc = log_flux_mean.unsqueeze(1), \
-                                scale = torch.exp(0.5 * log_flux_logvar).unsqueeze(1))
+    return torch.sum(
+        -log_probs * \
+        get_one_hot_encoding_from_int(true_n_stars.long(),
+                                        max_detections), dim = 1)
 
-    # locs loss
-    locs_loss_all = - logit_locs_q.log_prob(logit(true_locs)).sum(dim = 2)
-    (locs_loss, perm) = torch.min(locs_loss_all, 1)
+def eval_star_counter_loss(star_counter, train_loader,
+                            optimizer = None, train = True):
 
-    seq_tensor = torch.LongTensor([i for i in range(images.shape[0])])
-    fluxes_loss = - log_flux_q.log_prob(torch.log(true_fluxes))[seq_tensor, perm]
+    avg_loss = 0.0
+    max_detections = torch.Tensor([star_counter.max_detections])
 
-    # bernoulli loss
-    is_on = (true_n_stars > 0).float()
-    bern_loss = - is_on * torch.log(p_star) - (1 - is_on) * torch.log(1 - p_star)
+    for _, data in enumerate(train_loader):
+        images = data['image'].to(device)
+        true_n_stars = data['n_stars']
 
-    return (locs_loss + fluxes_loss) * is_on + bern_loss, perm
+        if train:
+            star_counter.train()
+            assert optimizer is not None
+            optimizer.zero_grad()
+        else:
+            star_counter.eval()
+
+        # evaluate log q
+        log_probs = star_counter(images)
+        loss = get_categorical_loss(log_probs, true_n_stars).mean()
+
+        assert not isnan(loss)
+
+        if train:
+            loss.backward()
+            optimizer.step()
+
+        avg_loss += loss * images.shape[0] / len(train_loader.dataset)
+
+    return avg_loss

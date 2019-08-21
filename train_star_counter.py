@@ -32,7 +32,7 @@ _ = torch.manual_seed(24534)
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
-data_params['min_stars'] = 1
+data_params['min_stars'] = 0
 data_params['max_stars'] = 4
 
 print(data_params)
@@ -54,60 +54,46 @@ loader = torch.utils.data.DataLoader(
                  batch_size=batchsize,
                  shuffle=True)
 
-# define rnn
-star_rnn = starnet_vae_lib.StarRNN(\
-                n_bands=1, slen=data_params['slen']).to(device)
+# define VAE
+star_counter = starnet_vae_lib.StarCounter(data_params['slen'],
+                                                n_bands = 1,
+                                                max_detections = data_params['max_stars'])
+
+star_counter.to(device)
 
 # define optimizer
 learning_rate = 1e-3
 weight_decay = 1e-5
 optimizer = optim.Adam([
-                    {'params': star_rnn.parameters(),
+                    {'params': star_counter.parameters(),
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
 
+n_epochs = 5000
 
-# loss function
-def get_loss():
-    avg_loss = 0.
-
-    for _, data in enumerate(loader):
-        # get data
-        true_fluxes = data['fluxes'].to(device)
-        true_locs = data['locs'].to(device)
-        true_n_stars = data['n_stars'].to(device)
-        images = data['image'].to(device)
-
-        # optimizer
-        optimizer.zero_grad()
-
-        # get loss
-        loss = \
-            objectives_lib.get_invKL_loss(star_rnn, images, true_fluxes, \
-                                            true_locs, true_n_stars)[0]
-
-        loss.mean().backward()
-        optimizer.step()
-
-        avg_loss += loss.sum() / loader.dataset.n_images
-
-    return avg_loss
-
-print('training')
-
-for epoch in range(200):
-
+for epoch in range(n_epochs):
     t0 = time.time()
-    avg_loss = get_loss()
+
+    avg_loss = objectives_lib.eval_star_counter_loss(star_counter, loader,
+                                                    optimizer, train = True)
+
     elapsed = time.time() - t0
-
-    # draw fresh data
-    loader.dataset.set_params_and_images()
-
     print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, elapsed))
 
-    torch.save(star_rnn.state_dict(), './fits/test_fit_one_detection')
+    if (epoch % 5) == 0:
+
+        test_loss = objectives_lib.eval_star_counter_loss(star_counter,
+                                            loader, train = False)
+
+        print('**** test loss: {:.3f}; ****'.format(test_loss))
+
+        detector_outfile = './fits/starnet_invKL_counter'
+        print("writing the counter parameters to " + detector_outfile)
+        torch.save(star_counter.state_dict(), detector_outfile)
+
+    # draw fresh data
+    loader.dataset.set_params_and_images()
 
 print('done')
