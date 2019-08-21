@@ -11,7 +11,7 @@ def get_invKL_loss(star_rnn, images, true_fluxes, true_locs, true_n_stars):
     logit_locs_mean, logit_locs_logvar, \
         log_flux_mean, log_flux_logvar = \
             star_rnn.forward_once(images, \
-                                    h_i = torch.zeros(images.shape[0], 180))
+                                    h_i = torch.zeros(images.shape[0], 180).to(device))
 
     # get loss
     logit_locs_q = normal.Normal(loc = logit_locs_mean, \

@@ -74,10 +74,10 @@ def get_loss():
 
     for _, data in enumerate(loader):
         # get data
-        true_fluxes = data['fluxes']
-        true_locs = data['locs']
-        true_n_stars = data['n_stars']
-        images = data['image']
+        true_fluxes = data['fluxes'].to(device)
+        true_locs = data['locs'].to(device)
+        true_n_stars = data['n_stars'].to(device)
+        images = data['image'].to(device)
 
         # optimizer
         optimizer.zero_grad()
