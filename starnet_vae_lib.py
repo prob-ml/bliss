@@ -40,7 +40,7 @@ class StarEncoder(nn.Module):
 
         # output dimension of convolutions
         conv_out_dim = \
-            self.enc_conv(torch.zeros(1, n_bands, slen, slen)).shape(1)
+            self.enc_conv(torch.zeros(1, n_bands, slen, slen)).size(1)
 
         # fully connected layers
         self.enc_fc = nn.Sequential(
@@ -59,80 +59,88 @@ class StarEncoder(nn.Module):
             nn.ReLU(),
         )
 
-        # add final layer, whose size depends on the number of stars to output
-        for i in range(1, max_detections + 1):
-            module_name = 'enc_final_detect' + str(i)
-            self.add_module(module_name, nn.Linear(enc_hidden, 6 * i))
+        # there are self.max_detections * (self.max_detections + 1)
+        #    total possible detections, and each detection has
+        #    six parameters (trhee means, three variances, for two locs and one
+        #    flux)
+        self.dim_out_all = \
+            int(0.5 * self.max_detections * (self.max_detections + 1)  * 6)
 
-    def forward(self, image, n_stars):
-        assert image.shape[0] == len(n_stars)
-        batchsize = image.shape[0]
+        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
+    def forward_to_last_hidden(self, image):
         h = self.enc_conv(image)
         h = self.enc_fc(h)
 
+        return self.enc_final(h)
+
+    def forward(self, images, n_stars):
+        h = self.forward_to_last_hidden(images)
+
+        batchsize = images.shape[0]
+
         # get parameters: last layer depends on the number of stars
-        logit_loc_mean, logit_loc_log_var, \
-                log_flux_mean, log_flux_log_var = (0, 0, 0, 0)
+        logit_loc_mean, logit_loc_logvar, \
+                log_flux_mean, log_flux_logvar = (0, 0, 0, 0)
 
         for i in range(1, self.max_detections + 1):
-            h_out = getattr(self, 'enc_final_detect' + str(i))(h)
-
-            logit_loc_mean_i, logit_loc_log_var_i, \
-                log_flux_mean_i, log_flux_log_var_i = \
-                    self._get_params_from_last_hidden_layer(h_out, i)
+            logit_loc_mean_i, logit_loc_logvar_i, \
+                log_flux_mean_i, log_flux_logvar_i = \
+                    self._get_params_from_last_hidden_layer(h, i)
 
             is_on = (n_stars == i).float()
             logit_loc_mean = logit_loc_mean + \
                 is_on.view(batchsize, 1, 1) * logit_loc_mean_i
-            logit_loc_log_var = logit_loc_log_var + \
-                is_on.view(batchsize, 1, 1) * logit_loc_log_var_i
+            logit_loc_logvar = logit_loc_logvar + \
+                is_on.view(batchsize, 1, 1) * logit_loc_logvar_i
 
             log_flux_mean = log_flux_mean + \
                 is_on.view(batchsize, 1) * log_flux_mean_i
-            log_flux_log_var = log_flux_log_var + \
-                is_on.view(batchsize, 1) * log_flux_log_var_i
+            log_flux_logvar = log_flux_logvar + \
+                is_on.view(batchsize, 1) * log_flux_logvar_i
 
-        return logit_loc_mean, logit_loc_log_var, \
-                log_flux_mean, log_flux_log_var
+        return logit_loc_mean, logit_loc_logvar, \
+                log_flux_mean, log_flux_logvar
 
 
     def _get_params_from_last_hidden_layer(self, h, n_detections):
 
-        assert h.shape[1] == 6 * n_detections
+        assert h.shape[1] == self.dim_out_all
+        assert n_detections <= self.max_detections
+        assert n_detections > 0
 
-        batchsize = h.shape[0]
+        batchsize = h.size(0)
 
-        indx1 = (2 * n_detections)
-        indx2 = (2 * n_detections) * 2
+        indx0 = int(0.5 * n_detections * (n_detections - 1) * 6)
 
-        logit_loc_mean = h[:, 0:indx1].view(-1, n_detections, 2)
-        logit_loc_log_var = torch.clamp(h[:, indx1:indx2] * 1e-2, \
-                            min = -8, max = 8).view(-1, n_detections, 2)
+        indx1 = (2 * n_detections) + indx0
+        indx2 = (2 * n_detections) * 2 + indx0
+
+        # get locations
+        logit_loc_mean = h[:, indx0:indx1].view(-1, n_detections, 2)
+        logit_loc_logvar = h[:, indx1:indx2].view(-1, n_detections, 2)
 
         indx3 = indx2 + n_detections
         indx4 = indx3 + n_detections
 
+        # get fluxes
         log_flux_mean = h[:, indx2:indx3]
-        log_flux_log_var = torch.clamp(h[:, indx3:indx4] * 1e-2,
-                                        min = -8, max = 8)
-        # scaling the variance, because otherwise, the variance immediately
-        # hits the max
+        log_flux_logvar = h[:, indx3:indx4]
 
         # pad params
         if not n_detections == self.max_detections:
             locs_pad_size = (batchsize, self.max_detections - n_detections, 2)
             pad_locs = torch.full(locs_pad_size, 0.).to(device)
             logit_loc_mean = torch.cat((logit_loc_mean, pad_locs), dim = 1)
-            logit_loc_log_var = torch.cat((logit_loc_log_var, pad_locs), dim = 1)
+            logit_loc_logvar = torch.cat((logit_loc_logvar, pad_locs), dim = 1)
 
             fluxes_pad_size = (batchsize, self.max_detections - n_detections)
             pad_flux = torch.full(fluxes_pad_size, 0.).to(device)
             log_flux_mean = torch.cat((log_flux_mean, pad_flux), dim = 1)
-            log_flux_log_var = torch.cat((log_flux_log_var, pad_flux), dim = 1)
+            log_flux_logvar = torch.cat((log_flux_logvar, pad_flux), dim = 1)
 
-        return logit_loc_mean, logit_loc_log_var, \
-                log_flux_mean, log_flux_log_var
+        return logit_loc_mean, logit_loc_logvar, \
+                log_flux_mean, log_flux_logvar
 
 class StarCounter(nn.Module):
     def __init__(self, slen, n_bands, max_detections):
