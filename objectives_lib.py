@@ -90,7 +90,7 @@ def get_losses_one_detection(true_logit_locs, true_log_fluxes, true_n_stars,
 
     (locs_loss, perm) = torch.min(locs_loss_all, 1)
 
-    seq_tensor = torch.LongTensor([i for i in range(true_fluxes.shape[0])])
+    seq_tensor = torch.LongTensor([i for i in range(true_log_fluxes.shape[0])])
     fluxes_loss = - _get_normal_logprob(true_log_fluxes,
                         log_flux_mean_i.unsqueeze(1),
                         log_flux_logvar_i.unsqueeze(1))[seq_tensor, perm]

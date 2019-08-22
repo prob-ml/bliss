@@ -223,7 +223,7 @@ class StarsDataset(Dataset):
 
 def get_is_on_from_n_stars(n_stars, max_stars):
     batchsize = len(n_stars)
-    is_on_array = torch.zeros((batchsize, max_stars))
+    is_on_array = torch.zeros((batchsize, max_stars)).to(device)
     for i in range(max_stars):
         is_on_array[:, i] = (n_stars > i).float()
 
