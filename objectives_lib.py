@@ -125,6 +125,7 @@ def get_losses_one_detection(true_logit_locs, true_log_fluxes, true_n_stars,
 
 def get_encoder_loss(star_encoder, images, true_locs,
                         true_fluxes, true_n_stars):
+    batchsize = images.shape[0]
 
     logit_loc_mean, logit_loc_logvar, \
             log_flux_mean, log_flux_logvar = star_encoder(images, true_n_stars)
@@ -133,29 +134,38 @@ def get_encoder_loss(star_encoder, images, true_locs,
     true_logit_locs = _logit(true_locs)
     true_log_fluxes = torch.log(true_fluxes)
 
-    # remove "off" stars
+    # which stars on "on"
     is_on_array = get_is_on_from_n_stars(true_n_stars,
                                             star_encoder.max_detections)
+    seq_tensor = torch.LongTensor([i for i in range(batchsize)])
 
-    true_logit_locs = true_logit_locs * is_on_array.unsqueeze(2) + \
-                    1e16 * (1 - is_on_array).unsqueeze(2)
+    perm_array = torch.zeros(batchsize, star_encoder.max_detections)
+    total_loss = 0.
+    for i in range(star_encoder.max_detections):
+        true_logit_locs = true_logit_locs * is_on_array.unsqueeze(2) + \
+                        1e16 * (1 - is_on_array).unsqueeze(2)
 
-    true_log_fluxes = true_log_fluxes * is_on_array + 1e16 * (1 - is_on_array)
+        true_log_fluxes = true_log_fluxes * is_on_array + 1e16 * (1 - is_on_array)
 
-    # only one detection at the moment
-    i = 0
-    logit_loc_mean_i = logit_loc_mean[:, i, :]
-    logit_loc_logvar_i = logit_loc_logvar[:, i, :]
+        logit_loc_mean_i = logit_loc_mean[:, i, :]
+        logit_loc_logvar_i = logit_loc_logvar[:, i, :]
 
-    log_flux_mean_i = log_flux_mean[:, i]
-    log_flux_logvar_i = log_flux_logvar[:, i]
+        log_flux_mean_i = log_flux_mean[:, i]
+        log_flux_logvar_i = log_flux_logvar[:, i]
 
-    loss, perm = \
-        get_losses_one_detection(true_logit_locs, true_log_fluxes, true_n_stars,
-                                    logit_loc_mean_i, logit_loc_logvar_i,
-                                    log_flux_mean_i, log_flux_logvar_i)
-    loss = loss * is_on_array[:, i]
-    return loss
+        loss, perm = \
+            get_losses_one_detection(true_logit_locs, true_log_fluxes, true_n_stars,
+                                        logit_loc_mean_i, logit_loc_logvar_i,
+                                        log_flux_mean_i, log_flux_logvar_i)
+
+        total_loss = total_loss + loss * is_on_array[seq_tensor, perm]
+
+        # update which stars are still "on"
+        is_on_array[seq_tensor, perm] = 0
+
+        perm_array[:, i] = perm
+
+    return total_loss, perm_array
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False):
@@ -177,7 +187,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
         # evaluate log q
         loss = get_encoder_loss(star_encoder, images, true_locs,
-                                true_fluxes, true_n_stars).mean()
+                                true_fluxes, true_n_stars)[0].mean()
 
         if train:
             loss.backward()
