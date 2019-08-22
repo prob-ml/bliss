@@ -84,14 +84,14 @@ def get_losses_one_detection(true_locs, true_fluxes, true_n_stars,
     assert len(logit_loc_mean_i.size()) == 2
     assert len(log_flux_mean_i.size()) == 1
 
-    locs_loss_all = - _get_normal_logprob(true_locs,
+    locs_loss_all = - _get_normal_logprob(_logit(true_locs),
                                 logit_loc_mean_i.unsqueeze(1),
                                 logit_loc_logvar_i.unsqueeze(1)).sum(dim = 2)
 
     (locs_loss, perm) = torch.min(locs_loss_all, 1)
 
     seq_tensor = torch.LongTensor([i for i in range(true_fluxes.shape[0])])
-    fluxes_loss = - _get_normal_logprob(true_fluxes,
+    fluxes_loss = - _get_normal_logprob(torch.log(true_fluxes),
                         log_flux_mean_i.unsqueeze(1),
                         log_flux_logvar_i.unsqueeze(1))[seq_tensor, perm]
 
