@@ -77,21 +77,21 @@ def _get_normal_logprob(x, mean, logvar):
 
     return norm.log_prob(x)
 
-def get_losses_one_detection(true_locs, true_fluxes, true_n_stars,
+def get_losses_one_detection(true_logit_locs, true_log_fluxes, true_n_stars,
                             logit_loc_mean_i, logit_loc_logvar_i,
                             log_flux_mean_i, log_flux_logvar_i):
 
     assert len(logit_loc_mean_i.size()) == 2
     assert len(log_flux_mean_i.size()) == 1
 
-    locs_loss_all = - _get_normal_logprob(_logit(true_locs),
+    locs_loss_all = - _get_normal_logprob(true_logit_locs,
                                 logit_loc_mean_i.unsqueeze(1),
                                 logit_loc_logvar_i.unsqueeze(1)).sum(dim = 2)
 
     (locs_loss, perm) = torch.min(locs_loss_all, 1)
 
     seq_tensor = torch.LongTensor([i for i in range(true_fluxes.shape[0])])
-    fluxes_loss = - _get_normal_logprob(torch.log(true_fluxes),
+    fluxes_loss = - _get_normal_logprob(true_log_fluxes,
                         log_flux_mean_i.unsqueeze(1),
                         log_flux_logvar_i.unsqueeze(1))[seq_tensor, perm]
 
@@ -129,14 +129,18 @@ def get_encoder_loss(star_encoder, images, true_locs,
     logit_loc_mean, logit_loc_logvar, \
             log_flux_mean, log_flux_logvar = star_encoder(images, true_n_stars)
 
+    # transform true parameters
+    true_logit_locs = _logit(true_locs)
+    true_log_fluxes = torch.log(true_fluxes)
+
     # remove "off" stars
     is_on_array = get_is_on_from_n_stars(true_n_stars,
                                             star_encoder.max_detections)
 
-    true_locs = true_locs * is_on_array.unsqueeze(2) + \
+    true_logit_locs = true_logit_locs * is_on_array.unsqueeze(2) + \
                     1e16 * (1 - is_on_array).unsqueeze(2)
 
-    true_fluxes = true_fluxes * is_on_array + 1e16 * (1 - is_on_array)
+    true_log_fluxes = true_log_fluxes * is_on_array + 1e16 * (1 - is_on_array)
 
     # only one detection at the moment
     i = 0
@@ -146,9 +150,10 @@ def get_encoder_loss(star_encoder, images, true_locs,
     log_flux_mean_i = log_flux_mean[:, i]
     log_flux_logvar_i = log_flux_logvar[:, i]
 
-    loss, perm = get_losses_one_detection(true_locs, true_fluxes, true_n_stars,
-                                            logit_loc_mean_i, logit_loc_logvar_i,
-                                            log_flux_mean_i, log_flux_logvar_i)
+    loss, perm = \
+        get_losses_one_detection(true_logit_locs, true_log_fluxes, true_n_stars,
+                                    logit_loc_mean_i, logit_loc_logvar_i,
+                                    log_flux_mean_i, log_flux_logvar_i)
     loss = loss * is_on_array[:, i]
     return loss
 
