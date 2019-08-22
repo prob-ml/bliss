@@ -156,10 +156,10 @@ def eval_star_encoder_loss(star_encoder, train_loader,
     avg_loss = 0.0
 
     for _, data in enumerate(train_loader):
-        true_fluxes = data['fluxes']
-        true_locs = data['locs']
-        true_n_stars = data['n_stars']
-        images = data['image']
+        true_fluxes = data['fluxes'].to(device)
+        true_locs = data['locs'].to(device)
+        true_n_stars = data['n_stars'].to(device)
+        images = data['image'].to(device)
 
         if train:
             star_encoder.train()
@@ -173,17 +173,17 @@ def eval_star_encoder_loss(star_encoder, train_loader,
                                 true_fluxes, true_n_stars)
 
         if train:
-            loss.backward()
+            loss.mean().backward()
             optimizer.step()
 
-        avg_loss += loss * images.shape[0] / len(train_loader.dataset)
+        avg_loss += loss.sum() * images.shape[0] / len(train_loader.dataset)
 
     return avg_loss
 
 
 def get_is_on_from_n_stars(n_stars, max_stars):
     batchsize = len(n_stars)
-    is_on_array = torch.zeros((batchsize, max_stars))
+    is_on_array = torch.zeros((batchsize, max_stars)).to(device)
     for i in range(max_stars):
         is_on_array[:, i] = (n_stars > i).float()
 

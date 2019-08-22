@@ -83,7 +83,7 @@ for epoch in range(n_epochs):
 
     if (epoch % 5) == 0:
 
-        test_loss = objectives_lib.eval_star_counter_loss(star_counter,
+        test_loss = objectives_lib.eval_star_encoder_loss(star_encoder,
                                             loader, train = False)
 
         print('**** test loss: {:.3f}; ****'.format(test_loss))
