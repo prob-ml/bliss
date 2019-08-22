@@ -2,6 +2,8 @@ import torch
 
 from torch.distributions import normal
 
+from star_datasets_lib import get_is_on_from_n_stars
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def isnan(x):
@@ -170,21 +172,12 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
         # evaluate log q
         loss = get_encoder_loss(star_encoder, images, true_locs,
-                                true_fluxes, true_n_stars)
+                                true_fluxes, true_n_stars).mean()
 
         if train:
-            loss.mean().backward()
+            loss.backward()
             optimizer.step()
 
-        avg_loss += loss.sum() * images.shape[0] / len(train_loader.dataset)
+        avg_loss += loss * images.shape[0] / len(train_loader.dataset)
 
     return avg_loss
-
-
-def get_is_on_from_n_stars(n_stars, max_stars):
-    batchsize = len(n_stars)
-    is_on_array = torch.zeros((batchsize, max_stars)).to(device)
-    for i in range(max_stars):
-        is_on_array[:, i] = (n_stars > i).float()
-
-    return is_on_array
