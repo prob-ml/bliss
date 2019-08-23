@@ -37,7 +37,7 @@ data_params['max_stars'] = 4
 print(data_params)
 
 # draw data
-n_stars = 64
+n_stars = 60000
 star_dataset = \
     star_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
@@ -46,7 +46,7 @@ star_dataset = \
                             add_noise = True)
 
 # get loader
-batchsize = 10
+batchsize = 2048
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
