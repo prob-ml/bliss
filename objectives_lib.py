@@ -1,6 +1,9 @@
 import torch
 import numpy as np
-from hungarian_alg import linear_sum_assignment
+
+# my implementation was still slower than scipy's :(
+# from hungarian_alg import linear_sum_assignment
+from scipy.optimze import linear_sum_assignment
 
 from torch.distributions import normal
 
@@ -92,20 +95,19 @@ def run_hungarian_alg(log_probs_all, n_stars):
 
     batchsize = log_probs_all.shape[0]
     max_detections = log_probs_all.shape[1]
-    perm = np.zeros((batchsize, max_detections))
+    perm = np.zeros((batchsize,max_detections))
+
+    # This is done in numpy ...
+    log_probs_all_np = log_probs_all.to('cpu').detach().numpy()
 
     for i in range(batchsize):
         n_stars_i = int(n_stars[i])
-        if(n_stars_i > 0):
-            col_indx = linear_sum_assignment(\
-                                    -log_probs_all[i, 0:n_stars_i, 0:n_stars_i])
+        row_indx, col_indx = linear_sum_assignment(\
+                                -log_probs_all_np[i, 0:n_stars_i, 0:n_stars_i])
 
-            perm[i, :] = torch.cat((col_indx,
-                torch.LongTensor([i for i in range(n_stars_i, max_detections)])))
-        else:
-            perm[i, :] = torch.LongTensor([i for i in range(max_detections)])
+        perm[i, :] = np.concatenate((col_indx, np.arange(n_stars_i, max_detections)))
 
-    return perm
+    return torch.LongTensor(perm)
 
 def _permute_losses_mat(losses_mat, perm):
     batchsize = losses_mat.shape[0]

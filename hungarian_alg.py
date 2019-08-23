@@ -1,6 +1,8 @@
 import torch
 from itertools import permutations
 
+import time
+
 # my implementation for the hungarian algorithm in pytorch
 # adapted from
 # https://github.com/scipy/scipy/blob/v0.18.1/scipy/optimize/_hungarian.py#L13-L107
@@ -17,6 +19,7 @@ def linear_sum_assignment(cost_matrix):
 
     i = 0
     while step is not None:
+        t0 = time.time()
         step = step(state)
         i += 1
 
@@ -184,11 +187,11 @@ def _step6(state):
     """
     # the smallest uncovered value in the matrix
     if torch.any(state.row_uncovered) and torch.any(state.col_uncovered):
-        minval = torch.min(state.C[state.row_uncovered.type(torch.ByteTensor)], dim=0)[0]
-        minval = torch.min(minval[state.col_uncovered.type(torch.ByteTensor)])
+        minval = torch.min(state.C[state.row_uncovered], dim=0)[0]
+        minval = torch.min(minval[state.col_uncovered])
 
-        state.C[~state.row_uncovered.type(torch.ByteTensor)] += minval
-        state.C[:, state.col_uncovered.type(torch.ByteTensor)] -= minval
+        state.C[~state.row_uncovered] += minval
+        state.C[:, state.col_uncovered] -= minval
 
     return _step4
 
