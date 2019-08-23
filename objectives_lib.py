@@ -3,7 +3,7 @@ import numpy as np
 
 # my implementation was still slower than scipy's :(
 # from hungarian_alg import linear_sum_assignment
-from scipy.optimze import linear_sum_assignment
+from scipy.optimize import linear_sum_assignment
 
 from torch.distributions import normal
 
@@ -87,11 +87,13 @@ def eval_lognormal_logprob(x, mu, log_var):
     log_x = torch.log(x)
     return eval_normal_logprob(log_x, mu, log_var)
 
-def run_hungarian_alg(log_probs_all, n_stars):
+def run_batch_hungarian_alg(log_probs_all, n_stars):
     # log_probs_all should be a tensor of size
     # (batchsize x estimated_param x true param)
     # giving for each N, the log prob of the estimated parameter
     # against the target parameter
+
+    # this finds the MAXIMAL permutation of log_probs_all
 
     batchsize = log_probs_all.shape[0]
     max_detections = log_probs_all.shape[1]
@@ -127,6 +129,8 @@ def _permute_losses_mat(losses_mat, perm):
     return mat_perm
 
 def get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var):
+    # batchsize x estimated parameters x true parameters
+
     batchsize = true_locs.shape[0]
     max_stars = true_locs.shape[1]
 
@@ -185,7 +189,7 @@ def get_encoder_loss(star_encoder, images, true_locs,
     assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_stars]
 
     # get permutation
-    perm = run_hungarian_alg(locs_log_probs_all, true_n_stars)
+    perm = run_batch_hungarian_alg(locs_log_probs_all, true_n_stars)
 
     # only count those stars that are on
     is_on = get_is_on_from_n_stars(true_n_stars, max_stars)

@@ -67,3 +67,6 @@ class TestStarEncoder(unittest.TestCase):
 
             assert torch.all(log_flux_mean[:, i:] == 0)
             assert torch.all(log_flux_log_var[:, i:] == 0)
+
+if __name__ == '__main__':
+    unittest.main()

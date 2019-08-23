@@ -31,3 +31,6 @@ class TestHungarian(unittest.TestCase):
 
         print('mean hungarian time: {0:.06f}sec'.format(torch.mean(hungarian_time)))
         print('mean permutation time: {0:.06f}sec'.format(torch.mean(perm_time)))
+
+if __name__ == '__main__':
+    unittest.main()

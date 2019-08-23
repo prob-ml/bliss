@@ -197,7 +197,7 @@ def _step6(state):
 
 # This is the O(n!) implementation
 # used only for testing
-def find_min_permutation(X):
+def find_min_col_permutation(X):
     dim = X.shape[1]
 
     # X should be square
