@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from joblib import Parallel, delayed
 
 # my implementation was still slower than scipy's :(
 # from hungarian_alg import linear_sum_assignment
@@ -87,6 +88,30 @@ def eval_lognormal_logprob(x, mu, log_var):
     log_x = torch.log(x)
     return eval_normal_logprob(log_x, mu, log_var)
 
+# def run_batch_hungarian_alg(log_probs_all, n_stars):
+#     # log_probs_all should be a tensor of size
+#     # (batchsize x estimated_param x true param)
+#     # giving for each N, the log prob of the estimated parameter
+#     # against the target parameter
+#
+#     # this finds the MAXIMAL permutation of log_probs_all
+#
+#     batchsize = log_probs_all.shape[0]
+#     max_detections = log_probs_all.shape[1]
+#     perm = np.zeros((batchsize,max_detections))
+#
+#     # This is done in numpy ...
+#     log_probs_all_np = log_probs_all.to('cpu').detach().numpy()
+#
+#     for i in range(batchsize):
+#         n_stars_i = int(n_stars[i])
+#         row_indx, col_indx = linear_sum_assignment(\
+#                                 -log_probs_all_np[i, 0:n_stars_i, 0:n_stars_i])
+#
+#         perm[i, :] = np.concatenate((col_indx, np.arange(n_stars_i, max_detections)))
+#
+#     return torch.LongTensor(perm)
+
 def run_batch_hungarian_alg(log_probs_all, n_stars):
     # log_probs_all should be a tensor of size
     # (batchsize x estimated_param x true param)
@@ -95,22 +120,41 @@ def run_batch_hungarian_alg(log_probs_all, n_stars):
 
     # this finds the MAXIMAL permutation of log_probs_all
 
+    # This is done in numpy ...
+    log_probs_all_np = log_probs_all.to('cpu').detach().numpy()
+
     batchsize = log_probs_all.shape[0]
     max_detections = log_probs_all.shape[1]
     perm = np.zeros((batchsize,max_detections))
 
-    # This is done in numpy ...
-    log_probs_all_np = log_probs_all.to('cpu').detach().numpy()
-
-    for i in range(batchsize):
+    def lin_assign_fun(i):
         n_stars_i = int(n_stars[i])
         row_indx, col_indx = linear_sum_assignment(\
                                 -log_probs_all_np[i, 0:n_stars_i, 0:n_stars_i])
 
-        perm[i, :] = np.concatenate((col_indx, np.arange(n_stars_i, max_detections)))
+        return(np.concatenate((col_indx, np.arange(n_stars_i, max_detections))))
+
+    perm = Parallel(n_jobs=-2)(delayed(lin_assign_fun)(i) for i in range(batchsize))
 
     return torch.LongTensor(perm)
 
+# def _permute_losses_mat(losses_mat, perm):
+#     batchsize = losses_mat.shape[0]
+#     max_stars = losses_mat.shape[1]
+#
+#     assert losses_mat.shape[2] == max_stars
+#     assert perm.shape[0] == batchsize
+#     assert perm.shape[1] == max_stars
+#
+#     mat_perm = torch.zeros((batchsize, max_stars)).to(device)
+#     seq_tensor = torch.LongTensor([i for i in range(batchsize)])
+#
+#     torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
+#     # for i in range(max_stars):
+#     #     i_tensor = torch.LongTensor([i for j in range(batchsize)])
+#     #     mat_perm[:, i] = losses_mat[seq_tensor, i_tensor, perm[:, i]]
+#
+#     return mat_perm
 def _permute_losses_mat(losses_mat, perm):
     batchsize = losses_mat.shape[0]
     max_stars = losses_mat.shape[1]
@@ -119,14 +163,7 @@ def _permute_losses_mat(losses_mat, perm):
     assert perm.shape[0] == batchsize
     assert perm.shape[1] == max_stars
 
-    mat_perm = torch.zeros((batchsize, max_stars)).to(device)
-    seq_tensor = torch.LongTensor([i for i in range(batchsize)])
-
-    for i in range(max_stars):
-        i_tensor = torch.LongTensor([i for j in range(batchsize)])
-        mat_perm[:, i] = losses_mat[seq_tensor, i_tensor, perm[:, i]]
-
-    return mat_perm
+    return torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
 
 def get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var):
     # batchsize x estimated parameters x true parameters
