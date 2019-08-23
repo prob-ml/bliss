@@ -7,33 +7,23 @@ from itertools import permutations
 
 def linear_sum_assignment(cost_matrix):
 
-    if len(cost_matrix.shape) != 2:
-        raise ValueError("expected a matrix (2-d array), got a %r array"
-                         % (cost_matrix.shape,))
-
-    # The algorithm expects more columns than rows in the cost matrix.
-    if cost_matrix.shape[1] < cost_matrix.shape[0]:
-        cost_matrix = torch.transpose(cost_matrix, 0, 1)
-        transposed = True
-    else:
-        transposed = False
+    # should be two dimensional square matrix
+    assert len(cost_matrix.shape) == 2
+    assert cost_matrix.shape[0] == cost_matrix.shape[1]
 
     state = _Hungary(cost_matrix)
 
-    # No need to bother with assignments if one of the dimensions
-    # of the cost matrix is zero-length.
-    step = None if 0 in cost_matrix.shape else _step1
+    step = _step1
 
     i = 0
     while step is not None:
         step = step(state)
         i += 1
 
-    if transposed:
-        marked = state.marked.T
-    else:
-        marked = state.marked
+    marked = state.marked
+
     return (marked == 1).nonzero()[:, 1]
+
 
 class _Hungary(object):
     """State of the Hungarian algorithm.
@@ -44,7 +34,7 @@ class _Hungary(object):
     """
 
     def __init__(self, cost_matrix):
-        self.C = cost_matrix
+        self.C = cost_matrix.clone()
 
         n, m = self.C.shape
         self.row_uncovered = torch.ones(n).type(torch.ByteTensor)
@@ -73,6 +63,7 @@ def _step1(state):
     # starred zero in its row or column, star Z. Repeat for each element
     # in the matrix.
     which_zero = torch.transpose((state.C == 0).nonzero(), 0, 1)
+
     for i, j in zip(*which_zero):
         if state.col_uncovered[j] and state.row_uncovered[i]:
             state.marked[i, j] = 1
