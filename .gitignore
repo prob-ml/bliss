@@ -2,3 +2,4 @@
 __pycache__/* 
 fits/*
 *.pyc
+sdss_stage_dir/*
