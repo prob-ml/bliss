@@ -112,7 +112,7 @@ def eval_lognormal_logprob(x, mu, log_var):
 #
 #     return torch.LongTensor(perm)
 
-def run_batch_hungarian_alg(log_probs_all, n_stars):
+def run_batch_hungarian_alg(log_probs_all, n_stars, ncores = -2):
     # log_probs_all should be a tensor of size
     # (batchsize x estimated_param x true param)
     # giving for each N, the log prob of the estimated parameter
@@ -127,14 +127,12 @@ def run_batch_hungarian_alg(log_probs_all, n_stars):
     max_detections = log_probs_all.shape[1]
     perm = np.zeros((batchsize,max_detections))
 
-    def lin_assign_fun(i):
-        n_stars_i = int(n_stars[i])
-        row_indx, col_indx = linear_sum_assignment(\
-                                -log_probs_all_np[i, 0:n_stars_i, 0:n_stars_i])
+    def lin_assign_fun(x):
+        row_indx, col_indx = linear_sum_assignment(x)
 
-        return(np.concatenate((col_indx, np.arange(n_stars_i, max_detections))))
+        return(np.concatenate((col_indx, np.arange(x.shape[1], max_detections))))
 
-    perm = Parallel(n_jobs=-2)(delayed(lin_assign_fun)(i) for i in range(batchsize))
+    perm = Parallel(n_jobs=ncores, backend="threading")(delayed(lin_assign_fun)(log_probs_all[i, :int(n_stars[i]), :int(n_stars[i])]) for i in range(batchsize))
 
     return torch.LongTensor(perm)
 
