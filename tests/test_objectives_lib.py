@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, './../')
 
 import objectives_lib
-import star_datasets_lib
+import simulated_datasets_lib
 import starnet_vae_lib
 from hungarian_alg import find_min_col_permutation
 

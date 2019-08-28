@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import sys
+sys.path.insert(0, '../')
+
 import unittest
 import torch
 import hungarian_alg
@@ -9,7 +12,7 @@ class TestHungarian(unittest.TestCase):
     def test_hungarian_alg(self):
         # test my implementation of the hungarian algorithm
         # against enumerating all permutations
-        dim = 8
+        dim = 6
         n_trials = 10
         hungarian_time = torch.zeros(n_trials)
         perm_time = torch.zeros(n_trials)
@@ -24,7 +27,7 @@ class TestHungarian(unittest.TestCase):
             hungarian_time[n_trial] = time.time() - t0
 
             t0 = time.time()
-            perm2 = hungarian_alg.find_min_permutation(X)
+            perm2 = hungarian_alg.find_min_col_permutation(X)
             perm_time[n_trial] = time.time() - t0
 
             assert torch.all(torch.Tensor(perm2) == perm1.float())

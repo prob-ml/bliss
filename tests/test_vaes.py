@@ -5,7 +5,7 @@ import unittest
 import torch
 
 import objectives_lib
-import star_datasets_lib
+import simulated_datasets_lib
 import starnet_vae_lib
 
 import json
@@ -23,7 +23,7 @@ psf_fit_file = \
     './../celeste_net/sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
 
 star_dataset = \
-    star_datasets_lib.load_dataset_from_params(psf_fit_file,
+    simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
                             n_stars = n_stars,
                             use_fresh_data = False,
