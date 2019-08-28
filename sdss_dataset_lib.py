@@ -114,6 +114,8 @@ class SloanDigitalSkySurvey(Dataset):
 def _tile_image(image, subimage_slen, return_tile_coords = False):
     # breaks up a large image into smaller patches,
     # of size subimage_slen x subimage_slen
+    # NOTE: input and output are torch tensors, not numpy arrays
+    #       (need the unfold command from torch)
 
     len(image.shape) == 2
 
@@ -133,9 +135,9 @@ def _tile_image(image, subimage_slen, return_tile_coords = False):
         tile_coords = torch.LongTensor([[i * subimage_slen, j * subimage_slen] \
                                         for i in range(num_x_tiles) for j in range(num_y_tiles)])
 
-        return image_unfold.contiguous().view(batchsize, subimage_slen, subimage_slen).numpy(), tile_coords.numpy()
+        return image_unfold.contiguous().view(batchsize, subimage_slen, subimage_slen), tile_coords
     else:
-        return image_unfold.contiguous().view(batchsize, subimage_slen, subimage_slen).numpy()
+        return image_unfold.contiguous().view(batchsize, subimage_slen, subimage_slen)
 
 class SDSSHubbleData(Dataset):
 
@@ -203,7 +205,9 @@ class SDSSHubbleData(Dataset):
         # break up the full sdss image into tiles, and create a batch
         self.images, self.tile_coords = \
             _tile_image(torch.Tensor(self.sdss_image_full), slen, return_tile_coords = True)
-        self.backgrounds = _tile_image(torch.Tensor(self.sdss_background_full), slen)
+        self.images = self.images.numpy()
+        self.tile_coords = self.tile_coords.numpy()
+        self.backgrounds = _tile_image(torch.Tensor(self.sdss_background_full), slen).numpy()
 
         # get counts of stars in each tile
         x = np.histogram2d(self.pix_coordinates[0], self.pix_coordinates[1],

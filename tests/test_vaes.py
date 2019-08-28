@@ -4,6 +4,8 @@ import unittest
 
 import torch
 
+import sys
+sys.path.insert(0, '../')
 import objectives_lib
 import simulated_datasets_lib
 import starnet_vae_lib
