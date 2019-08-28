@@ -1,8 +1,14 @@
 import torch
+import numpy as np
+from joblib import Parallel, delayed
+
+# my implementation was still slower than scipy's :(
+# from hungarian_alg import linear_sum_assignment
+from scipy.optimize import linear_sum_assignment
 
 from torch.distributions import normal
 
-from star_datasets_lib import get_is_on_from_n_stars
+from simulated_datasets_lib import get_is_on_from_n_stars
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -71,101 +77,166 @@ def eval_star_counter_loss(star_counter, train_loader,
 def _logit(x, tol = 1e-8):
     return torch.log(x + tol) - torch.log(1 - x + tol)
 
-def _get_normal_logprob(x, mean, logvar):
-    norm = normal.Normal(loc = mean, \
-                        scale = torch.exp(0.5 * logvar))
+def eval_normal_logprob(x, mu, log_var):
+    return - 0.5 * log_var - 0.5 * (x - mu)**2 / torch.exp(log_var)
 
-    return norm.log_prob(x)
+def eval_logitnormal_logprob(x, mu, log_var):
+    logit_x = _logit(x)
+    return eval_normal_logprob(logit_x, mu, log_var)
 
-def get_losses_one_detection(true_logit_locs, true_log_fluxes, true_n_stars,
-                            logit_loc_mean_i, logit_loc_logvar_i,
-                            log_flux_mean_i, log_flux_logvar_i):
+def eval_lognormal_logprob(x, mu, log_var):
+    log_x = torch.log(x)
+    return eval_normal_logprob(log_x, mu, log_var)
 
-    assert len(logit_loc_mean_i.size()) == 2
-    assert len(log_flux_mean_i.size()) == 1
+def run_batch_hungarian_alg(log_probs_all, n_stars):
+    # log_probs_all should be a tensor of size
+    # (batchsize x estimated_param x true param)
+    # giving for each N, the log prob of the estimated parameter
+    # against the target parameter
 
-    locs_loss_all = - _get_normal_logprob(true_logit_locs,
-                                logit_loc_mean_i.unsqueeze(1),
-                                logit_loc_logvar_i.unsqueeze(1)).sum(dim = 2)
+    # this finds the MAXIMAL permutation of log_probs_all
 
-    (locs_loss, perm) = torch.min(locs_loss_all, 1)
+    batchsize = log_probs_all.shape[0]
+    max_detections = log_probs_all.shape[1]
+    perm = np.zeros((batchsize,max_detections))
 
-    seq_tensor = torch.LongTensor([i for i in range(true_log_fluxes.shape[0])])
-    fluxes_loss = - _get_normal_logprob(true_log_fluxes,
-                        log_flux_mean_i.unsqueeze(1),
-                        log_flux_logvar_i.unsqueeze(1))[seq_tensor, perm]
+    # This is done in numpy ...
+    log_probs_all_np = log_probs_all.to('cpu').detach().numpy()
 
-    return locs_loss + fluxes_loss, perm
+    for i in range(batchsize):
+        n_stars_i = int(n_stars[i])
+        row_indx, col_indx = linear_sum_assignment(\
+                                -log_probs_all_np[i, 0:n_stars_i, 0:n_stars_i])
 
+        perm[i, :] = np.concatenate((col_indx, np.arange(n_stars_i, max_detections)))
 
-    # max_detections = 1 # logit_loc_mean.size[1]
-    #
-    # for i in range(max_detections):
-    #
-    #     # loss for locations
-    #     logit_loc_mean_i = logit_loc_mean[:, i, :]
-    #     logit_loc_logvar_i = logit_loc_logvar[:, i, :]
-    #
-    #     locs_loss_all = - _get_normal_logprob(true_locs,
-    #                             logit_loc_mean_i.unsqueeze(1),
-    #                             logit_loc_logvar_i.unsqueeze(1)).sum(dim = 2)
-    #
-    #     (locs_loss, perm) = torch.min(locs_loss_all, 1)
-    #
-    #     # loss for fluxes
-    #     log_flux_mean_i = log_flux_mean[:, i]
-    #     log_flux_logvar_i = log_flux_logvar[:, i]
-    #
-    #     seq_tensor = torch.LongTensor([i for i in range(images.shape[0])])
-    #     fluxes_loss = - _get_normal_logprob(true_fluxes,
-    #                         log_flux_mean_i.unsqueeze(1),
-    #                         log_flux_logvar_i.unsqueeze(1))[seq_tensor, perm]
-    #
-    # return
+    return torch.LongTensor(perm)
+
+# def run_batch_hungarian_alg(log_probs_all, n_stars, ncores = -2):
+#     # log_probs_all should be a tensor of size
+#     # (batchsize x estimated_param x true param)
+#     # giving for each N, the log prob of the estimated parameter
+#     # against the target parameter
+#
+#     # this finds the MAXIMAL permutation of log_probs_all
+#
+#     # This is done in numpy ...
+#     log_probs_all_np = log_probs_all.to('cpu').detach().numpy()
+#
+#     batchsize = log_probs_all.shape[0]
+#     max_detections = log_probs_all.shape[1]
+#     perm = np.zeros((batchsize,max_detections))
+#
+#     def lin_assign_fun(x):
+#         row_indx, col_indx = linear_sum_assignment(-x)
+#
+#         return(np.concatenate((col_indx, np.arange(x.shape[1], max_detections))))
+#
+#     perm = Parallel(n_jobs=ncores, backend="threading")(delayed(lin_assign_fun)(log_probs_all[i, :int(n_stars[i]), :int(n_stars[i])]) for i in range(batchsize))
+#
+#     return torch.LongTensor(perm)
+
+# def _permute_losses_mat(losses_mat, perm):
+#     batchsize = losses_mat.shape[0]
+#     max_stars = losses_mat.shape[1]
+#
+#     assert losses_mat.shape[2] == max_stars
+#     assert perm.shape[0] == batchsize
+#     assert perm.shape[1] == max_stars
+#
+#     mat_perm = torch.zeros((batchsize, max_stars)).to(device)
+#     seq_tensor = torch.LongTensor([i for i in range(batchsize)])
+#
+#     torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
+#     # for i in range(max_stars):
+#     #     i_tensor = torch.LongTensor([i for j in range(batchsize)])
+#     #     mat_perm[:, i] = losses_mat[seq_tensor, i_tensor, perm[:, i]]
+#
+#     return mat_perm
+def _permute_losses_mat(losses_mat, perm):
+    batchsize = losses_mat.shape[0]
+    max_stars = losses_mat.shape[1]
+
+    assert losses_mat.shape[2] == max_stars
+    assert perm.shape[0] == batchsize
+    assert perm.shape[1] == max_stars
+
+    return torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
+
+def get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var):
+    # batchsize x estimated parameters x true parameters
+
+    batchsize = true_locs.shape[0]
+    max_stars = true_locs.shape[1]
+
+    # get losses for locations
+    _logit_loc_mean = logit_loc_mean.view(batchsize, max_stars, 1, 2)
+    _logit_loc_log_var = logit_loc_log_var.view(batchsize, max_stars, 1, 2)
+    _true_locs = true_locs.view(batchsize, 1, max_stars, 2)
+
+    # this is batchsize x (n_stars x n_stars)
+    # the log prob for each mean x observed location
+    locs_log_probs_all = eval_logitnormal_logprob(_true_locs,
+                            _logit_loc_mean, _logit_loc_log_var).sum(dim = 3)
+
+    return locs_log_probs_all
+
+def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
+    batchsize = true_fluxes.shape[0]
+    max_stars = true_fluxes.shape[1]
+
+    _log_flux_mean = log_flux_mean.view(batchsize, max_stars, 1)
+    _log_flux_log_var = log_flux_log_var.view(batchsize, max_stars, 1)
+    _true_fluxes = true_fluxes.view(batchsize, 1, max_stars)
+
+    # this is batchsize x (n_stars x n_stars)
+    # the log prob for each mean x observed flux
+    flux_log_probs_all = eval_lognormal_logprob(_true_fluxes,
+                                _log_flux_mean, _log_flux_log_var)
+    assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_stars]
+
+    flux_log_probs_all = eval_lognormal_logprob(_true_fluxes,
+                                _log_flux_mean, _log_flux_log_var)
+
+    return flux_log_probs_all
 
 def get_encoder_loss(star_encoder, images, true_locs,
                         true_fluxes, true_n_stars):
+
+    # get variational parameters
+    logit_loc_mean, logit_loc_log_var, \
+            log_flux_mean, log_flux_log_var = star_encoder(images, true_n_stars)
+
+    # get losses for all estimates stars against all true stars
+
+    # this is batchsize x (n_stars x n_stars)
+    # the log prob for each mean x observed location
+    locs_log_probs_all = \
+        get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var)
+
+    flux_log_probs_all = get_fluxes_logprob_all_combs(true_fluxes, \
+                                log_flux_mean, log_flux_log_var)
+
+    # for my sanity
     batchsize = images.shape[0]
+    max_stars = true_locs.shape[1]
+    assert list(locs_log_probs_all.shape) == [batchsize, max_stars, max_stars]
+    assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_stars]
 
-    logit_loc_mean, logit_loc_logvar, \
-            log_flux_mean, log_flux_logvar = star_encoder(images, true_n_stars)
+    # get permutation
+    perm = run_batch_hungarian_alg(locs_log_probs_all, true_n_stars)
 
-    # transform true parameters
-    true_logit_locs = _logit(true_locs)
-    true_log_fluxes = torch.log(true_fluxes)
+    # only count those stars that are on
+    is_on = get_is_on_from_n_stars(true_n_stars, max_stars)
 
-    # which stars on "on"
-    is_on_array = get_is_on_from_n_stars(true_n_stars,
-                                            star_encoder.max_detections)
-    seq_tensor = torch.LongTensor([i for i in range(batchsize)])
+    # get losses
+    locs_loss = -(_permute_losses_mat(locs_log_probs_all, perm) * is_on).sum(dim = 1)
+    fluxes_loss = -(_permute_losses_mat(flux_log_probs_all, perm) * is_on).sum(dim = 1)
 
-    perm_array = torch.zeros(batchsize, star_encoder.max_detections)
-    total_loss = 0.
-    for i in range(star_encoder.max_detections):
-        true_logit_locs = true_logit_locs * is_on_array.unsqueeze(2) + \
-                        1e16 * (1 - is_on_array).unsqueeze(2)
 
-        true_log_fluxes = true_log_fluxes * is_on_array + 1e16 * (1 - is_on_array)
+    loss = (locs_loss + fluxes_loss).mean()
 
-        logit_loc_mean_i = logit_loc_mean[:, i, :]
-        logit_loc_logvar_i = logit_loc_logvar[:, i, :]
-
-        log_flux_mean_i = log_flux_mean[:, i]
-        log_flux_logvar_i = log_flux_logvar[:, i]
-
-        loss, perm = \
-            get_losses_one_detection(true_logit_locs, true_log_fluxes, true_n_stars,
-                                        logit_loc_mean_i, logit_loc_logvar_i,
-                                        log_flux_mean_i, log_flux_logvar_i)
-
-        total_loss = total_loss + loss * is_on_array[seq_tensor, perm]
-
-        # update which stars are still "on"
-        is_on_array[seq_tensor, perm] = 0
-
-        perm_array[:, i] = perm
-
-    return total_loss, perm_array
+    return loss, locs_loss, fluxes_loss, perm
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False):
@@ -187,7 +258,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
         # evaluate log q
         loss = get_encoder_loss(star_encoder, images, true_locs,
-                                true_fluxes, true_n_stars)[0].mean()
+                                true_fluxes, true_n_stars)[0]
 
         if train:
             loss.backward()

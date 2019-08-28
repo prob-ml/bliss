@@ -4,7 +4,7 @@ import torch
 import torch.optim as optim
 
 import sdss_psf
-import star_datasets_lib
+import simulated_datasets_lib
 import starnet_vae_lib
 import objectives_lib
 
@@ -39,7 +39,7 @@ print(data_params)
 # draw data
 n_stars = 60000
 star_dataset = \
-    star_datasets_lib.load_dataset_from_params(psf_fit_file,
+    simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
                             n_stars = n_stars,
                             use_fresh_data = False,

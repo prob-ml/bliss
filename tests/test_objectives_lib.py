@@ -4,81 +4,118 @@ import unittest
 
 import torch
 
+import sys
+sys.path.insert(0, './../')
+
 import objectives_lib
-import star_datasets_lib
+import simulated_datasets_lib
 import starnet_vae_lib
+from hungarian_alg import find_min_col_permutation
 
 import json
-
-# Get data that we will use in our tests
-with open('./data/default_star_parameters.json', 'r') as fp:
-    data_params = json.load(fp)
-
-data_params['min_stars'] = 0
-data_params['max_stars'] = 4
-
-# draw data
-n_stars = 64
-psf_fit_file = \
-    './../celeste_net/sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
-
-star_dataset = \
-    star_datasets_lib.load_dataset_from_params(psf_fit_file,
-                            data_params,
-                            n_stars = n_stars,
-                            use_fresh_data = False,
-                            add_noise = True)
 
 class TestStarCounterObjective(unittest.TestCase):
     def test_get_one_hot(self):
         # This tests the "get_one_hot_encoding_from_int"
         # function. We check that it returns a valid one-hot encoding
 
-        n_classes = data_params['max_stars'] + 1
-        z = star_dataset.n_stars
+        n_classes = 10
+        z = torch.randint(0, 10, (100, ))
 
         z_one_hot = objectives_lib.get_one_hot_encoding_from_int(z, n_classes)
 
         assert all(z_one_hot.sum(1) == 1)
         assert all(z_one_hot.float().max(1)[0] == 1)
-        assert all(z_one_hot.float().max(1)[1].float() == z)
-
+        assert all(z_one_hot.float().max(1)[1].float() == z.float())
 
 class TestStarEncoderObjective(unittest.TestCase):
-    def test_params_from_hidden(self):
-        # this tests the collection of parameters from the final layer
+    def test_perm_mat(self):
+        # this tests the _permute_losses_mat function, make sure
+        # it returns the correct perumtation of losses
 
-        # get encoder
-        star_encoder = starnet_vae_lib.StarEncoder(slen = data_params['slen'],
-                            n_bands = 1,
-                            max_detections = data_params['max_stars'])
+        # get data
+        batchsize = 200
+        max_detections = 4
+        locs_log_probs_all = torch.randn(batchsize, max_detections, max_detections)
 
-        # construct a test matrix, with all 1's for the one detection parameters ,
-        #   all 2's for the second detection parameters, etc
-        h = torch.zeros(n_stars, star_encoder.dim_out_all)
+        # some permutation
+        perm = objectives_lib.run_batch_hungarian_alg(locs_log_probs_all,
+                        n_stars = torch.ones(batchsize) * max_detections)
 
-        indx = 0
-        for i in range(1, data_params['max_stars'] + 1):
-            n_params_i = 6 * i
-            h[:, indx:(indx + n_params_i)] = i
-            indx = indx + n_params_i
+        # get losses according to the found permutation
+        perm_losses = objectives_lib._permute_losses_mat(locs_log_probs_all, perm)
 
-            assert torch.sum(h == i) == (i * 6 * n_stars)
+        # check it worked
+        for i in range(batchsize):
+            for j in range(max_detections):
+                assert perm_losses[i, j] == locs_log_probs_all[i, j, perm[i, j]]
 
-        # test my indexing of parameters
-        for i in range(1, data_params['max_stars'] + 1):
-            logit_loc_mean, logit_loc_log_var, \
-                log_flux_mean, log_flux_log_var = \
-                    star_encoder._get_params_from_last_hidden_layer(h, i)
+    def test_get_all_comb_losses(self):
+        # this checks that our function to return all combination of losses
+        # is correct
 
-            assert torch.all(logit_loc_mean[:, 0:i, :] == i)
-            assert torch.all(logit_loc_log_var[:, 0:i, :] == i)
+        batchsize = 200
+        max_detections = 4
 
-            assert torch.all(logit_loc_log_var[:, i:, :] == 0)
-            assert torch.all(logit_loc_log_var[:, i:, :] == 0)
+        # true parameters
+        true_locs = torch.rand(batchsize, max_detections, 2)
+        true_fluxes = torch.exp(torch.randn(batchsize, max_detections))
 
-            assert torch.all(log_flux_mean[:, 0:i] == i)
-            assert torch.all(log_flux_log_var[:, 0:i] == i)
+        # estimated parameters
+        logit_loc_mean = torch.randn(batchsize, max_detections, 2)
+        logit_loc_log_var = torch.randn(batchsize, max_detections, 2)
 
-            assert torch.all(log_flux_mean[:, i:] == 0)
-            assert torch.all(log_flux_log_var[:, i:] == 0)
+        log_flux_mean  = torch.randn(batchsize, max_detections)
+        log_flux_log_var = torch.randn(batchsize, max_detections)
+
+        # get loss for locations
+        locs_log_probs_all = \
+            objectives_lib.get_locs_logprob_all_combs(true_locs,
+                                    logit_loc_mean, logit_loc_log_var)
+
+        # get loss for fluxes
+        flux_log_probs_all = \
+            objectives_lib.get_fluxes_logprob_all_combs(true_fluxes, \
+                                log_flux_mean, log_flux_log_var)
+
+        # for my sanity
+        assert list(locs_log_probs_all.shape) == \
+            [batchsize, max_detections, max_detections]
+        assert list(flux_log_probs_all.shape) == \
+            [batchsize, max_detections, max_detections]
+
+        for i in range(batchsize):
+            for j in range(max_detections):
+                for k in range(max_detections):
+                    flux_loss_ij = \
+                        objectives_lib.eval_lognormal_logprob(true_fluxes[i, k],
+                                                        log_flux_mean[i, j],
+                                                        log_flux_log_var[i, j])
+
+                    assert flux_loss_ij == flux_log_probs_all[i, j, k]
+
+                    locs_loss_ij = \
+                        objectives_lib.eval_logitnormal_logprob(true_locs[i, k],
+                                                logit_loc_mean[i, j],
+                                                logit_loc_log_var[i, j]).sum()
+
+                    assert locs_loss_ij == locs_log_probs_all[i, j, k]
+
+    def test_batch_hungarian(self):
+
+        dim = 4
+        batchsize = 10
+
+        X = torch.randn(batchsize, dim, dim)
+
+        perm1 = objectives_lib.run_batch_hungarian_alg(X,
+                    n_stars = torch.ones(batchsize) * dim)
+
+        for i in range(batchsize):
+            perm2 = find_min_col_permutation(-X[i])
+
+            assert torch.all(perm1[i, :] == torch.LongTensor(perm2))
+
+
+if __name__ == '__main__':
+    unittest.main()
