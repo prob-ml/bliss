@@ -224,7 +224,7 @@ def get_encoder_loss(star_encoder, images, true_locs,
     assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_stars]
 
     # get permutation
-    perm = run_batch_hungarian_alg(locs_log_probs_all, true_n_stars)
+    perm = run_batch_hungarian_alg(locs_log_probs_all, true_n_stars).to(device)
 
     # only count those stars that are on
     is_on = get_is_on_from_n_stars(true_n_stars, max_stars)

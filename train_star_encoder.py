@@ -20,7 +20,7 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # load PSF
-psf_fit_file = './sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
+psf_fit_file = '../celeste_net/sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
 print('psf file: \n', psf_fit_file)
 
 # set seed
@@ -69,7 +69,7 @@ optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 
-n_epochs = 5000
+n_epochs = 500
 
 for epoch in range(n_epochs):
     t0 = time.time()
