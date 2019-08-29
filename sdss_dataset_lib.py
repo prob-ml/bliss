@@ -144,7 +144,7 @@ class SDSSHubbleData(Dataset):
     def __init__(self, sdssdir = '../../celeste_net/sdss_stage_dir/',
                         hubble_cat_file = '../hubble_data/NCG7089/' + \
                                          'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-                        slen = 10,
+                        slen = 11,
                         max_mag = 22,
                         max_detections = 20):
 
@@ -162,17 +162,17 @@ class SDSSHubbleData(Dataset):
         camcol = 2
         field = 136
         band = 2
-        sdss_data = SloanDigitalSkySurvey(sdssdir,
-                                                       run = run,
-                                                       camcol = camcol,
-                                                       field = field,
-                                                       band = band)
+        self.sdss_data = SloanDigitalSkySurvey(sdssdir,
+                                           run = run,
+                                           camcol = camcol,
+                                           field = field,
+                                           band = band)
 
         #
         self.sdss_image_full = \
-            sdss_data[0]['image'].squeeze()[0:1480, 1:2041]
+            self.sdss_data[0]['image'].squeeze()[0:1485, 1:2047]
         self.sdss_background_full = \
-            sdss_data[0]['background'].squeeze()[0:1480, 1:2041]
+            self.sdss_data[0]['background'].squeeze()[0:1485, 1:2047]
 
         # load hubble data
         print('loading hubble data from ', hubble_cat_file)

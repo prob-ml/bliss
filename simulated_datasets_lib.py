@@ -31,7 +31,7 @@ def _trim_psf(psf, slen):
 
 def _get_mgrid(slen):
     offset = (slen - 1) / 2
-    y, x = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
+    x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
     return torch.Tensor(np.dstack((x, y))) / offset
 
 def plot_one_star(locs, psf, cached_grid = None):
