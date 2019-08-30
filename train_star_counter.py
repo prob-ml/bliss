@@ -32,7 +32,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['min_stars'] = 0
-data_params['max_stars'] = 8
+data_params['max_stars'] = 20
 
 print(data_params)
 
@@ -69,7 +69,7 @@ optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 
-n_epochs = 5000
+n_epochs = 500
 
 for epoch in range(n_epochs):
     t0 = time.time()
