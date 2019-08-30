@@ -12,6 +12,8 @@ import fitsio
 from astropy.io import fits
 from astropy.wcs import WCS
 
+import sdss_psf
+
 import matplotlib.pyplot as plt
 
 class SloanDigitalSkySurvey(Dataset):
@@ -65,18 +67,18 @@ class SloanDigitalSkySurvey(Dataset):
         background_list = []
 
         cache_path = field_dir.joinpath("cache.pkl")
-        if cache_path.exists():
-            print('loading cached sdss data from ', cache_path)
-            return pickle.load(cache_path.open("rb"))
+        # if cache_path.exists():
+        #     print('loading cached sdss image from ', cache_path)
+        #     return pickle.load(cache_path.open("rb"))
 
         for b, bl in enumerate("ugriz"):
             if b != 2:
-                # taking only the green band
+                # taking only the red band
                 continue
 
             frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(bl, run, camcol, field)
-            print("loading sdss frame from", frame_name)
             frame_path = str(field_dir.joinpath(frame_name))
+            print("loading sdss image from", frame_path)
             frame = fitsio.FITS(frame_path)
 
             calibration = frame[1].read()
@@ -106,7 +108,8 @@ class SloanDigitalSkySurvey(Dataset):
             frame.close()
 
         ret = {'image': np.stack(image_list),
-               'background': np.stack(background_list)}
+               'background': np.stack(background_list),
+               'nelec_per_nmgy': nelec_per_nmgy}
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
         return ret
@@ -139,6 +142,9 @@ def _tile_image(image, subimage_slen, return_tile_coords = False):
     else:
         return image_unfold.contiguous().view(batchsize, subimage_slen, subimage_slen)
 
+def convert_mag_to_nmgy(mag):
+    return 10**((22.5 - mag) / 2.5)
+
 class SDSSHubbleData(Dataset):
 
     def __init__(self, sdssdir = '../../celeste_net/sdss_stage_dir/',
@@ -149,7 +155,6 @@ class SDSSHubbleData(Dataset):
                         max_detections = 20):
 
         super(SDSSHubbleData, self).__init__()
-
 
         assert os.path.exists(sdssdir)
 
@@ -168,11 +173,21 @@ class SDSSHubbleData(Dataset):
                                            field = field,
                                            band = band)
 
+        self.sdss_path = pathlib.Path(sdssdir)
+        # meta data for the run + camcol
+        psf_file = "psField-{:06d}-{:d}-{:04d}.fit".format(run, camcol, field)
+        psf_file = self.sdss_path.joinpath(str(run), str(camcol), \
+                                            str(field), psf_file)
+        print('loading psf from ', psf_file)
+        self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_file)
+        self.psf_max = np.max(self.psf_full)
+
         #
         self.sdss_image_full = \
             self.sdss_data[0]['image'].squeeze()[0:1485, 1:2047]
         self.sdss_background_full = \
             self.sdss_data[0]['background'].squeeze()[0:1485, 1:2047]
+        self.nelec_per_nmgy = self.sdss_data[0]['nelec_per_nmgy']
 
         # load hubble data
         print('loading hubble data from ', hubble_cat_file)
@@ -185,22 +200,30 @@ class SDSSHubbleData(Dataset):
         # keep only those locations with certain brightness
         hubble_ra = HTcat[:,21][hubble_rmag < max_mag]
         hubble_dc = HTcat[:,22][hubble_rmag < max_mag]
-        self.hubble_rmag = hubble_rmag[hubble_rmag < max_mag]
+        hubble_rmag = hubble_rmag[hubble_rmag < max_mag]
 
         # convert hubble r.a and declination to pixel coordinates
         # (0, 0) is top left of self.sdss_image_full
         frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format('ugriz'[band], run, camcol, field)
         field_dir = pathlib.Path(sdssdir).joinpath(str(run), str(camcol), str(field))
         frame_path = str(field_dir.joinpath(frame_name))
-        print('getting frame data from: ', frame_path)
+        print('getting sdss coordinates from: ', frame_path)
         hdulist = fits.open(str(frame_path))
         wcs = WCS(hdulist['primary'].header)
         # NOTE: pix_coordinates are (column x row), i.e. pix_coord[0] corresponds to a column
-        self.pix_coordinates = \
+        pix_coordinates = \
             wcs.wcs_world2pix(hubble_ra, hubble_dc, 0, ra_dec_order = True)
 
+        self.locs_x0 = pix_coordinates[1] # the row of pixel
+        self.locs_x1 = pix_coordinates[0] # the column of pixel
+
         # NOTE since we ignored the first column in our image
-        self.pix_coordinates[0] = self.pix_coordinates[0] - 1
+        self.locs_x1 = self.locs_x1 - 1
+
+        # convert hubble magnitude to n_electron count
+        which_cols = np.floor(self.locs_x1 / len(self.nelec_per_nmgy)).astype(int)
+        hubble_nmgy = convert_mag_to_nmgy(hubble_rmag)
+        self.fluxes = hubble_nmgy * self.nelec_per_nmgy[which_cols] # / self.psf_max
 
         # break up the full sdss image into tiles, and create a batch
         self.images, self.tile_coords = \
@@ -210,7 +233,7 @@ class SDSSHubbleData(Dataset):
         self.backgrounds = _tile_image(torch.Tensor(self.sdss_background_full), slen).numpy()
 
         # get counts of stars in each tile
-        x = np.histogram2d(self.pix_coordinates[0], self.pix_coordinates[1],
+        x = np.histogram2d(self.locs_x1, self.locs_x0,
                           bins = (np.arange(0, self.sdss_image_full.shape[1] + slen, step = slen),
                                   np.arange(0, self.sdss_image_full.shape[0] + slen, step = slen)));
         self.counts_mat = np.transpose(x[0])
@@ -253,7 +276,7 @@ class SDSSHubbleData(Dataset):
             fluxes = np.concatenate((fluxes, np.zeros(n_null)))
 
         return {'image': self.images[idx],
-                'backgrounds': self.backgrounds[idx],
+                'background': self.backgrounds[idx],
                 'locs': locs,
                 'fluxes': fluxes,
                 'n_stars': n_stars}
@@ -262,15 +285,15 @@ class SDSSHubbleData(Dataset):
         # x0 and x1 correspond to matrix indices
         # x0 is row of pixel, x1 is column of pixel
 
-        which_pixels = (self.pix_coordinates[1] > x0) & \
-                                (self.pix_coordinates[1] < (x0 + slen)) & \
-                             (self.pix_coordinates[0] > x1) & \
-                                        (self.pix_coordinates[0] < (x1 + slen))
+        which_pixels = (self.locs_x0 > x0) & \
+                                (self.locs_x0 < (x0 + slen)) & \
+                             (self.locs_x1 > x1) & \
+                                        (self.locs_x1 < (x1 + slen))
 
-        locs = np.transpose(np.array([(self.pix_coordinates[1][which_pixels] - x0) / (slen - 1),
-                                      (self.pix_coordinates[0][which_pixels] - x1) / (slen - 1)]))
+        locs = np.transpose(np.array([(self.locs_x0[which_pixels] - x0) / (slen - 1),
+                                      (self.locs_x1[which_pixels] - x1) / (slen - 1)]))
 
-        fluxes = self.hubble_rmag[which_pixels]
+        fluxes = self.fluxes[which_pixels]
 
         return locs, fluxes
 
