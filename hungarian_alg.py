@@ -32,7 +32,7 @@ def run_batch_hungarian_alg_parallel(log_probs_all, n_stars):
     perm = np.zeros((batchsize,max_detections))
 
     # This is done in numpy ...
-    log_probs_all_np = log_probs_all.to('cpu').detach().numpy()
+    log_probs_all_np = log_probs_all.to('cpu').detach().numpy(); n_stars_np = n_stars.to('cpu').detach().numpy()
 
 
     perm_array_base = multiprocessing.Array(ctypes.c_double, batchsize*max_detections)
@@ -41,9 +41,9 @@ def run_batch_hungarian_alg_parallel(log_probs_all, n_stars):
 
     pool = multiprocessing.Pool(multiprocessing.cpu_count(),
                                 _pool_init,
-                                (perm_array, log_probs_all_np, n_stars))
+                                (perm_array, log_probs_all_np, n_stars_np))
 
-    pool.map(pool_linear_sum_assignment, range(batchsize))
+    pool.map(pool_linear_sum_assignment, range(batchsize)); pool.close()
 
     return(torch.LongTensor(perm_array))
 
