@@ -7,11 +7,13 @@ from scipy.optimize import linear_sum_assignment
 
 import torch
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 batchsize = 2048
 dim = 20
-X = torch.randn(batchsize, dim, dim)
+X = torch.randn(batchsize, dim, dim).to(device)
 
-true_n_stars = torch.randint(0, dim+1, (batchsize, ))
+true_n_stars = torch.randint(0, dim+1, (batchsize, )).to(device)
 
 t0 = time.time()
 perm_array1 = hungarian_alg.run_batch_hungarian_alg(X, true_n_stars)

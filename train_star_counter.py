@@ -32,7 +32,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['min_stars'] = 0
-data_params['max_stars'] = 20
+data_params['max_stars'] = 1
 
 print(data_params)
 
@@ -88,7 +88,7 @@ for epoch in range(n_epochs):
 
         print('**** test loss: {:.3f}; ****'.format(test_loss))
 
-        detector_outfile = './fits/starnet_invKL_counter_new_priors'
+        detector_outfile = './fits/starnet_invKL_counter_test'
         print("writing the counter parameters to " + detector_outfile)
         torch.save(star_counter.state_dict(), detector_outfile)
 

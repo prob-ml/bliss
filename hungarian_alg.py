@@ -1,6 +1,6 @@
 import torch
 
-import multiprocessing
+from torch import multiprocessing
 import ctypes
 import numpy as np
 
