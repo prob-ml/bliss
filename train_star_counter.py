@@ -88,7 +88,7 @@ for epoch in range(n_epochs):
 
         print('**** test loss: {:.3f}; ****'.format(test_loss))
 
-        detector_outfile = './fits/starnet_invKL_counter'
+        detector_outfile = './fits/starnet_invKL_counter_new_priors'
         print("writing the counter parameters to " + detector_outfile)
         torch.save(star_counter.state_dict(), detector_outfile)
 
