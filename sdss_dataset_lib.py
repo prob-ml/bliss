@@ -111,9 +111,7 @@ class SloanDigitalSkySurvey(Dataset):
 
         ret = {'image': np.stack(image_list),
                'background': np.stack(background_list),
-               'nelec_per_nmgy': nelec_per_nmgy,
-               'gain': gain[2],
-               'calibration': calibration}
+               'nelec_per_nmgy': nelec_per_nmgy}
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
         return ret
@@ -330,7 +328,8 @@ class SDSSHubbleData(Dataset):
 
         # get hubble parameters
         locs, fluxes, locs_dim, fluxes_dim = \
-            self._get_hubble_params_in_patch(x0, x1, slen)
+            self._get_hubble_params_in_patch(x0, x1, slen,
+                                            return_dim_stars = plot_dim_stars)
 
         x_locs = locs[:, 1] * (slen - 1)
         y_locs = locs[:, 0] * (slen - 1)
