@@ -174,6 +174,7 @@ class StarsDataset(Dataset):
                 self.draw_batch_parameters(1, return_images = True)
 
         return {'image': images[0, :, :, :],
+                'background': torch.Tensor([[[self.sky_intensity]]]),
                 'locs': locs.squeeze(dim = 0),
                 'fluxes': fluxes.squeeze(dim = 0),
                 'n_stars': n_stars.squeeze(dim = 0)}

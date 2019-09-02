@@ -21,20 +21,21 @@ class StarEncoder(nn.Module):
         # max number of detections
         self.max_detections = max_detections
 
-        # convolutional NN paramters
-        enc_conv_c = 20
+        # convolutional NN parameters
+        enc_conv_c = 32
         enc_kern = 5
-        enc_hidden = 256
+        enc_hidden = 512
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
-                        stride=1, padding=0),
+                        stride=1, padding=3),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
-                        stride=1, padding=0),
+                        stride=1, padding=3),
             nn.ReLU(),
+
             Flatten()
         )
 
@@ -68,14 +69,14 @@ class StarEncoder(nn.Module):
 
         self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
-    def forward_to_last_hidden(self, image):
-        h = self.enc_conv(image)
+    def forward_to_last_hidden(self, images, backgrounds):
+        h = self.enc_conv(images - backgrounds)
         h = self.enc_fc(h)
 
         return self.enc_final(h)
 
-    def forward(self, images, n_stars):
-        h = self.forward_to_last_hidden(images)
+    def forward(self, images, backgrounds, n_stars):
+        h = self.forward_to_last_hidden(images, backgrounds)
 
         batchsize = images.shape[0]
 

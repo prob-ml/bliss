@@ -148,12 +148,13 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
 
     return flux_log_probs_all
 
-def get_encoder_loss(star_encoder, images, true_locs,
+def get_encoder_loss(star_encoder, images, backgrounds, true_locs,
                         true_fluxes, true_n_stars):
 
     # get variational parameters
     logit_loc_mean, logit_loc_log_var, \
-            log_flux_mean, log_flux_log_var = star_encoder(images, true_n_stars)
+            log_flux_mean, log_flux_log_var = \
+                star_encoder(images, backgrounds, true_n_stars)
 
     # get losses for all estimates stars against all true stars
 
@@ -196,6 +197,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
         true_locs = data['locs'].to(device)
         true_n_stars = data['n_stars'].to(device)
         images = data['image'].to(device)
+        backgrounds = data['background'].to(device)
 
         if train:
             star_encoder.train()
@@ -205,7 +207,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
             star_encoder.eval()
 
         # evaluate log q
-        loss = get_encoder_loss(star_encoder, images, true_locs,
+        loss = get_encoder_loss(star_encoder, images, backgrounds, true_locs,
                                 true_fluxes, true_n_stars)[0]
 
         if train:
