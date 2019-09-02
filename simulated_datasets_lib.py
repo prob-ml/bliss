@@ -58,7 +58,10 @@ def plot_one_star(locs, psf, cached_grid = None):
     locs = (locs - 0.5) * 2
     grid_loc = grid.view(1, slen, slen, 2) - locs.view(batchsize, 1, 1, 2)
 
-    return F.grid_sample(psf.expand(batchsize, 1, -1, -1), grid_loc)
+    star = F.grid_sample(psf.expand(batchsize, 1, -1, -1), grid_loc)
+
+    # normalize so one star still sums to 1
+    return star / star.sum(3, keepdim=True).sum(2, keepdim=True)
 
 def plot_multiple_stars(locs, n_stars, fluxes, psf, cached_grid = None):
     # locs is batchsize x max_stars x x_loc x y_loc

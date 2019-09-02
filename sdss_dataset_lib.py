@@ -16,6 +16,8 @@ import sdss_psf
 
 import matplotlib.pyplot as plt
 
+from simulated_datasets_lib import _trim_psf
+
 class SloanDigitalSkySurvey(Dataset):
 
     # this is adapted from
@@ -109,7 +111,9 @@ class SloanDigitalSkySurvey(Dataset):
 
         ret = {'image': np.stack(image_list),
                'background': np.stack(background_list),
-               'nelec_per_nmgy': nelec_per_nmgy}
+               'nelec_per_nmgy': nelec_per_nmgy,
+               'gain': gain[2],
+               'calibration': calibration}
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
         return ret
@@ -178,9 +182,9 @@ class SDSSHubbleData(Dataset):
         psf_file = "psField-{:06d}-{:d}-{:04d}.fit".format(run, camcol, field)
         psf_file = self.sdss_path.joinpath(str(run), str(camcol), \
                                             str(field), psf_file)
-        print('loading psf from ', psf_file)
-        self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_file)
-        self.psf_max = np.max(self.psf_full)
+        # print('loading psf from ', psf_file)
+        # self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_file)
+        # self.psf = _trim_psf(self.psf_full, slen)
 
         #
         self.sdss_image_full = \
