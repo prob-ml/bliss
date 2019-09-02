@@ -32,7 +32,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['min_stars'] = 0
-data_params['max_stars'] = 20
+data_params['max_stars'] = 4
 
 print(data_params)
 
@@ -88,7 +88,7 @@ for epoch in range(n_epochs):
 
         print('**** test loss: {:.3f}; ****'.format(test_loss))
 
-        outfile = './fits/starnet_invKL_encoder_new_priors'
+        outfile = './fits/starnet_invKL_encoder_four_stars'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
