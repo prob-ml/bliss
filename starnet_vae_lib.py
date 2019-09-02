@@ -24,7 +24,7 @@ class StarEncoder(nn.Module):
         # convolutional NN parameters
         enc_conv_c = 32
         enc_kern = 5
-        enc_hidden = 512
+        enc_hidden = 256
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
@@ -46,6 +46,10 @@ class StarEncoder(nn.Module):
         # fully connected layers
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
