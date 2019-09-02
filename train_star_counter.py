@@ -20,7 +20,7 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # load PSF
-psf_fit_file = './sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
+psf_fit_file = '../celeste_net/sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
 print('psf file: \n', psf_fit_file)
 
 # set seed
@@ -32,7 +32,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['min_stars'] = 0
-data_params['max_stars'] = 8
+data_params['max_stars'] = 1
 
 print(data_params)
 
@@ -69,7 +69,7 @@ optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 
-n_epochs = 5000
+n_epochs = 500
 
 for epoch in range(n_epochs):
     t0 = time.time()
@@ -88,7 +88,7 @@ for epoch in range(n_epochs):
 
         print('**** test loss: {:.3f}; ****'.format(test_loss))
 
-        detector_outfile = './fits/starnet_invKL_counter'
+        detector_outfile = './fits/starnet_invKL_counter_test'
         print("writing the counter parameters to " + detector_outfile)
         torch.save(star_counter.state_dict(), detector_outfile)
 

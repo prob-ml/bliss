@@ -31,7 +31,7 @@ def _trim_psf(psf, slen):
 
 def _get_mgrid(slen):
     offset = (slen - 1) / 2
-    y, x = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
+    x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
     return torch.Tensor(np.dstack((x, y))) / offset
 
 def plot_one_star(locs, psf, cached_grid = None):
@@ -58,7 +58,10 @@ def plot_one_star(locs, psf, cached_grid = None):
     locs = (locs - 0.5) * 2
     grid_loc = grid.view(1, slen, slen, 2) - locs.view(batchsize, 1, 1, 2)
 
-    return F.grid_sample(psf.expand(batchsize, 1, -1, -1), grid_loc)
+    star = F.grid_sample(psf.expand(batchsize, 1, -1, -1), grid_loc)
+
+    # normalize so one star still sums to 1
+    return star / star.sum(3, keepdim=True).sum(2, keepdim=True)
 
 def plot_multiple_stars(locs, n_stars, fluxes, psf, cached_grid = None):
     # locs is batchsize x max_stars x x_loc x y_loc

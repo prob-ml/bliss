@@ -101,21 +101,5 @@ class TestStarEncoderObjective(unittest.TestCase):
 
                     assert locs_loss_ij == locs_log_probs_all[i, j, k]
 
-    def test_batch_hungarian(self):
-
-        dim = 4
-        batchsize = 10
-
-        X = torch.randn(batchsize, dim, dim)
-
-        perm1 = objectives_lib.run_batch_hungarian_alg(X,
-                    n_stars = torch.ones(batchsize) * dim)
-
-        for i in range(batchsize):
-            perm2 = find_min_col_permutation(-X[i])
-
-            assert torch.all(perm1[i, :] == torch.LongTensor(perm2))
-
-
 if __name__ == '__main__':
     unittest.main()
