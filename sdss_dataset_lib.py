@@ -198,13 +198,12 @@ class SDSSHubbleData(Dataset):
         HTcat = np.loadtxt(hubble_cat_file, skiprows=True)
 
         # hubble magnitude
-        hubble_rmag = HTcat[:,9]
-
+        self.hubble_rmag = HTcat[:,9]
+        self.which_bright = self.hubble_rmag < self.max_mag
         # right ascension and declination
         # keep only those locations with certain brightness
-        hubble_ra = HTcat[:,21][hubble_rmag < max_mag]
-        hubble_dc = HTcat[:,22][hubble_rmag < max_mag]
-        hubble_rmag = hubble_rmag[hubble_rmag < max_mag]
+        hubble_ra = HTcat[:,21]
+        hubble_dc = HTcat[:,22]
 
         # convert hubble r.a and declination to pixel coordinates
         # (0, 0) is top left of self.sdss_image_full
@@ -226,7 +225,7 @@ class SDSSHubbleData(Dataset):
 
         # convert hubble magnitude to n_electron count
         which_cols = np.floor(self.locs_x1 / len(self.nelec_per_nmgy)).astype(int)
-        hubble_nmgy = convert_mag_to_nmgy(hubble_rmag)
+        hubble_nmgy = convert_mag_to_nmgy(self.hubble_rmag)
         self.fluxes = hubble_nmgy * self.nelec_per_nmgy[which_cols] # / self.psf_max
 
         # break up the full sdss image into tiles, and create a batch
@@ -237,9 +236,10 @@ class SDSSHubbleData(Dataset):
         self.backgrounds = _tile_image(torch.Tensor(self.sdss_background_full), slen).numpy()
 
         # get counts of stars in each tile
-        x = np.histogram2d(self.locs_x1, self.locs_x0,
-                          bins = (np.arange(0, self.sdss_image_full.shape[1] + slen, step = slen),
-                                  np.arange(0, self.sdss_image_full.shape[0] + slen, step = slen)));
+        x = np.histogram2d(self.locs_x1[self.which_bright],
+                        self.locs_x0[self.which_bright],
+                      bins = (np.arange(-0.5, self.sdss_image_full.shape[1] + slen - 0.5, step = slen),
+                              np.arange(-0.5, self.sdss_image_full.shape[0] + slen - 0.5, step = slen)));
         self.counts_mat = np.transpose(x[0])
 
         # keep only those images with no more than max_detection
@@ -259,19 +259,21 @@ class SDSSHubbleData(Dataset):
         x0 = self.tile_coords[idx, 0]
         x1 = self.tile_coords[idx, 1]
 
-        locs, fluxes = self._get_hubble_params_in_patch(x0, x1, self.slen)
+        locs, fluxes, locs_dim, fluxes_dim = \
+            self._get_hubble_params_in_patch(x0, x1, self.slen)
 
         assert self.n_stars[idx] == locs.shape[0]
 
+        n_stars = int(self.n_stars[idx])
         # have a 0.5 pixel border around each image; discard those
         #  outside this border
-        which_keep = (locs[:, 0] > 0) & (locs[:, 0] < 1) & \
-                        (locs[:, 1] > 0) & (locs[:, 1] < 1)
+        # which_keep = (locs[:, 0] > 0) & (locs[:, 0] < 1) & \
+        #                 (locs[:, 1] > 0) & (locs[:, 1] < 1)
 
-        locs = locs[which_keep, :]
-        fluxes = fluxes[which_keep]
-
-        n_stars = sum(which_keep)
+        # locs = locs[which_keep, :]
+        # fluxes = fluxes[which_keep]
+        #
+        # n_stars = sum(which_keep)
 
         if(len(fluxes) < self.max_detections):
             # append "empty" stars
@@ -283,25 +285,40 @@ class SDSSHubbleData(Dataset):
                 'background': self.backgrounds[idx],
                 'locs': locs,
                 'fluxes': fluxes,
+                # TODO: locs_dim and fluxes_dim are currently of varying size;
+                # how will if affect the dataloader?
+                # 'locs_dim': locs_dim,
+                # 'fluxes_dim': fluxes_dim,
                 'n_stars': n_stars}
 
-    def _get_hubble_params_in_patch(self, x0, x1, slen):
+    def _get_hubble_params_in_patch(self, x0, x1, slen, return_dim_stars = False):
         # x0 and x1 correspond to matrix indices
         # x0 is row of pixel, x1 is column of pixel
 
-        which_pixels = (self.locs_x0 > x0) & \
-                                (self.locs_x0 < (x0 + slen)) & \
-                             (self.locs_x1 > x1) & \
-                                        (self.locs_x1 < (x1 + slen))
+        # get all locations in the square
+        which_pixels = (self.locs_x0 > x0 - 0.5) & \
+                                (self.locs_x0 < (x0 + slen - 0.5)) & \
+                         (self.locs_x1 > x1 - 0.5) & \
+                                (self.locs_x1 < (x1 + slen - 0.5))
 
-        locs = np.transpose(np.array([(self.locs_x0[which_pixels] - x0) / (slen - 1),
-                                      (self.locs_x1[which_pixels] - x1) / (slen - 1)]))
+        locs = np.transpose(np.array([(self.locs_x0[which_pixels * self.which_bright] - x0) / (slen - 1),
+                                      (self.locs_x1[which_pixels * self.which_bright] - x1) / (slen - 1)]))
 
-        fluxes = self.fluxes[which_pixels]
+        fluxes = self.fluxes[which_pixels * self.which_bright]
 
-        return locs, fluxes
+        if return_dim_stars:
+            which_dim = (1 - self.which_bright).astype(bool)
+            locs_dim = np.transpose(np.array([(self.locs_x0[which_pixels * which_dim] - x0) / (slen - 1),
+                                          (self.locs_x1[which_pixels * which_dim] - x1) / (slen - 1)]))
 
-    def plot_image_patch(self, x0, x1, slen, flip_y = True):
+            fluxes_dim = self.fluxes[which_pixels * which_dim]
+        else:
+            locs_dim = 0
+            fluxes_dim = 0
+
+        return locs, fluxes, locs_dim, fluxes_dim
+
+    def plot_image_patch(self, x0, x1, slen, flip_y = True, plot_dim_stars = False):
 
         image = self.sdss_image_full[x0:(x0 + slen), x1:(x1 + slen)]
 
@@ -312,7 +329,8 @@ class SDSSHubbleData(Dataset):
         plt.matshow(image)
 
         # get hubble parameters
-        locs, fluxes = self._get_hubble_params_in_patch(x0, x1, slen)
+        locs, fluxes, locs_dim, fluxes_dim = \
+            self._get_hubble_params_in_patch(x0, x1, slen)
 
         x_locs = locs[:, 1] * (slen - 1)
         y_locs = locs[:, 0] * (slen - 1)
@@ -321,3 +339,13 @@ class SDSSHubbleData(Dataset):
             y_locs = (slen - 1) - y_locs
 
         plt.plot(x_locs, y_locs, 'x', color = 'r')
+
+        if plot_dim_stars:
+            # plot dim stars, too
+            x_locs_dim = locs_dim[:, 1] * (slen - 1)
+            y_locs_dim = locs_dim[:, 0] * (slen - 1)
+
+            if flip_y:
+                y_locs_dim = (slen - 1) - y_locs_dim
+
+            plt.plot(x_locs_dim, y_locs_dim, 'x', color = 'g')
