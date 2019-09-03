@@ -49,15 +49,11 @@ class StarEncoder(nn.Module):
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
-            nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
