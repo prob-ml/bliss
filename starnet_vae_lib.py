@@ -70,7 +70,7 @@ class StarEncoder(nn.Module):
                                     nn.ReLU())
             self.add_module(module_name, module)
 
-            final_module_name = 'enc_final_detect' + str(i)
+            final_module_name = 'enc_detect_final' + str(i)
             final_module = nn.Linear(enc_hidden + width_hidden, len_out)
             self.add_module(final_module_name, final_module)
 
