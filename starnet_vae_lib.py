@@ -22,7 +22,7 @@ class StarEncoder(nn.Module):
         self.max_detections = max_detections
 
         # convolutional NN parameters
-        enc_conv_c = 32
+        enc_conv_c = 20
         enc_kern = 5
         enc_hidden = 256
 
@@ -63,7 +63,7 @@ class StarEncoder(nn.Module):
             module_name = 'enc_final_detect' + str(i)
 
             len_out = i * 6
-            width_hidden = enc_hidden + len_out * 10
+            width_hidden = len_out * 10
 
             module = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
