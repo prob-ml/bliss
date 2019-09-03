@@ -55,10 +55,22 @@ class StarEncoder(nn.Module):
             nn.Linear(enc_hidden, enc_hidden),
             nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.ReLU(),
         )
+
+        # add final layer, whose size depends on the number of stars to output
+        for i in range(1, max_detections + 1):
+            module_name = 'enc_final_detect' + str(i)
+
+            len_out = i * 6
+            width_hidden = len_out * 10
+
+            module = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
+                                    nn.ReLU(),
+                                    nn.Linear(width_hidden, width_hidden),
+                                    nn.ReLU(),
+                                    nn.Linear(width_hidden, len_out))
+            self.add_module(module_name, module)
+
 
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
@@ -67,13 +79,19 @@ class StarEncoder(nn.Module):
         self.dim_out_all = \
             int(0.5 * self.max_detections * (self.max_detections + 1)  * 6)
 
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+        # self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
     def forward_to_last_hidden(self, image, background):
         h = self.enc_conv(torch.log(image - background + 1000.))
         h = self.enc_fc(h)
 
-        return self.enc_final(h)
+        h_out = torch.zeros(images.shape[0], 1).to(device)
+        for i in range(1, self.max_detections + 1):
+            h_out = torch.cat((h_out,
+                        getattr(self, 'enc_final_detect' + str(i))(h)),
+                        dim = 1)
+
+        return h_out[:, 1:h_out.shape[1]]
 
     def forward(self, images, background, n_stars):
         h = self.forward_to_last_hidden(images, background)
