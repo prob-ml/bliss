@@ -87,7 +87,7 @@ class StarEncoder(nn.Module):
         h = self.enc_conv(torch.log(image - background + 1000.))
         h = self.enc_fc(h)
 
-        h_out = torch.zeros(images.shape[0], 1).to(device)
+        h_out = torch.zeros(image.shape[0], 1).to(device)
         for i in range(1, self.max_detections + 1):
             h_i = getattr(self, 'enc_detect' + str(i))(h)
 
