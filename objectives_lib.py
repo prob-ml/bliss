@@ -84,23 +84,6 @@ def eval_lognormal_logprob(x, mu, log_var):
     log_x = torch.log(x)
     return eval_normal_logprob(log_x, mu, log_var)
 
-# def _permute_losses_mat(losses_mat, perm):
-#     batchsize = losses_mat.shape[0]
-#     max_stars = losses_mat.shape[1]
-#
-#     assert losses_mat.shape[2] == max_stars
-#     assert perm.shape[0] == batchsize
-#     assert perm.shape[1] == max_stars
-#
-#     mat_perm = torch.zeros((batchsize, max_stars)).to(device)
-#     seq_tensor = torch.LongTensor([i for i in range(batchsize)])
-#
-#     torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
-#     # for i in range(max_stars):
-#     #     i_tensor = torch.LongTensor([i for j in range(batchsize)])
-#     #     mat_perm[:, i] = losses_mat[seq_tensor, i_tensor, perm[:, i]]
-#
-#     return mat_perm
 def _permute_losses_mat(losses_mat, perm):
     batchsize = losses_mat.shape[0]
     max_stars = losses_mat.shape[1]
