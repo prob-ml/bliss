@@ -56,8 +56,6 @@ class StarEncoder(nn.Module):
             nn.BatchNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
 
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.ReLU(),
         )
 
         # add final layer, whose size depends on the number of stars to output
@@ -68,6 +66,8 @@ class StarEncoder(nn.Module):
             width_hidden = enc_hidden + len_out * 10
 
             module = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
+                                    nn.ReLU(),
+                                    nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, len_out))
             self.add_module(module_name, module)
