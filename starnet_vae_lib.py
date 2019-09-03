@@ -65,9 +65,9 @@ class StarEncoder(nn.Module):
             module_name = 'enc_final_detect' + str(i)
 
             len_out = i * 6
-            module = nn.Sequential(nn.Linear(enc_hidden, len_out * 5),
+            module = nn.Sequential(nn.Linear(enc_hidden, len_out * 10),
                                     nn.ReLU(),
-                                    nn.Linear(len_out * 5, len_out),
+                                    nn.Linear(len_out * 10, len_out),
                                     nn.ReLU())
             self.add_module(module_name, module)
 
