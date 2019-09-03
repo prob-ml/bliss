@@ -60,6 +60,18 @@ class StarEncoder(nn.Module):
             nn.ReLU(),
         )
 
+        # add final layer, whose size depends on the number of stars to output
+        for i in range(1, max_detections + 1):
+            module_name = 'enc_final_detect' + str(i)
+
+            len_out = i * 6
+            module = nn.Sequential(nn.Linear(enc_hidden, len_out * 5),
+                                    nn.ReLU(),
+                                    nn.Linear(len_out * 5, len_out),
+                                    nn.ReLU())
+            self.add_module(module_name, module)
+
+
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
         #    six parameters (trhee means, three variances, for two locs and one
@@ -67,13 +79,19 @@ class StarEncoder(nn.Module):
         self.dim_out_all = \
             int(0.5 * self.max_detections * (self.max_detections + 1)  * 6)
 
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+        # self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
     def forward_to_last_hidden(self, images, backgrounds):
         h = self.enc_conv(images - backgrounds)
         h = self.enc_fc(h)
 
-        return self.enc_final(h)
+        h_out = torch.zeros(images.shape[0], 1)
+        for i in range(1, self.max_detections + 1):
+            h_out = torch.cat((h_out,
+                        getattr(self, 'enc_final_detect' + str(i))(h)),
+                        axis = 1)
+
+        return h_out[:, 1:h_out.shape[1]]
 
     def forward(self, images, backgrounds, n_stars):
         h = self.forward_to_last_hidden(images, backgrounds)
