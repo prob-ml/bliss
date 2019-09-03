@@ -34,6 +34,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=0),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=False),
             nn.ReLU(),
             Flatten()
         )
@@ -69,7 +70,7 @@ class StarEncoder(nn.Module):
         self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
     def forward_to_last_hidden(self, image, background):
-        h = self.enc_conv(image)
+        h = self.enc_conv(image - background)
         h = self.enc_fc(h)
 
         return self.enc_final(h)

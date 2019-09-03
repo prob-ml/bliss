@@ -28,7 +28,7 @@ np.random.seed(43534)
 _ = torch.manual_seed(24534)
 
 # data parameters
-with open('./data/old_star_parameters.json', 'r') as fp:
+with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['min_stars'] = 0
@@ -88,7 +88,7 @@ for epoch in range(n_epochs):
 
         print('**** test loss: {:.3f}; ****'.format(test_loss))
 
-        outfile = './fits/starnet_invKL_encoder_four_stars'
+        outfile = './fits/starnet_invKL_encoder_four_stars_experimental'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
