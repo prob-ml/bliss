@@ -85,7 +85,7 @@ class StarEncoder(nn.Module):
     def forward_to_last_hidden(self, images, backgrounds):
         # log transform bc fluxes are super right skewed;
         #   log transform may help
-        image_trans = torch.log(images - backgrounds + 1000.)
+        image_trans = images - backgrounds # torch.log(images - backgrounds + 1000.)
         
         h = self.enc_conv(image_trans)
         h = self.enc_fc(h)
