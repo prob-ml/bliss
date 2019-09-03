@@ -70,7 +70,7 @@ class StarEncoder(nn.Module):
         self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
     def forward_to_last_hidden(self, image, background):
-        h = self.enc_conv(image - background)
+        h = self.enc_conv(torch.log(image - background + 1000.))
         h = self.enc_fc(h)
 
         return self.enc_final(h)
