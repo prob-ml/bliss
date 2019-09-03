@@ -200,6 +200,6 @@ def eval_star_encoder_loss(star_encoder, train_loader,
             loss.backward()
             optimizer.step()
 
-        avg_loss += loss * images.shape[0] / len(train_loader.dataset)
+        avg_loss += loss.item() * images.shape[0] / len(train_loader.dataset)
 
     return avg_loss
