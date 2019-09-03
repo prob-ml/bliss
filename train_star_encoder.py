@@ -28,7 +28,7 @@ np.random.seed(43534)
 _ = torch.manual_seed(24534)
 
 # data parameters
-with open('./data/default_star_parameters.json', 'r') as fp:
+with open('./data/old_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['min_stars'] = 0
