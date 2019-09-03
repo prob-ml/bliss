@@ -68,14 +68,14 @@ class StarEncoder(nn.Module):
 
         self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
-    def forward_to_last_hidden(self, image):
-        h = self.enc_conv(image)
+    def forward_to_last_hidden(self, image, background):
+        h = self.enc_conv(image - background)
         h = self.enc_fc(h)
 
         return self.enc_final(h)
 
-    def forward(self, images, n_stars):
-        h = self.forward_to_last_hidden(images)
+    def forward(self, images, background, n_stars):
+        h = self.forward_to_last_hidden(images, background)
 
         batchsize = images.shape[0]
 
