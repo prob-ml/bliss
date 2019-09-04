@@ -184,18 +184,21 @@ class StarCounter(nn.Module):
         self.detector = nn.Sequential(
             nn.Conv2d(n_bands, 8, 3, padding = 1),
             nn.ReLU(),
+            nn.MaxPool2d(2, stride = 1),
             nn.Conv2d(8, 8, 3, padding = 1),
             nn.BatchNorm2d(8, track_running_stats = False),
 
             nn.Conv2d(8, 16, 3, padding = 1),
             nn.ReLU(),
             nn.Conv2d(16, 16, 3, padding = 1),
-            nn.MaxPool2d(2, stride = 1),
+            nn.BatchNorm2d(16, track_running_stats = False),
+            nn.ReLU(),
 
             nn.Conv2d(16, 16, 3, padding = 1),
             nn.ReLU(),
             nn.Conv2d(16, 16, 3, padding = 1),
-            nn.MaxPool2d(2, stride = 1),
+            nn.BatchNorm2d(16, track_running_stats = False),
+            nn.ReLU(),
 
             Flatten())
 
