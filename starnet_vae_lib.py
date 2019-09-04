@@ -172,36 +172,42 @@ class StarEncoder(nn.Module):
         return logit_loc_mean, logit_loc_logvar, \
                 log_flux_mean, log_flux_logvar
 
+
 class StarCounter(nn.Module):
     def __init__(self, slen, n_bands, max_detections):
 
         super(StarCounter, self).__init__()
 
-        conv_len = 16 * int(np.ceil(slen / 8)) ** 2
-
         self.max_detections = max_detections
 
-        enc_hidden = 128
+        enc_hidden = 256
 
         self.detector = nn.Sequential(
             nn.Conv2d(n_bands, 8, 3, padding=1),
             nn.ReLU(),
             nn.Conv2d(8, 8, 3, padding=1),
-            nn.MaxPool2d(3, stride=2, padding=1),
+            nn.BatchNorm2d(8, track_running_stats = False),
 
             nn.Conv2d(8, 16, 3, padding=1),
             nn.ReLU(),
             nn.Conv2d(16, 16, 3, padding=1),
-            nn.MaxPool2d(3, stride=2, padding=1),
+            nn.BatchNorm2d(16, track_running_stats = False),
 
             nn.Conv2d(16, 16, 3, padding=1),
             nn.ReLU(),
             nn.Conv2d(16, 16, 3, padding=1),
-            nn.MaxPool2d(3, stride=2, padding=1),
+            nn.BatchNorm2d(16, track_running_stats = False),
 
-            Flatten(),
+            Flatten())
 
+        conv_len = self.detector(torch.zeros(1, n_bands, slen, slen)).shape[1]
+
+        self.fc = nn.Sequential(
             nn.Linear(conv_len, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, enc_hidden),
             nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
 
@@ -214,4 +220,5 @@ class StarCounter(nn.Module):
         )
 
     def forward(self, image):
-        return self.detector(image)
+        h = self.detector(image)
+        return self.fc(h)
