@@ -177,66 +177,47 @@ class StarCounter(nn.Module):
 
         super(StarCounter, self).__init__()
 
-        # image parameters
-        self.slen = slen
-        self.n_bands = n_bands
-
-        # max number of detections
         self.max_detections = max_detections
 
-        # convolutional NN paramters
-        enc_conv_c = 20
-        enc_kern = 5
         enc_hidden = 256
 
-        # convolutional NN
-        self.enc_conv = nn.Sequential(
-            nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
-                        stride=1, padding=0),
+        self.detector = nn.Sequential(
+            nn.Conv2d(n_bands, 8, 3, padding=1),
             nn.ReLU(),
+            nn.Conv2d(8, 8, 3, padding=1),
+            nn.BatchNorm2d(8, track_running_stats = False),
 
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
-                        stride=1, padding=0),
-            nn.BatchNorm2d(enc_conv_c, track_running_stats=False),
+            nn.Conv2d(8, 16, 3, padding=1),
             nn.ReLU(),
-            Flatten()
-        )
+            nn.Conv2d(16, 16, 3, padding=1),
+            nn.BatchNorm2d(16, track_running_stats = False),
 
-        # output dimension of convolutions
-        conv_out_dim = \
-            self.enc_conv(torch.zeros(1, n_bands, slen, slen)).size(1)
-
-        # fully connected layers
-        self.enc_fc = nn.Sequential(
-            nn.Linear(conv_out_dim, enc_hidden),
+            nn.Conv2d(16, 16, 3, padding=1),
             nn.ReLU(),
+            nn.Conv2d(16, 16, 3, padding=1),
+            nn.BatchNorm2d(16, track_running_stats = False),
 
-            nn.Linear(enc_hidden, enc_hidden),
+            Flatten())
+
+        conv_len = self.detector(torch.zeros(1, n_bands, slen, slen)).shape[1]
+
+        self.fc = nn.Sequential(
+            nn.Linear(conv_len, enc_hidden),
             nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
             nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
+
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, self.max_detections + 1),
+            nn.LogSoftmax(dim = 1)
         )
-
-        self.module_a = nn.Sequential(nn.Linear(enc_hidden, enc_hidden),
-                                nn.ReLU(),
-                                nn.Linear(enc_hidden, enc_hidden),
-                                nn.BatchNorm1d(enc_hidden, track_running_stats=False),
-                                nn.ReLU())
-
-        self.module_b = nn.Sequential(nn.Linear(enc_hidden, enc_hidden),
-                                nn.ReLU(),
-                                nn.Linear(enc_hidden, enc_hidden),
-                                nn.BatchNorm1d(enc_hidden, track_running_stats=False),
-                                nn.ReLU())
-
-        self.module_c = nn.Sequential(nn.Linear(enc_hidden, self.max_detections + 1),
-                                        nn.LogSoftmax(dim = 1))
 
     def forward(self, image):
-        h = self.enc_fc(self.enc_conv(image))
-        h_a = self.module_a(h)
-        h_b = self.module_b(h + h_a)
-        return self.module_c(h_a + h_b)
+        h = self.detector(image)
+        return self.fc(h)
