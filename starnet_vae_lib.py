@@ -220,5 +220,5 @@ class StarCounter(nn.Module):
         )
 
     def forward(self, image, background):
-        h = self.detector(torch.log(image - background + 1000.))
+        h = self.detector(image)
         return self.fc(h)
