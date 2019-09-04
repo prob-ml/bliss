@@ -44,6 +44,7 @@ def eval_star_counter_loss(star_counter, train_loader,
 
     for _, data in enumerate(train_loader):
         images = data['image'].to(device)
+        backgrounds = data['background'].to(device)
         true_n_stars = data['n_stars'].to(device)
 
         if train:
@@ -54,7 +55,7 @@ def eval_star_counter_loss(star_counter, train_loader,
             star_counter.eval()
 
         # evaluate log q
-        log_probs = star_counter(images)
+        log_probs = star_counter(images, backgrounds)
         loss = get_categorical_loss(log_probs, true_n_stars).mean()
 
         assert not isnan(loss)

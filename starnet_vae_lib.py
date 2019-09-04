@@ -219,6 +219,6 @@ class StarCounter(nn.Module):
             nn.LogSoftmax(dim = 1)
         )
 
-    def forward(self, image):
-        h = self.detector(image)
+    def forward(self, image, background):
+        h = self.detector(torch.log(image - background + 1000.))
         return self.fc(h)
