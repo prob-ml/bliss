@@ -154,7 +154,11 @@ class SDSSHubbleData(Dataset):
                                          'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
                         slen = 11,
                         max_mag = 22,
-                        max_detections = 20):
+                        max_detections = 20,
+                        run = 2583,
+                        camcol = 2,
+                        field = 136,
+                        band = 2):
 
         super(SDSSHubbleData, self).__init__()
 
@@ -165,10 +169,11 @@ class SDSSHubbleData(Dataset):
         self.max_detections = max_detections
 
         # get sdss data
-        run = 2583
-        camcol = 2
-        field = 136
-        band = 2
+        self.run = run
+        self.camcol = camcol
+        self.field = field
+        self.band = band 
+
         self.sdss_data = SloanDigitalSkySurvey(sdssdir,
                                            run = run,
                                            camcol = camcol,
