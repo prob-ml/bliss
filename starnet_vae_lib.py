@@ -179,7 +179,7 @@ class StarCounter(nn.Module):
 
         self.max_detections = max_detections
 
-        enc_hidden = 128
+        enc_hidden = 256
 
         self.detector = nn.Sequential(
             nn.Conv2d(n_bands, 8, 3, padding=1),
@@ -200,8 +200,13 @@ class StarCounter(nn.Module):
             Flatten())
 
         conv_len = self.detector(torch.zeros(1, n_bands, slen, slen)).shape[1]
+
         self.fc = nn.Sequential(
             nn.Linear(conv_len, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, enc_hidden),
             nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
 
