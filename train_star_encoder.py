@@ -88,7 +88,7 @@ for epoch in range(n_epochs):
 
         print('**** test loss: {:.3f}; ****'.format(test_loss))
 
-        outfile = './fits/starnet_invKL_encoder_twenty_stars_new_prior
+        outfile = './fits/starnet_invKL_encoder_twenty_stars_new_prior'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 

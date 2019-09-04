@@ -177,8 +177,8 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
     for _, data in enumerate(train_loader):
         true_fluxes = data['fluxes'].to(device)
-        if(torch.any(true_fluxes > 9e5)):
-            print('warning: large flux')
+        # if(torch.any(true_fluxes > 9e5)):
+        #    print('warning: large flux')
 
         true_locs = data['locs'].to(device)
         true_n_stars = data['n_stars'].to(device)
