@@ -84,23 +84,6 @@ def eval_lognormal_logprob(x, mu, log_var):
     log_x = torch.log(x)
     return eval_normal_logprob(log_x, mu, log_var)
 
-# def _permute_losses_mat(losses_mat, perm):
-#     batchsize = losses_mat.shape[0]
-#     max_stars = losses_mat.shape[1]
-#
-#     assert losses_mat.shape[2] == max_stars
-#     assert perm.shape[0] == batchsize
-#     assert perm.shape[1] == max_stars
-#
-#     mat_perm = torch.zeros((batchsize, max_stars)).to(device)
-#     seq_tensor = torch.LongTensor([i for i in range(batchsize)])
-#
-#     torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
-#     # for i in range(max_stars):
-#     #     i_tensor = torch.LongTensor([i for j in range(batchsize)])
-#     #     mat_perm[:, i] = losses_mat[seq_tensor, i_tensor, perm[:, i]]
-#
-#     return mat_perm
 def _permute_losses_mat(losses_mat, perm):
     batchsize = losses_mat.shape[0]
     max_stars = losses_mat.shape[1]
@@ -148,12 +131,13 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
 
     return flux_log_probs_all
 
-def get_encoder_loss(star_encoder, images, true_locs,
+def get_encoder_loss(star_encoder, images, backgrounds, true_locs,
                         true_fluxes, true_n_stars):
 
     # get variational parameters
     logit_loc_mean, logit_loc_log_var, \
-            log_flux_mean, log_flux_log_var = star_encoder(images, true_n_stars)
+            log_flux_mean, log_flux_log_var = \
+                star_encoder(images, backgrounds, true_n_stars)
 
     # get losses for all estimates stars against all true stars
 
@@ -193,9 +177,13 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
     for _, data in enumerate(train_loader):
         true_fluxes = data['fluxes'].to(device)
+        if(torch.any(true_fluxes > 9e5)):
+            print('warning: large flux')
+
         true_locs = data['locs'].to(device)
         true_n_stars = data['n_stars'].to(device)
         images = data['image'].to(device)
+        backgrounds = data['background'].to(device)
 
         if train:
             star_encoder.train()
@@ -205,13 +193,13 @@ def eval_star_encoder_loss(star_encoder, train_loader,
             star_encoder.eval()
 
         # evaluate log q
-        loss = get_encoder_loss(star_encoder, images, true_locs,
+        loss = get_encoder_loss(star_encoder, images, backgrounds, true_locs,
                                 true_fluxes, true_n_stars)[0]
 
         if train:
             loss.backward()
             optimizer.step()
 
-        avg_loss += loss * images.shape[0] / len(train_loader.dataset)
+        avg_loss += loss.item() * images.shape[0] / len(train_loader.dataset)
 
     return avg_loss

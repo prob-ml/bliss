@@ -34,6 +34,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=0),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=False),
             nn.ReLU(),
             Flatten()
         )
@@ -54,10 +55,31 @@ class StarEncoder(nn.Module):
             nn.Linear(enc_hidden, enc_hidden),
             nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.ReLU(),
         )
+
+        # add final layer, whose size depends on the number of stars to output
+        for i in range(1, max_detections + 1):
+            len_out = i * 6
+            width_hidden = len_out * 10
+
+            module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
+                                    nn.ReLU(),
+                                    nn.Linear(width_hidden, width_hidden),
+                                    nn.BatchNorm1d(width_hidden, track_running_stats=False),
+                                    nn.ReLU())
+            self.add_module('enc_a_detect' + str(i), module_a)
+
+            module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
+                                    nn.ReLU(),
+                                    nn.Linear(width_hidden, width_hidden),
+                                    nn.BatchNorm1d(width_hidden, track_running_stats=False),
+                                    nn.ReLU())
+
+            self.add_module('enc_b_detect' + str(i), module_b)
+
+            final_module_name = 'enc_final_detect' + str(i)
+            final_module = nn.Linear(2 * width_hidden + enc_hidden, len_out)
+            self.add_module(final_module_name, final_module)
 
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
@@ -66,16 +88,24 @@ class StarEncoder(nn.Module):
         self.dim_out_all = \
             int(0.5 * self.max_detections * (self.max_detections + 1)  * 6)
 
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+        # self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
-    def forward_to_last_hidden(self, image):
-        h = self.enc_conv(image)
+    def forward_to_last_hidden(self, image, background):
+        h = self.enc_conv(torch.log(image - background + 1000.))
         h = self.enc_fc(h)
 
-        return self.enc_final(h)
+        h_out = torch.zeros(image.shape[0], 1).to(device)
+        for i in range(1, self.max_detections + 1):
+            h_a = getattr(self, 'enc_a_detect' + str(i))(h)
+            h_b = getattr(self, 'enc_b_detect' + str(i))(torch.cat((h_a, h), dim = 1))
+            h_c = getattr(self, 'enc_final_detect' + str(i))(torch.cat((h_a, h_b, h), dim = 1))
 
-    def forward(self, images, n_stars):
-        h = self.forward_to_last_hidden(images)
+            h_out = torch.cat((h_out, h_c), dim = 1)
+
+        return h_out[:, 1:h_out.shape[1]]
+
+    def forward(self, images, background, n_stars):
+        h = self.forward_to_last_hidden(images, background)
 
         batchsize = images.shape[0]
 

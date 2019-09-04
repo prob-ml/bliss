@@ -8,7 +8,7 @@ from scipy.optimize import linear_sum_assignment
 
 from itertools import permutations
 
-# parallelism adapted from 
+# parallelism adapted from
 # https://stackoverflow.com/questions/36596805/python-multiprocessing-claims-too-many-open-files-when-no-files-are-even-opened
 def _run_linear_sum_assignment(i, perm_array, n_stars, X):
     n_stars_i = int(n_stars[i])
