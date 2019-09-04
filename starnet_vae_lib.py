@@ -182,20 +182,21 @@ class StarCounter(nn.Module):
         enc_hidden = 256
 
         self.detector = nn.Sequential(
-            nn.Conv2d(n_bands, 8, 3, padding=1),
+            nn.Conv2d(n_bands, 8, 3),
             nn.ReLU(),
-            nn.Conv2d(8, 8, 3, padding=1),
+            nn.Conv2d(8, 8, 3),
             nn.BatchNorm2d(8, track_running_stats = False),
+            nn.MaxPool2d(2, stride = 1),
 
-            nn.Conv2d(8, 16, 3, padding=1),
+            nn.Conv2d(8, 16, 3),
             nn.ReLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
-            nn.BatchNorm2d(16, track_running_stats = False),
+            nn.Conv2d(16, 16, 3),
+            nn.MaxPool2d(2, stride = 1),
 
-            nn.Conv2d(16, 16, 3, padding=1),
+            nn.Conv2d(16, 16, 3),
             nn.ReLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
-            nn.BatchNorm2d(16, track_running_stats = False),
+            nn.Conv2d(16, 16, 3),
+            nn.MaxPool2d(2, stride = 1),
 
             Flatten())
 
@@ -211,7 +212,6 @@ class StarCounter(nn.Module):
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, self.max_detections + 1),
