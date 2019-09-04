@@ -179,28 +179,23 @@ class StarCounter(nn.Module):
 
         self.max_detections = max_detections
 
+        # convolutional NN paramters
+        enc_conv_c = 20
+        enc_kern = 3
         enc_hidden = 256
 
-        self.detector = nn.Sequential(
-            nn.Conv2d(n_bands, 8, 3),
-            nn.ReLU(),
-            nn.Conv2d(8, 8, 3),
-            nn.BatchNorm2d(8, track_running_stats = False),
+        self.enc_conv = nn.Sequential(
+            nn.Conv2d(n_bands, enc_conv_c, enc_kern,
+                        stride=1, padding=0),
             nn.MaxPool2d(2, stride = 1),
-
-            nn.Conv2d(8, 16, 3),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
+                        stride=1, padding=0),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=False),
             nn.ReLU(),
-            nn.Conv2d(16, 16, 3),
-            nn.MaxPool2d(2, stride = 1),
+            Flatten()
+        )
 
-            nn.Conv2d(16, 16, 3),
-            nn.ReLU(),
-            nn.Conv2d(16, 16, 3),
-            nn.MaxPool2d(2, stride = 1),
-
-            Flatten())
-
-        conv_len = self.detector(torch.zeros(1, n_bands, slen, slen)).shape[1]
+        conv_len = self.enc_conv(torch.zeros(1, n_bands, slen, slen)).shape[1]
 
         self.fc = nn.Sequential(
             nn.Linear(conv_len, enc_hidden),
@@ -219,5 +214,5 @@ class StarCounter(nn.Module):
         )
 
     def forward(self, image):
-        h = self.detector(image)
+        h = self.enc_conv(image)
         return self.fc(h)
