@@ -38,8 +38,8 @@ def plot_one_star(locs, psf, cached_grid = None):
     # locs is batchsize x x_loc x y_loc: takes values between 0 and 1
     # psf is a slen x slen tensor
 
-    assert torch.all(locs <= 1)
-    assert torch.all(locs >= 0)
+    # assert torch.all(locs <= 1)
+    # assert torch.all(locs >= 0)
 
     slen = psf.shape[-1]
     assert slen == psf.shape[-2]

@@ -81,8 +81,8 @@ def eval_logitnormal_logprob(x, mu, log_var):
     logit_x = _logit(x)
     return eval_normal_logprob(logit_x, mu, log_var)
 
-def eval_lognormal_logprob(x, mu, log_var):
-    log_x = torch.log(x)
+def eval_lognormal_logprob(x, mu, log_var, tol = 1e-8):
+    log_x = torch.log(x + tol)
     return eval_normal_logprob(log_x, mu, log_var)
 
 def _permute_losses_mat(losses_mat, perm):

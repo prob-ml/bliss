@@ -122,7 +122,7 @@ def _tile_image(image, subimage_slen, return_tile_coords = False):
     # NOTE: input and output are torch tensors, not numpy arrays
     #       (need the unfold command from torch)
 
-    len(image.shape) == 2
+    assert len(image.shape) == 2
 
     image_xlen = image.shape[0]
     image_ylen = image.shape[1]
@@ -140,9 +140,9 @@ def _tile_image(image, subimage_slen, return_tile_coords = False):
         tile_coords = torch.LongTensor([[i * subimage_slen, j * subimage_slen] \
                                         for i in range(num_x_tiles) for j in range(num_y_tiles)])
 
-        return image_unfold.contiguous().view(batchsize, subimage_slen, subimage_slen), tile_coords
+        return image_unfold.contiguous().view(batchsize, 1, subimage_slen, subimage_slen), tile_coords
     else:
-        return image_unfold.contiguous().view(batchsize, subimage_slen, subimage_slen)
+        return image_unfold.contiguous().view(batchsize, 1, subimage_slen, subimage_slen)
 
 def convert_mag_to_nmgy(mag):
     return 10**((22.5 - mag) / 2.5)
@@ -172,7 +172,7 @@ class SDSSHubbleData(Dataset):
         self.run = run
         self.camcol = camcol
         self.field = field
-        self.band = band 
+        self.band = band
 
         self.sdss_data = SloanDigitalSkySurvey(sdssdir,
                                            run = run,
@@ -262,12 +262,12 @@ class SDSSHubbleData(Dataset):
         x0 = self.tile_coords[idx, 0]
         x1 = self.tile_coords[idx, 1]
 
-        locs, fluxes, locs_dim, fluxes_dim = \
+        locs, fluxes, locs_border, fluxes_border, locs_dim, fluxes_dim = \
             self._get_hubble_params_in_patch(x0, x1, self.slen)
 
-        assert self.n_stars[idx] == locs.shape[0]
+        assert self.n_stars[idx] == (locs.shape[0] + locs_border.shape[0])
 
-        n_stars = int(self.n_stars[idx])
+        n_stars = locs.shape[0] # int(self.n_stars[idx])
         # have a 0.5 pixel border around each image; discard those
         #  outside this border
         # which_keep = (locs[:, 0] > 0) & (locs[:, 0] < 1) & \
@@ -284,10 +284,16 @@ class SDSSHubbleData(Dataset):
             locs = np.concatenate((locs, np.zeros((n_null, 2))), 0)
             fluxes = np.concatenate((fluxes, np.zeros(n_null)))
 
+            n_null_border = self.max_detections - len(fluxes_border)
+            locs_border = np.concatenate((locs_border, np.zeros((n_null_border, 2))), 0)
+            fluxes_border = np.concatenate((fluxes_border, np.zeros(n_null_border)))
+
         return {'image': self.images[idx],
                 'background': self.backgrounds[idx],
                 'locs': locs,
                 'fluxes': fluxes,
+                'locs_border': locs_border,
+                'fluxes_border': fluxes_border,
                 # TODO: locs_dim and fluxes_dim are currently of varying size;
                 # how will if affect the dataloader?
                 # 'locs_dim': locs_dim,
@@ -309,6 +315,15 @@ class SDSSHubbleData(Dataset):
 
         fluxes = self.fluxes[which_pixels * self.which_bright]
 
+        # those locs on the border; we don't detect these
+        which_border = (locs[:, 0] > 1) | (locs[:, 0] < 0) | \
+                            (locs[:, 1] > 1) | (locs[:, 1] < 0)
+        locs_border = locs[which_border]
+        locs = locs[(1 - which_border).astype(bool)]
+
+        fluxes_border = fluxes[which_border]
+        fluxes = fluxes[(1 - which_border).astype(bool)]
+
         if return_dim_stars:
             which_dim = (1 - self.which_bright).astype(bool)
             locs_dim = np.transpose(np.array([(self.locs_x0[which_pixels * which_dim] - x0) / (slen - 1),
@@ -319,7 +334,7 @@ class SDSSHubbleData(Dataset):
             locs_dim = 0
             fluxes_dim = 0
 
-        return locs, fluxes, locs_dim, fluxes_dim
+        return locs, fluxes, locs_border, fluxes_border, locs_dim, fluxes_dim
 
     def plot_image_patch(self, x0, x1, slen, flip_y = True, plot_dim_stars = False):
 
