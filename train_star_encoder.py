@@ -20,7 +20,7 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # load PSF
-psf_fit_file = '../celeste_net/sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
+psf_fit_file = './../celeste_net/sdss_stage_dir/2566/6/65/psField-002566-6-0065.fit'
 print('psf file: \n', psf_fit_file)
 
 # set seed
@@ -88,7 +88,7 @@ for epoch in range(n_epochs):
 
         print('**** test loss: {:.3f}; ****'.format(test_loss))
 
-        outfile = './fits/starnet_invKL_encoder_twenty_stars_experimental'
+        outfile = './fits/starnet_invKL_encoder_twenty_stars_new_prior'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 

@@ -44,6 +44,7 @@ def eval_star_counter_loss(star_counter, train_loader,
 
     for _, data in enumerate(train_loader):
         images = data['image'].to(device)
+        backgrounds = data['background'].to(device)
         true_n_stars = data['n_stars'].to(device)
 
         if train:
@@ -54,7 +55,7 @@ def eval_star_counter_loss(star_counter, train_loader,
             star_counter.eval()
 
         # evaluate log q
-        log_probs = star_counter(images)
+        log_probs = star_counter(images, backgrounds)
         loss = get_categorical_loss(log_probs, true_n_stars).mean()
 
         assert not isnan(loss)
@@ -80,8 +81,8 @@ def eval_logitnormal_logprob(x, mu, log_var):
     logit_x = _logit(x)
     return eval_normal_logprob(logit_x, mu, log_var)
 
-def eval_lognormal_logprob(x, mu, log_var):
-    log_x = torch.log(x)
+def eval_lognormal_logprob(x, mu, log_var, tol = 1e-8):
+    log_x = torch.log(x + tol)
     return eval_normal_logprob(log_x, mu, log_var)
 
 def _permute_losses_mat(losses_mat, perm):
@@ -177,8 +178,8 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
     for _, data in enumerate(train_loader):
         true_fluxes = data['fluxes'].to(device)
-        if(torch.any(true_fluxes > 9e5)):
-            print('warning: large flux')
+        # if(torch.any(true_fluxes > 9e5)):
+        #    print('warning: large flux')
 
         true_locs = data['locs'].to(device)
         true_n_stars = data['n_stars'].to(device)
