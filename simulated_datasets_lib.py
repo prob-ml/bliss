@@ -198,7 +198,7 @@ class StarsDataset(Dataset):
         #             self.min_stars)
         n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
                                     batchsize)
-        n_stars = torch.Tensor(n_stars)
+        n_stars = torch.Tensor(n_stars).type(torch.LongTensor)
 
         if return_images:
             images = self.draw_image_from_params(locs, fluxes, n_stars,

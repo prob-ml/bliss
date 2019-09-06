@@ -89,150 +89,108 @@ class StarEncoder(nn.Module):
         self.dim_out_all = \
             int(0.5 * self.max_detections * (self.max_detections + 1)  * 6 + \
                     1 + self.max_detections)
+        self._get_hidden_indices()
 
         # self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
-        self.soft_max = nn.LogSoftmax(dim = 1)
+        self.log_softmax = nn.LogSoftmax(dim = 1)
 
-    def forward_to_last_hidden(self, image, background):
+    def _forward_to_pooled_hidden(self, image, background):
         h = self.enc_conv(torch.log(image - background + 1000.))
-        h = self.enc_fc(h)
+        return self.enc_fc(h)
+
+    def _forward_conditional_nstars(self, h, n_stars):
+        assert isinstance(n_stars, int)
+
+        h_a = getattr(self, 'enc_a_detect' + str(n_stars))(h)
+        h_b = getattr(self, 'enc_b_detect' + str(n_stars))(torch.cat((h_a, h), dim = 1))
+        h_c = getattr(self, 'enc_final_detect' + str(n_stars))(torch.cat((h_a, h_b, h), dim = 1))
+
+        return h_c
+
+    def _forward_to_last_hidden(self, image, background):
+        h = self._forward_to_pooled_hidden(image, background)
 
         h_out = torch.zeros(image.shape[0], 1).to(device)
         for i in range(0, self.max_detections + 1):
-            h_a = getattr(self, 'enc_a_detect' + str(i))(h)
-            h_b = getattr(self, 'enc_b_detect' + str(i))(torch.cat((h_a, h), dim = 1))
-            h_c = getattr(self, 'enc_final_detect' + str(i))(torch.cat((h_a, h_b, h), dim = 1))
+            h_i = self._forward_conditional_nstars(h, i)
 
-            h_out = torch.cat((h_out, h_c), dim = 1)
+            h_out = torch.cat((h_out, h_i), dim = 1)
 
         return h_out[:, 1:h_out.shape[1]]
 
     def forward(self, images, background, n_stars):
-        h = self.forward_to_last_hidden(images, background)
+        # pass through neural network
+        h = self._forward_to_last_hidden(images, background)
 
-        batchsize = images.shape[0]
-
-        # get parameters: last layer depends on the number of stars
+        # extract parameters
         logit_loc_mean, logit_loc_logvar, \
-                log_flux_mean, log_flux_logvar = (0, 0, 0, 0)
+                log_flux_mean, log_flux_logvar, free_probs = \
+                    self._get_params_from_last_hidden_layer(h, n_stars)
 
-        free_probs = torch.zeros(batchsize, self.max_detections + 1)
-
-        for i in range(0, self.max_detections + 1):
-
-            if(i == 0):
-                prob_i = h[:, -1]
-            else:
-                logit_loc_mean_i, logit_loc_logvar_i, \
-                    log_flux_mean_i, log_flux_logvar_i, prob_i = \
-                        self._get_params_from_last_hidden_layer(h, i)
-
-                free_probs[:, i] = prob_i
-
-                is_on = (n_stars == i).float().view(batchsize, 1, 1)
-                logit_loc_mean = logit_loc_mean + is_on * logit_loc_mean_i
-                logit_loc_logvar = logit_loc_logvar + is_on * logit_loc_logvar_i
-
-
-                log_flux_mean = log_flux_mean + is_on.squeeze(2) * log_flux_mean_i
-                log_flux_logvar = log_flux_logvar + is_on.squeeze(2) * log_flux_logvar_i
-
-        log_probs = self.soft_max(free_probs)
+        log_probs = self.log_softmax(free_probs)
 
         return logit_loc_mean, logit_loc_logvar, \
                 log_flux_mean, log_flux_logvar, log_probs
 
 
-    def _get_params_from_last_hidden_layer(self, h, n_detections):
+    def _get_params_from_last_hidden_layer(self, h, n_stars):
 
         assert h.shape[1] == self.dim_out_all
-        assert n_detections <= self.max_detections
-        assert n_detections > 0
+        assert h.shape[0] == len(n_stars)
 
         batchsize = h.size(0)
+        _h = torch.cat((h, torch.zeros(batchsize, 1)), dim = 1)
 
-        indx0 = int(0.5 * n_detections * (n_detections - 1) * 6) + \
-                    (n_detections  - 1)
+        logit_loc_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_stars])
+        logit_loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_stars])
 
-        indx1 = (2 * n_detections) + indx0
-        indx2 = (2 * n_detections) * 2 + indx0
+        log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_stars])
+        log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_stars])
 
-        # get locations
-        logit_loc_mean = h[:, indx0:indx1].view(-1, n_detections, 2)
-        logit_loc_logvar = h[:, indx1:indx2].view(-1, n_detections, 2)
+        free_probs = h[:, self.prob_indx]
 
-        indx3 = indx2 + n_detections
-        indx4 = indx3 + n_detections
-
-        # get fluxes
-        log_flux_mean = h[:, indx2:indx3]
-        log_flux_logvar = h[:, indx3:indx4]
-
-        # get probability of on
-        prob_i = h[:, indx4]
-
-        # pad params
-        if not n_detections == self.max_detections:
-            locs_pad_size = (batchsize, self.max_detections - n_detections, 2)
-            pad_locs = torch.full(locs_pad_size, 0.).to(device)
-            logit_loc_mean = torch.cat((logit_loc_mean, pad_locs), dim = 1)
-            logit_loc_logvar = torch.cat((logit_loc_logvar, pad_locs), dim = 1)
-
-            fluxes_pad_size = (batchsize, self.max_detections - n_detections)
-            pad_flux = torch.full(fluxes_pad_size, 0.).to(device)
-            log_flux_mean = torch.cat((log_flux_mean, pad_flux), dim = 1)
-            log_flux_logvar = torch.cat((log_flux_logvar, pad_flux), dim = 1)
-
-        return logit_loc_mean, logit_loc_logvar, \
-                log_flux_mean, log_flux_logvar, prob_i
+        return logit_loc_mean.reshape(batchsize, self.max_detections, 2), \
+                logit_loc_logvar.reshape(batchsize, self.max_detections, 2), \
+                log_flux_mean.reshape(batchsize, self.max_detections), \
+                log_flux_logvar.reshape(batchsize, self.max_detections), \
+                free_probs
 
 
-class StarCounter(nn.Module):
-    def __init__(self, slen, n_bands, max_detections):
+    def _get_hidden_indices(self):
 
-        super(StarCounter, self).__init__()
+        self.locs_mean_indx_mat = \
+            torch.full((self.max_detections + 1, 2 * self.max_detections),
+                        self.dim_out_all, dtype = int)
 
-        self.max_detections = max_detections
+        self.locs_var_indx_mat = \
+            torch.full((self.max_detections + 1, 2 * self.max_detections),
+                        self.dim_out_all, dtype = int)
 
-        enc_hidden = 256
+        self.fluxes_mean_indx_mat = \
+            torch.full((self.max_detections + 1, self.max_detections),
+                        self.dim_out_all, dtype = int)
+        self.fluxes_var_indx_mat = \
+            torch.full((self.max_detections + 1, self.max_detections),
+                        self.dim_out_all, dtype = int)
 
-        self.detector = nn.Sequential(
-            nn.Conv2d(n_bands, 8, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(8, 8, 3, padding=1),
-            nn.BatchNorm2d(8, track_running_stats = False),
+        self.prob_indx = torch.zeros(self.max_detections + 1).type(torch.LongTensor)
 
-            nn.Conv2d(8, 16, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
-            nn.BatchNorm2d(16, track_running_stats = False),
+        for n_detections in range(1, self.max_detections + 1):
+            indx0 = int(0.5 * n_detections * (n_detections - 1) * 6) + \
+                            (n_detections  - 1) + 1
 
-            nn.Conv2d(16, 16, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
-            nn.BatchNorm2d(16, track_running_stats = False),
+            indx1 = (2 * n_detections) + indx0
+            indx2 = (2 * n_detections) * 2 + indx0
 
-            Flatten())
+            # indices for locations
+            self.locs_mean_indx_mat[n_detections, 0:(2 * n_detections)] = torch.arange(indx0, indx1)
+            self.locs_var_indx_mat[n_detections, 0:(2 * n_detections)] = torch.arange(indx1, indx2)
 
-        conv_len = self.detector(torch.zeros(1, n_bands, slen, slen)).shape[1]
+            indx3 = indx2 + n_detections
+            indx4 = indx3 + n_detections
 
-        self.fc = nn.Sequential(
-            nn.Linear(conv_len, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
-            nn.ReLU(),
+            # indices for fluxes
+            self.fluxes_mean_indx_mat[n_detections, 0:n_detections] = torch.arange(indx2, indx3)
+            self.fluxes_var_indx_mat[n_detections, 0:n_detections] = torch.arange(indx3, indx4)
 
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
-            nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
-            nn.ReLU(),
-
-            nn.Linear(enc_hidden, self.max_detections + 1),
-            nn.LogSoftmax(dim = 1)
-        )
-
-    def forward(self, image, background):
-        h = self.detector(image)
-        return self.fc(h)
+            self.prob_indx[n_detections] = indx4

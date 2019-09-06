@@ -14,56 +14,6 @@ import starnet_vae_lib
 import json
 
 class TestStarEncoder(unittest.TestCase):
-    def test_params_from_hidden(self):
-        # this checks the collection of parameters from the final layer
-
-        n_images = 100
-        max_detections = 4
-
-        # get encoder
-        star_encoder = starnet_vae_lib.StarEncoder(slen = 11,
-                                                n_bands = 1,
-                                                max_detections = max_detections)
-
-        # construct a test matrix, with all 1's for the one detection parameters ,
-        #   all 2's for the second detection parameters, etc
-        h = torch.zeros(n_images, star_encoder.dim_out_all)
-        h[:, -1] = max_detections + 10
-
-        indx = 0
-        for i in range(1, max_detections + 1):
-            n_params_i = 6 * i + 1
-            h[:, indx:(indx + n_params_i)] = i
-
-            indx = indx + n_params_i
-
-        # check I constructed this matrix correctly
-        for i in range(1, max_detections + 1):
-            n_params_i = 6 * i + 1
-            assert torch.sum(h == i) == (n_params_i * n_images)
-
-        assert torch.all(h != 0)
-        assert torch.all(h[:,-1] == max_detections + 10)
-
-        # test my indexing of parameters
-        for i in range(1, max_detections + 1):
-            logit_loc_mean, logit_loc_log_var, \
-                log_flux_mean, log_flux_log_var, prob_i = \
-                    star_encoder._get_params_from_last_hidden_layer(h, i)
-
-            assert torch.all(logit_loc_mean[:, 0:i, :] == i)
-            assert torch.all(logit_loc_log_var[:, 0:i, :] == i)
-
-            assert torch.all(logit_loc_log_var[:, i:, :] == 0)
-            assert torch.all(logit_loc_log_var[:, i:, :] == 0)
-
-            assert torch.all(log_flux_mean[:, 0:i] == i)
-            assert torch.all(log_flux_log_var[:, 0:i] == i)
-
-            assert torch.all(log_flux_mean[:, i:] == 0)
-            assert torch.all(log_flux_log_var[:, i:] == 0)
-
-            assert torch.all(prob_i == i)
 
     def test_forward(self):
         n_images = 30
@@ -78,7 +28,7 @@ class TestStarEncoder(unittest.TestCase):
         # simulate images and backgrounds
         images = torch.randn(n_images, 1, slen, slen)
         backgrounds = torch.randn(n_images, 1, slen, slen)
-        n_stars = torch.Tensor(np.random.choice(max_detections, n_images))
+        n_stars = torch.Tensor(np.random.choice(max_detections, n_images)).type(torch.LongTensor)
 
         # forward
         logit_loc_mean, logit_loc_logvar, \
@@ -86,7 +36,8 @@ class TestStarEncoder(unittest.TestCase):
                 star_encoder(images, backgrounds, n_stars)
 
         # we check the variational parameters against the hidden parameters
-        h = star_encoder.forward_to_last_hidden(images, backgrounds)
+        # one by one
+        h = star_encoder._forward_to_pooled_hidden(images, backgrounds)
 
         for i in range(n_images):
             if(n_stars[i] == 0):
@@ -95,27 +46,28 @@ class TestStarEncoder(unittest.TestCase):
                 assert torch.all(log_flux_mean[i] == 0)
                 assert torch.all(log_flux_logvar[i] == 0)
             else:
-                _logit_loc_mean, _logit_loc_log_var, \
-                    _log_flux_mean, _log_flux_log_var, prob_i = \
-                        star_encoder._get_params_from_last_hidden_layer(h, int(n_stars[i]))
+                n_stars_i = int(n_stars[i])
+                h_out = star_encoder._forward_conditional_nstars(h, n_stars_i)
 
-                assert torch.all(logit_loc_mean[i] == _logit_loc_mean[i])
-                assert torch.all(logit_loc_logvar[i] == _logit_loc_log_var[i])
-                assert torch.all(log_flux_mean[i] == _log_flux_mean[i])
-                assert torch.all(log_flux_logvar[i] == _log_flux_log_var[i])
+                assert torch.all(logit_loc_mean[i, 0:n_stars_i, :] == \
+                                    h_out[i, 0:(2 * n_stars_i)].view(n_stars_i, 2))
+
+                assert torch.all(logit_loc_logvar[i, 0:n_stars_i, :] == \
+                                    h_out[i, (2 * n_stars_i):(4 * n_stars_i)].view(n_stars_i, 2))
+
+                assert torch.all(log_flux_mean[i, 0:n_stars_i] == \
+                                    h_out[i, (4 * n_stars_i):(5 * n_stars_i)])
+                assert torch.all(log_flux_logvar[i, 0:n_stars_i] == \
+                                    h_out[i, (5 * n_stars_i):(6 * n_stars_i)])
 
         # check probabilities
-        free_probs = torch.zeros(n_images, star_encoder.max_detections + 1)
-        for i in range(0, star_encoder.max_detections + 1):
-            if(i == 0):
-                prob_i = h[:, -1]
-            else:
-                _, _, _, _, prob_i = \
-                    star_encoder._get_params_from_last_hidden_layer(h, i)
+        free_probs = torch.zeros(n_images, max_detections + 1)
+        for i in range(star_encoder.max_detections + 1):
+            h_out = star_encoder._forward_conditional_nstars(h, i)
+            free_probs[:, i] = h_out[:, -1]
 
-                free_probs[:, i] = prob_i
+        assert torch.all(log_probs == star_encoder.log_softmax(free_probs))
 
-        assert torch.all(log_probs == star_encoder.soft_max(free_probs))
 
 if __name__ == '__main__':
     unittest.main()
