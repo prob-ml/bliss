@@ -110,15 +110,18 @@ def print_results(star_counter, star_encoder,
         axarr[0].set_title('Observed image \n est/true n_stars: {} / {}'.format(est_n_stars_i, int(n_stars_i)))
 
         # plot posterior samples
-        for k in range(int(n_stars_i)):
+        for k in range(int(est_n_stars_i)):
             samples = torch.sigmoid(torch.sqrt(torch.exp(logit_loc_log_var[i, k, :])) * \
                           torch.randn((1000, 2)) + logit_loc_mean[i, k, :]).detach()
 
             axarr[1].scatter(x = samples[:, 1] * (images.shape[-1] - 1),
                              y = samples[:, 0] * (images.shape[-1] - 1),
                              c = 'r', marker = 'x', alpha = 0.05)
+
         plot_image(axarr[1], images[i, 0, :, :] - backgrounds[i, 0, :, :],
                   true_locs = true_locs[i, 0:int(n_stars_i)])
+        axarr[1].get_xaxis().set_visible(False)
+        axarr[1].get_yaxis().set_visible(False)
 
         # plot residuals
         plot_image(axarr[2], images[i, 0, :, :]-recon_mean[i, 0, :, :])
