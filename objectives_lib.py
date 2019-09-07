@@ -36,37 +36,37 @@ def get_categorical_loss(log_probs, true_n_stars):
         get_one_hot_encoding_from_int(true_n_stars,
                                         max_detections), dim = 1)
 
-def eval_star_counter_loss(star_counter, train_loader,
-                            optimizer = None, train = True):
-
-    avg_loss = 0.0
-    max_detections = torch.Tensor([star_counter.max_detections])
-
-    for _, data in enumerate(train_loader):
-        images = data['image'].to(device)
-        backgrounds = data['background'].to(device)
-        true_n_stars = data['n_stars'].to(device)
-
-        if train:
-            star_counter.train()
-            assert optimizer is not None
-            optimizer.zero_grad()
-        else:
-            star_counter.eval()
-
-        # evaluate log q
-        log_probs = star_counter(images, backgrounds)
-        loss = get_categorical_loss(log_probs, true_n_stars).mean()
-
-        assert not isnan(loss)
-
-        if train:
-            loss.backward()
-            optimizer.step()
-
-        avg_loss += loss * images.shape[0] / len(train_loader.dataset)
-
-    return avg_loss
+# def eval_star_counter_loss(star_counter, train_loader,
+#                             optimizer = None, train = True):
+#
+#     avg_loss = 0.0
+#     max_detections = torch.Tensor([star_counter.max_detections])
+#
+#     for _, data in enumerate(train_loader):
+#         images = data['image'].to(device)
+#         backgrounds = data['background'].to(device)
+#         true_n_stars = data['n_stars'].to(device)
+#
+#         if train:
+#             star_counter.train()
+#             assert optimizer is not None
+#             optimizer.zero_grad()
+#         else:
+#             star_counter.eval()
+#
+#         # evaluate log q
+#         log_probs = star_counter(images, backgrounds)
+#         loss = get_categorical_loss(log_probs, true_n_stars).mean()
+#
+#         assert not isnan(loss)
+#
+#         if train:
+#             loss.backward()
+#             optimizer.step()
+#
+#         avg_loss += loss * images.shape[0] / len(train_loader.dataset)
+#
+#     return avg_loss
 
 #############################
 # functions to get loss for training the encoder
@@ -137,7 +137,7 @@ def get_encoder_loss(star_encoder, images, backgrounds, true_locs,
 
     # get variational parameters
     logit_loc_mean, logit_loc_log_var, \
-            log_flux_mean, log_flux_log_var = \
+            log_flux_mean, log_flux_log_var, log_probs = \
                 star_encoder(images, backgrounds, true_n_stars)
 
     # get losses for all estimates stars against all true stars
@@ -167,14 +167,17 @@ def get_encoder_loss(star_encoder, images, backgrounds, true_locs,
     fluxes_loss = -(_permute_losses_mat(flux_log_probs_all, perm) * is_on).sum(dim = 1)
 
 
-    loss = (locs_loss + fluxes_loss).mean()
+    counter_loss = get_categorical_loss(log_probs, true_n_stars)
 
-    return loss, locs_loss, fluxes_loss, perm
+    loss = (locs_loss + fluxes_loss + counter_loss).mean()
+
+    return loss, counter_loss, locs_loss, fluxes_loss, perm
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False):
 
     avg_loss = 0.0
+    avg_counter_loss = 0.0
 
     for _, data in enumerate(train_loader):
         true_fluxes = data['fluxes'].to(device)
@@ -194,13 +197,14 @@ def eval_star_encoder_loss(star_encoder, train_loader,
             star_encoder.eval()
 
         # evaluate log q
-        loss = get_encoder_loss(star_encoder, images, backgrounds, true_locs,
-                                true_fluxes, true_n_stars)[0]
+        loss, counter_loss = get_encoder_loss(star_encoder, images, backgrounds,
+                                true_locs, true_fluxes, true_n_stars)[0:2]
 
         if train:
             loss.backward()
             optimizer.step()
 
         avg_loss += loss.item() * images.shape[0] / len(train_loader.dataset)
+        avg_counter_loss += counter_loss.sum().item() / len(train_loader.dataset)
 
-    return avg_loss
+    return avg_loss, avg_counter_loss

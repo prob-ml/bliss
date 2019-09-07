@@ -32,7 +32,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['min_stars'] = 0
-data_params['max_stars'] = 20
+data_params['max_stars'] = 4
 
 print(data_params)
 
@@ -74,21 +74,22 @@ n_epochs = 500
 for epoch in range(n_epochs):
     t0 = time.time()
 
-    avg_loss = objectives_lib.eval_star_encoder_loss(star_encoder, loader,
+    avg_loss, counter_loss = objectives_lib.eval_star_encoder_loss(star_encoder, loader,
                                                     optimizer, train = True)
 
     elapsed = time.time() - t0
-    print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-                    epoch, avg_loss, elapsed))
+    print('[{}] loss: {:0.4f}; counter loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                    epoch, avg_loss, counter_loss, elapsed))
 
     if (epoch % 5) == 0:
 
-        test_loss = objectives_lib.eval_star_encoder_loss(star_encoder,
+        test_loss, test_counter_loss = \
+            objectives_lib.eval_star_encoder_loss(star_encoder,
                                             loader, train = False)
 
-        print('**** test loss: {:.3f}; ****'.format(test_loss))
+        print('**** test loss: {:.3f}; counter loss: {:.3f} ****'.format(test_loss, test_counter_loss))
 
-        outfile = './fits/starnet_invKL_encoder_twenty_stars_new_prior'
+        outfile = './fits/starnet_invKL_encoder_four_stars'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
