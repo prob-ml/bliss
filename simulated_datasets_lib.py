@@ -130,7 +130,8 @@ class StarsDataset(Dataset):
                          sky_intensity = 686.0,
                          alpha = 4,
                          use_fresh_data = False,
-                         add_noise = True):
+                         add_noise = True,
+                         add_edge_effect = True):
 
         #
         self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_fit_file)
@@ -153,6 +154,14 @@ class StarsDataset(Dataset):
         self.n_images = n_images
 
         self.cached_grid = _get_mgrid(slen)
+
+
+        # parameters for edge effects
+        self.border_len = 4
+        self.slen_extended = slen + self.border_len * 2
+        self.cached_grid_extended = _get_mgrid(self.slen_extended)
+        self.psf_extended = torch.Tensor(_trim_psf(self.psf_full, self.slen_extended))
+        self.add_edge_effect = add_edge_effect
 
         self.use_fresh_data = use_fresh_data
         if not use_fresh_data:
@@ -181,14 +190,13 @@ class StarsDataset(Dataset):
 
     def draw_batch_parameters(self, batchsize, return_images = True):
         # draw locations
-        locs = torch.rand((batchsize, self.max_stars, 2)) * (1 - 2 / self.slen) + \
-                    1 / self.slen
+        locs = torch.rand((batchsize, self.max_stars, 2))
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
                                 shape = (batchsize, self.max_stars))
         # sort from brightest to dimmest
-        fluxes = fluxes.topk(self.max_stars, dim = 1)[0]
+        # fluxes = fluxes.topk(self.max_stars, dim = 1)[0]
 
         # draw number of stars
         # n_stars = np.maximum(
@@ -202,15 +210,20 @@ class StarsDataset(Dataset):
 
         if return_images:
             images = self.draw_image_from_params(locs, fluxes, n_stars,
-                                                add_noise = self.add_noise)
+                                                add_noise = self.add_noise,
+                                    add_edge_effect = self.add_edge_effect)
             return locs, fluxes, n_stars, images
         else:
             return locs, fluxes, n_stars
 
-    def draw_image_from_params(self, locs, fluxes, n_stars, add_noise = True):
+    def draw_image_from_params(self, locs, fluxes, n_stars, add_noise = True,
+                                        add_edge_effect = True):
         images_mean = \
             plot_multiple_stars(locs, n_stars, fluxes, self.psf, self.cached_grid) + \
                          self.sky_intensity
+
+        if add_edge_effect:
+            images_mean = images_mean + self.get_edge_effect(locs.shape[0])[0]
 
         # add noise
         if add_noise:
@@ -224,6 +237,39 @@ class StarsDataset(Dataset):
     def set_params_and_images(self):
         self.locs, self.fluxes, self.n_stars, self.images = \
             self.draw_batch_parameters(self.n_images, return_images = True)
+
+    def get_edge_effect(self, batchsize):
+        # draw n_stars on border
+        max_stars_full = int(np.floor(self.max_stars * self.slen_extended**2 / self.slen**2))
+        n_stars = np.random.choice(np.arange(self.min_stars, max_stars_full + 1),
+                                    (batchsize, ))
+        n_stars = torch.Tensor(n_stars).type(torch.LongTensor)
+
+        # locs
+        locs = torch.rand((batchsize, max_stars_full, 2))
+
+        # draw fluxes
+        fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
+                                shape = (batchsize, max_stars_full))
+
+        # get only those on the edge
+        propn = 0.5 * self.border_len / self.slen_extended
+        which_edge = _get_which_border(locs, propn)
+
+        fluxes_filtered = fluxes * which_edge.float()
+
+        edge_mean = plot_multiple_stars(locs, n_stars, fluxes_filtered,
+                                        self.psf_extended,
+                                        self.cached_grid_extended)
+
+        edge_effect = edge_mean[:, :, self.border_len:(self.border_len + self.slen),
+                                self.border_len:(self.border_len + self.slen)]
+
+        return edge_effect, edge_mean
+
+def _get_which_border(locs, propn):
+    return (locs[:, :, 0] < propn) | (locs[:, :, 0] > (1 - propn)) | \
+                    (locs[:, :, 1] < propn) | (locs[:, :, 1] > (1 - propn))
 
 def get_is_on_from_n_stars(n_stars, max_stars):
     batchsize = len(n_stars)

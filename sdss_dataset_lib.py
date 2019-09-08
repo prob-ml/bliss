@@ -189,11 +189,12 @@ class SDSSHubbleData(Dataset):
         # self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_file)
         # self.psf = _trim_psf(self.psf_full, slen)
 
-        #
-        self.sdss_image_full = \
-            self.sdss_data[0]['image'].squeeze()[0:1485, 1:2047]
+        sdss_image = self.sdss_data[0]['image'].squeeze()
+        x_total = int(np.floor(sdss_image.shape[0] / slen) * slen)
+        y_total = int(np.floor(sdss_image.shape[1] / slen) * slen) + 1
+        self.sdss_image_full = sdss_image[0:x_total, 1:y_total]
         self.sdss_background_full = \
-            self.sdss_data[0]['background'].squeeze()[0:1485, 1:2047]
+            self.sdss_data[0]['background'].squeeze()[0:x_total, 1:y_total]
         self.nelec_per_nmgy = self.sdss_data[0]['nelec_per_nmgy']
 
         # load hubble data
@@ -347,7 +348,7 @@ class SDSSHubbleData(Dataset):
         plt.matshow(image)
 
         # get hubble parameters
-        locs, fluxes, locs_dim, fluxes_dim = \
+        locs, fluxes, locs_border, fluxes_border, locs_dim, fluxes_dim = \
             self._get_hubble_params_in_patch(x0, x1, slen,
                                             return_dim_stars = plot_dim_stars)
 
