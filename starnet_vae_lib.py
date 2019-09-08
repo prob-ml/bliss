@@ -139,7 +139,7 @@ class StarEncoder(nn.Module):
         assert h.shape[0] == len(n_stars)
 
         batchsize = h.size(0)
-        _h = torch.cat((h, torch.zeros(batchsize, 1)), dim = 1)
+        _h = torch.cat((h, torch.zeros(batchsize, 1).to(device)), dim = 1)
 
         logit_loc_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_stars])
         logit_loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_stars])
@@ -160,20 +160,20 @@ class StarEncoder(nn.Module):
 
         self.locs_mean_indx_mat = \
             torch.full((self.max_detections + 1, 2 * self.max_detections),
-                        self.dim_out_all, dtype = int)
+                        self.dim_out_all).type(torch.LongTensor).to(device)
 
         self.locs_var_indx_mat = \
             torch.full((self.max_detections + 1, 2 * self.max_detections),
-                        self.dim_out_all, dtype = int)
+                        self.dim_out_all).type(torch.LongTensor).to(device)
 
         self.fluxes_mean_indx_mat = \
             torch.full((self.max_detections + 1, self.max_detections),
-                        self.dim_out_all, dtype = int)
+                        self.dim_out_all).type(torch.LongTensor).to(device)
         self.fluxes_var_indx_mat = \
             torch.full((self.max_detections + 1, self.max_detections),
-                        self.dim_out_all, dtype = int)
+                        self.dim_out_all).type(torch.LongTensor).to(device)
 
-        self.prob_indx = torch.zeros(self.max_detections + 1).type(torch.LongTensor)
+        self.prob_indx = torch.zeros(self.max_detections + 1).type(torch.LongTensor).to(device)
 
         for n_detections in range(1, self.max_detections + 1):
             indx0 = int(0.5 * n_detections * (n_detections - 1) * 6) + \
