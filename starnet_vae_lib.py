@@ -23,17 +23,23 @@ class StarEncoder(nn.Module):
 
         # convolutional NN paramters
         enc_conv_c = 20
-        enc_kern = 5
+        enc_kern = 3
         enc_hidden = 256
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
-                        stride=1, padding=0),
+                        stride=1, padding=1),
+            nn.MaxPool2d(kernel_size = 2, stride=1, padding=1),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
-                        stride=1, padding=0),
+                        stride=1, padding=1),
+            nn.MaxPool2d(kernel_size = 2, stride=1, padding=1),
+            nn.ReLU(),
+
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
+                        stride=1, padding=1),
             nn.BatchNorm2d(enc_conv_c, track_running_stats=False),
             nn.ReLU(),
             Flatten()
@@ -47,6 +53,7 @@ class StarEncoder(nn.Module):
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
             nn.ReLU(),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
 
             nn.Linear(enc_hidden, enc_hidden),
             nn.BatchNorm1d(enc_hidden, track_running_stats=False),
