@@ -43,6 +43,10 @@ class StarEncoder(nn.Module):
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
                         stride=1, padding=1),
+            nn.ReLU(),
+
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
+                        stride=1, padding=1),
             nn.MaxPool2d(kernel_size = 2, stride=1, padding=1),
             nn.ReLU(),
 
