@@ -97,7 +97,7 @@ def print_results(star_encoder,
                                             true_n_stars)
 
     if condition is None:
-        condition = [True] * len(indx)
+        condition = [True] * len(images)
 
 
     for i in indx:
