@@ -53,14 +53,14 @@ class StarEncoder(nn.Module):
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
             nn.ReLU(),
-            nn.InstanceNorm2d(enc_hidden, track_running_stats=True),
+            nn.InstanceNorm1d(enc_hidden, track_running_stats=True),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.InstanceNorm2d(enc_hidden, track_running_stats=True),
+            nn.InstanceNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.InstanceNorm2d(enc_hidden, track_running_stats=True),
+            nn.InstanceNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
         )
 
