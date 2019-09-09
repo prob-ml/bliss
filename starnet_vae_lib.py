@@ -83,24 +83,22 @@ class StarEncoder(nn.Module):
             len_out = i * 6 + 1
             width_hidden = len_out * 10
 
-            module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
+            self.add_module('enc_a_detect' + str(i),
+                            nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
                                     nn.BatchNorm1d(width_hidden, momentum = momentum, track_running_stats=True),
-                                    nn.ReLU())
-            self.add_module('enc_a_detect' + str(i), module_a)
+                                    nn.ReLU()))
 
-            module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
+            self.add_module('enc_b_detect' + str(i),
+                            nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
                                     nn.BatchNorm1d(width_hidden, momentum = momentum, track_running_stats=True),
-                                    nn.ReLU())
-
-            self.add_module('enc_b_detect' + str(i), module_b)
+                                    nn.ReLU()))
 
             final_module_name = 'enc_final_detect' + str(i)
-            final_module = nn.Linear(2 * width_hidden + enc_hidden, len_out)
-            self.add_module(final_module_name, final_module)
+            self.add_module(final_module_name, nn.Linear(2 * width_hidden + enc_hidden, len_out))
 
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
