@@ -53,7 +53,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum = momentum, track_running_stats=True),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=False),
             nn.ReLU(),
             Flatten()
         )
@@ -65,15 +65,15 @@ class StarEncoder(nn.Module):
         # fully connected layers
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum = momentum, track_running_stats=True),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum = momentum, track_running_stats=True),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum = momentum, track_running_stats=True),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
             nn.ReLU(),
         )
 
@@ -83,22 +83,24 @@ class StarEncoder(nn.Module):
             len_out = i * 6 + 1
             width_hidden = len_out * 10
 
-            self.add_module('enc_a_detect' + str(i),
-                            nn.Sequential(nn.Linear(enc_hidden, width_hidden),
+            module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    nn.BatchNorm1d(width_hidden, momentum = momentum, track_running_stats=True),
-                                    nn.ReLU()))
+                                    nn.BatchNorm1d(width_hidden, track_running_stats=False),
+                                    nn.ReLU())
+            self.add_module('enc_a_detect' + str(i), module_a)
 
-            self.add_module('enc_b_detect' + str(i),
-                            nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
+            module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    nn.BatchNorm1d(width_hidden, momentum = momentum, track_running_stats=True),
-                                    nn.ReLU()))
+                                    nn.BatchNorm1d(width_hidden, track_running_stats=False),
+                                    nn.ReLU())
+
+            self.add_module('enc_b_detect' + str(i), module_b)
 
             final_module_name = 'enc_final_detect' + str(i)
-            self.add_module(final_module_name, nn.Linear(2 * width_hidden + enc_hidden, len_out))
+            final_module = nn.Linear(2 * width_hidden + enc_hidden, len_out)
+            self.add_module(final_module_name, final_module)
 
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
