@@ -56,7 +56,7 @@ def get_variational_parameters(star_encoder, images,
             log_flux_mean, log_flux_log_var, foo = \
                 star_encoder(images, backgrounds, est_n_stars)
 
-        assert torch.all(foo == log_probs)        
+        assert torch.all(foo == log_probs)
 
     map_locs = torch.sigmoid(logit_loc_mean).detach()
     map_fluxes = torch.exp(log_flux_mean).detach()
@@ -77,7 +77,8 @@ def print_results(star_encoder,
                         true_locs,
                         true_n_stars,
                         indx,
-                        use_true_n_stars = False):
+                        use_true_n_stars = False,
+                        condition = None):
 
     # get variational parameters
     if use_true_n_stars:
@@ -95,7 +96,15 @@ def print_results(star_encoder,
                                             psf,
                                             true_n_stars)
 
+    if condition is None:
+        condition = [True] * len(indx)
+
+
     for i in indx:
+
+        if not(condition[i]):
+            continue
+
         _, axarr = plt.subplots(1, 4, figsize=(15, 4))
 
         # observed image
@@ -116,6 +125,7 @@ def print_results(star_encoder,
 
         # plot posterior samples
         for k in range(int(est_n_stars_i)):
+
             samples = torch.sigmoid(torch.sqrt(torch.exp(logit_loc_log_var[i, k, :])) * \
                           torch.randn((1000, 2)) + logit_loc_mean[i, k, :]).detach()
 
