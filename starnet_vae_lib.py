@@ -37,6 +37,8 @@ class StarEncoder(nn.Module):
         enc_kern = 3
         enc_hidden = 256
 
+        momentum = 0.1
+
         # convolutional NN
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
@@ -51,7 +53,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.InstanceNorm2d(enc_conv_c, track_running_stats=False),
+            nn.BatchNorm2d(enc_conv_c, momentum = momentum, track_running_stats=True),
             nn.ReLU(),
             Flatten()
         )
@@ -63,15 +65,15 @@ class StarEncoder(nn.Module):
         # fully connected layers
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
-            MyInstanceNorm1d(enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum = momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            MyInstanceNorm1d(enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum = momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            MyInstanceNorm1d(enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum = momentum, track_running_stats=True),
             nn.ReLU(),
         )
 
@@ -84,14 +86,14 @@ class StarEncoder(nn.Module):
             module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    MyInstanceNorm1d(width_hidden),
+                                    nn.BatchNorm1d(width_hidden, momentum = momentum, track_running_stats=True),
                                     nn.ReLU())
             self.add_module('enc_a_detect' + str(i), module_a)
 
             module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    MyInstanceNorm1d(width_hidden),
+                                    nn.BatchNorm1d(width_hidden, momentum = momentum, track_running_stats=True),
                                     nn.ReLU())
 
             self.add_module('enc_b_detect' + str(i), module_b)
