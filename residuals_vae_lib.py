@@ -141,7 +141,7 @@ def get_resid_vae_loss(residuals, resid_vae):
 
     kl_prior = get_kl_prior_term(eta_mean, eta_logvar)
 
-    return recon_loss.sum() + kl_prior.sum()
+    return recon_loss.sum() - kl_prior.sum()
 
 
 def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train = False):
