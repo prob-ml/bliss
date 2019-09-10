@@ -111,8 +111,8 @@ class ResidualVAE(nn.Module):
         recon_mean = h[:, 0:self.n_bands, :, :]
         recon_logvar = h[:, self.n_bands:(2 * self.n_bands), :, :]
 
-        recon_mean = torch.clamp(recon_mean, max = self.f_min)
-        recon_logvar = torch.clamp(recon_mean, max = np.log(2 * self.f_min))
+        recon_mean = torch.clamp(recon_mean, min = -self.f_min, max = self.f_min)
+        recon_logvar = torch.clamp(recon_mean, max = np.log(3 * self.f_min))
 
         return recon_mean, recon_logvar
 
@@ -163,7 +163,8 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
                                              add_noise = False)
 
         # get residual
-        residual_image = (images - simulated_images).clamp(max = residual_vae.f_min)
+        residual_image = (images - simulated_images).clamp(min = -residual_vae.f_min,
+                                                            max = residual_vae.f_min)
 
         if train:
             residual_vae.train()
