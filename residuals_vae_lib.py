@@ -135,6 +135,7 @@ def get_kl_prior_term(mean, logvar):
     return -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
 
 def get_resid_vae_loss(residuals, resid_vae):
+
     recon_mean, recon_logvar, eta_mean, eta_logvar = resid_vae(residuals)
 
     recon_loss = - eval_normal_logprob(residuals, recon_mean, recon_logvar)
@@ -143,6 +144,15 @@ def get_resid_vae_loss(residuals, resid_vae):
 
     return recon_loss.sum() - kl_prior.sum()
 
+
+def normalize_image(image):
+    assert len(image.shape) == 4
+    image_mean = image.view(image.shape[0], -1).mean(1)
+    image_var = image.view(image.shape[0], -1).var(1)
+
+    return (image - image_mean.view(image.shape[0], 1, 1, 1)) / \
+                torch.sqrt(image_var.view(image.shape[0], 1, 1, 1) + 1e-5),
+            image_mean, image_var
 
 def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train = False):
     avg_loss = 0.0
@@ -166,6 +176,9 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
         residual_image = (images - simulated_images).clamp(min = -residual_vae.f_min,
                                                             max = residual_vae.f_min)
 
+        # normalize
+        normalized_residual = normalize_image(residual_image)
+
         if train:
             residual_vae.train()
             assert optimizer is not None
@@ -173,7 +186,8 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
         else:
             residual_vae.eval()
 
-        loss = get_resid_vae_loss(residual_image, residual_vae)
+
+        loss = get_resid_vae_loss(normalized_residual, residual_vae)
 
 
         if train:
