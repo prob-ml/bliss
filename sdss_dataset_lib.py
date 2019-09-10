@@ -181,12 +181,12 @@ class SDSSHubbleData(Dataset):
                                            band = band)
 
         self.sdss_path = pathlib.Path(sdssdir)
-        # meta data for the run + camcol
-        psf_file = "psField-{:06d}-{:d}-{:04d}.fit".format(run, camcol, field)
-        psf_file = self.sdss_path.joinpath(str(run), str(camcol), \
-                                            str(field), psf_file)
-        # print('loading psf from ', psf_file)
-        # self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_file)
+
+        self.psf_file = "psField-{:06d}-{:d}-{:04d}.fit".format(run, camcol, field)
+        self.psf_file = self.sdss_path.joinpath(str(run), str(camcol), \
+                                            str(field), self.psf_file)
+        # print('loading psf from ', self.psf_file)
+        # self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = self.psf_file)
         # self.psf = _trim_psf(self.psf_full, slen)
 
         sdss_image = self.sdss_data[0]['image'].squeeze()

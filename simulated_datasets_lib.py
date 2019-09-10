@@ -118,6 +118,40 @@ def _draw_pareto_maxed(f_min, f_max, alpha, shape):
 
     return pareto_samples
 
+class StarSimulator:
+    # TODO: incorporate this into the dataset class...
+    #   pulled it out here for our residual VAE
+    def __init__(self, psf_fit_file, slen, sky_intensity):
+        self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_fit_file)
+
+        self.slen = slen
+        self.psf = torch.Tensor(_trim_psf(self.psf_full, slen))
+
+        self.cached_grid = _get_mgrid(slen)
+
+        self.sky_intensity = sky_intensity
+
+
+    def draw_image_from_params(self, locs, fluxes, n_stars,
+                                        add_noise = True,
+                                        subtract_sky_intensity = False):
+        images_mean = \
+            plot_multiple_stars(locs, n_stars, fluxes, self.psf, self.cached_grid) + \
+                self.sky_intensity
+
+        # add noise
+        if add_noise:
+            images = torch.sqrt(images_mean) * torch.randn(images_mean.shape) + \
+                                                            images_mean
+        else:
+            images = images_mean
+
+        if subtract_sky_intensity:
+            return images - self.sky_intensity
+        else:
+            return images
+
+
 class StarsDataset(Dataset):
 
     def __init__(self, psf_fit_file, n_images,
