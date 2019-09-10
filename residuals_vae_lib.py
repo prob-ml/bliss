@@ -142,7 +142,7 @@ class ResidualVAE(nn.Module):
             recon_mean = recon_mean * torch.sqrt(variance) + mean
             recon_logvar = recon_logvar + torch.log(variance)
 
-        return recon_mean, recon_logvar, eta_mean, eta_logvar
+        return recon_mean, recon_logvar, eta_mean, eta_logvar, normalized_residual
 
 def normalize_image(image):
     assert len(image.shape) == 4
@@ -159,9 +159,10 @@ def get_kl_prior_term(mean, logvar):
 
 def get_resid_vae_loss(residuals, resid_vae):
 
-    recon_mean, recon_logvar, eta_mean, eta_logvar = resid_vae(residuals)
+    recon_mean, recon_logvar, eta_mean, eta_logvar, normalized_residual = \
+            resid_vae(residuals)
 
-    recon_loss = - eval_normal_logprob(residuals, recon_mean, recon_logvar)
+    recon_loss = - eval_normal_logprob(normalized_residual, recon_mean, recon_logvar)
 
     kl_prior = get_kl_prior_term(eta_mean, eta_logvar)
 
