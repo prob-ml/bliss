@@ -117,7 +117,7 @@ class ResidualVAE(nn.Module):
         return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).to(device)
 
     def forward(self, residual, sample = True, return_unnormalized = False):
-        
+
         # clip residual
         residual_clamped = residual.clamp(min = -self.f_min,
                                             max = self.f_min)
@@ -152,7 +152,7 @@ def normalize_image(image):
     _image_mean = image_mean.view(image.shape[0], 1, 1, 1)
     _image_var = image_var.view(image.shape[0], 1, 1, 1)
 
-    return (image - _image_mean) / _image_var, _image_mean, _image_var
+    return (image - _image_mean) / torch.sqrt(_image_var + 1e-5), _image_mean, _image_var
 
 def get_kl_prior_term(mean, logvar):
     return - 0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
