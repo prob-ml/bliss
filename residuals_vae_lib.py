@@ -151,7 +151,7 @@ def normalize_image(image):
     image_var = image.view(image.shape[0], -1).var(1)
 
     return (image - image_mean.view(image.shape[0], 1, 1, 1)) / \
-                torch.sqrt(image_var.view(image.shape[0], 1, 1, 1) + 1e-5),
+                torch.sqrt(image_var.view(image.shape[0], 1, 1, 1) + 1e-5), \
             image_mean, image_var
 
 def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train = False):
@@ -177,7 +177,7 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
                                                             max = residual_vae.f_min)
 
         # normalize
-        normalized_residual = normalize_image(residual_image)
+        normalized_residual = normalize_image(residual_image)[0]
 
         if train:
             residual_vae.train()

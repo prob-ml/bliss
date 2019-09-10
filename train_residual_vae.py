@@ -35,7 +35,7 @@ simulator = simulated_datasets_lib.StarSimulator(psf_fit_file=sdss_hubble_data.p
                                     slen = sdss_hubble_data.slen,
                                     sky_intensity = sky_intensity)
 # get loader
-batchsize = 64
+batchsize = len(sdss_hubble_data)
 loader = torch.utils.data.DataLoader(
                  dataset=sdss_hubble_data,
                  batch_size=batchsize,
@@ -49,7 +49,7 @@ resid_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
 resid_vae.to(device)
 
 # define optimizer
-learning_rate = 1e-4
+learning_rate = 1e-3
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': resid_vae.parameters(),
