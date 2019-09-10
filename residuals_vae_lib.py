@@ -95,7 +95,7 @@ class ResidualVAE(nn.Module):
         h = self.enc_fc(self.enc_conv(residual))
 
         eta_mean = h[:, 0:self.latent_dim]
-        eta_logvar = h[:, self.latent_dim:(2 * self.latent_dim)] * 1e-3
+        eta_logvar = h[:, self.latent_dim:(2 * self.latent_dim)] * 0. + -3
 
         return eta_mean, eta_logvar
 
@@ -109,9 +109,7 @@ class ResidualVAE(nn.Module):
         h = CenterCrop(h, 2)
 
         recon_mean = h[:, 0:self.n_bands, :, :]
-        # recon_logvar = h[:, self.n_bands:(2 * self.n_bands), :, :]
-
-        recon_logvar = torch.ones(eta.shape[0], self.n_bands, self.slen, self.slen).to(device) * 0.5
+        recon_logvar = h[:, self.n_bands:(2 * self.n_bands), :, :] * 0.0 - 1.
 
         return recon_mean, recon_logvar
 
