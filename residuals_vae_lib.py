@@ -163,7 +163,7 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
                                              add_noise = False)
 
         # get residual
-        residual_image = images - simulated_images
+        residual_image = (images - simulated_images).clamp(max = residual_vae.f_min)
 
         if train:
             residual_vae.train()

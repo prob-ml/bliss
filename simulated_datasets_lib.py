@@ -126,6 +126,8 @@ class StarSimulator:
 
         self.slen = slen
         self.psf = torch.Tensor(_trim_psf(self.psf_full, slen)).to(device)
+        # normalize
+        self.psf = self.psf / torch.sum(self.psf)
 
         self.cached_grid = _get_mgrid(slen).to(device)
 

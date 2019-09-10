@@ -44,7 +44,7 @@ loader = torch.utils.data.DataLoader(
 # define VAE
 resid_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
                                             n_bands = 1,
-                                            f_min = 1300.)
+                                            f_min = 2000.)
 
 resid_vae.to(device)
 
