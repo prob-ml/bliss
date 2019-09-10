@@ -125,9 +125,9 @@ class StarSimulator:
         self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_fit_file)
 
         self.slen = slen
-        self.psf = torch.Tensor(_trim_psf(self.psf_full, slen))
+        self.psf = torch.Tensor(_trim_psf(self.psf_full, slen)).to(device)
 
-        self.cached_grid = _get_mgrid(slen)
+        self.cached_grid = _get_mgrid(slen).to(device)
 
         self.sky_intensity = sky_intensity
 

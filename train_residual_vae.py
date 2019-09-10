@@ -49,7 +49,7 @@ resid_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
 resid_vae.to(device)
 
 # define optimizer
-learning_rate = 1e-3
+learning_rate = 1e-4
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': resid_vae.parameters(),
@@ -67,7 +67,7 @@ for epoch in range(n_epochs):
                                             optimizer, train = True)
 
     elapsed = time.time() - t0
-    print('[{}] loss: {:0.4f}; \t[{:.1f} seconds]'.format(\
+    print('[{}] loss: {:.6E}; \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, elapsed))
 
     if (epoch % 5) == 0:
@@ -76,7 +76,7 @@ for epoch in range(n_epochs):
             residuals_vae_lib.eval_residual_vae(resid_vae, loader, simulator,
                                                 optimizer = None, train = False)
 
-        print('**** test loss: {:.3f} ****'.format(test_loss))
+        print('**** test loss: {:.6E} ****'.format(test_loss))
 
         outfile = './fits/residual_vae'
         print("writing the vae parameters to " + outfile)
