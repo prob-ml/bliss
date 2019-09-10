@@ -133,8 +133,7 @@ class StarSimulator:
 
 
     def draw_image_from_params(self, locs, fluxes, n_stars,
-                                        add_noise = True,
-                                        subtract_sky_intensity = False):
+                                        add_noise = True):
         images_mean = \
             plot_multiple_stars(locs, n_stars, fluxes, self.psf, self.cached_grid) + \
                 self.sky_intensity
@@ -146,10 +145,7 @@ class StarSimulator:
         else:
             images = images_mean
 
-        if subtract_sky_intensity:
-            return images - self.sky_intensity
-        else:
-            return images
+        return images
 
 
 class StarsDataset(Dataset):
