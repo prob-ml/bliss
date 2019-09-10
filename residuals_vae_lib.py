@@ -109,7 +109,9 @@ class ResidualVAE(nn.Module):
         h = CenterCrop(h, 2)
 
         recon_mean = h[:, 0:self.n_bands, :, :]
-        recon_logvar = h[:, self.n_bands:(2 * self.n_bands), :, :]
+        # recon_logvar = h[:, self.n_bands:(2 * self.n_bands), :, :]
+
+        recon_logvar = torch.ones(eta.shape[0], self.n_bands, self.slen, self.slen).to(device) * 0.5
 
         return recon_mean, recon_logvar
 
@@ -185,7 +187,6 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
 
 
         loss = get_resid_vae_loss(normalized_residual, residual_vae)
-
 
         if train:
             (loss / images.shape[0]).backward()
