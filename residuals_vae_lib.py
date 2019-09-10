@@ -129,7 +129,7 @@ class ResidualVAE(nn.Module):
         return recon_mean, recon_logvar, eta_mean, eta_logvar
 
 def get_kl_prior_term(mean, logvar):
-    return -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
+    return - 0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
 
 def get_resid_vae_loss(residuals, resid_vae):
 
@@ -139,7 +139,7 @@ def get_resid_vae_loss(residuals, resid_vae):
 
     kl_prior = get_kl_prior_term(eta_mean, eta_logvar)
 
-    return recon_loss.sum() - kl_prior.sum()
+    return recon_loss.sum() + kl_prior.sum()
 
 
 def normalize_image(image):
