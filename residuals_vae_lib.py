@@ -33,15 +33,16 @@ class ResidualVAE(nn.Module):
 
         # convolutional NN paramters
         enc_kern = 3
-        enc_hidden = 256
+        enc_hidden = 128
+        self.conv_channels = 64
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
-            nn.Conv2d(self.n_bands, 16, enc_kern,
+            nn.Conv2d(self.n_bands, 32, enc_kern,
                         stride=1, padding=1),
             nn.ReLU(),
 
-            nn.Conv2d(16, 32, enc_kern,
+            nn.Conv2d(32, self.conv_channels, enc_kern,
                         stride=1, padding=1),
             nn.ReLU(),
             Flatten()
@@ -50,13 +51,16 @@ class ResidualVAE(nn.Module):
         # output dimension of convolutions
         self.conv_out_dim = \
             self.enc_conv(torch.zeros(1, n_bands, slen, slen)).size(1)
-        self.h_slen = np.sqrt(self.conv_out_dim / 32)
+        self.h_slen = np.sqrt(self.conv_out_dim / self.conv_channels)
         assert (self.h_slen % 1) == 0
         self.h_slen = int(self.h_slen)
 
         # fully connected layers
         self.enc_fc = nn.Sequential(
             nn.Linear(self.conv_out_dim, enc_hidden),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, enc_hidden),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, 2 * latent_dim)
@@ -68,14 +72,17 @@ class ResidualVAE(nn.Module):
             nn.Linear(latent_dim, enc_hidden),
             nn.ReLU(),
 
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.ReLU(),
+
             nn.Linear(enc_hidden, self.conv_out_dim),
             nn.ReLU()
         )
 
         self.dec_conv = nn.Sequential(
-            nn.ConvTranspose2d(32, 16, enc_kern, stride=1),
+            nn.ConvTranspose2d(self.conv_channels, 32, enc_kern, stride=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(16, self.n_bands * 2, enc_kern, stride=1)
+            nn.ConvTranspose2d(32, self.n_bands * 2, enc_kern, stride=1)
         )
 
         eta = self.encode(torch.zeros(1, n_bands, slen, slen))[0]
@@ -96,7 +103,7 @@ class ResidualVAE(nn.Module):
 
         h = self.dec_fc(eta)
 
-        h = h.view(eta.shape[0], 32, self.h_slen, self.h_slen)
+        h = h.view(eta.shape[0], self.conv_channels, self.h_slen, self.h_slen)
 
         h = self.dec_conv(h)
         h = CenterCrop(h, 2)
