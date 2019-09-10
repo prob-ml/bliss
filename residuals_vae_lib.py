@@ -111,9 +111,6 @@ class ResidualVAE(nn.Module):
         recon_mean = h[:, 0:self.n_bands, :, :]
         recon_logvar = h[:, self.n_bands:(2 * self.n_bands), :, :]
 
-        recon_mean = torch.clamp(recon_mean, min = -self.f_min, max = self.f_min)
-        recon_logvar = torch.clamp(recon_mean, max = np.log(3 * self.f_min))
-
         return recon_mean, recon_logvar
 
     def sample_normal(self, mean, logvar):
