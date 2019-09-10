@@ -1,0 +1,140 @@
+import torch
+import torch.nn as nn
+
+import numpy as np
+
+from objectives_lib import eval_normal_logprob
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+class Flatten(nn.Module):
+    def forward(self, tensor):
+        return tensor.view(tensor.size(0), -1)
+
+def CenterCrop(tensor, edge):
+        assert len(tensor.shape) == 4
+        w = tensor.shape[2]
+        h = tensor.shape[3]
+
+        return tensor[:, :, edge:(w - edge),edge:(h - edge)]
+
+
+class ResidualVAE(nn.Module):
+    def __init__(self, slen, n_bands, latent_dim = 8):
+
+        super(ResidualVAE, self).__init__()
+
+        # image parameters
+        self.slen = slen
+        self.n_bands = n_bands
+
+        self.latent_dim = latent_dim
+
+        # convolutional NN paramters
+        enc_kern = 3
+        enc_hidden = 256
+
+        # convolutional NN
+        self.enc_conv = nn.Sequential(
+            nn.Conv2d(self.n_bands, 32, enc_kern,
+                        stride=1, padding=1),
+            nn.ReLU(),
+
+            nn.Conv2d(32, 64, enc_kern,
+                        stride=1, padding=1),
+            nn.ReLU(),
+            Flatten()
+        )
+
+        # output dimension of convolutions
+        self.conv_out_dim = \
+            self.enc_conv(torch.zeros(1, n_bands, slen, slen)).size(1)
+        self.h_slen = np.sqrt(self.conv_out_dim / 64)
+        assert (self.h_slen % 1) == 0
+        self.h_slen = int(self.h_slen)
+
+        # fully connected layers
+        self.enc_fc = nn.Sequential(
+            nn.Linear(self.conv_out_dim, enc_hidden),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, 2 * latent_dim)
+        )
+
+
+        # fully connected layers for generative model
+        self.dec_fc = nn.Sequential(
+            nn.Linear(latent_dim, enc_hidden),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, self.conv_out_dim),
+            nn.ReLU()
+        )
+
+        self.dec_conv = nn.Sequential(
+            nn.ConvTranspose2d(64, 32, enc_kern, stride=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, self.n_bands * 2, enc_kern, stride=1)
+        )
+
+        eta = self.encode(torch.zeros(1, n_bands, slen, slen))[0]
+        out1, out2 = self.decode(eta)
+        assert out1.shape[2] == slen
+        assert out1.shape[3] == slen
+        assert out1.shape == out2.shape
+
+
+
+    def encode(self, residual):
+        h = self.enc_fc(self.enc_conv(residual))
+
+        eta_mean = h[:, 0:self.latent_dim]
+        eta_logvar = h[:, self.latent_dim:(2 * self.latent_dim)]
+
+        return eta_mean, eta_logvar
+
+    def decode(self, eta):
+        h = self.dec_fc(eta)
+
+        h = h.view(eta.shape[0], 64, self.h_slen, self.h_slen)
+
+        h = self.dec_conv(h)
+        h = CenterCrop(h, 2)
+
+        recon_mean = h[:, 0:self.n_bands, :, :]
+        recon_logvar = h[:, self.n_bands:(2 * self.n_bands), :, :]
+
+        return recon_mean, recon_logvar
+
+    def sample_normal(self, mean, logvar):
+        return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).to(device)
+
+    def forward(self, residual, sample = True):
+        eta_mean, eta_logvar = self.encode(residual)
+
+        if sample:
+            eta = self.sample_normal(eta_mean, eta_logvar)
+        else:
+            eta = eta_mean
+
+        recon_mean, recon_logvar = self.decode(eta)
+
+        return recon_mean, recon_logvar, eta_mean, eta_logvar
+
+def get_kl_prior_term(mean, logvar):
+    return -0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
+
+def get_resid_vae_loss(residuals, resid_vae):
+    recon_mean, recon_logvar, eta_mean, eta_logvar = resid_vae(residuals)
+
+    recon_loss = - eval_normal_logprob(residuals, recon_mean, recon_logvar)
+
+    kl_prior = get_kl_prior_term(eta_mean, eta_logvar)
+
+    return recon_loss.sum() + kl_prior.sum()
