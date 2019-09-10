@@ -116,17 +116,43 @@ class ResidualVAE(nn.Module):
     def sample_normal(self, mean, logvar):
         return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).to(device)
 
-    def forward(self, residual, sample = True):
-        eta_mean, eta_logvar = self.encode(residual)
+    def forward(self, residual, sample = True, return_unnormalized = False):
+        
+        # clip residual
+        residual_clamped = residual.clamp(min = -self.f_min,
+                                            max = self.f_min)
 
+        # normalize
+        normalized_residual, mean, variance = normalize_image(residual_clamped)
+
+        # encode
+        eta_mean, eta_logvar = self.encode(normalized_residual)
+
+        # reparameterize
         if sample:
             eta = self.sample_normal(eta_mean, eta_logvar)
         else:
             eta = eta_mean
 
+        # decode
         recon_mean, recon_logvar = self.decode(eta)
 
+        # unnormalize
+        if return_unnormalized:
+            recon_mean = recon_mean * torch.sqrt(variance) + mean
+            recon_logvar = recon_logvar + torch.log(variance)
+
         return recon_mean, recon_logvar, eta_mean, eta_logvar
+
+def normalize_image(image):
+    assert len(image.shape) == 4
+    image_mean = image.view(image.shape[0], -1).mean(1)
+    image_var = image.view(image.shape[0], -1).var(1)
+
+    _image_mean = image_mean.view(image.shape[0], 1, 1, 1)
+    _image_var = image_var.view(image.shape[0], 1, 1, 1)
+
+    return (image - _image_mean) / _image_var, _image_mean, _image_var
 
 def get_kl_prior_term(mean, logvar):
     return - 0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
@@ -140,16 +166,6 @@ def get_resid_vae_loss(residuals, resid_vae):
     kl_prior = get_kl_prior_term(eta_mean, eta_logvar)
 
     return recon_loss.sum() + kl_prior.sum()
-
-
-def normalize_image(image):
-    assert len(image.shape) == 4
-    image_mean = image.view(image.shape[0], -1).mean(1)
-    image_var = image.view(image.shape[0], -1).var(1)
-
-    return (image - image_mean.view(image.shape[0], 1, 1, 1)) / \
-                torch.sqrt(image_var.view(image.shape[0], 1, 1, 1) + 1e-5), \
-            image_mean, image_var
 
 def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train = False):
     avg_loss = 0.0
@@ -170,11 +186,7 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
                                              add_noise = False)
 
         # get residual
-        residual_image = (images - simulated_images).clamp(min = -residual_vae.f_min,
-                                                            max = residual_vae.f_min)
-
-        # normalize
-        normalized_residual = normalize_image(residual_image)[0]
+        residual_image = images - simulated_images
 
         if train:
             residual_vae.train()
@@ -184,7 +196,7 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
             residual_vae.eval()
 
 
-        loss = get_resid_vae_loss(normalized_residual, residual_vae)
+        loss = get_resid_vae_loss(residual_image, residual_vae)
 
         if train:
             (loss / images.shape[0]).backward()
