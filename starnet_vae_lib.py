@@ -39,7 +39,7 @@ class StarEncoder(nn.Module):
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
-            Normalize2d()
+            Normalize2d(),
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
                         stride=1, padding=1),
             nn.ReLU(),
