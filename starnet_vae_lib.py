@@ -45,7 +45,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            Normalize2d(),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=True),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
@@ -54,7 +54,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            Normalize2d(),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=True),
             nn.ReLU(),
             Flatten()
         )
