@@ -89,14 +89,12 @@ class StarEncoder(nn.Module):
             module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    nn.BatchNorm1d(width_hidden, track_running_stats=True),
                                     nn.ReLU())
             self.add_module('enc_a_detect' + str(i), module_a)
 
             module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    nn.BatchNorm1d(width_hidden, track_running_stats=True),
                                     nn.ReLU())
 
             self.add_module('enc_b_detect' + str(i), module_b)
