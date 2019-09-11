@@ -9,15 +9,13 @@ class Flatten(nn.Module):
     def forward(self, tensor):
         return tensor.view(tensor.size(0), -1)
 
-class MyInstanceNorm1d(nn.Module):
-    def __init__(self, d):
-        super(MyInstanceNorm1d, self).__init__()
-
-        self.instance_norm = nn.InstanceNorm1d(d, track_running_stats=False)
-
+class Normalize2d(nn.Module):
     def forward(self, tensor):
-        assert len(tensor.shape) == 2
-        return self.instance_norm(tensor.unsqueeze(1)).squeeze()
+        assert len(tensor.shape) == 4
+        mean = tensor.view(tensor.shape[0], tensor.shape[1], -1).mean(2, keepdim = True).unsqueeze(-1)
+        var = tensor.view(tensor.shape[0], tensor.shape[1], -1).var(2, keepdim = True).unsqueeze(-1)
+
+        return (tensor - mean) / torch.sqrt(var + 1e-5)
 
 
 class StarEncoder(nn.Module):
@@ -57,7 +55,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, track_running_stats=False),
+            Normalize2d(),
             nn.ReLU(),
             Flatten()
         )
@@ -69,15 +67,15 @@ class StarEncoder(nn.Module):
         # fully connected layers
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
         )
 
@@ -90,14 +88,12 @@ class StarEncoder(nn.Module):
             module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    nn.BatchNorm1d(width_hidden, track_running_stats=False),
                                     nn.ReLU())
             self.add_module('enc_a_detect' + str(i), module_a)
 
             module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    nn.BatchNorm1d(width_hidden, track_running_stats=False),
                                     nn.ReLU())
 
             self.add_module('enc_b_detect' + str(i), module_b)
