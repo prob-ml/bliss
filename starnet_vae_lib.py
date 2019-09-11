@@ -39,9 +39,9 @@ class StarEncoder(nn.Module):
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
-            Normalize2d(),
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
                         stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=True),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
@@ -51,6 +51,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=True),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
