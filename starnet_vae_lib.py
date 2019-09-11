@@ -45,12 +45,11 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.MaxPool2d(kernel_size = 2, stride=1, padding=1),
+            Normalize2d(),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.MaxPool2d(kernel_size = 2, stride=1, padding=1),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
