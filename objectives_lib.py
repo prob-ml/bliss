@@ -191,7 +191,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
         if train:
             star_encoder.train()
-            if optimizer is not None
+            if optimizer is not None:
                 optimizer.zero_grad()
         else:
             star_encoder.eval()
@@ -201,7 +201,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
                                 true_locs, true_fluxes, true_n_stars)[0:2]
 
         if train:
-            if optimizer is not None
+            if optimizer is not None:
                 loss.backward()
                 optimizer.step()
 

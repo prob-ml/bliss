@@ -35,7 +35,7 @@ class StarEncoder(nn.Module):
         enc_kern = 3
         enc_hidden = 256
 
-        momentum = 0.9
+        momentum = 0.5
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
