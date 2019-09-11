@@ -41,6 +41,7 @@ class StarEncoder(nn.Module):
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
                         stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, track_running_stats=True),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
