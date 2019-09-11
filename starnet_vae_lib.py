@@ -35,13 +35,13 @@ class StarEncoder(nn.Module):
         enc_kern = 3
         enc_hidden = 256
 
-        momentum = 0.1
+        momentum = 0.9
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, track_running_stats=True),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
@@ -56,7 +56,7 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, track_running_stats=True),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
             Flatten()
         )
@@ -68,15 +68,15 @@ class StarEncoder(nn.Module):
         # fully connected layers
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
         )
 
