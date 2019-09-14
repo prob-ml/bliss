@@ -225,9 +225,8 @@ class StarsDataset(Dataset):
         locs = torch.rand((batchsize, self.max_stars, 2))
 
         # draw fluxes
-        # fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
-        #                         shape = (batchsize, self.max_stars))
-        fluxes = 10 * self.f_min * torch.ones(batchsize, self.max_stars)
+        fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
+                                shape = (batchsize, self.max_stars))
 
         # sort from brightest to dimmest
         # fluxes = fluxes.topk(self.max_stars, dim = 1)[0]
