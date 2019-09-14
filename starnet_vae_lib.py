@@ -88,6 +88,8 @@ class StarEncoder(nn.Module):
 
             module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
+                                    nn.Linear(enc_hidden, width_hidden),
+                                    nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU())
             self.add_module('enc_a_detect' + str(i), module_a)
