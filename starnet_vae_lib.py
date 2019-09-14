@@ -41,7 +41,6 @@ class StarEncoder(nn.Module):
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
@@ -66,19 +65,19 @@ class StarEncoder(nn.Module):
             self.enc_conv(torch.zeros(1, n_bands, slen, slen)).size(1)
 
         # fully connected layers
-        self.enc_fc = nn.Sequential(
-            nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
-            nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
-            nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
-            nn.ReLU(),
-        )
+        # self.enc_fc = nn.Sequential(
+        #     nn.Linear(conv_out_dim, enc_hidden),
+        #     nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
+        #     nn.ReLU(),
+        #
+        #     nn.Linear(enc_hidden, enc_hidden),
+        #     nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
+        #     nn.ReLU(),
+        #
+        #     nn.Linear(enc_hidden, enc_hidden),
+        #     nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
+        #     nn.ReLU(),
+        # )
 
         # add final layer, whose size depends on the number of stars to output
         for i in range(0, max_detections + 1):
@@ -86,7 +85,7 @@ class StarEncoder(nn.Module):
             len_out = i * 6 + 1
             width_hidden = len_out * 10
 
-            module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
+            module_a = nn.Sequential(nn.Linear(conv_out_dim, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU())

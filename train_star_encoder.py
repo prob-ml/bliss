@@ -82,12 +82,11 @@ for epoch in range(n_epochs):
                     epoch, avg_loss, counter_loss, elapsed))
 
     if (epoch % 5) == 0:
-
-        _, _ = \
-            objectives_lib.eval_star_encoder_loss(star_encoder,
-                                            loader, train = True)
-
-        loader.dataset.set_params_and_images()
+        # _, _ = \
+        #     objectives_lib.eval_star_encoder_loss(star_encoder,
+        #                                     loader, train = True)
+        #
+        # loader.dataset.set_params_and_images()
         test_loss, test_counter_loss = \
             objectives_lib.eval_star_encoder_loss(star_encoder,
                                             loader, train = False)
