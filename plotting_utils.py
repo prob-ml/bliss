@@ -7,9 +7,12 @@ from simulated_datasets_lib import plot_multiple_stars
 
 def plot_image(fig, image,
                 true_locs = None, estimated_locs = None,
-                vmin = None, vmax = None):
+                vmin = None, vmax = None,
+                add_colorbar = False,
+                global_fig = None):
+
     slen = image.shape[-1]
-    fig.matshow(image, vmin = vmin, vmax = vmax)
+    im = fig.matshow(image, vmin = vmin, vmax = vmax)
 
     if not(true_locs is None):
         fig.scatter(x = true_locs[:, 1] * (slen - 1),
@@ -20,6 +23,10 @@ def plot_image(fig, image,
         fig.scatter(x = estimated_locs[:, 1] * (slen - 1),
                     y = estimated_locs[:, 0] * (slen - 1),
                     color = 'r', marker = 'x')
+
+    if add_colorbar:
+        assert global_fig is not None
+        global_fig.colorbar(im, ax = fig)
 
 def plot_categorical_probs(log_prob_vec, fig):
     n_cat = len(log_prob_vec)
@@ -78,6 +85,7 @@ def print_results(star_encoder,
                         true_n_stars,
                         indx,
                         use_true_n_stars = False,
+                        residual_clamp = 1e16,
                         condition = None):
 
     # get variational parameters
@@ -105,7 +113,7 @@ def print_results(star_encoder,
         if not(condition[i]):
             continue
 
-        _, axarr = plt.subplots(1, 4, figsize=(15, 4))
+        fig, axarr = plt.subplots(1, 4, figsize=(15, 4))
 
         # observed image
         n_stars_i = true_n_stars[i]
@@ -116,7 +124,9 @@ def print_results(star_encoder,
 
         plot_image(axarr[0], images[i, 0, :, :] - backgrounds[i, 0, :, :],
                   true_locs = true_locs[i, 0:int(n_stars_i)],
-                  estimated_locs = map_locs[i, 0:int(est_n_stars_i)])
+                  estimated_locs = map_locs[i, 0:int(est_n_stars_i)],
+                  add_colorbar = True,
+                  global_fig = fig)
 
         axarr[0].get_xaxis().set_visible(False)
         axarr[0].get_yaxis().set_visible(False)
@@ -134,12 +144,18 @@ def print_results(star_encoder,
                              c = 'r', marker = 'x', alpha = 0.05)
 
         plot_image(axarr[1], images[i, 0, :, :] - backgrounds[i, 0, :, :],
-                  true_locs = true_locs[i, 0:int(n_stars_i)])
+                  true_locs = true_locs[i, 0:int(n_stars_i)],
+                  add_colorbar = True,
+                  global_fig = fig)
         axarr[1].get_xaxis().set_visible(False)
         axarr[1].get_yaxis().set_visible(False)
 
-        # plot residuals
-        plot_image(axarr[2], images[i, 0, :, :]-recon_mean[i, 0, :, :])
+        residual = images[i, 0, :, :]-recon_mean[i, 0, :, :]
+        residual = residual.clamp(min = -residual_clamp, max = residual_clamp)
+
+        plot_image(axarr[2], residual,
+                  add_colorbar = True,
+                  global_fig = fig)
 
         axarr[2].get_xaxis().set_visible(False)
         axarr[2].get_yaxis().set_visible(False)
