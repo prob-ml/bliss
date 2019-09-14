@@ -80,12 +80,13 @@ class StarEncoder(nn.Module):
         # )
 
         # add final layer, whose size depends on the number of stars to output
+        enc_hidden = conv_out_dim
         for i in range(0, max_detections + 1):
             # i = 0, 1, ..., max_detections
             len_out = i * 6 + 1
             width_hidden = len_out * 10
 
-            module_a = nn.Sequential(nn.Linear(conv_out_dim, width_hidden),
+            module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU())
@@ -116,7 +117,7 @@ class StarEncoder(nn.Module):
 
     def _forward_to_pooled_hidden(self, image, background):
         h = self.enc_conv(torch.log(image - background + 1000.))
-        return self.enc_fc(h)
+        return h # self.enc_fc(h)
 
     def _forward_conditional_nstars(self, h, n_stars):
         assert isinstance(n_stars, int)
