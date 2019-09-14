@@ -84,7 +84,7 @@ class StarEncoder(nn.Module):
         for i in range(0, max_detections + 1):
             # i = 0, 1, ..., max_detections
             len_out = i * 6 + 1
-            width_hidden = len_out * 10
+            width_hidden = 256 # len_out * 10
 
             module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
