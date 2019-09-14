@@ -43,7 +43,8 @@ star_dataset = \
                             data_params,
                             n_stars = n_stars,
                             use_fresh_data = False,
-                            add_noise = True)
+                            add_noise = True,
+                            add_edge_effect = False)
 
 # get loader
 batchsize = 2048

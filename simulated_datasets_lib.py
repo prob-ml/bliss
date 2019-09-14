@@ -325,7 +325,8 @@ def get_is_on_from_n_stars(n_stars, max_stars):
 #     return fluxes_perm, locs_perm
 
 def load_dataset_from_params(psf_fit_file, data_params, n_stars, use_fresh_data,
-                                add_noise = True):
+                                add_noise = True,
+                                add_edge_effect = True):
     # data parameters
     slen = data_params['slen']
 
@@ -351,7 +352,8 @@ def load_dataset_from_params(psf_fit_file, data_params, n_stars, use_fresh_data,
                             alpha = alpha,
                             sky_intensity = sky_intensity,
                             use_fresh_data = use_fresh_data,
-                            add_noise = add_noise)
+                            add_noise = add_noise,
+                            add_edge_effect = add_edge_effect)
 
 def load_data_from_disk(psf_fit_file, filename, data_params, add_noise = True):
     test_data_numpy = np.load(filename)
