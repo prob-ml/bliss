@@ -3,7 +3,7 @@ import torch.nn as nn
 
 import numpy as np
 
-from objectives_lib import eval_normal_logprob
+from inv_KL_objective_lib import eval_normal_logprob
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -17,6 +17,9 @@ def CenterCrop(tensor, edge):
         h = tensor.shape[3]
 
         return tensor[:, :, edge:(w - edge),edge:(h - edge)]
+
+def sample_normal(mean, logvar):
+    return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).to(device)
 
 
 class ResidualVAE(nn.Module):
@@ -113,9 +116,6 @@ class ResidualVAE(nn.Module):
 
         return recon_mean, recon_logvar
 
-    def sample_normal(self, mean, logvar):
-        return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).to(device)
-
     def forward(self, residual, sample = True, return_unnormalized = False):
 
         # clip residual
@@ -123,14 +123,15 @@ class ResidualVAE(nn.Module):
                                             max = self.f_min)
 
         # normalize
-        normalized_residual, mean, variance = normalize_image(residual_clamped)
+        # normalized_residual, mean, variance = normalize_image(residual_clamped)
+        normalized_residual = residual_clamped * 1.0
 
         # encode
         eta_mean, eta_logvar = self.encode(normalized_residual)
 
         # reparameterize
         if sample:
-            eta = self.sample_normal(eta_mean, eta_logvar)
+            eta = sample_normal(eta_mean, eta_logvar)
         else:
             eta = eta_mean
 
