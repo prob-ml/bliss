@@ -52,30 +52,27 @@ def get_variational_parameters(star_encoder, images,
                                true_n_stars,
                                use_true_n_stars = False):
 
+    if use_true_n_stars:
+        n_stars = true_n_stars
+    else:
+        n_stars = None
+
     # get parameters
     logit_loc_mean, logit_loc_log_var, \
         log_flux_mean, log_flux_log_var, log_probs = \
-            star_encoder(images, backgrounds, true_n_stars)
-
-    map_n_stars = torch.argmax(log_probs, dim = 1).detach()
+            star_encoder(images, backgrounds, n_stars)
 
     if use_true_n_stars:
-        est_n_stars = true_n_stars
+        map_n_stars = true_n_stars
     else:
-        est_n_stars = map_n_stars
+        map_n_stars = torch.argmax(log_probs, dim = 1)
 
-        # get locations and fluxes using map values
-        logit_loc_mean, logit_loc_log_var, \
-            log_flux_mean, log_flux_log_var, foo = \
-                star_encoder(images, backgrounds, est_n_stars)
-
-        assert torch.all(foo == log_probs)
 
     map_locs = torch.sigmoid(logit_loc_mean).detach()
     map_fluxes = torch.exp(log_flux_mean).detach()
 
     # get reconstruction
-    recon_mean = plot_multiple_stars(map_locs, est_n_stars, map_fluxes, psf) + \
+    recon_mean = plot_multiple_stars(map_locs, map_n_stars, map_fluxes, psf) + \
                     backgrounds
 
     return map_n_stars, map_locs, map_fluxes, \
@@ -113,10 +110,7 @@ def print_results(star_encoder,
 
         # observed image
         n_stars_i = true_n_stars[i]
-        if use_true_n_stars:
-            est_n_stars_i = true_n_stars[i]
-        else:
-            est_n_stars_i = map_n_stars[i]
+        est_n_stars_i = map_n_stars[i]
 
         plot_image(axarr[0], images[i, 0, :, :] - backgrounds[i, 0, :, :],
                   true_locs = true_locs[i, 0:int(n_stars_i)],

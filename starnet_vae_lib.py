@@ -137,20 +137,27 @@ class StarEncoder(nn.Module):
 
         return h_out[:, 1:h_out.shape[1]]
 
-    def forward(self, images, background, n_stars):
+    def forward(self, images, background, n_stars = None):
         # pass through neural network
         h = self._forward_to_last_hidden(images, background)
 
+        log_probs = self._get_logprobs_from_last_hidden_layer(h)
+
+        if n_stars is None:
+            n_stars = torch.argmax(log_probs, dim = 1)
+
         # extract parameters
         logit_loc_mean, logit_loc_logvar, \
-                log_flux_mean, log_flux_logvar, free_probs = \
-                    self._get_params_from_last_hidden_layer(h, n_stars)
-
-        log_probs = self.log_softmax(free_probs)
+            log_flux_mean, log_flux_logvar = \
+                self._get_params_from_last_hidden_layer(h, n_stars)
 
         return logit_loc_mean, logit_loc_logvar, \
                 log_flux_mean, log_flux_logvar, log_probs
 
+    def _get_logprobs_from_last_hidden_layer(self, h):
+        free_probs = h[:, self.prob_indx]
+
+        return self.log_softmax(free_probs)
 
     def _get_params_from_last_hidden_layer(self, h, n_stars):
 
@@ -166,14 +173,10 @@ class StarEncoder(nn.Module):
         log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_stars])
         log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_stars])
 
-        free_probs = h[:, self.prob_indx]
-
         return logit_loc_mean.reshape(batchsize, self.max_detections, 2), \
                 logit_loc_logvar.reshape(batchsize, self.max_detections, 2), \
                 log_flux_mean.reshape(batchsize, self.max_detections), \
-                log_flux_logvar.reshape(batchsize, self.max_detections), \
-                free_probs
-
+                log_flux_logvar.reshape(batchsize, self.max_detections)
 
     def _get_hidden_indices(self):
 
