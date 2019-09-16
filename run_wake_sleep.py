@@ -63,6 +63,7 @@ simulated_dataset = \
                             data_params,
                             n_stars = 60000,
                             add_noise = True)
+
 simulated_loader = torch.utils.data.DataLoader(
                                  dataset=simulated_dataset,
                                  batch_size=2048,
@@ -138,6 +139,8 @@ def eval_wake_loss(residual_vae, star_encoder, loader, simulator,
 def run_wake(residual_vae, star_encoder, loader,
                 simulator, optimizer, cycle):
 
+    star_encoder.eval();
+    
     n_epochs = 500
 
     for epoch in range(n_epochs):
