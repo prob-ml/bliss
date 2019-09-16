@@ -191,22 +191,41 @@ def get_resid_vae_loss(image, simulated_image, resid_vae):
 
     return recon_loss.sum() + kl_prior.sum()
 
-def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train = False):
+def eval_residual_vae(residual_vae, loader, simulator,
+                        optimizer = None, train = False ,
+                        star_encoder = None):
     avg_loss = 0.0
 
     for _, data in enumerate(loader):
-        # true parameters
-        true_fluxes = data['fluxes'].to(device).type(torch.float)
-        true_locs = data['locs'].to(device).type(torch.float)
-        true_n_stars = data['n_stars'].to(device)
         images = data['image'].to(device)
         backgrounds = data['background'].to(device)
 
+        if starnet_encoder is None:
+            # use true parameters
+            fluxes = data['fluxes'].to(device).type(torch.float)
+            locs = data['locs'].to(device).type(torch.float)
+            n_stars = data['n_stars'].to(device)
+        else:
+            # use estimated parameters
+            starnet_encoder.eval()
+
+            logit_loc_mean, logit_loc_logvar, \
+                log_flux_mean, log_flux_logvar, log_probs = \
+                        star_encoder(images, backgrounds)
+
+            locs = torch.sigmoid(\
+                residuals_vae_lib.sample_normal(logit_loc_mean.detach(),
+                                                logit_loc_logvar.detach()))
+            fluxes = torch.exp(\
+                residuals_vae_lib.sample_normal(log_flux_mean.detach(),
+                                                log_flux_logvar.detach()))
+            n_stars = torch.multinomial(torch.exp(log_probs), num_samples = 1).squeeze()
+
         # reconstruction
         simulated_images = \
-            simulator.draw_image_from_params(locs = true_locs,
-                                             fluxes = true_fluxes,
-                                             n_stars = true_n_stars,
+            simulator.draw_image_from_params(locs = locs,
+                                             fluxes = fluxes,
+                                             n_stars = n_stars,
                                              add_noise = False)
 
         if train:
