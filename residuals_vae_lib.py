@@ -23,7 +23,7 @@ def sample_normal(mean, logvar):
 
 
 class ResidualVAE(nn.Module):
-    def __init__(self, slen, n_bands, f_min, latent_dim = 8):
+    def __init__(self, slen, n_bands, f_min, latent_dim = 64):
 
         super(ResidualVAE, self).__init__()
 
@@ -36,7 +36,7 @@ class ResidualVAE(nn.Module):
 
         # convolutional NN paramters
         enc_kern = 3
-        enc_hidden = 128
+        enc_hidden = 256
         self.conv_channels = 64
 
         # convolutional NN
@@ -66,6 +66,9 @@ class ResidualVAE(nn.Module):
             nn.Linear(enc_hidden, enc_hidden),
             nn.ReLU(),
 
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.ReLU(),
+
             nn.Linear(enc_hidden, 2 * latent_dim)
         )
 
@@ -73,6 +76,9 @@ class ResidualVAE(nn.Module):
         # fully connected layers for generative model
         self.dec_fc = nn.Sequential(
             nn.Linear(latent_dim, enc_hidden),
+            nn.ReLU(),
+
+            nn.Linear(enc_hidden, enc_hidden),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
@@ -116,14 +122,12 @@ class ResidualVAE(nn.Module):
 
         return recon_mean, recon_logvar
 
-    def forward(self, residual, sample = True, return_unnormalized = False):
+    def forward(self, image, simulated_image, sample = True, return_unnormalized = False):
 
-        # clip residual
-        residual_clamped = residual.clamp(min = -self.f_min,
-                                            max = self.f_min)
+        residual_clamped = (image - simulated_image).clamp(min = -self.f_min,
+                                                max = self.f_min)
 
-        # normalize
-        normalized_residual, mean, variance = normalize_image(residual_clamped)
+        normalized_residual = residual_clamped / simulated_image
 
         # encode
         eta_mean, eta_logvar = self.encode(normalized_residual)
@@ -139,10 +143,14 @@ class ResidualVAE(nn.Module):
 
         # unnormalize
         if return_unnormalized:
-            recon_mean = recon_mean * torch.sqrt(variance) + mean
-            recon_logvar = recon_logvar + torch.log(variance)
+            recon_mean = recon_mean * simulated_image
+            recon_logvar = recon_logvar + torch.log(simulated_image**2)
+            residual = normalized_residual * simulated_image
+        else:
+            residual = normalized_residual
 
-        return recon_mean, recon_logvar, eta_mean, eta_logvar, normalized_residual
+
+        return recon_mean, recon_logvar, eta_mean, eta_logvar, residual
 
 def normalize_image(image):
     assert len(image.shape) == 4
@@ -157,10 +165,10 @@ def normalize_image(image):
 def get_kl_prior_term(mean, logvar):
     return - 0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
 
-def get_resid_vae_loss(residuals, resid_vae):
+def get_resid_vae_loss(image, simulated_image, resid_vae):
 
     recon_mean, recon_logvar, eta_mean, eta_logvar, normalized_residual = \
-            resid_vae(residuals)
+            resid_vae(image, simulated_image)
 
     recon_loss = - eval_normal_logprob(normalized_residual, recon_mean, recon_logvar)
 
@@ -186,9 +194,6 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
                                              n_stars = true_n_stars,
                                              add_noise = False)
 
-        # get residual
-        residual_image = images - simulated_images
-
         if train:
             residual_vae.train()
             assert optimizer is not None
@@ -197,7 +202,7 @@ def eval_residual_vae(residual_vae, loader, simulator, optimizer = None, train =
             residual_vae.eval()
 
 
-        loss = get_resid_vae_loss(residual_image, residual_vae)
+        loss = get_resid_vae_loss(images, simulated_images, residual_vae)
 
         if train:
             (loss / images.shape[0]).backward()
