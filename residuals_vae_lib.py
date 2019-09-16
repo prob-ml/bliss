@@ -123,8 +123,7 @@ class ResidualVAE(nn.Module):
                                             max = self.f_min)
 
         # normalize
-        # normalized_residual, mean, variance = normalize_image(residual_clamped)
-        normalized_residual = residual_clamped * 1.0
+        normalized_residual, mean, variance = normalize_image(residual_clamped)
 
         # encode
         eta_mean, eta_logvar = self.encode(normalized_residual)

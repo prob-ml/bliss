@@ -49,7 +49,7 @@ resid_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
 resid_vae.to(device)
 
 # define optimizer
-learning_rate = 1e-3
+learning_rate = 1e-4
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': resid_vae.parameters(),
