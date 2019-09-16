@@ -43,10 +43,12 @@ class ResidualVAE(nn.Module):
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, 32, enc_kern,
                         stride=1, padding=1),
+            nn.BatchNorm2d(32, track_running_stats=True),
             nn.ReLU(),
 
             nn.Conv2d(32, self.conv_channels, enc_kern,
                         stride=1, padding=1),
+            nn.BatchNorm2d(self.conv_channels, track_running_stats=True),
             nn.ReLU(),
             Flatten()
         )
@@ -61,9 +63,11 @@ class ResidualVAE(nn.Module):
         # fully connected layers
         self.enc_fc = nn.Sequential(
             nn.Linear(self.conv_out_dim, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, 2 * latent_dim)
@@ -82,13 +86,24 @@ class ResidualVAE(nn.Module):
             nn.ReLU()
         )
 
+        # self.dec_conv_mean = nn.Sequential(
+        #     nn.ConvTranspose2d(self.conv_channels, 32, enc_kern, stride=1),
+        #     nn.ReLU(),
+        #     nn.ConvTranspose2d(32, self.n_bands, enc_kern, stride=1)
+        # )
+        # self.dec_conv_var = nn.Sequential(
+        #     nn.ConvTranspose2d(self.conv_channels, 32, enc_kern, stride=1),
+        #     nn.ReLU(),
+        #     nn.ConvTranspose2d(32, self.n_bands, enc_kern, stride=1)
+        # )
+
         self.dec_conv = nn.Sequential(
             nn.ConvTranspose2d(self.conv_channels, 32, enc_kern, stride=1),
             nn.ReLU(),
             nn.ConvTranspose2d(32, self.n_bands * 2, enc_kern, stride=1)
         )
 
-        eta = self.encode(torch.zeros(1, n_bands, slen, slen))[0]
+        eta = self.encode(torch.zeros(5, n_bands, slen, slen))[0]
         out1, out2 = self.decode(eta)
         assert out1.shape[2] == slen
         assert out1.shape[3] == slen
@@ -113,6 +128,9 @@ class ResidualVAE(nn.Module):
 
         recon_mean = h[:, 0:self.n_bands, :, :]
         recon_logvar = h[:, self.n_bands:(2 * self.n_bands), :, :]
+        #
+        # recon_mean = CenterCrop(self.dec_conv_mean(h), 2)
+        # recon_logvar = CenterCrop(self.dec_conv_var(h), 2)
 
         return recon_mean, recon_logvar
 
@@ -121,7 +139,7 @@ class ResidualVAE(nn.Module):
         residual_clamped = (image - simulated_image).clamp(min = -self.f_min,
                                                 max = self.f_min)
 
-        normalized_residual = normalize_image(residual_clamped)[0] # residual_clamped / image
+        normalized_residual = residual_clamped / simulated_image
 
         # encode
         eta_mean, eta_logvar = self.encode(normalized_residual)
@@ -137,10 +155,9 @@ class ResidualVAE(nn.Module):
 
         # unnormalize
         if return_unnormalized:
-            # recon_mean = recon_mean * simulated_image
-            # recon_logvar = recon_logvar + torch.log(simulated_image**2)
-            # residual = normalized_residual * simulated_image
-            raise NotImplementedError()
+            recon_mean = recon_mean * simulated_image
+            recon_logvar = recon_logvar + torch.log(simulated_image**2)
+            residual = normalized_residual * simulated_image
         else:
             residual = normalized_residual
 
@@ -164,6 +181,9 @@ def get_resid_vae_loss(image, simulated_image, resid_vae):
 
     recon_mean, recon_logvar, eta_mean, eta_logvar, normalized_residual = \
             resid_vae(image, simulated_image)
+
+    assert normalized_residual.shape == recon_mean.shape
+    assert normalized_residual.shape == recon_logvar.shape
 
     recon_loss = - eval_normal_logprob(normalized_residual, recon_mean, recon_logvar)
 
