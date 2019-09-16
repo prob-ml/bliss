@@ -200,24 +200,24 @@ def eval_residual_vae(residual_vae, loader, simulator,
         images = data['image'].to(device)
         backgrounds = data['background'].to(device)
 
-        if starnet_encoder is None:
+        if star_encoder is None:
             # use true parameters
             fluxes = data['fluxes'].to(device).type(torch.float)
             locs = data['locs'].to(device).type(torch.float)
             n_stars = data['n_stars'].to(device)
         else:
             # use estimated parameters
-            starnet_encoder.eval()
+            star_encoder.eval()
 
             logit_loc_mean, logit_loc_logvar, \
                 log_flux_mean, log_flux_logvar, log_probs = \
                         star_encoder(images, backgrounds)
 
             locs = torch.sigmoid(\
-                residuals_vae_lib.sample_normal(logit_loc_mean.detach(),
+                sample_normal(logit_loc_mean.detach(),
                                                 logit_loc_logvar.detach()))
             fluxes = torch.exp(\
-                residuals_vae_lib.sample_normal(log_flux_mean.detach(),
+                sample_normal(log_flux_mean.detach(),
                                                 log_flux_logvar.detach()))
             n_stars = torch.multinomial(torch.exp(log_probs), num_samples = 1).squeeze()
 
