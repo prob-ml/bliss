@@ -121,7 +121,7 @@ class ResidualVAE(nn.Module):
         residual_clamped = (image - simulated_image).clamp(min = -self.f_min,
                                                 max = self.f_min)
 
-        normalized_residual = normalize_image(residual_clamped) # residual_clamped / image
+        normalized_residual = normalize_image(residual_clamped)[0] # residual_clamped / image
 
         # encode
         eta_mean, eta_logvar = self.encode(normalized_residual)
@@ -137,9 +137,10 @@ class ResidualVAE(nn.Module):
 
         # unnormalize
         if return_unnormalized:
-            recon_mean = recon_mean * simulated_image
-            recon_logvar = recon_logvar + torch.log(simulated_image**2)
-            residual = normalized_residual * simulated_image
+            # recon_mean = recon_mean * simulated_image
+            # recon_logvar = recon_logvar + torch.log(simulated_image**2)
+            # residual = normalized_residual * simulated_image
+            raise NotImplementedError()
         else:
             residual = normalized_residual
 
