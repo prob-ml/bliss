@@ -102,7 +102,7 @@ def plot_multiple_stars(locs, n_stars, fluxes, psf, cached_grid = None):
     return stars
 
 def _draw_pareto(f_min, alpha, shape):
-    uniform_samples = torch.rand(shape)
+    uniform_samples = torch.rand(shape).to(device)
 
     return f_min / (1 - uniform_samples)**(1 / alpha)
 
@@ -141,7 +141,7 @@ class StarSimulator:
 
         # add noise
         if add_noise:
-            images = torch.sqrt(images_mean) * torch.randn(images_mean.shape) + \
+            images = torch.sqrt(images_mean) * torch.randn(images_mean.shape).to(device) + \
                                                             images_mean
         else:
             images = images_mean
@@ -201,7 +201,7 @@ class StarsDataset(Dataset):
 
     def draw_batch_parameters(self, batchsize, return_images = True):
         # draw locations
-        locs = torch.rand((batchsize, self.max_stars, 2))
+        locs = torch.rand((batchsize, self.max_stars, 2)).to(device)
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
@@ -209,7 +209,7 @@ class StarsDataset(Dataset):
 
         n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
                                     batchsize)
-        n_stars = torch.Tensor(n_stars).type(torch.LongTensor)
+        n_stars = torch.Tensor(n_stars).type(torch.LongTensor).to(device)
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,
