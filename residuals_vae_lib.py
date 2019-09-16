@@ -23,7 +23,7 @@ def sample_normal(mean, logvar):
 
 
 class ResidualVAE(nn.Module):
-    def __init__(self, slen, n_bands, f_min, latent_dim = 64):
+    def __init__(self, slen, n_bands, f_min, latent_dim = 8):
 
         super(ResidualVAE, self).__init__()
 
@@ -36,7 +36,7 @@ class ResidualVAE(nn.Module):
 
         # convolutional NN paramters
         enc_kern = 3
-        enc_hidden = 256
+        enc_hidden = 128
         self.conv_channels = 64
 
         # convolutional NN
@@ -66,9 +66,6 @@ class ResidualVAE(nn.Module):
             nn.Linear(enc_hidden, enc_hidden),
             nn.ReLU(),
 
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.ReLU(),
-
             nn.Linear(enc_hidden, 2 * latent_dim)
         )
 
@@ -76,9 +73,6 @@ class ResidualVAE(nn.Module):
         # fully connected layers for generative model
         self.dec_fc = nn.Sequential(
             nn.Linear(latent_dim, enc_hidden),
-            nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
@@ -127,7 +121,7 @@ class ResidualVAE(nn.Module):
         residual_clamped = (image - simulated_image).clamp(min = -self.f_min,
                                                 max = self.f_min)
 
-        normalized_residual = residual_clamped / image
+        normalized_residual = normalized_image(residual_clamped) # residual_clamped / image
 
         # encode
         eta_mean, eta_logvar = self.encode(normalized_residual)
