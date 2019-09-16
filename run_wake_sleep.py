@@ -140,7 +140,7 @@ def run_wake(residual_vae, star_encoder, loader,
                 simulator, optimizer, cycle):
 
     star_encoder.eval();
-    
+
     n_epochs = 500
 
     for epoch in range(n_epochs):
@@ -164,15 +164,104 @@ def run_wake(residual_vae, star_encoder, loader,
             print("writing the residual vae parameters to " + outfile)
             torch.save(resid_vae.state_dict(), outfile)
 
+def eval_sleep_loss(star_encoder, resid_vae, train_loader,
+                    optimizer = None, train = False):
+
+    avg_loss = 0.0
+    avg_counter_loss = 0.0
+
+    for _, data in enumerate(train_loader):
+        true_fluxes = data['fluxes'].to(device)
+        true_locs = data['locs'].to(device)
+        true_n_stars = data['n_stars'].to(device)
+        images = data['image'].to(device)
+        backgrounds = data['background'].to(device)
+
+        # add residual noise
+        eta = torch.randn(images.shape[0], resid_vae.latent_dim)
+        residuals = resid_vae.decode(eta)[0] # just taking the mean ...
+
+        images_noised = images * residuals + images
+
+        if train:
+            star_encoder.train()
+            if optimizer is not None:
+                optimizer.zero_grad()
+        else:
+            star_encoder.eval()
+
+        # evaluate log q
+        loss, counter_loss = get_encoder_loss(star_encoder, images_noised, backgrounds,
+                                    true_locs, true_fluxes, true_n_stars)[0:2]
+
+        if train:
+            if optimizer is not None:
+                loss.backward()
+                optimizer.step()
+
+        avg_loss += loss.item() * images.shape[0] / len(train_loader.dataset)
+        avg_counter_loss += counter_loss.sum().item() / len(train_loader.dataset)
+
+    return avg_loss, avg_counter_loss
+
+def run_sleep(residual_vae, star_encoder, loader, optimizer, cycle):
+
+    residual_vae.eval();
+
+    n_epochs = 500
+
+    for epoch in range(n_epochs):
+        t0 = time.time()
+
+        avg_loss, counter_loss = objectives_lib.eval_star_encoder_loss(star_encoder, loader,
+                                                        optimizer, train = True)
+
+        elapsed = time.time() - t0
+        print('[{}] loss: {:0.4f}; counter loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                        epoch, avg_loss, counter_loss, elapsed))
+
+        # draw fresh data
+        loader.dataset.set_params_and_images()
+
+        if (epoch % 20) == 0:
+            _, _ = \
+                objectives_lib.eval_star_encoder_loss(star_encoder,
+                                                loader, train = True)
+
+            loader.dataset.set_params_and_images()
+            test_loss, test_counter_loss = \
+                objectives_lib.eval_star_encoder_loss(star_encoder,
+                                                loader, train = False)
+
+            print('**** test loss: {:.3f}; counter loss: {:.3f} ****'.format(test_loss, test_counter_loss))
+
+            outfile = './fits/starnet_encoder_sleep' + str(cycle)
+            print("writing the encoder parameters to " + outfile)
+            torch.save(star_encoder.state_dict(), outfile)
+
+
 ##############################
 # Train!
 ##############################
+# get optimizers
 learning_rate = 1e-3
 weight_decay = 1e-5
-optimizer = optim.Adam([
+residual_optimizer = optim.Adam([
                     {'params': resid_vae.parameters(),
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
-run_wake(resid_vae, star_encoder, sdss_loader,
-            simulated_dataset.simulator, optimizer, cycle = 1)
+learning_rate = 1e-3
+weight_decay = 1e-5
+encoder_optimizer = optim.Adam([
+                    {'params': star_encoder.parameters(),
+                    'lr': learning_rate}],
+                    weight_decay = weight_decay)
+
+# run_wake(resid_vae, star_encoder, sdss_loader,
+#             simulated_dataset.simulator, residual_optimizer, cycle = 1)
+
+resid_vae.load_state_dict(torch.load('../fits/residual_vae_wake1',
+                               map_location=lambda storage, loc: storage))
+
+run_sleep(resid_vae, star_encoder, simulated_loader, encoder_optimizer, cycle = 1)
