@@ -127,7 +127,7 @@ class ResidualVAE(nn.Module):
         residual_clamped = (image - simulated_image).clamp(min = -self.f_min,
                                                 max = self.f_min)
 
-        normalized_residual = residual_clamped / simulated_image
+        normalized_residual = residual_clamped / image
 
         # encode
         eta_mean, eta_logvar = self.encode(normalized_residual)
