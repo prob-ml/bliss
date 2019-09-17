@@ -179,12 +179,17 @@ encoder_optimizer = optim.Adam([
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
-for i in range(2, 11):
-    # load  encoder
-    if(i > 1):
-        star_encoder.load_state_dict(torch.load('./fits/starnet_encoder_sleep' + str(i - 1),
-                                       map_location=lambda storage, loc: storage))
-        star_encoder.to(device)
+# run first sleep cycle
+run_sleep(None, star_encoder,
+            simulated_loader,
+            encoder_optimizer,
+            cycle = 0,
+            n_epochs = 1000)
+
+for i in range(1, 11):
+    star_encoder.load_state_dict(torch.load('./fits/starnet_encoder_sleep' + str(i - 1),
+                                   map_location=lambda storage, loc: storage))
+    star_encoder.to(device)
 
     # run wake
     run_wake(residual_vae, star_encoder, sdss_loader,
@@ -196,4 +201,5 @@ for i in range(2, 11):
     residual_vae.to(device)
 
     # run sleep
-    run_sleep(residual_vae, star_encoder, simulated_loader, encoder_optimizer, cycle = i, n_epochs = 200)
+    run_sleep(residual_vae, star_encoder, simulated_loader, encoder_optimizer,
+                cycle = i, n_epochs = 150)
