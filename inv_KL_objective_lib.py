@@ -175,7 +175,7 @@ def get_encoder_loss(star_encoder, images, backgrounds, true_locs,
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False,
-                resiudal_vae = None):
+                residual_vae = None):
 
     avg_loss = 0.0
     avg_counter_loss = 0.0
@@ -187,11 +187,11 @@ def eval_star_encoder_loss(star_encoder, train_loader,
         images = data['image'].to(device)
         backgrounds = data['background'].to(device)
 
-        if resiudal_vae is not None:
+        if residual_vae is not None:
             # add noise
-            resiudal_vae.eval()
-            eta = torch.randn(images.shape[0], resiudal_vae.latent_dim)
-            residuals = resiudal_vae.decode(eta)[0] # just taking the mean ...
+            residual_vae.eval()
+            eta = torch.randn(images.shape[0], residual_vae.latent_dim)
+            residuals = residual_vae.decode(eta)[0] # just taking the mean ...
 
             images = images * residuals + images
 
