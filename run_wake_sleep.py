@@ -183,7 +183,7 @@ encoder_optimizer = optim.Adam([
 # run_wake(resiudal_vae, star_encoder, sdss_loader,
 #             simulated_dataset.simulator, residual_optimizer, cycle = 1, n_epochs = 150)
 
-resiudal_vae.load_state_dict(torch.load('../fits/residual_vae_wake1',
+resiudal_vae.load_state_dict(torch.load('./fits/residual_vae_wake1',
                                map_location=lambda storage, loc: storage))
 
 run_sleep(resiudal_vae, star_encoder, simulated_loader, encoder_optimizer, cycle = 1)
