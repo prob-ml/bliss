@@ -78,10 +78,10 @@ star_encoder = starnet_vae_lib.StarEncoder(sdss_hubble_data.slen,
                                           max_detections = max_stars)
 
 # load iteration 0 results: i.e. encoder trained on simulated data only
-encoder_init = './fits/starnet_invKL_encoder_twenty_stars'
-print('loading encoder from: ', encoder_init)
-star_encoder.load_state_dict(torch.load(encoder_init,
-                               map_location=lambda storage, loc: storage))
+# encoder_init = './fits/starnet_invKL_encoder_twenty_stars'
+# print('loading encoder from: ', encoder_init)
+# star_encoder.load_state_dict(torch.load(encoder_init,
+#                                map_location=lambda storage, loc: storage))
 
 residual_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
                                             n_bands = 1,
