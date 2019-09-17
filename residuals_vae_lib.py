@@ -177,10 +177,10 @@ def normalize_image(image):
 def get_kl_prior_term(mean, logvar):
     return - 0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
 
-def get_resid_vae_loss(image, simulated_image, resid_vae):
+def get_resid_vae_loss(image, simulated_image, resiudal_vae):
 
     recon_mean, recon_logvar, eta_mean, eta_logvar, normalized_residual = \
-            resid_vae(image, simulated_image)
+            resiudal_vae(image, simulated_image)
 
     assert normalized_residual.shape == recon_mean.shape
     assert normalized_residual.shape == recon_logvar.shape
