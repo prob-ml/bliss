@@ -82,12 +82,12 @@ print('loading encoder from: ', encoder_init)
 star_encoder.load_state_dict(torch.load(encoder_init,
                                map_location=lambda storage, loc: storage))
 
-resiudal_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
+residual_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
                                             n_bands = 1,
                                             f_min = 2000.)
 
 star_encoder.to(device)
-resiudal_vae.to(device)
+residual_vae.to(device)
 
 #####################
 # Define losses
@@ -120,7 +120,7 @@ def run_wake(residual_vae, star_encoder, loader,
 
             outfile = './fits/residual_vae_wake' + str(cycle)
             print("writing the residual vae parameters to " + outfile)
-            torch.save(resiudal_vae.state_dict(), outfile)
+            torch.save(residual_vae.state_dict(), outfile)
 
 
 def run_sleep(residual_vae, star_encoder, loader, optimizer, cycle, n_epochs):
@@ -134,7 +134,7 @@ def run_sleep(residual_vae, star_encoder, loader, optimizer, cycle, n_epochs):
 
         avg_loss, counter_loss = objectives_lib.eval_star_encoder_loss(star_encoder, loader,
                                                         optimizer, train = True,
-                                                        resiudal_vae = residual_vae)
+                                                        residual_vae = residual_vae)
 
         elapsed = time.time() - t0
         print('[{}] loss: {:0.4f}; counter loss: {:0.4f} \t[{:.1f} seconds]'.format(\
@@ -147,13 +147,13 @@ def run_sleep(residual_vae, star_encoder, loader, optimizer, cycle, n_epochs):
             _, _ = \
                 objectives_lib.eval_star_encoder_loss(star_encoder,
                                                 loader, train = True,
-                                                resiudal_vae = residual_vae)
+                                                residual_vae = residual_vae)
 
             loader.dataset.set_params_and_images()
             test_loss, test_counter_loss = \
                 objectives_lib.eval_star_encoder_loss(star_encoder,
                                                 loader, train = False,
-                                                resiudal_vae = residual_vae)
+                                                residual_vae = residual_vae)
 
             print('**** test loss: {:.3f}; counter loss: {:.3f} ****'.format(test_loss, test_counter_loss))
 
@@ -169,7 +169,7 @@ def run_sleep(residual_vae, star_encoder, loader, optimizer, cycle, n_epochs):
 learning_rate = 1e-3
 weight_decay = 1e-5
 residual_optimizer = optim.Adam([
-                    {'params': resiudal_vae.parameters(),
+                    {'params': residual_vae.parameters(),
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
@@ -180,10 +180,10 @@ encoder_optimizer = optim.Adam([
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
-# run_wake(resiudal_vae, star_encoder, sdss_loader,
+# run_wake(residual_vae, star_encoder, sdss_loader,
 #             simulated_dataset.simulator, residual_optimizer, cycle = 1, n_epochs = 150)
 
-resiudal_vae.load_state_dict(torch.load('../fits/residual_vae_wake1',
+residual_vae.load_state_dict(torch.load('../fits/residual_vae_wake1',
                                map_location=lambda storage, loc: storage))
 
-run_sleep(resiudal_vae, star_encoder, simulated_loader, encoder_optimizer, cycle = 1)
+run_sleep(residual_vae, star_encoder, simulated_loader, encoder_optimizer, cycle = 1)
