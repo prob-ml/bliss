@@ -7,6 +7,7 @@ import sdss_dataset_lib
 import residuals_vae_lib
 import simulated_datasets_lib
 import starnet_vae_lib
+import inv_KL_objective_lib as objectives_lib
 
 import time
 
@@ -181,9 +182,9 @@ encoder_optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 # run_wake(residual_vae, star_encoder, sdss_loader,
-#             simulated_dataset.simulator, residual_optimizer, cycle = 1, n_epochs = 150)
+#              simulated_dataset.simulator, residual_optimizer, cycle = 1, n_epochs = 150)
 
-residual_vae.load_state_dict(torch.load('../fits/residual_vae_wake1',
+residual_vae.load_state_dict(torch.load('./fits/residual_vae_wake1',
                                map_location=lambda storage, loc: storage))
 residual_vae.to(device)
 run_sleep(residual_vae, star_encoder, simulated_loader, encoder_optimizer, cycle = 1, n_epochs = 200)

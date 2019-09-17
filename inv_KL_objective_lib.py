@@ -190,7 +190,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
         if residual_vae is not None:
             # add noise
             residual_vae.eval()
-            eta = torch.randn(images.shape[0], residual_vae.latent_dim)
+            eta = torch.randn(images.shape[0], residual_vae.latent_dim).to(device)
             residuals = residual_vae.decode(eta)[0] # just taking the mean ...
 
             images = images * residuals + images
