@@ -126,7 +126,8 @@ def run_wake(residual_vae, star_encoder, loader,
 
 def run_sleep(residual_vae, star_encoder, loader, optimizer, cycle, n_epochs):
 
-    residual_vae.eval();
+    if residual_vae is not None:
+        residual_vae.eval();
 
     for epoch in range(n_epochs):
         t0 = time.time()
