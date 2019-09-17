@@ -184,7 +184,7 @@ run_sleep(None, star_encoder,
             simulated_loader,
             encoder_optimizer,
             cycle = 0,
-            n_epochs = 1000)
+            n_epochs = 1001)
 
 for i in range(1, 11):
     star_encoder.load_state_dict(torch.load('./fits/starnet_encoder_sleep' + str(i - 1),
@@ -193,7 +193,7 @@ for i in range(1, 11):
 
     # run wake
     run_wake(residual_vae, star_encoder, sdss_loader,
-                 simulated_dataset.simulator, residual_optimizer, cycle = i, n_epochs = 150)
+                 simulated_dataset.simulator, residual_optimizer, cycle = i, n_epochs = 151)
 
     # load residual vae
     residual_vae.load_state_dict(torch.load('./fits/residual_vae_wake' + str(i),
@@ -202,4 +202,4 @@ for i in range(1, 11):
 
     # run sleep
     run_sleep(residual_vae, star_encoder, simulated_loader, encoder_optimizer,
-                cycle = i, n_epochs = 150)
+                cycle = i, n_epochs = 161)
