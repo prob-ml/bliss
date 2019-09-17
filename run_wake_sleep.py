@@ -128,8 +128,6 @@ def run_sleep(residual_vae, star_encoder, loader, optimizer, cycle, n_epochs):
 
     residual_vae.eval();
 
-    n_epochs = 500
-
     for epoch in range(n_epochs):
         t0 = time.time()
 
@@ -181,10 +179,10 @@ encoder_optimizer = optim.Adam([
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
-for i in range(1, 11):
+for i in range(2, 11):
     # load  encoder
     if(i > 1):
-        star_encoder.load_state_dict(torch.load('./fits/starnet_encoder_sleep' + str(cycle - 1),
+        star_encoder.load_state_dict(torch.load('./fits/starnet_encoder_sleep' + str(i - 1),
                                        map_location=lambda storage, loc: storage))
         star_encoder.to(device)
 
