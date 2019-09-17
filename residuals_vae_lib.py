@@ -177,7 +177,7 @@ def normalize_image(image):
 def get_kl_prior_term(mean, logvar):
     return - 0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
 
-def get_resid_vae_loss(image, simulated_image, resiudal_vae):
+def get_residual_vae_loss(image, simulated_image, resiudal_vae):
 
     recon_mean, recon_logvar, eta_mean, eta_logvar, normalized_residual = \
             resiudal_vae(image, simulated_image)
@@ -236,7 +236,7 @@ def eval_residual_vae(residual_vae, loader, simulator,
             residual_vae.eval()
 
 
-        loss = get_resid_vae_loss(images, simulated_images, residual_vae)
+        loss = get_residual_vae_loss(images, simulated_images, residual_vae)
 
         if train:
             (loss / images.shape[0]).backward()
