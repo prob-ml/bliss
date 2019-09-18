@@ -144,33 +144,36 @@ def get_encoder_loss(star_encoder, images, backgrounds, true_locs,
 
     # this is batchsize x (n_stars x n_stars)
     # the log prob for each mean x observed location
-    locs_log_probs_all = \
-        get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var)
-
-    flux_log_probs_all = get_fluxes_logprob_all_combs(true_fluxes, \
-                                log_flux_mean, log_flux_log_var)
+    # locs_log_probs_all = \
+    #     get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var)
+    #
+    # flux_log_probs_all = get_fluxes_logprob_all_combs(true_fluxes, \
+    #                             log_flux_mean, log_flux_log_var)
 
     # for my sanity
     batchsize = images.shape[0]
     max_stars = true_locs.shape[1]
-    assert list(locs_log_probs_all.shape) == [batchsize, max_stars, max_stars]
-    assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_stars]
-
+    # assert list(locs_log_probs_all.shape) == [batchsize, max_stars, max_stars]
+    # assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_stars]
+    #
     # get permutation
-    perm = run_batch_hungarian_alg_parallel(locs_log_probs_all, true_n_stars).to(device)
+    # perm = run_batch_hungarian_alg_parallel(locs_log_probs_all, true_n_stars).to(device)
 
     # only count those stars that are on
     is_on = get_is_on_from_n_stars(true_n_stars, max_stars)
 
     # get losses
-    locs_loss = -(_permute_losses_mat(locs_log_probs_all, perm) * is_on).sum(dim = 1)
-    fluxes_loss = -(_permute_losses_mat(flux_log_probs_all, perm) * is_on).sum(dim = 1)
+    # locs_loss = -(_permute_losses_mat(locs_log_probs_all, perm) * is_on).sum(dim = 1)
+    # fluxes_loss = -(_permute_losses_mat(flux_log_probs_all, perm) * is_on).sum(dim = 1)
 
+    locs_loss = -(eval_logitnormal_logprob(true_locs, logit_loc_mean, logit_loc_log_var).sum(dim = 2) * is_on).sum(dim = 1)
+    fluxes_loss = -(eval_lognormal_logprob(true_fluxes, log_flux_mean, log_flux_log_var) * is_on).sum(dim = 1)
 
     counter_loss = get_categorical_loss(log_probs, true_n_stars)
 
     loss = (locs_loss + fluxes_loss + counter_loss).mean()
 
+    perm = 0
     return loss, counter_loss, locs_loss, fluxes_loss, perm
 
 def eval_star_encoder_loss(star_encoder, train_loader,
