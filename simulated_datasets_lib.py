@@ -200,16 +200,18 @@ class StarsDataset(Dataset):
                 'n_stars': n_stars.squeeze(dim = 0)}
 
     def draw_batch_parameters(self, batchsize, return_images = True):
+        # draw number of stars
+        n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
+                                    batchsize)
+        n_stars = torch.Tensor(n_stars).type(torch.LongTensor).to(device)
+
         # draw locations
         locs = torch.rand((batchsize, self.max_stars, 2)).to(device)
+        locs = _sort_locs(locs, n_stars, self.max_stars)
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
                                 shape = (batchsize, self.max_stars))
-
-        n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
-                                    batchsize)
-        n_stars = torch.Tensor(n_stars).type(torch.LongTensor).to(device)
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,
@@ -222,6 +224,15 @@ class StarsDataset(Dataset):
     def set_params_and_images(self):
         self.locs, self.fluxes, self.n_stars, self.images = \
             self.draw_batch_parameters(self.n_images, return_images = True)
+
+def _sort_locs(locs, n_stars, max_stars):
+    is_on_array = get_is_on_from_n_stars(n_stars, max_stars)
+    sort_perm = \
+        torch.argsort(torch.sum(locs**2, dim = 2) * is_on_array,
+                        descending=True)
+
+    seq_tensor = torch.LongTensor([[i] for i in range(len(n_stars))])
+    return locs[seq_tensor, sort_perm]
 
 
 def get_is_on_from_n_stars(n_stars, max_stars):

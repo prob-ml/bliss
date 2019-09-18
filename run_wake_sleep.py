@@ -42,7 +42,6 @@ sdss_loader = torch.utils.data.DataLoader(
                  batch_size=batchsize,
                  shuffle=False)
 
-
 sky_intensity = sdss_hubble_data.sdss_background_full.mean()
 
 ########################
