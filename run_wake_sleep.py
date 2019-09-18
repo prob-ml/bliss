@@ -22,7 +22,7 @@ print('torch version: ', torch.__version__)
 np.random.seed(43534)
 _ = torch.manual_seed(24534)
 
-max_stars = 20
+max_stars = 4
 
 ########################
 # Get Hubble data
