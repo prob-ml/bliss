@@ -9,15 +9,13 @@ class Flatten(nn.Module):
     def forward(self, tensor):
         return tensor.view(tensor.size(0), -1)
 
-class MyInstanceNorm1d(nn.Module):
-    def __init__(self, d):
-        super(MyInstanceNorm1d, self).__init__()
-
-        self.instance_norm = nn.InstanceNorm1d(d, track_running_stats=False)
-
+class Normalize2d(nn.Module):
     def forward(self, tensor):
-        assert len(tensor.shape) == 2
-        return self.instance_norm(tensor.unsqueeze(1)).squeeze()
+        assert len(tensor.shape) == 4
+        mean = tensor.view(tensor.shape[0], tensor.shape[1], -1).mean(2, keepdim = True).unsqueeze(-1)
+        var = tensor.view(tensor.shape[0], tensor.shape[1], -1).var(2, keepdim = True).unsqueeze(-1)
+
+        return (tensor - mean) / torch.sqrt(var + 1e-5)
 
 
 class StarEncoder(nn.Module):
@@ -37,7 +35,7 @@ class StarEncoder(nn.Module):
         enc_kern = 3
         enc_hidden = 256
 
-        momentum = 0.1
+        momentum = 0.5
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
@@ -47,17 +45,16 @@ class StarEncoder(nn.Module):
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.MaxPool2d(kernel_size = 2, stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.MaxPool2d(kernel_size = 2, stride=1, padding=1),
             nn.ReLU(),
 
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
                         stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, track_running_stats=False),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
             Flatten()
         )
@@ -69,15 +66,15 @@ class StarEncoder(nn.Module):
         # fully connected layers
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
 
             nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, track_running_stats=False),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
         )
 
@@ -90,14 +87,12 @@ class StarEncoder(nn.Module):
             module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    nn.BatchNorm1d(width_hidden, track_running_stats=False),
                                     nn.ReLU())
             self.add_module('enc_a_detect' + str(i), module_a)
 
             module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
-                                    nn.BatchNorm1d(width_hidden, track_running_stats=False),
                                     nn.ReLU())
 
             self.add_module('enc_b_detect' + str(i), module_b)
@@ -142,20 +137,27 @@ class StarEncoder(nn.Module):
 
         return h_out[:, 1:h_out.shape[1]]
 
-    def forward(self, images, background, n_stars):
+    def forward(self, images, background, n_stars = None):
         # pass through neural network
         h = self._forward_to_last_hidden(images, background)
 
+        log_probs = self._get_logprobs_from_last_hidden_layer(h)
+
+        if n_stars is None:
+            n_stars = torch.argmax(log_probs, dim = 1)
+
         # extract parameters
         logit_loc_mean, logit_loc_logvar, \
-                log_flux_mean, log_flux_logvar, free_probs = \
-                    self._get_params_from_last_hidden_layer(h, n_stars)
-
-        log_probs = self.log_softmax(free_probs)
+            log_flux_mean, log_flux_logvar = \
+                self._get_params_from_last_hidden_layer(h, n_stars)
 
         return logit_loc_mean, logit_loc_logvar, \
                 log_flux_mean, log_flux_logvar, log_probs
 
+    def _get_logprobs_from_last_hidden_layer(self, h):
+        free_probs = h[:, self.prob_indx]
+
+        return self.log_softmax(free_probs)
 
     def _get_params_from_last_hidden_layer(self, h, n_stars):
 
@@ -171,14 +173,10 @@ class StarEncoder(nn.Module):
         log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_stars])
         log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_stars])
 
-        free_probs = h[:, self.prob_indx]
-
         return logit_loc_mean.reshape(batchsize, self.max_detections, 2), \
                 logit_loc_logvar.reshape(batchsize, self.max_detections, 2), \
                 log_flux_mean.reshape(batchsize, self.max_detections), \
-                log_flux_logvar.reshape(batchsize, self.max_detections), \
-                free_probs
-
+                log_flux_logvar.reshape(batchsize, self.max_detections)
 
     def _get_hidden_indices(self):
 

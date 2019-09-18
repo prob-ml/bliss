@@ -7,7 +7,7 @@ import numpy as np
 
 import sys
 sys.path.insert(0, '../')
-import objectives_lib
+import inv_KL_objective_lib as objectives_lib
 import simulated_datasets_lib
 import starnet_vae_lib
 
@@ -24,6 +24,7 @@ class TestStarEncoder(unittest.TestCase):
         star_encoder = starnet_vae_lib.StarEncoder(slen = slen,
                                                 n_bands = 1,
                                                 max_detections = max_detections)
+        star_encoder.eval();
 
         # simulate images and backgrounds
         images = torch.randn(n_images, 1, slen, slen)
@@ -67,6 +68,23 @@ class TestStarEncoder(unittest.TestCase):
             free_probs[:, i] = h_out[:, -1]
 
         assert torch.all(log_probs == star_encoder.log_softmax(free_probs))
+
+        # test that everything works even when n_stars is None
+        logit_loc_mean, logit_loc_logvar, \
+            log_flux_mean, log_flux_logvar, log_probs = \
+                star_encoder(images, backgrounds, n_stars = None)
+
+        map_n_stars = torch.argmax(log_probs, dim = 1)
+
+        _logit_loc_mean, _logit_loc_logvar, \
+            _log_flux_mean, _log_flux_logvar, _log_probs = \
+                star_encoder(images, backgrounds, n_stars = map_n_stars)
+
+        assert torch.all(logit_loc_mean == _logit_loc_mean)
+        assert torch.all(logit_loc_logvar == _logit_loc_logvar)
+        assert torch.all(log_flux_mean == _log_flux_mean)
+        assert torch.all(log_flux_logvar == _log_flux_logvar)
+        assert torch.all(log_probs == _log_probs)
 
 
 if __name__ == '__main__':

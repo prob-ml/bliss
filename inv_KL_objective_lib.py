@@ -174,25 +174,31 @@ def get_encoder_loss(star_encoder, images, backgrounds, true_locs,
     return loss, counter_loss, locs_loss, fluxes_loss, perm
 
 def eval_star_encoder_loss(star_encoder, train_loader,
-                optimizer = None, train = False):
+                optimizer = None, train = False,
+                residual_vae = None):
 
     avg_loss = 0.0
     avg_counter_loss = 0.0
 
     for _, data in enumerate(train_loader):
         true_fluxes = data['fluxes'].to(device)
-        # if(torch.any(true_fluxes > 9e5)):
-        #    print('warning: large flux')
-
         true_locs = data['locs'].to(device)
         true_n_stars = data['n_stars'].to(device)
         images = data['image'].to(device)
         backgrounds = data['background'].to(device)
 
+        if residual_vae is not None:
+            # add noise
+            residual_vae.eval()
+            eta = torch.randn(images.shape[0], residual_vae.latent_dim).to(device)
+            residuals = residual_vae.decode(eta)[0] # just taking the mean ...
+
+            images = images * residuals + images
+
         if train:
             star_encoder.train()
-            assert optimizer is not None
-            optimizer.zero_grad()
+            if optimizer is not None:
+                optimizer.zero_grad()
         else:
             star_encoder.eval()
 
@@ -201,8 +207,9 @@ def eval_star_encoder_loss(star_encoder, train_loader,
                                 true_locs, true_fluxes, true_n_stars)[0:2]
 
         if train:
-            loss.backward()
-            optimizer.step()
+            if optimizer is not None:
+                loss.backward()
+                optimizer.step()
 
         avg_loss += loss.item() * images.shape[0] / len(train_loader.dataset)
         avg_counter_loss += counter_loss.sum().item() / len(train_loader.dataset)

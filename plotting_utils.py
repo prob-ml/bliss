@@ -7,9 +7,18 @@ from simulated_datasets_lib import plot_multiple_stars
 
 def plot_image(fig, image,
                 true_locs = None, estimated_locs = None,
-                vmin = None, vmax = None):
+                vmin = None, vmax = None,
+                add_colorbar = False,
+                global_fig = None,
+                diverging_cmap = False):
+
     slen = image.shape[-1]
-    fig.matshow(image, vmin = vmin, vmax = vmax)
+
+    if diverging_cmap:
+        im = fig.matshow(image, vmin = vmin, vmax = vmax,
+                            cmap=plt.get_cmap('bwr'))
+    else:
+        im = fig.matshow(image, vmin = vmin, vmax = vmax)
 
     if not(true_locs is None):
         fig.scatter(x = true_locs[:, 1] * (slen - 1),
@@ -20,6 +29,10 @@ def plot_image(fig, image,
         fig.scatter(x = estimated_locs[:, 1] * (slen - 1),
                     y = estimated_locs[:, 0] * (slen - 1),
                     color = 'r', marker = 'x')
+
+    if add_colorbar:
+        assert global_fig is not None
+        global_fig.colorbar(im, ax = fig)
 
 def plot_categorical_probs(log_prob_vec, fig):
     n_cat = len(log_prob_vec)
@@ -39,30 +52,27 @@ def get_variational_parameters(star_encoder, images,
                                true_n_stars,
                                use_true_n_stars = False):
 
+    if use_true_n_stars:
+        n_stars = true_n_stars
+    else:
+        n_stars = None
+
     # get parameters
     logit_loc_mean, logit_loc_log_var, \
         log_flux_mean, log_flux_log_var, log_probs = \
-            star_encoder(images, backgrounds, true_n_stars)
-
-    map_n_stars = torch.argmax(log_probs, dim = 1).detach()
+            star_encoder(images, backgrounds, n_stars)
 
     if use_true_n_stars:
-        est_n_stars = true_n_stars
+        map_n_stars = true_n_stars
     else:
-        est_n_stars = map_n_stars
+        map_n_stars = torch.argmax(log_probs, dim = 1)
 
-        # get locations and fluxes using map values
-        logit_loc_mean, logit_loc_log_var, \
-            log_flux_mean, log_flux_log_var, foo = \
-                star_encoder(images, backgrounds, est_n_stars)
-
-        assert torch.all(foo == log_probs)
 
     map_locs = torch.sigmoid(logit_loc_mean).detach()
     map_fluxes = torch.exp(log_flux_mean).detach()
 
     # get reconstruction
-    recon_mean = plot_multiple_stars(map_locs, est_n_stars, map_fluxes, psf) + \
+    recon_mean = plot_multiple_stars(map_locs, map_n_stars, map_fluxes, psf) + \
                     backgrounds
 
     return map_n_stars, map_locs, map_fluxes, \
@@ -76,15 +86,12 @@ def print_results(star_encoder,
                         psf,
                         true_locs,
                         true_n_stars,
-                        indx,
                         use_true_n_stars = False,
-                        condition = None):
+                        residual_clamp = 1e16):
 
-    # get variational parameters
-    if use_true_n_stars:
-        n_stars = true_n_stars
-    else:
-        n_stars = None
+    assert images.shape[0] == backgrounds.shape[0]
+    assert images.shape[0] == true_locs.shape[0]
+    assert images.shape[0] == len(true_n_stars)
 
     map_n_stars, map_locs, map_fluxes, \
         logit_loc_mean, logit_loc_log_var, \
@@ -94,29 +101,22 @@ def print_results(star_encoder,
                                             images,
                                             backgrounds,
                                             psf,
-                                            true_n_stars)
+                                            true_n_stars,
+                                            use_true_n_stars)
 
-    if condition is None:
-        condition = [True] * len(images)
+    for i in range(images.shape[0]):
 
-
-    for i in indx:
-
-        if not(condition[i]):
-            continue
-
-        _, axarr = plt.subplots(1, 4, figsize=(15, 4))
+        fig, axarr = plt.subplots(1, 4, figsize=(15, 4))
 
         # observed image
         n_stars_i = true_n_stars[i]
-        if use_true_n_stars:
-            est_n_stars_i = true_n_stars[i]
-        else:
-            est_n_stars_i = map_n_stars[i]
+        est_n_stars_i = map_n_stars[i]
 
         plot_image(axarr[0], images[i, 0, :, :] - backgrounds[i, 0, :, :],
                   true_locs = true_locs[i, 0:int(n_stars_i)],
-                  estimated_locs = map_locs[i, 0:int(est_n_stars_i)])
+                  estimated_locs = map_locs[i, 0:int(est_n_stars_i)],
+                  add_colorbar = True,
+                  global_fig = fig)
 
         axarr[0].get_xaxis().set_visible(False)
         axarr[0].get_yaxis().set_visible(False)
@@ -124,22 +124,37 @@ def print_results(star_encoder,
         axarr[0].set_title('Observed image \n est/true n_stars: {} / {}'.format(est_n_stars_i, int(n_stars_i)))
 
         # plot posterior samples
-        for k in range(int(est_n_stars_i)):
+        # for k in range(int(est_n_stars_i)):
+        #
+        #     samples = torch.sigmoid(torch.sqrt(torch.exp(logit_loc_log_var[i, k, :])) * \
+        #                   torch.randn((1000, 2)) + logit_loc_mean[i, k, :]).detach()
+        #
+        #     axarr[1].scatter(x = samples[:, 1] * (images.shape[-1] - 1),
+        #                      y = samples[:, 0] * (images.shape[-1] - 1),
+        #                      c = 'r', marker = 'x', alpha = 0.05)
+        #
+        # plot_image(axarr[1], images[i, 0, :, :] - backgrounds[i, 0, :, :],
+        #           true_locs = true_locs[i, 0:int(n_stars_i)],
+        #           add_colorbar = True,
+        #           global_fig = fig)
 
-            samples = torch.sigmoid(torch.sqrt(torch.exp(logit_loc_log_var[i, k, :])) * \
-                          torch.randn((1000, 2)) + logit_loc_mean[i, k, :]).detach()
-
-            axarr[1].scatter(x = samples[:, 1] * (images.shape[-1] - 1),
-                             y = samples[:, 0] * (images.shape[-1] - 1),
-                             c = 'r', marker = 'x', alpha = 0.05)
-
-        plot_image(axarr[1], images[i, 0, :, :] - backgrounds[i, 0, :, :],
-                  true_locs = true_locs[i, 0:int(n_stars_i)])
+        plot_image(axarr[1], recon_mean[i, 0, :, :] - backgrounds[i, 0, :, :],
+                  estimated_locs = map_locs[i, 0:int(est_n_stars_i)],
+                  add_colorbar = True,
+                  global_fig = fig)
         axarr[1].get_xaxis().set_visible(False)
         axarr[1].get_yaxis().set_visible(False)
 
-        # plot residuals
-        plot_image(axarr[2], images[i, 0, :, :]-recon_mean[i, 0, :, :])
+        # plot residual
+        residual = images[i, 0, :, :]-recon_mean[i, 0, :, :]
+        residual = residual.clamp(min = -residual_clamp, max = residual_clamp)
+        vmax = torch.abs(residual).max()
+
+        plot_image(axarr[2], residual,
+                  add_colorbar = True,
+                  global_fig = fig,
+                  diverging_cmap = True,
+                  vmin = -vmax, vmax = vmax)
 
         axarr[2].get_xaxis().set_visible(False)
         axarr[2].get_yaxis().set_visible(False)

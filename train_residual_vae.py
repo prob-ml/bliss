@@ -42,28 +42,28 @@ loader = torch.utils.data.DataLoader(
                  shuffle=True)
 
 # define VAE
-resid_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
+residual_vae = residuals_vae_lib.ResidualVAE(slen = sdss_hubble_data.slen,
                                             n_bands = 1,
                                             f_min = 2000.)
 
-resid_vae.to(device)
+residual_vae.to(device)
 
 # define optimizer
 learning_rate = 1e-3
 weight_decay = 1e-5
 optimizer = optim.Adam([
-                    {'params': resid_vae.parameters(),
+                    {'params': residual_vae.parameters(),
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
 
-n_epochs = 100
+n_epochs = 500
 
 for epoch in range(n_epochs):
     t0 = time.time()
 
     avg_loss = \
-        residuals_vae_lib.eval_residual_vae(resid_vae, loader, simulator,
+        residuals_vae_lib.eval_residual_vae(residual_vae, loader, simulator,
                                             optimizer, train = True)
 
     elapsed = time.time() - t0
@@ -73,14 +73,14 @@ for epoch in range(n_epochs):
     if (epoch % 5) == 0:
 
         test_loss = \
-            residuals_vae_lib.eval_residual_vae(resid_vae, loader, simulator,
+            residuals_vae_lib.eval_residual_vae(residual_vae, loader, simulator,
                                                 optimizer = None, train = False)
 
         print('**** test loss: {:.6E} ****'.format(test_loss))
 
         outfile = './fits/residual_vae'
         print("writing the vae parameters to " + outfile)
-        torch.save(resid_vae.state_dict(), outfile)
+        torch.save(residual_vae.state_dict(), outfile)
 
 
 print('done')
