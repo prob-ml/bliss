@@ -20,7 +20,7 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # load PSF
-psf_fit_file = './../celeste_net/sdss_stage_dir/2566/6/65/psField-002566-6-0065.fit'
+psf_fit_file = '../../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 print('psf file: \n', psf_fit_file)
 
 # set seed
@@ -31,23 +31,25 @@ _ = torch.manual_seed(24534)
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
-data_params['min_stars'] = 0
-data_params['max_stars'] = 20
+data_params['slen'] = 101
+data_params['min_stars'] = 400
+data_params['max_stars'] = 400
+data_params['alpha'] = 0.5
 
 print(data_params)
 
 # draw data
-n_stars = 60000
+n_images = 1
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
-                            n_stars = n_stars,
+                            n_images = n_images,
                             use_fresh_data = False,
                             add_noise = True,
                             add_edge_effect = False)
 
 # get loader
-batchsize = 2048
+batchsize = n_images
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -55,9 +57,11 @@ loader = torch.utils.data.DataLoader(
                  shuffle=True)
 
 # define VAE
-star_encoder = starnet_vae_lib.StarEncoder(data_params['slen'],
-                                                n_bands = 1,
-                                                max_detections = data_params['max_stars'])
+star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
+                                           stamp_slen = 11,
+                                           step = 5,
+                                           n_bands = 1,
+                                           max_detections = 15)
 
 star_encoder.to(device)
 
@@ -97,7 +101,7 @@ for epoch in range(n_epochs):
 
         print('**** test loss: {:.3f}; counter loss: {:.3f} ****'.format(test_loss, test_counter_loss))
 
-        outfile = './fits/starnet_invKL_encoder_twenty_stars'
+        outfile = './fits/starnet_invKL_encoder_batched_images_400stars'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 

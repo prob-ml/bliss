@@ -150,6 +150,7 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, n_patc
 
     # get parameterization for subimage
     subimage_locs = (subimage_locs * (slen - 1) - tile_coords.float().unsqueeze(1)) / (subimage_slen - 1)
+    subimage_locs = torch.relu(subimage_locs) # by subtracting off, some are negative now; just set these to 0
 
     subimage_fluxes = subimage_fluxes[seq_tensor, sort_perm]
 
