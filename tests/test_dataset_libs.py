@@ -44,12 +44,12 @@ class TestSDSSDataset(unittest.TestCase):
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)
 
-        n_stars = 64
+        n_images = 64
         # get dataset
         star_dataset = \
             simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
                                     data_params,
-                                    n_stars = n_stars,
+                                    n_images = n_images,
                                     add_noise = True)
 
         # get loader
