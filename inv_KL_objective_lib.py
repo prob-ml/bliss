@@ -145,8 +145,7 @@ def get_encoder_loss(star_encoder,
 
     # if there're more than the max detections, we fail-- and only detect
     #   the first max_detections
-    true_n_stars = true_n_stars + \
-        (true_n_stars > star_encoder.max_detections).float() * star_encoder.max_detections
+    true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
 
     # get variational parameters
     logit_loc_mean, logit_loc_log_var, \
