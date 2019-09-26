@@ -3,6 +3,8 @@ import torch.nn as nn
 
 import numpy as np
 
+import image_utils
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class Flatten(nn.Module):
@@ -19,13 +21,17 @@ class Normalize2d(nn.Module):
 
 
 class StarEncoder(nn.Module):
-    def __init__(self, slen, n_bands, max_detections):
+    def __init__(self, full_slen, stamp_slen, step, n_bands, max_detections):
 
         super(StarEncoder, self).__init__()
 
         # image parameters
-        self.slen = slen
+        self.full_slen = full_slen # dimension of full image: we assume its square for now
+        self.stamp_slen = stamp_slen # dimension of the individual image patches
+        self.step = step # number of pixels to shift every subimage
         self.n_bands = n_bands
+
+        self.batchsize = None
 
         # max number of detections
         self.max_detections = max_detections
@@ -61,7 +67,7 @@ class StarEncoder(nn.Module):
 
         # output dimension of convolutions
         conv_out_dim = \
-            self.enc_conv(torch.zeros(1, n_bands, slen, slen)).size(1)
+            self.enc_conv(torch.zeros(1, n_bands, stamp_slen, stamp_slen)).size(1)
 
         # fully connected layers
         self.enc_fc = nn.Sequential(
@@ -216,3 +222,31 @@ class StarEncoder(nn.Module):
             self.fluxes_var_indx_mat[n_detections, 0:n_detections] = torch.arange(indx3, indx4)
 
             self.prob_indx[n_detections] = indx4
+
+    def get_image_stamps(self, images_full, locs, fluxes):
+        assert len(images_full.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
+        assert images_full.shape[1] == self.n_bands
+        assert images_full.shape[2] == self.full_slen
+        assert images_full.shape[3] == self.full_slen
+
+        if (self.batchsize is None) or (images_full.shape[0] != batchsize):
+            image_stamps, self.tile_coords, _, _, self.n_patches = \
+                image_utils.tile_images(images_full,
+                                        self.stamp_slen,
+                                        self.step,
+                                        return_tile_coords = True)
+        else:
+            image_stamps = image_utils.tile_images(images_full,
+                                                    self.stamp_slen,
+                                                    self.step,
+                                                    return_tile_coords = False)
+
+        subimage_locs, subimage_fluxes, n_stars = \
+            image_utils.get_params_in_patches(self.tile_coords,
+                                              locs,
+                                              fluxes,
+                                              self.full_slen,
+                                              self.stamp_slen,
+                                              self.n_patches)
+
+        return image_stamps, subimage_locs, subimage_fluxes, n_stars
