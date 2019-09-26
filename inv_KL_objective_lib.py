@@ -143,6 +143,11 @@ def get_encoder_loss(star_encoder,
         star_encoder.get_image_stamps(images_full, true_locs, true_fluxes)
     background_stamps = backgrounds_full.mean() # TODO
 
+    # if there're more than the max detections, we fail-- and only detect
+    #   the first max_detections
+    true_n_stars = true_n_stars + \
+        (true_n_stars > star_encoder.max_detections).float() * star_encoder.max_detections
+
     # get variational parameters
     logit_loc_mean, logit_loc_log_var, \
             log_flux_mean, log_flux_log_var, log_probs = \
