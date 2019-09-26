@@ -358,7 +358,7 @@ class SDSSHubbleData(Dataset):
         if flip_y:
             y_locs = (slen - 1) - y_locs
 
-        plt.plot(x_locs, y_locs, 'x', color = 'r')
+        plt.plot(x_locs, y_locs, 'o', color = 'b')
 
         if plot_dim_stars:
             # plot dim stars, too
@@ -368,4 +368,4 @@ class SDSSHubbleData(Dataset):
             if flip_y:
                 y_locs_dim = (slen - 1) - y_locs_dim
 
-            plt.plot(x_locs_dim, y_locs_dim, 'x', color = 'g')
+            plt.plot(x_locs_dim, y_locs_dim, '.', color = 'g')
