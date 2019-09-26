@@ -106,7 +106,7 @@ def tile_images(images, subimage_slen, step, return_tile_coords = False):
                                     (i % n_patches) % ny_patches * step]
 
         tile_coords = torch.LongTensor([return_coords(i) \
-                                        for i in range(images_batched.shape[0])])
+                                        for i in range(images_batched.shape[0])]).to(device)
 
         return images_batched, tile_coords, nx_patches, ny_patches, n_patches
     else:
@@ -121,7 +121,7 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, n_patc
     max_stars = locs.shape[1]
     assert max_stars == fluxes.shape[1]
 
-    which_locs_array = torch.zeros(fullimage_batchsize, n_patches, max_stars)
+    which_locs_array = torch.zeros(fullimage_batchsize, n_patches, max_stars).to(device)
     for i in range(subimage_batchsize):
 
         b = i // n_patches
@@ -135,7 +135,7 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, n_patc
                     ((locs[b, :, 1] * (slen-1)) > x1) & \
                         ((locs[b, :, 1] * (slen-1)) < (x1 + subimage_slen - 1))
 
-    n_stars = which_locs_array.view(subimage_batchsize, max_stars).sum(dim = 1).type(torch.LongTensor)
+    n_stars = which_locs_array.view(subimage_batchsize, max_stars).sum(dim = 1).type(torch.LongTensor).to(device)
 
     subimage_locs = \
         (which_locs_array.unsqueeze(3) * locs.unsqueeze(1)).view(subimage_batchsize, max_stars, 2)

@@ -6,7 +6,7 @@ import torch.optim as optim
 import sdss_psf
 import simulated_datasets_lib
 import starnet_vae_lib
-import objectives_lib
+import inv_KL_objective_lib as objectives_lib
 
 import time
 
@@ -20,7 +20,7 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # load PSF
-psf_fit_file = '../../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+psf_fit_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 print('psf file: \n', psf_fit_file)
 
 # set seed
@@ -39,17 +39,15 @@ data_params['alpha'] = 0.5
 print(data_params)
 
 # draw data
-n_images = 1
+n_images = 10
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
                             n_images = n_images,
-                            use_fresh_data = False,
-                            add_noise = True,
-                            add_edge_effect = False)
+                            add_noise = True)
 
 # get loader
-batchsize = n_images
+batchsize = 10
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
