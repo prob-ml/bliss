@@ -123,11 +123,11 @@ class StarEncoder(nn.Module):
 
     def _forward_to_pooled_hidden(self, image, background):
         log_img = torch.log(image - background + 1000)
-
-        means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
-        stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
-        log_img = (log_img - means.unsqueeze(-1).unsqueeze(-1)) / stds.unsqueeze(-1).unsqueeze(-1)
-
+        #
+        # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
+        # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
+        # log_img = (log_img - means.unsqueeze(-1).unsqueeze(-1)) / stds.unsqueeze(-1).unsqueeze(-1)
+        #
         h = self.enc_conv(log_img)
 
         return self.enc_fc(h)
@@ -256,8 +256,7 @@ class StarEncoder(nn.Module):
                                               fluxes,
                                               self.full_slen,
                                               self.stamp_slen,
-                                              self.edge_padding,
-                                              return_plotting_parameterization)
+                                              self.edge_padding)
 
         return image_stamps, subimage_locs, subimage_fluxes, \
                     n_stars, is_on_array
