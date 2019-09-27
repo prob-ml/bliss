@@ -113,7 +113,9 @@ def tile_images(images, subimage_slen, step, return_tile_coords = False):
         return images_batched
 
 def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
-                            edge_padding = 0, sort_locs = False):
+                            edge_padding = 0,
+                            return_plotting_parameterization = False,
+                            sort_locs = False):
     n_patches = tile_coords.shape[0] # number of patches in a full image
     fullimage_batchsize = locs.shape[0]
     assert fullimage_batchsize == fluxes.shape[0]
@@ -131,8 +133,8 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
 
     subimage_locs = \
         (which_locs_array.unsqueeze(3) * locs.unsqueeze(1) - \
-            tile_coords).view(subimage_batchsize, max_stars, 2) / \
-                (subimage_slen - 1)
+            tile_coords - edge_padding).view(subimage_batchsize, max_stars, 2) / \
+                (subimage_slen - 1 - 2 * edge_padding)
     subimage_locs = torch.relu(subimage_locs) # by subtracting off, some are negative now; just set these to 0
 
     subimage_fluxes = \
@@ -150,5 +152,8 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
         is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool).to(device)
 
     n_stars = is_on_array.float().sum(dim = 1).type(torch.LongTensor).to(device)
+
+    if return_plotting_parameterization:
+        subimage_locs = (subimage_locs * (subimage_slen - 1 - 2 * edge_padding) + edge_padding) / (subimage_slen - 1)
 
     return subimage_locs, subimage_fluxes, n_stars, is_on_array
