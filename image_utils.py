@@ -153,3 +153,8 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     n_stars = is_on_array.float().sum(dim = 1).type(torch.LongTensor).to(device)
 
     return subimage_locs, subimage_fluxes, n_stars, is_on_array
+
+def trim_images(images, edge_padding):
+    slen = images.shape[-1] - edge_padding
+
+    return images[:, :, edge_padding:slen, edge_padding:slen]

@@ -60,7 +60,7 @@ loader = torch.utils.data.DataLoader(
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            stamp_slen = 15,
                                            step = 8,
-                                           edge_padding = 2, 
+                                           edge_padding = 2,
                                            n_bands = 1,
                                            max_detections = 15)
 
@@ -81,12 +81,13 @@ print('training')
 for epoch in range(n_epochs):
     t0 = time.time()
 
-    avg_loss, counter_loss = objectives_lib.eval_star_encoder_loss(star_encoder, loader,
+    avg_loss, counter_loss, locs_loss, fluxes_loss \
+        = objectives_lib.eval_star_encoder_loss(star_encoder, loader,
                                                     optimizer, train = True)
 
     elapsed = time.time() - t0
-    print('[{}] loss: {:0.4f}; counter loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-                    epoch, avg_loss, counter_loss, elapsed))
+    print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                    epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
 
     # draw fresh data
     loader.dataset.set_params_and_images()
@@ -97,11 +98,12 @@ for epoch in range(n_epochs):
                                             loader, train = True)
 
         loader.dataset.set_params_and_images()
-        test_loss, test_counter_loss = \
+        test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
             objectives_lib.eval_star_encoder_loss(star_encoder,
                                             loader, train = False)
 
-        print('**** test loss: {:.3f}; counter loss: {:.3f} ****'.format(test_loss, test_counter_loss))
+        print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
+            test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
         outfile = './fits/starnet_invKL_encoder_batched_images_100stars'
         print("writing the encoder parameters to " + outfile)

@@ -201,8 +201,9 @@ def eval_star_encoder_loss(star_encoder, train_loader,
             star_encoder.eval()
 
         # evaluate log q
-        loss, counter_loss = get_encoder_loss(star_encoder, images, backgrounds,
-                                true_locs, true_fluxes)[0:2]
+        loss, counter_loss, locs_loss, fluxes_loss = \
+            get_encoder_loss(star_encoder, images, backgrounds,
+                                true_locs, true_fluxes)[0:4]
 
         if train:
             if optimizer is not None:
@@ -211,5 +212,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
         avg_loss += loss.item() * images.shape[0] / len(train_loader.dataset)
         avg_counter_loss += counter_loss.sum().item() / (len(train_loader.dataset) * star_encoder.n_patches)
+        avg_fluxes_loss += fluxes_loss.sum().item() / (len(train_loader.dataset) * star_encoder.n_patches)
+        avg_locs_loss += locs_loss.sum().item() / (len(train_loader.dataset) * star_encoder.n_patches)
 
-    return avg_loss, avg_counter_loss
+    return avg_loss, avg_counter_loss, avg_locs_loss, avg_fluxes_loss
