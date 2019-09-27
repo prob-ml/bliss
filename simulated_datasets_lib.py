@@ -230,7 +230,7 @@ class StarsDataset(Dataset):
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
-                                shape = (batchsize, self.max_stars))
+                                shape = (batchsize, self.max_stars)) * 0 + 2000.
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,

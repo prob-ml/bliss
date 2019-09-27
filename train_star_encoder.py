@@ -31,7 +31,7 @@ _ = torch.manual_seed(24534)
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
-data_params['slen'] = 101
+data_params['slen'] = 103
 data_params['min_stars'] = 100
 data_params['max_stars'] = 100
 data_params['alpha'] = 0.5
@@ -58,8 +58,9 @@ loader = torch.utils.data.DataLoader(
 
 # define VAE
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
-                                           stamp_slen = 11,
-                                           step = 5,
+                                           stamp_slen = 15,
+                                           step = 8,
+                                           edge_padding = 2, 
                                            n_bands = 1,
                                            max_detections = 15)
 

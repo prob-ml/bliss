@@ -112,7 +112,8 @@ def tile_images(images, subimage_slen, step, return_tile_coords = False):
     else:
         return images_batched
 
-def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, sort_locs = False):
+def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
+                            edge_padding = 0, sort_locs = False):
     n_patches = tile_coords.shape[0] # number of patches in a full image
     fullimage_batchsize = locs.shape[0]
     assert fullimage_batchsize == fluxes.shape[0]
@@ -124,8 +125,8 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, sort_l
 
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
-    which_locs_array = (locs.unsqueeze(1) > tile_coords) & \
-                        (locs.unsqueeze(1) < tile_coords + subimage_slen - 1)
+    which_locs_array = (locs.unsqueeze(1) > tile_coords + edge_padding) & \
+                        (locs.unsqueeze(1) < tile_coords + subimage_slen - 1 - edge_padding)
     which_locs_array = (which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]).float()
 
     subimage_locs = \
@@ -147,7 +148,7 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, sort_l
         is_on_array = subimage_fluxes > 0
     else:
         is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool).to(device)
-        
+
     n_stars = is_on_array.float().sum(dim = 1).type(torch.LongTensor).to(device)
 
     return subimage_locs, subimage_fluxes, n_stars, is_on_array

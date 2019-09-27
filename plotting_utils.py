@@ -85,13 +85,15 @@ def print_results(star_encoder,
                         backgrounds,
                         psf,
                         true_locs,
-                        true_n_stars,
+                        true_is_on,
                         use_true_n_stars = False,
                         residual_clamp = 1e16):
 
     assert images.shape[0] == backgrounds.shape[0]
     assert images.shape[0] == true_locs.shape[0]
-    assert images.shape[0] == len(true_n_stars)
+    assert images.shape[0] == true_is_on.shape[0]
+
+    true_n_stars = true_is_on.sum(dim = 1)
 
     map_n_stars, map_locs, map_fluxes, \
         logit_loc_mean, logit_loc_log_var, \
@@ -113,7 +115,7 @@ def print_results(star_encoder,
         est_n_stars_i = map_n_stars[i]
 
         plot_image(axarr[0], images[i, 0, :, :] - backgrounds[i, 0, :, :],
-                  true_locs = true_locs[i, 0:int(n_stars_i)],
+                  true_locs = true_locs[i, true_is_on[i]],
                   estimated_locs = map_locs[i, 0:int(est_n_stars_i)],
                   add_colorbar = True,
                   global_fig = fig)

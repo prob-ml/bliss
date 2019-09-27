@@ -21,7 +21,7 @@ class Normalize2d(nn.Module):
 
 
 class StarEncoder(nn.Module):
-    def __init__(self, full_slen, stamp_slen, step, n_bands, max_detections):
+    def __init__(self, full_slen, stamp_slen, step, edge_padding, n_bands, max_detections):
 
         super(StarEncoder, self).__init__()
 
@@ -30,6 +30,8 @@ class StarEncoder(nn.Module):
         self.stamp_slen = stamp_slen # dimension of the individual image patches
         self.step = step # number of pixels to shift every subimage
         self.n_bands = n_bands
+
+        self.edge_padding = edge_padding
 
         self.batchsize = None
 
@@ -246,7 +248,8 @@ class StarEncoder(nn.Module):
                                               locs,
                                               fluxes,
                                               self.full_slen,
-                                              self.stamp_slen)
+                                              self.stamp_slen,
+                                              self.edge_padding)
 
         return image_stamps, subimage_locs, subimage_fluxes, \
                     n_stars, is_on_array
