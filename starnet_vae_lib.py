@@ -225,7 +225,7 @@ class StarEncoder(nn.Module):
 
             self.prob_indx[n_detections] = indx4
 
-    def get_image_stamps(self, images_full, locs, fluxes):
+    def get_image_stamps(self, images_full, locs, fluxes, return_plotting_parameterization = False):
         assert len(images_full.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
         assert images_full.shape[1] == self.n_bands
         assert images_full.shape[2] == self.full_slen
@@ -249,7 +249,8 @@ class StarEncoder(nn.Module):
                                               fluxes,
                                               self.full_slen,
                                               self.stamp_slen,
-                                              self.edge_padding)
+                                              self.edge_padding,
+                                              return_plotting_parameterization)
 
         return image_stamps, subimage_locs, subimage_fluxes, \
                     n_stars, is_on_array

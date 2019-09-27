@@ -72,8 +72,8 @@ def get_variational_parameters(star_encoder, images,
     map_fluxes = torch.exp(log_flux_mean).detach()
 
     # get reconstruction
-    recon_mean = plot_multiple_stars(images.shape[-1], map_locs, map_n_stars, map_fluxes, psf) + \
-                    backgrounds
+    recon_mean = plot_multiple_stars(images.shape[-1], map_locs, map_n_stars, map_fluxes, psf) 
+
 
     return map_n_stars, map_locs, map_fluxes, \
             logit_loc_mean, logit_loc_log_var, \
@@ -105,6 +105,10 @@ def print_results(star_encoder,
                                             psf,
                                             true_n_stars,
                                             use_true_n_stars)
+
+    # re-parameterize for plots
+    map_locs = (map_locs * (star_encoder.stamp_slen - 1 - 2 * star_encoder.edge_padding) +
+                star_encoder.edge_padding) / (star_encoder.stamp_slen - 1)
 
     for i in range(images.shape[0]):
 
