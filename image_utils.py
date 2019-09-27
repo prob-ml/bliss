@@ -146,8 +146,8 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, sort_l
         subimage_fluxes = subimage_fluxes[seq_tensor, sort_perm]
         is_on_array = subimage_fluxes > 0
     else:
-        is_on_array = which_locs_array.view(subimage_batchsize, max_stars).to(device)
+        is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool).to(device)
         
-    n_stars = is_on_array.sum(dim = 1).type(torch.LongTensor).to(device)
+    n_stars = is_on_array.float().sum(dim = 1).type(torch.LongTensor).to(device)
 
-    return subimage_locs, subimage_fluxes, n_stars, is_on_array.type(torch.bool)
+    return subimage_locs, subimage_fluxes, n_stars, is_on_array
