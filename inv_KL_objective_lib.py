@@ -178,6 +178,8 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
     avg_loss = 0.0
     avg_counter_loss = 0.0
+    avg_locs_loss = 0.0
+    avg_fluxes_loss = 0.0
 
     for _, data in enumerate(train_loader):
         true_fluxes = data['fluxes'].to(device)
