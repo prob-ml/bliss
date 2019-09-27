@@ -39,13 +39,15 @@ data_params['alpha'] = 0.5
 print(data_params)
 
 # draw data
-n_images = 10
+print('generating data: ')
+n_images = 200
+t0 = time.time()
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
                             n_images = n_images,
                             add_noise = True)
-
+print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
 batchsize = 10
 
@@ -73,6 +75,7 @@ optimizer = optim.Adam([
 
 
 n_epochs = 500
+print('training')
 
 for epoch in range(n_epochs):
     t0 = time.time()
