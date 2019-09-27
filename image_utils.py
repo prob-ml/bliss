@@ -128,8 +128,6 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, sort_l
                         (locs.unsqueeze(1) < tile_coords + subimage_slen - 1)
     which_locs_array = (which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]).float()
 
-    n_stars = which_locs_array.view(subimage_batchsize, max_stars).sum(dim = 1).type(torch.LongTensor).to(device)
-
     subimage_locs = \
         (which_locs_array.unsqueeze(3) * locs.unsqueeze(1) - \
             tile_coords).view(subimage_batchsize, max_stars, 2) / \
@@ -146,6 +144,10 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen, sort_l
         seq_tensor = torch.LongTensor([[i] for i in range(subimage_batchsize)])
         subimage_locs = subimage_locs[seq_tensor, sort_perm]
         subimage_fluxes = subimage_fluxes[seq_tensor, sort_perm]
+        is_on_array = subimage_fluxes > 0
+    else:
+        is_on_array = which_locs_array.view(subimage_batchsize, max_stars).to(device)
+        
+    n_stars = is_on_array.sum(dim = 1).type(torch.LongTensor).to(device)
 
-
-    return subimage_locs, subimage_fluxes, n_stars
+    return subimage_locs, subimage_fluxes, n_stars, is_on_array.type(torch.bool)

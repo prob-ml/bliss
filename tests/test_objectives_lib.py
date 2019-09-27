@@ -10,7 +10,7 @@ sys.path.insert(0, './../')
 import inv_KL_objective_lib as objectives_lib
 import simulated_datasets_lib
 import starnet_vae_lib
-from hungarian_alg import find_min_col_permutation
+from hungarian_alg import find_min_col_permutation, run_batch_hungarian_alg_parallel
 
 import json
 
@@ -35,31 +35,37 @@ class TestStarEncoderObjective(unittest.TestCase):
 
         # get data
         batchsize = 200
-        max_detections = 4
-        locs_log_probs_all = torch.randn(batchsize, max_detections, max_detections)
+
+        max_detections = 15
+        max_stars = 20
+
+        # some losses
+        locs_log_probs_all = torch.randn(batchsize, max_stars, max_detections)
 
         # some permutation
-        perm = objectives_lib.run_batch_hungarian_alg(locs_log_probs_all,
-                        n_stars = torch.ones(batchsize) * max_detections)
+        is_on_array = torch.rand(batchsize, max_stars) > 1
+        is_on_array = is_on_array * (is_on_array.sum(dim = 1) < max_detections).unsqueeze(1)
+        perm = run_batch_hungarian_alg_parallel(locs_log_probs_all, is_on_array)
 
         # get losses according to the found permutation
         perm_losses = objectives_lib._permute_losses_mat(locs_log_probs_all, perm)
 
         # check it worked
         for i in range(batchsize):
-            for j in range(max_detections):
+            for j in range(max_stars):
                 assert perm_losses[i, j] == locs_log_probs_all[i, j, perm[i, j]]
 
     def test_get_all_comb_losses(self):
         # this checks that our function to return all combination of losses
         # is correct
 
-        batchsize = 200
+        batchsize = 10
         max_detections = 4
+        max_stars = 6
 
         # true parameters
-        true_locs = torch.rand(batchsize, max_detections, 2)
-        true_fluxes = torch.exp(torch.randn(batchsize, max_detections))
+        true_locs = torch.rand(batchsize, max_stars, 2)
+        true_fluxes = torch.exp(torch.randn(batchsize, max_stars))
 
         # estimated parameters
         logit_loc_mean = torch.randn(batchsize, max_detections, 2)
@@ -80,24 +86,24 @@ class TestStarEncoderObjective(unittest.TestCase):
 
         # for my sanity
         assert list(locs_log_probs_all.shape) == \
-            [batchsize, max_detections, max_detections]
+            [batchsize, max_stars, max_detections]
         assert list(flux_log_probs_all.shape) == \
-            [batchsize, max_detections, max_detections]
+            [batchsize, max_stars, max_detections]
 
         for i in range(batchsize):
-            for j in range(max_detections):
+            for j in range(max_stars):
                 for k in range(max_detections):
                     flux_loss_ij = \
-                        objectives_lib.eval_lognormal_logprob(true_fluxes[i, k],
-                                                        log_flux_mean[i, j],
-                                                        log_flux_log_var[i, j])
+                        objectives_lib.eval_lognormal_logprob(true_fluxes[i, j],
+                                                        log_flux_mean[i, k],
+                                                        log_flux_log_var[i, k])
 
                     assert flux_loss_ij == flux_log_probs_all[i, j, k]
 
                     locs_loss_ij = \
-                        objectives_lib.eval_logitnormal_logprob(true_locs[i, k],
-                                                logit_loc_mean[i, j],
-                                                logit_loc_log_var[i, j]).sum()
+                        objectives_lib.eval_logitnormal_logprob(true_locs[i, j],
+                                                logit_loc_mean[i, k],
+                                                logit_loc_log_var[i, k]).sum()
 
                     assert locs_loss_ij == locs_log_probs_all[i, j, k]
 

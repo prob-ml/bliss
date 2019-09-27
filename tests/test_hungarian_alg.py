@@ -56,18 +56,22 @@ class TestHungarian(unittest.TestCase):
 
     def test_batch_hungarian_parallel(self):
 
-        dim = 4
-        batchsize = 10
+        max_detections = 4
+        max_stars = 4
 
-        X = torch.randn(batchsize, dim, dim)
+        batchsize = 100
 
-        perm1 = hungarian_alg.run_batch_hungarian_alg_parallel(X,
-                    n_stars = torch.ones(batchsize) * dim)
+        X = torch.randn(batchsize, max_detections, max_stars)
+
+        is_on = torch.randn(batchsize, max_stars) > 0
+
+        perm1 = hungarian_alg.run_batch_hungarian_alg_parallel(X, is_on)
 
         for i in range(batchsize):
-            perm2 = hungarian_alg.find_min_col_permutation(-X[i])
 
-            assert torch.all(perm1[i, :] == torch.LongTensor(perm2))
+            perm2 = hungarian_alg.find_min_col_permutation(-X[i, is_on[i], 0:torch.sum(is_on[i])])
+
+            assert torch.all(perm1[i, is_on[i]] == torch.LongTensor(perm2))
 
 
 

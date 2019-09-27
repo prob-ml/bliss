@@ -241,12 +241,12 @@ class StarEncoder(nn.Module):
                                                     self.step,
                                                     return_tile_coords = False)
 
-        subimage_locs, subimage_fluxes, n_stars = \
+        subimage_locs, subimage_fluxes, n_stars, is_on_array = \
             image_utils.get_params_in_patches(self.tile_coords,
                                               locs,
                                               fluxes,
                                               self.full_slen,
-                                              self.stamp_slen,
-                                              self.n_patches)
+                                              self.stamp_slen)
 
-        return image_stamps, subimage_locs, subimage_fluxes, n_stars
+        return image_stamps, subimage_locs, subimage_fluxes, \
+                    n_stars, is_on_array
