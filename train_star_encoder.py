@@ -79,7 +79,7 @@ n_epochs = 500
 print_every = 20
 print('training')
 
-test_losses = np.zeros(4, n_epochs // print_every)
+test_losses = np.zeros((4, n_epochs // print_every))
 
 for epoch in range(n_epochs):
     t0 = time.time()
