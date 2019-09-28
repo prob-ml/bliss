@@ -4,6 +4,7 @@ import torch
 import numpy as np
 
 from simulated_datasets_lib import plot_multiple_stars
+import image_utils
 
 def plot_image(fig, image,
                 true_locs = None, estimated_locs = None,
@@ -72,7 +73,7 @@ def get_variational_parameters(star_encoder, images,
     map_fluxes = torch.exp(log_flux_mean).detach()
 
     # get reconstruction
-    recon_mean = plot_multiple_stars(images.shape[-1], map_locs, map_n_stars, map_fluxes, psf) + \
+    recon_mean = plot_multiple_stars(psf.shape[0], map_locs, map_n_stars, map_fluxes, psf) + \
                     backgrounds
 
 
@@ -107,9 +108,8 @@ def print_results(star_encoder,
                                             true_n_stars,
                                             use_true_n_stars)
 
-    # re-parameterize for plots
-    map_locs = (map_locs * (star_encoder.stamp_slen - 1 - 2 * star_encoder.edge_padding) +
-                star_encoder.edge_padding) / (star_encoder.stamp_slen - 1)
+    _images = image_utils.trim_images(images, star_encoder.edge_padding)
+
 
     for i in range(images.shape[0]):
 
@@ -119,7 +119,7 @@ def print_results(star_encoder,
         n_stars_i = true_n_stars[i]
         est_n_stars_i = map_n_stars[i]
 
-        plot_image(axarr[0], images[i, 0, :, :] - backgrounds[i, 0, :, :],
+        plot_image(axarr[0], _images[i, 0, :, :] - backgrounds[i, 0, :, :],
                   true_locs = true_locs[i, true_is_on[i]],
                   estimated_locs = map_locs[i, 0:int(est_n_stars_i)],
                   add_colorbar = True,
@@ -153,7 +153,7 @@ def print_results(star_encoder,
         axarr[1].get_yaxis().set_visible(False)
 
         # plot residual
-        residual = images[i, 0, :, :]-recon_mean[i, 0, :, :]
+        residual = _images[i, 0, :, :]-recon_mean[i, 0, :, :]
         residual = residual.clamp(min = -residual_clamp, max = residual_clamp)
         vmax = torch.abs(residual).max()
 
