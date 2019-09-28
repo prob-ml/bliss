@@ -113,7 +113,7 @@ for epoch in range(n_epochs):
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('test_losses', test_losses)
+        np.savetxt('./fits/test_losses', test_losses)
 
 
 print('done')
