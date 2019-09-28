@@ -79,7 +79,7 @@ n_epochs = 500
 print_every = 20
 print('training')
 
-test_losses = np.zeros(4, n_epochs // print_every)
+test_losses = np.zeros((4, n_epochs // print_every))
 
 for epoch in range(n_epochs):
     t0 = time.time()
@@ -96,7 +96,7 @@ for epoch in range(n_epochs):
     loader.dataset.set_params_and_images()
 
     if (epoch % print_every) == 0:
-        _, _ = \
+        _ = \
             objectives_lib.eval_star_encoder_loss(star_encoder,
                                             loader, train = True)
 
