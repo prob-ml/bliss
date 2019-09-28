@@ -93,7 +93,7 @@ for epoch in range(n_epochs):
     loader.dataset.set_params_and_images()
 
     if (epoch % 20) == 0:
-        _, _ = \
+        _ = \
             objectives_lib.eval_star_encoder_loss(star_encoder,
                                             loader, train = True)
 
