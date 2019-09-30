@@ -32,8 +32,8 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['slen'] = 103
-data_params['min_stars'] = 100
-data_params['max_stars'] = 100
+data_params['min_stars'] = 400
+data_params['max_stars'] = 400
 data_params['alpha'] = 0.5
 
 print(data_params)
@@ -76,7 +76,7 @@ optimizer = optim.Adam([
 
 
 n_epochs = 500
-print_every = 20
+print_every = 10
 print('training')
 
 test_losses = np.zeros((4, n_epochs // print_every))
@@ -108,12 +108,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/starnet_invKL_encoder_batched_images_100stars_default'
+        outfile = './fits/starnet_invKL_encoder_batched_images_400stars_default'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/test_losses', test_losses)
+        np.savetxt('./fits/test_losses_400stars_default', test_losses)
 
 
 print('done')
