@@ -132,7 +132,10 @@ def get_encoder_loss(star_encoder,
 
     # extract image_patches patches
     image_stamps, subimage_locs, subimage_fluxes, true_n_stars, is_on_array = \
-        star_encoder.get_image_stamps(images_full, true_locs, true_fluxes); true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
+        star_encoder.get_image_stamps(images_full, true_locs, true_fluxes)
+
+    # TODO: if more than max detections ...
+    true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
 
     background_stamps = backgrounds_full.mean() # TODO
 
@@ -168,7 +171,7 @@ def get_encoder_loss(star_encoder,
 
     counter_loss = get_categorical_loss(log_probs, true_n_stars)
 
-    loss = (locs_loss + fluxes_loss + counter_loss).mean()
+    loss = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss).mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm
 
