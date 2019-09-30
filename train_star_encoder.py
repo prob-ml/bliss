@@ -24,8 +24,8 @@ psf_fit_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136
 print('psf file: \n', psf_fit_file)
 
 # set seed
-np.random.seed(43534)
-_ = torch.manual_seed(24534)
+np.random.seed(4534)
+_ = torch.manual_seed(2534)
 
 # data parameters
 with open('./data/default_star_parameters.json', 'r') as fp:
@@ -76,7 +76,7 @@ optimizer = optim.Adam([
 
 
 n_epochs = 500
-print_every = 10
+print_every = 1
 print('training')
 
 test_losses = np.zeros((4, n_epochs // print_every))
