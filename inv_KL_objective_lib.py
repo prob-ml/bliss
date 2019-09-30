@@ -207,6 +207,12 @@ def eval_star_encoder_loss(star_encoder, train_loader,
             get_encoder_loss(star_encoder, images, backgrounds,
                                 true_locs, true_fluxes)[0:4]
 
+        if(loss > 10000):
+            print('breaking')
+            np.savetxt('../fits/debugging_images', images.numpy())
+            np.savetxt('../fits/debugging_locs', true_locs.numpy())
+            torch.save(star_encoder.state_dict(), '../fits/debugging_encoder')
+
         if train:
             if optimizer is not None:
                 loss.backward()

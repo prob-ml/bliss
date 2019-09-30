@@ -117,12 +117,10 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
                             sort_locs = False):
     n_patches = tile_coords.shape[0] # number of patches in a full image
     fullimage_batchsize = locs.shape[0]
-    assert fullimage_batchsize == fluxes.shape[0]
 
     subimage_batchsize = n_patches * fullimage_batchsize
 
     max_stars = locs.shape[1]
-    assert max_stars == fluxes.shape[1]
 
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
@@ -136,8 +134,13 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
                 (subimage_slen - 1 - 2 * edge_padding)
     subimage_locs = torch.relu(subimage_locs) # by subtracting off, some are negative now; just set these to 0
 
-    subimage_fluxes = \
-        (which_locs_array * fluxes.unsqueeze(1)).view(subimage_batchsize, max_stars)
+    if fluxes is not None:
+        assert fullimage_batchsize == fluxes.shape[0]
+        assert max_stars == fluxes.shape[1]
+        subimage_fluxes = \
+            (which_locs_array * fluxes.unsqueeze(1)).view(subimage_batchsize, max_stars)
+    else:
+        subimage_fluxes = torch.zeros(subimage_locs.shape[0], subimage_locs.shape[1])
 
     # sort locs so all the zeros are at the end
     if sort_locs:
