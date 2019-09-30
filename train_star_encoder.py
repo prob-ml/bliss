@@ -75,7 +75,7 @@ optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 
-n_epochs = 500
+n_epochs = 1000
 print_every = 1
 print('training')
 
