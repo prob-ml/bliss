@@ -48,7 +48,7 @@ star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
                             n_images = n_images,
-                            add_noise = False)
+                            add_noise = True)
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
 batchsize = 20
@@ -61,7 +61,7 @@ loader = torch.utils.data.DataLoader(
 # define VAE
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            stamp_slen = 15,
-                                           step = 8,
+                                           step = 11,
                                            edge_padding = 2,
                                            n_bands = 1,
                                            max_detections = 15)
@@ -110,12 +110,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/starnet_invKL_encoder_batched_images_400stars_nonoise'
+        outfile = './fits/starnet_invKL_encoder_batched_images_400stars_default'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/test_losses_400stars_nonoise', test_losses)
+        np.savetxt('./fits/test_losses_400stars_default', test_losses)
 
 
 print('done')

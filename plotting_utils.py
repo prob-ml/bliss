@@ -175,3 +175,16 @@ def print_results(star_encoder,
                                   stop = np.max(np.exp(log_probs.detach().numpy()[i])), num = 100),
                       color = 'red',
                       linestyle = '--')
+
+
+def plot_subimage(image, x0, x1, subimage_slen, x0_loc, x1_loc):
+    plt.matshow(image.squeeze()[x0:(x0 + subimage_slen), x1:(x1 + subimage_slen)])
+
+    which_locs = (x0_loc > x0) & \
+                        (x0_loc < (x0 + subimage_slen - 1)) & \
+                        (x1_loc > x1) & \
+                        (x1_loc < (x1 + subimage_slen - 1))
+
+    plt.scatter(x1_loc[which_locs] - x1,
+                x0_loc[which_locs] - x0,
+                color = 'r', marker = 'x')
