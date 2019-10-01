@@ -13,6 +13,8 @@ def plot_image(fig, image,
                 global_fig = None,
                 diverging_cmap = False):
 
+    # locations are coordinates in the image, on scale from 0 to 1
+
     slen = image.shape[-1]
 
     if diverging_cmap:
@@ -22,11 +24,15 @@ def plot_image(fig, image,
         im = fig.matshow(image, vmin = vmin, vmax = vmax)
 
     if not(true_locs is None):
+        assert len(true_locs.shape) == 2
+        assert true_locs.shape[1] == 2
         fig.scatter(x = true_locs[:, 1] * (slen - 1),
                     y = true_locs[:, 0] * (slen - 1),
                     color = 'b')
 
     if not(estimated_locs is None):
+        assert len(estimated_locs.shape) == 2
+        assert estimated_locs.shape[1] == 2
         fig.scatter(x = estimated_locs[:, 1] * (slen - 1),
                     y = estimated_locs[:, 0] * (slen - 1),
                     color = 'r', marker = 'x')
@@ -177,14 +183,46 @@ def print_results(star_encoder,
                       linestyle = '--')
 
 
-def plot_subimage(image, x0, x1, subimage_slen, x0_loc, x1_loc):
-    plt.matshow(image.squeeze()[x0:(x0 + subimage_slen), x1:(x1 + subimage_slen)])
+def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
+                    x0, x1, subimage_slen,
+                    vmin = None, vmax = None,
+                    add_colorbar = False,
+                    global_fig = None,
+                    diverging_cmap = False):
 
-    which_locs = (x0_loc > x0) & \
-                        (x0_loc < (x0 + subimage_slen - 1)) & \
-                        (x1_loc > x1) & \
-                        (x1_loc < (x1 + subimage_slen - 1))
+    assert len(full_image.shape) == 2
 
-    plt.scatter(x1_loc[which_locs] - x1,
-                x0_loc[which_locs] - x0,
-                color = 'r', marker = 'x')
+    # full_est_locs and full_true_locs are locations in the coordinates of the
+    # full image, in pixel units
+
+    # trim image to subimage
+    image_patch = full_image[x0:(x0 + subimage_slen), x1:(x1 + subimage_slen)]
+
+    # get locations in the subimage
+    if full_est_locs is not None:
+        which_est_locs = (full_est_locs[:, 0] > x0) & \
+                        (full_est_locs[:, 0] < (x0 + subimage_slen - 1)) & \
+                        (full_est_locs[:, 1] > x1) & \
+                        (full_est_locs[:, 1] < (x1 + subimage_slen - 1))
+        est_locs = (full_est_locs[which_est_locs, :] - torch.Tensor([[x0, x1]])) / (subimage_slen - 1)
+    else:
+        est_locs = None
+
+
+    if full_true_locs is not None:
+        which_true_locs = (full_true_locs[:, 0] > x0) & \
+                        (full_true_locs[:, 0] < (x0 + subimage_slen - 1)) & \
+                        (full_true_locs[:, 1] > x1) & \
+                        (full_true_locs[:, 1] < (x1 + subimage_slen - 1))
+
+        true_locs = (full_true_locs[which_true_locs, :] - torch.Tensor([[x0, x1]])) / (subimage_slen - 1)
+    else:
+        true_locs = None
+
+    plot_image(fig, image_patch,
+                    true_locs = true_locs,
+                    estimated_locs = est_locs,
+                    vmin = vmin, vmax = vmax,
+                    add_colorbar = add_colorbar,
+                    global_fig = global_fig,
+                    diverging_cmap = diverging_cmap)

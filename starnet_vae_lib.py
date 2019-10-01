@@ -253,13 +253,20 @@ class StarEncoder(nn.Module):
                                                     self.step,
                                                     return_tile_coords = False)
 
-        subimage_locs, subimage_fluxes, n_stars, is_on_array = \
-            image_utils.get_params_in_patches(self.tile_coords,
-                                              locs,
-                                              fluxes,
-                                              self.full_slen,
-                                              self.stamp_slen,
-                                              self.edge_padding)
+        if (locs is not None) and (fluxes is not None):
+            # get parameters in patch as well
+            subimage_locs, subimage_fluxes, n_stars, is_on_array = \
+                image_utils.get_params_in_patches(self.tile_coords,
+                                                  locs,
+                                                  fluxes,
+                                                  self.full_slen,
+                                                  self.stamp_slen,
+                                                  self.edge_padding)
+        else:
+            subimage_locs = None
+            subimage_fluxes = None
+            n_stars = None
+            is_on_array = None
 
         if trim_images:
             image_stamps = image_utils.trim_images(image_stamps, self.edge_padding)

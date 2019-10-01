@@ -73,7 +73,7 @@ def plot_one_star(slen, locs, psf, cached_grid = None):
     locs = (locs - 0.5) * 2
     grid_loc = grid.view(1, slen, slen, 2) - locs.view(batchsize, 1, 1, 2)
 
-    star = F.grid_sample(psf.expand(batchsize, 1, -1, -1), grid_loc)
+    star = F.grid_sample(psf.expand(batchsize, 1, -1, -1), grid_loc, mode = 'nearest')
 
     # normalize so one star still sums to 1
     return star # / star.sum(3, keepdim=True).sum(2, keepdim=True)
@@ -230,7 +230,7 @@ class StarsDataset(Dataset):
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
-                                shape = (batchsize, self.max_stars)) 
+                                shape = (batchsize, self.max_stars))
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,
