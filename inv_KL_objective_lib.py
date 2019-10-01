@@ -141,8 +141,8 @@ def get_encoder_loss(star_encoder,
 
     # get variational parameters
     logit_loc_mean, logit_loc_log_var, \
-            log_flux_mean, log_flux_log_var, log_probs = \
-                star_encoder(image_stamps, background_stamps, true_n_stars)
+        log_flux_mean, log_flux_log_var, log_probs = \
+            star_encoder(image_stamps, background_stamps, true_n_stars)
 
     # get losses for all estimates stars against all true stars
 
