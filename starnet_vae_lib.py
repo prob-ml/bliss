@@ -117,7 +117,7 @@ class StarEncoder(nn.Module):
 
         h = self.enc_conv(log_img)
 
-        return self.enc_fc(h)
+        return self.enc_fc(h), log_img
 
     def _forward_conditional_nstars(self, image_flatten, h, n_stars):
         assert isinstance(n_stars, int)
@@ -129,9 +129,9 @@ class StarEncoder(nn.Module):
         return h_c
 
     def _forward_to_last_hidden(self, image, background):
-        h = self._forward_to_pooled_hidden(image, background)
+        h, log_img = self._forward_to_pooled_hidden(image, background)
 
-        image_flatten = image.reshape(image.shape[0], -1)
+        image_flatten = log_img.reshape(log_img.shape[0], -1)
 
         h_out = torch.zeros(image.shape[0], 1).to(device)
         for i in range(0, self.max_detections + 1):
