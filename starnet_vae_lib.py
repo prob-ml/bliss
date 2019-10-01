@@ -3,6 +3,8 @@ import torch.nn as nn
 
 import numpy as np
 
+import image_utils
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class Flatten(nn.Module):
@@ -19,13 +21,19 @@ class Normalize2d(nn.Module):
 
 
 class StarEncoder(nn.Module):
-    def __init__(self, slen, n_bands, max_detections):
+    def __init__(self, full_slen, stamp_slen, step, edge_padding, n_bands, max_detections):
 
         super(StarEncoder, self).__init__()
 
         # image parameters
-        self.slen = slen
+        self.full_slen = full_slen # dimension of full image: we assume its square for now
+        self.stamp_slen = stamp_slen # dimension of the individual image patches
+        self.step = step # number of pixels to shift every subimage
         self.n_bands = n_bands
+
+        self.edge_padding = edge_padding
+
+        self.batchsize = None
 
         # max number of detections
         self.max_detections = max_detections
@@ -61,7 +69,7 @@ class StarEncoder(nn.Module):
 
         # output dimension of convolutions
         conv_out_dim = \
-            self.enc_conv(torch.zeros(1, n_bands, slen, slen)).size(1)
+            self.enc_conv(torch.zeros(1, n_bands, stamp_slen, stamp_slen)).size(1)
 
         # fully connected layers
         self.enc_fc = nn.Sequential(
@@ -114,7 +122,17 @@ class StarEncoder(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim = 1)
 
     def _forward_to_pooled_hidden(self, image, background):
-        h = self.enc_conv(torch.log(image - background + 1000.))
+        log_img = torch.log(image - background + 1000)
+
+        # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
+        # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
+        # mins = log_img.view(image.shape[0], self.n_bands, -1).min(-1)[0]
+        # maxes = log_img.view(image.shape[0], self.n_bands, -1).max(-1)[0]
+        #
+        # log_img = (log_img - mins.unsqueeze(-1).unsqueeze(-1)) / (maxes - mins).unsqueeze(-1).unsqueeze(-1)
+
+        h = self.enc_conv(log_img)
+
         return self.enc_fc(h)
 
     def _forward_conditional_nstars(self, h, n_stars):
@@ -216,3 +234,42 @@ class StarEncoder(nn.Module):
             self.fluxes_var_indx_mat[n_detections, 0:n_detections] = torch.arange(indx3, indx4)
 
             self.prob_indx[n_detections] = indx4
+
+    def get_image_stamps(self, images_full, locs, fluxes, trim_images = False):
+        assert len(images_full.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
+        assert images_full.shape[1] == self.n_bands
+        assert images_full.shape[2] == self.full_slen
+        assert images_full.shape[3] == self.full_slen
+
+        if (self.batchsize is None) or (images_full.shape[0] != batchsize):
+            image_stamps, self.tile_coords, _, _, self.n_patches = \
+                image_utils.tile_images(images_full,
+                                        self.stamp_slen,
+                                        self.step,
+                                        return_tile_coords = True)
+        else:
+            image_stamps = image_utils.tile_images(images_full,
+                                                    self.stamp_slen,
+                                                    self.step,
+                                                    return_tile_coords = False)
+
+        if (locs is not None) and (fluxes is not None):
+            # get parameters in patch as well
+            subimage_locs, subimage_fluxes, n_stars, is_on_array = \
+                image_utils.get_params_in_patches(self.tile_coords,
+                                                  locs,
+                                                  fluxes,
+                                                  self.full_slen,
+                                                  self.stamp_slen,
+                                                  self.edge_padding)
+        else:
+            subimage_locs = None
+            subimage_fluxes = None
+            n_stars = None
+            is_on_array = None
+
+        if trim_images:
+            image_stamps = image_utils.trim_images(image_stamps, self.edge_padding)
+
+        return image_stamps, subimage_locs, subimage_fluxes, \
+                    n_stars, is_on_array

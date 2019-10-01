@@ -22,7 +22,7 @@ print('torch version: ', torch.__version__)
 np.random.seed(43534)
 _ = torch.manual_seed(24534)
 
-max_stars = 20
+max_stars = 4
 
 ########################
 # Get Hubble data
@@ -41,7 +41,6 @@ sdss_loader = torch.utils.data.DataLoader(
                  dataset=sdss_hubble_data,
                  batch_size=batchsize,
                  shuffle=False)
-
 
 sky_intensity = sdss_hubble_data.sdss_background_full.mean()
 
@@ -184,23 +183,23 @@ encoder_optimizer = optim.Adam([
 run_sleep(None, star_encoder,
             simulated_loader,
             encoder_optimizer,
-            cycle = 0,
+            cycle = '0_four_stars',
             n_epochs = 1001)
 
-for i in range(1, 11):
-    star_encoder.load_state_dict(torch.load('./fits/starnet_encoder_sleep' + str(i - 1),
-                                   map_location=lambda storage, loc: storage))
-    star_encoder.to(device)
-
-    # run wake
-    run_wake(residual_vae, star_encoder, sdss_loader,
-                 simulated_dataset.simulator, residual_optimizer, cycle = i, n_epochs = 151)
-
-    # load residual vae
-    residual_vae.load_state_dict(torch.load('./fits/residual_vae_wake' + str(i),
-                                   map_location=lambda storage, loc: storage))
-    residual_vae.to(device)
-
-    # run sleep
-    run_sleep(residual_vae, star_encoder, simulated_loader, encoder_optimizer,
-                cycle = i, n_epochs = 161)
+# for i in range(1, 11):
+#     star_encoder.load_state_dict(torch.load('./fits/starnet_encoder_sleep' + str(i - 1),
+#                                    map_location=lambda storage, loc: storage))
+#     star_encoder.to(device)
+#
+#     # run wake
+#     run_wake(residual_vae, star_encoder, sdss_loader,
+#                  simulated_dataset.simulator, residual_optimizer, cycle = i, n_epochs = 151)
+#
+#     # load residual vae
+#     residual_vae.load_state_dict(torch.load('./fits/residual_vae_wake' + str(i),
+#                                    map_location=lambda storage, loc: storage))
+#     residual_vae.to(device)
+#
+#     # run sleep
+#     run_sleep(residual_vae, star_encoder, simulated_loader, encoder_optimizer,
+#                 cycle = i, n_epochs = 161)

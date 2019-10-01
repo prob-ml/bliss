@@ -4,7 +4,7 @@ import numpy as np
 from torch.distributions import normal
 
 from simulated_datasets_lib import get_is_on_from_n_stars
-from hungarian_alg import run_batch_hungarian_alg, run_batch_hungarian_alg_parallel
+from hungarian_alg import run_batch_hungarian_alg_parallel
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -89,25 +89,22 @@ def _permute_losses_mat(losses_mat, perm):
     batchsize = losses_mat.shape[0]
     max_stars = losses_mat.shape[1]
 
-    assert losses_mat.shape[2] == max_stars
     assert perm.shape[0] == batchsize
     assert perm.shape[1] == max_stars
 
     return torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
 
 def get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var):
-    # batchsize x estimated parameters x true parameters
 
     batchsize = true_locs.shape[0]
-    max_stars = true_locs.shape[1]
 
     # get losses for locations
-    _logit_loc_mean = logit_loc_mean.view(batchsize, max_stars, 1, 2)
-    _logit_loc_log_var = logit_loc_log_var.view(batchsize, max_stars, 1, 2)
-    _true_locs = true_locs.view(batchsize, 1, max_stars, 2)
+    _logit_loc_mean = logit_loc_mean.view(batchsize, 1, logit_loc_mean.shape[1], 2)
+    _logit_loc_log_var = logit_loc_log_var.view(batchsize, 1, logit_loc_mean.shape[1], 2)
+    _true_locs = true_locs.view(batchsize, true_locs.shape[1], 1, 2)
 
-    # this is batchsize x (n_stars x n_stars)
-    # the log prob for each mean x observed location
+    # this is batchsize x (max_stars x max_detections)
+    # the log prob for each observed location x mean
     locs_log_probs_all = eval_logitnormal_logprob(_true_locs,
                             _logit_loc_mean, _logit_loc_log_var).sum(dim = 3)
 
@@ -115,61 +112,66 @@ def get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var):
 
 def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
     batchsize = true_fluxes.shape[0]
-    max_stars = true_fluxes.shape[1]
 
-    _log_flux_mean = log_flux_mean.view(batchsize, max_stars, 1)
-    _log_flux_log_var = log_flux_log_var.view(batchsize, max_stars, 1)
-    _true_fluxes = true_fluxes.view(batchsize, 1, max_stars)
+    _log_flux_mean = log_flux_mean.view(batchsize, 1, log_flux_mean.shape[1])
+    _log_flux_log_var = log_flux_log_var.view(batchsize, 1, log_flux_mean.shape[1])
+    _true_fluxes = true_fluxes.view(batchsize, true_fluxes.shape[1], 1)
 
-    # this is batchsize x (n_stars x n_stars)
-    # the log prob for each mean x observed flux
-    flux_log_probs_all = eval_lognormal_logprob(_true_fluxes,
-                                _log_flux_mean, _log_flux_log_var)
-    assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_stars]
-
+    # this is batchsize x (max_stars x max_detections)
+    # the log prob for each observed location x mean
     flux_log_probs_all = eval_lognormal_logprob(_true_fluxes,
                                 _log_flux_mean, _log_flux_log_var)
 
     return flux_log_probs_all
 
-def get_encoder_loss(star_encoder, images, backgrounds, true_locs,
-                        true_fluxes, true_n_stars):
+def get_encoder_loss(star_encoder,
+                        images_full,
+                        backgrounds_full,
+                        true_locs,
+                        true_fluxes):
+
+    # extract image_patches patches
+    image_stamps, subimage_locs, subimage_fluxes, true_n_stars, is_on_array = \
+        star_encoder.get_image_stamps(images_full, true_locs, true_fluxes)
+
+    # TODO: if more than max detections ...
+    true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
+
+    background_stamps = backgrounds_full.mean() # TODO
 
     # get variational parameters
     logit_loc_mean, logit_loc_log_var, \
-            log_flux_mean, log_flux_log_var, log_probs = \
-                star_encoder(images, backgrounds, true_n_stars)
+        log_flux_mean, log_flux_log_var, log_probs = \
+            star_encoder(image_stamps, background_stamps, true_n_stars)
 
     # get losses for all estimates stars against all true stars
 
-    # this is batchsize x (n_stars x n_stars)
-    # the log prob for each mean x observed location
+    # this is batchsize x (max_stars x max_detections)
+    # the log prob for each observed location x mean
     locs_log_probs_all = \
-        get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var)
+        get_locs_logprob_all_combs(subimage_locs,
+                                    logit_loc_mean,
+                                    logit_loc_log_var)
 
-    flux_log_probs_all = get_fluxes_logprob_all_combs(true_fluxes, \
-                                log_flux_mean, log_flux_log_var)
-
-    # for my sanity
-    batchsize = images.shape[0]
-    max_stars = true_locs.shape[1]
-    assert list(locs_log_probs_all.shape) == [batchsize, max_stars, max_stars]
-    assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_stars]
+    flux_log_probs_all = \
+        get_fluxes_logprob_all_combs(subimage_fluxes, \
+                                    log_flux_mean, log_flux_log_var)
 
     # get permutation
-    perm = run_batch_hungarian_alg_parallel(locs_log_probs_all, true_n_stars).to(device)
-
-    # only count those stars that are on
-    is_on = get_is_on_from_n_stars(true_n_stars, max_stars)
+    # TODO: right now, if too many stars, just remove the loss
+    is_on_array[is_on_array.float().sum(dim = 1) > star_encoder.max_detections] = 0
+    perm = run_batch_hungarian_alg_parallel(locs_log_probs_all, is_on_array.type(torch.bool)).to(device)
 
     # get losses
-    locs_loss = -(_permute_losses_mat(locs_log_probs_all, perm) * is_on).sum(dim = 1)
-    fluxes_loss = -(_permute_losses_mat(flux_log_probs_all, perm) * is_on).sum(dim = 1)
+    locs_loss = -(_permute_losses_mat(locs_log_probs_all, perm) * is_on_array.float()).sum(dim = 1)
+    fluxes_loss = -(_permute_losses_mat(flux_log_probs_all, perm) * is_on_array.float()).sum(dim = 1)
 
+    # locs_loss = -(eval_logitnormal_logprob(true_locs, logit_loc_mean, logit_loc_log_var).sum(dim = 2) * is_on).sum(dim = 1)
+    # fluxes_loss = -(eval_lognormal_logprob(true_fluxes, log_flux_mean, log_flux_log_var) * is_on).sum(dim = 1)
 
     counter_loss = get_categorical_loss(log_probs, true_n_stars)
 
-    loss = (locs_loss + fluxes_loss + counter_loss).mean()
+    loss = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss).mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm
 
@@ -179,11 +181,12 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
     avg_loss = 0.0
     avg_counter_loss = 0.0
+    avg_locs_loss = 0.0
+    avg_fluxes_loss = 0.0
 
     for _, data in enumerate(train_loader):
         true_fluxes = data['fluxes'].to(device)
         true_locs = data['locs'].to(device)
-        true_n_stars = data['n_stars'].to(device)
         images = data['image'].to(device)
         backgrounds = data['background'].to(device)
 
@@ -203,8 +206,14 @@ def eval_star_encoder_loss(star_encoder, train_loader,
             star_encoder.eval()
 
         # evaluate log q
-        loss, counter_loss = get_encoder_loss(star_encoder, images, backgrounds,
-                                true_locs, true_fluxes, true_n_stars)[0:2]
+        loss, counter_loss, locs_loss, fluxes_loss = \
+            get_encoder_loss(star_encoder, images, backgrounds,
+                                true_locs, true_fluxes)[0:4]
+
+        # if(loss > 1000):
+        #     print('breaking ... ')
+        #     np.savez('./fits/debugging_images', images = images.cpu().numpy(), locs = true_locs.cpu().numpy(), fluxes = true_fluxes.cpu().numpy(), backgrounds = backgrounds.cpu().numpy())
+        #     torch.save(star_encoder.state_dict(), './fits/debugging_encoder')
 
         if train:
             if optimizer is not None:
@@ -212,6 +221,8 @@ def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer.step()
 
         avg_loss += loss.item() * images.shape[0] / len(train_loader.dataset)
-        avg_counter_loss += counter_loss.sum().item() / len(train_loader.dataset)
+        avg_counter_loss += counter_loss.sum().item() / (len(train_loader.dataset) * star_encoder.n_patches)
+        avg_fluxes_loss += fluxes_loss.sum().item() / (len(train_loader.dataset) * star_encoder.n_patches)
+        avg_locs_loss += locs_loss.sum().item() / (len(train_loader.dataset) * star_encoder.n_patches)
 
-    return avg_loss, avg_counter_loss
+    return avg_loss, avg_counter_loss, avg_locs_loss, avg_fluxes_loss

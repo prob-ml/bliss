@@ -4,6 +4,7 @@ import torch
 import numpy as np
 
 from simulated_datasets_lib import plot_multiple_stars
+import image_utils
 
 def plot_image(fig, image,
                 true_locs = None, estimated_locs = None,
@@ -11,6 +12,8 @@ def plot_image(fig, image,
                 add_colorbar = False,
                 global_fig = None,
                 diverging_cmap = False):
+
+    # locations are coordinates in the image, on scale from 0 to 1
 
     slen = image.shape[-1]
 
@@ -21,11 +24,15 @@ def plot_image(fig, image,
         im = fig.matshow(image, vmin = vmin, vmax = vmax)
 
     if not(true_locs is None):
+        assert len(true_locs.shape) == 2
+        assert true_locs.shape[1] == 2
         fig.scatter(x = true_locs[:, 1] * (slen - 1),
                     y = true_locs[:, 0] * (slen - 1),
                     color = 'b')
 
     if not(estimated_locs is None):
+        assert len(estimated_locs.shape) == 2
+        assert estimated_locs.shape[1] == 2
         fig.scatter(x = estimated_locs[:, 1] * (slen - 1),
                     y = estimated_locs[:, 0] * (slen - 1),
                     color = 'r', marker = 'x')
@@ -72,8 +79,9 @@ def get_variational_parameters(star_encoder, images,
     map_fluxes = torch.exp(log_flux_mean).detach()
 
     # get reconstruction
-    recon_mean = plot_multiple_stars(map_locs, map_n_stars, map_fluxes, psf) + \
+    recon_mean = plot_multiple_stars(psf.shape[0], map_locs, map_n_stars, map_fluxes, psf) + \
                     backgrounds
+
 
     return map_n_stars, map_locs, map_fluxes, \
             logit_loc_mean, logit_loc_log_var, \
@@ -85,13 +93,15 @@ def print_results(star_encoder,
                         backgrounds,
                         psf,
                         true_locs,
-                        true_n_stars,
+                        true_is_on,
                         use_true_n_stars = False,
                         residual_clamp = 1e16):
 
     assert images.shape[0] == backgrounds.shape[0]
     assert images.shape[0] == true_locs.shape[0]
-    assert images.shape[0] == len(true_n_stars)
+    assert images.shape[0] == true_is_on.shape[0]
+
+    true_n_stars = true_is_on.sum(dim = 1)
 
     map_n_stars, map_locs, map_fluxes, \
         logit_loc_mean, logit_loc_log_var, \
@@ -104,6 +114,9 @@ def print_results(star_encoder,
                                             true_n_stars,
                                             use_true_n_stars)
 
+    _images = image_utils.trim_images(images, star_encoder.edge_padding)
+
+
     for i in range(images.shape[0]):
 
         fig, axarr = plt.subplots(1, 4, figsize=(15, 4))
@@ -112,8 +125,8 @@ def print_results(star_encoder,
         n_stars_i = true_n_stars[i]
         est_n_stars_i = map_n_stars[i]
 
-        plot_image(axarr[0], images[i, 0, :, :] - backgrounds[i, 0, :, :],
-                  true_locs = true_locs[i, 0:int(n_stars_i)],
+        plot_image(axarr[0], _images[i, 0, :, :] - backgrounds[i, 0, :, :],
+                  true_locs = true_locs[i, true_is_on[i]],
                   estimated_locs = map_locs[i, 0:int(est_n_stars_i)],
                   add_colorbar = True,
                   global_fig = fig)
@@ -146,7 +159,7 @@ def print_results(star_encoder,
         axarr[1].get_yaxis().set_visible(False)
 
         # plot residual
-        residual = images[i, 0, :, :]-recon_mean[i, 0, :, :]
+        residual = _images[i, 0, :, :]-recon_mean[i, 0, :, :]
         residual = residual.clamp(min = -residual_clamp, max = residual_clamp)
         vmax = torch.abs(residual).max()
 
@@ -168,3 +181,48 @@ def print_results(star_encoder,
                                   stop = np.max(np.exp(log_probs.detach().numpy()[i])), num = 100),
                       color = 'red',
                       linestyle = '--')
+
+
+def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
+                    x0, x1, subimage_slen,
+                    vmin = None, vmax = None,
+                    add_colorbar = False,
+                    global_fig = None,
+                    diverging_cmap = False):
+
+    assert len(full_image.shape) == 2
+
+    # full_est_locs and full_true_locs are locations in the coordinates of the
+    # full image, in pixel units
+
+    # trim image to subimage
+    image_patch = full_image[x0:(x0 + subimage_slen), x1:(x1 + subimage_slen)]
+
+    # get locations in the subimage
+    if full_est_locs is not None:
+        which_est_locs = (full_est_locs[:, 0] > x0) & \
+                        (full_est_locs[:, 0] < (x0 + subimage_slen - 1)) & \
+                        (full_est_locs[:, 1] > x1) & \
+                        (full_est_locs[:, 1] < (x1 + subimage_slen - 1))
+        est_locs = (full_est_locs[which_est_locs, :] - torch.Tensor([[x0, x1]])) / (subimage_slen - 1)
+    else:
+        est_locs = None
+
+
+    if full_true_locs is not None:
+        which_true_locs = (full_true_locs[:, 0] > x0) & \
+                        (full_true_locs[:, 0] < (x0 + subimage_slen - 1)) & \
+                        (full_true_locs[:, 1] > x1) & \
+                        (full_true_locs[:, 1] < (x1 + subimage_slen - 1))
+
+        true_locs = (full_true_locs[which_true_locs, :] - torch.Tensor([[x0, x1]])) / (subimage_slen - 1)
+    else:
+        true_locs = None
+
+    plot_image(fig, image_patch,
+                    true_locs = true_locs,
+                    estimated_locs = est_locs,
+                    vmin = vmin, vmax = vmax,
+                    add_colorbar = add_colorbar,
+                    global_fig = global_fig,
+                    diverging_cmap = diverging_cmap)
