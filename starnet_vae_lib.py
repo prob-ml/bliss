@@ -40,8 +40,8 @@ class StarEncoder(nn.Module):
 
         # convolutional NN paramters
         enc_conv_c = 20
-        enc_kern = 3
-        enc_hidden = 256
+        enc_kern = 2
+        enc_hidden = 64
 
         momentum = 0.5
 
@@ -56,14 +56,6 @@ class StarEncoder(nn.Module):
             nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
             nn.ReLU(),
 
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
-                        stride=1, padding=1),
-            nn.ReLU(),
-
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern,
-                        stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
-            nn.ReLU(),
             Flatten()
         )
 
@@ -75,15 +67,7 @@ class StarEncoder(nn.Module):
         self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, enc_hidden),
             nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
-            nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
-            nn.ReLU(),
-
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
-            nn.ReLU(),
+            nn.ReLU()
         )
 
         # add final layer, whose size depends on the number of stars to output
@@ -92,7 +76,7 @@ class StarEncoder(nn.Module):
             len_out = i * 6 + 1
             width_hidden = len_out * 10
 
-            module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
+            module_a = nn.Sequential(nn.Linear(enc_hidden + self.stamp_slen**2, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU())
@@ -135,10 +119,10 @@ class StarEncoder(nn.Module):
 
         return self.enc_fc(h)
 
-    def _forward_conditional_nstars(self, h, n_stars):
+    def _forward_conditional_nstars(self, image_flatten, h, n_stars):
         assert isinstance(n_stars, int)
 
-        h_a = getattr(self, 'enc_a_detect' + str(n_stars))(h)
+        h_a = getattr(self, 'enc_a_detect' + str(n_stars))(torch.cat((h, image_flatten), dim = 1))
         h_b = getattr(self, 'enc_b_detect' + str(n_stars))(torch.cat((h_a, h), dim = 1))
         h_c = getattr(self, 'enc_final_detect' + str(n_stars))(torch.cat((h_a, h_b, h), dim = 1))
 
@@ -147,9 +131,11 @@ class StarEncoder(nn.Module):
     def _forward_to_last_hidden(self, image, background):
         h = self._forward_to_pooled_hidden(image, background)
 
+        image_flatten = image.reshape(image.shape[0], -1)
+
         h_out = torch.zeros(image.shape[0], 1).to(device)
         for i in range(0, self.max_detections + 1):
-            h_i = self._forward_conditional_nstars(h, i)
+            h_i = self._forward_conditional_nstars(image_flatten, h, i)
 
             h_out = torch.cat((h_out, h_i), dim = 1)
 

@@ -60,11 +60,11 @@ loader = torch.utils.data.DataLoader(
 
 # define VAE
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
-                                           stamp_slen = 15,
-                                           step = 11,
-                                           edge_padding = 2,
+                                           stamp_slen = 8,
+                                           step = 5,
+                                           edge_padding = 1,
                                            n_bands = 1,
-                                           max_detections = 15)
+                                           max_detections = 8)
 
 star_encoder.to(device)
 
