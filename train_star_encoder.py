@@ -26,6 +26,8 @@ print('psf file: \n', psf_fit_file)
 # set seed
 np.random.seed(4534)
 _ = torch.manual_seed(2534)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 # data parameters
 with open('./data/default_star_parameters.json', 'r') as fp:
@@ -49,7 +51,7 @@ star_dataset = \
                             add_noise = False)
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
-batchsize = 10
+batchsize = 20
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -76,7 +78,7 @@ optimizer = optim.Adam([
 
 
 n_epochs = 1000
-print_every = 1
+print_every = 20
 print('training')
 
 test_losses = np.zeros((4, n_epochs // print_every))
