@@ -40,7 +40,7 @@ class StarEncoder(nn.Module):
 
         # convolutional NN paramters
         enc_conv_c = 20
-        enc_kern = 2
+        enc_kern = 3
         enc_hidden = 64
 
         momentum = 0.5
