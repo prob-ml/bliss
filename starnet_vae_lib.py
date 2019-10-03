@@ -227,7 +227,10 @@ class StarEncoder(nn.Module):
         assert images_full.shape[2] == self.full_slen
         assert images_full.shape[3] == self.full_slen
 
+        batchsize = images_full.shape[0]
+
         if (self.batchsize is None) or (images_full.shape[0] != batchsize):
+            self.batchsize = batchsize
             image_stamps, self.tile_coords, _, _, self.n_patches = \
                 image_utils.tile_images(images_full,
                                         self.stamp_slen,

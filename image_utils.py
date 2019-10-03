@@ -3,6 +3,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 import simulated_datasets_lib
 
+
 # Tile images
 
 # The next two functions copied from
@@ -115,6 +116,11 @@ def tile_images(images, subimage_slen, step, return_tile_coords = False):
 def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
                             edge_padding = 0,
                             sort_locs = False):
+
+    # locs are the coordinates in the full image, in coordinates between 0-1
+    assert torch.all(locs <= 1.)
+    assert torch.all(locs >= 0.)
+
     n_patches = tile_coords.shape[0] # number of patches in a full image
     fullimage_batchsize = locs.shape[0]
 
@@ -156,6 +162,41 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     n_stars = is_on_array.float().sum(dim = 1).type(torch.LongTensor).to(device)
 
     return subimage_locs, subimage_fluxes, n_stars, is_on_array
+
+def get_full_params_from_patch_params(patch_locs, patch_fluxes,
+                                        is_on_array,
+                                        tile_coords,
+                                        full_slen,
+                                        stamp_slen,
+                                        edge_padding,
+                                        batchsize):
+
+    patch_fluxes = patch_fluxes * is_on_array.float()
+
+    assert (patch_fluxes.shape[0] % batchsize) == 0
+    n_stars_in_batch = int(patch_fluxes.shape[0] * patch_fluxes.shape[1] / batchsize)
+
+    fluxes_full_image = patch_fluxes.view(batchsize, n_stars_in_batch)
+
+    scale = (stamp_slen - 1 - 2 * edge_padding)
+    bias = tile_coords.repeat(batchsize, 1).unsqueeze(1).float() + edge_padding
+    locs_full_image = (patch_locs * scale + bias) / (full_slen - 1)
+
+    locs_full_image = locs_full_image.view(batchsize, n_stars_in_batch, 2)
+
+    n_stars = torch.sum(fluxes_full_image > 0, dim = 1)
+
+    is_on_array_full = simulated_datasets_lib.get_is_on_from_n_stars(n_stars, max(n_stars))
+    indx = is_on_array_full.type(torch.LongTensor)
+    indx[indx == 1] = torch.nonzero(fluxes_full_image)[:, 1]
+
+    fluxes_full_image = torch.gather(fluxes_full_image, dim = 1, index = indx) * is_on_array_full
+    locs_full_image = torch.gather(locs_full_image, dim = 1, index = indx.unsqueeze(2).repeat(1, 1, 2)) * \
+                        is_on_array_full.unsqueeze(2)
+
+    return locs_full_image, fluxes_full_image, n_stars
+
+
 
 def trim_images(images, edge_padding):
     slen = images.shape[-1] - edge_padding
