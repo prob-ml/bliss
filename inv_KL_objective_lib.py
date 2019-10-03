@@ -131,11 +131,12 @@ def get_encoder_loss(star_encoder,
                         true_fluxes):
 
     # extract image_patches patches
-    image_stamps, subimage_locs, subimage_fluxes, true_n_stars, is_on_array = \
+    image_stamps, subimage_locs, subimage_fluxes, true_n_stars, _ = \
         star_encoder.get_image_stamps(images_full, true_locs, true_fluxes)
 
     # TODO: if more than max detections ...
     true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
+    is_on_array = simulated_datasets_lib.get_is_on_from_n_stars(true_n_stars, star_encoder.max_detections)
 
     background_stamps = backgrounds_full.mean() # TODO
 
@@ -158,8 +159,6 @@ def get_encoder_loss(star_encoder,
                                     log_flux_mean, log_flux_log_var)
 
     # get permutation
-    # TODO: right now, if too many stars, just remove the loss
-    is_on_array[is_on_array.float().sum(dim = 1) > star_encoder.max_detections] = 0
     perm = run_batch_hungarian_alg_parallel(locs_log_probs_all, is_on_array.type(torch.bool)).to(device)
 
     # get losses
