@@ -34,8 +34,8 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 data_params['slen'] = 101
-data_params['min_stars'] = 400
-data_params['max_stars'] = 400
+data_params['min_stars'] = 2000
+data_params['max_stars'] = 2000
 data_params['alpha'] = 0.5
 
 print(data_params)
@@ -51,7 +51,7 @@ star_dataset = \
                             add_noise = True)
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
-batchsize = 20
+batchsize = 5
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -64,12 +64,12 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            step = 4,
                                            edge_padding = 2,
                                            n_bands = 1,
-                                           max_detections = 6)
+                                           max_detections = 15)
 
 star_encoder.to(device)
 
 # define optimizer
-learning_rate = 1e-3
+learning_rate = 5e-4
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
@@ -81,7 +81,7 @@ n_epochs = 1001
 print_every = 20
 print('training')
 
-test_losses = np.zeros((4, n_epochs // print_every))
+test_losses = np.zeros((4, n_epochs // print_every + 1))
 
 for epoch in range(n_epochs):
     t0 = time.time()
@@ -110,12 +110,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/starnet_invKL_encoder_batched_images_400stars_smallpatch2'
+        outfile = './fits/starnet_invKL_encoder_batched_images_2000stars_smallpatch2'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/test_losses_400stars_smallpatch2', test_losses)
+        np.savetxt('./fits/test_losses_2000stars_smallpatch2', test_losses)
 
 
 print('done')
