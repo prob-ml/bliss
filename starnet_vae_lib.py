@@ -250,7 +250,8 @@ class StarEncoder(nn.Module):
                                                   fluxes,
                                                   self.full_slen,
                                                   self.stamp_slen,
-                                                  self.edge_padding)
+                                                  self.edge_padding,
+                                                  sort_locs = True)
         else:
             subimage_locs = None
             subimage_fluxes = None

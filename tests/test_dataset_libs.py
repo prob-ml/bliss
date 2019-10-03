@@ -2,6 +2,8 @@
 
 import unittest
 
+import numpy as np
+
 import torch
 
 import sys
@@ -39,6 +41,14 @@ class TestSDSSDataset(unittest.TestCase):
             j = tile_coords[k, 1]
 
             assert torch.all(batched_image[k] == image[i:(i + 10), j:(j + 10)])
+
+    def test_is_on_from_n_stars(self):
+        max_stars = 10
+        n_stars = torch.Tensor(np.random.choice(max_stars, 5)).type(torch.LongTensor)
+
+        is_on = simulated_datasets_lib.get_is_on_from_n_stars(n_stars, max_stars)
+
+        assert torch.all(is_on.sum(1) == n_stars)
 
     def test_fresh_data(self):
         # this checks that we are actually drawing fresh data
