@@ -136,7 +136,7 @@ def get_encoder_loss(star_encoder,
 
     # TODO: if more than max detections ...
     true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
-    is_on_array = simulated_datasets_lib.get_is_on_from_n_stars(true_n_stars, star_encoder.max_detections)
+    is_on_array = get_is_on_from_n_stars(true_n_stars, max(true_n_stars))
 
     background_stamps = backgrounds_full.mean() # TODO
 
