@@ -51,7 +51,7 @@ star_dataset = \
                             add_noise = True)
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
-batchsize = 5
+batchsize = 20
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -64,7 +64,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            step = 4,
                                            edge_padding = 2,
                                            n_bands = 1,
-                                           max_detections = 15)
+                                           max_detections = 8)
 
 star_encoder.to(device)
 
