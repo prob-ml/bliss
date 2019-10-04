@@ -51,9 +51,9 @@ star_dataset = \
                             add_noise = True)
 
 np.savez('./fits/testing_data',
-            images = star_dataset.images,
-            true_locs = star_dataset.locs,
-            true_fluxes = star_dataset.fluxes)
+            images = star_dataset.images.cpu(),
+            true_locs = star_dataset.locs.cpu(),
+            true_fluxes = star_dataset.fluxes.cpu())
 
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
@@ -83,7 +83,7 @@ optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 
-n_epochs = 1001
+n_epochs = 10001
 print_every = 20
 print('training')
 
