@@ -89,6 +89,7 @@ print('training')
 
 test_losses = np.zeros((4, n_epochs // print_every + 1))
 
+avg_loss_old = 1e16
 for epoch in range(n_epochs):
     t0 = time.time()
 
@@ -99,6 +100,15 @@ for epoch in range(n_epochs):
     elapsed = time.time() - t0
     print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
+
+    # my debugging
+    if(avg_loss > (avg_loss_old + 5)):
+        outfile = './fits/starnet_invKL_encoder_batched_images_2000stars_smallpatch3_failed'
+        print("writing the encoder parameters to " + outfile)
+        torch.save(star_encoder.state_dict(), outfile)
+
+        break
+    avg_loss_old = avg_loss
 
     # draw fresh data
     # loader.dataset.set_params_and_images()

@@ -124,38 +124,22 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
 
     return flux_log_probs_all
 
-def get_encoder_loss(star_encoder,
-                        images_full,
-                        backgrounds_full,
-                        true_locs,
-                        true_fluxes):
-
-    # extract image_patches patches
-    image_stamps, subimage_locs, subimage_fluxes, true_n_stars, _ = \
-        star_encoder.get_image_stamps(images_full, true_locs, true_fluxes)
-
-    # TODO: if more than max detections ...
-    true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
-    is_on_array = get_is_on_from_n_stars(true_n_stars, subimage_fluxes.shape[1])
-
-    background_stamps = backgrounds_full.mean() # TODO
-
-    # get variational parameters
-    logit_loc_mean, logit_loc_log_var, \
-        log_flux_mean, log_flux_log_var, log_probs = \
-            star_encoder(image_stamps, background_stamps, true_n_stars)
-
+def get_params_loss(logit_loc_mean, logit_loc_log_var, \
+                        log_flux_mean, log_flux_log_var, log_probs,
+                        true_locs, true_fluxes, true_n_stars):
     # get losses for all estimates stars against all true stars
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
+    is_on_array = get_is_on_from_n_stars(true_n_stars, true_fluxes.shape[1])
+
     locs_log_probs_all = \
-        get_locs_logprob_all_combs(subimage_locs,
+        get_locs_logprob_all_combs(true_locs,
                                     logit_loc_mean,
                                     logit_loc_log_var)
 
     flux_log_probs_all = \
-        get_fluxes_logprob_all_combs(subimage_fluxes, \
+        get_fluxes_logprob_all_combs(true_fluxes, \
                                     log_flux_mean, log_flux_log_var)
 
     # get permutation
@@ -173,6 +157,30 @@ def get_encoder_loss(star_encoder,
     loss = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss).mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm
+
+def get_encoder_loss(star_encoder,
+                        images_full,
+                        backgrounds_full,
+                        true_locs,
+                        true_fluxes):
+
+    # extract image_patches patches
+    image_stamps, subimage_locs, subimage_fluxes, true_n_stars, _ = \
+        star_encoder.get_image_stamps(images_full, true_locs, true_fluxes)
+
+    # TODO: if more than max detections ...
+    true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
+
+    background_stamps = backgrounds_full.mean() # TODO
+
+    # get variational parameters
+    logit_loc_mean, logit_loc_log_var, \
+        log_flux_mean, log_flux_log_var, log_probs = \
+            star_encoder(image_stamps, background_stamps, true_n_stars)
+
+    return get_params_loss(logit_loc_mean, logit_loc_log_var, \
+                            log_flux_mean, log_flux_log_var, log_probs, \
+                            subimage_locs, subimage_fluxes, true_n_stars)
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False,
