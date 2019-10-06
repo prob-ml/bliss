@@ -57,7 +57,7 @@ star_dataset = \
 
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
-batchsize = 20
+batchsize = 10
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
