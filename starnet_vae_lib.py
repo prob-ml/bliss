@@ -96,7 +96,7 @@ class StarEncoder(nn.Module):
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU(),
-                                    nn.Linear(width_hidden, width_hidden)
+                                    nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU())
             self.add_module('enc_a_detect' + str(i), module_a)
 
@@ -104,7 +104,7 @@ class StarEncoder(nn.Module):
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU(),
-                                    nn.Linear(width_hidden, width_hidden)
+                                    nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU())
 
             self.add_module('enc_b_detect' + str(i), module_b)
