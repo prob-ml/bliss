@@ -167,15 +167,14 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     return subimage_locs, subimage_fluxes, n_stars, is_on_array
 
 def get_full_params_from_patch_params(patch_locs, patch_fluxes,
-                                        is_on_array,
                                         tile_coords,
                                         full_slen,
                                         stamp_slen,
                                         edge_padding,
                                         batchsize):
 
-    patch_fluxes = patch_fluxes * is_on_array.float()
-
+    assert torch.all(patch_locs <= 1.)
+    assert torch.all(patch_locs >= 0.)
     assert (patch_fluxes.shape[0] % batchsize) == 0
     n_stars_in_batch = int(patch_fluxes.shape[0] * patch_fluxes.shape[1] / batchsize)
 
