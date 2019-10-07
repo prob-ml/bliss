@@ -95,12 +95,16 @@ class StarEncoder(nn.Module):
             module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
+                                    # nn.ReLU(),
+                                    # nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU())
             self.add_module('enc_a_detect' + str(i), module_a)
 
             module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
                                     nn.ReLU(),
                                     nn.Linear(width_hidden, width_hidden),
+                                    # nn.ReLU(),
+                                    # nn.Linear(width_hidden, width_hidden),
                                     nn.ReLU())
 
             self.add_module('enc_b_detect' + str(i), module_b)
@@ -241,7 +245,10 @@ class StarEncoder(nn.Module):
         assert images_full.shape[2] == self.full_slen
         assert images_full.shape[3] == self.full_slen
 
+        batchsize = images_full.shape[0]
+
         if (self.batchsize is None) or (images_full.shape[0] != batchsize):
+            self.batchsize = batchsize
             image_stamps, self.tile_coords, _, _, self.n_patches = \
                 image_utils.tile_images(images_full,
                                         self.stamp_slen,
@@ -261,7 +268,8 @@ class StarEncoder(nn.Module):
                                                   fluxes,
                                                   self.full_slen,
                                                   self.stamp_slen,
-                                                  self.edge_padding)
+                                                  self.edge_padding,
+                                                  sort_locs = True)
         else:
             subimage_locs = None
             subimage_fluxes = None

@@ -33,9 +33,9 @@ torch.backends.cudnn.benchmark = False
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
-data_params['slen'] = 103
-data_params['min_stars'] = 400
-data_params['max_stars'] = 400
+data_params['slen'] = 101
+data_params['min_stars'] = 2000
+data_params['max_stars'] = 2000
 data_params['alpha'] = 0.5
 
 print(data_params)
@@ -49,9 +49,15 @@ star_dataset = \
                             data_params,
                             n_images = n_images,
                             add_noise = True)
+
+# np.savez('./fits/testing_data',
+#             images = star_dataset.images.cpu(),
+#             true_locs = star_dataset.locs.cpu(),
+#             true_fluxes = star_dataset.fluxes.cpu())
+
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
-batchsize = 20
+batchsize = 10
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -60,16 +66,16 @@ loader = torch.utils.data.DataLoader(
 
 # define VAE
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
-                                           stamp_slen = 15,
-                                           step = 11,
-                                           edge_padding = 2,
+                                           stamp_slen = 9,
+                                           step = 2,
+                                           edge_padding = 3,
                                            n_bands = 1,
-                                           max_detections = 15)
+                                           max_detections = 3)
 
 star_encoder.to(device)
 
 # define optimizer
-learning_rate = 1e-3
+learning_rate = 5e-4
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
@@ -77,12 +83,13 @@ optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 
-n_epochs = 1000
+n_epochs = 1001
 print_every = 20
 print('training')
 
-test_losses = np.zeros((4, n_epochs // print_every))
+test_losses = np.zeros((4, n_epochs // print_every + 1))
 
+avg_loss_old = 1e16
 for epoch in range(n_epochs):
     t0 = time.time()
 
@@ -93,6 +100,15 @@ for epoch in range(n_epochs):
     elapsed = time.time() - t0
     print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
+
+    # my debugging
+    # if(avg_loss > (avg_loss_old + 5)):
+    #     outfile = './fits/starnet_invKL_encoder_batched_images_2000stars_smallpatch3_failed'
+    #     print("writing the encoder parameters to " + outfile)
+    #     torch.save(star_encoder.state_dict(), outfile)
+    #
+    #     break
+    # avg_loss_old = avg_loss
 
     # draw fresh data
     loader.dataset.set_params_and_images()
@@ -110,12 +126,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/starnet_invKL_encoder_batched_images_400stars_default'
+        outfile = './fits/starnet_invKL_encoder_batched_images_2000stars_smallpatch5'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/test_losses_400stars_default', test_losses)
+        np.savetxt('./fits/test_losses_2000stars_smallpatch5', test_losses)
 
 
 print('done')

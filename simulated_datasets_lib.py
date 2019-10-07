@@ -132,7 +132,12 @@ def _draw_pareto_maxed(f_min, f_max, alpha, shape):
 
 class StarSimulator:
     def __init__(self, psf_fit_file, slen, sky_intensity):
-        self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_fit_file)
+        if '.txt' in psf_fit_file:
+            # format of Portillos psfs
+            self.psf_full = np.loadtxt(psf_fit_file, skiprows = 1)
+        else:
+            # else it should be a .fits file
+            self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_fit_file)
 
         self.slen = slen
 
@@ -230,7 +235,7 @@ class StarsDataset(Dataset):
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
-                                shape = (batchsize, self.max_stars))
+                                shape = (batchsize, self.max_stars)) 
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,
@@ -256,9 +261,9 @@ def _sort_locs(locs, is_on_array):
 
 def get_is_on_from_n_stars(n_stars, max_stars):
     batchsize = len(n_stars)
-    is_on_array = torch.zeros((batchsize, max_stars)).to(device)
+    is_on_array = torch.zeros((batchsize, max_stars), dtype = torch.long).to(device)
     for i in range(max_stars):
-        is_on_array[:, i] = (n_stars > i).float()
+        is_on_array[:, i] = (n_stars > i)
 
     return is_on_array
 
