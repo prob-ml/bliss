@@ -6,7 +6,7 @@ import torch.optim as optim
 import sdss_psf
 import simulated_datasets_lib
 import starnet_vae_lib
-import inv_KL_objective_lib as objectives_lib
+import inv_kl_objective_lib as objectives_lib
 
 import time
 
