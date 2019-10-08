@@ -4,6 +4,7 @@ import torch.nn as nn
 import numpy as np
 
 import image_utils
+from simulated_datasets_lib import get_is_on_from_n_stars
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -281,3 +282,36 @@ class StarEncoder(nn.Module):
 
         return image_stamps, subimage_locs, subimage_fluxes, \
                     n_stars, is_on_array
+
+    def get_results_on_full_image(self, images_full, backgrounds_full):
+        # first convert full iimages to image stamps
+
+        # get image stamps
+        image_stamps = self.get_image_stamps(images_full, None, None,
+                                              trim_images = False)[0]
+        background_stamps = self.get_image_stamps(backgrounds_full, None, None,
+                                              trim_images = False)[0]
+
+        # get variational parameters on stamps
+        logit_loc_mean, logit_loc_log_var, \
+            log_flux_mean, log_flux_log_var, log_probs = \
+                self.forward(image_stamps, background_stamps)
+
+        # get map estimates on image stamps
+        map_n_stars = torch.argmax(log_probs, dim = 1)
+        is_on_array = get_is_on_from_n_stars(map_n_stars, self.max_detections)
+
+        map_locs = torch.sigmoid(logit_loc_mean).detach() * is_on_array.unsqueeze(2).float()
+        map_fluxes = torch.exp(log_flux_mean).detach() * is_on_array.float()
+
+        # convert stamp parameters to parameters on the full image
+        map_locs_full_image, map_fluxes_full_image, n_stars_full = \
+            image_utils.get_full_params_from_patch_params(map_locs,
+                                                          map_fluxes,
+                                                        self.tile_coords,
+                                                        self.full_slen,
+                                                        self.stamp_slen,
+                                                        self.edge_padding,
+                                                        self.batchsize)
+
+        return map_locs_full_image, map_fluxes_full_image, n_stars_full
