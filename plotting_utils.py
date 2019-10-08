@@ -12,7 +12,7 @@ def plot_image(fig, image,
                 add_colorbar = False,
                 global_fig = None,
                 diverging_cmap = False,
-                color = 'r', marker = 'x'):
+                color = 'r', marker = 'x', alpha = 1):
 
     # locations are coordinates in the image, on scale from 0 to 1
 
@@ -36,7 +36,7 @@ def plot_image(fig, image,
         assert estimated_locs.shape[1] == 2
         fig.scatter(x = estimated_locs[:, 1] * (slen - 1),
                     y = estimated_locs[:, 0] * (slen - 1),
-                    color = color, marker = marker)
+                    color = color, marker = marker, alpha = alpha)
 
     if add_colorbar:
         assert global_fig is not None
@@ -61,7 +61,7 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
                     add_colorbar = False,
                     global_fig = None,
                     diverging_cmap = False,
-                    color = 'r', marker = 'x'):
+                    color = 'r', marker = 'x', alpha = 1):
 
     assert len(full_image.shape) == 2
 
@@ -111,4 +111,4 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
                     add_colorbar = add_colorbar,
                     global_fig = global_fig,
                     diverging_cmap = diverging_cmap,
-                    color = color, marker = marker)
+                    color = color, marker = marker, alpha = alpha)

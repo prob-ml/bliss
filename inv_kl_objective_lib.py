@@ -162,7 +162,7 @@ def get_encoder_loss(star_encoder,
                         images_full,
                         backgrounds_full,
                         true_locs,
-                        true_fluxes):
+                        true_fluxes, use_l2_loss = False):
 
     # extract image_patches patches
     image_stamps, subimage_locs, subimage_fluxes, true_n_stars, _ = \
@@ -177,6 +177,10 @@ def get_encoder_loss(star_encoder,
     logit_loc_mean, logit_loc_log_var, \
         log_flux_mean, log_flux_log_var, log_probs = \
             star_encoder(image_stamps, background_stamps, true_n_stars)
+
+    if use_l2_loss:
+        logit_loc_log_var = torch.ones((logit_loc_log_var.shape))
+        log_flux_log_var = torch.ones((log_flux_log_var.shape))
 
     return get_params_loss(logit_loc_mean, logit_loc_log_var, \
                             log_flux_mean, log_flux_log_var, log_probs, \
