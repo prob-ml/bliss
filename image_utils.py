@@ -172,6 +172,8 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
                                         stamp_slen,
                                         edge_padding,
                                         batchsize):
+                                        
+    # off stars should have patch_locs == 0 and patch_fluxes == 0
 
     assert torch.all(patch_locs <= 1.)
     assert torch.all(patch_locs >= 0.)

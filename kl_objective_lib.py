@@ -5,7 +5,7 @@ from torch.distributions import normal, categorical
 
 import image_utils
 
-from inv_KL_objective_lib import eval_normal_logprob, get_one_hot_encoding_from_int
+from inv_kl_objective_lib import eval_normal_logprob, get_one_hot_encoding_from_int
 from simulated_datasets_lib import get_is_on_from_n_stars
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

@@ -299,7 +299,11 @@ class StarEncoder(nn.Module):
                 self.forward(image_stamps, background_stamps, true_n_stars)
 
         # get map estimates on image stamps
-        map_n_stars = torch.argmax(log_probs, dim = 1)
+        if true_n_stars is None:
+            map_n_stars = torch.argmax(log_probs, dim = 1)
+        else:
+            map_n_stars = true_n_stars
+
         is_on_array = get_is_on_from_n_stars(map_n_stars, self.max_detections)
 
         map_locs = torch.sigmoid(logit_loc_mean).detach() * is_on_array.unsqueeze(2).float()
