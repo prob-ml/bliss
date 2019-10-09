@@ -131,10 +131,10 @@ class StarEncoder(nn.Module):
 
         # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
         # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
-        # mins = log_img.view(image.shape[0], self.n_bands, -1).min(-1)[0]
-        # maxes = log_img.view(image.shape[0], self.n_bands, -1).max(-1)[0]
-        #
-        # log_img = (log_img - mins.unsqueeze(-1).unsqueeze(-1)) / (maxes - mins).unsqueeze(-1).unsqueeze(-1)
+        mins = log_img.view(log_img.shape[0], self.n_bands, -1).min(-1)[0]
+        maxes = log_img.view(log_img.shape[0], self.n_bands, -1).max(-1)[0]
+
+        log_img = (log_img - mins.unsqueeze(-1).unsqueeze(-1)) / (maxes - mins).unsqueeze(-1).unsqueeze(-1)
 
         h = self.enc_conv(log_img)
 
