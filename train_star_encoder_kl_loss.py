@@ -3,8 +3,10 @@ import numpy as np
 import torch
 import torch.optim as optim
 
+import sdss_dataset_lib
 import simulated_datasets_lib
 import starnet_vae_lib
+import kl_objective_lib
 
 import time
 
@@ -24,11 +26,13 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # get sdss data
-sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData()
+sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/', 
+					hubble_cat_file = './hubble_data/NCG7089/' + \
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',)
 
 # image
-full_image = sdss_hubble_data.sdss_image.squeeze()
-full_background = sdss_hubble_data.sdss_background.squeeze()
+full_image = sdss_hubble_data.sdss_image.squeeze().to(device)
+full_background = sdss_hubble_data.sdss_background.squeeze().to(device)
 
 # simulator
 simulator = simulated_datasets_lib.StarSimulator(
@@ -44,7 +48,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
                                            n_bands = 1,
                                            max_detections = 4)
 
-star_encoder.load_state_dict(torch.load('../fits/starnet_invKL_encoder-10072019',
+star_encoder.load_state_dict(torch.load('./fits/starnet_invKL_encoder-10072019',
                                map_location=lambda storage, loc: storage))
 star_encoder.to(device)
 
@@ -58,7 +62,7 @@ def set_bn_eval(m):
 star_encoder.apply(set_bn_eval)
 
 # define optimizer
-learning_rate = 5e-4
+learning_rate = 1e-4
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
@@ -78,9 +82,9 @@ for epoch in range(n_epochs):
     optimizer.zero_grad()
 
     map_loss, ps_loss = kl_objective_lib.get_kl_loss(star_encoder,
-                            full_images.unsqueeze(0).unsqueeze(0),
-                            full_backgrounds.unsqueeze(0).unsqueeze(0),,
-                            star_dataset.simulator)
+                            full_image.unsqueeze(0).unsqueeze(0),
+                            full_background.unsqueeze(0).unsqueeze(0),
+                            simulator)
 
     avg_loss = map_loss.mean()
 
