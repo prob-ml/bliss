@@ -357,7 +357,7 @@ class StarEncoder(nn.Module):
             return map_locs_full_image, map_fluxes_full_image, n_stars_full
 
 def get_weights(n_stars):
-    weights = torch.zeros(max(n_stars) + 1)
+    weights = torch.zeros(max(n_stars) + 1).to(device)
     for i in range(max(n_stars) + 1):
         weights[i] = len(n_stars) / torch.sum(n_stars == i).float()
     return weights / weights.min()
