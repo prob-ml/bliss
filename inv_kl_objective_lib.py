@@ -169,7 +169,7 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
 
     loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
 
-    weights = torch.ones(len(true_n_stars)).to(device) # get_weights_from_n_stars(true_n_stars).detach()
+    weights = get_weights_from_n_stars(true_n_stars).detach()
     loss = (loss_vec * weights).mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm
