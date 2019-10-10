@@ -131,11 +131,11 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
 #
 #     return weights / weights.min()
 def get_weights_vec(n_stars, weights):
-    weights_vec= torch.zeros(len(n_stars)).to(device)
-    for i in range(max(n_stars) + 1):
-        weights_vec[n_stars == i] = weights[i]
+    # weights_vec= torch.zeros(len(n_stars)).to(device)
+    # for i in range(max(n_stars) + 1):
+    #     weights_vec[n_stars == i] = weights[i]
 
-    return weights_vec
+    return torch.matmul(get_one_hot_encoding_from_int(n_stars, max(n_stars) + 1), weights)
 
 def get_params_loss(logit_loc_mean, logit_loc_log_var, \
                         log_flux_mean, log_flux_log_var, log_probs,
