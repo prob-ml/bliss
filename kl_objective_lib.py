@@ -61,8 +61,8 @@ def get_loss_cond_nstars(star_encoder, full_images, full_backgrounds, h, n_stars
 
     # get parameters
     logit_loc_mean, logit_loc_logvar, \
-            log_flux_mean, log_flux_logvar = \
-                star_encoder._get_params_from_last_hidden_layer(h, n_stars)
+        log_flux_mean, log_flux_logvar = \
+            star_encoder._get_params_from_last_hidden_layer(h, n_stars)
 
     # sample locations
     subimage_locs_sampled = torch.sigmoid(sample_normal(logit_loc_mean, logit_loc_logvar)) * \
@@ -94,6 +94,7 @@ def get_kl_loss(star_encoder,
                 full_images,
                 full_backgrounds,
                 simulator):
+
     assert simulator.slen == full_images.shape[-1]
 
     # extract image_patches patches
@@ -131,10 +132,10 @@ def get_kl_loss(star_encoder,
     #   second term of rao-blackwellized gradient
     ###############################
     mask = get_one_hot_encoding_from_int(map_n_stars, star_encoder.max_detections + 1)
-    conditional_probs = torch.exp(log_probs).detach() * (1 - mask)
+    conditional_probs = torch.exp(log_probs) * (1 - mask)
     conditional_probs = conditional_probs / conditional_probs.sum(1, keepdim = True)
 
-    n_stars_sampled = sample_class_weights(conditional_probs)
+    n_stars_sampled = sample_class_weights(conditional_probs).detach()
 
     sampled_loss = get_loss_cond_nstars(star_encoder, full_images, full_backgrounds, h,
                                                 n_stars_sampled, simulator)

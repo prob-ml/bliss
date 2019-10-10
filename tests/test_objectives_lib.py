@@ -113,9 +113,12 @@ class TestStarEncoderObjective(unittest.TestCase):
 
         n_stars = torch.randint(0, max_stars + 1, (100, ))
 
-        weights = objectives_lib.get_weights_from_n_stars(n_stars)
+        # get weights
+        weights = starnet_vae_lib.get_weights(n_stars)
 
-        assert len(weights) == len(n_stars)
+        # get weights vector
+        one_hot = objectives_lib.get_one_hot_encoding_from_int(n_stars, max(n_stars) + 1)
+        weights_vec = objectives_lib.get_weights_vec(one_hot, weights)
 
         # get counts:
         counts = torch.zeros(max_stars + 1)
@@ -123,9 +126,9 @@ class TestStarEncoderObjective(unittest.TestCase):
             counts[i] = torch.sum(n_stars == i)
 
         for i in range(max_stars + 1):
-            assert len(torch.unique(weights[n_stars == i])) == 1
+            assert len(torch.unique(weights_vec[n_stars == i])) == 1
 
-            x = torch.unique(weights[n_stars == i])
+            x = torch.unique(weights_vec[n_stars == i])
             y = counts.max() / counts[i]
 
             assert torch.abs(x - y) < 1e-6
