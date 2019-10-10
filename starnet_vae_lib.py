@@ -5,6 +5,7 @@ import numpy as np
 
 import image_utils
 from simulated_datasets_lib import get_is_on_from_n_stars
+from inv_kl_objective_lib import get_weights_from_n_stars
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -35,6 +36,7 @@ class StarEncoder(nn.Module):
         self.edge_padding = edge_padding
 
         self.batchsize = None
+        self.weights = None
 
         # max number of detections
         self.max_detections = max_detections
@@ -248,7 +250,7 @@ class StarEncoder(nn.Module):
 
         batchsize = images_full.shape[0]
 
-        if (self.batchsize is None) or (images_full.shape[0] != batchsize):
+        if (self.batchsize is None) or (images_full.shape[0] != self.batchsize):
             self.batchsize = batchsize
             image_stamps, self.tile_coords, _, _, self.n_patches = \
                 image_utils.tile_images(images_full,
@@ -271,6 +273,10 @@ class StarEncoder(nn.Module):
                                                   self.stamp_slen,
                                                   self.edge_padding,
                                                   sort_locs = True)
+
+            if (self.weights is None) or (images_full.shape[0] != self.batchsize):
+                self.weights = inv_kl_objective_lib.get_weights_from_n_stars(n_stars)
+
         else:
             subimage_locs = None
             subimage_fluxes = None

@@ -125,7 +125,6 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
     return flux_log_probs_all
 
 def get_weights_from_n_stars(n_stars):
-
     weights = torch.zeros(len(n_stars)).to(device)
     for i in range(max(n_stars) + 1):
         weights[n_stars == i] = len(n_stars) / torch.sum(n_stars == i).float()
@@ -134,7 +133,7 @@ def get_weights_from_n_stars(n_stars):
 
 def get_params_loss(logit_loc_mean, logit_loc_log_var, \
                         log_flux_mean, log_flux_log_var, log_probs,
-                        true_locs, true_fluxes, true_n_stars):
+                        true_locs, true_fluxes, true_n_stars, weights):
     # get losses for all estimates stars against all true stars
 
     is_on_array = get_is_on_from_n_stars(true_n_stars, true_fluxes.shape[1])
@@ -165,7 +164,7 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
 
     loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
 
-    weights = get_weights_from_n_stars(true_n_stars).detach()
+    # weights = get_weights_from_n_stars(true_n_stars).detach()
     loss = (loss_vec * weights).mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm
@@ -196,7 +195,8 @@ def get_encoder_loss(star_encoder,
 
     return get_params_loss(logit_loc_mean, logit_loc_log_var, \
                             log_flux_mean, log_flux_log_var, log_probs, \
-                            subimage_locs, subimage_fluxes, true_n_stars)
+                            subimage_locs, subimage_fluxes, true_n_stars,
+                            star_encoder.weights)
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False,
