@@ -26,15 +26,13 @@ def get_one_hot_encoding_from_int(z, n_classes):
 
     return z_one_hot
 
-def get_categorical_loss(log_probs, true_n_stars):
+def get_categorical_loss(log_probs, one_hot_encoding):
     assert torch.all(log_probs <= 0)
-    assert log_probs.shape[0] == len(true_n_stars)
-    max_detections = log_probs.shape[1]
+    assert log_probs.shape[0] == one_hot_encoding.shape[0]
+    assert log_probs.shape[1] == one_hot_encoding.shape[1]
 
     return torch.sum(
-        -log_probs * \
-        get_one_hot_encoding_from_int(true_n_stars,
-                                        max_detections), dim = 1)
+        -log_probs * one_hot_encoding, dim = 1)
 
 # def eval_star_counter_loss(star_counter, train_loader,
 #                             optimizer = None, train = True):
@@ -124,14 +122,28 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
 
     return flux_log_probs_all
 
+# def get_weights_from_n_stars(n_stars):
+#     weights = torch.zeros(len(n_stars)).to(device)
+#     for i in range(max(n_stars) + 1):
+#         weights[n_stars == i] = len(n_stars) / torch.sum(n_stars == i).float()
+#
+#     return weights / weights.min()
+def get_weights_vec(one_hot_encoding, weights):
+    # weights_vec= torch.zeros(len(n_stars)).to(device)
+    # for i in range(max(n_stars) + 1):
+    #     weights_vec[n_stars == i] = weights[i]
+
+    return torch.matmul(one_hot_encoding, weights)
+
 def get_params_loss(logit_loc_mean, logit_loc_log_var, \
                         log_flux_mean, log_flux_log_var, log_probs,
-                        true_locs, true_fluxes, true_n_stars):
+                        true_locs, true_fluxes, true_n_stars, weights):
     # get losses for all estimates stars against all true stars
+
+    is_on_array = get_is_on_from_n_stars(true_n_stars, true_fluxes.shape[1])
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    is_on_array = get_is_on_from_n_stars(true_n_stars, true_fluxes.shape[1])
 
     locs_log_probs_all = \
         get_locs_logprob_all_combs(true_locs,
@@ -152,9 +164,14 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
     # locs_loss = -(eval_logitnormal_logprob(true_locs, logit_loc_mean, logit_loc_log_var).sum(dim = 2) * is_on).sum(dim = 1)
     # fluxes_loss = -(eval_lognormal_logprob(true_fluxes, log_flux_mean, log_flux_log_var) * is_on).sum(dim = 1)
 
-    counter_loss = get_categorical_loss(log_probs, true_n_stars)
+    one_hot_encoding = get_one_hot_encoding_from_int(true_n_stars, log_probs.shape[1])
+    counter_loss = get_categorical_loss(log_probs, one_hot_encoding)
 
-    loss = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss).mean()
+    loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
+
+    weights_vec = get_weights_vec(one_hot_encoding, weights)
+    assert len(weights_vec) == len(loss_vec)
+    loss = (loss_vec * weights_vec).mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm
 
@@ -169,7 +186,7 @@ def get_encoder_loss(star_encoder,
         star_encoder.get_image_stamps(images_full, true_locs, true_fluxes)
 
     # TODO: if more than max detections ...
-    true_n_stars[true_n_stars > star_encoder.max_detections] = star_encoder.max_detections
+    true_n_stars = true_n_stars.clamp(max = star_encoder.max_detections)
 
     background_stamps = backgrounds_full.mean() # TODO
 
@@ -184,7 +201,8 @@ def get_encoder_loss(star_encoder,
 
     return get_params_loss(logit_loc_mean, logit_loc_log_var, \
                             log_flux_mean, log_flux_log_var, log_probs, \
-                            subimage_locs, subimage_fluxes, true_n_stars)
+                            subimage_locs, subimage_fluxes, true_n_stars,
+                            star_encoder.weights)
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False,
@@ -223,7 +241,10 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
         # if(loss > 1000):
         #     print('breaking ... ')
-        #     np.savez('./fits/debugging_images', images = images.cpu().numpy(), locs = true_locs.cpu().numpy(), fluxes = true_fluxes.cpu().numpy(), backgrounds = backgrounds.cpu().numpy())
+        #     np.savez('./fits/debugging_images', images = images.cpu().numpy(),
+                    # locs = true_locs.cpu().numpy(),
+                    # fluxes = true_fluxes.cpu().numpy(),
+                    # backgrounds = backgrounds.cpu().numpy())
         #     torch.save(star_encoder.state_dict(), './fits/debugging_encoder')
 
         if train:

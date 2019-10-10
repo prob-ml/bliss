@@ -35,6 +35,7 @@ class StarEncoder(nn.Module):
         self.edge_padding = edge_padding
 
         self.batchsize = None
+        self.weights = None
 
         # max number of detections
         self.max_detections = max_detections
@@ -131,8 +132,8 @@ class StarEncoder(nn.Module):
 
         # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
         # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
-        # mins = log_img.view(image.shape[0], self.n_bands, -1).min(-1)[0]
-        # maxes = log_img.view(image.shape[0], self.n_bands, -1).max(-1)[0]
+        # mins = log_img.view(log_img.shape[0], self.n_bands, -1).min(-1)[0]
+        # maxes = log_img.view(log_img.shape[0], self.n_bands, -1).max(-1)[0]
         #
         # log_img = (log_img - mins.unsqueeze(-1).unsqueeze(-1)) / (maxes - mins).unsqueeze(-1).unsqueeze(-1)
 
@@ -248,7 +249,7 @@ class StarEncoder(nn.Module):
 
         batchsize = images_full.shape[0]
 
-        if (self.batchsize is None) or (images_full.shape[0] != batchsize):
+        if (self.batchsize is None) or (images_full.shape[0] != self.batchsize):
             self.batchsize = batchsize
             image_stamps, self.tile_coords, _, _, self.n_patches = \
                 image_utils.tile_images(images_full,
@@ -271,6 +272,10 @@ class StarEncoder(nn.Module):
                                                   self.stamp_slen,
                                                   self.edge_padding,
                                                   sort_locs = True)
+
+            if (self.weights is None) or (images_full.shape[0] != self.batchsize):
+                self.weights = get_weights(n_stars.clamp(max = self.max_detections))
+
         else:
             subimage_locs = None
             subimage_fluxes = None
@@ -350,3 +355,9 @@ class StarEncoder(nn.Module):
 
         else:
             return map_locs_full_image, map_fluxes_full_image, n_stars_full
+
+def get_weights(n_stars):
+    weights = torch.zeros(max(n_stars) + 1).to(device)
+    for i in range(max(n_stars) + 1):
+        weights[i] = len(n_stars) / torch.sum(n_stars == i).float()
+    return weights / weights.min()

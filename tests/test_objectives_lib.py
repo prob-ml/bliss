@@ -7,7 +7,7 @@ import torch
 import sys
 sys.path.insert(0, './../')
 
-import inv_KL_objective_lib as objectives_lib
+import inv_kl_objective_lib as objectives_lib
 import simulated_datasets_lib
 import starnet_vae_lib
 from hungarian_alg import find_min_col_permutation, run_batch_hungarian_alg_parallel
@@ -106,6 +106,32 @@ class TestStarEncoderObjective(unittest.TestCase):
                                                 logit_loc_log_var[i, k]).sum()
 
                     assert locs_loss_ij == locs_log_probs_all[i, j, k]
+
+    def test_get_weights(self):
+
+        max_stars = 4
+
+        n_stars = torch.randint(0, max_stars + 1, (100, ))
+
+        # get weights
+        weights = starnet_vae_lib.get_weights(n_stars)
+
+        # get weights vector
+        one_hot = objectives_lib.get_one_hot_encoding_from_int(n_stars, max(n_stars) + 1)
+        weights_vec = objectives_lib.get_weights_vec(one_hot, weights)
+
+        # get counts:
+        counts = torch.zeros(max_stars + 1)
+        for i in range(max_stars + 1):
+            counts[i] = torch.sum(n_stars == i)
+
+        for i in range(max_stars + 1):
+            assert len(torch.unique(weights_vec[n_stars == i])) == 1
+
+            x = torch.unique(weights_vec[n_stars == i])
+            y = counts.max() / counts[i]
+
+            assert torch.abs(x - y) < 1e-6
 
 if __name__ == '__main__':
     unittest.main()
