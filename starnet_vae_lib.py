@@ -5,7 +5,6 @@ import numpy as np
 
 import image_utils
 from simulated_datasets_lib import get_is_on_from_n_stars
-from inv_kl_objective_lib import get_weights_from_n_stars
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -275,7 +274,7 @@ class StarEncoder(nn.Module):
                                                   sort_locs = True)
 
             if (self.weights is None) or (images_full.shape[0] != self.batchsize):
-                self.weights = get_weights_from_n_stars(n_stars)
+                self.weights = get_weights(n_stars)
 
         else:
             subimage_locs = None
@@ -356,3 +355,9 @@ class StarEncoder(nn.Module):
 
         else:
             return map_locs_full_image, map_fluxes_full_image, n_stars_full
+
+def get_weights(n_stars):
+    weights = torch.zeros(max(n_stars) + 1)
+    for i in range(max(n_stars) + 1):
+        weights[i] = len(n_stars) / torch.sum(n_stars == i).float()
+    return weights / weights.min()
