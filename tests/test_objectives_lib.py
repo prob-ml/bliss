@@ -117,8 +117,9 @@ class TestStarEncoderObjective(unittest.TestCase):
 
         assert len(weights) == len(n_stars)
 
-        # get category with most counts
-        print(torch.where(weights == 1.0))
+        # get counts:
+        for i in range(max_stars + 1): 
+
         max_cat = int(torch.where(weights == 1.0).squeeze())
 
 if __name__ == '__main__':
