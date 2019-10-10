@@ -109,18 +109,26 @@ class TestStarEncoderObjective(unittest.TestCase):
 
     def test_get_weights(self):
 
-        max_stars = 10
+        max_stars = 4
 
-        n_stars = torch.randint(0, max_stars, (100, ))
+        n_stars = torch.randint(0, max_stars + 1, (100, ))
 
         weights = objectives_lib.get_weights_from_n_stars(n_stars)
 
         assert len(weights) == len(n_stars)
 
         # get counts:
-        for i in range(max_stars + 1): 
+        counts = torch.zeros(max_stars + 1)
+        for i in range(max_stars + 1):
+            counts[i] = torch.sum(n_stars == i)
 
-        max_cat = int(torch.where(weights == 1.0).squeeze())
+        for i in range(max_stars + 1):
+            assert len(torch.unique(weights[n_stars == i])) == 1
+
+            x = torch.unique(weights[n_stars == i])
+            y = counts.max() / counts[i]
+
+            assert torch.abs(x - y) < 1e-6
 
 if __name__ == '__main__':
     unittest.main()

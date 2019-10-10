@@ -128,7 +128,7 @@ def get_weights_from_n_stars(n_stars):
 
     weights = torch.zeros(len(n_stars)).to(device)
     for i in range(max(n_stars) + 1):
-        weights[n_stars == i] = len(n_stars) / torch.sum(n_stars == i)
+        weights[n_stars == i] = len(n_stars) / torch.sum(n_stars == i).float()
 
     return weights / weights.min()
 
