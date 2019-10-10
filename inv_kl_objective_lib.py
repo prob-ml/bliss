@@ -125,14 +125,14 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
     return flux_log_probs_all
 
 def get_weights_from_n_stars(n_stars):
-    counts = torch.zeros(max(n_stars) + 1)
+    counts = torch.zeros(max(n_stars) + 1).to(device)
 
     for i in range(max(n_stars) + 1):
         counts[i] = torch.sum(n_stars == i)
 
-    weights = torch.zeros(len(n_stars))
+    weights = torch.zeros(len(n_stars)).to(device)
     for i in range(max(n_stars) + 1):
-        weights[n_stars == i] = len(n_stars) / counts[i] 
+        weights[n_stars == i] = len(n_stars) / counts[i]
 
     return weights / weights.min()
 
@@ -169,7 +169,7 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
 
     loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
 
-    weights = get_weights_from_n_stars(true_n_stars)
+    weights = torch.ones(len(true_n_stars)).to(device) # get_weights_from_n_stars(true_n_stars).detach()
     loss = (loss_vec * weights).mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm
