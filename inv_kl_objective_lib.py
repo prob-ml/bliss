@@ -161,7 +161,7 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
 
     # get losses
     locs_loss = -(_permute_losses_mat(locs_log_probs_all, perm) * is_on_array.float()).sum(dim = 1)
-    fluxes_loss = torch.zeros(locs_loss.shape).to(device)  # -(_permute_losses_mat(flux_log_probs_all, perm) * is_on_array.float()).sum(dim = 1)
+    fluxes_loss = -(_permute_losses_mat(flux_log_probs_all, perm) * is_on_array.float()).sum(dim = 1)
 
     # locs_loss = -(eval_logitnormal_logprob(true_locs, logit_loc_mean, logit_loc_log_var).sum(dim = 2) * is_on).sum(dim = 1)
     # fluxes_loss = -(eval_lognormal_logprob(true_fluxes, log_flux_mean, log_flux_log_var) * is_on).sum(dim = 1)
