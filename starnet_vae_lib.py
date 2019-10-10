@@ -275,7 +275,7 @@ class StarEncoder(nn.Module):
                                                   sort_locs = True)
 
             if (self.weights is None) or (images_full.shape[0] != self.batchsize):
-                self.weights = inv_kl_objective_lib.get_weights_from_n_stars(n_stars)
+                self.weights = get_weights_from_n_stars(n_stars)
 
         else:
             subimage_locs = None
