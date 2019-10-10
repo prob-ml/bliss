@@ -26,15 +26,13 @@ def get_one_hot_encoding_from_int(z, n_classes):
 
     return z_one_hot
 
-def get_categorical_loss(log_probs, true_n_stars):
+def get_categorical_loss(log_probs, one_hot_encoding):
     assert torch.all(log_probs <= 0)
-    assert log_probs.shape[0] == len(true_n_stars)
-    max_detections = log_probs.shape[1]
+    assert log_probs.shape[0] == one_hot_encoding.shape[0]
+    assert log_probs.shape[1] == one_hot_encoding.shape[1]
 
     return torch.sum(
-        -log_probs * \
-        get_one_hot_encoding_from_int(true_n_stars,
-                                        max_detections), dim = 1)
+        -log_probs * one_hot_encoding, dim = 1)
 
 # def eval_star_counter_loss(star_counter, train_loader,
 #                             optimizer = None, train = True):
@@ -130,16 +128,16 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
 #         weights[n_stars == i] = len(n_stars) / torch.sum(n_stars == i).float()
 #
 #     return weights / weights.min()
-def get_weights_vec(n_stars, weights):
+def get_weights_vec(one_hot_encoding, weights):
     # weights_vec= torch.zeros(len(n_stars)).to(device)
     # for i in range(max(n_stars) + 1):
     #     weights_vec[n_stars == i] = weights[i]
 
-    return torch.matmul(get_one_hot_encoding_from_int(n_stars, max(n_stars) + 1), weights)
+    return torch.matmul(one_hot_encoding, weights)
 
 def get_params_loss(logit_loc_mean, logit_loc_log_var, \
                         log_flux_mean, log_flux_log_var, log_probs,
-                        true_locs, true_fluxes, true_n_stars, weights_vec):
+                        true_locs, true_fluxes, true_n_stars, weights):
     # get losses for all estimates stars against all true stars
 
     is_on_array = get_is_on_from_n_stars(true_n_stars, true_fluxes.shape[1])
@@ -166,11 +164,12 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
     # locs_loss = -(eval_logitnormal_logprob(true_locs, logit_loc_mean, logit_loc_log_var).sum(dim = 2) * is_on).sum(dim = 1)
     # fluxes_loss = -(eval_lognormal_logprob(true_fluxes, log_flux_mean, log_flux_log_var) * is_on).sum(dim = 1)
 
-    counter_loss = get_categorical_loss(log_probs, true_n_stars)
+    one_hot_encoding = get_one_hot_encoding_from_int(true_n_stars, log_probs.shape[1])
+    counter_loss = get_categorical_loss(log_probs, one_hot_encoding)
 
     loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
 
-    # weights = get_weights_from_n_stars(true_n_stars).detach()
+    weights_vec = get_weights_vec(one_hot_encoding, weights)
     assert len(weights_vec) == len(loss_vec)
     loss = (loss_vec * weights_vec).mean()
 
@@ -200,11 +199,10 @@ def get_encoder_loss(star_encoder,
         logit_loc_log_var = torch.ones((logit_loc_log_var.shape))
         log_flux_log_var = torch.ones((log_flux_log_var.shape))
 
-    weights_vec = get_weights_vec(true_n_stars, star_encoder.weights)
     return get_params_loss(logit_loc_mean, logit_loc_log_var, \
                             log_flux_mean, log_flux_log_var, log_probs, \
                             subimage_locs, subimage_fluxes, true_n_stars,
-                            weights_vec)
+                            star_encoder.weights)
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False,
