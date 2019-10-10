@@ -131,9 +131,8 @@ def get_weights_from_n_stars(n_stars):
         counts[i] = torch.sum(n_stars == i)
 
     weights = torch.zeros(len(n_stars))
-
     for i in range(max(n_stars) + 1):
-        weights = weights + len(n_stars) / counts[i] * (n_stars == i).float()
+        weights[n_stars == i] = len(n_stars) / counts[i] 
 
     return weights / weights.min()
 
