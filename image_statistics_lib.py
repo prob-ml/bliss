@@ -59,6 +59,9 @@ def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
     for i in range(len(mag_vec) - 1):
         which_est = (est_mag > mag_vec[i]) & (est_mag < mag_vec[i + 1])
 
+        if torch.sum(which_est) == 0:
+            continue
+        
         tpr_vec[i] = \
             get_summary_stats(est_locs[which_est], true_locs, slen,
                             est_fluxes[which_est], true_fluxes)[1]
