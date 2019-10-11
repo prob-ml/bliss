@@ -134,18 +134,18 @@ class StarSimulator:
     def __init__(self, psf_fit_file, slen, sky_intensity):
         if '.txt' in psf_fit_file:
             # format of Portillos psfs
-            self.psf_full = np.loadtxt(psf_fit_file, skiprows = 1)
+            self.psf_og = np.loadtxt(psf_fit_file, skiprows = 1)
         else:
             # else it should be a .fits file
-            self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_fit_file)
+            self.psf_og = sdss_psf.psf_at_points(0, 0, psf_fit_file = psf_fit_file)
 
         self.slen = slen
 
         # get psf shape to match image shape
-        if (slen >= self.psf_full.shape[0]):
-            self.psf = torch.Tensor(_expand_psf(self.psf_full, slen)).to(device)
+        if (slen >= self.psf_og.shape[0]):
+            self.psf = torch.Tensor(_expand_psf(self.psf_og, slen)).to(device)
         else:
-            self.psf = torch.Tensor(_trim_psf(self.psf_full, slen)).to(device)
+            self.psf = torch.Tensor(_trim_psf(self.psf_og, slen)).to(device)
 
         # TODO:
         # should we then upsample??
