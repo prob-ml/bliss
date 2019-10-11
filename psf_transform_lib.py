@@ -29,9 +29,9 @@ class PsfLocalTransform(nn.Module):
 
         self.psf_slen = psf.shape[-1]
 
-        self.weight = nn.Parameter(
-            torch.randn(self.psf_slen ** 2, kernel_size ** 2)
-        )
+        init_weight = torch.zeros(self.psf_slen ** 2, kernel_size ** 2)
+        init_weight[:, 4] = 5
+        self.weight = nn.Parameter(init_weight)
 
     def tile_psf(self):
         self.psf_tiled = unfold(self.psf,
