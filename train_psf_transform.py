@@ -86,9 +86,9 @@ print('training')
 test_losses = np.zeros(n_epochs)
 
 for epoch in range(n_epochs):
-    t0 = time.time()
+	t0 = time.time()
 
-    optimizer.zero_grad()
+	optimizer.zero_grad()
 
 	# get params: these normally would be the variational parameters.
 	# using true parameters atm
@@ -97,7 +97,7 @@ for epoch in range(n_epochs):
 										trim_images = False)
 
 	# get loss
-    loss = get_psf_transform_loss(full_images, full_backgrounds,
+	loss = get_psf_transform_loss(full_images, full_backgrounds,
 	                            subimage_locs,
 	                            subimage_fluxes,
 	                            star_encoder.tile_coords,
@@ -106,21 +106,21 @@ for epoch in range(n_epochs):
 	                            simulator,
 	                            psf_transform)[1]
 
-    avg_loss = loss.mean()
+	avg_loss = loss.mean()
 
-    avg_loss.backward()
-    optimizer.step()
+	avg_loss.backward()
+	optimizer.step()
 
-    elapsed = time.time() - t0
-    print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-                    epoch, avg_loss, elapsed))
+	elapsed = time.time() - t0
+	print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+	                epoch, avg_loss, elapsed))
 
-    test_losses[epoch] = avg_loss
-    if (epoch % print_every) == 0:
+	test_losses[epoch] = avg_loss
+	if (epoch % print_every) == 0:
 
-        outfile = './fits/psf_transform-10112019'
-        print("writing the encoder parameters to " + outfile)
-        torch.save(psf_transform.state_dict(), outfile)
+	    outfile = './fits/psf_transform-10112019'
+	    print("writing the encoder parameters to " + outfile)
+	    torch.save(psf_transform.state_dict(), outfile)
 
 
 print('done')
