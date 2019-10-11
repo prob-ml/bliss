@@ -93,8 +93,8 @@ for epoch in range(n_epochs):
 	# get params: these normally would be the variational parameters.
 	# using true parameters atm
 	_, subimage_locs, subimage_fluxes, _, _ = \
-	        star_encoder.get_image_stamps(images_full, true_full_locs, true_full_fluxes,
-	                                      trim_images = False)
+		star_encoder.get_image_stamps(images_full, true_full_locs, true_full_fluxes,
+										trim_images = False)
 
 	# get loss
     loss = get_psf_transform_loss(full_images, full_backgrounds,
