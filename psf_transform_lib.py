@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch.nn.functional import unfold, softmax, pad
 
 import image_utils
-from kl_objective_lib import eval_normal_logprob
+from inv_kl_objective_lib import eval_normal_logprob
 
 class PsfLocalTransform(nn.Module):
     def __init__(self, psf,
@@ -70,7 +70,7 @@ def get_psf_transform_loss(full_images, full_backgrounds,
 
     if psf_transform is not None:
         simulator.psf = psf_transform.forward()
-        
+
     recon_means = simulator.draw_image_from_params(locs = locs_full_image,
                                                   fluxes = fluxes_full_image,
                                                   n_stars = torch.sum(fluxes_full_image > 0, dim = 1),
@@ -78,6 +78,9 @@ def get_psf_transform_loss(full_images, full_backgrounds,
 
 
     recon_means = recon_means - simulator.sky_intensity + full_backgrounds
-    recon_loss = - eval_normal_logprob(full_images, recon_means, torch.log(recon_means)).view(full_images.shape[0], -1).sum(1)
+    # TODO: choose the paddding 
+    recon_loss = - eval_normal_logprob(full_images[0, 0, 5:95, 5:95],
+                                        recon_means[0, 0, 5:95, 5:95],
+                                        torch.log(recon_means)[0, 0, 5:95, 5:95]).view(full_images.shape[0], -1).sum(1)
 
     return recon_means, recon_loss
