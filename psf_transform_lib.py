@@ -27,6 +27,8 @@ class PsfLocalTransform(nn.Module):
         self.psf = psf.unsqueeze(0).unsqueeze(0)
         self.tile_psf()
 
+        self.normalization = psf.sum()
+
         self.psf_slen = psf.shape[-1]
 
         init_weight = torch.zeros(self.psf_slen ** 2, kernel_size ** 2)
@@ -48,7 +50,7 @@ class PsfLocalTransform(nn.Module):
         # pad psf for full image
         l_pad = (self.image_slen - self.psf_slen) // 2
         psf_image = pad(psf_transformed, (l_pad, ) * 4)
-        return psf_image
+        return psf_image * self.normalization / psf_image.sum()
 
 
 def get_psf_transform_loss(full_images, full_backgrounds,
@@ -78,7 +80,7 @@ def get_psf_transform_loss(full_images, full_backgrounds,
 
 
     recon_means = recon_means - simulator.sky_intensity + full_backgrounds
-    # TODO: choose the paddding 
+    # TODO: choose the paddding
     recon_loss = - eval_normal_logprob(full_images[0, 0, 5:95, 5:95],
                                         recon_means[0, 0, 5:95, 5:95],
                                         torch.log(recon_means)[0, 0, 5:95, 5:95]).view(full_images.shape[0], -1).sum(1)
