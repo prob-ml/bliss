@@ -67,7 +67,7 @@ psf_transform = PsfLocalTransform(torch.Tensor(simulator.psf_og).to(device),
 									kernel_size = 3)
 psf_transform.to(device)
 # define optimizer
-learning_rate = 1e-3
+learning_rate = 0.5
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': psf_transform.parameters(),
@@ -75,7 +75,7 @@ optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 
-n_epochs = 101
+n_epochs = 51
 print_every = 10
 print('training')
 
