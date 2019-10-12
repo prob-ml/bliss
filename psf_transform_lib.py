@@ -58,7 +58,7 @@ def get_psf_transform_loss(full_images, full_backgrounds,
                             subimage_slen,
                             edge_padding,
                             simulator,
-                            psf_transform):
+                            psf_transform = None):
 
     locs_full_image, fluxes_full_image, _ = \
         image_utils.get_full_params_from_patch_params(subimage_locs, subimage_fluxes,
@@ -68,7 +68,9 @@ def get_psf_transform_loss(full_images, full_backgrounds,
                                                 edge_padding,
                                                 full_images.shape[0])
 
-    simulator.psf = psf_transform.forward()
+    if psf_transform is not None:
+        simulator.psf = psf_transform.forward()
+        
     recon_means = simulator.draw_image_from_params(locs = locs_full_image,
                                                   fluxes = fluxes_full_image,
                                                   n_stars = torch.sum(fluxes_full_image > 0, dim = 1),

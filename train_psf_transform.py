@@ -15,10 +15,6 @@ print('device: ', device)
 
 print('torch version: ', torch.__version__)
 
-# load PSF
-psf_fit_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
-print('psf file: \n', psf_fit_file)
-
 # set seed
 np.random.seed(4534)
 _ = torch.manual_seed(2534)
@@ -28,7 +24,7 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 					hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',)
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
 
 # image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
