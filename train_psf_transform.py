@@ -35,8 +35,8 @@ full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
 full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device)
 
 # true paramters
-true_full_locs = sdss_hubble_data.locs.unsqueeze(0)
-true_full_fluxes = sdss_hubble_data.fluxes.unsqueeze(0)
+true_full_locs = sdss_hubble_data.locs.unsqueeze(0).to(device)
+true_full_fluxes = sdss_hubble_data.fluxes.unsqueeze(0).to(device)
 
 # simulator
 simulator = simulated_datasets_lib.StarSimulator(
@@ -52,7 +52,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
                                            n_bands = 1,
                                            max_detections = 4)
 
-star_encoder.load_state_dict(torch.load('./fits/starnet_invKL_encoder-10072019',
+star_encoder.load_state_dict(torch.load('./fits/starnet_invKL_encoder-10092019-reweighted_samples',
                                map_location=lambda storage, loc: storage))
 star_encoder.to(device)
 
@@ -66,10 +66,10 @@ def set_bn_eval(m):
 star_encoder.apply(set_bn_eval)
 
 # define transform
-psf_transform = PsfLocalTransform(torch.Tensor(simulator.psf_og),
+psf_transform = PsfLocalTransform(torch.Tensor(simulator.psf_og).to(device),
 									simulator.slen,
 									kernel_size = 3)
-
+psf_transform.to(device)
 # define optimizer
 learning_rate = 1e-3
 weight_decay = 1e-5
@@ -93,11 +93,11 @@ for epoch in range(n_epochs):
 	# get params: these normally would be the variational parameters.
 	# using true parameters atm
 	_, subimage_locs, subimage_fluxes, _, _ = \
-		star_encoder.get_image_stamps(images_full, true_full_locs, true_full_fluxes,
+		star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
 										trim_images = False)
 
 	# get loss
-	loss = get_psf_transform_loss(full_images, full_backgrounds,
+	loss = get_psf_transform_loss(full_image, full_background,
 	                            subimage_locs,
 	                            subimage_fluxes,
 	                            star_encoder.tile_coords,
