@@ -51,15 +51,15 @@ def run_wake(star_encoder, psf_transform, simulator, optimzer,
                 n_epochs, out_filename, iteration):
 
     for epoch in range(n_epochs):
-    	t0 = time.time()
+        t0 = time.time()
 
-    	optimizer.zero_grad()
+        optimizer.zero_grad()
 
-    	# get params: these normally would be the variational parameters.
-    	# using true parameters atm
-    	# _, subimage_locs, subimage_fluxes, _, _ = \
-    	# 	star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
-    	# 									trim_images = False)
+        # get params: these normally would be the variational parameters.
+        # using true parameters atm
+        # _, subimage_locs, subimage_fluxes, _, _ = \
+        # 	star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
+        # 									trim_images = False)
 
         #####################
         # get params
@@ -84,21 +84,21 @@ def run_wake(star_encoder, psf_transform, simulator, optimzer,
 
         # sample locations
         subimage_locs_sampled = torch.sigmoid(sample_normal(logit_loc_mean, logit_loc_logvar)) * \
-                                                is_on_array.unsqueeze(2).float()
+                                    is_on_array.unsqueeze(2).float()
 
         # sample fluxes
         subimage_fluxes_sampled = torch.exp(sample_normal(log_flux_mean, log_flux_logvar)) * \
-                            is_on_array.float()
+                                    is_on_array.float()
 
         # get loss
         loss = get_psf_transform_loss(full_image, full_background,
-                                    subimage_locs_sampled,
-                                    subimage_fluxes_sampled,
-                                    star_encoder.tile_coords,
-                                    star_encoder.stamp_slen,
-                                    star_encoder.edge_padding,
-                                    simulator,
-                                    psf_transform)[1]
+                                        subimage_locs_sampled,
+                                        subimage_fluxes_sampled,
+                                        star_encoder.tile_coords,
+                                        star_encoder.stamp_slen,
+                                        star_encoder.edge_padding,
+                                        simulator,
+                                        psf_transform)[1]
 
         avg_loss = loss.mean()
 
@@ -107,7 +107,7 @@ def run_wake(star_encoder, psf_transform, simulator, optimzer,
 
         elapsed = time.time() - t0
         print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-                        epoch, avg_loss, elapsed))
+                    epoch, avg_loss, elapsed))
 
         if (epoch % print_every) == 0:
             outfile = out_filename + '-iter' + str(iteration)
