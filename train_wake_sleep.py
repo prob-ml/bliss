@@ -10,6 +10,8 @@ import starnet_vae_lib
 import inv_kl_objective_lib as inv_kl_lib
 from kl_objective_lib import sample_normal, sample_class_weights
 
+from wake_sleep_lib import run_wake, run_sleep
+
 import psf_transform_lib
 
 import time
@@ -81,146 +83,78 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
 
 star_encoder.to(device)
 
-# load init
-vae_file = './fits/starnet_invKL_encoder-10092019-reweighted_samples'
-print('loading vae from: ', vae_file)
-star_encoder.load_state_dict(torch.load(vae_file,
-                               map_location=lambda storage, loc: storage))
-
-
 # define psf transform
 psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(loader.dataset.simulator.psf_og).to(device),
 									data_params['slen'],
 									kernel_size = 3)
 psf_transform.to(device)
 
-def run_sleep(star_encoder, loader, optimizer, n_epochs, filename, iteration):
-    print_every = 10
-
-    test_losses = np.zeros((4, n_epochs // print_every + 1))
-
-    for epoch in range(n_epochs):
-        t0 = time.time()
-
-        avg_loss, counter_loss, locs_loss, fluxes_loss \
-            = inv_kl_lib.eval_star_encoder_loss(star_encoder, loader,
-                                                        optimizer, train = True)
-
-        elapsed = time.time() - t0
-        print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-                        epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
-
-        # draw fresh data
-        loader.dataset.set_params_and_images()
-
-        if (epoch % print_every) == 0:
-            _ = \
-                inv_kl_lib.eval_star_encoder_loss(star_encoder,
-                                                loader, train = True)
-
-            loader.dataset.set_params_and_images()
-            test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-                inv_kl_lib.eval_star_encoder_loss(star_encoder,
-                                                loader, train = False)
-
-            print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
-                test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
-
-            outfile = filename + '-iter' + str(iteration)
-            print("writing the encoder parameters to " + outfile)
-            torch.save(star_encoder.state_dict(), outfile)
-
-            test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-            np.savetxt(filename + '-test_losses-' + 'iter' + str(iteration),
-                        test_losses)
-
-def run_wake(star_encoder, psf_transform, simulator, optimzer,
-                n_epochs, filename, iteration):
-
-    for epoch in range(n_epochs):
-    	t0 = time.time()
-
-    	optimizer.zero_grad()
-
-    	# get params: these normally would be the variational parameters.
-    	# using true parameters atm
-    	# _, subimage_locs, subimage_fluxes, _, _ = \
-    	# 	star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
-    	# 									trim_images = False)
-
-        #####################
-        # get params
-        #####################
-        # the image stamps
-        image_stamps = star_encoder.get_image_stamps(full_image,
-                                                        true_locs = None,
-                                                        true_fluxes = None,
-                                                        trim_images = False)[0]
-        background_stamps = star_encoder.get_image_stamps(full_background,
-                                                        true_locs = None,
-                                                        true_fluxes = None,
-                                                        trim_images = False)[0]
-
-        # pass through NN
-        h = star_encoder._forward_to_last_hidden(image_stamps, background_stamps)
-        # get log probs
-        log_probs = star_encoder._get_logprobs_from_last_hidden_layer(h)
-
-        # sample number of stars
-        n_stars_sampled = sample_class_weights(torch.exp(log_probs))
-        is_on_array = simulated_datasets_lib.get_is_on_from_n_stars(n_stars_sampled, star_encoder.max_detections)
-
-        # get variational parameters
-        logit_loc_mean, logit_loc_logvar, \
-            log_flux_mean, log_flux_logvar = \
-                star_encoder._get_params_from_last_hidden_layer(h, n_stars)
-
-        # sample locations
-        subimage_locs_sampled = torch.sigmoid(sample_normal(logit_loc_mean, logit_loc_logvar)) * \
-                                                is_on_array.unsqueeze(2).float()
-
-        # sample fluxes
-        subimage_fluxes_sampled = torch.exp(sample_normal(log_flux_mean, log_flux_logvar)) * \
-                            is_on_array.float()
-
-    	# get loss
-    	loss = get_psf_transform_loss(full_image, full_background,
-    	                            subimage_locs_sampled,
-    	                            subimage_fluxes_sampled,
-    	                            star_encoder.tile_coords,
-    	                            star_encoder.stamp_slen,
-    	                            star_encoder.edge_padding,
-    	                            simulator,
-    	                            psf_transform)[1]
-
-    	avg_loss = loss.mean()
-
-    	avg_loss.backward()
-    	optimizer.step()
-
-    	elapsed = time.time() - t0
-    	print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-    	                epoch, avg_loss, elapsed))
-
-    	if (epoch % print_every) == 0:
-    	    outfile = filename + '-iter' + str(iteration)
-    	    print("writing the psf parameters to " + outfile)
-    	    torch.save(psf_transform.state_dict(), outfile)
 
 
-filename = './fits/'
+filename = './fits/wake_sleep-alt_m2-101320129'
 for iteration in range(0, 6):
+    print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
+    # load encoder
     if iteration == 0:
-        encoder_file =
+        encoder_file = './fits/starnet_invKL_encoder-10092019-reweighted_samples'
+    else:
+        encoder_file = filename + '-encoder-iter' + str(iteration)
 
-print('running sleep. Loading psf transform from')
-# load trained transform
-psf_transform.load_state_dict(torch.load('./fits/psf_transform-real_params-10112019',
-                                         map_location=lambda storage, loc: storage))
-loader.dataset.simulator.psf = psf_transform.forward().detach()
-run_sleep(star_encoder,
-            loader,
-            vae_optimizer,
-            n_epochs = 101,
-            filename = 'starnet_invKL_encoder-trained_psf-10122019',
-            iteration = 0)
+        psf_transform_file = filename + 'psf_transform' + '-iter' + str(iteration - 1)
+        print('loading psf_transform from: ', psf_transform_file)
+        psf_transform.load_state_dict(torch.load(psf_transform_file,
+                                    map_location=lambda storage, loc: storage))
+        psf_transform.to(device)
+
+    print('loading encoder from: ', encoder_file)
+    star_encoder.load_state_dict(torch.load(encoder_file,
+                                   map_location=lambda storage, loc: storage)).to(device)
+
+    # get optimizer
+    learning_rate = 0.5
+    weight_decay = 1e-5
+    psf_optimizer = optim.Adam([
+                        {'params': psf_transform.parameters(),
+                        'lr': learning_rate}],
+                        weight_decay = weight_decay)
+
+    run_wake(star_encoder.detach(), psf_transform,
+                    simulator = loader.dataset.simulator,
+                    optimzer = psf_optimizer,
+                    n_epochs = 100,
+                    out_filename = filename + 'psf_transform',
+                    iteration = iteration)
+
+    print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
+
+    # load encoder
+    if iteration == 0:
+        encoder_file = './fits/starnet_invKL_encoder-10092019-reweighted_samples'
+    else:
+        encoder_file = filename + '-encoder-iter' + str(iteration)
+    print('loading encoder from: ', encoder_file)
+    star_encoder.load_state_dict(torch.load(encoder_file,
+                                   map_location=lambda storage, loc: storage)).to(device)
+
+    psf_transform_file = filename + 'psf_transform' + '-iter' + str(iteration)
+    print('loading psf_transform from: ', psf_transform_file)
+
+    # load trained transform
+    psf_transform.load_state_dict(torch.load(psf_transform_file,
+                                map_location=lambda storage, loc: storage))
+    loader.dataset.simulator.psf = psf_transform.forward().detach()
+
+    # load optimizer
+    learning_rate = 5e-4
+    weight_decay = 1e-5
+    vae_optimizer = optim.Adam([
+                        {'params': star_encoder.parameters(),
+                        'lr': learning_rate}],
+                        weight_decay = weight_decay)
+
+    run_sleep(star_encoder,
+                loader,
+                vae_optimizer,
+                n_epochs = 21,
+                out_filename = filename + '-encoder',
+                iteration = iteration + 1)
