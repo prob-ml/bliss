@@ -8,6 +8,7 @@ import sdss_dataset_lib
 import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as inv_kl_lib
+from kl_objective_lib import sample_normal, sample_class_weights
 
 import psf_transform_lib
 
@@ -143,14 +144,49 @@ def run_wake(star_encoder, psf_transform, simulator, optimzer,
 
     	# get params: these normally would be the variational parameters.
     	# using true parameters atm
-    	_, subimage_locs, subimage_fluxes, _, _ = \
-    		star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
-    										trim_images = False)
+    	# _, subimage_locs, subimage_fluxes, _, _ = \
+    	# 	star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
+    	# 									trim_images = False)
+
+        #####################
+        # get params
+        #####################
+        # the image stamps
+        image_stamps = star_encoder.get_image_stamps(full_image,
+                                                        true_locs = None,
+                                                        true_fluxes = None,
+                                                        trim_images = False)[0]
+        background_stamps = star_encoder.get_image_stamps(full_background,
+                                                        true_locs = None,
+                                                        true_fluxes = None,
+                                                        trim_images = False)[0]
+
+        # pass through NN
+        h = star_encoder._forward_to_last_hidden(image_stamps, background_stamps)
+        # get log probs
+        log_probs = star_encoder._get_logprobs_from_last_hidden_layer(h)
+
+        # sample number of stars
+        n_stars_sampled = sample_class_weights(torch.exp(log_probs))
+        is_on_array = simulated_datasets_lib.get_is_on_from_n_stars(n_stars_sampled, star_encoder.max_detections)
+
+        # get variational parameters
+        logit_loc_mean, logit_loc_logvar, \
+            log_flux_mean, log_flux_logvar = \
+                star_encoder._get_params_from_last_hidden_layer(h, n_stars)
+
+        # sample locations
+        subimage_locs_sampled = torch.sigmoid(sample_normal(logit_loc_mean, logit_loc_logvar)) * \
+                                                is_on_array.unsqueeze(2).float()
+
+        # sample fluxes
+        subimage_fluxes_sampled = torch.exp(sample_normal(log_flux_mean, log_flux_logvar)) * \
+                            is_on_array.float()
 
     	# get loss
     	loss = get_psf_transform_loss(full_image, full_background,
-    	                            subimage_locs,
-    	                            subimage_fluxes,
+    	                            subimage_locs_sampled,
+    	                            subimage_fluxes_sampled,
     	                            star_encoder.tile_coords,
     	                            star_encoder.stamp_slen,
     	                            star_encoder.edge_padding,
@@ -172,22 +208,16 @@ def run_wake(star_encoder, psf_transform, simulator, optimzer,
     	    torch.save(psf_transform.state_dict(), outfile)
 
 
-# define optimizer
-learning_rate = 5e-4
-weight_decay = 1e-5
-vae_optimizer = optim.Adam([
-                    {'params': star_encoder.parameters(),
-                    'lr': learning_rate}],
-                    weight_decay = weight_decay)
-
-
+filename = './fits/'
+for iteration in range(0, 6):
+    if iteration == 0:
+        encoder_file =
 
 print('running sleep. Loading psf transform from')
 # load trained transform
 psf_transform.load_state_dict(torch.load('../fits/psf_transform-real_params-10112019',
                                          map_location=lambda storage, loc: storage))
 loader.dataset.simulator.psf = psf_transform.forward()
-print(running sleep)
 run_sleep(star_encoder,
             loader,
             vae_optimizer,
