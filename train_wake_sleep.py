@@ -111,7 +111,7 @@ for iteration in range(0, 6):
                                    map_location=lambda storage, loc: storage)); star_encoder.to(device); star_encoder.eval();
 
     # get optimizer
-    learning_rate = 1e-4
+    learning_rate = 0.5
     weight_decay = 1e-5
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
@@ -121,7 +121,7 @@ for iteration in range(0, 6):
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     simulator = loader.dataset.simulator,
                     optimizer = psf_optimizer,
-                    n_epochs = 100,
+                    n_epochs = 41,
                     out_filename = filename + 'psf_transform',
                     iteration = iteration)
 
