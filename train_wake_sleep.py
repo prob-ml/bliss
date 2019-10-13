@@ -90,7 +90,7 @@ star_encoder.load_state_dict(torch.load(vae_file,
 
 # define psf transform
 psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(loader.dataset.simulator.psf_og).to(device),
-									simulator.slen,
+									data_params['slen'],
 									kernel_size = 3)
 psf_transform.to(device)
 
@@ -215,9 +215,9 @@ for iteration in range(0, 6):
 
 print('running sleep. Loading psf transform from')
 # load trained transform
-psf_transform.load_state_dict(torch.load('../fits/psf_transform-real_params-10112019',
+psf_transform.load_state_dict(torch.load('./fits/psf_transform-real_params-10112019',
                                          map_location=lambda storage, loc: storage))
-loader.dataset.simulator.psf = psf_transform.forward()
+loader.dataset.simulator.psf = psf_transform.forward().detach()
 run_sleep(star_encoder,
             loader,
             vae_optimizer,
