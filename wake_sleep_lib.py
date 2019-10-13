@@ -90,26 +90,26 @@ def run_wake(star_encoder, psf_transform, simulator, optimzer,
         subimage_fluxes_sampled = torch.exp(sample_normal(log_flux_mean, log_flux_logvar)) * \
                             is_on_array.float()
 
-    	# get loss
-    	loss = get_psf_transform_loss(full_image, full_background,
-    	                            subimage_locs_sampled,
-    	                            subimage_fluxes_sampled,
-    	                            star_encoder.tile_coords,
-    	                            star_encoder.stamp_slen,
-    	                            star_encoder.edge_padding,
-    	                            simulator,
-    	                            psf_transform)[1]
+        # get loss
+        loss = get_psf_transform_loss(full_image, full_background,
+                                    subimage_locs_sampled,
+                                    subimage_fluxes_sampled,
+                                    star_encoder.tile_coords,
+                                    star_encoder.stamp_slen,
+                                    star_encoder.edge_padding,
+                                    simulator,
+                                    psf_transform)[1]
 
-    	avg_loss = loss.mean()
+        avg_loss = loss.mean()
 
-    	avg_loss.backward()
-    	optimizer.step()
+        avg_loss.backward()
+        optimizer.step()
 
-    	elapsed = time.time() - t0
-    	print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-    	                epoch, avg_loss, elapsed))
+        elapsed = time.time() - t0
+        print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                        epoch, avg_loss, elapsed))
 
-    	if (epoch % print_every) == 0:
-    	    outfile = out_filename + '-iter' + str(iteration)
-    	    print("writing the psf parameters to " + outfile)
-    	    torch.save(psf_transform.state_dict(), outfile)
+        if (epoch % print_every) == 0:
+            outfile = out_filename + '-iter' + str(iteration)
+            print("writing the psf parameters to " + outfile)
+            torch.save(psf_transform.state_dict(), outfile)
