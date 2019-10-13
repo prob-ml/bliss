@@ -108,7 +108,7 @@ for iteration in range(0, 6):
 
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage)).to(device)
+                                   map_location=lambda storage, loc: storage)); star_encoder.to(device)
 
     # get optimizer
     learning_rate = 0.5
@@ -118,9 +118,9 @@ for iteration in range(0, 6):
                         'lr': learning_rate}],
                         weight_decay = weight_decay)
 
-    run_wake(star_encoder.detach(), psf_transform,
+    run_wake(full_image, full_background, star_encoder, psf_transform,
                     simulator = loader.dataset.simulator,
-                    optimzer = psf_optimizer,
+                    optimizer = psf_optimizer,
                     n_epochs = 100,
                     out_filename = filename + 'psf_transform',
                     iteration = iteration)
@@ -134,14 +134,14 @@ for iteration in range(0, 6):
         encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage)).to(device)
+                                   map_location=lambda storage, loc: storage)); star_encoder.to(device)
 
     psf_transform_file = filename + 'psf_transform' + '-iter' + str(iteration)
     print('loading psf_transform from: ', psf_transform_file)
 
     # load trained transform
     psf_transform.load_state_dict(torch.load(psf_transform_file,
-                                map_location=lambda storage, loc: storage))
+                                map_location=lambda storage, loc: storage)); psf_transform.to(device)
     loader.dataset.simulator.psf = psf_transform.forward().detach()
 
     # load optimizer
