@@ -1,5 +1,7 @@
 import torch
 
+import numpy as np
+
 import simulated_datasets_lib
 import inv_kl_objective_lib as inv_kl_lib
 from kl_objective_lib import sample_normal, sample_class_weights
