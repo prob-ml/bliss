@@ -65,14 +65,8 @@ def run_wake(star_encoder, psf_transform, simulator, optimzer,
         # get params
         #####################
         # the image stamps
-        image_stamps = star_encoder.get_image_stamps(full_image,
-                                                        true_locs = None,
-                                                        true_fluxes = None,
-                                                        trim_images = False)[0]
-        background_stamps = star_encoder.get_image_stamps(full_background,
-                                                        true_locs = None,
-                                                        true_fluxes = None,
-                                                        trim_images = False)[0]
+        image_stamps = star_encoder.get_image_stamps(full_image, true_locs = None, true_fluxes = None, trim_images = False)[0]
+        background_stamps = star_encoder.get_image_stamps(full_background, true_locs = None, true_fluxes = None, trim_images = False)[0]
 
         # pass through NN
         h = star_encoder._forward_to_last_hidden(image_stamps, background_stamps)
