@@ -76,7 +76,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, simulator
         log_probs = star_encoder._get_logprobs_from_last_hidden_layer(h)
 
         # sample number of stars
-        n_stars_sampled = sample_class_weights(torch.exp(log_probs))
+        n_stars_sampled = torch.argmax(log_probs, dim = 1) # sample_class_weights(torch.exp(log_probs))
         is_on_array = simulated_datasets_lib.get_is_on_from_n_stars(n_stars_sampled, star_encoder.max_detections)
 
         # get variational parameters
@@ -85,12 +85,11 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, simulator
                 star_encoder._get_params_from_last_hidden_layer(h, n_stars_sampled)
 
         # sample locations
-        subimage_locs_sampled = torch.sigmoid(sample_normal(logit_loc_mean, logit_loc_logvar)) * \
+        subimage_locs_sampled = torch.sigmoid(logit_loc_mean) * \
                                     is_on_array.unsqueeze(2).float()
 
         # sample fluxes
-        subimage_fluxes_sampled = torch.exp(sample_normal(log_flux_mean, log_flux_logvar)) * \
-                                    is_on_array.float()
+        subimage_fluxes_sampled = torch.exp(log_flux_mean) * is_on_array.float()
 
         # get loss
         loss = get_psf_transform_loss(full_image, full_background,

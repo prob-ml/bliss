@@ -108,10 +108,10 @@ for iteration in range(0, 6):
 
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage)); star_encoder.to(device)
+                                   map_location=lambda storage, loc: storage)); star_encoder.to(device); star_encoder.eval(); 
 
     # get optimizer
-    learning_rate = 0.5
+    learning_rate = 1e-4
     weight_decay = 1e-5
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
