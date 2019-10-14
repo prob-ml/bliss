@@ -32,8 +32,7 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 					hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-					x0 = 650, x1 = 120)
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -91,7 +90,7 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-alt_m2-101320129'
+filename = './fits/wake_sleep-portm2-101420129'
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
@@ -100,7 +99,7 @@ for iteration in range(0, 6):
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
 
-        psf_transform_file = filename + 'psf_transform' + '-iter' + str(iteration - 1)
+        psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
         print('loading psf_transform from: ', psf_transform_file)
         psf_transform.load_state_dict(torch.load(psf_transform_file,
                                     map_location=lambda storage, loc: storage))
@@ -122,7 +121,7 @@ for iteration in range(0, 6):
                     simulator = loader.dataset.simulator,
                     optimizer = psf_optimizer,
                     n_epochs = 41,
-                    out_filename = filename + 'psf_transform',
+                    out_filename = filename + '-psf_transform',
                     iteration = iteration)
 
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
@@ -136,7 +135,7 @@ for iteration in range(0, 6):
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage)); star_encoder.to(device)
 
-    psf_transform_file = filename + 'psf_transform' + '-iter' + str(iteration)
+    psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
     print('loading psf_transform from: ', psf_transform_file)
 
     # load trained transform

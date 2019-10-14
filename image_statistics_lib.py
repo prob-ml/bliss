@@ -20,11 +20,11 @@ def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes):
 
     locs_error = get_locs_error(est_locs * (slen - 1), true_locs * (slen - 1))
 
-    completeness = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 1).float().mean()
+    completeness_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 1).float()
 
-    tpr = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 0).float().mean()
+    tpr_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 0).float()
 
-    return completeness, tpr
+    return completeness_bool.mean(), tpr_bool.mean(), completeness_bool, tpr_bool
 
 def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
     true_mag = torch.log10(true_fluxes)
@@ -61,7 +61,7 @@ def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
 
         if torch.sum(which_est) == 0:
             continue
-        
+
         tpr_vec[i] = \
             get_summary_stats(est_locs[which_est], true_locs, slen,
                             est_fluxes[which_est], true_fluxes)[1]
