@@ -24,8 +24,7 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 					hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-					x0 = 650, x1 = 120)
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
 
 # image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -114,9 +113,9 @@ for epoch in range(n_epochs):
 
 	test_losses[epoch] = avg_loss
 	if (epoch % print_every) == 0:
-
-	    outfile = './fits/psf_transform-real_params-10112019'
-	    print("writing the encoder parameters to " + outfile)
+		
+	    outfile = './fits/psf_transform-portm2-real_params-10114019'
+	    print("writing the psf transform parameters to " + outfile)
 	    torch.save(psf_transform.state_dict(), outfile)
 
 
