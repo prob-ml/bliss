@@ -108,9 +108,9 @@ def _get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array
     batchsize = flux_log_probs_all.shape[0]
 
     locs_loss_all_perm = torch.zeros(batchsize,
-                                        math.factorial(max_detections))
+                                        math.factorial(max_detections)).to(device)
     fluxes_loss_all_perm = torch.zeros(batchsize,
-                                        math.factorial(max_detections))
+                                        math.factorial(max_detections)).to(device)
     i = 0
     for perm in permutations(range(max_detections)):
         locs_loss_all_perm[:, i] = \
