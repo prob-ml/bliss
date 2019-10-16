@@ -241,7 +241,8 @@ class StarEncoder(nn.Module):
 
             self.prob_indx[n_detections] = indx4
 
-    def get_image_stamps(self, images_full, locs, fluxes, trim_images = False):
+    def get_image_stamps(self, images_full, locs, fluxes,
+                            trim_images = False, clip_max_stars = False):
         assert len(images_full.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
         assert images_full.shape[1] == self.n_bands
         assert images_full.shape[2] == self.full_slen
@@ -275,6 +276,12 @@ class StarEncoder(nn.Module):
 
             if (self.weights is None) or (images_full.shape[0] != self.batchsize):
                 self.weights = get_weights(n_stars.clamp(max = self.max_detections))
+
+            if clip_max_stars:
+                n_stars = n_stars.clamp(max = self.max_detections)
+                subimage_locs = subimage_locs[:, 0:self.max_detections, :]
+                subimage_fluxes = subimage_fluxes[:, 0:self.max_detections]
+                is_on_array = is_on_array[:, 0:self.max_detections]
 
         else:
             subimage_locs = None
