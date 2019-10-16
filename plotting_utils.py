@@ -19,7 +19,8 @@ def plot_image(fig, image,
     slen = image.shape[-1]
 
     if diverging_cmap:
-        im = fig.matshow(image, vmin = vmin, vmax = vmax,
+        vmax = image.abs().max()
+        im = fig.matshow(image, vmin = -vmax, vmax = vmax,
                             cmap=plt.get_cmap('bwr'))
     else:
         im = fig.matshow(image, vmin = vmin, vmax = vmax)

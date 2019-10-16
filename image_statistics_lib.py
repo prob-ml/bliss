@@ -20,11 +20,11 @@ def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes):
 
     locs_error = get_locs_error(est_locs * (slen - 1), true_locs * (slen - 1))
 
-    completeness = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 1).float().mean()
+    completeness_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 1).float()
 
-    tpr = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 0).float().mean()
+    tpr_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 0).float()
 
-    return completeness, tpr
+    return completeness_bool.mean(), tpr_bool.mean(), completeness_bool, tpr_bool
 
 def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
     true_mag = torch.log10(true_fluxes)
@@ -37,14 +37,17 @@ def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
 
     completeness_vec = np.zeros(len(mag_vec) - 1)
 
+    counts_vec = np.zeros(len(mag_vec) - 1)
+
     for i in range(len(mag_vec) - 1):
         which_true = (true_mag > mag_vec[i]) & (true_mag < mag_vec[i + 1])
+        counts_vec[i] = torch.sum(which_true)
 
         completeness_vec[i] = \
             get_summary_stats(est_locs, true_locs[which_true], slen,
                             est_fluxes, true_fluxes[which_true])[0]
 
-    return completeness_vec, mag_vec
+    return completeness_vec, mag_vec, counts_vec
 
 def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
     est_mag = torch.log10(est_fluxes)
@@ -55,12 +58,18 @@ def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
     mag_vec = np.arange(min_mag, max_mag + 0.1, 0.5)
 
     tpr_vec = np.zeros(len(mag_vec) - 1)
+    counts_vec = np.zeros(len(mag_vec) - 1)
 
     for i in range(len(mag_vec) - 1):
         which_est = (est_mag > mag_vec[i]) & (est_mag < mag_vec[i + 1])
+
+        counts_vec[i] = torch.sum(which_est)
+
+        if torch.sum(which_est) == 0:
+            continue
 
         tpr_vec[i] = \
             get_summary_stats(est_locs[which_est], true_locs, slen,
                             est_fluxes[which_est], true_fluxes)[1]
 
-    return tpr_vec, mag_vec
+    return tpr_vec, mag_vec, counts_vec
