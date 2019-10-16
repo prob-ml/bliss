@@ -33,11 +33,6 @@ torch.backends.cudnn.benchmark = False
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
-data_params['slen'] = 101
-data_params['min_stars'] = 2000
-data_params['max_stars'] = 2000
-data_params['alpha'] = 0.5
-
 print(data_params)
 
 # draw data
@@ -70,7 +65,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            step = 2,
                                            edge_padding = 3,
                                            n_bands = 1,
-                                           max_detections = 4)
+                                           max_detections = 2)
 
 star_encoder.to(device)
 
@@ -126,12 +121,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/testing'
+        outfile = './fits/starnet-10162019-new_priors'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/test_losses-testing', test_losses)
+        np.savetxt('./fits/test_losses-starnet-10162019-new_priors', test_losses)
 
 
 print('done')

@@ -143,7 +143,6 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-
     locs_log_probs_all = \
         get_locs_logprob_all_combs(true_locs,
                                     logit_loc_mean,
@@ -158,15 +157,6 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
     # TODO:
     perm = None
 
-    # get permutation
-    # perm = run_batch_hungarian_alg_parallel(locs_log_probs_all, is_on_array.type(torch.bool)).to(device)
-    #
-    # # get losses
-    # locs_loss = -(_permute_losses_mat(locs_log_probs_all, perm) * is_on_array.float()).sum(dim = 1)
-    # fluxes_loss = -(_permute_losses_mat(flux_log_probs_all, perm) * is_on_array.float()).sum(dim = 1)
-
-    # locs_loss = -(eval_logitnormal_logprob(true_locs, logit_loc_mean, logit_loc_log_var).sum(dim = 2) * is_on).sum(dim = 1)
-    # fluxes_loss = -(eval_lognormal_logprob(true_fluxes, log_flux_mean, log_flux_log_var) * is_on).sum(dim = 1)
 
     true_n_stars = true_is_on_array.sum(1)
     one_hot_encoding = get_one_hot_encoding_from_int(true_n_stars, log_probs.shape[1])
