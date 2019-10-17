@@ -30,9 +30,7 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # get sdss data
-sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
-					hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
+sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(x0 = 650, x1 = 120)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -90,12 +88,12 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-portm2-101420129'
+filename = './fits/wake_sleep-altm2-101720129'
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
     if iteration == 0:
-        encoder_file = './fits/starnet_invKL_encoder-10092019-reweighted_samples'
+        encoder_file = './fits/starnet-10172019-no_reweighting'
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
 
@@ -128,7 +126,7 @@ for iteration in range(0, 6):
 
     # load encoder
     if iteration == 0:
-        encoder_file = './fits/starnet_invKL_encoder-10092019-reweighted_samples'
+        encoder_file = './fits/starnet-10172019-no_reweighting'
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
