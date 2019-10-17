@@ -41,7 +41,7 @@ class StarEncoder(nn.Module):
         # TODO: make this variable for mean stars
         mean_stars_per_patch = 0.4
         poisson_dstr = poisson.Poisson(rate = mean_stars_per_patch)
-        inv_weights = torch.exp(poisson_dstr.log_prob(torch.arange(max_detections + 1)))
+        inv_weights = torch.exp(poisson_dstr.log_prob(torch.arange(max_detections + 1).float()))
 
         self.weights = (inv_weights.max() / inv_weights).to(device)
 
