@@ -81,6 +81,8 @@ print('training')
 
 test_losses = np.zeros(n_epochs)
 
+cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1])
+
 for epoch in range(n_epochs):
 	t0 = time.time()
 
@@ -88,19 +90,18 @@ for epoch in range(n_epochs):
 
 	# get params: these normally would be the variational parameters.
 	# using true parameters atm
-	_, subimage_locs, subimage_fluxes, _, _ = \
-		star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
-										trim_images = False)
+	locs = true_full_locs
+	fluxes = true_full_fluxes
+	n_stars = torch.sum(true_full_fluxes, dim = 1)
+
+	psf_trained = psf_transform.forward()
 
 	# get loss
-	loss = get_psf_transform_loss(full_image, full_background,
-	                            subimage_locs,
-	                            subimage_fluxes,
-	                            star_encoder.tile_coords,
-	                            star_encoder.stamp_slen,
-	                            star_encoder.edge_padding,
-	                            simulator,
-	                            psf_transform)[1]
+	loss = get_psf_transform_loss(full_images, full_backgrounds,
+	                    locs, fluxes, n_stars,
+						psf_trained,
+	                    pad = 5,
+	                    grid = cached_grid)[1]
 
 	avg_loss = loss.mean()
 
@@ -112,9 +113,10 @@ for epoch in range(n_epochs):
 	                epoch, avg_loss, elapsed))
 
 	test_losses[epoch] = avg_loss
+
 	if (epoch % print_every) == 0:
-		
-	    outfile = './fits/psf_transform-portm2-real_params-10114019'
+
+	    outfile = './fits/psf_transform-portm2-real_params-10182019'
 	    print("writing the psf transform parameters to " + outfile)
 	    torch.save(psf_transform.state_dict(), outfile)
 
