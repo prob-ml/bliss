@@ -5,7 +5,7 @@ from torch.nn.functional import unfold, softmax, pad
 
 import image_utils
 from inv_kl_objective_lib import eval_normal_logprob
-from full_backgrounds import _get_mgrid
+from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
 
 class PsfLocalTransform(nn.Module):
     def __init__(self, psf,
@@ -58,9 +58,9 @@ def get_psf_loss(full_images, full_backgrounds,
                     locs, fluxes, n_stars, psf,
                     pad = 5,
                     grid = None):
-                    
+
     assert len(full_images.shape) == 4
-    assert torch.all(full_images.shape == full_backgrounds.shape)
+    assert full_images.shape == full_backgrounds.shape
 
     assert len(locs) == len(fluxes)
     assert len(fluxes) == len(n_stars)
@@ -69,7 +69,7 @@ def get_psf_loss(full_images, full_backgrounds,
 
     if grid is None:
         grid = _get_mgrid(slen)
-
+    
     recon_means = \
         plot_multiple_stars(slen, locs, n_stars, fluxes, psf, grid) + \
             full_backgrounds
@@ -77,7 +77,7 @@ def get_psf_loss(full_images, full_backgrounds,
     _full_image = full_images[0, 0, pad:(slen - pad), pad:(slen - pad)]
     _recon_means = recon_means[0, 0, pad:(slen - pad), pad:(slen - pad)]
     recon_loss = - eval_normal_logprob(_full_image,
-                _recon_means
+                _recon_means,
                 torch.log(_recon_means)).view(full_images.shape[0], -1).sum(1)
 
     return recon_means, recon_loss

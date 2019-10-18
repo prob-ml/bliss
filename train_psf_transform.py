@@ -6,7 +6,7 @@ import torch.optim as optim
 import sdss_dataset_lib
 import simulated_datasets_lib
 import starnet_vae_lib
-from psf_transform_lib import PsfLocalTransform, get_psf_transform_loss
+from psf_transform_lib import PsfLocalTransform, get_psf_loss
 
 import time
 
@@ -48,9 +48,9 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
                                            n_bands = 1,
                                            max_detections = 4)
 
-star_encoder.load_state_dict(torch.load('./fits/starnet_invKL_encoder-10092019-reweighted_samples',
-                               map_location=lambda storage, loc: storage))
-star_encoder.to(device)
+# star_encoder.load_state_dict(torch.load('./fits/starnet_invKL_encoder-10092019-reweighted_samples',
+#                                map_location=lambda storage, loc: storage))
+# star_encoder.to(device)
 
 # We want to set batchnorm to eval
 # https://discuss.pytorch.org/t/freeze-batchnorm-layer-lead-to-nan/8385
@@ -92,12 +92,12 @@ for epoch in range(n_epochs):
 	# using true parameters atm
 	locs = true_full_locs
 	fluxes = true_full_fluxes
-	n_stars = torch.sum(true_full_fluxes, dim = 1)
+	n_stars = torch.sum(true_full_fluxes > 0, dim = 1).type(torch.LongTensor)
 
 	psf_trained = psf_transform.forward()
 
 	# get loss
-	loss = get_psf_transform_loss(full_images, full_backgrounds,
+	loss = get_psf_loss(full_image, full_background,
 	                    locs, fluxes, n_stars,
 						psf_trained,
 	                    pad = 5,
