@@ -30,7 +30,9 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # get sdss data
-sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(x0 = 650, x1 = 120)
+sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
+                                       hubble_cat_file = './hubble_data/NCG7089/' + \
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt', x0 = 650, x1 = 120)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -76,7 +78,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            step = 2,
                                            edge_padding = 3,
                                            n_bands = 1,
-                                           max_detections = 4)
+                                           max_detections = 2)
 
 star_encoder.to(device)
 
