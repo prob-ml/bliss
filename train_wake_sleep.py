@@ -32,24 +32,16 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt', x0 = 650, x1 = 120)
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
+                                        x0 = 650, x1 = 120)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
 full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device)
 
-# true parameters
-true_full_locs = sdss_hubble_data.locs.unsqueeze(0).to(device)
-true_full_fluxes = sdss_hubble_data.fluxes.unsqueeze(0).to(device)
-
 # simulated data parameters
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
-
-data_params['slen'] = full_image.shape[-1]
-data_params['min_stars'] = 2000
-data_params['max_stars'] = 2000
-data_params['alpha'] = 0.5
 
 print(data_params)
 
@@ -83,7 +75,9 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
 star_encoder.to(device)
 
 # define psf transform
-psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(loader.dataset.simulator.psf_og).to(device),
+from copy import deepcopy
+psf_og = deepcopy(loader.dataset.simulator.psf_og)
+psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(device),
 									data_params['slen'],
 									kernel_size = 3)
 psf_transform.to(device)
@@ -99,6 +93,7 @@ for iteration in range(0, 6):
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
 
+        # load psf transform
         psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
         print('loading psf_transform from: ', psf_transform_file)
         psf_transform.load_state_dict(torch.load(psf_transform_file,
@@ -107,7 +102,9 @@ for iteration in range(0, 6):
 
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage)); star_encoder.to(device); star_encoder.eval();
+                                   map_location=lambda storage, loc: storage));
+    star_encoder.to(device);
+    star_encoder.eval();
 
     # get optimizer
     learning_rate = 0.5
@@ -118,7 +115,6 @@ for iteration in range(0, 6):
                         weight_decay = weight_decay)
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
-                    simulator = loader.dataset.simulator,
                     optimizer = psf_optimizer,
                     n_epochs = 41,
                     out_filename = filename + '-psf_transform',
@@ -135,10 +131,9 @@ for iteration in range(0, 6):
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage)); star_encoder.to(device)
 
+    # load trained transform
     psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
     print('loading psf_transform from: ', psf_transform_file)
-
-    # load trained transform
     psf_transform.load_state_dict(torch.load(psf_transform_file,
                                 map_location=lambda storage, loc: storage)); psf_transform.to(device)
     loader.dataset.simulator.psf = psf_transform.forward().detach()

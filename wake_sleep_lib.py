@@ -20,6 +20,9 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
     for epoch in range(n_epochs):
         t0 = time.time()
 
+        # draw fresh data
+        loader.dataset.set_params_and_images()
+
         avg_loss, counter_loss, locs_loss, fluxes_loss \
             = inv_kl_lib.eval_star_encoder_loss(star_encoder, loader,
                                                 optimizer, train = True)
@@ -28,10 +31,8 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
         print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                         epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
 
-        # draw fresh data
-        loader.dataset.set_params_and_images()
-
         if (epoch % print_every) == 0:
+            loader.dataset.set_params_and_images()
             _ = inv_kl_lib.eval_star_encoder_loss(star_encoder,
                                                 loader, train = True)
 
@@ -51,23 +52,15 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
             np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
                         test_losses)
 
-def run_wake(full_image, full_background, star_encoder, psf_transform, simulator, optimizer,
+def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
                 n_epochs, out_filename, iteration):
 
+    test_losses = np.zeros(n_epochs)
     for epoch in range(n_epochs):
         t0 = time.time(); print_every = 10
 
         optimizer.zero_grad()
 
-        # get params: these normally would be the variational parameters.
-        # using true parameters atm
-        # _, subimage_locs, subimage_fluxes, _, _ = \
-        # 	star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
-        # 									trim_images = False)
-
-        #####################
-        # get params
-        #####################
         # the image stamps
         image_stamps = star_encoder.get_image_stamps(full_image, locs = None, fluxes = None, trim_images = False)[0]
         background_stamps = star_encoder.get_image_stamps(full_background, locs = None, fluxes = None, trim_images = False)[0]
@@ -93,15 +86,21 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, simulator
         # sample fluxes
         subimage_fluxes_sampled = torch.exp(log_flux_mean) * is_on_array.float()
 
+        # get parameters on full image
+        map_locs_full_image, map_fluxes_full_image, n_stars_full = \
+            image_utils.get_full_params_from_patch_params(subimage_locs_sampled,
+                                                          subimage_fluxes_sampled,
+                                                        star_encoder.tile_coords,
+                                                        star_encoder.full_slen,
+                                                        star_encoder.stamp_slen,
+                                                        star_encoder.edge_padding,
+                                                        star_encoder.batchsize)
         # get loss
-        loss = get_psf_transform_loss(full_image, full_background,
-                                        subimage_locs_sampled,
-                                        subimage_fluxes_sampled,
-                                        star_encoder.tile_coords,
-                                        star_encoder.stamp_slen,
-                                        star_encoder.edge_padding,
-                                        simulator,
-                                        psf_transform)[1]
+        loss = get_psf_loss(full_image, full_background,
+                            map_locs_full_image, map_fluxes_full_image,
+                            n_stars = torch.sum(map_fluxes_full_image > 0, dim = 1),
+                            psf = psf_transform.forward(),
+                            pad = 5)[1]
 
         avg_loss = loss.mean()
 
@@ -112,7 +111,11 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, simulator
         print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, elapsed))
 
+        test_losses[epoch] = avg_loss
         if (epoch % print_every) == 0:
             outfile = out_filename + '-iter' + str(iteration)
             print("writing the psf parameters to " + outfile)
             torch.save(psf_transform.state_dict(), outfile)
+
+            np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
+                        test_losses)
