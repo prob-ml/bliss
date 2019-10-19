@@ -69,7 +69,7 @@ def get_psf_loss(full_images, full_backgrounds,
 
     if grid is None:
         grid = _get_mgrid(slen)
-    
+
     recon_means = \
         plot_multiple_stars(slen, locs, n_stars, fluxes, psf, grid) + \
             full_backgrounds

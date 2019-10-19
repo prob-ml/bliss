@@ -340,6 +340,7 @@ class StarEncoder(nn.Module):
                                                         self.batchsize)
 
         if n_samples > 0:
+            # TODO: this is not thoroughly tested ... 
             logit_loc_sample = logit_loc_mean.unsqueeze(3) + \
                                     torch.randn((logit_loc_mean.shape[0],
                                                 logit_loc_mean.shape[1],
