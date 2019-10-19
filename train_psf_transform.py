@@ -81,7 +81,7 @@ print('training')
 
 test_losses = np.zeros(n_epochs)
 
-cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1])
+cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
 
 for epoch in range(n_epochs):
 	t0 = time.time()
@@ -92,7 +92,7 @@ for epoch in range(n_epochs):
 	# using true parameters atm
 	locs = true_full_locs
 	fluxes = true_full_fluxes
-	n_stars = torch.sum(true_full_fluxes > 0, dim = 1).type(torch.LongTensor)
+	n_stars = torch.sum(true_full_fluxes > 0, dim = 1)
 
 	psf_trained = psf_transform.forward()
 

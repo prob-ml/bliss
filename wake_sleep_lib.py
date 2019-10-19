@@ -5,8 +5,9 @@ import numpy as np
 import simulated_datasets_lib
 import inv_kl_objective_lib as inv_kl_lib
 from kl_objective_lib import sample_normal, sample_class_weights
+import image_utils
 
-from psf_transform_lib import get_psf_transform_loss
+from psf_transform_lib import get_psf_loss
 
 import time
 
@@ -55,7 +56,7 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
 def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
                 n_epochs, out_filename, iteration):
 
-    test_losses = np.zeros(n_epochs)
+    test_losses = np.zeros(n_epochs); cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
     for epoch in range(n_epochs):
         t0 = time.time(); print_every = 10
 
@@ -100,7 +101,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                             map_locs_full_image, map_fluxes_full_image,
                             n_stars = torch.sum(map_fluxes_full_image > 0, dim = 1),
                             psf = psf_transform.forward(),
-                            pad = 5)[1]
+                            pad = 5, grid = cached_grid)[1]
 
         avg_loss = loss.mean()
 
