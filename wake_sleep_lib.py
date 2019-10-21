@@ -91,13 +91,13 @@ def sample_star_encoder(star_encoder, full_image, full_background, return_map = 
     # sample locations
     subimage_locs_sampled = \
         torch.sigmoid(logit_loc_mean + \
-                        torch.randn(logit_loc_mean.shape) * logit_loc_sd) * \
+                        torch.randn(logit_loc_mean.shape).to(device) * logit_loc_sd) * \
                         is_on_array.unsqueeze(2).float()
 
     # sample fluxes
     subimage_fluxes_sampled = \
         torch.exp(log_flux_mean + \
-            torch.randn(log_flux_mean.shape) * log_flux_sd) * \
+            torch.randn(log_flux_mean.shape).to(device) * log_flux_sd) * \
                 is_on_array.float()
 
     # get parameters on full image
