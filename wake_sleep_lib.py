@@ -55,9 +55,12 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
 
 
 def sample_star_encoder(star_encoder, full_image, full_background, return_map = False):
+
     # the image stamps
-    image_stamps = star_encoder.get_image_stamps(full_image, locs = None, fluxes = None, trim_images = False)[0]
-    background_stamps = star_encoder.get_image_stamps(full_background, locs = None, fluxes = None, trim_images = False)[0]
+    image_stamps = star_encoder.get_image_stamps(full_image,
+                        locs = None, fluxes = None, trim_images = False)[0]
+    background_stamps = star_encoder.get_image_stamps(full_background,
+                        locs = None, fluxes = None, trim_images = False)[0]
 
     # pass through NN
     h = star_encoder._forward_to_last_hidden(image_stamps, background_stamps).detach()
@@ -70,7 +73,8 @@ def sample_star_encoder(star_encoder, full_image, full_background, return_map = 
     else:
         n_stars_sampled = sample_class_weights(torch.exp(log_probs))
 
-    is_on_array = simulated_datasets_lib.get_is_on_from_n_stars(n_stars_sampled, star_encoder.max_detections)
+    is_on_array = simulated_datasets_lib.get_is_on_from_n_stars(n_stars_sampled,
+                            star_encoder.max_detections)
 
     # get variational parameters
     logit_loc_mean, logit_loc_logvar, \
@@ -112,7 +116,9 @@ def sample_star_encoder(star_encoder, full_image, full_background, return_map = 
 def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
                 n_epochs, out_filename, iteration):
 
-    test_losses = np.zeros(n_epochs); cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
+    test_losses = np.zeros(n_epochs);
+    cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
+
     for epoch in range(n_epochs):
         t0 = time.time(); print_every = 10
 
@@ -121,7 +127,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # sample variational parameters
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full = \
             sample_star_encoder(star_encoder, full_image, full_background,
-                                    return_map = True)
+                                    return_map = False)
 
         # get loss
         loss = get_psf_loss(full_image, full_background,
