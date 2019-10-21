@@ -117,7 +117,7 @@ for iteration in range(0, 6):
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
                     n_epochs = 41,
-                    n_samples = 100, 
+                    n_samples = 100,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration)
 
@@ -150,6 +150,6 @@ for iteration in range(0, 6):
     run_sleep(star_encoder,
                 loader,
                 vae_optimizer,
-                n_epochs = 21,
+                n_epochs = 41,
                 out_filename = filename + '-encoder',
                 iteration = iteration + 1)

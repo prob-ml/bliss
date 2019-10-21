@@ -138,20 +138,25 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
         optimizer.zero_grad()
 
-        # sample variational parameters
-        sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full = \
-            sample_star_encoder(star_encoder, full_image, full_background,
-                                    n_samples, return_map = False)
+        psf = psf_transform.forward()
+        n_rep = 4
+        avg_loss = 0.0
+        # I want more samples, but I get a memory error ... hence this for loop
+        for i in range(n_rep):
+            # sample variational parameters
+            sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full = \
+                sample_star_encoder(star_encoder, full_image, full_background,
+                                        n_samples, return_map = False)
 
-        # get loss
-        loss = get_psf_loss(full_image.squeeze(), full_background.squeeze(),
-                            sampled_locs_full_image,
-                            sampled_fluxes_full_image,
-                            n_stars = sampled_n_stars_full,
-                            psf = psf_transform.forward(),
-                            pad = 5, grid = cached_grid)[1]
+            # get loss
+            loss = get_psf_loss(full_image.squeeze(), full_background.squeeze(),
+                                sampled_locs_full_image,
+                                sampled_fluxes_full_image,
+                                n_stars = sampled_n_stars_full,
+                                psf = psf,
+                                pad = 5, grid = cached_grid)[1]
 
-        avg_loss = loss.mean()
+            avg_loss += loss.mean() / n_rep
 
         avg_loss.backward()
         optimizer.step()
