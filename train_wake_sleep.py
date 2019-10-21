@@ -107,7 +107,7 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    learning_rate = 0.5
+    learning_rate = 0.1
     weight_decay = 1e-5
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
@@ -116,7 +116,7 @@ for iteration in range(0, 6):
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
-                    n_epochs = 41,
+                    n_epochs = 81,
                     n_samples = 100,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration)
