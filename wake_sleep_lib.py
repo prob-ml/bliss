@@ -124,20 +124,24 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
         optimizer.zero_grad()
 
-        # sample variational parameters
-        sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full = \
-            sample_star_encoder(star_encoder, full_image, full_background,
-                                    return_map = False)
+        avg_loss = 0.0
+        for i in range(100):
+            # sample variational parameters
+            sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full = \
+                sample_star_encoder(star_encoder, full_image, full_background,
+                                        return_map = False)
 
-        # get loss
-        loss = get_psf_loss(full_image, full_background,
-                            sampled_locs_full_image,
-                            sampled_fluxes_full_image,
-                            n_stars = sampled_n_stars_full,
-                            psf = psf_transform.forward(),
-                            pad = 5, grid = cached_grid)[1]
+            # get loss
+            loss = get_psf_loss(full_image, full_background,
+                                sampled_locs_full_image,
+                                sampled_fluxes_full_image,
+                                n_stars = sampled_n_stars_full,
+                                psf = psf_transform.forward(),
+                                pad = 5, grid = cached_grid)[1]
 
-        avg_loss = loss.mean()
+            avg_loss += loss.mean() * full_image.shape[0]
+
+        # avg_loss = loss.mean()
 
         avg_loss.backward()
         optimizer.step()
