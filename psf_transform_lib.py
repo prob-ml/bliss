@@ -59,11 +59,14 @@ def get_psf_loss(full_images, full_backgrounds,
                     pad = 5,
                     grid = None):
 
-    assert len(full_images.shape) == 4
+    assert len(full_images.shape) == 2 # for now, one image at a time ...
     assert full_images.shape == full_backgrounds.shape
 
+    assert len(locs.shape) == 3
+    assert len(fluxes.shape) == 2
     assert len(locs) == len(fluxes)
     assert len(fluxes) == len(n_stars)
+    n_samples = len(locs)
 
     slen = full_images.shape[-1]
 
@@ -74,10 +77,10 @@ def get_psf_loss(full_images, full_backgrounds,
         plot_multiple_stars(slen, locs, n_stars, fluxes, psf, grid) + \
             full_backgrounds
 
-    _full_image = full_images[0, 0, pad:(slen - pad), pad:(slen - pad)]
-    _recon_means = recon_means[0, 0, pad:(slen - pad), pad:(slen - pad)]
+    _full_image = full_images[pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
+    _recon_means = recon_means[:, 0, pad:(slen - pad), pad:(slen - pad)]
     recon_loss = - eval_normal_logprob(_full_image,
                 _recon_means,
-                torch.log(_recon_means)).view(full_images.shape[0], -1).sum(1)
+                torch.log(_recon_means)).view(n_samples, -1).sum(1)
 
     return recon_means, recon_loss
