@@ -151,7 +151,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                             psf = psf_transform.forward(),
                             pad = 5, grid = cached_grid)[1]
 
-        avg_loss += loss.mean()
+        avg_loss = loss.mean()
 
         avg_loss.backward()
         optimizer.step()
