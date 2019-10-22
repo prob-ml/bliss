@@ -53,9 +53,45 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
             np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
                         test_losses)
 
+def get_is_on_from_n_stars_2d(n_stars, max_stars):
+    n_samples = n_stars.shape[0]
+    batchsize = n_stars.shape[1]
+
+    is_on_array = torch.zeros((n_samples, batchsize, max_stars), dtype = torch.long).to(device)
+    for i in range(max_stars):
+        is_on_array[:, :, i] = (n_stars > i)
+
+    return is_on_array
+
+def _get_params_from_last_hidden_layer_2dn_stars(star_encoder, h, n_stars):
+
+    # this class takes in an array of n_stars, n_samples x batchsize
+
+    assert h.shape[1] == star_encoder.dim_out_all
+    assert h.shape[0] == n_stars.shape[1]
+
+    n_samples = n_stars.shape[0]
+
+    batchsize = h.size(0)
+    _h = torch.cat((h, torch.zeros(batchsize, 1).to(device)), dim = 1)
+
+    logit_loc_mean = torch.gather(_h, 1, star_encoder.locs_mean_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
+    logit_loc_logvar = torch.gather(_h, 1, star_encoder.locs_var_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
+
+    log_flux_mean = torch.gather(_h, 1, star_encoder.fluxes_mean_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
+    log_flux_logvar = torch.gather(_h, 1, star_encoder.fluxes_var_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
+
+    return logit_loc_mean.reshape(batchsize, n_samples, star_encoder.max_detections, 2).transpose(0, 1), \
+            logit_loc_logvar.reshape(batchsize, n_samples, star_encoder.max_detections, 2).transpose(0, 1), \
+            log_flux_mean.reshape(batchsize, n_samples, star_encoder.max_detections).transpose(0, 1), \
+            log_flux_logvar.reshape(batchsize, n_samples, star_encoder.max_detections).transpose(0, 1)
 
 def sample_star_encoder(star_encoder, full_image,
-                            full_background, n_samples = 1, return_map = False):
+                            full_background,
+                            n_samples = 1,
+                            return_map = False,
+                            n_stars = None):
+
     # our sampling only works for one image at a time at the moment ...
     assert full_image.shape[0] == 1
 
@@ -72,17 +108,20 @@ def sample_star_encoder(star_encoder, full_image,
 
     # sample number of stars
     if return_map:
-        n_stars_sampled = torch.argmax(log_probs, dim = 1)
+        n_stars_sampled = torch.argmax(log_probs, dim = 1).unsqueeze(0)
     else:
-        n_stars_sampled = sample_class_weights(torch.exp(log_probs))
+        if n_stars is None:
+            n_stars_sampled = sample_class_weights(torch.exp(log_probs), n_samples)
+        else:
+            n_stars_sampled = n_stars.unsqueeze(0)
 
-    is_on_array = simulated_datasets_lib.get_is_on_from_n_stars(n_stars_sampled,
+    is_on_array = get_is_on_from_n_stars_2d(n_stars_sampled,
                             star_encoder.max_detections)
 
     # get variational parameters
     logit_loc_mean, logit_loc_logvar, \
         log_flux_mean, log_flux_logvar = \
-            star_encoder._get_params_from_last_hidden_layer(h, n_stars_sampled)
+            _get_params_from_last_hidden_layer_2dn_stars(star_encoder, h, n_stars_sampled)
 
     if return_map:
         logit_loc_sd = torch.zeros(logit_loc_logvar.shape)
@@ -92,31 +131,24 @@ def sample_star_encoder(star_encoder, full_image,
         log_flux_sd = torch.exp(0.5 * log_flux_logvar)
 
     # sample locations
-    locs_randn = torch.randn((n_samples,
-                                logit_loc_mean.shape[0],
-                                logit_loc_mean.shape[1],
-                                logit_loc_mean.shape[2],
-                                )).to(device)
+    locs_randn = torch.randn(logit_loc_mean.shape).to(device)
 
     subimage_locs_sampled = \
-        torch.sigmoid(logit_loc_mean.unsqueeze(0) + \
-                        locs_randn * logit_loc_sd.unsqueeze(0)) * \
-                        is_on_array.unsqueeze(2).unsqueeze(0).float()
+        torch.sigmoid(logit_loc_mean + \
+                        locs_randn * logit_loc_sd) * \
+                        is_on_array.unsqueeze(2).float()
 
     # sample fluxes
-    fluxes_randn = torch.randn((n_samples,
-                                log_flux_mean.shape[0],
-                                log_flux_mean.shape[1],
-                                )).to(device)
+    fluxes_randn = torch.randn(log_flux_mean.shape).to(device)
     subimage_fluxes_sampled = \
-        torch.exp(log_flux_mean.unsqueeze(0) + \
-                fluxes_randn * log_flux_sd.unsqueeze(0)) * \
-                is_on_array.unsqueeze(0).float()
+        torch.exp(log_flux_mean + \
+                fluxes_randn * log_flux_sd) * \
+                is_on_array.float()
 
     # get parameters on full image
     locs_full_image, fluxes_full_image, n_stars_full = \
-        image_utils.get_full_params_from_patch_params(subimage_locs_sampled.view(n_samples * logit_loc_mean.shape[0], -1, 2),
-                                                      subimage_fluxes_sampled.view(n_samples * log_flux_mean.shape[0], -1),
+        image_utils.get_full_params_from_patch_params(subimage_locs_sampled.view(n_samples * h.shape[0], -1, 2),
+                                                      subimage_fluxes_sampled.view(n_samples * h.shape[0], -1),
                                                     star_encoder.tile_coords,
                                                     star_encoder.full_slen,
                                                     star_encoder.stamp_slen,

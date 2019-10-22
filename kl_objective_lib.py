@@ -17,7 +17,7 @@ def get_kl_prior_term(mean, logvar):
     # ADD this to the LOSS
     return - 0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
 
-def sample_class_weights(class_weights):
+def sample_class_weights(class_weights, n_samples = 1):
     """
     draw a sample from Categorical variable with
     probabilities class_weights
@@ -27,7 +27,7 @@ def sample_class_weights(class_weights):
     # probabilities class_weights
 
     cat_rv = categorical.Categorical(probs = class_weights)
-    return cat_rv.sample().detach()
+    return cat_rv.sample((n_samples, )).detach().squeeze()
 
 def get_recon_loss(full_images, full_backgrounds,
                     subimage_locs,
