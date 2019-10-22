@@ -85,6 +85,7 @@ psf_transform.to(device)
 
 
 filename = './fits/wake_sleep-altm2-10222019'
+psf_lr = 1.0
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
@@ -107,12 +108,11 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    learning_rate = 0.5
-    weight_decay = 1e-5
+    psf_lr = 0.5 * psf_lr
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
-                        'lr': learning_rate}],
-                        weight_decay = weight_decay)
+                        'lr': psf_lr}],
+                        weight_decay = 1e-5)
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
@@ -140,12 +140,11 @@ for iteration in range(0, 6):
     loader.dataset.simulator.psf = psf_transform.forward().detach()
 
     # load optimizer
-    learning_rate = 5e-4
-    weight_decay = 1e-5
+    encoder_lr = 5e-4
     vae_optimizer = optim.Adam([
                         {'params': star_encoder.parameters(),
-                        'lr': learning_rate}],
-                        weight_decay = weight_decay)
+                        'lr': encoder_lr}],
+                        weight_decay = 1e-5)
 
     run_sleep(star_encoder,
                 loader,
