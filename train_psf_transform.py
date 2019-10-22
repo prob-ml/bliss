@@ -98,7 +98,7 @@ for epoch in range(n_epochs):
 	psf_trained = psf_transform.forward()
 
 	# get loss
-	loss = get_psf_loss(full_image, full_background,
+	loss = get_psf_loss(full_image.squeeze(), full_background.squeeze(),
 	                    locs, fluxes, n_stars,
 						psf_trained,
 	                    pad = 5,
