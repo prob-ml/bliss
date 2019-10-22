@@ -176,7 +176,8 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # sample variational parameters
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full = \
             sample_star_encoder(star_encoder, full_image, full_background,
-                                    n_samples, return_map = False)
+                                    # n_samples, return_map = False)
+                                    n_samples = 1, return_map = True)
 
         # get loss
         loss = get_psf_loss(full_image.squeeze(), full_background.squeeze(),

@@ -84,7 +84,7 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-altm2-10212019'
+filename = './fits/wake_sleep-altm2-map_encoder-10222019'
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
