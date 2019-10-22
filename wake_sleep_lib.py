@@ -136,7 +136,7 @@ def sample_star_encoder(star_encoder, full_image,
     subimage_locs_sampled = \
         torch.sigmoid(logit_loc_mean + \
                         locs_randn * logit_loc_sd) * \
-                        is_on_array.unsqueeze(2).float()
+                        is_on_array.unsqueeze(3).float()
 
     # sample fluxes
     fluxes_randn = torch.randn(log_flux_mean.shape).to(device)
