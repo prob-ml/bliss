@@ -124,8 +124,8 @@ def sample_star_encoder(star_encoder, full_image,
             _get_params_from_last_hidden_layer_2dn_stars(star_encoder, h, n_stars_sampled)
 
     if return_map:
-        logit_loc_sd = torch.zeros(logit_loc_logvar.shape)
-        log_flux_sd = torch.zeros(log_flux_logvar.shape)
+        logit_loc_sd = torch.zeros(logit_loc_logvar.shape).to(device)
+        log_flux_sd = torch.zeros(log_flux_logvar.shape).to(device)
     else:
         logit_loc_sd = torch.exp(0.5 * logit_loc_logvar)
         log_flux_sd = torch.exp(0.5 * log_flux_logvar)
