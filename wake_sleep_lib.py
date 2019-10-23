@@ -207,7 +207,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         if use_iwae:
             # this is log (p / q)
             log_pq = - neg_logprob - log_q_locs - log_q_fluxes - log_q_n_stars
-            avg_loss = torch.logsumexp(log_pq - np.log(n_samples), 0)
+            avg_loss = - torch.logsumexp(log_pq - np.log(n_samples), 0)
         else:
             avg_loss = loss.mean()
 

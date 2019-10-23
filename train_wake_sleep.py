@@ -124,7 +124,7 @@ for iteration in range(0, 6):
 
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
-    load encoder
+    # load encoder
     if iteration == 0:
         encoder_file = './fits/starnet-10172019-no_reweighting'
     else:
