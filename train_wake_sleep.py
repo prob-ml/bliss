@@ -131,13 +131,16 @@ for iteration in range(0, 6):
         encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage)); star_encoder.to(device)
+                                   map_location=lambda storage, loc: storage));
+    star_encoder.to(device)
 
     # load trained transform
-    psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
+    # psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
+    psf_transform_file = filename + '-psf_transform' + '-iter' + str(0)
     print('loading psf_transform from: ', psf_transform_file)
     psf_transform.load_state_dict(torch.load(psf_transform_file,
-                                map_location=lambda storage, loc: storage)); psf_transform.to(device)
+                                map_location=lambda storage, loc: storage));
+    psf_transform.to(device)
     loader.dataset.simulator.psf = psf_transform.forward().detach()
 
     # load optimizer
