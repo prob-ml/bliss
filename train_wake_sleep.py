@@ -92,7 +92,8 @@ for iteration in range(0, 6):
     if iteration == 0:
         encoder_file = './fits/starnet-10172019-no_reweighting'
     else:
-        encoder_file = filename + '-encoder-iter' + str(iteration)
+        encoder_file = './fits/starnet-10172019-no_reweighting'
+        # encoder_file = filename + '-encoder-iter' + str(iteration)
 
         # load psf transform
         psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
@@ -121,34 +122,34 @@ for iteration in range(0, 6):
                     out_filename = filename + '-psf_transform',
                     iteration = iteration)
 
-    print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
+    # print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
     # load encoder
-    if iteration == 0:
-        encoder_file = './fits/starnet-10172019-no_reweighting'
-    else:
-        encoder_file = filename + '-encoder-iter' + str(iteration)
-    print('loading encoder from: ', encoder_file)
-    star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage)); star_encoder.to(device)
-
-    # load trained transform
-    psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
-    print('loading psf_transform from: ', psf_transform_file)
-    psf_transform.load_state_dict(torch.load(psf_transform_file,
-                                map_location=lambda storage, loc: storage)); psf_transform.to(device)
-    loader.dataset.simulator.psf = psf_transform.forward().detach()
-
-    # load optimizer
-    encoder_lr = 5e-4
-    vae_optimizer = optim.Adam([
-                        {'params': star_encoder.parameters(),
-                        'lr': encoder_lr}],
-                        weight_decay = 1e-5)
-
-    run_sleep(star_encoder,
-                loader,
-                vae_optimizer,
-                n_epochs = 21,
-                out_filename = filename + '-encoder',
-                iteration = iteration + 1)
+    # if iteration == 0:
+    #     encoder_file = './fits/starnet-10172019-no_reweighting'
+    # else:
+    #     encoder_file = filename + '-encoder-iter' + str(iteration)
+    # print('loading encoder from: ', encoder_file)
+    # star_encoder.load_state_dict(torch.load(encoder_file,
+    #                                map_location=lambda storage, loc: storage)); star_encoder.to(device)
+    #
+    # # load trained transform
+    # psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
+    # print('loading psf_transform from: ', psf_transform_file)
+    # psf_transform.load_state_dict(torch.load(psf_transform_file,
+    #                             map_location=lambda storage, loc: storage)); psf_transform.to(device)
+    # loader.dataset.simulator.psf = psf_transform.forward().detach()
+    #
+    # # load optimizer
+    # encoder_lr = 5e-4
+    # vae_optimizer = optim.Adam([
+    #                     {'params': star_encoder.parameters(),
+    #                     'lr': encoder_lr}],
+    #                     weight_decay = 1e-5)
+    #
+    # run_sleep(star_encoder,
+    #             loader,
+    #             vae_optimizer,
+    #             n_epochs = 21,
+    #             out_filename = filename + '-encoder',
+    #             iteration = iteration + 1)
