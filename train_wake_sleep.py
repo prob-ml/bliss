@@ -33,7 +33,7 @@ torch.backends.cudnn.benchmark = False
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-                                        x0 = 650, x1 = 250)
+                                        x0 = 650, x1 = 120)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -84,7 +84,7 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-loc650x250-iwae-10232019'
+filename = './fits/wake_sleep-loc650x120-iwae-10232019'
 psf_lr = 0.1
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
@@ -108,7 +108,7 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    psf_lr = 1.0 * psf_lr
+    psf_lr = 0.1 * psf_lr
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
                         'lr': psf_lr}],
@@ -150,6 +150,6 @@ for iteration in range(0, 6):
     run_sleep(star_encoder,
                 loader,
                 vae_optimizer,
-                n_epochs = 21,
+                n_epochs = 11,
                 out_filename = filename + '-encoder',
                 iteration = iteration + 1)
