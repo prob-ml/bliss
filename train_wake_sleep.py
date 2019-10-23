@@ -85,7 +85,7 @@ psf_transform.to(device)
 
 
 filename = './fits/wake_sleep-altm2-lr_experiment2-10222019'
-psf_lr = 1.0
+psf_lr = 0.1
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
@@ -109,7 +109,7 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    psf_lr = 0.5 * psf_lr
+    psf_lr = 1.0 * psf_lr
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
                         'lr': psf_lr}],
