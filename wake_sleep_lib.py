@@ -17,7 +17,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration):
     print_every = 10
 
-    test_losses = np.zeros(n_epochs)
+    test_losses = np.zeros((4, n_epochs))
 
     for epoch in range(n_epochs):
         t0 = time.time()
