@@ -156,10 +156,12 @@ def sample_star_encoder(star_encoder, full_image,
                                                     n_samples)
 
     if return_log_q:
-        log_q_locs = eval_normal_logprob(logit_locs_sampled, logit_loc_mean,
-                                            logit_loc_logvar).view(n_samples, -1).sum(1)
-        log_q_fluxes = eval_normal_logprob(log_flux_sampled, log_flux_mean,
-                                            log_flux_logvar).view(n_samples, -1).sum(1)
+        log_q_locs = (eval_normal_logprob(logit_locs_sampled, logit_loc_mean,
+                                                    logit_loc_logvar) * \
+                                                    is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
+        log_q_fluxes = (eval_normal_logprob(log_flux_sampled, log_flux_mean,
+                                            log_flux_logvar) * \
+                                            is_on_array.float()).view(n_samples, -1).sum(1)
         log_q_n_stars = torch.gather(log_probs, 1, n_stars_sampled.transpose(0, 1)).transpose(0, 1).sum(1)
 
     else:
@@ -205,7 +207,6 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         if use_iwae:
             # this is log (p / q)
             log_pq = - neg_logprob - log_q_locs - log_q_fluxes - log_q_n_stars
-
             avg_loss = torch.logsumexp(log_pq - np.log(n_samples), 0)
         else:
             avg_loss = loss.mean()
