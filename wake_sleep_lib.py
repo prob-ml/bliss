@@ -17,7 +17,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration):
     print_every = 10
 
-    test_losses = np.zeros((4, n_epochs // print_every + 1))
+    test_losses = np.zeros(n_epochs)
 
     for epoch in range(n_epochs):
         t0 = time.time()
@@ -33,26 +33,27 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
         print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                         epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
 
+        test_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, fluxes_loss])
+        np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
+                    test_losses)
+
         if (epoch % print_every) == 0:
-            loader.dataset.set_params_and_images()
-            _ = inv_kl_lib.eval_star_encoder_loss(star_encoder,
-                                                loader, train = True)
-
-            loader.dataset.set_params_and_images()
-            test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-                inv_kl_lib.eval_star_encoder_loss(star_encoder,
-                                                loader, train = False)
-
-            print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
-                test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
+            # loader.dataset.set_params_and_images()
+            # _ = inv_kl_lib.eval_star_encoder_loss(star_encoder,
+            #                                     loader, train = True)
+            #
+            # loader.dataset.set_params_and_images()
+            # test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
+            #     inv_kl_lib.eval_star_encoder_loss(star_encoder,
+            #                                     loader, train = False)
+            #
+            # print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
+            #     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
             outfile = out_filename + '-iter' + str(iteration)
             print("writing the encoder parameters to " + outfile)
             torch.save(star_encoder.state_dict(), outfile)
 
-            test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-            np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
-                        test_losses)
 
 def get_is_on_from_n_stars_2d(n_stars, max_stars):
     n_samples = n_stars.shape[0]
