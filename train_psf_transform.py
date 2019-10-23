@@ -7,6 +7,7 @@ import sdss_dataset_lib
 import simulated_datasets_lib
 import starnet_vae_lib
 from psf_transform_lib import PsfLocalTransform, get_psf_loss
+from wake_sleep_lib import sample_star_encoder
 
 import time
 
@@ -47,7 +48,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
                                            step = 2,
                                            edge_padding = 3,
                                            n_bands = 1,
-                                           max_detections = 4)
+                                           max_detections = 2)
 encoder_file = './fits/starnet-10172019-no_reweighting'
 star_encoder.load_state_dict(torch.load(encoder_file,
 							   map_location=lambda storage, loc: storage));
@@ -92,12 +93,12 @@ for epoch in range(n_epochs):
 
 	# get params: these normally would be the variational parameters.
 	# using true parameters atm
-	# locs = true_full_locs
-	# fluxes = true_full_fluxes
-	# n_stars = torch.sum(true_full_fluxes > 0, dim = 1)
-	locs, fluxes, n_stars = \
-		sample_star_encoder(star_encoder, full_image, full_background,
-								n_samples = 100, return_map = False)
+	locs = true_full_locs
+	fluxes = true_full_fluxes
+	n_stars = torch.sum(true_full_fluxes > 0, dim = 1); 
+	# locs, fluxes, n_stars = \
+	# 	sample_star_encoder(star_encoder, full_image, full_background,
+	# 							n_samples = 100, return_map = False)
 
 	psf_trained = psf_transform.forward()
 

@@ -84,7 +84,7 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-altm2-10222019'
+filename = './fits/wake_sleep-altm2-lr_experiment-10222019'
 psf_lr = 1.0
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
