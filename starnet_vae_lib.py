@@ -6,6 +6,8 @@ import numpy as np
 import image_utils
 from simulated_datasets_lib import get_is_on_from_n_stars
 
+from torch.distributions import poisson
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class Flatten(nn.Module):
@@ -35,7 +37,13 @@ class StarEncoder(nn.Module):
         self.edge_padding = edge_padding
 
         self.batchsize = None
-        self.weights = None
+
+        # TODO: make this variable for mean stars
+        mean_stars_per_patch = 0.4
+        poisson_dstr = poisson.Poisson(rate = mean_stars_per_patch)
+        inv_weights = torch.exp(poisson_dstr.log_prob(torch.arange(max_detections + 1).float()))
+
+        self.weights = (inv_weights.max() / inv_weights).to(device)
 
         # max number of detections
         self.max_detections = max_detections
@@ -241,7 +249,8 @@ class StarEncoder(nn.Module):
 
             self.prob_indx[n_detections] = indx4
 
-    def get_image_stamps(self, images_full, locs, fluxes, trim_images = False):
+    def get_image_stamps(self, images_full, locs, fluxes,
+                            trim_images = False, clip_max_stars = False):
         assert len(images_full.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
         assert images_full.shape[1] == self.n_bands
         assert images_full.shape[2] == self.full_slen
@@ -273,8 +282,14 @@ class StarEncoder(nn.Module):
                                                   self.edge_padding,
                                                   sort_locs = True)
 
-            if (self.weights is None) or (images_full.shape[0] != self.batchsize):
-                self.weights = get_weights(n_stars.clamp(max = self.max_detections))
+            # if (self.weights is None) or (images_full.shape[0] != self.batchsize):
+            #     self.weights = get_weights(n_stars.clamp(max = self.max_detections))
+
+            if clip_max_stars:
+                n_stars = n_stars.clamp(max = self.max_detections)
+                subimage_locs = subimage_locs[:, 0:self.max_detections, :]
+                subimage_fluxes = subimage_fluxes[:, 0:self.max_detections]
+                is_on_array = is_on_array[:, 0:self.max_detections]
 
         else:
             subimage_locs = None
@@ -325,6 +340,7 @@ class StarEncoder(nn.Module):
                                                         self.batchsize)
 
         if n_samples > 0:
+            # TODO: this is not thoroughly tested ... 
             logit_loc_sample = logit_loc_mean.unsqueeze(3) + \
                                     torch.randn((logit_loc_mean.shape[0],
                                                 logit_loc_mean.shape[1],

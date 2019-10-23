@@ -6,7 +6,8 @@ import torch.optim as optim
 import sdss_dataset_lib
 import simulated_datasets_lib
 import starnet_vae_lib
-from psf_transform_lib import PsfLocalTransform, get_psf_transform_loss
+from psf_transform_lib import PsfLocalTransform, get_psf_loss
+from wake_sleep_lib import sample_star_encoder
 
 import time
 
@@ -24,7 +25,8 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 					hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
+					x0 = 650, x1 = 120)
 
 # image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -46,20 +48,21 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
                                            step = 2,
                                            edge_padding = 3,
                                            n_bands = 1,
-                                           max_detections = 4)
-
-star_encoder.load_state_dict(torch.load('./fits/starnet_invKL_encoder-10092019-reweighted_samples',
-                               map_location=lambda storage, loc: storage))
-star_encoder.to(device)
+                                           max_detections = 2)
+encoder_file = './fits/starnet-10172019-no_reweighting'
+star_encoder.load_state_dict(torch.load(encoder_file,
+							   map_location=lambda storage, loc: storage));
+star_encoder.to(device);
+star_encoder.eval();
 
 # We want to set batchnorm to eval
 # https://discuss.pytorch.org/t/freeze-batchnorm-layer-lead-to-nan/8385
-def set_bn_eval(m):
-    classname = m.__class__.__name__
-    if classname.find('BatchNorm') != -1:
-      m.eval()
-
-star_encoder.apply(set_bn_eval)
+# def set_bn_eval(m):
+#     classname = m.__class__.__name__
+#     if classname.find('BatchNorm') != -1:
+#       m.eval()
+#
+# star_encoder.apply(set_bn_eval)
 
 # define transform
 psf_transform = PsfLocalTransform(torch.Tensor(simulator.psf_og).to(device),
@@ -81,6 +84,8 @@ print('training')
 
 test_losses = np.zeros(n_epochs)
 
+cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
+
 for epoch in range(n_epochs):
 	t0 = time.time()
 
@@ -88,19 +93,21 @@ for epoch in range(n_epochs):
 
 	# get params: these normally would be the variational parameters.
 	# using true parameters atm
-	_, subimage_locs, subimage_fluxes, _, _ = \
-		star_encoder.get_image_stamps(full_image, true_full_locs, true_full_fluxes,
-										trim_images = False)
+	locs = true_full_locs
+	fluxes = true_full_fluxes
+	n_stars = torch.sum(true_full_fluxes > 0, dim = 1); 
+	# locs, fluxes, n_stars = \
+	# 	sample_star_encoder(star_encoder, full_image, full_background,
+	# 							n_samples = 100, return_map = False)
+
+	psf_trained = psf_transform.forward()
 
 	# get loss
-	loss = get_psf_transform_loss(full_image, full_background,
-	                            subimage_locs,
-	                            subimage_fluxes,
-	                            star_encoder.tile_coords,
-	                            star_encoder.stamp_slen,
-	                            star_encoder.edge_padding,
-	                            simulator,
-	                            psf_transform)[1]
+	loss = get_psf_loss(full_image.squeeze(), full_background.squeeze(),
+	                    locs, fluxes, n_stars,
+						psf_trained,
+	                    pad = 5,
+	                    grid = cached_grid)[1]
 
 	avg_loss = loss.mean()
 
@@ -112,9 +119,10 @@ for epoch in range(n_epochs):
 	                epoch, avg_loss, elapsed))
 
 	test_losses[epoch] = avg_loss
+
 	if (epoch % print_every) == 0:
-		
-	    outfile = './fits/psf_transform-portm2-real_params-10114019'
+
+	    outfile = './fits/psf_transform-altm2-real_params-10222019'
 	    print("writing the psf transform parameters to " + outfile)
 	    torch.save(psf_transform.state_dict(), outfile)
 

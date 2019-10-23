@@ -179,6 +179,7 @@ class StarsDataset(Dataset):
     def __init__(self, psf_fit_file, n_images,
                         slen = 21,
                          max_stars = 5,
+                         mean_stars = 2,
                          min_stars = 0,
                          f_min = 700.0,
                          f_max = 1000.0,
@@ -192,6 +193,7 @@ class StarsDataset(Dataset):
 
         # image parameters
         self.max_stars = max_stars
+        self.mean_stars = mean_stars
         self.min_stars = min_stars
         self.add_noise = add_noise
 
@@ -225,17 +227,22 @@ class StarsDataset(Dataset):
 
     def draw_batch_parameters(self, batchsize, return_images = True):
         # draw number of stars
-        n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
-                                    batchsize)
-        n_stars = torch.Tensor(n_stars).type(torch.LongTensor).to(device)
+        # n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
+        #                             batchsize)
+        n_stars = np.random.poisson(self.mean_stars, batchsize)
+        n_stars = torch.Tensor(n_stars).clamp(max = self.max_stars,
+                        min = self.min_stars).type(torch.LongTensor).to(device)
+        is_on_array = get_is_on_from_n_stars(n_stars, self.max_stars)
 
         # draw locations
-        locs = torch.rand((batchsize, self.max_stars, 2)).to(device)
+        locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * \
+                is_on_array.unsqueeze(2).float()
         # locs = _sort_locs(locs, is_on_array)
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
-                                shape = (batchsize, self.max_stars))
+                                shape = (batchsize, self.max_stars)) * \
+                is_on_array.float()
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,
@@ -278,6 +285,7 @@ def load_dataset_from_params(psf_fit_file, data_params, n_images,
     alpha = data_params['alpha']
 
     max_stars = data_params['max_stars']
+    mean_stars = data_params['mean_stars']
     min_stars = data_params['min_stars']
 
     sky_intensity = data_params['sky_intensity']
@@ -289,6 +297,7 @@ def load_dataset_from_params(psf_fit_file, data_params, n_images,
                             f_min=f_min,
                             f_max=f_max,
                             max_stars = max_stars,
+                            mean_stars = mean_stars,
                             min_stars = min_stars,
                             alpha = alpha,
                             sky_intensity = sky_intensity,

@@ -5,6 +5,7 @@ from torch.nn.functional import unfold, softmax, pad
 
 import image_utils
 from inv_kl_objective_lib import eval_normal_logprob
+from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
 
 class PsfLocalTransform(nn.Module):
     def __init__(self, psf,
@@ -53,36 +54,33 @@ class PsfLocalTransform(nn.Module):
         return psf_image * self.normalization / psf_image.sum()
 
 
-def get_psf_transform_loss(full_images, full_backgrounds,
-                            subimage_locs,
-                            subimage_fluxes,
-                            tile_coords,
-                            subimage_slen,
-                            edge_padding,
-                            simulator,
-                            psf_transform = None):
+def get_psf_loss(full_images, full_backgrounds,
+                    locs, fluxes, n_stars, psf,
+                    pad = 5,
+                    grid = None):
 
-    locs_full_image, fluxes_full_image, _ = \
-        image_utils.get_full_params_from_patch_params(subimage_locs, subimage_fluxes,
-                                                tile_coords,
-                                                full_images.shape[-1],
-                                                subimage_slen,
-                                                edge_padding,
-                                                full_images.shape[0])
+    assert len(full_images.shape) == 2 # for now, one image at a time ...
+    assert full_images.shape == full_backgrounds.shape
 
-    if psf_transform is not None:
-        simulator.psf = psf_transform.forward()
+    assert len(locs.shape) == 3
+    assert len(fluxes.shape) == 2
+    assert len(locs) == len(fluxes)
+    assert len(fluxes) == len(n_stars)
+    n_samples = len(locs)
 
-    recon_means = simulator.draw_image_from_params(locs = locs_full_image,
-                                                  fluxes = fluxes_full_image,
-                                                  n_stars = torch.sum(fluxes_full_image > 0, dim = 1),
-                                                  add_noise = False)
+    slen = full_images.shape[-1]
 
+    if grid is None:
+        grid = _get_mgrid(slen)
 
-    recon_means = recon_means - simulator.sky_intensity + full_backgrounds
-    # TODO: choose the paddding
-    recon_loss = - eval_normal_logprob(full_images[0, 0, 5:95, 5:95],
-                                        recon_means[0, 0, 5:95, 5:95],
-                                        torch.log(recon_means)[0, 0, 5:95, 5:95]).view(full_images.shape[0], -1).sum(1)
+    recon_means = \
+        plot_multiple_stars(slen, locs, n_stars, fluxes, psf, grid) + \
+            full_backgrounds
+
+    _full_image = full_images[pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
+    _recon_means = recon_means[:, 0, pad:(slen - pad), pad:(slen - pad)].clamp(min = 100)
+    recon_loss = - eval_normal_logprob(_full_image,
+                _recon_means,
+                torch.log(_recon_means)).view(n_samples, -1).sum(1)
 
     return recon_means, recon_loss
