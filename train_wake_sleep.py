@@ -108,10 +108,10 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    psf_lr = 0.1 / (1 + 40 * iteration)
+    psf_lr = 0.001 / (1 + 40 * iteration)
     psf_optimizer = optim.SGD([
                         {'params': psf_transform.parameters(),
-                        'lr': psf_lr}])
+                        'lr': psf_lr}], weight_decay = 1e-5)
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
@@ -150,6 +150,6 @@ for iteration in range(0, 6):
     run_sleep(star_encoder,
                 loader,
                 vae_optimizer,
-                n_epochs = 5,
+                n_epochs = 11,
                 out_filename = filename + '-encoder',
                 iteration = iteration + 1)
