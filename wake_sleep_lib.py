@@ -37,7 +37,7 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
         np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
                     test_losses)
 
-        if (epoch % print_every) == 0:
+        if ((epoch % print_every) == 0) or (epoch == (n_epochs-1)):
             # loader.dataset.set_params_and_images()
             # _ = inv_kl_lib.eval_star_encoder_loss(star_encoder,
             #                                     loader, train = True)

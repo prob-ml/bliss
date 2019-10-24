@@ -143,11 +143,10 @@ for iteration in range(0, 6):
     # loader.dataset.simulator.psf = psf_transform.forward().detach()
 
     # load optimizer
-    encoder_lr = 5e-4
-    vae_optimizer = optim.Adam([
+    encoder_lr = 1e-4
+    vae_optimizer = optim.SGD([
                         {'params': star_encoder.parameters(),
-                        'lr': encoder_lr}],
-                        weight_decay = 1e-5)
+                        'lr': encoder_lr}])
 
     run_sleep(star_encoder,
                 loader,
