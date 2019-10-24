@@ -108,7 +108,7 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    psf_lr = 0.1 # / (1 + 80 * iteration)
+    psf_lr = 0.1 / (1 + 80 * iteration)
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
                         'lr': psf_lr}], weight_decay = 1e-5)
