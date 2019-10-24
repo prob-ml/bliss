@@ -87,40 +87,39 @@ psf_transform.to(device)
 filename = './fits/wake_sleep-loc650x120-iwae-10232019'
 
 for iteration in range(0, 6):
-    # print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
-    # # load encoder
-    # if iteration == 0:
-    #     encoder_file = './fits/starnet-10172019-no_reweighting'
-    # else:
-    #     encoder_file = filename + '-encoder-iter' + str(iteration)
-    #
-    #     # load psf transform
-    #     psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
-    #     print('loading psf_transform from: ', psf_transform_file)
-    #     psf_transform.load_state_dict(torch.load(psf_transform_file,
-    #                                 map_location=lambda storage, loc: storage))
-    #     psf_transform.to(device)
-    #
-    # print('loading encoder from: ', encoder_file)
-    # star_encoder.load_state_dict(torch.load(encoder_file,
-    #                                map_location=lambda storage, loc: storage));
-    # star_encoder.to(device);
-    # star_encoder.eval();
-    #
-    # # get optimizer
-    # psf_lr = 1e-2 / (1 + 80 * iteration)
-    # psf_optimizer = optim.Adam([
-    #                     {'params': psf_transform.parameters(),
-    #                     'lr': psf_lr}],
-    #                     weight_decay = 1e-5)
-    #
-    # run_wake(full_image, full_background, star_encoder, psf_transform,
-    #                 optimizer = psf_optimizer,
-    #                 n_epochs = 81,
-    #                 n_samples = 100,
-    #                 out_filename = filename + '-psf_transform',
-    #                 iteration = iteration,
-    #                 use_iwae = True)
+    print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
+    # load encoder
+    if iteration == 0:
+        encoder_file = './fits/starnet-10172019-no_reweighting'
+    else:
+        encoder_file = filename + '-encoder-iter' + str(iteration)
+
+        # load psf transform
+        psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
+        print('loading psf_transform from: ', psf_transform_file)
+        psf_transform.load_state_dict(torch.load(psf_transform_file,
+                                    map_location=lambda storage, loc: storage))
+        psf_transform.to(device)
+
+    print('loading encoder from: ', encoder_file)
+    star_encoder.load_state_dict(torch.load(encoder_file,
+                                   map_location=lambda storage, loc: storage));
+    star_encoder.to(device);
+    star_encoder.eval();
+
+    # get optimizer
+    psf_lr = 0.1 / (1 + 40 * iteration)
+    psf_optimizer = optim.SGD([
+                        {'params': psf_transform.parameters(),
+                        'lr': psf_lr}])
+
+    run_wake(full_image, full_background, star_encoder, psf_transform,
+                    optimizer = psf_optimizer,
+                    n_epochs = 41,
+                    n_samples = 100,
+                    out_filename = filename + '-psf_transform',
+                    iteration = iteration,
+                    use_iwae = True)
 
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
@@ -135,12 +134,12 @@ for iteration in range(0, 6):
     star_encoder.to(device)
 
     # load trained transform
-    # psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
-    # print('loading psf_transform from: ', psf_transform_file)
-    # psf_transform.load_state_dict(torch.load(psf_transform_file,
-    #                             map_location=lambda storage, loc: storage));
-    # psf_transform.to(device)
-    # loader.dataset.simulator.psf = psf_transform.forward().detach()
+    psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
+    print('loading psf_transform from: ', psf_transform_file)
+    psf_transform.load_state_dict(torch.load(psf_transform_file,
+                                map_location=lambda storage, loc: storage));
+    psf_transform.to(device)
+    loader.dataset.simulator.psf = psf_transform.forward().detach()
 
     # load optimizer
     encoder_lr = 1e-4
