@@ -115,7 +115,7 @@ for iteration in range(0, 6):
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
                     n_epochs = 81,
-                    n_samples = 100,
+                    n_samples = 50,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration,
                     use_iwae = True)
