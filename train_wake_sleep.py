@@ -83,13 +83,13 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-loc630x310-iwae-10232019'
+filename = './fits/wake_sleep-loc630x310-reweighted_prior-iwae-10252019'
 
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
     if iteration == 0:
-        encoder_file = './fits/starnet-10172019-no_reweighting'
+        encoder_file = './fits/starnet-10162019-reweighted'
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
 
@@ -124,7 +124,7 @@ for iteration in range(0, 6):
 
     # load encoder
     if iteration == 0:
-        encoder_file = './fits/starnet-10172019-no_reweighting'
+        encoder_file = './fits/starnet-10162019-reweighted'
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
