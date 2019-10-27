@@ -4,6 +4,7 @@ import numpy as np
 
 import simulated_datasets_lib
 import inv_kl_objective_lib as inv_kl_lib
+from inv_kl_objective_lib import eval_normal_logprob
 from kl_objective_lib import sample_normal, sample_class_weights
 import image_utils
 
@@ -16,7 +17,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration):
     print_every = 10
 
-    test_losses = np.zeros((4, n_epochs // print_every + 1))
+    test_losses = np.zeros((4, n_epochs))
 
     for epoch in range(n_epochs):
         t0 = time.time()
@@ -32,26 +33,27 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
         print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                         epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
 
-        if (epoch % print_every) == 0:
-            loader.dataset.set_params_and_images()
-            _ = inv_kl_lib.eval_star_encoder_loss(star_encoder,
-                                                loader, train = True)
+        test_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, fluxes_loss])
+        np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
+                    test_losses)
 
-            loader.dataset.set_params_and_images()
-            test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-                inv_kl_lib.eval_star_encoder_loss(star_encoder,
-                                                loader, train = False)
-
-            print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
-                test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
+        if ((epoch % print_every) == 0) or (epoch == (n_epochs-1)):
+            # loader.dataset.set_params_and_images()
+            # _ = inv_kl_lib.eval_star_encoder_loss(star_encoder,
+            #                                     loader, train = True)
+            #
+            # loader.dataset.set_params_and_images()
+            # test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
+            #     inv_kl_lib.eval_star_encoder_loss(star_encoder,
+            #                                     loader, train = False)
+            #
+            # print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
+            #     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
             outfile = out_filename + '-iter' + str(iteration)
             print("writing the encoder parameters to " + outfile)
             torch.save(star_encoder.state_dict(), outfile)
 
-            test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-            np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
-                        test_losses)
 
 def get_is_on_from_n_stars_2d(n_stars, max_stars):
     n_samples = n_stars.shape[0]
@@ -90,7 +92,8 @@ def sample_star_encoder(star_encoder, full_image,
                             full_background,
                             n_samples = 1,
                             return_map = False,
-                            n_stars = None):
+                            n_stars = None,
+                            return_log_q = False):
 
     # our sampling only works for one image at a time at the moment ...
     assert full_image.shape[0] == 1
@@ -108,12 +111,12 @@ def sample_star_encoder(star_encoder, full_image,
 
     # sample number of stars
     if return_map:
-        n_stars_sampled = torch.argmax(log_probs, dim = 1).unsqueeze(0)
+        n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
     else:
         if n_stars is None:
             n_stars_sampled = sample_class_weights(torch.exp(log_probs), n_samples)
         else:
-            n_stars_sampled = n_stars.unsqueeze(0)
+            n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
 
     is_on_array = get_is_on_from_n_stars_2d(n_stars_sampled,
                             star_encoder.max_detections)
@@ -133,17 +136,15 @@ def sample_star_encoder(star_encoder, full_image,
     # sample locations
     locs_randn = torch.randn(logit_loc_mean.shape).to(device)
 
+    logit_locs_sampled = logit_loc_mean + locs_randn * logit_loc_sd
     subimage_locs_sampled = \
-        torch.sigmoid(logit_loc_mean + \
-                        locs_randn * logit_loc_sd) * \
-                        is_on_array.unsqueeze(3).float()
+        torch.sigmoid(logit_locs_sampled) * is_on_array.unsqueeze(3).float()
 
     # sample fluxes
     fluxes_randn = torch.randn(log_flux_mean.shape).to(device)
+    log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
     subimage_fluxes_sampled = \
-        torch.exp(log_flux_mean + \
-                fluxes_randn * log_flux_sd) * \
-                is_on_array.float()
+        torch.exp(log_flux_sampled) * is_on_array.float()
 
     # get parameters on full image
     locs_full_image, fluxes_full_image, n_stars_full = \
@@ -155,11 +156,26 @@ def sample_star_encoder(star_encoder, full_image,
                                                     star_encoder.edge_padding,
                                                     n_samples)
 
-    return locs_full_image, fluxes_full_image, n_stars_full
+    if return_log_q:
+        log_q_locs = (eval_normal_logprob(logit_locs_sampled, logit_loc_mean,
+                                                    logit_loc_logvar) * \
+                                                    is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
+        log_q_fluxes = (eval_normal_logprob(log_flux_sampled, log_flux_mean,
+                                            log_flux_logvar) * \
+                                            is_on_array.float()).view(n_samples, -1).sum(1)
+        log_q_n_stars = torch.gather(log_probs, 1, n_stars_sampled.transpose(0, 1)).transpose(0, 1).sum(1)
+
+    else:
+        log_q_locs = None
+        log_q_fluxes = None
+        log_q_n_stars = None
+
+    return locs_full_image, fluxes_full_image, n_stars_full, \
+            log_q_locs, log_q_fluxes, log_q_n_stars
 
 
 def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
-                n_epochs, n_samples, out_filename, iteration):
+                n_epochs, n_samples, out_filename, iteration, use_iwae = False):
 
     test_losses = np.zeros(n_epochs)
     cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
@@ -174,20 +190,27 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         psf = psf_transform.forward()
 
         # sample variational parameters
-        sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full = \
-            sample_star_encoder(star_encoder, full_image, full_background,
-                                    n_samples, return_map = False)
+        sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
+            log_q_locs, log_q_fluxes, log_q_n_stars = \
+                sample_star_encoder(star_encoder, full_image, full_background,
+                                        n_samples, return_map = False,
+                                        return_log_q = use_iwae)
                                     # n_samples = 1, return_map = True)
 
         # get loss
-        loss = get_psf_loss(full_image.squeeze(), full_background.squeeze(),
+        neg_logprob = get_psf_loss(full_image.squeeze(), full_background.squeeze(),
                             sampled_locs_full_image,
                             sampled_fluxes_full_image,
                             n_stars = sampled_n_stars_full,
                             psf = psf,
                             pad = 5, grid = cached_grid)[1]
 
-        avg_loss = loss.mean()
+        if use_iwae:
+            # this is log (p / q)
+            log_pq = - neg_logprob - log_q_locs - log_q_fluxes - log_q_n_stars
+            avg_loss = - torch.logsumexp(log_pq - np.log(n_samples), 0)
+        else:
+            avg_loss = loss.mean()
 
         avg_loss.backward()
         optimizer.step()

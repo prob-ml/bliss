@@ -41,7 +41,7 @@ def _logit(x, tol = 1e-8):
     return torch.log(x + tol) - torch.log(1 - x + tol)
 
 def eval_normal_logprob(x, mu, log_var):
-    return - 0.5 * log_var - 0.5 * (x - mu)**2 / (torch.exp(log_var) + 1e-5)
+    return - 0.5 * log_var - 0.5 * (x - mu)**2 / (torch.exp(log_var) + 1e-5) - 0.5 * np.log(2 * np.pi)
 
 def eval_logitnormal_logprob(x, mu, log_var):
     logit_x = _logit(x)
@@ -164,10 +164,10 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
 
     loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
 
-    # weights_vec = get_weights_vec(one_hot_encoding, weights)
-    # assert len(weights_vec) == len(loss_vec)
-    # loss = (loss_vec * weights_vec).mean()
-    loss = loss_vec.mean()
+    weights_vec = get_weights_vec(one_hot_encoding, weights).detach()
+    assert len(weights_vec) == len(loss_vec)
+    loss = (loss_vec * weights_vec).mean()
+    # loss = loss_vec.mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm
 
