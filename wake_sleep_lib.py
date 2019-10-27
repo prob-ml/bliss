@@ -4,8 +4,7 @@ import numpy as np
 
 import simulated_datasets_lib
 import inv_kl_objective_lib as inv_kl_lib
-from inv_kl_objective_lib import eval_normal_logprob
-from kl_objective_lib import sample_normal, sample_class_weights
+import utils
 import image_utils
 
 from psf_transform_lib import get_psf_loss
@@ -114,7 +113,7 @@ def sample_star_encoder(star_encoder, full_image,
         n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
     else:
         if n_stars is None:
-            n_stars_sampled = sample_class_weights(torch.exp(log_probs), n_samples)
+            n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples)
         else:
             n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
 
@@ -157,10 +156,10 @@ def sample_star_encoder(star_encoder, full_image,
                                                     n_samples)
 
     if return_log_q:
-        log_q_locs = (eval_normal_logprob(logit_locs_sampled, logit_loc_mean,
+        log_q_locs = (utils.eval_normal_logprob(logit_locs_sampled, logit_loc_mean,
                                                     logit_loc_logvar) * \
                                                     is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
-        log_q_fluxes = (eval_normal_logprob(log_flux_sampled, log_flux_mean,
+        log_q_fluxes = (utilseval_normal_logprob(log_flux_sampled, log_flux_mean,
                                             log_flux_logvar) * \
                                             is_on_array.float()).view(n_samples, -1).sum(1)
         log_q_n_stars = torch.gather(log_probs, 1, n_stars_sampled.transpose(0, 1)).transpose(0, 1).sum(1)

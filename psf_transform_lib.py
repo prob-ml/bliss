@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch.nn.functional import unfold, softmax, pad
 
 import image_utils
-from inv_kl_objective_lib import eval_normal_logprob
+from utils import eval_normal_logprob
 from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
 
 class PsfLocalTransform(nn.Module):

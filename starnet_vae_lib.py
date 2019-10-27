@@ -4,7 +4,7 @@ import torch.nn as nn
 import numpy as np
 
 import image_utils
-from simulated_datasets_lib import get_is_on_from_n_stars
+from utils import get_is_on_from_n_stars
 
 from torch.distributions import poisson
 
@@ -340,7 +340,7 @@ class StarEncoder(nn.Module):
                                                         self.batchsize)
 
         if n_samples > 0:
-            # TODO: this is not thoroughly tested ... 
+            # TODO: this is not thoroughly tested ...
             logit_loc_sample = logit_loc_mean.unsqueeze(3) + \
                                     torch.randn((logit_loc_mean.shape[0],
                                                 logit_loc_mean.shape[1],

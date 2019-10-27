@@ -4,8 +4,7 @@ import math
 
 from torch.distributions import normal
 
-from simulated_datasets_lib import get_is_on_from_n_stars
-from hungarian_alg import run_batch_hungarian_alg_parallel
+from utils import get_is_on_from_n_stars
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

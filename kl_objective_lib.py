@@ -5,29 +5,13 @@ from torch.distributions import normal, categorical
 
 import image_utils
 
-from inv_kl_objective_lib import eval_normal_logprob, get_one_hot_encoding_from_int
-from simulated_datasets_lib import get_is_on_from_n_stars
+import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-def sample_normal(mean, logvar):
-    return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).to(device)
 
 def get_kl_prior_term(mean, logvar):
     # ADD this to the LOSS
     return - 0.5 * (1 + logvar - mean.pow(2) - logvar.exp())
-
-def sample_class_weights(class_weights, n_samples = 1):
-    """
-    draw a sample from Categorical variable with
-    probabilities class_weights
-    """
-
-    # draw a sample from Categorical variable with
-    # probabilities class_weights
-
-    cat_rv = categorical.Categorical(probs = class_weights)
-    return cat_rv.sample((n_samples, )).detach().squeeze()
 
 def get_recon_loss(full_images, full_backgrounds,
                     subimage_locs,
@@ -52,12 +36,12 @@ def get_recon_loss(full_images, full_backgrounds,
 
 
     recon_means = recon_means - simulator.sky_intensity + full_backgrounds
-    recon_loss = - eval_normal_logprob(full_images, recon_means, torch.log(recon_means)).view(full_images.shape[0], -1).sum(1)
+    recon_loss = - utils.eval_normal_logprob(full_images, recon_means, torch.log(recon_means)).view(full_images.shape[0], -1).sum(1)
 
     return recon_means, recon_loss
 
 def get_loss_cond_nstars(star_encoder, full_images, full_backgrounds, h, n_stars, simulator):
-    is_on_array = get_is_on_from_n_stars(n_stars, star_encoder.max_detections)
+    is_on_array = utils.get_is_on_from_n_stars(n_stars, star_encoder.max_detections)
 
     # get parameters
     logit_loc_mean, logit_loc_logvar, \
@@ -65,11 +49,11 @@ def get_loss_cond_nstars(star_encoder, full_images, full_backgrounds, h, n_stars
             star_encoder._get_params_from_last_hidden_layer(h, n_stars)
 
     # sample locations
-    subimage_locs_sampled = torch.sigmoid(sample_normal(logit_loc_mean, logit_loc_logvar)) * \
+    subimage_locs_sampled = torch.sigmoid(utils.sample_normal(logit_loc_mean, logit_loc_logvar)) * \
                                             is_on_array.unsqueeze(2).float()
 
     # sample fluxes
-    subimage_fluxes_sampled = torch.exp(sample_normal(log_flux_mean, log_flux_logvar)) * \
+    subimage_fluxes_sampled = torch.exp(utils.sample_normal(log_flux_mean, log_flux_logvar)) * \
                         is_on_array.float()
 
     # get reconstruction loss
@@ -131,11 +115,11 @@ def get_kl_loss(star_encoder,
     # sample from complement and recompute loss;
     #   second term of rao-blackwellized gradient
     ###############################
-    mask = get_one_hot_encoding_from_int(map_n_stars, star_encoder.max_detections + 1)
+    mask = utils.get_one_hot_encoding_from_int(map_n_stars, star_encoder.max_detections + 1)
     conditional_probs = torch.exp(log_probs) * (1 - mask)
     conditional_probs = conditional_probs / conditional_probs.sum(1, keepdim = True)
 
-    n_stars_sampled = sample_class_weights(conditional_probs).detach()
+    n_stars_sampled = utils.sample_class_weights(conditional_probs).detach()
 
     sampled_loss = get_loss_cond_nstars(star_encoder, full_images, full_backgrounds, h,
                                                 n_stars_sampled, simulator)
