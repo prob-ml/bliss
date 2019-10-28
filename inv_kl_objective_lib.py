@@ -4,7 +4,7 @@ import math
 
 from torch.distributions import normal
 
-from utils import get_is_on_from_n_stars
+import utils 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -134,7 +134,7 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
 
 
     true_n_stars = true_is_on_array.sum(1)
-    one_hot_encoding = get_one_hot_encoding_from_int(true_n_stars, log_probs.shape[1])
+    one_hot_encoding = utils.get_one_hot_encoding_from_int(true_n_stars, log_probs.shape[1])
     counter_loss = get_categorical_loss(log_probs, one_hot_encoding)
 
     loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
