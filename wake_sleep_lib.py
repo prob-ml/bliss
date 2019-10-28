@@ -74,13 +74,13 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # sample variational parameters
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
             log_q_locs, log_q_fluxes, log_q_n_stars = \
-                sample_star_encoder(star_encoder, full_image, full_background,
+                star_encoder.sample_star_encoder(full_image, full_background,
                                         n_samples, return_map = False,
                                         return_log_q = use_iwae)
                                     # n_samples = 1, return_map = True)
 
         # get loss
-        neg_logprob = get_psf_loss(full_image.squeeze(), full_background.squeeze(),
+        neg_logprob = get_psf_loss(full_image, full_background,
                             sampled_locs_full_image,
                             sampled_fluxes_full_image,
                             n_stars = sampled_n_stars_full,
