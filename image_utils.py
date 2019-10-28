@@ -1,7 +1,7 @@
 import torch
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-import simulated_datasets_lib
+import utils
 
 
 # Tile images
@@ -151,7 +151,7 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool).to(device)
     n_stars = is_on_array.float().sum(dim = 1).type(torch.LongTensor).to(device)
 
-    is_on_array_sorted = simulated_datasets_lib.get_is_on_from_n_stars(n_stars, max(n_stars))
+    is_on_array_sorted = utils.get_is_on_from_n_stars(n_stars, max(n_stars))
 
     indx = is_on_array_sorted.clone()
     indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
@@ -168,10 +168,12 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
                                         tile_coords,
                                         full_slen,
                                         stamp_slen,
-                                        edge_padding,
-                                        batchsize):
+                                        edge_padding):
 
     # off stars should have patch_locs == 0 and patch_fluxes == 0
+
+    assert (patch_fluxes.shape[0] % tile_coords.shape[0]) == 0
+    batchsize = int(patch_fluxes.shape[0] / tile_coords.shape[0])
 
     assert torch.all(patch_locs <= 1.)
     assert torch.all(patch_locs >= 0.)
@@ -188,7 +190,7 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
 
     n_stars = torch.sum(fluxes_full_image > 0, dim = 1)
 
-    is_on_array_full = simulated_datasets_lib.get_is_on_from_n_stars(n_stars, max(n_stars))
+    is_on_array_full = utils.get_is_on_from_n_stars(n_stars, max(n_stars))
     indx = is_on_array_full.clone()
     indx[indx == 1] = torch.nonzero(fluxes_full_image)[:, 1]
 

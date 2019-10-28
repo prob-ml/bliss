@@ -6,12 +6,27 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Functions to work with n_stars
 def get_is_on_from_n_stars(n_stars, max_stars):
+    assert len(n_stars.shape) == 1
+    
     batchsize = len(n_stars)
     is_on_array = torch.zeros((batchsize, max_stars), dtype = torch.long).to(device)
     for i in range(max_stars):
         is_on_array[:, i] = (n_stars > i)
 
     return is_on_array
+
+def get_is_on_from_n_stars_2d(n_stars, max_stars):
+    # n stars sis n_samples x batchsize
+
+    n_samples = n_stars.shape[0]
+    batchsize = n_stars.shape[1]
+
+    is_on_array = torch.zeros((n_samples, batchsize, max_stars), dtype = torch.long).to(device)
+    for i in range(max_stars):
+        is_on_array[:, :, i] = (n_stars > i)
+
+    return is_on_array
+
 
 def get_one_hot_encoding_from_int(z, n_classes):
     z = z.long()

@@ -100,8 +100,7 @@ class TestImageBatching(unittest.TestCase):
                                                             tile_coords,
                                                             full_slen,
                                                             subimage_slen,
-                                                            edge_padding,
-                                                            n_images)
+                                                            edge_padding)
         for i in range(n_images):
             fluxes_i = fluxes[i, :]
             fluxes2_i = fluxes2[i, :]

@@ -17,16 +17,6 @@ def isnan(x):
 #############################
 # functions to get loss for training the counter
 ############################
-def get_one_hot_encoding_from_int(z, n_classes):
-    z = z.long()
-
-    assert len(torch.unique(z)) <= n_classes
-
-    z_one_hot = torch.zeros(len(z), n_classes).to(device)
-    z_one_hot.scatter_(1, z.view(-1, 1), 1)
-    z_one_hot = z_one_hot.view(len(z), n_classes)
-
-    return z_one_hot
 
 def get_categorical_loss(log_probs, one_hot_encoding):
     assert torch.all(log_probs <= 0)
@@ -35,20 +25,6 @@ def get_categorical_loss(log_probs, one_hot_encoding):
 
     return torch.sum(
         -log_probs * one_hot_encoding, dim = 1)
-
-def _logit(x, tol = 1e-8):
-    return torch.log(x + tol) - torch.log(1 - x + tol)
-
-def eval_normal_logprob(x, mu, log_var):
-    return - 0.5 * log_var - 0.5 * (x - mu)**2 / (torch.exp(log_var) + 1e-5) - 0.5 * np.log(2 * np.pi)
-
-def eval_logitnormal_logprob(x, mu, log_var):
-    logit_x = _logit(x)
-    return eval_normal_logprob(logit_x, mu, log_var)
-
-def eval_lognormal_logprob(x, mu, log_var, tol = 1e-8):
-    log_x = torch.log(x + tol)
-    return eval_normal_logprob(log_x, mu, log_var)
 
 def _permute_losses_mat(losses_mat, perm):
     batchsize = losses_mat.shape[0]
@@ -70,7 +46,7 @@ def get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var):
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    locs_log_probs_all = eval_logitnormal_logprob(_true_locs,
+    locs_log_probs_all = utils.eval_logitnormal_logprob(_true_locs,
                             _logit_loc_mean, _logit_loc_log_var).sum(dim = 3)
 
     return locs_log_probs_all
@@ -84,7 +60,7 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    flux_log_probs_all = eval_lognormal_logprob(_true_fluxes,
+    flux_log_probs_all = utils.eval_lognormal_logprob(_true_fluxes,
                                 _log_flux_mean, _log_flux_log_var)
 
     return flux_log_probs_all

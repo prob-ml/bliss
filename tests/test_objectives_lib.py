@@ -14,20 +14,6 @@ from hungarian_alg import find_min_col_permutation, run_batch_hungarian_alg_para
 
 import json
 
-class TestStarCounterObjective(unittest.TestCase):
-    def test_get_one_hot(self):
-        # This tests the "get_one_hot_encoding_from_int"
-        # function. We check that it returns a valid one-hot encoding
-
-        n_classes = 10
-        z = torch.randint(0, 10, (100, ))
-
-        z_one_hot = objectives_lib.get_one_hot_encoding_from_int(z, n_classes)
-
-        assert all(z_one_hot.sum(1) == 1)
-        assert all(z_one_hot.float().max(1)[0] == 1)
-        assert all(z_one_hot.float().max(1)[1].float() == z.float())
-
 class TestStarEncoderObjective(unittest.TestCase):
     def test_perm_mat(self):
         # this tests the _permute_losses_mat function, make sure

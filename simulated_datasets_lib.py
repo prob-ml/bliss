@@ -266,14 +266,6 @@ def _sort_locs(locs, is_on_array):
     return locs[seq_tensor, sort_perm] * is_on_array.unsqueeze(2)
 
 
-def get_is_on_from_n_stars(n_stars, max_stars):
-    batchsize = len(n_stars)
-    is_on_array = torch.zeros((batchsize, max_stars), dtype = torch.long).to(device)
-    for i in range(max_stars):
-        is_on_array[:, i] = (n_stars > i)
-
-    return is_on_array
-
 
 def load_dataset_from_params(psf_fit_file, data_params, n_images,
                                 add_noise = True):
