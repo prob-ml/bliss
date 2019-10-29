@@ -4,7 +4,7 @@ import math
 
 from torch.distributions import normal
 
-import utils 
+import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
