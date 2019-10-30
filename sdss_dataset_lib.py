@@ -67,6 +67,7 @@ class SloanDigitalSkySurvey(Dataset):
 
         image_list = []
         background_list = []
+        gain_list = []
 
         cache_path = field_dir.joinpath("cache.pkl")
         # if cache_path.exists():
@@ -107,12 +108,13 @@ class SloanDigitalSkySurvey(Dataset):
             image_list.append(pixels_nelec)
             background_list.append(large_sky_nelec)
 
+            gain_list.append(gain[b])
             frame.close()
 
         ret = {'image': np.stack(image_list),
                'background': np.stack(background_list),
                'nelec_per_nmgy': nelec_per_nmgy,
-               'gain': gain[b],
+               'gain': gain_list,
                'calibration': calibration}
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
