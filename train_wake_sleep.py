@@ -8,7 +8,6 @@ import sdss_dataset_lib
 import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as inv_kl_lib
-from kl_objective_lib import sample_normal, sample_class_weights
 
 from wake_sleep_lib import run_wake, run_sleep
 
@@ -83,7 +82,8 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-loc630x310-reweighted_prior-iwae-10252019'
+filename = './fits/wake_sleep-loc630x310-reweighted_prior-iwae-10282019'
+# filename = './fits/deleteme'
 
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))

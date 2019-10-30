@@ -1,7 +1,7 @@
 import torch
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-import simulated_datasets_lib
+import utils
 
 
 # Tile images
@@ -76,7 +76,21 @@ def _reconstruct_from_patches_2d(patches,img_shape,step=[1.0,1.0],batch_first=Fa
     return img
 
 
-def tile_images(images, subimage_slen, step, return_tile_coords = False):
+def get_tile_coords(image_xlen, image_ylen, subimage_slen, step):
+    nx_patches = ((image_xlen - subimage_slen) // step) + 1
+    ny_patches = ((image_ylen - subimage_slen) // step) + 1
+    n_patches = nx_patches * ny_patches
+
+    return_coords = lambda i : [(i // ny_patches) * step,
+                                (i % ny_patches) * step]
+
+    tile_coords = torch.LongTensor([return_coords(i) \
+                                    for i in range(n_patches)]).to(device)
+
+    return tile_coords
+
+
+def tile_images(images, subimage_slen, step):
     # breaks up a large image into smaller patches,
     # of size subimage_slen x subimage_slen
     # NOTE: input and output are torch tensors, not numpy arrays
@@ -97,25 +111,10 @@ def tile_images(images, subimage_slen, step, return_tile_coords = False):
                                         step = [step, step],
                                         batch_first = True).reshape(-1, 1, subimage_slen, subimage_slen)
 
-
-    if return_tile_coords:
-        nx_patches = ((image_xlen - subimage_slen) // step) + 1
-        ny_patches = ((image_ylen - subimage_slen) // step) + 1
-        n_patches = nx_patches * ny_patches
-
-        return_coords = lambda i : [(i // ny_patches) * step,
-                                    (i % ny_patches) * step]
-
-        tile_coords = torch.LongTensor([return_coords(i) \
-                                        for i in range(n_patches)]).to(device)
-
-        return images_batched, tile_coords, nx_patches, ny_patches, n_patches
-    else:
-        return images_batched
+    return images_batched
 
 def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
-                            edge_padding = 0,
-                            sort_locs = False):
+                            edge_padding = 0):
 
     # locs are the coordinates in the full image, in coordinates between 0-1
     assert torch.all(locs <= 1.)
@@ -152,17 +151,16 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool).to(device)
     n_stars = is_on_array.float().sum(dim = 1).type(torch.LongTensor).to(device)
 
-    if sort_locs:
-        is_on_array_sorted = simulated_datasets_lib.get_is_on_from_n_stars(n_stars, max(n_stars))
+    is_on_array_sorted = utils.get_is_on_from_n_stars(n_stars, max(n_stars))
 
-        indx = is_on_array_sorted.clone()
-        indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
+    indx = is_on_array_sorted.clone()
+    indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
 
-        subimage_fluxes = torch.gather(subimage_fluxes, dim = 1, index = indx) * is_on_array_sorted.float()
-        subimage_locs = torch.gather(subimage_locs, dim = 1, index = indx.unsqueeze(2).repeat(1, 1, 2)) * \
-                            is_on_array_sorted.float().unsqueeze(2)
+    subimage_fluxes = torch.gather(subimage_fluxes, dim = 1, index = indx) * is_on_array_sorted.float()
+    subimage_locs = torch.gather(subimage_locs, dim = 1, index = indx.unsqueeze(2).repeat(1, 1, 2)) * \
+                        is_on_array_sorted.float().unsqueeze(2)
 
-        is_on_array = is_on_array_sorted
+    is_on_array = is_on_array_sorted
 
     return subimage_locs, subimage_fluxes, n_stars, is_on_array
 
@@ -170,10 +168,12 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
                                         tile_coords,
                                         full_slen,
                                         stamp_slen,
-                                        edge_padding,
-                                        batchsize):
-                                        
+                                        edge_padding):
+
     # off stars should have patch_locs == 0 and patch_fluxes == 0
+
+    assert (patch_fluxes.shape[0] % tile_coords.shape[0]) == 0
+    batchsize = int(patch_fluxes.shape[0] / tile_coords.shape[0])
 
     assert torch.all(patch_locs <= 1.)
     assert torch.all(patch_locs >= 0.)
@@ -190,7 +190,7 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
 
     n_stars = torch.sum(fluxes_full_image > 0, dim = 1)
 
-    is_on_array_full = simulated_datasets_lib.get_is_on_from_n_stars(n_stars, max(n_stars))
+    is_on_array_full = utils.get_is_on_from_n_stars(n_stars, max(n_stars))
     indx = is_on_array_full.clone()
     indx[indx == 1] = torch.nonzero(fluxes_full_image)[:, 1]
 

@@ -4,7 +4,7 @@ import torch.nn as nn
 import numpy as np
 
 import image_utils
-from simulated_datasets_lib import get_is_on_from_n_stars
+import utils
 
 from torch.distributions import poisson
 
@@ -36,7 +36,9 @@ class StarEncoder(nn.Module):
 
         self.edge_padding = edge_padding
 
-        self.batchsize = None
+        self.tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
+                                                        stamp_slen, step); self.n_patches = self.tile_coords.shape[0]
+
 
         # TODO: make this variable for mean stars
         mean_stars_per_patch = 0.4
@@ -135,7 +137,12 @@ class StarEncoder(nn.Module):
         # self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim = 1)
 
+    ############################
+    # The layers of our neural network
+    ############################
     def _forward_to_pooled_hidden(self, image, background):
+        # forward to the layer that is shared by all n_stars
+
         log_img = torch.log(image - background + 1000)
 
         # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
@@ -150,6 +157,9 @@ class StarEncoder(nn.Module):
         return self.enc_fc(h)
 
     def _forward_conditional_nstars(self, h, n_stars):
+        # for a **single** n_stars for all image in the batch,
+        # get the output parameters
+
         assert isinstance(n_stars, int)
 
         h_a = getattr(self, 'enc_a_detect' + str(n_stars))(h)
@@ -158,10 +168,12 @@ class StarEncoder(nn.Module):
 
         return h_c
 
-    def _forward_to_last_hidden(self, image, background):
-        h = self._forward_to_pooled_hidden(image, background)
+    def _forward_to_last_hidden(self, image_stamps, background_stamps):
+        # concatenate all output parameters for all possible n_stars
 
-        h_out = torch.zeros(image.shape[0], 1).to(device)
+        h = self._forward_to_pooled_hidden(image_stamps, background_stamps)
+
+        h_out = torch.zeros(image_stamps.shape[0], 1).to(device)
         for i in range(0, self.max_detections + 1):
             h_i = self._forward_conditional_nstars(h, i)
 
@@ -169,10 +181,14 @@ class StarEncoder(nn.Module):
 
         return h_out[:, 1:h_out.shape[1]]
 
-    def forward(self, images, background, n_stars = None):
+    ######################
+    # Forward modules
+    ######################
+    def forward(self, image_stamps, background_stamps, n_stars = None):
         # pass through neural network
-        h = self._forward_to_last_hidden(images, background)
+        h = self._forward_to_last_hidden(image_stamps, background_stamps)
 
+        # get probability of n_stars
         log_probs = self._get_logprobs_from_last_hidden_layer(h)
 
         if n_stars is None:
@@ -193,22 +209,39 @@ class StarEncoder(nn.Module):
 
     def _get_params_from_last_hidden_layer(self, h, n_stars):
 
+        if len(n_stars.shape) == 1:
+            n_stars = n_stars.unsqueeze(0)
+            squeeze_output = True
+        else:
+            squeeze_output = False
+
+        # this class takes in an array of n_stars, n_samples x batchsize
         assert h.shape[1] == self.dim_out_all
-        assert h.shape[0] == len(n_stars)
+        assert h.shape[0] == n_stars.shape[1]
+
+        n_samples = n_stars.shape[0]
 
         batchsize = h.size(0)
         _h = torch.cat((h, torch.zeros(batchsize, 1).to(device)), dim = 1)
 
-        logit_loc_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_stars])
-        logit_loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_stars])
+        logit_loc_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
+        logit_loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
 
-        log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_stars])
-        log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_stars])
+        log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
+        log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
 
-        return logit_loc_mean.reshape(batchsize, self.max_detections, 2), \
-                logit_loc_logvar.reshape(batchsize, self.max_detections, 2), \
-                log_flux_mean.reshape(batchsize, self.max_detections), \
-                log_flux_logvar.reshape(batchsize, self.max_detections)
+        # reshape
+        logit_loc_mean =  logit_loc_mean.reshape(batchsize, n_samples, self.max_detections, 2).transpose(0, 1)
+        logit_loc_logvar = logit_loc_logvar.reshape(batchsize, n_samples, self.max_detections, 2).transpose(0, 1)
+        log_flux_mean = log_flux_mean.reshape(batchsize, n_samples, self.max_detections).transpose(0, 1)
+        log_flux_logvar = log_flux_logvar.reshape(batchsize, n_samples, self.max_detections).transpose(0, 1)
+
+        if squeeze_output:
+            return logit_loc_mean.squeeze(), logit_loc_logvar.squeeze(), \
+                        log_flux_mean.squeeze(), log_flux_logvar.squeeze()
+        else:
+            return logit_loc_mean, logit_loc_logvar, \
+                        log_flux_mean, log_flux_logvar
 
     def _get_hidden_indices(self):
 
@@ -249,6 +282,9 @@ class StarEncoder(nn.Module):
 
             self.prob_indx[n_detections] = indx4
 
+    ######################
+    # Modules for patching images and parameters
+    ######################
     def get_image_stamps(self, images_full, locs, fluxes,
                             trim_images = False, clip_max_stars = False):
         assert len(images_full.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
@@ -258,18 +294,10 @@ class StarEncoder(nn.Module):
 
         batchsize = images_full.shape[0]
 
-        if (self.batchsize is None) or (images_full.shape[0] != self.batchsize):
-            self.batchsize = batchsize
-            image_stamps, self.tile_coords, _, _, self.n_patches = \
-                image_utils.tile_images(images_full,
-                                        self.stamp_slen,
-                                        self.step,
-                                        return_tile_coords = True)
-        else:
-            image_stamps = image_utils.tile_images(images_full,
-                                                    self.stamp_slen,
-                                                    self.step,
-                                                    return_tile_coords = False)
+        image_stamps = \
+            image_utils.tile_images(images_full,
+                                    self.stamp_slen,
+                                    self.step)
 
         if (locs is not None) and (fluxes is not None):
             # get parameters in patch as well
@@ -279,8 +307,7 @@ class StarEncoder(nn.Module):
                                                   fluxes,
                                                   self.full_slen,
                                                   self.stamp_slen,
-                                                  self.edge_padding,
-                                                  sort_locs = True)
+                                                  self.edge_padding)
 
             # if (self.weights is None) or (images_full.shape[0] != self.batchsize):
             #     self.weights = get_weights(n_stars.clamp(max = self.max_detections))
@@ -303,77 +330,198 @@ class StarEncoder(nn.Module):
         return image_stamps, subimage_locs, subimage_fluxes, \
                     n_stars, is_on_array
 
-    def get_results_on_full_image(self, images_full, backgrounds_full,
-                                        true_n_stars = None, n_samples = 0):
-        # first convert full iimages to image stamps
+    ######################
+    # Modules to sample our variational distribution and get parameters on the full image
+    ######################
+    def _get_full_params_from_sampled_params(self, subimage_locs_sampled,
+                                                subimage_fluxes_sampled):
+        n_samples = subimage_locs_sampled.shape[0]
+        n_image_stamps = subimage_locs_sampled.shape[1]
 
-        # get image stamps
-        image_stamps = self.get_image_stamps(images_full, None, None,
-                                              trim_images = False)[0]
-        background_stamps = self.get_image_stamps(backgrounds_full, None, None,
-                                              trim_images = False)[0]
+        assert (n_image_stamps % self.tile_coords.shape[0]) == 0
 
-        # get variational parameters on stamps
-        logit_loc_mean, logit_loc_log_var, \
-            log_flux_mean, log_flux_log_var, log_probs = \
-                self.forward(image_stamps, background_stamps, true_n_stars)
-
-        # get map estimates on image stamps
-        if true_n_stars is None:
-            map_n_stars = torch.argmax(log_probs, dim = 1)
-        else:
-            map_n_stars = true_n_stars
-
-        is_on_array = get_is_on_from_n_stars(map_n_stars, self.max_detections)
-
-        map_locs = torch.sigmoid(logit_loc_mean).detach() * is_on_array.unsqueeze(2).float()
-        map_fluxes = torch.exp(log_flux_mean).detach() * is_on_array.float()
-
-        # convert stamp parameters to parameters on the full image
-        map_locs_full_image, map_fluxes_full_image, n_stars_full = \
-            image_utils.get_full_params_from_patch_params(map_locs,
-                                                          map_fluxes,
+        locs_full_image, fluxes_full_image, n_stars_full = \
+            image_utils.get_full_params_from_patch_params(subimage_locs_sampled.view(n_samples * n_image_stamps, -1, 2),
+                                                          subimage_fluxes_sampled.view(n_samples * n_image_stamps, -1),
                                                         self.tile_coords,
                                                         self.full_slen,
                                                         self.stamp_slen,
-                                                        self.edge_padding,
-                                                        self.batchsize)
+                                                        self.edge_padding)
 
-        if n_samples > 0:
-            # TODO: this is not thoroughly tested ... 
-            logit_loc_sample = logit_loc_mean.unsqueeze(3) + \
-                                    torch.randn((logit_loc_mean.shape[0],
-                                                logit_loc_mean.shape[1],
-                                                logit_loc_mean.shape[2],
-                                                n_samples)) * \
-                                    torch.exp(0.5 * logit_loc_log_var).unsqueeze(3)
+        return locs_full_image, fluxes_full_image, n_stars_full
 
-            locs_sampled = torch.sigmoid(logit_loc_sample) * is_on_array.unsqueeze(2).unsqueeze(3).float()
+    def sample_star_encoder(self, full_image,
+                                full_background,
+                                n_samples = 1,
+                                return_map = False,
+                                n_stars = None,
+                                return_log_q = False):
 
-            log_flux_sample = log_flux_mean.unsqueeze(2) + \
-                                    torch.randn((log_flux_mean.shape[0],
-                                                log_flux_mean.shape[1],
-                                                n_samples)) * \
-                                    torch.exp(0.5 * log_flux_log_var).unsqueeze(2)
-            fluxes_sampled = torch.exp(log_flux_sample) * is_on_array.unsqueeze(2).float()
+        # our sampling only works for one image at a time at the moment ...
+        assert full_image.shape[0] == 1
 
-            locs_sampled_full_image, fluxes_sampled_full_image, _ = \
-                image_utils.get_full_params_from_patch_params(locs_sampled.view(locs_sampled.shape[0], -1, 2),
-                                                              fluxes_sampled.view(fluxes_sampled.shape[0], -1),
-                                                            self.tile_coords,
-                                                            self.full_slen,
-                                                            self.stamp_slen,
-                                                            self.edge_padding,
-                                                            self.batchsize)
+        # the image stamps
+        image_stamps = self.get_image_stamps(full_image,
+                            locs = None, fluxes = None, trim_images = False)[0]
+        background_stamps = self.get_image_stamps(full_background,
+                            locs = None, fluxes = None, trim_images = False)[0]
 
-            return map_locs_full_image, map_fluxes_full_image, n_stars_full, \
-                    locs_sampled_full_image, fluxes_sampled_full_image
+        # pass through NN
+        h = self._forward_to_last_hidden(image_stamps, background_stamps).detach()
+        # get log probs
+        log_probs = self._get_logprobs_from_last_hidden_layer(h)
+
+        # sample number of stars
+        if return_map:
+            n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
+        else:
+            if n_stars is None:
+                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples)
+            else:
+                n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
+
+        is_on_array = utils.get_is_on_from_n_stars_2d(n_stars_sampled,
+                                self.max_detections)
+
+        # get variational parameters
+        logit_loc_mean, logit_loc_logvar, \
+            log_flux_mean, log_flux_logvar = \
+                self._get_params_from_last_hidden_layer(h, n_stars_sampled)
+
+        if return_map:
+            logit_loc_sd = torch.zeros(logit_loc_logvar.shape).to(device)
+            log_flux_sd = torch.zeros(log_flux_logvar.shape).to(device)
+        else:
+            logit_loc_sd = torch.exp(0.5 * logit_loc_logvar)
+            log_flux_sd = torch.exp(0.5 * log_flux_logvar)
+
+        # sample locations
+        locs_randn = torch.randn(logit_loc_mean.shape).to(device)
+
+        logit_locs_sampled = logit_loc_mean + locs_randn * logit_loc_sd
+        subimage_locs_sampled = \
+            torch.sigmoid(logit_locs_sampled) * is_on_array.unsqueeze(3).float()
+
+        # sample fluxes
+        fluxes_randn = torch.randn(log_flux_mean.shape).to(device)
+        log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
+        subimage_fluxes_sampled = \
+            torch.exp(log_flux_sampled) * is_on_array.float()
+
+        # get parameters on full image
+        locs_full_image, fluxes_full_image, n_stars_full = \
+            self._get_full_params_from_sampled_params(subimage_locs_sampled,
+                                                        subimage_fluxes_sampled)
+
+        if return_log_q:
+            log_q_locs = (utils.eval_normal_logprob(logit_locs_sampled, logit_loc_mean,
+                                                        logit_loc_logvar) * \
+                                                        is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
+            log_q_fluxes = (utils.eval_normal_logprob(log_flux_sampled, log_flux_mean,
+                                                log_flux_logvar) * \
+                                                is_on_array.float()).view(n_samples, -1).sum(1)
+            log_q_n_stars = torch.gather(log_probs, 1, n_stars_sampled.transpose(0, 1)).transpose(0, 1).sum(1)
 
         else:
-            return map_locs_full_image, map_fluxes_full_image, n_stars_full
+            log_q_locs = None
+            log_q_fluxes = None
+            log_q_n_stars = None
 
-def get_weights(n_stars):
-    weights = torch.zeros(max(n_stars) + 1).to(device)
-    for i in range(max(n_stars) + 1):
-        weights[i] = len(n_stars) / torch.sum(n_stars == i).float()
-    return weights / weights.min()
+        return locs_full_image, fluxes_full_image, n_stars_full, \
+                log_q_locs, log_q_fluxes, log_q_n_stars
+
+
+# def get_weights(n_stars):
+#     weights = torch.zeros(max(n_stars) + 1).to(device)
+#     for i in range(max(n_stars) + 1):
+#         weights[i] = len(n_stars) / torch.sum(n_stars == i).float()
+#     return weights / weights.min()
+
+# def get_results_on_full_image(self, images_full, backgrounds_full,
+#                                     true_n_stars = None, n_samples = 0):
+#     # first convert full iimages to image stamps
+#
+#     # get image stamps
+#     image_stamps = self.get_image_stamps(images_full, None, None,
+#                                           trim_images = False)[0]
+#     background_stamps = self.get_image_stamps(backgrounds_full, None, None,
+#                                           trim_images = False)[0]
+#
+#     # get variational parameters on stamps
+#     logit_loc_mean, logit_loc_log_var, \
+#         log_flux_mean, log_flux_log_var, log_probs = \
+#             self.forward(image_stamps, background_stamps, true_n_stars)
+#
+#     # get map estimates on image stamps
+#     if true_n_stars is None:
+#         map_n_stars = torch.argmax(log_probs, dim = 1)
+#     else:
+#         map_n_stars = true_n_stars
+#
+#     is_on_array = get_is_on_from_n_stars(map_n_stars, self.max_detections)
+#
+#     map_locs = torch.sigmoid(logit_loc_mean).detach() * is_on_array.unsqueeze(2).float()
+#     map_fluxes = torch.exp(log_flux_mean).detach() * is_on_array.float()
+#
+#     # convert stamp parameters to parameters on the full image
+#     map_locs_full_image, map_fluxes_full_image, n_stars_full = \
+#         image_utils.get_full_params_from_patch_params(map_locs,
+#                                                       map_fluxes,
+#                                                     self.tile_coords,
+#                                                     self.full_slen,
+#                                                     self.stamp_slen,
+#                                                     self.edge_padding,
+#                                                     self.batchsize)
+#
+#     if n_samples > 0:
+#         # TODO: this is not thoroughly tested ...
+#         logit_loc_sample = logit_loc_mean.unsqueeze(3) + \
+#                                 torch.randn((logit_loc_mean.shape[0],
+#                                             logit_loc_mean.shape[1],
+#                                             logit_loc_mean.shape[2],
+#                                             n_samples)) * \
+#                                 torch.exp(0.5 * logit_loc_log_var).unsqueeze(3)
+#
+#         locs_sampled = torch.sigmoid(logit_loc_sample) * is_on_array.unsqueeze(2).unsqueeze(3).float()
+#
+#         log_flux_sample = log_flux_mean.unsqueeze(2) + \
+#                                 torch.randn((log_flux_mean.shape[0],
+#                                             log_flux_mean.shape[1],
+#                                             n_samples)) * \
+#                                 torch.exp(0.5 * log_flux_log_var).unsqueeze(2)
+#         fluxes_sampled = torch.exp(log_flux_sample) * is_on_array.unsqueeze(2).float()
+#
+#         locs_sampled_full_image, fluxes_sampled_full_image, _ = \
+#             image_utils.get_full_params_from_patch_params(locs_sampled.view(locs_sampled.shape[0], -1, 2),
+#                                                           fluxes_sampled.view(fluxes_sampled.shape[0], -1),
+#                                                         self.tile_coords,
+#                                                         self.full_slen,
+#                                                         self.stamp_slen,
+#                                                         self.edge_padding,
+#                                                         self.batchsize)
+#
+#         return map_locs_full_image, map_fluxes_full_image, n_stars_full, \
+#                 locs_sampled_full_image, fluxes_sampled_full_image
+#
+#     else:
+#         return map_locs_full_image, map_fluxes_full_image, n_stars_full
+#
+
+# def _get_params_from_last_hidden_layer(self, h, n_stars):
+#
+#     assert h.shape[1] == self.dim_out_all
+#     assert h.shape[0] == len(n_stars)
+#
+#     batchsize = h.size(0)
+#     _h = torch.cat((h, torch.zeros(batchsize, 1).to(device)), dim = 1)
+#
+#     logit_loc_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_stars])
+#     logit_loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_stars])
+#
+#     log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_stars])
+#     log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_stars])
+#
+#     return logit_loc_mean.reshape(batchsize, self.max_detections, 2), \
+#             logit_loc_logvar.reshape(batchsize, self.max_detections, 2), \
+#             log_flux_mean.reshape(batchsize, self.max_detections), \
+#             log_flux_logvar.reshape(batchsize, self.max_detections)

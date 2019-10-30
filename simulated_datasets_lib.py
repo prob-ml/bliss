@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import sys
 sys.path.insert(0, '../')
 import sdss_psf
+import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -232,12 +233,11 @@ class StarsDataset(Dataset):
         n_stars = np.random.poisson(self.mean_stars, batchsize)
         n_stars = torch.Tensor(n_stars).clamp(max = self.max_stars,
                         min = self.min_stars).type(torch.LongTensor).to(device)
-        is_on_array = get_is_on_from_n_stars(n_stars, self.max_stars)
+        is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
 
         # draw locations
         locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * \
                 is_on_array.unsqueeze(2).float()
-        # locs = _sort_locs(locs, is_on_array)
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
@@ -255,24 +255,6 @@ class StarsDataset(Dataset):
     def set_params_and_images(self):
         self.locs, self.fluxes, self.n_stars, self.images = \
             self.draw_batch_parameters(self.n_images, return_images = True)
-
-def _sort_locs(locs, is_on_array):
-
-    sort_perm = \
-        torch.argsort(torch.sum(locs**2, dim = 2) * is_on_array,
-                        descending=True)
-
-    seq_tensor = torch.LongTensor([[i] for i in range(locs.shape[0])])
-    return locs[seq_tensor, sort_perm] * is_on_array.unsqueeze(2)
-
-
-def get_is_on_from_n_stars(n_stars, max_stars):
-    batchsize = len(n_stars)
-    is_on_array = torch.zeros((batchsize, max_stars), dtype = torch.long).to(device)
-    for i in range(max_stars):
-        is_on_array[:, i] = (n_stars > i)
-
-    return is_on_array
 
 
 def load_dataset_from_params(psf_fit_file, data_params, n_images,
