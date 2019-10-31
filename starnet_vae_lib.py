@@ -37,7 +37,8 @@ class StarEncoder(nn.Module):
         self.edge_padding = edge_padding
 
         self.tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
-                                                        stamp_slen, step); self.n_patches = self.tile_coords.shape[0]
+                                                        stamp_slen, step);
+        self.n_patches = self.tile_coords.shape[0]
 
 
         # TODO: make this variable for mean stars

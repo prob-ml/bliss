@@ -32,6 +32,8 @@ class SloanDigitalSkySurvey(Dataset):
 
         self.rcfgs = []
 
+        self.band = band
+
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
         camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
@@ -75,7 +77,7 @@ class SloanDigitalSkySurvey(Dataset):
         #     return pickle.load(cache_path.open("rb"))
 
         for b, bl in enumerate("ugriz"):
-            if b != 2:
+            if b != self.band:
                 # taking only the red band
                 continue
 
@@ -85,7 +87,7 @@ class SloanDigitalSkySurvey(Dataset):
             frame = fitsio.FITS(frame_path)
 
             calibration = frame[1].read()
-            nelec_per_nmgy = gain[b] / calibration
+            cts_per_nmgy = 1 / calibration
 
             sky_small, = frame[2]["ALLSKY"].read()
             sky_x, = frame[2]["XINTERP"].read()
@@ -99,21 +101,27 @@ class SloanDigitalSkySurvey(Dataset):
             sky_x = sky_x.clip(0, sky_small.shape[1] - 1)
             large_points = np.stack(np.meshgrid(sky_y, sky_x)).transpose()
             large_sky = sky_interp(large_points)
-            large_sky_nelec = large_sky * gain[b]
+            large_sky_nelec = large_sky * 1.0
 
             pixels_ss_nmgy = frame[0].read()
-            pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
+            pixels_ss_nelec = pixels_ss_nmgy * cts_per_nmgy
             pixels_nelec = pixels_ss_nelec + large_sky_nelec
 
             image_list.append(pixels_nelec)
-            background_list.append(large_sky_nelec)
+            # background_list.append(large_sky_nelec)
+            # Portillos estimates a different background ...
+            # and it corresponds well to how the generative model works
+            #   i.e. we actually add stars to this background.
+            # TODO: get backgrounds for other bands as well ...
+            assert self.band == 2
+            background_list.append(np.ones(large_sky_nelec.shape) * 179)
 
             gain_list.append(gain[b])
             frame.close()
 
         ret = {'image': np.stack(image_list),
                'background': np.stack(background_list),
-               'nelec_per_nmgy': nelec_per_nmgy,
+               'cts_per_nmgy': cts_per_nmgy,
                'gain': gain_list,
                'calibration': calibration}
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
@@ -195,12 +203,12 @@ class SDSSHubbleData(Dataset):
         # the full SDSS image
         self.sdss_image_full = self.sdss_data[0]['image']
         self.sdss_background_full = self.sdss_data[0]['background']
-        self.nelec_per_nmgy_full = self.sdss_data[0]['nelec_per_nmgy']
+        self.cts_per_nmgy_full = self.sdss_data[0]['cts_per_nmgy']
 
         # just a subset
         self.sdss_image = self.sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)]
         self.sdss_background = self.sdss_background_full[:, x0:(x0 + slen), x1:(x1 + slen)]
-        self.nelec_per_nmgy = self.nelec_per_nmgy_full[x1:(x1 + slen)]
+        self.cts_per_nmgy = self.cts_per_nmgy_full[x1:(x1 + slen)]
 
         # load hubble data
         print('loading hubble data from ', hubble_cat_file)
@@ -228,11 +236,10 @@ class SDSSHubbleData(Dataset):
         self.locs_full_x1 = pix_coordinates[0] # the column of pixel
 
         # convert hubble magnitude to n_electron count
-        which_cols = np.floor(self.locs_full_x1 / len(self.nelec_per_nmgy_full)).astype(int)
+        which_cols = np.floor(self.locs_full_x1 / len(self.cts_per_nmgy_full)).astype(int)
         hubble_nmgy = convert_mag_to_nmgy(self.hubble_rmag)
 
-        self.fudge_conversion = 1.2593
-        self.fluxes_full = hubble_nmgy * self.nelec_per_nmgy[which_cols] * self.fudge_conversion # / self.psf_max
+        self.fluxes_full = hubble_nmgy * self.cts_per_nmgy[which_cols]
 
         assert len(self.fluxes_full) == len(self.locs_full_x0)
         assert len(self.fluxes_full) == len(self.locs_full_x1)
