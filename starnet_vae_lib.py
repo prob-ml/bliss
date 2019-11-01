@@ -143,7 +143,7 @@ class StarEncoder(nn.Module):
     ############################
     def _forward_to_pooled_hidden(self, image, background):
         # forward to the layer that is shared by all n_stars
-        assert torch.all((image - background) > 0.)
+        assert torch.all(image > 0.); assert torch.all((image - background) > -1000.)
         log_img = torch.log(image - background + 1000)
 
 
