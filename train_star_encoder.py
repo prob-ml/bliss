@@ -30,7 +30,7 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # data parameters
-with open('./data/default_star_parameters.json', 'r') as fp:
+with open('./data/old_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)
@@ -121,12 +121,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_10302019/starnet-10302019'
+        outfile = './fits/results_10302019/old_starnet-10302019'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_10302019/test_losses-starnet-10302019', test_losses)
+        np.savetxt('./fits/results_10302019/test_losses-old_starnet-10302019', test_losses)
 
 
 print('done')
