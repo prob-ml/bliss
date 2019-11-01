@@ -108,13 +108,7 @@ class SloanDigitalSkySurvey(Dataset):
             pixels_nelec = pixels_ss_nelec + large_sky_nelec
 
             image_list.append(pixels_nelec)
-            # background_list.append(large_sky_nelec)
-            # Portillos estimates a different background ...
-            # and it corresponds well to how the generative model works
-            #   i.e. we actually add stars to this background.
-            # TODO: get backgrounds for other bands as well ...
-            assert self.band == 2
-            background_list.append(np.ones(large_sky_nelec.shape) * 179)
+            background_list.append(large_sky_nelec)
 
             gain_list.append(gain[b])
             frame.close()
