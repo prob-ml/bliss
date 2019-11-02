@@ -31,7 +31,8 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
+                                        x0 = 650, x1 = 120)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -42,7 +43,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)
-data_params['sky_intensity'] = 179
+data_params['sky_intensity'] = 201
 full_background = full_background * 0.0 + data_params['sky_intensity']
 
 # draw data
@@ -84,7 +85,7 @@ psf_transform.to(device)
 
 
 
-filename = './fits/results_10302019/wake_sleep-loc630x310-11022019'
+filename = './fits/results_10302019/wake_sleep-loc650x120-11022019'
 
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
