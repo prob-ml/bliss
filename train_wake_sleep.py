@@ -42,6 +42,8 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)
+data_params['sky_intensity'] = 179
+full_background = full_background * 0.0 + data_params['sky_intensity']
 
 # draw data
 print('generating data: ')
@@ -82,14 +84,13 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-loc630x310-reweighted_prior-iwae-10282019'
-# filename = './fits/deleteme'
+filename = './fits/results_10302019/wake_sleep-loc630x310-11022019'
 
 for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
     if iteration == 0:
-        encoder_file = './fits/starnet-10162019-reweighted'
+        encoder_file = './fits/results_10302019/starnet-10302019'
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
 
@@ -124,7 +125,7 @@ for iteration in range(0, 6):
 
     # load encoder
     if iteration == 0:
-        encoder_file = './fits/starnet-10162019-reweighted'
+        encoder_file = './fits/results_10302019/starnet-10302019'
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
