@@ -48,7 +48,7 @@ full_background = full_background * 0.0 + data_params['sky_intensity']
 
 # draw data
 print('generating data: ')
-n_images = 200
+n_images =1
 t0 = time.time()
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(str(sdss_hubble_data.psf_file),
@@ -95,6 +95,7 @@ print('loading encoder from: ', init_encoder)
 star_encoder.load_state_dict(torch.load(init_encoder,
                                map_location=lambda storage, loc: storage));
 star_encoder.to(device)
+star_encoder.eval(); 
 
 images_full = star_dataset.images.detach()
 backgrounds_full = torch.ones(star_dataset.images.shape) * star_dataset.sky_intensity
