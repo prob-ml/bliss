@@ -67,14 +67,14 @@ def train_psf_transform_one_epoch(full_image, full_background, star_encoder,
                                     n_samples, return_map = False,
                                     return_log_q = use_iwae)
 
-    loss = 0.0
+    avg_loss = 0.0
     for i in range(n_samples // batchsize):
         optimizer.zero_grad()
 
         # get psf
         psf = psf_transform.forward()
 
-        indx1 = int(i * batchsize); print(indx1)
+        indx1 = int(i * batchsize)
         indx2 = min(int((i + 1) * batchsize), n_samples)
 
         # get loss
@@ -87,10 +87,10 @@ def train_psf_transform_one_epoch(full_image, full_background, star_encoder,
 
         if use_iwae:
             # this is log (p / q)
-            log_pq = - neg_logprob - log_q_locs - log_q_fluxes - log_q_n_stars
+            log_pq = - neg_logprob - log_q_locs[indx1:indx2] - log_q_fluxes[indx1:indx2] - log_q_n_stars[indx1:indx2]
             loss_i = - torch.logsumexp(log_pq - np.log(n_samples), 0)
         else:
-            loss_i = - neg_logprob.mean()
+            loss_i = neg_logprob.mean()
 
         loss_i.backward()
         optimizer.step()
@@ -103,7 +103,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                 n_epochs, n_samples, out_filename, iteration, use_iwae = False):
 
     test_losses = np.zeros(n_epochs)
-    cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
+    cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
     print_every = 10
 
     for epoch in range(n_epochs):
@@ -114,7 +114,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                                             n_samples,
                                             batchsize = 100,
                                             cached_grid = cached_grid, 
-                                            use_iwae = False)
+                                            use_iwae = use_iwae)
 
         elapsed = time.time() - t0
         print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
