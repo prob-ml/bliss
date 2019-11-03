@@ -374,13 +374,14 @@ class StarEncoder(nn.Module):
         log_probs = self._get_logprobs_from_last_hidden_layer(h)
 
         # sample number of stars
-        if return_map:
-            n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
-        else:
-            if n_stars is None:
-                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples)
+        if n_stars is None:
+            if return_map:
+                n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
+
             else:
-                n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
+                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples)
+        else:
+            n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
 
         is_on_array = utils.get_is_on_from_n_stars_2d(n_stars_sampled,
                                 self.max_detections)
