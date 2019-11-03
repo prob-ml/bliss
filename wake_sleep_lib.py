@@ -101,7 +101,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, elapsed))
 
-        test_losses[epoch] = avg_loss
+        test_losses[epoch] = avg_loss.item()
         if (epoch % print_every) == 0:
             outfile = out_filename + '-iter' + str(iteration)
             print("writing the psf parameters to " + outfile)

@@ -82,12 +82,12 @@ def get_psf_loss(full_images, full_backgrounds,
         indx1 = int(i * 50); print(indx1)
         indx2 = min(int((i + 1) * 50), n_samples)
         recon_means = \
-            plot_multiple_stars(slen, locs[indx1:indx2],
-                                n_stars[indx1:indx2],
-                                fluxes[indx1:indx2], psf, grid) + \
-                full_backgrounds
+            plot_multiple_stars(slen, locs[indx1:indx2].detach(),
+                                n_stars[indx1:indx2].detach(),
+                                fluxes[indx1:indx2].detach(), psf, grid.detach()) + \
+                full_backgrounds.detach()
 
-        _full_image = full_images[0, :, pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
+        _full_image = full_images[0, :, pad:(slen - pad), pad:(slen - pad)].unsqueeze(0).detach()
         _recon_means = recon_means[:, :, pad:(slen - pad), pad:(slen - pad)].clamp(min = 100)
 
         n_samples_i = indx2 - indx1
