@@ -95,6 +95,22 @@ print('loading encoder from: ', init_encoder)
 star_encoder.load_state_dict(torch.load(init_encoder,
                                map_location=lambda storage, loc: storage));
 star_encoder.to(device)
+
+images_full = star_dataset.images.detach()
+backgrounds_full = torch.ones(star_dataset.images.shape) * star_dataset.sky_intensity
+
+true_full_locs = star_dataset.locs[:, star_dataset.fluxes.squeeze() > 0, :]
+true_full_fluxes = star_dataset.fluxes[:, star_dataset.fluxes.squeeze() > 0]
+
+# check loss
+loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
+    inv_kl_lib.get_encoder_loss(star_encoder, images_full, backgrounds_full,
+                                true_full_locs, true_full_fluxes)
+print('loss: {:06f}'.format(loss))
+print(counter_loss.mean())
+print(locs_loss.mean())
+print(fluxes_loss.mean())
+
 # load optimizer
 encoder_lr = 0e-5
 vae_optimizer = optim.Adam([
