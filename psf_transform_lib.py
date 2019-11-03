@@ -75,23 +75,24 @@ def get_psf_loss(full_images, full_backgrounds,
     if grid is None:
         grid = _get_mgrid(slen)
 
-    recon_means = torch.zeros(locs.shape[0], 1,
-                full_images.shape[-1], full_images.shape[-1])
     n_samples = locs.shape[0]
 
+    recon_loss = 0.0
     for i in range(int(n_samples // 50)):
         indx1 = int(i * 50)
         indx2 = min(int((i + 1) * 50), n_samples)
-        recon_means[indx1:indx2] = \
+        recon_means = \
             plot_multiple_stars(slen, locs[indx1:indx2],
                                 n_stars[indx1:indx2],
                                 fluxes[indx1:indx2], psf, grid) + \
                 full_backgrounds
 
-    _full_image = full_images[0, :, pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
-    _recon_means = recon_means[:, :, pad:(slen - pad), pad:(slen - pad)].clamp(min = 100)
-    recon_loss = - eval_normal_logprob(_full_image,
-                _recon_means,
-                torch.log(_recon_means)).view(n_samples, -1).sum(1)
+        _full_image = full_images[0, :, pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
+        _recon_means = recon_means[:, :, pad:(slen - pad), pad:(slen - pad)].clamp(min = 100)
+        
+        recon_loss += - eval_normal_logprob(_full_image,
+                                            _recon_means,
+                                            torch.log(_recon_means)).view(n_samples, -1).sum(1) * \
+                        (indx2 - indx1)  / n_samples
 
     return recon_means, recon_loss
