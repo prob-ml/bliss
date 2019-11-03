@@ -112,7 +112,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         avg_loss = train_psf_transform_one_epoch(full_image, full_background, star_encoder,
                                             psf_transform, optimizer,
                                             n_samples,
-                                            batchsize = 100,
+                                            batchsize = 50,
                                             cached_grid = cached_grid, 
                                             use_iwae = use_iwae)
 
