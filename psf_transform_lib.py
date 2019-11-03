@@ -82,7 +82,7 @@ def get_psf_loss(full_images, full_backgrounds,
     for i in range(int(n_samples // 50)):
         indx1 = int(i * 50)
         indx2 = min(int((i + 1) * 50), n_samples)
-        _recon_means = \
+        recon_means[indx1:indx2] = \
             plot_multiple_stars(slen, locs[indx1:indx2],
                                 n_stars[indx1:indx2],
                                 fluxes[indx1:indx2], psf, grid) + \
