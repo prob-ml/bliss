@@ -43,12 +43,12 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)
-data_params['sky_intensity'] = 170
+data_params['sky_intensity'] = 201
 full_background = full_background * 0.0 + data_params['sky_intensity']
 
 # draw data
 print('generating data: ')
-n_images =1
+n_images = 200
 t0 = time.time()
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(str(sdss_hubble_data.psf_file),
@@ -95,25 +95,9 @@ print('loading encoder from: ', init_encoder)
 star_encoder.load_state_dict(torch.load(init_encoder,
                                map_location=lambda storage, loc: storage));
 star_encoder.to(device)
-star_encoder.eval(); 
-
-images_full = star_dataset.images.detach()
-backgrounds_full = torch.ones(star_dataset.images.shape) * star_dataset.sky_intensity
-
-true_full_locs = star_dataset.locs[:, star_dataset.fluxes.squeeze() > 0, :]
-true_full_fluxes = star_dataset.fluxes[:, star_dataset.fluxes.squeeze() > 0]
-
-# check loss
-loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
-    inv_kl_lib.get_encoder_loss(star_encoder, images_full, backgrounds_full,
-                                true_full_locs, true_full_fluxes)
-print('loss: {:06f}'.format(loss))
-print(counter_loss.mean())
-print(locs_loss.mean())
-print(fluxes_loss.mean())
 
 # load optimizer
-encoder_lr = 0e-5
+encoder_lr = 5e-5
 vae_optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
                     'lr': encoder_lr}],
