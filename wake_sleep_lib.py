@@ -57,6 +57,7 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
 def train_psf_transform_one_epoch(full_image, full_background, star_encoder,
                                     psf_transform, optimizer,
                                     n_samples, batchsize,
+                                    cached_grid = None,
                                     use_iwae = False):
 
     # sample variational parameters
@@ -112,6 +113,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                                             psf_transform, optimizer,
                                             n_samples,
                                             batchsize = 100,
+                                            cached_grid = cached_grid, 
                                             use_iwae = False)
 
         elapsed = time.time() - t0
