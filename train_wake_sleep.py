@@ -43,7 +43,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)
-data_params['sky_intensity'] = 201
+data_params['sky_intensity'] = 170
 full_background = full_background * 0.0 + data_params['sky_intensity']
 
 # draw data
@@ -96,7 +96,7 @@ star_encoder.load_state_dict(torch.load(init_encoder,
                                map_location=lambda storage, loc: storage));
 star_encoder.to(device)
 # load optimizer
-encoder_lr = 5e-5
+encoder_lr = 0e-5
 vae_optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
                     'lr': encoder_lr}],
