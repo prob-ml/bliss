@@ -80,7 +80,7 @@ def get_psf_loss(full_images, full_backgrounds,
     n_samples = locs.shape[0]
 
     for i in range(int(n_samples // 50)):
-        indx1 = int(i * 50)
+        indx1 = int(i * 50); print(indx1)
         indx2 = min(int((i + 1) * 50), n_samples)
         recon_means[indx1:indx2] = \
             plot_multiple_stars(slen, locs[indx1:indx2],
