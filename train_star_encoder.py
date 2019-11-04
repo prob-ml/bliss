@@ -65,7 +65,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
 star_encoder.to(device)
 
 # define optimizer
-learning_rate = 1e-3
+learning_rate = 5e-4
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
