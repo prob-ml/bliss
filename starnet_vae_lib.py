@@ -143,7 +143,9 @@ class StarEncoder(nn.Module):
     ############################
     def _forward_to_pooled_hidden(self, image, background):
         # forward to the layer that is shared by all n_stars
-        assert torch.all(image > 0.); assert torch.all((image - background) > -1000.)
+        assert torch.all(image > 0.)
+        assert torch.all((image - background) > -1000.)
+        
         log_img = torch.log(image - background + 1000)
 
 
@@ -157,18 +159,6 @@ class StarEncoder(nn.Module):
         h = self.enc_conv(log_img)
 
         return self.enc_fc(h)
-
-    def _forward_conditional_nstars(self, h, n_stars):
-        # for a **single** n_stars for all image in the batch,
-        # get the output parameters
-
-        assert isinstance(n_stars, int)
-
-        h_a = getattr(self, 'enc_a_detect' + str(n_stars))(h)
-        h_b = getattr(self, 'enc_b_detect' + str(n_stars))(torch.cat((h_a, h), dim = 1))
-        h_c = getattr(self, 'enc_final_detect' + str(n_stars))(torch.cat((h_a, h_b, h), dim = 1))
-
-        return h_c
 
     def _forward_to_last_hidden(self, image_stamps, background_stamps):
         # concatenate all output parameters for all possible n_stars
