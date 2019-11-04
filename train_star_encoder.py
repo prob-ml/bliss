@@ -47,7 +47,7 @@ star_dataset = \
 
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
-batchsize = 10
+batchsize = 20
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -58,14 +58,14 @@ loader = torch.utils.data.DataLoader(
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            stamp_slen = 7,
                                            step = 2,
-                                           edge_padding = 2.5,
+                                           edge_padding = 2,
                                            n_bands = 1,
                                            max_detections = 2)
 
 star_encoder.to(device)
 
 # define optimizer
-learning_rate = 5e-4
+learning_rate = 1e-3
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
