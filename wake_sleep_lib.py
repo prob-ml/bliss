@@ -113,7 +113,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                                             psf_transform, optimizer,
                                             n_samples,
                                             batchsize = 50,
-                                            cached_grid = cached_grid, 
+                                            cached_grid = cached_grid,
                                             use_iwae = use_iwae)
 
         elapsed = time.time() - t0
@@ -121,10 +121,11 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                     epoch, avg_loss, elapsed))
 
         test_losses[epoch] = avg_loss.item()
-        if (epoch % print_every) == 0:
+        np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
+                    test_losses)
+
+
+        if ((epoch % print_every) == 0) or (epoch == (n_epochs - 1)):
             outfile = out_filename + '-iter' + str(iteration)
             print("writing the psf parameters to " + outfile)
             torch.save(psf_transform.state_dict(), outfile)
-
-            np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
-                        test_losses)
