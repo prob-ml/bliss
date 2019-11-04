@@ -13,6 +13,7 @@ def get_fluxes_error(fluxes, true_fluxes):
                      torch.log10(true_fluxes).unsqueeze(1))
 
 def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes):
+
     if (est_fluxes is None) or (true_fluxes is None):
         fluxes_error = 0.
     else:
