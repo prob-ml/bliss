@@ -81,6 +81,7 @@ def get_psf_loss(full_images, full_backgrounds,
 
     _full_image = full_images[0, :, pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
     _recon_means = recon_means[:, :, pad:(slen - pad), pad:(slen - pad)].clamp(min = 100)
+
     recon_loss = - eval_normal_logprob(_full_image,
                 _recon_means,
                 torch.log(_recon_means)).view(n_samples, -1).sum(1)

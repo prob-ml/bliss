@@ -106,7 +106,7 @@ def get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, is_on_array):
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim = 1)
     fluxes_loss = -torch.gather(fluxes_log_probs_all_perm, 1, indx.unsqueeze(1)).squeeze()
 
-    return locs_loss, fluxes_loss
+    return locs_loss, fluxes_loss, indx
 
 
 def get_params_loss(logit_loc_mean, logit_loc_log_var, \
@@ -127,10 +127,8 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
         get_fluxes_logprob_all_combs(true_fluxes, \
                                     log_flux_mean, log_flux_log_var)
 
-    locs_loss, fluxes_loss = \
+    locs_loss, fluxes_loss, perm_indx = \
         get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, true_is_on_array)
-    # TODO:
-    perm = None
 
 
     true_n_stars = true_is_on_array.sum(1)
@@ -144,7 +142,7 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
     loss = (loss_vec * weights_vec).mean()
     # loss = loss_vec.mean()
 
-    return loss, counter_loss, locs_loss, fluxes_loss, perm
+    return loss, counter_loss, locs_loss, fluxes_loss, perm_indx
 
 def get_encoder_loss(star_encoder,
                         images_full,

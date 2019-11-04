@@ -37,7 +37,8 @@ class StarEncoder(nn.Module):
         self.edge_padding = edge_padding
 
         self.tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
-                                                        stamp_slen, step); self.n_patches = self.tile_coords.shape[0]
+                                                        stamp_slen, step);
+        self.n_patches = self.tile_coords.shape[0]
 
 
         # TODO: make this variable for mean stars
@@ -142,8 +143,9 @@ class StarEncoder(nn.Module):
     ############################
     def _forward_to_pooled_hidden(self, image, background):
         # forward to the layer that is shared by all n_stars
-
+        assert torch.all(image > 0.); assert torch.all((image - background) > -1000.)
         log_img = torch.log(image - background + 1000)
+
 
         # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
         # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
@@ -372,13 +374,14 @@ class StarEncoder(nn.Module):
         log_probs = self._get_logprobs_from_last_hidden_layer(h)
 
         # sample number of stars
-        if return_map:
-            n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
-        else:
-            if n_stars is None:
-                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples)
+        if n_stars is None:
+            if return_map:
+                n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
+
             else:
-                n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
+                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples)
+        else:
+            n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
 
         is_on_array = utils.get_is_on_from_n_stars_2d(n_stars_sampled,
                                 self.max_detections)

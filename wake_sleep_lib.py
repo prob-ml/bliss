@@ -54,58 +54,78 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
             torch.save(star_encoder.state_dict(), outfile)
 
 
+def train_psf_transform_one_epoch(full_image, full_background, star_encoder,
+                                    psf_transform, optimizer,
+                                    n_samples, batchsize,
+                                    cached_grid = None,
+                                    use_iwae = False):
 
+    # sample variational parameters
+    sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
+        log_q_locs, log_q_fluxes, log_q_n_stars = \
+            star_encoder.sample_star_encoder(full_image, full_background,
+                                    n_samples, return_map = False,
+                                    return_log_q = use_iwae)
 
-def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
-                n_epochs, n_samples, out_filename, iteration, use_iwae = False):
-
-    test_losses = np.zeros(n_epochs)
-    cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
-    print_every = 10
-
-    for epoch in range(n_epochs):
-        t0 = time.time()
-
+    avg_loss = 0.0
+    for i in range(n_samples // batchsize):
         optimizer.zero_grad()
 
         # get psf
         psf = psf_transform.forward()
 
-        # sample variational parameters
-        sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
-            log_q_locs, log_q_fluxes, log_q_n_stars = \
-                star_encoder.sample_star_encoder(full_image, full_background,
-                                        n_samples, return_map = False,
-                                        return_log_q = use_iwae)
-                                    # n_samples = 1, return_map = True)
+        indx1 = int(i * batchsize)
+        indx2 = min(int((i + 1) * batchsize), n_samples)
 
         # get loss
         neg_logprob = get_psf_loss(full_image, full_background,
-                            sampled_locs_full_image,
-                            sampled_fluxes_full_image,
-                            n_stars = sampled_n_stars_full,
-                            psf = psf,
-                            pad = 5, grid = cached_grid)[1]
+                                    sampled_locs_full_image[indx1:indx2],
+                                    sampled_fluxes_full_image[indx1:indx2],
+                                    n_stars = sampled_n_stars_full[indx1:indx2],
+                                    psf = psf,
+                                    pad = 5, grid = cached_grid)[1]
 
         if use_iwae:
             # this is log (p / q)
-            log_pq = - neg_logprob - log_q_locs - log_q_fluxes - log_q_n_stars
-            avg_loss = - torch.logsumexp(log_pq - np.log(n_samples), 0)
+            log_pq = - neg_logprob - log_q_locs[indx1:indx2] - log_q_fluxes[indx1:indx2] - log_q_n_stars[indx1:indx2]
+            loss_i = - torch.logsumexp(log_pq - np.log(n_samples), 0)
         else:
-            avg_loss = loss.mean()
+            loss_i = neg_logprob.mean()
 
-        avg_loss.backward()
+        loss_i.backward()
         optimizer.step()
+
+        avg_loss += loss_i.detach() * (indx2 - indx1) / n_samples
+
+    return avg_loss
+
+def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
+                n_epochs, n_samples, out_filename, iteration, use_iwae = False):
+
+    test_losses = np.zeros(n_epochs)
+    cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
+    print_every = 10
+
+    for epoch in range(n_epochs):
+        t0 = time.time()
+
+        avg_loss = train_psf_transform_one_epoch(full_image, full_background, star_encoder,
+                                            psf_transform, optimizer,
+                                            n_samples,
+                                            batchsize = 50,
+                                            cached_grid = cached_grid,
+                                            use_iwae = use_iwae)
 
         elapsed = time.time() - t0
         print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, elapsed))
 
-        test_losses[epoch] = avg_loss
-        if (epoch % print_every) == 0:
+        test_losses[epoch] = avg_loss.item()
+        np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
+                    test_losses)
+
+
+        if ((epoch % print_every) == 0) or (epoch == (n_epochs - 1)):
             outfile = out_filename + '-iter' + str(iteration)
             print("writing the psf parameters to " + outfile)
             torch.save(psf_transform.state_dict(), outfile)
-
-            np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
-                        test_losses)

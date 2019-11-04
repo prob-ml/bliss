@@ -31,7 +31,8 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
+                                        x0 = 650, x1 = 120)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -42,6 +43,8 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)
+data_params['sky_intensity'] = 201
+full_background = full_background * 0.0 + data_params['sky_intensity']
 
 # draw data
 print('generating data: ')
@@ -82,17 +85,40 @@ psf_transform.to(device)
 
 
 
-filename = './fits/wake_sleep-loc630x310-reweighted_prior-iwae-10282019'
-# filename = './fits/deleteme'
+filename = './fits/results_10302019/wake_sleep-loc650x120-11022019'
+
+########################
+# Initial training of encoder
+########################
+init_encoder = './fits/results_10302019/starnet-10302019'
+print('loading encoder from: ', init_encoder)
+star_encoder.load_state_dict(torch.load(init_encoder,
+                               map_location=lambda storage, loc: storage));
+star_encoder.to(device)
+
+# load optimizer
+encoder_lr = 5e-5
+vae_optimizer = optim.Adam([
+                    {'params': star_encoder.parameters(),
+                    'lr': encoder_lr}],
+                    weight_decay = 1e-5)
+
+run_sleep(star_encoder,
+            loader,
+            vae_optimizer,
+            n_epochs = 11,
+            out_filename = filename + '-encoder',
+            iteration = 0)
 
 for iteration in range(0, 6):
+    ########################
+    # wake phase training
+    ########################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
-    if iteration == 0:
-        encoder_file = './fits/starnet-10162019-reweighted'
-    else:
-        encoder_file = filename + '-encoder-iter' + str(iteration)
+    encoder_file = filename + '-encoder-iter' + str(iteration)
 
+    if iteration > 0:
         # load psf transform
         psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
         print('loading psf_transform from: ', psf_transform_file)
@@ -107,26 +133,26 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    psf_lr = 0.1 / (1 + 80 * iteration)
+    psf_lr = 0.05 
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
                         'lr': psf_lr}], weight_decay = 1e-5)
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
-                    n_epochs = 81,
-                    n_samples = 50,
+                    n_epochs = 10,
+                    n_samples = 1000,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration,
                     use_iwae = True)
 
+    ########################
+    # sleep phase training
+    ########################
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
     # load encoder
-    if iteration == 0:
-        encoder_file = './fits/starnet-10162019-reweighted'
-    else:
-        encoder_file = filename + '-encoder-iter' + str(iteration)
+    encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage));
@@ -141,7 +167,7 @@ for iteration in range(0, 6):
     loader.dataset.simulator.psf = psf_transform.forward().detach()
 
     # load optimizer
-    encoder_lr = 1e-4
+    encoder_lr = 5e-5
     vae_optimizer = optim.Adam([
                         {'params': star_encoder.parameters(),
                         'lr': encoder_lr}],
