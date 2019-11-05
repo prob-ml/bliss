@@ -143,7 +143,7 @@ for iteration in range(0, 6):
                     n_samples = 50,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration,
-                    epoch0 = iteration * 10,
+                    epoch0 = iteration * 200,
                     use_iwae = True)
 
     ########################

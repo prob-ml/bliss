@@ -153,10 +153,6 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         counter += 1
 
         if ((epoch % print_every) == 0) or (epoch == (n_epochs - 1)):
-            outfile = out_filename + '-iter' + str(iteration)
-            print("writing the psf parameters to " + outfile)
-            torch.save(psf_transform.state_dict(), outfile)
-
             elapsed = time.time() - t0
             print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                         epoch, avg_loss / counter, elapsed))
@@ -169,3 +165,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
             avg_loss = 0.0
             counter = 0
             t0 = time.time()
+
+        outfile = out_filename + '-iter' + str(iteration)
+        print("writing the psf parameters to " + outfile)
+        torch.save(psf_transform.state_dict(), outfile)
