@@ -127,9 +127,9 @@ for epoch in range(n_epochs):
 	test_losses[epoch] = avg_loss
 
 	if (epoch % print_every) == 0:
-		outfile = './fits/results_11042019/starnet_testing-11042019';
-		print("writing the encoder parameters to " + outfile);
-		torch.save(star_encoder.state_dict(), outfile);
+        outfile = './fits/results_11042019/starnet_testing-11042019';
+        print("writing the encoder parameters to " + outfile);
+        torch.save(star_encoder.state_dict(), outfile);
 
         locs, fluxes, n_stars = \
             star_encoder.sample_star_encoder(full_image, full_background,
@@ -139,10 +139,10 @@ for epoch in range(n_epochs):
                                                 training = True)[0:3]
 
         loss = get_psf_loss(full_image, full_background,
-    	                    locs.detach(), fluxes.detach(), n_stars.detach(),
-    						psf,
-    	                    pad = 5,
-    	                    grid = cached_grid)[1]
+                                locs.detach(), fluxes.detach(), n_stars.detach(),
+                                psf,
+                                pad = 5,
+                                grid = cached_grid)[1]
 
         print(locs.mean())
         print(fluxes.mean())
