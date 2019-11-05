@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
+import json
 import sdss_dataset_lib
 import sdss_psf
 import simulated_datasets_lib
@@ -53,7 +54,7 @@ else:
 
 
 # define encoder
-star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
+star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                             stamp_slen = 7,
                                             step = 2,
                                             edge_padding = 2,
@@ -78,16 +79,15 @@ print('training')
 
 test_losses = np.zeros(n_epochs)
 
-cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device)
+cached_grid = simulated_datasets_lib._get_mgrid(star_encoder.full_slen).to(device)
 
 for epoch in range(n_epochs):
 	t0 = time.time()
 
 	optimizer.zero_grad()
 
-	
-	images_full = star_dataset.images
-    backgrounds_full = torch.ones(star_dataset.images.shape).to(device) * star_dataset.sky_intensity
+
+	full_image = star_dataset.images; full_background = torch.ones(star_dataset.images.shape).to(device) * star_dataset.sky_intensity
 
 	# get params
 	locs, fluxes, n_stars = \
@@ -101,7 +101,7 @@ for epoch in range(n_epochs):
 	# get loss
 	loss = get_psf_loss(full_image, full_background,
 	                    locs.detach(), fluxes, n_stars.detach(),
-						torch.Tensor(psf_init).to(device),
+						star_dataset.simulator.psf.to(device),
 	                    pad = 5,
 	                    grid = cached_grid)[1]
 
@@ -117,9 +117,7 @@ for epoch in range(n_epochs):
 	test_losses[epoch] = avg_loss
 
 	if (epoch % print_every) == 0:
-	    outfile = './fits/results_11042019/starnet_testing-11042019'
-		print("writing the encoder parameters to " + outfile)
-		torch.save(star_encoder.state_dict(), outfile)
+	    outfile = './fits/results_11042019/starnet_testing-11042019'; print("writing the encoder parameters to " + outfile); torch.save(star_encoder.state_dict(), outfile)
 
 	star_dataset.set_params_and_images()
 
