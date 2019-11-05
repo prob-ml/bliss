@@ -92,7 +92,7 @@ for epoch in range(n_epochs):
 	optimizer.zero_grad()
 
 	if use_real_data:
-		full_image = sdss_background
+		full_image = sdss_image
 		full_background = sdss_background
 	else:
 		star_dataset.set_params_and_images()

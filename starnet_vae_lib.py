@@ -402,7 +402,7 @@ class StarEncoder(nn.Module):
             torch.sigmoid(logit_locs_sampled) * is_on_array.unsqueeze(3).float()
 
         # sample fluxes
-        fluxes_randn = torch.randn(log_flux_mean.shape).to(device)
+        fluxes_randn = torch.randn(log_flux_mean.shape).to(device); 
         log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
         subimage_fluxes_sampled = \
             torch.exp(log_flux_sampled) * is_on_array.float()
