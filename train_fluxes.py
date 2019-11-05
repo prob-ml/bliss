@@ -101,7 +101,7 @@ for epoch in range(n_epochs):
 	locs, fluxes, n_stars = \
 		star_encoder.sample_star_encoder(full_image,
 			                                full_background,
-			                                n_samples = 1,
+			                                n_samples = 100,
 			                                return_map = False,
 			                                return_log_q = False,
 			                                training = True)[0:3]
