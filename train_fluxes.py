@@ -133,11 +133,11 @@ for epoch in range(n_epochs):
 
         locs, fluxes, n_stars = \
     		star_encoder.sample_star_encoder(full_image,
-    			                                full_background,
-    			                                n_samples = 1,
-    			                                return_map = True,
-    			                                return_log_q = False,
-    			                                training = True)[0:3]
+                                                full_background,
+                                                n_samples = 1,
+                                                return_map = True,
+                                                return_log_q = False,
+                                                training = True)[0:3]
         print(locs.mean())
         print(fluxes.mean())
         print(n_stars.mean())
