@@ -145,9 +145,8 @@ class StarEncoder(nn.Module):
         # forward to the layer that is shared by all n_stars
         assert torch.all(image > 0.)
         assert torch.all((image - background) > -1000.)
-        
-        log_img = torch.log(image - background + 1000)
 
+        log_img = torch.log(image - background + 1000)
 
         # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
         # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
@@ -349,7 +348,8 @@ class StarEncoder(nn.Module):
                                 n_samples = 1,
                                 return_map = False,
                                 n_stars = None,
-                                return_log_q = False):
+                                return_log_q = False,
+                                training = False):
 
         # our sampling only works for one image at a time at the moment ...
         assert full_image.shape[0] == 1
@@ -361,7 +361,11 @@ class StarEncoder(nn.Module):
                             locs = None, fluxes = None, trim_images = False)[0]
 
         # pass through NN
-        h = self._forward_to_last_hidden(image_stamps, background_stamps).detach()
+        if training:
+            h = self._forward_to_last_hidden(image_stamps, background_stamps)
+        else:
+            h = self._forward_to_last_hidden(image_stamps, background_stamps).detach()
+
         # get log probs
         log_probs = self._get_logprobs_from_last_hidden_layer(h)
 
