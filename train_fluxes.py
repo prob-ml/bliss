@@ -22,37 +22,34 @@ _ = torch.manual_seed(2534)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-# # get sdss data
-# sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
-# 					hubble_cat_file = './hubble_data/NCG7089/' + \
-#                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
-#
-# # load psf
-# psf_og = sdss_psf.psf_at_points(0, 0, psf_fit_file = str(sdss_hubble_data.psf_file))
-#
-# psf_init = torch.Tensor(simulated_datasets_lib._expand_psf(psf_og, sdss_hubble_data.slen))
-# print(psf_init.shape)
-#
-# # image
-# full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
-# full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device) * 0.0 + 179.
-#
-# # true paramters
-# true_full_locs = sdss_hubble_data.locs.unsqueeze(0).to(device)
-# true_full_fluxes = sdss_hubble_data.fluxes.unsqueeze(0).to(device)
+# get sdss data
+if use_real_data:
+	sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
+						hubble_cat_file = './hubble_data/NCG7089/' + \
+	                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
 
-# get simulated data
-with open('./data/default_star_parameters.json', 'r') as fp:
-    data_params = json.load(fp)
+	# load psf
+	psf_og = sdss_psf.psf_at_points(0, 0, psf_fit_file = str(sdss_hubble_data.psf_file))
 
-psf_fit_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+	psf_init = torch.Tensor(simulated_datasets_lib._expand_psf(psf_og, sdss_hubble_data.slen))
 
-n_images = 20
-star_dataset = \
-    simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
-                            data_params,
-                            n_images = n_images,
-                            add_noise = True)
+	# image
+	full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
+	full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device) * 0.0 + 179.
+
+else:
+	# get simulated data
+	with open('./data/default_star_parameters.json', 'r') as fp:
+	    data_params = json.load(fp)
+
+	psf_fit_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+
+	n_images = 20
+	star_dataset = \
+	    simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
+	                            data_params,
+	                            n_images = n_images,
+	                            add_noise = True)
 
 
 # define encoder
@@ -88,6 +85,7 @@ for epoch in range(n_epochs):
 
 	optimizer.zero_grad()
 
+	
 	images_full = star_dataset.images
     backgrounds_full = torch.ones(star_dataset.images.shape).to(device) * star_dataset.sky_intensity
 
