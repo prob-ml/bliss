@@ -361,13 +361,10 @@ class StarEncoder(nn.Module):
                             locs = None, fluxes = None, trim_images = False)[0]
 
         # pass through NN
-        if training:
-            h = self._forward_to_last_hidden(image_stamps, background_stamps)
-        else:
-            h = self._forward_to_last_hidden(image_stamps, background_stamps).detach()
+        h = self._forward_to_last_hidden(image_stamps, background_stamps)
 
         # get log probs
-        log_probs = self._get_logprobs_from_last_hidden_layer(h)
+        log_probs = self._get_logprobs_from_last_hidden_layer(h).detach()
 
         # sample number of stars
         if n_stars is None:
@@ -391,8 +388,10 @@ class StarEncoder(nn.Module):
             logit_loc_sd = torch.zeros(logit_loc_logvar.shape).to(device)
             log_flux_sd = torch.zeros(log_flux_logvar.shape).to(device)
         else:
-            logit_loc_sd = torch.exp(0.5 * logit_loc_logvar)
+            logit_loc_sd = torch.exp(0.5 * logit_loc_logvar.detach())
             log_flux_sd = torch.exp(0.5 * log_flux_logvar)
+            if not training:
+                log_flux_sd = log_flux_sd.detach()
 
         # sample locations
         locs_randn = torch.randn(logit_loc_mean.shape).to(device)
@@ -402,8 +401,12 @@ class StarEncoder(nn.Module):
             torch.sigmoid(logit_locs_sampled) * is_on_array.unsqueeze(3).float()
 
         # sample fluxes
-        fluxes_randn = torch.randn(log_flux_mean.shape).to(device); 
-        log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
+        fluxes_randn = torch.randn(log_flux_mean.shape).to(device);
+        if training:
+            log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
+        else:
+            log_flux_sampled = log_flux_mean.detach() + fluxes_randn * log_flux_sd
+            
         subimage_fluxes_sampled = \
             torch.exp(log_flux_sampled) * is_on_array.float()
 
