@@ -23,8 +23,14 @@ _ = torch.manual_seed(2534)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-# get sdss data
+# data parameters
+with open('./data/default_star_parameters.json', 'r') as fp:
+    data_params = json.load(fp)
+
+use_real_data = True
 if use_real_data:
+	# get sdss data
+
 	sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 						hubble_cat_file = './hubble_data/NCG7089/' + \
 	                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
@@ -35,13 +41,10 @@ if use_real_data:
 	psf_init = torch.Tensor(simulated_datasets_lib._expand_psf(psf_og, sdss_hubble_data.slen))
 
 	# image
-	full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
-	full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device) * 0.0 + 179.
+	sdss_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
+	sdss_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device) * 0.0 + 179.
 
 else:
-	# get simulated data
-	with open('./data/default_star_parameters.json', 'r') as fp:
-	    data_params = json.load(fp)
 
 	psf_fit_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 
@@ -86,8 +89,13 @@ for epoch in range(n_epochs):
 
 	optimizer.zero_grad()
 
-
-	full_image = star_dataset.images; full_background = torch.ones(star_dataset.images.shape).to(device) * star_dataset.sky_intensity
+	if use_real_data:
+		full_image = sdss_background
+		full_background = sdss_background
+		star_dataset.set_params_and_images()
+	else:
+		full_image = star_dataset.images
+		full_background = torch.ones(star_dataset.images.shape).to(device) * star_dataset.sky_intensity
 
 	# get params
 	locs, fluxes, n_stars = \
@@ -117,8 +125,8 @@ for epoch in range(n_epochs):
 	test_losses[epoch] = avg_loss
 
 	if (epoch % print_every) == 0:
-	    outfile = './fits/results_11042019/starnet_testing-11042019'; print("writing the encoder parameters to " + outfile); torch.save(star_encoder.state_dict(), outfile)
-
-	star_dataset.set_params_and_images()
+		outfile = './fits/results_11042019/starnet_testing-11042019';
+		print("writing the encoder parameters to " + outfile);
+		torch.save(star_encoder.state_dict(), outfile)
 
 print('done')
