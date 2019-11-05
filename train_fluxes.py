@@ -37,7 +37,7 @@ if use_real_data:
 	# load psf
 	psf_og = sdss_psf.psf_at_points(0, 0, psf_fit_file = str(sdss_hubble_data.psf_file))
 
-	psf_init = torch.Tensor(simulated_datasets_lib._expand_psf(psf_og, sdss_hubble_data.slen))
+	psf = torch.Tensor(simulated_datasets_lib._expand_psf(psf_og, sdss_hubble_data.slen)).to(device)
 
 	# image
 	sdss_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -54,6 +54,8 @@ else:
 	                            data_params,
 	                            n_images = n_images,
 	                            add_noise = True)
+
+	psf = star_dataset.simulator.psf.to(device)
 
 
 # define encoder
@@ -109,7 +111,7 @@ for epoch in range(n_epochs):
 	# get loss
 	loss = get_psf_loss(full_image, full_background,
 	                    locs.detach(), fluxes, n_stars.detach(),
-						star_dataset.simulator.psf.to(device),
+						psf,
 	                    pad = 5,
 	                    grid = cached_grid)[1]
 
