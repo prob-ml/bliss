@@ -87,44 +87,44 @@ test_losses = np.zeros(n_epochs)
 cached_grid = simulated_datasets_lib._get_mgrid(star_encoder.full_slen).to(device)
 
 for epoch in range(n_epochs):
-	t0 = time.time()
+    t0 = time.time()
 
-	optimizer.zero_grad()
+    optimizer.zero_grad()
 
-	if use_real_data:
-		full_image = sdss_image
-		full_background = sdss_background
-	else:
-		star_dataset.set_params_and_images()
-		full_image = star_dataset.images
-		full_background = torch.ones(star_dataset.images.shape).to(device) * star_dataset.sky_intensity
+    if use_real_data:
+        full_image = sdss_image
+        full_background = sdss_background
+    else:
+        star_dataset.set_params_and_images()
+        full_image = star_dataset.images
+        full_background = torch.ones(star_dataset.images.shape).to(device) * star_dataset.sky_intensity
 
-	# get params
-	locs, fluxes, n_stars = \
-		star_encoder.sample_star_encoder(full_image,
-			                                full_background,
-			                                n_samples = 100,
-			                                return_map = False,
-			                                return_log_q = False,
-			                                training = True)[0:3]
+    # get params
+    locs, fluxes, n_stars = \
+        star_encoder.sample_star_encoder(full_image,
+                                            full_background,
+                                            n_samples = 100,
+                                            return_map = False,
+                                            return_log_q = False,
+                                            training = True)[0:3]
 
-	# get loss
-	loss = get_psf_loss(full_image, full_background,
-	                    locs.detach(), fluxes, n_stars.detach(),
-						psf,
-	                    pad = 5,
-	                    grid = cached_grid)[1]
+    # get loss
+    loss = get_psf_loss(full_image, full_background,
+                            locs.detach(), fluxes, n_stars.detach(),
+                            psf,
+                            pad = 5,
+                            grid = cached_grid)[1]
 
-	avg_loss = loss.mean()
+    avg_loss = loss.mean()
 
-	avg_loss.backward()
-	optimizer.step()
+    avg_loss.backward()
+    optimizer.step()
 
-	elapsed = time.time() - t0
-	print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-	                epoch, avg_loss, elapsed))
+    elapsed = time.time() - t0
+    print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                    epoch, avg_loss, elapsed))
 
-	test_losses[epoch] = avg_loss
+    test_losses[epoch] = avg_loss
 
     if (epoch % print_every) == 0:
         outfile = './fits/results_11042019/starnet_testing-11042019';
@@ -132,17 +132,17 @@ for epoch in range(n_epochs):
         torch.save(star_encoder.state_dict(), outfile);
 
         locs, fluxes, n_stars = \
-        star_encoder.sample_star_encoder(full_image, full_background,
-                                            n_samples = 1,
-                                            return_map = True,
-                                            return_log_q = False,
-                                            training = True)[0:3]
+            star_encoder.sample_star_encoder(full_image, full_background,
+                                                n_samples = 1,
+                                                return_map = True,
+                                                return_log_q = False,
+                                                training = True)[0:3]
 
         loss = get_psf_loss(full_image, full_background,
-                            locs.detach(), fluxes.detach(), n_stars.detach(),
-                            psf,
-                            pad = 5,
-                            grid = cached_grid)[1]
+                                locs.detach(), fluxes.detach(), n_stars.detach(),
+                                psf,
+                                pad = 5,
+                                grid = cached_grid)[1]
 
         print(locs.mean())
         print(fluxes.mean())
