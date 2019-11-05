@@ -74,6 +74,15 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
 
 star_encoder.to(device)
 
+# freeze batchnorm layers
+# code taken from https://discuss.pytorch.org/t/freeze-batchnorm-layer-lead-to-nan/8385/2
+def set_bn_eval(m):
+    classname = m.__class__.__name__
+    if classname.find('BatchNorm') != -1:
+      m.eval()
+
+star_encoder.apply(set_bn_eval);
+
 # define psf transform
 from copy import deepcopy
 psf_og = deepcopy(loader.dataset.simulator.psf_og)
@@ -135,7 +144,9 @@ for iteration in range(0, 1):
     psf_lr = 0.025 / (1 + 201 * iteration)
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
-                        'lr': psf_lr}], weight_decay = 1e-5)
+                        'lr': psf_lr},
+                        {'params': star_encoder.enc_final.parameters(),
+                        'lr': encoder_lr}], weight_decay = 1e-5)
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
