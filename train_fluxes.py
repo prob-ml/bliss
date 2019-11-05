@@ -30,7 +30,6 @@ with open('./data/default_star_parameters.json', 'r') as fp:
 use_real_data = True
 if use_real_data:
 	# get sdss data
-
 	sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 						hubble_cat_file = './hubble_data/NCG7089/' + \
 	                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
@@ -45,7 +44,8 @@ if use_real_data:
 	sdss_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device) * 0.0 + 179.
 
 else:
-
+	print('simulating data; data params: ')
+	print(data_params)
 	psf_fit_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 
 	n_images = 20
@@ -92,8 +92,8 @@ for epoch in range(n_epochs):
 	if use_real_data:
 		full_image = sdss_background
 		full_background = sdss_background
-		star_dataset.set_params_and_images()
 	else:
+		star_dataset.set_params_and_images()
 		full_image = star_dataset.images
 		full_background = torch.ones(star_dataset.images.shape).to(device) * star_dataset.sky_intensity
 
