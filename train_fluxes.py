@@ -70,6 +70,17 @@ star_encoder.load_state_dict(torch.load('./fits/results_11042019/starnet-1104201
                                map_location=lambda storage, loc: storage))
 
 star_encoder.to(device)
+
+# freeze batchnorm layers
+# code taken from https://discuss.pytorch.org/t/freeze-batchnorm-layer-lead-to-nan/8385/2
+def set_bn_eval(m):
+    classname = m.__class__.__name__
+    if classname.find('BatchNorm') != -1:
+      m.eval()
+
+star_encoder.apply(set_bn_eval)
+
+
 # define optimizer
 weight_decay = 1e-5
 optimizer = optim.Adam([
@@ -148,6 +159,6 @@ for epoch in range(n_epochs):
         print(fluxes.mean())
         print(n_stars.float().mean())
 
-        print('MAP loss: {:0.8f}'.format(loss.mean()))
+        print('**************** MAP loss ****************: {:0.8f}'.format(loss.mean()))
 
 print('done')
