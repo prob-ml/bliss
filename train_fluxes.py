@@ -129,10 +129,25 @@ for epoch in range(n_epochs):
 	if (epoch % print_every) == 0:
 		outfile = './fits/results_11042019/starnet_testing-11042019';
 		print("writing the encoder parameters to " + outfile);
-		torch.save(star_encoder.state_dict(), outfile); locs, fluxes, n_stars = star_encoder.sample_star_encoder(full_image, full_background,
+		torch.save(star_encoder.state_dict(), outfile);
+
+        locs, fluxes, n_stars = \
+            star_encoder.sample_star_encoder(full_image, full_background,
                                                 n_samples = 1,
                                                 return_map = True,
                                                 return_log_q = False,
-                                                training = True)[0:3]; print(locs.mean()); print(fluxes.mean()); print(n_stars.float().mean())
+                                                training = True)[0:3]
+
+        loss = get_psf_loss(full_image, full_background,
+    	                    locs.detach(), fluxes.detach(), n_stars.detach(),
+    						psf,
+    	                    pad = 5,
+    	                    grid = cached_grid)[1]
+
+        print(locs.mean())
+        print(fluxes.mean())
+        print(n_stars.float().mean())
+
+        print('MAP loss: {:0.8f}'.format(loss.mean()))
 
 print('done')
