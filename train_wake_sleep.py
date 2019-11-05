@@ -98,11 +98,12 @@ filename = './fits/results_11042019/wake_sleep-loc630x310-11042019'
 ########################
 # Initial training of encoder
 ########################
-init_encoder = './fits/results_11042019/starnet-11042019'
-print('loading encoder from: ', init_encoder)
-star_encoder.load_state_dict(torch.load(init_encoder,
-                               map_location=lambda storage, loc: storage));
-star_encoder.to(device)
+# init_encoder = './fits/results_11042019/starnet-11042019'
+# init_encoder = './fits/results_11042019/wake_sleep-loc630x310-11042019-encoder-iter0'
+# print('loading encoder from: ', init_encoder)
+# star_encoder.load_state_dict(torch.load(init_encoder,
+#                                map_location=lambda storage, loc: storage));
+# star_encoder.to(device)
 
 # load optimizer
 encoder_lr = 5e-5
@@ -111,14 +112,14 @@ vae_optimizer = optim.Adam([
                     'lr': encoder_lr}],
                     weight_decay = 1e-5)
 
-run_sleep(star_encoder,
-            loader,
-            vae_optimizer,
-            n_epochs = 11,
-            out_filename = filename + '-encoder',
-            iteration = 0)
+# run_sleep(star_encoder,
+#             loader,
+#             vae_optimizer,
+#             n_epochs = 11,
+#             out_filename = filename + '-encoder',
+#             iteration = 0)
 
-for iteration in range(0, 1):
+for iteration in range(0, 6):
     ########################
     # wake phase training
     ########################
@@ -151,7 +152,7 @@ for iteration in range(0, 1):
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
                     n_epochs = 200,
-                    n_samples = 100,
+                    n_samples = 50,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration,
                     epoch0 = iteration * 200,

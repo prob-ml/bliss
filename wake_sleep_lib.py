@@ -148,7 +148,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         if use_iwae:
             # this is log (p / q)
             log_pq = - neg_logprob - log_q_locs[indx1:indx2].detach() - \
-                            log_q_fluxes[indx1:indx2],detach() - \
+                            log_q_fluxes[indx1:indx2].detach() - \
                             log_q_n_stars[indx1:indx2].detach()
                             
             loss_i = - torch.logsumexp(log_pq - np.log(n_samples), 0)
