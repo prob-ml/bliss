@@ -101,7 +101,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                 use_iwae = False):
 
     cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
-    print_every = 10
+    print_every = 20
 
     init_lr = optimizer.param_groups[0]['lr']
 
@@ -118,9 +118,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
     counter = 0
     t0 = time.time()
     test_losses = []
-    for epoch in range(n_epochs):
-        # update stepsize
-        optimizer.param_groups[0]['lr'] = init_lr / (1 + epoch + epoch0)
+    for epoch in range(1, n_epochs + 1):
 
         optimizer.zero_grad()
 
@@ -128,8 +126,8 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         psf = psf_transform.forward()
 
         # get index of sampled parameters
-        indx1 = int(epoch * n_samples)
-        indx2 = int((epoch + 1) * n_samples)
+        indx1 = int((epoch - 1) * n_samples)
+        indx2 = int(epoch * n_samples)
 
         # get loss
         neg_logprob = get_psf_loss(full_image, full_background,
@@ -152,12 +150,12 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         avg_loss += loss_i.detach()
         counter += 1
 
-        if ((epoch % print_every) == 0) or (epoch == (n_epochs - 1)):
+        if ((epoch % print_every) == 0) or (epoch == n_epochs):
             elapsed = time.time() - t0
             print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                         epoch, avg_loss / counter, elapsed))
 
-            test_losses.append(avg_loss)
+            test_losses.append(avg_loss / counter)
             np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
                         test_losses)
 
