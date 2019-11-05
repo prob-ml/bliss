@@ -48,7 +48,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
 
 psf_fit_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 
-n_images = 1
+n_images = 20
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
                             data_params,
@@ -76,7 +76,7 @@ optimizer = optim.Adam([
                     weight_decay = weight_decay)
 
 
-n_epochs = 101
+n_epochs = 1001
 print_every = 10
 print('training')
 
@@ -95,7 +95,7 @@ for epoch in range(n_epochs):
 	locs, fluxes, n_stars = \
 		star_encoder.sample_star_encoder(full_image,
 			                                full_background,
-			                                n_samples = 100,
+			                                n_samples = 1,
 			                                return_map = False,
 			                                return_log_q = False,
 			                                training = True)[0:3]

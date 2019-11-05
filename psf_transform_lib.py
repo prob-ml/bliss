@@ -60,7 +60,7 @@ def get_psf_loss(full_images, full_backgrounds,
                     grid = None):
 
     assert len(full_images.shape) == 4
-    assert full_images.shape[0] == 1 # for now, one image at a time ...
+    # assert full_images.shape[0] == 1 # for now, one image at a time ...
 
     assert full_images.shape == full_backgrounds.shape
 
@@ -79,7 +79,7 @@ def get_psf_loss(full_images, full_backgrounds,
         plot_multiple_stars(slen, locs, n_stars, fluxes, psf, grid) + \
             full_backgrounds
 
-    _full_image = full_images[0, :, pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
+    _full_image = full_images[:, :, pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
     _recon_means = recon_means[:, :, pad:(slen - pad), pad:(slen - pad)].clamp(min = 100, max = 2 * _full_image.max())
 
     recon_loss = - eval_normal_logprob(_full_image,
