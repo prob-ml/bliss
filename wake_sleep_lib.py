@@ -166,6 +166,6 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
             counter = 0
             t0 = time.time()
 
-        outfile = out_filename + '-iter' + str(iteration)
-        print("writing the psf parameters to " + outfile)
-        torch.save(psf_transform.state_dict(), outfile)
+    outfile = out_filename + '-iter' + str(iteration)
+    print("writing the psf parameters to " + outfile)
+    torch.save(psf_transform.state_dict(), outfile)
