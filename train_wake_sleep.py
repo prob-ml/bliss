@@ -139,10 +139,11 @@ for iteration in range(0, 6):
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
-                    n_epochs = 10,
-                    n_samples = 1000,
+                    n_epochs = 201,
+                    n_samples = 50,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration,
+                    epoch0 = iteration * 10,
                     use_iwae = True)
 
     ########################
