@@ -106,7 +106,12 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
     cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
     print_every = 10
 
+    init_lr = psf_optimizer.param_groups[0]['lr']
+
     for epoch in range(n_epochs):
+        # update stepsize
+        psf_optimizer.param_groups[0]['lr'] = init_lr / (1 + epoch)
+
         t0 = time.time()
 
         avg_loss = train_psf_transform_one_epoch(full_image, full_background, star_encoder,
