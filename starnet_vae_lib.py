@@ -100,31 +100,31 @@ class StarEncoder(nn.Module):
         )
 
         # add final layer, whose size depends on the number of stars to output
-        for i in range(0, max_detections + 1):
-            # i = 0, 1, ..., max_detections
-            len_out = i * 6 + 1
-            width_hidden = len_out * 10
-
-            module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
-                                    nn.ReLU(),
-                                    nn.Linear(width_hidden, width_hidden),
-                                    # nn.ReLU(),
-                                    # nn.Linear(width_hidden, width_hidden),
-                                    nn.ReLU())
-            self.add_module('enc_a_detect' + str(i), module_a)
-
-            module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
-                                    nn.ReLU(),
-                                    nn.Linear(width_hidden, width_hidden),
-                                    # nn.ReLU(),
-                                    # nn.Linear(width_hidden, width_hidden),
-                                    nn.ReLU())
-
-            self.add_module('enc_b_detect' + str(i), module_b)
-
-            final_module_name = 'enc_final_detect' + str(i)
-            final_module = nn.Linear(2 * width_hidden + enc_hidden, len_out)
-            self.add_module(final_module_name, final_module)
+        # for i in range(0, max_detections + 1):
+        #     # i = 0, 1, ..., max_detections
+        #     len_out = i * 6 + 1
+        #     width_hidden = len_out * 10
+        #
+        #     module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
+        #                             nn.ReLU(),
+        #                             nn.Linear(width_hidden, width_hidden),
+        #                             # nn.ReLU(),
+        #                             # nn.Linear(width_hidden, width_hidden),
+        #                             nn.ReLU())
+        #     self.add_module('enc_a_detect' + str(i), module_a)
+        #
+        #     module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
+        #                             nn.ReLU(),
+        #                             nn.Linear(width_hidden, width_hidden),
+        #                             # nn.ReLU(),
+        #                             # nn.Linear(width_hidden, width_hidden),
+        #                             nn.ReLU())
+        #
+        #     self.add_module('enc_b_detect' + str(i), module_b)
+        #
+        #     final_module_name = 'enc_final_detect' + str(i)
+        #     final_module = nn.Linear(2 * width_hidden + enc_hidden, len_out)
+        #     self.add_module(final_module_name, final_module)
 
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
@@ -135,7 +135,7 @@ class StarEncoder(nn.Module):
                     1 + self.max_detections)
         self._get_hidden_indices()
 
-        # self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim = 1)
 
     ############################
@@ -143,9 +143,10 @@ class StarEncoder(nn.Module):
     ############################
     def _forward_to_pooled_hidden(self, image, background):
         # forward to the layer that is shared by all n_stars
-        assert torch.all(image > 0.); assert torch.all((image - background) > -1000.)
-        log_img = torch.log(image - background + 1000)
+        assert torch.all(image > 0.)
+        assert torch.all((image - background) > -1000.)
 
+        log_img = torch.log(image - background + 1000)
 
         # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
         # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
@@ -158,30 +159,20 @@ class StarEncoder(nn.Module):
 
         return self.enc_fc(h)
 
-    def _forward_conditional_nstars(self, h, n_stars):
-        # for a **single** n_stars for all image in the batch,
-        # get the output parameters
-
-        assert isinstance(n_stars, int)
-
-        h_a = getattr(self, 'enc_a_detect' + str(n_stars))(h)
-        h_b = getattr(self, 'enc_b_detect' + str(n_stars))(torch.cat((h_a, h), dim = 1))
-        h_c = getattr(self, 'enc_final_detect' + str(n_stars))(torch.cat((h_a, h_b, h), dim = 1))
-
-        return h_c
-
     def _forward_to_last_hidden(self, image_stamps, background_stamps):
         # concatenate all output parameters for all possible n_stars
 
         h = self._forward_to_pooled_hidden(image_stamps, background_stamps)
 
-        h_out = torch.zeros(image_stamps.shape[0], 1).to(device)
-        for i in range(0, self.max_detections + 1):
-            h_i = self._forward_conditional_nstars(h, i)
+        return self.enc_final(h)
 
-            h_out = torch.cat((h_out, h_i), dim = 1)
-
-        return h_out[:, 1:h_out.shape[1]]
+        # h_out = torch.zeros(image_stamps.shape[0], 1).to(device)
+        # for i in range(0, self.max_detections + 1):
+        #     h_i = self._forward_conditional_nstars(h, i)
+        #
+        #     h_out = torch.cat((h_out, h_i), dim = 1)
+        #
+        # return h_out[:, 1:h_out.shape[1]]
 
     ######################
     # Forward modules
@@ -357,7 +348,8 @@ class StarEncoder(nn.Module):
                                 n_samples = 1,
                                 return_map = False,
                                 n_stars = None,
-                                return_log_q = False):
+                                return_log_q = False,
+                                training = False):
 
         # our sampling only works for one image at a time at the moment ...
         assert full_image.shape[0] == 1
@@ -369,9 +361,10 @@ class StarEncoder(nn.Module):
                             locs = None, fluxes = None, trim_images = False)[0]
 
         # pass through NN
-        h = self._forward_to_last_hidden(image_stamps, background_stamps).detach()
+        h = self._forward_to_last_hidden(image_stamps, background_stamps)
+
         # get log probs
-        log_probs = self._get_logprobs_from_last_hidden_layer(h)
+        log_probs = self._get_logprobs_from_last_hidden_layer(h).detach()
 
         # sample number of stars
         if n_stars is None:
@@ -395,19 +388,25 @@ class StarEncoder(nn.Module):
             logit_loc_sd = torch.zeros(logit_loc_logvar.shape).to(device)
             log_flux_sd = torch.zeros(log_flux_logvar.shape).to(device)
         else:
-            logit_loc_sd = torch.exp(0.5 * logit_loc_logvar)
+            logit_loc_sd = torch.exp(0.5 * logit_loc_logvar.detach())
             log_flux_sd = torch.exp(0.5 * log_flux_logvar)
+            if not training:
+                log_flux_sd = log_flux_sd.detach()
 
         # sample locations
         locs_randn = torch.randn(logit_loc_mean.shape).to(device)
 
-        logit_locs_sampled = logit_loc_mean + locs_randn * logit_loc_sd
+        logit_locs_sampled = logit_loc_mean.detach() + locs_randn * logit_loc_sd
         subimage_locs_sampled = \
             torch.sigmoid(logit_locs_sampled) * is_on_array.unsqueeze(3).float()
 
         # sample fluxes
-        fluxes_randn = torch.randn(log_flux_mean.shape).to(device)
-        log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
+        fluxes_randn = torch.randn(log_flux_mean.shape).to(device);
+        if training:
+            log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
+        else:
+            log_flux_sampled = log_flux_mean.detach() + fluxes_randn * log_flux_sd
+
         subimage_fluxes_sampled = \
             torch.exp(log_flux_sampled) * is_on_array.float()
 

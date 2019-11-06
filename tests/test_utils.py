@@ -6,6 +6,7 @@ import unittest
 import torch
 
 import sys
+sys.path.insert(0, './')
 sys.path.insert(0, './../')
 
 import utils

@@ -7,7 +7,6 @@ import sdss_dataset_lib
 import simulated_datasets_lib
 import starnet_vae_lib
 from psf_transform_lib import PsfLocalTransform, get_psf_loss
-from wake_sleep_lib import sample_star_encoder
 
 import time
 
@@ -25,8 +24,7 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 					hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-					x0 = 650, x1 = 120)
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
 
 # image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -41,28 +39,6 @@ simulator = simulated_datasets_lib.StarSimulator(
                     psf_fit_file=str(sdss_hubble_data.psf_file),
                     slen = full_image.shape[-1],
                     sky_intensity = 0.)
-
-# define VAE
-star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
-                                           stamp_slen = 9,
-                                           step = 2,
-                                           edge_padding = 3,
-                                           n_bands = 1,
-                                           max_detections = 2)
-encoder_file = './fits/starnet-10172019-no_reweighting'
-star_encoder.load_state_dict(torch.load(encoder_file,
-							   map_location=lambda storage, loc: storage));
-star_encoder.to(device);
-star_encoder.eval();
-
-# We want to set batchnorm to eval
-# https://discuss.pytorch.org/t/freeze-batchnorm-layer-lead-to-nan/8385
-# def set_bn_eval(m):
-#     classname = m.__class__.__name__
-#     if classname.find('BatchNorm') != -1:
-#       m.eval()
-#
-# star_encoder.apply(set_bn_eval)
 
 # define transform
 psf_transform = PsfLocalTransform(torch.Tensor(simulator.psf_og).to(device),
@@ -95,15 +71,12 @@ for epoch in range(n_epochs):
 	# using true parameters atm
 	locs = true_full_locs
 	fluxes = true_full_fluxes
-	n_stars = torch.sum(true_full_fluxes > 0, dim = 1); 
-	# locs, fluxes, n_stars = \
-	# 	sample_star_encoder(star_encoder, full_image, full_background,
-	# 							n_samples = 100, return_map = False)
+	n_stars = torch.sum(true_full_fluxes > 0, dim = 1);
 
 	psf_trained = psf_transform.forward()
 
 	# get loss
-	loss = get_psf_loss(full_image.squeeze(), full_background.squeeze(),
+	loss = get_psf_loss(full_image, full_background,
 	                    locs, fluxes, n_stars,
 						psf_trained,
 	                    pad = 5,
@@ -121,10 +94,8 @@ for epoch in range(n_epochs):
 	test_losses[epoch] = avg_loss
 
 	if (epoch % print_every) == 0:
-
-	    outfile = './fits/psf_transform-altm2-real_params-10222019'
+	    outfile = './fits/results_11042019/true_psf_transform_630x310'
 	    print("writing the psf transform parameters to " + outfile)
 	    torch.save(psf_transform.state_dict(), outfile)
-
 
 print('done')

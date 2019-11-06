@@ -45,14 +45,9 @@ star_dataset = \
                             n_images = n_images,
                             add_noise = True)
 
-# np.savez('./fits/testing_data',
-#             images = star_dataset.images.cpu(),
-#             true_locs = star_dataset.locs.cpu(),
-#             true_fluxes = star_dataset.fluxes.cpu())
-
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
-batchsize = 10
+batchsize = 20
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -61,9 +56,9 @@ loader = torch.utils.data.DataLoader(
 
 # define VAE
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
-                                           stamp_slen = 9,
+                                           stamp_slen = 7,
                                            step = 2,
-                                           edge_padding = 3,
+                                           edge_padding = 2,
                                            n_bands = 1,
                                            max_detections = 2)
 
@@ -96,15 +91,6 @@ for epoch in range(n_epochs):
     print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                     epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
 
-    # my debugging
-    # if(avg_loss > (avg_loss_old + 5)):
-    #     outfile = './fits/starnet_invKL_encoder_batched_images_2000stars_smallpatch3_failed'
-    #     print("writing the encoder parameters to " + outfile)
-    #     torch.save(star_encoder.state_dict(), outfile)
-    #
-    #     break
-    # avg_loss_old = avg_loss
-
     # draw fresh data
     loader.dataset.set_params_and_images()
 
@@ -121,12 +107,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_10302019/starnet-10302019'
+        outfile = './fits/results_11042019/starnet-11042019'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_10302019/test_losses-starnet-10302019', test_losses)
+        np.savetxt('./fits/results_11042019/test_losses-starnet-11042019', test_losses)
 
 
 print('done')

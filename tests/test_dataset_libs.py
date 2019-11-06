@@ -18,37 +18,10 @@ psf_fit_file = './../celeste_net/sdss_stage_dir/3900/6/269/psField-003900-6-0269
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
+data_params['slen'] = 30
+data_params['mean_stars'] = 10
+
 class TestSDSSDataset(unittest.TestCase):
-    def test_tile_image(self):
-        # this tests the tiling of SDSS images into one batch of images
-
-        image = torch.randn(100, 200)
-
-        batched_image, tile_coords = \
-            sdss_dataset_lib._tile_image(image, 10, return_tile_coords=True)
-
-        k = 0
-        for i in range(10):
-            for j in range(20):
-                # check images align
-                assert torch.all(batched_image[k] == \
-                            image[(10*i):(10*(i + 1)), (10*j):(10*(j + 1))])
-                k += 1
-
-        for k in range(batched_image.shape[0]):
-            # check my coordinates are correct
-            i = tile_coords[k, 0]
-            j = tile_coords[k, 1]
-
-            assert torch.all(batched_image[k] == image[i:(i + 10), j:(j + 10)])
-
-    def test_is_on_from_n_stars(self):
-        max_stars = 10
-        n_stars = torch.Tensor(np.random.choice(max_stars, 5)).type(torch.LongTensor)
-
-        is_on = simulated_datasets_lib.get_is_on_from_n_stars(n_stars, max_stars)
-
-        assert torch.all(is_on.sum(1) == n_stars)
 
     def test_fresh_data(self):
         # this checks that we are actually drawing fresh data

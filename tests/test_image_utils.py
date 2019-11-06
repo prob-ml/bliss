@@ -7,6 +7,7 @@ import numpy as np
 
 import sys
 sys.path.insert(0, '../')
+sys.path.insert(0, './')
 import image_utils
 
 from utils import get_is_on_from_n_stars

@@ -6,6 +6,7 @@ import torch
 import numpy as np
 
 import sys
+sys.path.insert(0, './')
 sys.path.insert(0, './../')
 
 import inv_kl_objective_lib as inv_kl_lib
@@ -104,7 +105,7 @@ class TestStarEncoderObjective(unittest.TestCase):
 
 
 
-        locs_loss, fluxes_loss = inv_kl_lib.get_min_perm_loss(locs_log_probs_all,
+        locs_loss, fluxes_loss, _ = inv_kl_lib.get_min_perm_loss(locs_log_probs_all,
                                     flux_log_probs_all, is_on_array)
 
         print(locs_loss)

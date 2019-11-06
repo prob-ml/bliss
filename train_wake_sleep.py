@@ -31,8 +31,7 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-                                        x0 = 650, x1 = 120)
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -43,7 +42,7 @@ with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)
-data_params['sky_intensity'] = 201
+data_params['sky_intensity'] = 179.
 full_background = full_background * 0.0 + data_params['sky_intensity']
 
 # draw data
@@ -58,7 +57,7 @@ star_dataset = \
 
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
 # get loader
-batchsize = 10
+batchsize = 20
 
 loader = torch.utils.data.DataLoader(
                  dataset=star_dataset,
@@ -67,13 +66,22 @@ loader = torch.utils.data.DataLoader(
 
 # define VAE
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
-                                           stamp_slen = 9,
+                                           stamp_slen = 7,
                                            step = 2,
-                                           edge_padding = 3,
+                                           edge_padding = 2,
                                            n_bands = 1,
                                            max_detections = 2)
 
 star_encoder.to(device)
+
+# freeze batchnorm layers
+# code taken from https://discuss.pytorch.org/t/freeze-batchnorm-layer-lead-to-nan/8385/2
+def set_bn_eval(m):
+    classname = m.__class__.__name__
+    if classname.find('BatchNorm') != -1:
+      m.eval()
+
+star_encoder.apply(set_bn_eval);
 
 # define psf transform
 from copy import deepcopy
@@ -85,16 +93,17 @@ psf_transform.to(device)
 
 
 
-filename = './fits/results_10302019/wake_sleep-loc650x120-11022019'
+filename = './fits/results_11042019/wake_sleep-loc630x310-11042019'
 
 ########################
 # Initial training of encoder
 ########################
-init_encoder = './fits/results_10302019/starnet-10302019'
-print('loading encoder from: ', init_encoder)
-star_encoder.load_state_dict(torch.load(init_encoder,
-                               map_location=lambda storage, loc: storage));
-star_encoder.to(device)
+# init_encoder = './fits/results_11042019/starnet-11042019'
+# init_encoder = './fits/results_11042019/wake_sleep-loc630x310-11042019-encoder-iter0'
+# print('loading encoder from: ', init_encoder)
+# star_encoder.load_state_dict(torch.load(init_encoder,
+#                                map_location=lambda storage, loc: storage));
+# star_encoder.to(device)
 
 # load optimizer
 encoder_lr = 5e-5
@@ -103,12 +112,12 @@ vae_optimizer = optim.Adam([
                     'lr': encoder_lr}],
                     weight_decay = 1e-5)
 
-run_sleep(star_encoder,
-            loader,
-            vae_optimizer,
-            n_epochs = 11,
-            out_filename = filename + '-encoder',
-            iteration = 0)
+# run_sleep(star_encoder,
+#             loader,
+#             vae_optimizer,
+#             n_epochs = 11,
+#             out_filename = filename + '-encoder',
+#             iteration = 0)
 
 for iteration in range(0, 6):
     ########################
@@ -133,17 +142,20 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    psf_lr = 0.05 
+    psf_lr = 0.025 / (1 + 201 * iteration)
     psf_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
-                        'lr': psf_lr}], weight_decay = 1e-5)
+                        'lr': psf_lr},
+                        {'params': star_encoder.enc_final.parameters(),
+                        'lr': encoder_lr}], weight_decay = 1e-5)
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = psf_optimizer,
-                    n_epochs = 10,
-                    n_samples = 1000,
+                    n_epochs = 200,
+                    n_samples = 50,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration,
+                    epoch0 = iteration * 200,
                     use_iwae = True)
 
     ########################
