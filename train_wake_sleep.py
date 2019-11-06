@@ -105,7 +105,7 @@ init_encoder = './fits/results_11052019/starnet'
 # star_encoder.to(device)
 #
 # # load optimizer
-# encoder_lr = 5e-5
+encoder_lr = 5e-5
 # vae_optimizer = optim.Adam([
 #                     {'params': star_encoder.parameters(),
 #                     'lr': encoder_lr}],
