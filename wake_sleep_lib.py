@@ -114,31 +114,27 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # get psf
         psf = psf_transform.forward()
 
-        # get index of sampled parameters
-        indx1 = 0 # int((epoch - 1) * n_samples)
-        indx2 = n_samples # int(epoch * n_samples)
-
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
             log_q_locs, log_q_fluxes, log_q_n_stars = \
                 star_encoder.sample_star_encoder(full_image, full_background,
                                         n_samples, return_map = False,
                                         return_log_q = use_iwae,
-                                        training_fluxes = True)
+                                        training = False)
 
 
         # get loss
         neg_logprob = get_psf_loss(full_image, full_background,
-                                    sampled_locs_full_image[indx1:indx2].detach(),
-                                    sampled_fluxes_full_image[indx1:indx2],
-                                    n_stars = sampled_n_stars_full[indx1:indx2].detach(),
+                                    sampled_locs_full_image.detach(),
+                                    sampled_fluxes_full_image.detach(),
+                                    n_stars = sampled_n_stars_full.detach(),
                                     psf = psf,
                                     pad = 5, grid = cached_grid)[1]
 
         if use_iwae:
             # this is log (p / q)
-            log_pq = - neg_logprob - log_q_locs[indx1:indx2].detach() - \
-                            log_q_fluxes[indx1:indx2].detach() - \
-                            log_q_n_stars[indx1:indx2].detach()
+            log_pq = - neg_logprob - log_q_locs.detach() - \
+                            log_q_fluxes.detach() - \
+                            log_q_n_stars.detach()
 
             loss_i = - torch.logsumexp(log_pq - np.log(n_samples), 0)
         else:
