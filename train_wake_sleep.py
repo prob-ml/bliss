@@ -93,7 +93,7 @@ psf_transform.to(device)
 
 
 
-filename = './fits/results_11052019/wake_sleep-loc630x310'
+filename = './fits/results_11052019/wake_sleep2-loc630x310'
 
 ########################
 # Initial training of encoder
@@ -142,18 +142,27 @@ for iteration in range(0, 6):
 
     # get optimizer
     psf_lr = 0.025
-    psf_optimizer = optim.Adam([
+    wake_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
-                        'lr': psf_lr}], weight_decay = 1e-5)
+                        'lr': psf_lr},
+                        {'params': star_encoder.parameters(),
+                        'lr': encoder_lr}], weight_decay = 1e-5)
 
-    run_wake(full_image, full_background, star_encoder, psf_transform,
-                    optimizer = psf_optimizer,
-                    n_epochs = 200,
-                    n_samples = 50,
-                    out_filename = filename + '-psf_transform',
-                    iteration = iteration,
-                    epoch0 = iteration * 200,
-                    use_iwae = True)
+    run_joint_wake(full_image, full_background, star_encoder, psf_transform,
+                        optimizer = vae_optimizer,
+                        n_epochs = 200,
+                        n_samples = 10,
+                        encoder_outfile = filename + '-encoder-iter' + str(iteration),
+                        psf_outfile = filename + '-psf_transform-iter' + str(iteration))
+
+    # run_wake(full_image, full_background, star_encoder, psf_transform,
+    #                 optimizer = psf_optimizer,
+    #                 n_epochs = 200,
+    #                 n_samples = 50,
+    #                 out_filename = filename + '-psf_transform',
+    #                 iteration = iteration,
+    #                 epoch0 = iteration * 200,
+    #                 use_iwae = True)
 
     ########################
     # sleep phase training
@@ -176,7 +185,6 @@ for iteration in range(0, 6):
     loader.dataset.simulator.psf = psf_transform.forward().detach()
 
     # load optimizer
-    encoder_lr = 5e-5
     vae_optimizer = optim.Adam([
                         {'params': star_encoder.parameters(),
                         'lr': encoder_lr}],
