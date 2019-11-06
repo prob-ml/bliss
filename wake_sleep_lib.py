@@ -170,7 +170,9 @@ def run_joint_wake(full_image, full_background, star_encoder, psf_transform, opt
                     use_iwae = False):
 
     cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
+    
     print_every = 20
+    save_every = 100
 
     avg_loss = 0.0
     counter = 0
@@ -225,10 +227,11 @@ def run_joint_wake(full_image, full_background, star_encoder, psf_transform, opt
             counter = 0
             t0 = time.time()
 
-    # save encoder
-    print("writing the encoder parameters to " + encoder_outfile)
-    torch.save(star_encoder.state_dict(), encoder_outfile)
+        if ((epoch % save_every) == 0) or (epoch == n_epochs):
+            # save encoder
+            print("writing the encoder parameters to " + encoder_outfile)
+            torch.save(star_encoder.state_dict(), encoder_outfile)
 
-    # save psf
-    print("writing the psf parameters to " + psf_outfile)
-    torch.save(psf_transform.state_dict(), psf_outfile)
+            # save psf
+            print("writing the psf parameters to " + psf_outfile)
+            torch.save(psf_transform.state_dict(), psf_outfile)
