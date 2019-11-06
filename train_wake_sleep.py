@@ -99,24 +99,24 @@ filename = './fits/results_11052019/wake_sleep2-loc630x310'
 # Initial training of encoder
 ########################
 init_encoder = './fits/results_11052019/starnet'
-print('loading encoder from: ', init_encoder)
-star_encoder.load_state_dict(torch.load(init_encoder,
-                               map_location=lambda storage, loc: storage));
-star_encoder.to(device)
-
-# load optimizer
-encoder_lr = 5e-5
-vae_optimizer = optim.Adam([
-                    {'params': star_encoder.parameters(),
-                    'lr': encoder_lr}],
-                    weight_decay = 1e-5)
-
-run_sleep(star_encoder,
-            loader,
-            vae_optimizer,
-            n_epochs = 11,
-            out_filename = filename + '-encoder',
-            iteration = 0)
+# print('loading encoder from: ', init_encoder)
+# star_encoder.load_state_dict(torch.load(init_encoder,
+#                                map_location=lambda storage, loc: storage));
+# star_encoder.to(device)
+#
+# # load optimizer
+# encoder_lr = 5e-5
+# vae_optimizer = optim.Adam([
+#                     {'params': star_encoder.parameters(),
+#                     'lr': encoder_lr}],
+#                     weight_decay = 1e-5)
+#
+# run_sleep(star_encoder,
+#             loader,
+#             vae_optimizer,
+#             n_epochs = 11,
+#             out_filename = filename + '-encoder',
+#             iteration = 0)
 
 for iteration in range(0, 6):
     ########################
@@ -124,7 +124,7 @@ for iteration in range(0, 6):
     ########################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     # load encoder
-    encoder_file = filename + '-encoder-iter' + str(iteration)
+
 
     if iteration > 0:
         # load psf transform
@@ -133,6 +133,10 @@ for iteration in range(0, 6):
         psf_transform.load_state_dict(torch.load(psf_transform_file,
                                     map_location=lambda storage, loc: storage))
         psf_transform.to(device)
+
+        encoder_file = filename + '-encoder-iter' + str(iteration)
+    else:
+        encoder_file = init_encoder
 
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
