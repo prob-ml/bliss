@@ -170,7 +170,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
 
 def run_joint_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
-                    n_epochs, n_samples, out_filename, iteration,
+                    n_epochs, n_samples, out_filename, iteration=0,
                     epoch0 = 0,
                     use_iwae = False):
 
