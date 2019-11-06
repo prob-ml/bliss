@@ -82,11 +82,6 @@ avg_loss_old = 1e16
 for epoch in range(n_epochs):
     t0 = time.time()
 
-
-    if (epoch > 0) and ((epoch % 60) == 0):
-        # update learning rate
-        optimizer.param_groups[0]['lr'] = learning_rate / (1 + 10 * epoch / 60)
-
     avg_loss, counter_loss, locs_loss, fluxes_loss \
         = objectives_lib.eval_star_encoder_loss(star_encoder, loader,
                                                     optimizer, train = True)
@@ -111,7 +106,7 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_11052019/starnet_testlr'
+        outfile = './fits/results_11052019/starnet'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
