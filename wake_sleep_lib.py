@@ -134,7 +134,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                 star_encoder.sample_star_encoder(full_image, full_background,
                                         n_samples, return_map = False,
                                         return_log_q = use_iwae,
-                                        training = True)
+                                        training_fluxes = True)
 
 
         # get loss
@@ -150,7 +150,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
             log_pq = - neg_logprob - log_q_locs[indx1:indx2].detach() - \
                             log_q_fluxes[indx1:indx2].detach() - \
                             log_q_n_stars[indx1:indx2].detach()
-                            
+
             loss_i = - torch.logsumexp(log_pq - np.log(n_samples), 0)
         else:
             loss_i = neg_logprob.mean()

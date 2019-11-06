@@ -60,7 +60,7 @@ def get_psf_loss(full_images, full_backgrounds,
                     grid = None):
 
     assert len(full_images.shape) == 4
-    # assert full_images.shape[0] == 1 # for now, one image at a time ...
+    assert full_images.shape[0] == 1 # for now, one image at a time ...
 
     assert full_images.shape == full_backgrounds.shape
 
