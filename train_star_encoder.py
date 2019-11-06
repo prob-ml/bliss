@@ -65,7 +65,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
 star_encoder.to(device)
 
 # define optimizer
-learning_rate = 5e-4
+learning_rate = 1e-3
 weight_decay = 1e-5
 optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
@@ -85,7 +85,7 @@ for epoch in range(n_epochs):
 
     if (epoch > 0) and ((epoch % 60) == 0):
         # update learning rate
-        optimizer.param_groups[0]['lr'] = learning_rate / (1 + epoch / 60)
+        optimizer.param_groups[0]['lr'] = learning_rate / (1 + 10 * epoch / 60)
 
     avg_loss, counter_loss, locs_loss, fluxes_loss \
         = objectives_lib.eval_star_encoder_loss(star_encoder, loader,
@@ -111,12 +111,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_11052019/starnet'
+        outfile = './fits/results_11052019/starnet_testlr'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_11052019/test_losses-starnet', test_losses)
+        np.savetxt('./fits/results_11052019/test_losses-starnet_testlr', test_losses)
 
 
 print('done')
