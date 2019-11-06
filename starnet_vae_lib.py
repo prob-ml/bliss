@@ -1,4 +1,4 @@
-import torch
+training_fluxesimport torch
 import torch.nn as nn
 
 import numpy as np
@@ -349,7 +349,7 @@ class StarEncoder(nn.Module):
                                 return_map = False,
                                 n_stars = None,
                                 return_log_q = False,
-                                training = False):
+                                training_fluxes = False):
 
         # our sampling only works for one image at a time at the moment ...
         assert full_image.shape[0] == 1
@@ -390,7 +390,7 @@ class StarEncoder(nn.Module):
         else:
             logit_loc_sd = torch.exp(0.5 * logit_loc_logvar.detach())
             log_flux_sd = torch.exp(0.5 * log_flux_logvar)
-            if not training:
+            if not training_fluxes:
                 log_flux_sd = log_flux_sd.detach()
 
         # sample locations
@@ -402,7 +402,7 @@ class StarEncoder(nn.Module):
 
         # sample fluxes
         fluxes_randn = torch.randn(log_flux_mean.shape).to(device);
-        if training:
+        if training_fluxes:
             log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
         else:
             log_flux_sampled = log_flux_mean.detach() + fluxes_randn * log_flux_sd
