@@ -1,1 +1,1 @@
-{"slen": 101, "min_stars": 1000, "max_stars": 2500, "mean_stars":2000, "f_min": 186, "f_max": 100000, "sky_intensity": 149, "alpha": 0.5}
+{"slen": 101, "min_stars": 0, "max_stars": 1500, "mean_stars":1000, "f_min": 1000, "f_max": 1000000, "sky_intensity": 686.0, "alpha": 0.5}
