@@ -74,12 +74,12 @@ class TestStarEncoderObjective(unittest.TestCase):
 
     def test_get_min_perm_loss(self):
 
-        batchsize = 30
+        batchsize = 100
         max_detections = 4
         max_stars = 4
 
         # true parameters
-        n_stars = torch.Tensor(np.random.choice(max_detections, batchsize))
+        n_stars = torch.Tensor(np.random.choice(max_detections + 1, batchsize))
         is_on_array = utils.get_is_on_from_n_stars(n_stars, max_detections).float()
 
         true_locs = torch.rand(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
@@ -108,8 +108,16 @@ class TestStarEncoderObjective(unittest.TestCase):
         locs_loss, fluxes_loss, _ = inv_kl_lib.get_min_perm_loss(locs_log_probs_all,
                                     flux_log_probs_all, is_on_array)
 
+        print(n_stars)
         print(locs_loss)
+        print(fluxes_loss)
 
+        # a quick check for zer0 and one stars
+        assert (locs_loss[n_stars == 0] == 0).all()
+        assert (locs_loss[n_stars == 1] == -locs_log_probs_all[n_stars == 1][:, 0, 0]).all()
+        assert (fluxes_loss[n_stars == 1] == -flux_log_probs_all[n_stars == 1][:, 0, 0]).all()
+
+        # a more thorough check for all possible n_stars
         for i in range(batchsize):
             _n_stars = int(n_stars[i])
 
@@ -136,6 +144,7 @@ class TestStarEncoderObjective(unittest.TestCase):
                                         _log_flux_mean.unsqueeze(0)[:, perm],
                                         _log_flux_log_var.unsqueeze(0)[:,perm]).sum()
 
+            print(min_locs_loss)
             assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5
             assert torch.abs(fluxes_loss[i] - min_fluxes_loss) < 1e-5
 
