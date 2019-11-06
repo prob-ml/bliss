@@ -72,7 +72,6 @@ optimizer = optim.Adam([
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
-
 n_epochs = 1001
 print_every = 20
 print('training')
@@ -82,6 +81,11 @@ test_losses = np.zeros((4, n_epochs // print_every + 1))
 avg_loss_old = 1e16
 for epoch in range(n_epochs):
     t0 = time.time()
+
+
+    if (epoch > 0) and ((epoch % 60) == 0):
+        # update learning rate
+        optimizer.param_groups[0]['lr'] = learning_rate / (1 + epoch / 60)
 
     avg_loss, counter_loss, locs_loss, fluxes_loss \
         = objectives_lib.eval_star_encoder_loss(star_encoder, loader,

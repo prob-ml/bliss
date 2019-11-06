@@ -170,8 +170,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
 
 def run_joint_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
-                    n_epochs, n_samples, out_filename, iteration=0,
-                    epoch0 = 0,
+                    n_epochs, n_samples, encoder_outfile, psf_outfile,
                     use_iwae = False):
 
     cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
@@ -221,13 +220,8 @@ def run_joint_wake(full_image, full_background, star_encoder, psf_transform, opt
             print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
                         epoch, avg_loss / counter, elapsed))
 
-            # save encoder
-            outfile = out_filename
-            print("writing the encoder parameters to " + outfile)
-            torch.save(star_encoder.state_dict(), outfile)
-
             test_losses.append(avg_loss / counter)
-            np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
+            np.savetxt(psf_outfile + '-test_losses',
                         test_losses)
 
             # reset
@@ -235,7 +229,10 @@ def run_joint_wake(full_image, full_background, star_encoder, psf_transform, opt
             counter = 0
             t0 = time.time()
 
-    # TODO: save psf
-    # outfile = out_filename + '-iter' + str(iteration)
-    # print("writing the psf parameters to " + outfile)
-    # torch.save(psf_transform.state_dict(), outfile)
+    # save encoder
+    print("writing the encoder parameters to " + encoder_outfile)
+    torch.save(star_encoder.state_dict(), encoder_outfile)
+
+    # save psf
+    print("writing the psf parameters to " + psf_outfile)
+    torch.save(psf_transform.state_dict(), psf_outfile)
