@@ -103,17 +103,6 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
     cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
     print_every = 20
 
-    init_lr = optimizer.param_groups[0]['lr']
-
-    # n_total_samples = n_samples * n_epochs
-
-    # sample variational parameters for all epochs!
-    # sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
-    #     log_q_locs, log_q_fluxes, log_q_n_stars = \
-    #         star_encoder.sample_star_encoder(full_image, full_background,
-    #                                 n_total_samples, return_map = False,
-    #                                 return_log_q = use_iwae)
-
     avg_loss = 0.0
     counter = 0
     t0 = time.time()
@@ -125,31 +114,27 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # get psf
         psf = psf_transform.forward()
 
-        # get index of sampled parameters
-        indx1 = 0 # int((epoch - 1) * n_samples)
-        indx2 = n_samples # int(epoch * n_samples)
-
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
             log_q_locs, log_q_fluxes, log_q_n_stars = \
                 star_encoder.sample_star_encoder(full_image, full_background,
                                         n_samples, return_map = False,
                                         return_log_q = use_iwae,
-                                        training_fluxes = True)
+                                        training = False)
 
 
         # get loss
         neg_logprob = get_psf_loss(full_image, full_background,
-                                    sampled_locs_full_image[indx1:indx2].detach(),
-                                    sampled_fluxes_full_image[indx1:indx2],
-                                    n_stars = sampled_n_stars_full[indx1:indx2].detach(),
+                                    sampled_locs_full_image.detach(),
+                                    sampled_fluxes_full_image.detach(),
+                                    n_stars = sampled_n_stars_full.detach(),
                                     psf = psf,
                                     pad = 5, grid = cached_grid)[1]
 
         if use_iwae:
             # this is log (p / q)
-            log_pq = - neg_logprob - log_q_locs[indx1:indx2].detach() - \
-                            log_q_fluxes[indx1:indx2].detach() - \
-                            log_q_n_stars[indx1:indx2].detach()
+            log_pq = - neg_logprob - log_q_locs.detach() - \
+                            log_q_fluxes.detach() - \
+                            log_q_n_stars.detach()
 
             loss_i = - torch.logsumexp(log_pq - np.log(n_samples), 0)
         else:
@@ -178,3 +163,75 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
     outfile = out_filename + '-iter' + str(iteration)
     print("writing the psf parameters to " + outfile)
     torch.save(psf_transform.state_dict(), outfile)
+
+
+def run_joint_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
+                    n_epochs, n_samples, encoder_outfile, psf_outfile,
+                    use_iwae = False):
+
+    cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
+    
+    print_every = 20
+    save_every = 100
+
+    avg_loss = 0.0
+    counter = 0
+    t0 = time.time()
+    test_losses = []
+    for epoch in range(1, n_epochs + 1):
+
+        optimizer.zero_grad()
+
+        # get psf
+        psf = psf_transform.forward()
+
+        sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
+            log_q_locs, log_q_fluxes, log_q_n_stars = \
+                star_encoder.sample_star_encoder(full_image, full_background,
+                                        n_samples,
+                                        return_map = False,
+                                        return_log_q = True,
+                                        training = True)
+
+        # get loss
+        neg_logprob = get_psf_loss(full_image, full_background,
+                                    sampled_locs_full_image,
+                                    sampled_fluxes_full_image,
+                                    n_stars = sampled_n_stars_full.detach(),
+                                    psf = psf,
+                                    pad = 5, grid = cached_grid)[1]
+
+        entropy_term = - log_q_locs - log_q_fluxes - log_q_n_stars
+
+        loss_i = neg_logprob - entropy_term
+
+        ps_loss = loss_i.detach() * log_q_n_stars + loss_i
+
+        ps_loss.mean().backward()
+        optimizer.step()
+
+        avg_loss += loss_i.detach().mean()
+        counter += 1
+
+        if ((epoch % print_every) == 0) or (epoch == n_epochs):
+            elapsed = time.time() - t0
+            print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                        epoch, avg_loss / counter, elapsed))
+
+            test_losses.append(avg_loss / counter)
+            np.savetxt(psf_outfile + '-test_losses',
+                        test_losses)
+
+            # reset
+            avg_loss = 0.0
+            counter = 0
+            t0 = time.time()
+
+        if ((epoch % save_every) == 0) or (epoch == n_epochs):
+            # save encoder
+            print("writing the encoder parameters to " + encoder_outfile)
+            torch.save(star_encoder.state_dict(), encoder_outfile)
+
+            # save psf
+            print("writing the psf parameters to " + psf_outfile)
+            torch.save(psf_transform.state_dict(), psf_outfile)

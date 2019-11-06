@@ -94,6 +94,7 @@ class TestImageBatching(unittest.TestCase):
                             subimage_n_stars.float() * 2)
         assert torch.all((subimage_fluxes != 0).float().sum(1) == subimage_n_stars.float())
 
+
         # now convert to full parameters
         locs2, fluxes2, n_stars2 = \
             image_utils.get_full_params_from_patch_params(subimage_locs,

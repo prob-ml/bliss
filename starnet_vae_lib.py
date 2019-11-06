@@ -1,4 +1,4 @@
-training_fluxesimport torch
+import torch
 import torch.nn as nn
 
 import numpy as np
@@ -349,7 +349,7 @@ class StarEncoder(nn.Module):
                                 return_map = False,
                                 n_stars = None,
                                 return_log_q = False,
-                                training_fluxes = False):
+                                training = False):
 
         # our sampling only works for one image at a time at the moment ...
         assert full_image.shape[0] == 1
@@ -362,6 +362,9 @@ class StarEncoder(nn.Module):
 
         # pass through NN
         h = self._forward_to_last_hidden(image_stamps, background_stamps)
+
+        if not training:
+            h = h.detach()
 
         # get log probs
         log_probs = self._get_logprobs_from_last_hidden_layer(h).detach()
@@ -388,24 +391,19 @@ class StarEncoder(nn.Module):
             logit_loc_sd = torch.zeros(logit_loc_logvar.shape).to(device)
             log_flux_sd = torch.zeros(log_flux_logvar.shape).to(device)
         else:
-            logit_loc_sd = torch.exp(0.5 * logit_loc_logvar.detach())
+            logit_loc_sd = torch.exp(0.5 * logit_loc_logvar)
             log_flux_sd = torch.exp(0.5 * log_flux_logvar)
-            if not training_fluxes:
-                log_flux_sd = log_flux_sd.detach()
 
         # sample locations
         locs_randn = torch.randn(logit_loc_mean.shape).to(device)
 
-        logit_locs_sampled = logit_loc_mean.detach() + locs_randn * logit_loc_sd
+        logit_locs_sampled = logit_loc_mean + locs_randn * logit_loc_sd
         subimage_locs_sampled = \
             torch.sigmoid(logit_locs_sampled) * is_on_array.unsqueeze(3).float()
 
         # sample fluxes
         fluxes_randn = torch.randn(log_flux_mean.shape).to(device);
-        if training_fluxes:
-            log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
-        else:
-            log_flux_sampled = log_flux_mean.detach() + fluxes_randn * log_flux_sd
+        log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
 
         subimage_fluxes_sampled = \
             torch.exp(log_flux_sampled) * is_on_array.float()

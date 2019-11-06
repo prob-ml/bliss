@@ -45,6 +45,19 @@ class TestStarEncoder(unittest.TestCase):
             log_flux_mean, log_flux_logvar, log_probs = \
                 star_encoder(image_stamps, background_stamps, n_star_stamps)
 
+        # test we have the correct pattern of zeros
+        assert ((logit_loc_mean != 0).sum(1)[:, 0] == n_star_stamps).all()
+        assert ((logit_loc_mean != 0).sum(1)[:, 1] == n_star_stamps).all()
+
+        assert ((logit_loc_logvar != 0).sum(1)[:, 0] == n_star_stamps).all()
+        assert ((logit_loc_logvar != 0).sum(1)[:, 1] == n_star_stamps).all()
+
+        assert ((log_flux_mean != 0).sum(1) == n_star_stamps).all()
+        assert ((log_flux_mean != 0).sum(1) == n_star_stamps).all()
+
+        assert ((log_flux_logvar != 0).sum(1) == n_star_stamps).all()
+        assert ((log_flux_logvar != 0).sum(1) == n_star_stamps).all()
+
         # we check the variational parameters against the hidden parameters
         # one by one
         h_out = star_encoder._forward_to_last_hidden(image_stamps, background_stamps)
