@@ -9,7 +9,7 @@ import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as inv_kl_lib
 
-from wake_sleep_lib import run_wake, run_sleep
+from wake_sleep_lib import run_joint_wake, run_wake, run_sleep
 
 import psf_transform_lib
 
@@ -149,7 +149,7 @@ for iteration in range(0, 6):
                         'lr': encoder_lr}], weight_decay = 1e-5)
 
     run_joint_wake(full_image, full_background, star_encoder, psf_transform,
-                        optimizer = vae_optimizer,
+                        optimizer = wake_optimizer,
                         n_epochs = 200,
                         n_samples = 10,
                         encoder_outfile = filename + '-encoder-iter' + str(iteration),
