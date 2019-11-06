@@ -87,7 +87,7 @@ class SloanDigitalSkySurvey(Dataset):
             frame = fitsio.FITS(frame_path)
 
             calibration = frame[1].read()
-            nelec_per_per_nmgy = gain[b] / calibration
+            nelec_per_nmgy = gain[b] / calibration
 
             sky_small, = frame[2]["ALLSKY"].read()
             sky_x, = frame[2]["XINTERP"].read()
@@ -104,7 +104,7 @@ class SloanDigitalSkySurvey(Dataset):
             large_sky_nelec = large_sky * gain[b]
 
             pixels_ss_nmgy = frame[0].read()
-            pixels_ss_nelec = pixels_ss_nmgy * nelec_per_per_nmgy
+            pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
             pixels_nelec = pixels_ss_nelec + large_sky_nelec
 
             image_list.append(pixels_nelec)
@@ -115,7 +115,7 @@ class SloanDigitalSkySurvey(Dataset):
 
         ret = {'image': np.stack(image_list),
                'background': np.stack(background_list),
-               'nelec_per_per_nmgy': nelec_per_per_nmgy,
+               'nelec_per_nmgy': nelec_per_nmgy,
                'gain': gain_list,
                'calibration': calibration}
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
