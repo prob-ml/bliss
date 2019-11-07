@@ -153,7 +153,7 @@ for iteration in range(0, 6):
     # load optimizer
     vae_optimizer = optim.Adam([
                         {'params': star_encoder.parameters(),
-                        'lr': encoder_lr}],
+                        'lr': 5e-5}],
                         weight_decay = 1e-5)
 
     run_sleep(star_encoder,
