@@ -85,12 +85,17 @@ filename = './fits/results_11052019/wake_sleep-loc630x310'
 init_encoder = './fits/results_11052019/starnet'
 
 # optimzers
+psf_lr = 0.1
 wake_optimizer = optim.Adam([
                     {'params': psf_transform.parameters(),
                     'lr': psf_lr}],
                     weight_decay = 1e-5)
 
-vae_optimizer =
+sleep_optimizer = optim.Adam([
+                    {'params': star_encoder.parameters(),
+                    'lr': 5e-5}],
+                    weight_decay = 1e-5)
+
 for iteration in range(0, 6):
     ########################
     # wake phase training
@@ -116,9 +121,8 @@ for iteration in range(0, 6):
     star_encoder.to(device);
     star_encoder.eval();
 
-    # get optimizer
-    psf_lr = 0.1 / (1 + 80 * iteration)
-
+    # reset learning rate
+    wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + iteration)
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = wake_optimizer,
                     n_epochs = 80,
@@ -149,12 +153,6 @@ for iteration in range(0, 6):
                                 map_location=lambda storage, loc: storage));
     psf_transform.to(device)
     loader.dataset.simulator.psf = psf_transform.forward().detach()
-
-    # load optimizer
-    vae_optimizer = optim.Adam([
-                        {'params': star_encoder.parameters(),
-                        'lr': 5e-5}],
-                        weight_decay = 1e-5)
 
     run_sleep(star_encoder,
                 loader,
