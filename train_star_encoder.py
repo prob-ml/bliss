@@ -106,12 +106,12 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_11052019/starnet'
+        outfile = './fits/results_11052019/starnet3'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_11052019/test_losses-starnet_testlr', test_losses)
+        np.savetxt('./fits/results_11052019/test_losses-starnet3', test_losses)
 
 
 print('done')

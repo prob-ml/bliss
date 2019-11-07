@@ -87,7 +87,7 @@ class SloanDigitalSkySurvey(Dataset):
             frame = fitsio.FITS(frame_path)
 
             calibration = frame[1].read()
-            cts_per_nmgy = 1 / calibration
+            nelec_per_nmgy = gain[b] / calibration
 
             sky_small, = frame[2]["ALLSKY"].read()
             sky_x, = frame[2]["XINTERP"].read()
@@ -101,10 +101,10 @@ class SloanDigitalSkySurvey(Dataset):
             sky_x = sky_x.clip(0, sky_small.shape[1] - 1)
             large_points = np.stack(np.meshgrid(sky_y, sky_x)).transpose()
             large_sky = sky_interp(large_points)
-            large_sky_nelec = large_sky * 1.0
+            large_sky_nelec = large_sky * gain[b]
 
             pixels_ss_nmgy = frame[0].read()
-            pixels_ss_nelec = pixels_ss_nmgy * cts_per_nmgy
+            pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
             pixels_nelec = pixels_ss_nelec + large_sky_nelec
 
             image_list.append(pixels_nelec)
@@ -115,7 +115,7 @@ class SloanDigitalSkySurvey(Dataset):
 
         ret = {'image': np.stack(image_list),
                'background': np.stack(background_list),
-               'cts_per_nmgy': cts_per_nmgy,
+               'nelec_per_nmgy': nelec_per_nmgy,
                'gain': gain_list,
                'calibration': calibration}
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
@@ -197,12 +197,12 @@ class SDSSHubbleData(Dataset):
         # the full SDSS image
         self.sdss_image_full = self.sdss_data[0]['image']
         self.sdss_background_full = self.sdss_data[0]['background']
-        self.cts_per_nmgy_full = self.sdss_data[0]['cts_per_nmgy']
+        self.nelec_per_nmgy_full = self.sdss_data[0]['nelec_per_nmgy']
 
         # just a subset
         self.sdss_image = self.sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)]
         self.sdss_background = self.sdss_background_full[:, x0:(x0 + slen), x1:(x1 + slen)]
-        self.cts_per_nmgy = self.cts_per_nmgy_full[x1:(x1 + slen)]
+        self.nelec_per_nmgy = self.nelec_per_nmgy_full[x1:(x1 + slen)]
 
         # load hubble data
         print('loading hubble data from ', hubble_cat_file)
@@ -230,10 +230,11 @@ class SDSSHubbleData(Dataset):
         self.locs_full_x1 = pix_coordinates[0] # the column of pixel
 
         # convert hubble magnitude to n_electron count
-        which_cols = np.floor(self.locs_full_x1 / len(self.cts_per_nmgy_full)).astype(int)
+        which_cols = np.floor(self.locs_full_x1 / len(self.nelec_per_nmgy_full)).astype(int)
         hubble_nmgy = convert_mag_to_nmgy(self.hubble_rmag)
 
-        self.fluxes_full = hubble_nmgy * self.cts_per_nmgy[which_cols]
+        self.fudge_conversion = 1.2593
+        self.fluxes_full = hubble_nmgy * self.nelec_per_nmgy[which_cols] * self.fudge_conversion # / self.psf_max
 
         assert len(self.fluxes_full) == len(self.locs_full_x0)
         assert len(self.fluxes_full) == len(self.locs_full_x1)
