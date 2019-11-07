@@ -81,8 +81,8 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									kernel_size = 3)
 psf_transform.to(device)
 
-filename = './fits/results_11052019/wake_sleep-loc630x310'
-init_encoder = './fits/results_11052019/starnet'
+filename = './fits/results_11052019/wake_sleep3-loc630x310'
+init_encoder = './fits/results_11052019/starnet3'
 
 # optimzers
 psf_lr = 0.1
