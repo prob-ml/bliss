@@ -41,9 +41,8 @@ full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device)
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
+data_params['sky_intensity'] = full_background.mean()
 print(data_params)
-data_params['sky_intensity'] = 179.
-full_background = full_background * 0.0 + data_params['sky_intensity']
 
 # draw data
 print('generating data: ')
@@ -74,15 +73,6 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
 
 star_encoder.to(device)
 
-# freeze batchnorm layers
-# code taken from https://discuss.pytorch.org/t/freeze-batchnorm-layer-lead-to-nan/8385/2
-def set_bn_eval(m):
-    classname = m.__class__.__name__
-    if classname.find('BatchNorm') != -1:
-      m.eval()
-
-star_encoder.apply(set_bn_eval);
-
 # define psf transform
 from copy import deepcopy
 psf_og = deepcopy(loader.dataset.simulator.psf_og)
@@ -90,8 +80,6 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									data_params['slen'],
 									kernel_size = 3)
 psf_transform.to(device)
-
-
 
 filename = './fits/results_11052019/wake_sleep2-loc630x310'
 
@@ -123,8 +111,6 @@ for iteration in range(0, 6):
     # wake phase training
     ########################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
-    # load encoder
-
 
     if iteration > 0:
         # load psf transform
@@ -138,6 +124,7 @@ for iteration in range(0, 6):
     else:
         encoder_file = init_encoder
 
+    # load encoder
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage));
@@ -145,58 +132,62 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # get optimizer
-    psf_lr = 0.025
+    psf_lr = 0.1 / (1 + 80 * iteration)
     wake_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
-                        'lr': psf_lr},
-                        {'params': star_encoder.parameters(),
-                        'lr': encoder_lr}], weight_decay = 1e-5)
+                        'lr': psf_lr}], weight_decay = 1e-5)
 
-    run_joint_wake(full_image, full_background, star_encoder, psf_transform,
-                        optimizer = wake_optimizer,
-                        n_epochs = 1000,
-                        n_samples = 10,
-                        encoder_outfile = filename + '-encoder-iter' + str(iteration),
-                        psf_outfile = filename + '-psf_transform-iter' + str(iteration))
+    # joint_wake_optimizer = optim.Adam([
+    #                     {'params': psf_transform.parameters(),
+    #                     'lr': psf_lr},
+    #                     {'params': star_encoder.parameters(),
+    #                     'lr': encoder_lr}], weight_decay = 1e-5)
 
-    # run_wake(full_image, full_background, star_encoder, psf_transform,
-    #                 optimizer = psf_optimizer,
-    #                 n_epochs = 200,
-    #                 n_samples = 50,
-    #                 out_filename = filename + '-psf_transform',
-    #                 iteration = iteration,
-    #                 epoch0 = iteration * 200,
-    #                 use_iwae = True)
+    # run_joint_wake(full_image, full_background, star_encoder, psf_transform,
+    #                     optimizer = joint_wake_optimizer,
+    #                     n_epochs = 1000,
+    #                     n_samples = 10,
+    #                     encoder_outfile = filename + '-encoder-iter' + str(iteration),
+    #                     psf_outfile = filename + '-psf_transform-iter' + str(iteration))
+
+    run_wake(full_image, full_background, star_encoder, psf_transform,
+                    optimizer = psf_optimizer,
+                    n_epochs = 80,
+                    n_samples = 50,
+                    out_filename = filename + '-psf_transform',
+                    iteration = iteration,
+                    epoch0 = iteration * 200,
+                    use_iwae = True)
 
     ########################
     # sleep phase training
     ########################
-    # print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
-    #
-    # # load encoder
-    # encoder_file = filename + '-encoder-iter' + str(iteration)
-    # print('loading encoder from: ', encoder_file)
-    # star_encoder.load_state_dict(torch.load(encoder_file,
-    #                                map_location=lambda storage, loc: storage));
-    # star_encoder.to(device)
-    #
-    # # load trained transform
-    # psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
-    # print('loading psf_transform from: ', psf_transform_file)
-    # psf_transform.load_state_dict(torch.load(psf_transform_file,
-    #                             map_location=lambda storage, loc: storage));
-    # psf_transform.to(device)
-    # loader.dataset.simulator.psf = psf_transform.forward().detach()
-    #
-    # # load optimizer
-    # vae_optimizer = optim.Adam([
-    #                     {'params': star_encoder.parameters(),
-    #                     'lr': encoder_lr}],
-    #                     weight_decay = 1e-5)
-    #
-    # run_sleep(star_encoder,
-    #             loader,
-    #             vae_optimizer,
-    #             n_epochs = 11,
-    #             out_filename = filename + '-encoder',
-    #             iteration = iteration + 1)
+    print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
+
+    # load encoder
+    encoder_file = filename + '-encoder-iter' + str(iteration)
+    print('loading encoder from: ', encoder_file)
+    star_encoder.load_state_dict(torch.load(encoder_file,
+                                   map_location=lambda storage, loc: storage));
+    star_encoder.to(device)
+
+    # load trained transform
+    psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
+    print('loading psf_transform from: ', psf_transform_file)
+    psf_transform.load_state_dict(torch.load(psf_transform_file,
+                                map_location=lambda storage, loc: storage));
+    psf_transform.to(device)
+    loader.dataset.simulator.psf = psf_transform.forward().detach()
+
+    # load optimizer
+    vae_optimizer = optim.Adam([
+                        {'params': star_encoder.parameters(),
+                        'lr': encoder_lr}],
+                        weight_decay = 1e-5)
+
+    run_sleep(star_encoder,
+                loader,
+                vae_optimizer,
+                n_epochs = 11,
+                out_filename = filename + '-encoder',
+                iteration = iteration + 1)
