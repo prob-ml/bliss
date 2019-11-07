@@ -81,7 +81,7 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									kernel_size = 3)
 psf_transform.to(device)
 
-filename = './fits/results_11052019/wake_sleep2-loc630x310'
+filename = './fits/results_11052019/wake_sleep-loc630x310'
 
 ########################
 # Initial training of encoder
@@ -151,12 +151,11 @@ for iteration in range(0, 6):
     #                     psf_outfile = filename + '-psf_transform-iter' + str(iteration))
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
-                    optimizer = psf_optimizer,
+                    optimizer = wake_optimizer,
                     n_epochs = 80,
                     n_samples = 50,
                     out_filename = filename + '-psf_transform',
                     iteration = iteration,
-                    epoch0 = iteration * 200,
                     use_iwae = True)
 
     ########################
