@@ -82,12 +82,15 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 psf_transform.to(device)
 
 filename = './fits/results_11052019/wake_sleep-loc630x310'
-
-########################
-# Initial training of encoder
-########################
 init_encoder = './fits/results_11052019/starnet'
 
+# optimzers
+wake_optimizer = optim.Adam([
+                    {'params': psf_transform.parameters(),
+                    'lr': psf_lr}],
+                    weight_decay = 1e-5)
+
+vae_optimizer =
 for iteration in range(0, 6):
     ########################
     # wake phase training
@@ -115,9 +118,6 @@ for iteration in range(0, 6):
 
     # get optimizer
     psf_lr = 0.1 / (1 + 80 * iteration)
-    wake_optimizer = optim.Adam([
-                        {'params': psf_transform.parameters(),
-                        'lr': psf_lr}], weight_decay = 1e-5)
 
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = wake_optimizer,
