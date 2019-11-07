@@ -122,7 +122,7 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # reset learning rate
-    wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + iteration)
+    wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + 80 * iteration)
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = wake_optimizer,
                     n_epochs = 80,
@@ -156,7 +156,7 @@ for iteration in range(0, 6):
 
     run_sleep(star_encoder,
                 loader,
-                vae_optimizer,
+                sleep_optimizer,
                 n_epochs = 11,
                 out_filename = filename + '-encoder',
                 iteration = iteration + 1)
