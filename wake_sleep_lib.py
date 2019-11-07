@@ -165,12 +165,13 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
     torch.save(psf_transform.state_dict(), outfile)
 
 
+# TODO: this should be the same as run_wake ... just with a different optimizer
 def run_joint_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
                     n_epochs, n_samples, encoder_outfile, psf_outfile,
                     use_iwae = False):
 
     cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
-    
+
     print_every = 20
     save_every = 100
 
