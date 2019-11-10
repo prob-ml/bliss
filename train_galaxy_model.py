@@ -2,6 +2,7 @@
 
 import argparse
 import numpy as np
+import subprocess
 import timeit
 from pathlib import Path
 
@@ -34,6 +35,8 @@ parser.add_argument('--device', type=int, default=0, metavar='N',
                     help='GPU device ID')
 parser.add_argument('--dir', type=str, default="data/test", metavar='N',
                     help='run-specific directory to read from / write to')
+parser.add_argument('--overwrite', action='store_true',
+                    help='Whether to overwrite if directory already exists.')
 args = parser.parse_args()
 
 
@@ -49,7 +52,7 @@ def plot_reconstruction(data_loader, vae, epoch, sleep=False):
     plt.tight_layout()
     plt.suptitle("Epoch {:d}".format(epoch))
 
-    num_cols = 2
+    num_cols = 3 #also look at recon_var 
 
     with torch.no_grad():
         for batch_idx, data in enumerate(data_loader):
@@ -65,7 +68,7 @@ def plot_reconstruction(data_loader, vae, epoch, sleep=False):
             recon_mean, recon_var, _ = vae(image, background)
 
             for i in range(num_examples):
-                vmax1 = image[i, 2].max()
+                vmax1 = image[i, 2].max() #we are looking at the ith sample in the second band. 
                 plt.subplot(num_examples, num_cols, num_cols * i + 1)
                 plt.title("image [{} galaxies]".format(num_galaxies[i]))
                 plt.imshow(image[i, 2].data.cpu().numpy(), vmax=vmax1)
@@ -74,6 +77,11 @@ def plot_reconstruction(data_loader, vae, epoch, sleep=False):
                 plt.subplot(num_examples, num_cols, num_cols * i + 2)
                 plt.title("recon_mean")
                 plt.imshow(recon_mean[i, 2].data.cpu().numpy(), vmax=vmax1)
+                plt.colorbar()
+
+                plt.subplot(num_examples, num_cols, num_cols * i + 3)
+                plt.title("recon_var")
+                plt.imshow(recon_var[i, 2].data.cpu().numpy(), vmax=vmax1)
                 plt.colorbar()
 
             break
@@ -110,7 +118,6 @@ def eval_epoch(vae, data_loader):
 
     with torch.no_grad(): #no need to compute gradients outside training. 
         for batch_idx, data in enumerate(data_loader):
-            print('batch_idx', batch_idx)
             image = data["image"].cuda() #shape: [nsamples, num_bands, slen, slen]
             background = data["background"].cuda()
             loss = vae.loss(image, background)
@@ -156,6 +163,9 @@ def train_module(vae, ds, epochs=10000, lr=1e-4):
             print("  * evaluating test loss...")
             test_loss = eval_epoch(vae, test_loader)
             print("  * test loss: {:.0f}\n".format(test_loss))
+            loss_file = Path(args.dir, "loss.dat")
+            with open(loss_file.as_posix(), 'a') as f: 
+                f.write(f"epoch {epoch}, test loss: {test_loss}\n")
 
 
 def run():
@@ -172,5 +182,13 @@ def run():
 
 
 if __name__ == "__main__":
+    #check if directory exists
+    if Path(args.dir).is_dir() and not args.overwrite:
+        raise IOError("Directory already exists.")
+
+    elif Path(args.dir).is_dir(): 
+        subprocess.run(f"rm -r {args.dir}", shell=True)
+
+
     with torch.cuda.device(args.device):
         run()

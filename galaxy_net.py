@@ -108,8 +108,8 @@ class CenteredGalaxyDecoder(nn.Module): #generator
         #expected number of photons has to be positive, this is why we use .relu here. 
         recon_mean = f.relu(z[:, :self.num_bands])  
 
-        #sometimes nn can get variance to be really large, if sigma gets really large then small lerning r
-        #avoids variance getting too large. 
+        #sometimes nn can get variance to be really large, if sigma gets really large then small learning
+        #this avoids variance getting too large. 
         var_multiplier = 1 + 10 * torch.sigmoid(z[:, self.num_bands:(2 * self.num_bands)])
         recon_var = 1e-4 + var_multiplier * recon_mean
 

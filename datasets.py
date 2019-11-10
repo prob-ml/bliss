@@ -1,9 +1,66 @@
 import pathlib
 import pickle
+import galsim
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 import scipy.stats as stats
 from torch.utils.data import Dataset
+
+#sky level and exposure, etc. for LSST 
+
+class Gsim(Dataset):
+
+    def __init__(self, slen, mean_galaxies=2, min_galaxies=0, max_galaxies=3,
+                 num_images=1600, num_bands=1, padding=3, centered=False, pixel_scale=0.2
+                 brightness=30000):
+        """
+        This class uses galsim.
+        """
+        super(Gsim, self).__init__() #runs init of the super class. 
+
+        self.slen = slen #number of pixel dimensions. 
+        self.mean_galaxies = mean_galaxies
+        self.min_galaxies = min_galaxies
+        self.max_galaxies = max_galaxies
+        self.num_images = num_images
+        self.num_bands = num_bands
+        self.padding = padding
+        self.centered = centered
+        self.brightness = brightness
+        self.pixel_scale = pixel_scale
+
+    def __len__(self):
+        return self.num_images
+
+    def __getitem__(self, idx):
+        #right now this completely ignores the index and returns some random Gaussian galaxy using Galsim.
+        #scale is LSST scale.
+
+        if self.num_bands > 1 or not self.centered: 
+            raise NotImplementedError("Not yet implemented multiple bands, uncentering")
+
+        #get random parameters. 
+        sigma = np.random.sample() * (self.slen/2) * self.pixe_scale / 3
+        theta = np.random.sample()* np.pi * 2
+        e1,e2 = np.cos(theta), np.sin(theta) 
+
+
+
+        gal = Galsim.Gaussian(flux=1, sigma=sigma)
+        gal = gal.shear(e1=e1, e2=e2)
+        img = gal.drawImage(gal, method='phot', poisson_flux=True, nx=self.slen, ny=self.slen, scale=0.2)
+        noisy_img = img.copy()
+
+        #add noise. 
+        rng = galsim.BaseDeviate(0)
+        noise = galsim.GaussianNoise(rng=rng)
+        variance_noise = noisy_img.addNoiseSNR(noise, snr, sky=..., preserve_flux=True)
+
+
+        #obtain background 
+
+
+
 
 
 class Synthetic(Dataset):
