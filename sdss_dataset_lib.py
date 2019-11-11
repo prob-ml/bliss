@@ -25,14 +25,14 @@ class SloanDigitalSkySurvey(Dataset):
     # to run on a specified run, camcol, field, and band
     # returns one 1 x 1489 x 2048 image
     def __init__(self, sdssdir = '../sdss_stage_dir/',
-                 run = 3900, camcol = 6, field = 269, band = 2):
+                 run = 3900, camcol = 6, field = 269, bands = [2]):
 
         super(SloanDigitalSkySurvey, self).__init__()
         self.sdss_path = pathlib.Path(sdssdir)
 
         self.rcfgs = []
 
-        self.band = band
+        self.bands = bands
 
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
@@ -69,6 +69,8 @@ class SloanDigitalSkySurvey(Dataset):
 
         image_list = []
         background_list = []
+        nelec_per_nmgy_list = []
+        calibration_list = []
         gain_list = []
 
         cache_path = field_dir.joinpath("cache.pkl")
@@ -77,7 +79,7 @@ class SloanDigitalSkySurvey(Dataset):
         #     return pickle.load(cache_path.open("rb"))
 
         for b, bl in enumerate("ugriz"):
-            if b != self.band:
+            if not(b in self.bands):
                 # taking only the red band
                 continue
 
@@ -111,13 +113,16 @@ class SloanDigitalSkySurvey(Dataset):
             background_list.append(large_sky_nelec)
 
             gain_list.append(gain[b])
+            nelec_per_nmgy_list.append(nelec_per_nmgy)
+            calibration_list.append(calibration)
+
             frame.close()
 
         ret = {'image': np.stack(image_list),
                'background': np.stack(background_list),
-               'nelec_per_nmgy': nelec_per_nmgy,
-               'gain': gain_list,
-               'calibration': calibration}
+               'nelec_per_nmgy': np.stack(nelec_per_nmgy_list),
+               'gain': np.stack(gain_list),
+               'calibration': np.stack(calibration_list)}
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
         return ret
@@ -162,7 +167,7 @@ class SDSSHubbleData(Dataset):
                         run = 2583,
                         camcol = 2,
                         field = 136,
-                        band = 2,
+                        bands = [2],
                         x0 = 630,
                         x1 = 310):
 
@@ -176,20 +181,23 @@ class SDSSHubbleData(Dataset):
         self.run = run
         self.camcol = camcol
         self.field = field
-        self.band = band
+
+        # must use at least the r band
+        assert 2 in bands
+        self.bands = bands
 
         self.sdss_data = SloanDigitalSkySurvey(sdssdir,
                                            run = run,
                                            camcol = camcol,
                                            field = field,
-                                           band = band)
+                                           bands = bands)
 
         self.sdss_path = pathlib.Path(sdssdir)
 
         # save PSF filename; dont actually need to load it though
-        self.psf_file = "psField-{:06d}-{:d}-{:04d}.fit".format(run, camcol, field)
-        self.psf_file = self.sdss_path.joinpath(str(run), str(camcol), \
-                                            str(field), self.psf_file)
+        # self.psf_file = "psField-{:06d}-{:d}-{:04d}.fit".format(run, camcol, field)
+        # self.psf_file = self.sdss_path.joinpath(str(run), str(camcol), \
+        #                                     str(field), self.psf_file)
         # print('loading psf from ', self.psf_file)
         # self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = self.psf_file)
         # self.psf = _trim_psf(self.psf_full, slen)
@@ -197,7 +205,8 @@ class SDSSHubbleData(Dataset):
         # the full SDSS image
         self.sdss_image_full = self.sdss_data[0]['image']
         self.sdss_background_full = self.sdss_data[0]['background']
-        self.nelec_per_nmgy_full = self.sdss_data[0]['nelec_per_nmgy']
+        # only take r band
+        self.nelec_per_nmgy_full = self.sdss_data[0]['nelec_per_nmgy'][np.array(self.bands) == 2].squeeze()
 
         # just a subset
         self.sdss_image = self.sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)]
@@ -211,20 +220,20 @@ class SDSSHubbleData(Dataset):
         # hubble magnitude
         self.hubble_rmag = HTcat[:,9]
         # right ascension and declination
-        hubble_ra = HTcat[:,21]
-        hubble_dc = HTcat[:,22]
+        self.hubble_ra = HTcat[:,21]
+        self.hubble_dc = HTcat[:,22]
 
         # convert hubble r.a and declination to pixel coordinates
         # (0, 0) is top left of self.sdss_image_full
-        frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format('ugriz'[band], run, camcol, field)
+        frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format('r', run, camcol, field)
         field_dir = pathlib.Path(sdssdir).joinpath(str(run), str(camcol), str(field))
         frame_path = str(field_dir.joinpath(frame_name))
         print('getting sdss coordinates from: ', frame_path)
         hdulist = fits.open(str(frame_path))
-        wcs = WCS(hdulist['primary'].header)
+        self.wcs = WCS(hdulist['primary'].header)
         # NOTE: pix_coordinates are (column x row), i.e. pix_coord[0] corresponds to a column
         pix_coordinates = \
-            wcs.wcs_world2pix(hubble_ra, hubble_dc, 0, ra_dec_order = True)
+            self.wcs.wcs_world2pix(self.hubble_ra, self.hubble_dc, 0, ra_dec_order = True)
 
         self.locs_full_x0 = pix_coordinates[1] # the row of pixel
         self.locs_full_x1 = pix_coordinates[0] # the column of pixel
