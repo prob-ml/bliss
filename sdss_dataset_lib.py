@@ -16,7 +16,7 @@ import sdss_psf
 
 import matplotlib.pyplot as plt
 
-from simulated_datasets_lib import _trim_psf
+from simulated_datasets_lib import _trim_psf, _get_mgrid
 
 class SloanDigitalSkySurvey(Dataset):
 
@@ -184,15 +184,19 @@ class SDSSHubbleData(Dataset):
 
         # must use at least the r band
         assert 2 in bands
-        self.bands = bands
+        self.bands = np.array(bands)
 
-        self.sdss_data = SloanDigitalSkySurvey(sdssdir,
+        # only handles two bands at the moment
+        assert len(bands) == 2
+
+        self.sdss_dir = sdssdir
+        self.sdss_data = SloanDigitalSkySurvey(self.sdss_dir,
                                            run = run,
                                            camcol = camcol,
                                            field = field,
                                            bands = bands)
 
-        self.sdss_path = pathlib.Path(sdssdir)
+        self.sdss_path = pathlib.Path(self.sdss_dir)
 
         # save PSF filename; dont actually need to load it though
         # self.psf_file = "psField-{:06d}-{:d}-{:04d}.fit".format(run, camcol, field)
@@ -206,7 +210,7 @@ class SDSSHubbleData(Dataset):
         self.sdss_image_full = self.sdss_data[0]['image']
         self.sdss_background_full = self.sdss_data[0]['background']
         # only take r band
-        self.nelec_per_nmgy_full = self.sdss_data[0]['nelec_per_nmgy'][np.array(self.bands) == 2].squeeze()
+        self.nelec_per_nmgy_full = self.sdss_data[0]['nelec_per_nmgy'][self.bands == 2].squeeze()
 
         # just a subset
         self.sdss_image = self.sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)]
@@ -262,6 +266,32 @@ class SDSSHubbleData(Dataset):
         self.fluxes = torch.Tensor(self.fluxes)
         self.sdss_image = torch.Tensor(self.sdss_image)
         self.sdss_background = torch.Tensor(self.sdss_background)
+
+        self._align_images()
+
+    def _align_images(self):
+        indx = self.bands[self.bands != 2]
+        other_band = 'ugriz'[indx[0]]
+        frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(other_band, self.run, self.camcol, self.field)
+        field_dir = pathlib.Path(self.sdss_dir).joinpath(str(self.run), str(self.camcol), str(self.field))
+        frame_path = str(field_dir.joinpath(frame_name))
+        print('\n aligning images. \n Getting sdss coordinates from: ', frame_path)
+        hdu = fits.open(str(frame_path))
+        wcs_other = WCS(hdu['primary'].header)
+
+        # get pixel coords
+        pix_coordinates_other = wcs_other.wcs_world2pix(self.hubble_ra,
+                                        self.hubble_dc, 0, ra_dec_order = True)
+
+        self.shift_x0 = np.median(self.locs_full_x0 - pix_coordinates_other[1])
+        self.shift_x1 = np.median(self.locs_full_x1 - pix_coordinates_other[0])
+
+        grid = _get_mgrid(self.slen).unsqueeze(0) - \
+                torch.Tensor([self.shift_x1, self.shift_x0]).unsqueeze(0).unsqueeze(0).unsqueeze(0)/ (self.slen - 1) * 2
+
+        self.sdss_image[self.bands != 2] = \
+            torch.nn.functional.grid_sample(self.sdss_image[self.bands != 2].unsqueeze(0),
+                                            grid).squeeze()
 
     # only one image in a dataset right now;
     # __len__ and __getitem__ are unnecessary atm ...
