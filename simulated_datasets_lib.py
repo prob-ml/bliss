@@ -263,7 +263,8 @@ class StarsDataset(Dataset):
         if self.n_bands > 1:
             colors = torch.randn(batchsize, self.max_stars, self.n_bands - 1).to(device) + 0.25
 
-            _fluxes = 10**(- colors / 2.5) * base_fluxes.unsqueeze(2)
+            # _fluxes = 10**(- colors / 2.5) * base_fluxes.unsqueeze(2)
+            _fluxes = base_fluxes.unsqueeze(2)
 
             fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim = 2) * \
                                 is_on_array.unsqueeze(2).float()

@@ -149,10 +149,12 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     if fluxes is not None:
         assert fullimage_batchsize == fluxes.shape[0]
         assert max_stars == fluxes.shape[1]
+        n_bands = fluxes.shape[2]
         subimage_fluxes = \
-            (which_locs_array * fluxes.unsqueeze(1)).view(subimage_batchsize, max_stars)
+            (which_locs_array.unsqueeze(3) * fluxes.unsqueeze(1)).view(subimage_batchsize, max_stars, n_bands)
     else:
-        subimage_fluxes = torch.zeros(subimage_locs.shape[0], subimage_locs.shape[1])
+        subimage_fluxes = torch.zeros(subimage_locs.shape[0], subimage_locs.shape[1], 1)
+        n_bands = 1
 
     # sort locs so all the zeros are at the end
     is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool).to(device)
@@ -163,7 +165,8 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     indx = is_on_array_sorted.clone()
     indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
 
-    subimage_fluxes = torch.gather(subimage_fluxes, dim = 1, index = indx) * is_on_array_sorted.float()
+    subimage_fluxes = torch.gather(subimage_fluxes, dim = 1, index = indx.unsqueeze(2).repeat(1, 1, n_bands)) * \
+                        is_on_array_sorted.float().unsqueeze(2)
     subimage_locs = torch.gather(subimage_locs, dim = 1, index = indx.unsqueeze(2).repeat(1, 1, 2)) * \
                         is_on_array_sorted.float().unsqueeze(2)
 
@@ -187,7 +190,8 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
     assert (patch_fluxes.shape[0] % batchsize) == 0
     n_stars_in_batch = int(patch_fluxes.shape[0] * patch_fluxes.shape[1] / batchsize)
 
-    fluxes_full_image = patch_fluxes.view(batchsize, n_stars_in_batch)
+    n_bands = patch_fluxes.shape[2]
+    fluxes_full_image = patch_fluxes.view(batchsize, n_stars_in_batch, n_bands)
 
     scale = (stamp_slen - 1 - 2 * edge_padding)
     bias = tile_coords.repeat(batchsize, 1).unsqueeze(1).float() + edge_padding
@@ -195,13 +199,15 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
 
     locs_full_image = locs_full_image.view(batchsize, n_stars_in_batch, 2)
 
-    n_stars = torch.sum(fluxes_full_image > 0, dim = 1)
+    patch_is_on_bool = (fluxes_full_image > 0).any(2).float() # if flux in any band is nonzero
+    n_stars = torch.sum(patch_is_on_bool > 0, dim = 1)
 
     is_on_array_full = utils.get_is_on_from_n_stars(n_stars, n_stars.max())
     indx = is_on_array_full.clone()
-    indx[indx == 1] = torch.nonzero(fluxes_full_image)[:, 1]
+    indx[indx == 1] = torch.nonzero(patch_is_on_bool)[:, 1]
 
-    fluxes_full_image = torch.gather(fluxes_full_image, dim = 1, index = indx) * is_on_array_full.float()
+    fluxes_full_image = torch.gather(fluxes_full_image, dim = 1, index = indx.unsqueeze(2).repeat(1, 1, n_bands)) * \
+                        is_on_array_full.float().unsqueeze(2)
     locs_full_image = torch.gather(locs_full_image, dim = 1, index = indx.unsqueeze(2).repeat(1, 1, 2)) * \
                         is_on_array_full.float().unsqueeze(2)
 
