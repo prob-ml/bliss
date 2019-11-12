@@ -103,8 +103,8 @@ def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid = None):
     assert locs.shape[2] == 2
 
     assert fluxes.shape[0] == batchsize
-    assert fluxes.shape[1] == n_bands
-    assert fluxes.shape[2] == max_stars
+    assert fluxes.shape[1] == max_stars
+    assert fluxes.shape[2] == n_bands
     assert len(n_stars) == batchsize
     assert len(n_stars.shape) == 1
 
@@ -120,7 +120,7 @@ def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid = None):
     for n in range(max(n_stars)):
         is_on_n = (n < n_stars).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-        fluxes_n = fluxes[:, :, n]
+        fluxes_n = fluxes[:, n, :]
 
         one_star = plot_one_star(slen, locs_n, psf, cached_grid = grid)
 
@@ -261,14 +261,14 @@ class StarsDataset(Dataset):
                                 shape = (batchsize, self.max_stars))
 
         if self.n_bands > 1:
-            colors = torch.randn(batchsize, self.n_bands - 1, self.max_stars).to(device) + 0.25
+            colors = torch.randn(batchsize, self.max_stars, self.n_bands - 1).to(device) + 0.25
 
-            _fluxes = 10**(- colors / 2.5) * base_fluxes.unsqueeze(1)
+            _fluxes = 10**(- colors / 2.5) * base_fluxes.unsqueeze(2)
 
-            fluxes = torch.cat((base_fluxes.unsqueeze(1), _fluxes), dim = 1) * \
-                                    is_on_array.unsqueeze(1).float()
+            fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim = 2) * \
+                                is_on_array.unsqueeze(2).float()
         else:
-            fluxes = (fluxes * is_on_array.float()).unsqueeze(1)
+            fluxes = (fluxes * is_on_array.float()).unsqueeze(2)
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,

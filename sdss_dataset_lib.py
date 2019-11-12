@@ -320,9 +320,9 @@ class SDSSHubbleData(Dataset):
         flux_ratio = image_other_pixels / image_r_pixels
 
         # set fluxes
-        self.fluxes = torch.zeros(len(self.bands), len(self.r_fluxes))
-        self.fluxes[self.bands == 2] = self.r_fluxes
-        self.fluxes[self.bands != 2] = self.r_fluxes * flux_ratio
+        self.fluxes = torch.zeros(len(self.r_fluxes), len(self.bands))
+        self.fluxes[:, self.bands == 2] = self.r_fluxes.unsqueeze(1)
+        self.fluxes[:, self.bands != 2] = (self.r_fluxes * flux_ratio).unsqueeze(1)
 
 
 
