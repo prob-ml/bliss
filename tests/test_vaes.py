@@ -24,20 +24,21 @@ class TestStarEncoder(unittest.TestCase):
         n_image_stamps = 30
         max_detections = 4
         stamp_slen = 9
+        n_bands = 2
 
         # get encoder
         star_encoder = starnet_vae_lib.StarEncoder(full_slen = 101,
                                                    stamp_slen = stamp_slen,
                                                    step = 2,
                                                    edge_padding = 3,
-                                                   n_bands = 1,
+                                                   n_bands = n_bands,
                                                    max_detections = max_detections)
 
         star_encoder.eval();
 
         # simulate image stamps and backgrounds
-        image_stamps = torch.randn(n_image_stamps, 1, stamp_slen, stamp_slen) + 10.
-        background_stamps = torch.randn(n_image_stamps, 1, stamp_slen, stamp_slen)
+        image_stamps = torch.randn(n_image_stamps, n_bands, stamp_slen, stamp_slen) + 10.
+        background_stamps = torch.randn(n_image_stamps, n_bands, stamp_slen, stamp_slen)
         n_star_stamps = torch.Tensor(np.random.choice(max_detections, n_image_stamps)).type(torch.LongTensor)
 
         # forward
@@ -52,11 +53,21 @@ class TestStarEncoder(unittest.TestCase):
         assert ((logit_loc_logvar != 0).sum(1)[:, 0] == n_star_stamps).all()
         assert ((logit_loc_logvar != 0).sum(1)[:, 1] == n_star_stamps).all()
 
-        assert ((log_flux_mean != 0).sum(1) == n_star_stamps).all()
-        assert ((log_flux_mean != 0).sum(1) == n_star_stamps).all()
+        for n in range(n_bands):
+            assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_stamps).all()
+            assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_stamps).all()
 
-        assert ((log_flux_logvar != 0).sum(1) == n_star_stamps).all()
-        assert ((log_flux_logvar != 0).sum(1) == n_star_stamps).all()
+            assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_stamps).all()
+            assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_stamps).all()
+
+        # check pattern of zeros
+        is_on_array = utils.get_is_on_from_n_stars(n_star_stamps, star_encoder.max_detections)
+        assert torch.all((logit_loc_mean * is_on_array.unsqueeze(2).float()) == logit_loc_mean)
+        assert torch.all((logit_loc_logvar * is_on_array.unsqueeze(2).float()) == logit_loc_logvar)
+
+
+        assert torch.all((log_flux_mean * is_on_array.unsqueeze(2).float()) == log_flux_mean)
+        assert torch.all((log_flux_logvar * is_on_array.unsqueeze(2).float()) == log_flux_logvar)
 
         # we check the variational parameters against the hidden parameters
         # one by one
@@ -76,10 +87,10 @@ class TestStarEncoder(unittest.TestCase):
                 assert torch.all(logit_loc_logvar[i, 0:n_stars_i, :].flatten() == \
                                     h_out[i, star_encoder.locs_var_indx_mat[n_stars_i][0:(2 * n_stars_i)]])
 
-                assert torch.all(log_flux_mean[i, 0:n_stars_i].flatten() == \
-                                    h_out[i, star_encoder.fluxes_mean_indx_mat[n_stars_i][0:(n_stars_i)]])
-                assert torch.all(log_flux_logvar[i, 0:n_stars_i].flatten() == \
-                                    h_out[i, star_encoder.fluxes_var_indx_mat[n_stars_i][0:(n_stars_i)]])
+                assert torch.all(log_flux_mean[i, 0:n_stars_i, :].flatten() == \
+                                    h_out[i, star_encoder.fluxes_mean_indx_mat[n_stars_i][0:(n_bands * n_stars_i)]])
+                assert torch.all(log_flux_logvar[i, 0:n_stars_i, :].flatten() == \
+                                    h_out[i, star_encoder.fluxes_var_indx_mat[n_stars_i][0:(n_bands * n_stars_i)]])
 
         # check probabilities
         # free_probs = torch.zeros(n_image_stamps, max_detections + 1)
@@ -112,21 +123,22 @@ class TestStarEncoder(unittest.TestCase):
         n_image_stamps = 30
         max_detections = 4
         stamp_slen = 9
+        n_bands = 2
 
         # get encoder
         star_encoder = starnet_vae_lib.StarEncoder(full_slen = 101,
                                                    stamp_slen = stamp_slen,
                                                    step = 2,
                                                    edge_padding = 3,
-                                                   n_bands = 1,
+                                                   n_bands = n_bands,
                                                    max_detections = max_detections)
 
         star_encoder.eval();
 
         # simulate image stamps and backgrounds
         n_samples = 10
-        image_stamps = torch.randn(n_image_stamps, 1, stamp_slen, stamp_slen) + 10.
-        background_stamps = torch.randn(n_image_stamps, 1, stamp_slen, stamp_slen)
+        image_stamps = torch.randn(n_image_stamps, n_bands, stamp_slen, stamp_slen) + 10.
+        background_stamps = torch.randn(n_image_stamps, n_bands, stamp_slen, stamp_slen)
         n_star_stamps_sampled = torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_stamps))).type(torch.LongTensor)
 
         h = star_encoder._forward_to_last_hidden(image_stamps, background_stamps).detach()
@@ -149,13 +161,14 @@ class TestStarEncoder(unittest.TestCase):
         n_samples = 10
         stamp_slen = 9
         max_detections = 4
+        n_bands = 2
 
         # get encoder
         star_encoder = starnet_vae_lib.StarEncoder(full_slen = 101,
                                                    stamp_slen = stamp_slen,
                                                    step = 2,
                                                    edge_padding = 3,
-                                                   n_bands = 1,
+                                                   n_bands = n_bands,
                                                    max_detections = max_detections)
 
         n_image_stamps = star_encoder.tile_coords.shape[0]
@@ -166,7 +179,7 @@ class TestStarEncoder(unittest.TestCase):
                                                         max_detections).float()
 
         subimage_locs_sampled = torch.rand((n_samples, n_image_stamps, max_detections, 2)) * is_on_array.unsqueeze(3)
-        subimage_fluxes_sampled = torch.rand((n_samples, n_image_stamps, max_detections)) * is_on_array
+        subimage_fluxes_sampled = torch.rand((n_samples, n_image_stamps, max_detections, n_bands)) * is_on_array.unsqueeze(3)
 
         locs_full_image, fluxes_full_image, n_stars_full = \
             star_encoder._get_full_params_from_sampled_params(subimage_locs_sampled,
