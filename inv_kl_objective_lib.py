@@ -53,15 +53,16 @@ def get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var):
 
 def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
     batchsize = true_fluxes.shape[0]
+    n_bands = true_fluxes.shape[2]
 
-    _log_flux_mean = log_flux_mean.view(batchsize, 1, log_flux_mean.shape[1])
-    _log_flux_log_var = log_flux_log_var.view(batchsize, 1, log_flux_mean.shape[1])
-    _true_fluxes = true_fluxes.view(batchsize, true_fluxes.shape[1], 1)
+    _log_flux_mean = log_flux_mean.view(batchsize, 1, log_flux_mean.shape[1], n_bands)
+    _log_flux_log_var = log_flux_log_var.view(batchsize, 1, log_flux_mean.shape[1], n_bands)
+    _true_fluxes = true_fluxes.view(batchsize, true_fluxes.shape[1], 1, n_bands)
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
     flux_log_probs_all = utils.eval_lognormal_logprob(_true_fluxes,
-                                _log_flux_mean, _log_flux_log_var)
+                                _log_flux_mean, _log_flux_log_var).sum(dim = 3)
 
     return flux_log_probs_all
 

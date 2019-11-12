@@ -27,17 +27,18 @@ class TestStarEncoderObjective(unittest.TestCase):
         batchsize = 10
         max_detections = 4
         max_stars = 6
+        n_bands = 2
 
         # true parameters
         true_locs = torch.rand(batchsize, max_stars, 2)
-        true_fluxes = torch.exp(torch.randn(batchsize, max_stars))
+        true_fluxes = torch.exp(torch.randn(batchsize, max_stars, n_bands))
 
         # estimated parameters
         logit_loc_mean = torch.randn(batchsize, max_detections, 2)
         logit_loc_log_var = torch.randn(batchsize, max_detections, 2)
 
-        log_flux_mean  = torch.randn(batchsize, max_detections)
-        log_flux_log_var = torch.randn(batchsize, max_detections)
+        log_flux_mean  = torch.randn(batchsize, max_detections, n_bands)
+        log_flux_log_var = torch.randn(batchsize, max_detections, n_bands)
 
         # get loss for locations
         locs_log_probs_all = \
@@ -61,7 +62,7 @@ class TestStarEncoderObjective(unittest.TestCase):
                     flux_loss_ij = \
                         utils.eval_lognormal_logprob(true_fluxes[i, j],
                                                         log_flux_mean[i, k],
-                                                        log_flux_log_var[i, k])
+                                                        log_flux_log_var[i, k]).sum()
 
                     assert flux_loss_ij == flux_log_probs_all[i, j, k]
 
@@ -77,21 +78,22 @@ class TestStarEncoderObjective(unittest.TestCase):
         batchsize = 100
         max_detections = 4
         max_stars = 4
+        n_bands = 2
 
         # true parameters
         n_stars = torch.Tensor(np.random.choice(max_detections + 1, batchsize))
         is_on_array = utils.get_is_on_from_n_stars(n_stars, max_detections).float()
 
         true_locs = torch.rand(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
-        true_fluxes = torch.exp(torch.randn(batchsize, max_detections)) * is_on_array
+        true_fluxes = torch.exp(torch.randn(batchsize, max_detections, n_bands)) * is_on_array.unsqueeze(2)
 
 
         # estimated parameters
         logit_loc_mean = torch.randn(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
         logit_loc_log_var = torch.randn(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
 
-        log_flux_mean  = torch.randn(batchsize, max_detections) * is_on_array
-        log_flux_log_var = torch.randn(batchsize, max_detections) * is_on_array
+        log_flux_mean  = torch.randn(batchsize, max_detections, n_bands) * is_on_array.unsqueeze(2)
+        log_flux_log_var = torch.randn(batchsize, max_detections, n_bands) * is_on_array.unsqueeze(2)
 
         # get loss for locations
         locs_log_probs_all = \
@@ -107,10 +109,6 @@ class TestStarEncoderObjective(unittest.TestCase):
 
         locs_loss, fluxes_loss, _ = inv_kl_lib.get_min_perm_loss(locs_log_probs_all,
                                     flux_log_probs_all, is_on_array)
-
-        print(n_stars)
-        print(locs_loss)
-        print(fluxes_loss)
 
         # a quick check for zer0 and one stars
         assert (locs_loss[n_stars == 0] == 0).all()
@@ -129,9 +127,9 @@ class TestStarEncoderObjective(unittest.TestCase):
             _logit_loc_mean = logit_loc_mean[i, 0:_n_stars, :]
             _logit_loc_log_var = logit_loc_log_var[i, 0:_n_stars, :]
 
-            _true_fluxes = true_fluxes[i, 0:_n_stars]
-            _log_flux_mean = log_flux_mean[i, 0:_n_stars]
-            _log_flux_log_var = log_flux_log_var[i, 0:_n_stars]
+            _true_fluxes = true_fluxes[i, 0:_n_stars, :]
+            _log_flux_mean = log_flux_mean[i, 0:_n_stars, :]
+            _log_flux_log_var = log_flux_log_var[i, 0:_n_stars, :]
 
             min_locs_loss = 1e16
             for perm in permutations(range(_n_stars)):
@@ -141,10 +139,9 @@ class TestStarEncoderObjective(unittest.TestCase):
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_locs_loss = locs_loss_perm.sum()
                     min_fluxes_loss = -utils.eval_lognormal_logprob(_true_fluxes,
-                                        _log_flux_mean.unsqueeze(0)[:, perm],
-                                        _log_flux_log_var.unsqueeze(0)[:,perm]).sum()
+                                        _log_flux_mean[perm, :],
+                                        _log_flux_log_var[perm, :]).sum()
 
-            print(min_locs_loss)
             assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5
             assert torch.abs(fluxes_loss[i] - min_fluxes_loss) < 1e-5
 
