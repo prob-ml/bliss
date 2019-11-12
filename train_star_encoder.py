@@ -34,7 +34,8 @@ with open('./data/default_star_parameters.json', 'r') as fp:
 print(data_params)
 
 # load psf
-psf_dir = './../multiband_pcat/Data/idR-002583-2-0136/psfs/'
+# psf_dir = './../multiband_pcat/Data/idR-002583-2-0136/psfs/'
+psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 psf_og = np.array([psf_r, psf_i])
@@ -114,7 +115,7 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_11052019/starnet_ri'
+        outfile = './fits/results_11122019/starnet_ri'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
