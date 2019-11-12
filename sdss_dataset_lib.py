@@ -16,7 +16,14 @@ import sdss_psf
 
 import matplotlib.pyplot as plt
 
-from simulated_datasets_lib import _trim_psf, _get_mgrid
+from simulated_datasets_lib import _trim_psf
+
+def _get_mgrid2(slen0, slen1):
+    offset0 = (slen0 - 1) / 2
+    offset1 = (slen1 - 1) / 2
+    x, y = np.mgrid[-offset0:(offset0 + 1), -offset1:(offset1 + 1)]
+    # return torch.Tensor(np.dstack((x, y))) / offset
+    return torch.Tensor(np.dstack((y, x))) / torch.Tensor([[[offset1, offset0]]])
 
 class SloanDigitalSkySurvey(Dataset):
 
@@ -189,6 +196,7 @@ class SDSSHubbleData(Dataset):
         # only handles two bands at the moment
         assert len(bands) == 2
 
+        # get sdss data
         self.sdss_dir = sdssdir
         self.sdss_data = SloanDigitalSkySurvey(self.sdss_dir,
                                            run = run,
@@ -207,15 +215,8 @@ class SDSSHubbleData(Dataset):
         # self.psf = _trim_psf(self.psf_full, slen)
 
         # the full SDSS image
-        self.sdss_image_full = self.sdss_data[0]['image']
-        self.sdss_background_full = self.sdss_data[0]['background']
-        # only take r band
-        self.nelec_per_nmgy_full = self.sdss_data[0]['nelec_per_nmgy'][self.bands == 2].squeeze()
-
-        # just a subset
-        self.sdss_image = self.sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)]
-        self.sdss_background = self.sdss_background_full[:, x0:(x0 + slen), x1:(x1 + slen)]
-        self.nelec_per_nmgy = self.nelec_per_nmgy_full[x1:(x1 + slen)]
+        self.sdss_image_full = torch.Tensor(self.sdss_data[0]['image'])
+        self.sdss_background_full = torch.Tensor(self.sdss_data[0]['background'])
 
         # load hubble data
         print('loading hubble data from ', hubble_cat_file)
@@ -242,7 +243,12 @@ class SDSSHubbleData(Dataset):
         self.locs_full_x0 = pix_coordinates[1] # the row of pixel
         self.locs_full_x1 = pix_coordinates[0] # the column of pixel
 
+        self._align_images()
+
         # convert hubble magnitude to n_electron count
+        # only take r band
+        self.nelec_per_nmgy_full = self.sdss_data[0]['nelec_per_nmgy'][self.bands == 2].squeeze()
+        self.nelec_per_nmgy = self.nelec_per_nmgy_full[x1:(x1 + slen)]
         which_cols = np.floor(self.locs_full_x1 / len(self.nelec_per_nmgy_full)).astype(int)
         hubble_nmgy = convert_mag_to_nmgy(self.hubble_rmag)
 
@@ -262,13 +268,17 @@ class SDSSHubbleData(Dataset):
 
         r_fluxes = self.fluxes_full[which_locs]
 
+        print('\n returning image at x0 = {}, x1 = {}'.format(x0, x1))
+        # just a subset
+        self.sdss_image = self.sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)]
+        self.sdss_background = self.sdss_background_full[:, x0:(x0 + slen), x1:(x1 + slen)]
+
         # convert to torch.Tensor
         self.locs = torch.Tensor(self.locs) / (self.slen - 1)
         self.r_fluxes = torch.Tensor(r_fluxes)
         self.sdss_image = torch.Tensor(self.sdss_image)
         self.sdss_background = torch.Tensor(self.sdss_background)
 
-        self._align_images()
         self._estimate_colors()
 
     def _align_images(self):
@@ -288,11 +298,13 @@ class SDSSHubbleData(Dataset):
         self.shift_x0 = np.median(self.locs_full_x0 - pix_coordinates_other[1])
         self.shift_x1 = np.median(self.locs_full_x1 - pix_coordinates_other[0])
 
-        grid = _get_mgrid(self.slen).unsqueeze(0) - \
-                torch.Tensor([self.shift_x1, self.shift_x0]).unsqueeze(0).unsqueeze(0).unsqueeze(0)/ (self.slen - 1) * 2
+        grid = _get_mgrid2(self.sdss_image_full.shape[-2],
+                            self.sdss_image_full.shape[-1]).unsqueeze(0) - \
+                torch.Tensor([[[[self.shift_x1 / (self.sdss_image_full.shape[-1] - 1),
+                                self.shift_x0 / (self.sdss_image_full.shape[-2] - 1)]]]]) * 2
 
-        self.sdss_image[self.bands != 2] = \
-            torch.nn.functional.grid_sample(self.sdss_image[self.bands != 2].unsqueeze(0),
+        self.sdss_image_full[self.bands != 2] = \
+            torch.nn.functional.grid_sample(self.sdss_image_full[self.bands != 2].unsqueeze(0),
                                             grid).squeeze()
 
     def _estimate_colors(self):
@@ -306,8 +318,6 @@ class SDSSHubbleData(Dataset):
 
         # flux ratio
         flux_ratio = image_other_pixels / image_r_pixels
-
-        print(flux_ratio)
 
         # set fluxes
         self.fluxes = torch.zeros(len(self.bands), len(self.r_fluxes))
