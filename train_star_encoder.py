@@ -80,7 +80,7 @@ optimizer = optim.Adam([
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
-n_epochs = 1001
+n_epochs = 201
 print_every = 20
 print('training')
 
