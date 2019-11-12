@@ -96,7 +96,7 @@ def tile_images(images, subimage_slen, step):
     # NOTE: input and output are torch tensors, not numpy arrays
     #       (need the unfold command from torch)
 
-    # image should be batchsize x 1 x slen x slen
+    # image should be batchsize x n_bands x slen x slen
     assert len(images.shape) == 4
 
     image_xlen = images.shape[2]
@@ -106,10 +106,17 @@ def tile_images(images, subimage_slen, step):
     assert (image_xlen - subimage_slen) % step == 0
     assert (image_ylen - subimage_slen) % step == 0
 
-    images_batched = _extract_patches_2d(images,
-                                        patch_shape = [subimage_slen, subimage_slen],
-                                        step = [step, step],
-                                        batch_first = True).reshape(-1, 1, subimage_slen, subimage_slen)
+    n_bands = images.shape[1]
+    for b in range(n_bands):
+        images_batched_b = _extract_patches_2d(images[:, b:(b+1), :, :],
+                                            patch_shape = [subimage_slen, subimage_slen],
+                                            step = [step, step],
+                                            batch_first = True).reshape(-1, 1, subimage_slen, subimage_slen)
+
+        if b == 0:
+            images_batched = images_batched_b
+        else:
+            images_batched = torch.cat((images_batched, images_batched_b), dim = 1)
 
     return images_batched
 

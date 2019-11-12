@@ -246,7 +246,8 @@ class SDSSHubbleData(Dataset):
         which_cols = np.floor(self.locs_full_x1 / len(self.nelec_per_nmgy_full)).astype(int)
         hubble_nmgy = convert_mag_to_nmgy(self.hubble_rmag)
 
-        self.fudge_conversion = 1.2593
+        # self.fudge_conversion = 1.2593
+        self.fudge_conversion = 1. / (1 - 0.122)
         self.fluxes_full = hubble_nmgy * self.nelec_per_nmgy[which_cols] * self.fudge_conversion # / self.psf_max
 
         assert len(self.fluxes_full) == len(self.locs_full_x0)
@@ -259,15 +260,16 @@ class SDSSHubbleData(Dataset):
         self.locs = np.array([self.locs_full_x0[which_locs] - x0,
                                 self.locs_full_x1[which_locs] - x1]).transpose()
 
-        self.fluxes = self.fluxes_full[which_locs]
+        r_fluxes = self.fluxes_full[which_locs]
 
         # convert to torch.Tensor
         self.locs = torch.Tensor(self.locs) / (self.slen - 1)
-        self.fluxes = torch.Tensor(self.fluxes)
+        self.r_fluxes = torch.Tensor(r_fluxes)
         self.sdss_image = torch.Tensor(self.sdss_image)
         self.sdss_background = torch.Tensor(self.sdss_background)
 
         self._align_images()
+        self._estimate_colors()
 
     def _align_images(self):
         indx = self.bands[self.bands != 2]
@@ -292,6 +294,27 @@ class SDSSHubbleData(Dataset):
         self.sdss_image[self.bands != 2] = \
             torch.nn.functional.grid_sample(self.sdss_image[self.bands != 2].unsqueeze(0),
                                             grid).squeeze()
+
+    def _estimate_colors(self):
+        locs_indx = torch.round(self.locs * (self.slen - 1)).type(torch.long)
+
+        # pixels in the r-band
+        image_r_pixels = self.sdss_image[self.bands == 2][0, locs_indx[:, 0], locs_indx[:, 1]]
+
+        # pixels in the other band
+        image_other_pixels = self.sdss_image[self.bands != 2][0, locs_indx[:, 0], locs_indx[:, 1]]
+
+        # flux ratio
+        flux_ratio = image_other_pixels / image_r_pixels
+
+        print(flux_ratio)
+
+        # set fluxes
+        self.fluxes = torch.zeros(len(self.bands), len(self.r_fluxes))
+        self.fluxes[self.bands == 2] = self.r_fluxes
+        self.fluxes[self.bands != 2] = self.r_fluxes * flux_ratio
+
+
 
     # only one image in a dataset right now;
     # __len__ and __getitem__ are unnecessary atm ...
