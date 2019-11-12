@@ -41,7 +41,7 @@ psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 psf_og = np.array([psf_r, psf_i])
 
 # sky intensity: for the r and i band
-sky_intensity = torch.Tensor([686., 1123.])
+sky_intensity = torch.Tensor([686., 1123.]).to(device)
 
 # draw data
 print('generating data: ')
