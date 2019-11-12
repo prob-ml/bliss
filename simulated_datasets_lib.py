@@ -238,7 +238,7 @@ class StarsDataset(Dataset):
     def __getitem__(self, idx):
 
         return {'image': self.images[idx],
-                'background': self.background,
+                'background': self.background[indx],
                 'locs': self.locs[idx],
                 'fluxes': self.fluxes[idx],
                 'n_stars': self.n_stars[idx]}
