@@ -229,8 +229,8 @@ class StarsDataset(Dataset):
         self.set_params_and_images()
 
         self.background = \
-            torch.ones(self.n_bands, self.slen, self.slen).to(device) * \
-                            self.sky_intensity.unsqueeze(1).unsqueeze(1)
+            torch.ones(self.n_images, self.n_bands, self.slen, self.slen).to(device) * \
+                            self.sky_intensity.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
 
     def __len__(self):
         return self.n_images

@@ -156,7 +156,9 @@ def get_encoder_loss(star_encoder,
         star_encoder.get_image_stamps(images_full, true_locs, true_fluxes,
                                         clip_max_stars = True)
 
-    background_stamps = backgrounds_full.mean() # TODO
+    background_stamps = \
+        star_encoder.get_image_stamps(backgrounds_full, None, None,
+                                      trim_images = False)[0]
 
     # get variational parameters
     logit_loc_mean, logit_loc_log_var, \
