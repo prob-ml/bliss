@@ -128,9 +128,9 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     assert torch.all(locs >= 0.)
 
     n_patches = tile_coords.shape[0] # number of patches in a full image
-    fullimage_batchsize = locs.shape[0]
+    fullimage_batchsize = locs.shape[0] # number of full images
 
-    subimage_batchsize = n_patches * fullimage_batchsize
+    subimage_batchsize = n_patches * fullimage_batchsize # total number of patches
 
     max_stars = locs.shape[1]
 

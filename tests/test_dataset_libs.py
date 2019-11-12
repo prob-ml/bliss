@@ -14,11 +14,17 @@ import sdss_dataset_lib
 
 import json
 
-psf_fit_file = './../celeste_net/sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
+import fitsio
+
+psf_dir = './../multiband_pcat/Data/idR-002583-2-0136/psfs/'
+psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
+psf_g = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-g.fits')[0].read()
+psf_og = np.array([psf_r, psf_g])
+
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
-data_params['slen'] = 30
+data_params['slen'] = 31
 data_params['mean_stars'] = 10
 
 class TestSDSSDataset(unittest.TestCase):
@@ -27,12 +33,13 @@ class TestSDSSDataset(unittest.TestCase):
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)
 
-        n_images = 64
+        n_images = 32
         # get dataset
         star_dataset = \
-            simulated_datasets_lib.load_dataset_from_params(psf_fit_file,
+            simulated_datasets_lib.load_dataset_from_params(psf_og,
                                     data_params,
                                     n_images = n_images,
+                                    sky_intensity = torch.Tensor([686., 1000.]),
                                     add_noise = True)
 
         # get loader

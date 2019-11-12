@@ -87,7 +87,6 @@ class SloanDigitalSkySurvey(Dataset):
 
         for b, bl in enumerate("ugriz"):
             if not(b in self.bands):
-                # taking only the red band
                 continue
 
             frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(bl, run, camcol, field)
@@ -194,7 +193,7 @@ class SDSSHubbleData(Dataset):
         self.bands = np.array(bands)
 
         # only handles two bands at the moment
-        assert len(bands) == 2
+        assert len(bands) <= 2
 
         # get sdss data
         self.sdss_dir = sdssdir
@@ -243,7 +242,8 @@ class SDSSHubbleData(Dataset):
         self.locs_full_x0 = pix_coordinates[1] # the row of pixel
         self.locs_full_x1 = pix_coordinates[0] # the column of pixel
 
-        self._align_images()
+        if len(self.bands) > 1:
+            self._align_images()
 
         # convert hubble magnitude to n_electron count
         # only take r band
@@ -317,7 +317,7 @@ class SDSSHubbleData(Dataset):
         image_other_pixels = self.sdss_image[self.bands != 2][0, locs_indx[:, 0], locs_indx[:, 1]]
 
         # flux ratio
-        flux_ratio = image_other_pixels / image_r_pixels
+        flux_ratio = (image_other_pixels / image_r_pixels) 
 
         # set fluxes
         self.fluxes = torch.zeros(len(self.r_fluxes), len(self.bands))
