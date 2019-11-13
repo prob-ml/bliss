@@ -146,6 +146,7 @@ class StarEncoder(nn.Module):
         # forward to the layer that is shared by all n_stars
         assert torch.all(image > 0.)
         assert torch.all((image - background) > -1000.)
+        assert image.shape == background.shape
 
         log_img = torch.log(image - background + 1000)
 
