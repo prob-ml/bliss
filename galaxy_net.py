@@ -19,9 +19,9 @@ class CenteredGalaxyEncoder(nn.Module): #recognition, inference
         self.slen = slen
         self.latent_dim = latent_dim
         self.num_bands = num_bands
- 
+
         self.features = nn.Sequential(
-            nn.Conv2d(num_bands, 16, 3, padding=1),
+            nn.Conv2d(self.num_bands, 16, 3, padding=1),
             nn.ReLU(),
 
             nn.Conv2d(16, 16, 3, padding=1),
@@ -119,7 +119,7 @@ class CenteredGalaxyDecoder(nn.Module): #generator
 
 class OneCenteredGalaxy(nn.Module):
 
-    def __init__(self, slen, latent_dim=8, num_bands=5):
+    def __init__(self, slen, latent_dim=8, num_bands=1):
         super(OneCenteredGalaxy, self).__init__()
 
         self.slen = slen #The dimensions of the image slen * slen
@@ -162,7 +162,8 @@ class OneCenteredGalaxy(nn.Module):
         recon_losses = recon_losses.view(image.size(0), -1).sum(1) 
 
         #the expectation is subtle and implicit bc we are using stochastic optimization multiple times. 
-        loss = (recon_losses + kl_z).sum() #this is actually actually ELBO. 
+        #sum here is over the samples (only remaining dimensions)
+        loss = (recon_losses + kl_z).sum() #this is actually actually ELBO
 
         return loss
 

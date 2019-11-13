@@ -5,18 +5,22 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 import scipy.stats as stats
 from torch.utils.data import Dataset
+from WeakLensingDeblending import descwl
 
 #sky level and exposure, etc. for LSST 
 
-class Gsim(Dataset):
+class GalBasic(Dataset):
 
-    def __init__(self, slen, mean_galaxies=2, min_galaxies=0, max_galaxies=3,
-                 num_images=1600, num_bands=1, padding=3, centered=False, pixel_scale=0.2
-                 brightness=30000):
+    def __init__(self, slen, mean_galaxies=1, min_galaxies=1, max_galaxies=1,
+                 num_images=1600, num_bands=1, padding=3, centered=True,
+                 brightness=30000, survey_name='lsst', 
+                 snr=50, sky=700):
         """
         This class uses galsim.
         """
-        super(Gsim, self).__init__() #runs init of the super class. 
+        super(GalBasic, self).__init__() #runs init of the super class. 
+
+
 
         self.slen = slen #number of pixel dimensions. 
         self.mean_galaxies = mean_galaxies
@@ -27,38 +31,64 @@ class Gsim(Dataset):
         self.padding = padding
         self.centered = centered
         self.brightness = brightness
-        self.pixel_scale = pixel_scale
+        self.snr=snr
+
+        #survey specific parameters. 
+        # self.survey_name = survey_name 
+        # self.survey = descwl.survey.Survey(no_analysis=True, survey_name=self.survey_name, filter_band='r')
+        # self.sky = self.survey.mean_sky_level
+        self.sky=sky
+        self.pixel_scale=0.2
+
+        if self.num_bands > 1 or not self.centered or survey_name != 'lsst': 
+            raise NotImplementedError("Not yet implemented multiple bands, uncentering")
 
     def __len__(self):
         return self.num_images
 
     def __getitem__(self, idx):
-        #right now this completely ignores the index and returns some random Gaussian galaxy using Galsim.
+        #right now this completely ignores the index and returns some random Gaussian galaxy using galsim.
         #scale is LSST scale.
 
-        if self.num_bands > 1 or not self.centered: 
-            raise NotImplementedError("Not yet implemented multiple bands, uncentering")
 
-        #get random parameters. 
-        sigma = np.random.sample() * (self.slen/2) * self.pixe_scale / 3
+        poisson_galaxies = np.random.poisson(self.mean_galaxies)
+        num_galaxies = np.maximum(np.minimum(poisson_galaxies, self.max_galaxies), self.min_galaxies)
+
+        #get random galaxy parameters. 
+
+        #do not want too small of sigma to avoid pixel galaxies. 
+        sigma = max(np.random.sample() * self.pixel_scale*2, self.pixel_scale*.75) 
+
+        r = min(np.random.sample(), 0.99) #magnitude needs to be < 1 . 
         theta = np.random.sample()* np.pi * 2
-        e1,e2 = np.cos(theta), np.sin(theta) 
+        e1,e2 = r*np.cos(theta), r*np.sin(theta) 
 
 
 
-        gal = Galsim.Gaussian(flux=1, sigma=sigma)
+        gal = galsim.Gaussian(flux=1000, sigma=sigma)
         gal = gal.shear(e1=e1, e2=e2)
-        img = gal.drawImage(gal, method='phot', poisson_flux=True, nx=self.slen, ny=self.slen, scale=0.2)
+        img = gal.drawImage(nx=self.slen, ny=self.slen, scale=self.pixel_scale, 
+                            method='phot', poisson_flux=True)
+
         noisy_img = img.copy()
 
         #add noise. 
         rng = galsim.BaseDeviate(0)
         noise = galsim.GaussianNoise(rng=rng)
-        variance_noise = noisy_img.addNoiseSNR(noise, snr, sky=..., preserve_flux=True)
+        noise = galsim.PoissonNoise(rng = rng, sky_level = self.sky)
+        _ = noisy_img.addNoiseSNR(noise, self.snr, preserve_flux=True)
 
 
         #obtain background 
+        nimage = noisy_img.array
+        image = np.zeros((self.num_bands, self.slen, self.slen), dtype=np.float32)
+        image[0, :, :] = nimage
+        background=np.full_like(image, self.sky)
+        image+= background
 
+        return {'image': image,
+                'background': background,
+                'num_galaxies': num_galaxies}
 
 
 

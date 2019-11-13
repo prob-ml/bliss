@@ -21,7 +21,7 @@ plt.switch_backend("Agg")
 
 
 parser = argparse.ArgumentParser(description='GalaxyNet',formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+parser.add_argument('--batch-size', type=int, default=10, metavar='N',
                     help='input batch size for training.')
 parser.add_argument('--mode', type=str, default="rnn", metavar='N',
                     help='specifies the dataset and the vae type: one, rnn, or grid')
@@ -39,10 +39,10 @@ parser.add_argument('--overwrite', action='store_true',
                     help='Whether to overwrite if directory already exists.')
 args = parser.parse_args()
 
+args.dir= "data/"+args.dir
 
 torch.cuda.manual_seed(args.seed)
 np.random.seed(args.seed)
-
 
 def plot_reconstruction(data_loader, vae, epoch, sleep=False):
     num_examples = min(10, args.batch_size)
@@ -68,20 +68,20 @@ def plot_reconstruction(data_loader, vae, epoch, sleep=False):
             recon_mean, recon_var, _ = vae(image, background)
 
             for i in range(num_examples):
-                vmax1 = image[i, 2].max() #we are looking at the ith sample in the second band. 
+                vmax1 = image[i, 0].max() #we are looking at the ith sample in the first band. 
                 plt.subplot(num_examples, num_cols, num_cols * i + 1)
                 plt.title("image [{} galaxies]".format(num_galaxies[i]))
-                plt.imshow(image[i, 2].data.cpu().numpy(), vmax=vmax1)
+                plt.imshow(image[i, 0].data.cpu().numpy(), vmax=vmax1)
                 plt.colorbar()
 
                 plt.subplot(num_examples, num_cols, num_cols * i + 2)
                 plt.title("recon_mean")
-                plt.imshow(recon_mean[i, 2].data.cpu().numpy(), vmax=vmax1)
+                plt.imshow(recon_mean[i, 0].data.cpu().numpy(), vmax=vmax1)
                 plt.colorbar()
 
                 plt.subplot(num_examples, num_cols, num_cols * i + 3)
                 plt.title("recon_var")
-                plt.imshow(recon_var[i, 2].data.cpu().numpy(), vmax=vmax1)
+                plt.imshow(recon_var[i, 0].data.cpu().numpy(), vmax=vmax1)
                 plt.colorbar()
 
             break
@@ -130,8 +130,8 @@ def eval_epoch(vae, data_loader):
 def train_module(vae, ds, epochs=10000, lr=1e-4):
     optimizer = optim.Adam(vae.parameters(), lr=lr, weight_decay=1e-6)
 
-    tt_split = int(0.1 * len(ds)) #10% of data only. 
-    test_indices = np.mgrid[:tt_split]
+    tt_split = int(0.1 * len(ds)) 
+    test_indices = np.mgrid[:tt_split] #10% of data only is for test. 
     train_indices = np.mgrid[tt_split:len(ds)]
 
     test_loader = DataLoader(ds, batch_size=args.batch_size,
@@ -173,8 +173,8 @@ def run():
     Questions: 
     * What does vae.cuda() do? 
     """
-    ds = datasets.Synthetic(15, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=12800, centered=True)
-    vae = galaxy_net.OneCenteredGalaxy(15)
+    ds = datasets.GalBasic(15, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=1000, centered=True,sky=0)
+    vae = galaxy_net.OneCenteredGalaxy(15, num_bands=1)
     vae.cuda()
 
     print("training...")
