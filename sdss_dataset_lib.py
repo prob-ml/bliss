@@ -279,7 +279,8 @@ class SDSSHubbleData(Dataset):
         self.sdss_image = torch.Tensor(self.sdss_image)
         self.sdss_background = torch.Tensor(self.sdss_background)
 
-        self._estimate_colors()
+        if len(self.bands) > 1:
+            self._estimate_colors()
 
     def _align_images(self):
         indx = self.bands[self.bands != 2]
@@ -317,7 +318,7 @@ class SDSSHubbleData(Dataset):
         image_other_pixels = self.sdss_image[self.bands != 2][0, locs_indx[:, 0], locs_indx[:, 1]]
 
         # flux ratio
-        flux_ratio = (image_other_pixels / image_r_pixels) 
+        flux_ratio = (image_other_pixels / image_r_pixels)
 
         # set fluxes
         self.fluxes = torch.zeros(len(self.r_fluxes), len(self.bands))
