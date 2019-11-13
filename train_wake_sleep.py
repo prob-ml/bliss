@@ -15,6 +15,8 @@ import psf_transform_lib
 
 import time
 
+import fitsio
+
 import json
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -29,9 +31,11 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # get sdss data
+bands = [2, 3]
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
+                                        bands = bands)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -41,17 +45,26 @@ full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device)
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
-data_params['sky_intensity'] = full_background.mean()
 print(data_params)
+
+sky_intensity = full_background.reshape(full_background.shape[1], -1).mean(1)
+
+# load psf
+psf_dir = '../data/'
+psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
+psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
+
+psf_og = np.array([psf_r, psf_i])
 
 # draw data
 print('generating data: ')
 n_images = 200
 t0 = time.time()
 star_dataset = \
-    simulated_datasets_lib.load_dataset_from_params(str(sdss_hubble_data.psf_file),
+    simulated_datasets_lib.load_dataset_from_params(psf_og,
                             data_params,
                             n_images = n_images,
+                            sky_intensity = sky_intensity,
                             add_noise = True)
 
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
@@ -68,21 +81,19 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            stamp_slen = 7,
                                            step = 2,
                                            edge_padding = 2,
-                                           n_bands = 1,
+                                           n_bands = len(bands),
                                            max_detections = 2)
 
 star_encoder.to(device)
 
 # define psf transform
-from copy import deepcopy
-psf_og = deepcopy(loader.dataset.simulator.psf_og)
 psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(device),
 									data_params['slen'],
 									kernel_size = 3)
 psf_transform.to(device)
 
-filename = './fits/results_11052019/wake_sleep3-loc630x310'
-init_encoder = './fits/results_11052019/starnet3'
+filename = './fits/results_11122019/wake_sleep_ri-loc630x310'
+init_encoder = './fits/results_11122019/starnet_ri'
 
 # optimzers
 psf_lr = 0.1
