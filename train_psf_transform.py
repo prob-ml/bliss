@@ -10,6 +10,8 @@ from psf_transform_lib import PsfLocalTransform, get_psf_loss
 
 import time
 
+import fitsio
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print('device: ', device)
 
@@ -24,7 +26,8 @@ torch.backends.cudnn.benchmark = False
 # get sdss data
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 					hubble_cat_file = './hubble_data/NCG7089/' + \
-                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt')
+                                        'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
+					bands = [2, 3])
 
 # image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -34,15 +37,16 @@ full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device)
 true_full_locs = sdss_hubble_data.locs.unsqueeze(0).to(device)
 true_full_fluxes = sdss_hubble_data.fluxes.unsqueeze(0).to(device)
 
-# simulator
-simulator = simulated_datasets_lib.StarSimulator(
-                    psf_fit_file=str(sdss_hubble_data.psf_file),
-                    slen = full_image.shape[-1],
-                    sky_intensity = 0.)
+# load psf
+psf_dir = './data/'
+psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
+psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
+
+psf_og = np.array([psf_r, psf_i])
 
 # define transform
-psf_transform = PsfLocalTransform(torch.Tensor(simulator.psf_og).to(device),
-									simulator.slen,
+psf_transform = PsfLocalTransform(torch.Tensor(psf_og).to(device),
+									full_image.shape[-1],
 									kernel_size = 3)
 psf_transform.to(device)
 # define optimizer
@@ -71,7 +75,7 @@ for epoch in range(n_epochs):
 	# using true parameters atm
 	locs = true_full_locs
 	fluxes = true_full_fluxes
-	n_stars = torch.sum(true_full_fluxes > 0, dim = 1);
+	n_stars = torch.sum(true_full_fluxes[:, :, 0] > 0, dim = 1);
 
 	psf_trained = psf_transform.forward()
 
@@ -94,7 +98,7 @@ for epoch in range(n_epochs):
 	test_losses[epoch] = avg_loss
 
 	if (epoch % print_every) == 0:
-	    outfile = './fits/results_11042019/true_psf_transform_630x310'
+	    outfile = './fits/results_11122019/true_psf_transform_630x310'
 	    print("writing the psf transform parameters to " + outfile)
 	    torch.save(psf_transform.state_dict(), outfile)
 

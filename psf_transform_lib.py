@@ -14,8 +14,11 @@ class PsfLocalTransform(nn.Module):
 
         super(PsfLocalTransform, self).__init__()
 
-        assert len(psf.shape) == 2
-        assert psf.shape[0] == psf.shape[1]
+        assert len(psf.shape) == 3
+        self.n_bands = psf.shape[0]
+
+        assert psf.shape[1] == psf.shape[2]
+        self.psf_slen = psf.shape[-1]
 
         # only implemented for this case atm
         assert image_slen > psf.shape[1]
@@ -25,33 +28,45 @@ class PsfLocalTransform(nn.Module):
         self.image_slen = image_slen
         self.kernel_size = kernel_size
 
-        self.psf = psf.unsqueeze(0).unsqueeze(0)
+        self.psf = psf.unsqueeze(0)
         self.tile_psf()
 
-        self.normalization = psf.sum()
+        # for renormalizing the PSF
+        self.normalization = psf.view(self.n_bands, -1).sum(1)
 
-        self.psf_slen = psf.shape[-1]
-
-        init_weight = torch.zeros(self.psf_slen ** 2, kernel_size ** 2)
-        init_weight[:, 4] = 5
+        # initializtion
+        init_weight = torch.zeros(self.psf_slen ** 2, self.n_bands,\
+                                    kernel_size ** 2)
+        init_weight[:, :, 4] = 5
         self.weight = nn.Parameter(init_weight)
 
     def tile_psf(self):
-        self.psf_tiled = unfold(self.psf,
+        psf_unfolded = unfold(self.psf,
                         kernel_size = self.kernel_size,
-                        padding = (self.kernel_size - 1) // 2).squeeze().transpose(0, 1)
+                        padding = (self.kernel_size - 1) // 2).squeeze(0).transpose(0, 1)
 
+
+        self.psf_tiled = psf_unfolded.view(psf_unfolded.shape[0], self.n_bands,
+                                            self.kernel_size**2)
+
+    def apply_weights(self, w):
+        tile_psf_transformed = torch.sum(w * self.psf_tiled, dim = 2).transpose(0, 1)
+
+        return tile_psf_transformed.view(self.n_bands, self.psf_slen,
+                                            self.psf_slen)
 
     def forward(self):
-        weights_constrained = torch.nn.functional.softmax(self.weight, dim = 1)
+        weights_constrained = torch.nn.functional.softmax(self.weight, dim = 2)
 
-        tile_psf_transformed = torch.sum(weights_constrained * self.psf_tiled, dim = 1)
-        psf_transformed = tile_psf_transformed.view(self.psf_slen, self.psf_slen)
+        psf_transformed = self.apply_weights(weights_constrained)
 
         # pad psf for full image
         l_pad = (self.image_slen - self.psf_slen) // 2
         psf_image = pad(psf_transformed, (l_pad, ) * 4)
-        return psf_image * self.normalization / psf_image.sum()
+
+        psf_image_normalization = psf_image.view(self.n_bands, -1).sum(1)
+
+        return psf_image * (self.normalization / psf_image_normalization).unsqueeze(-1).unsqueeze(-1)
 
 
 def get_psf_loss(full_images, full_backgrounds,
@@ -61,11 +76,15 @@ def get_psf_loss(full_images, full_backgrounds,
 
     assert len(full_images.shape) == 4
     assert full_images.shape[0] == 1 # for now, one image at a time ...
+    n_bands = full_images.shape[1]
 
     assert full_images.shape == full_backgrounds.shape
 
     assert len(locs.shape) == 3
-    assert len(fluxes.shape) == 2
+    assert len(fluxes.shape) == 3
+
+    assert n_bands == fluxes.shape[2]
+
     assert len(locs) == len(fluxes)
     assert len(fluxes) == len(n_stars)
     n_samples = len(locs)
