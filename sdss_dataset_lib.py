@@ -281,6 +281,8 @@ class SDSSHubbleData(Dataset):
 
         if len(self.bands) > 1:
             self._estimate_colors()
+        else:
+            self.fluxes = self.r_fluxes.unsqueeze(1)
 
     def _align_images(self):
         indx = self.bands[self.bands != 2]
