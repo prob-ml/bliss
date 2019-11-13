@@ -37,11 +37,6 @@ full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device)
 true_full_locs = sdss_hubble_data.locs.unsqueeze(0).to(device)
 true_full_fluxes = sdss_hubble_data.fluxes.unsqueeze(0).to(device)
 
-print(full_image.mean());
-print(full_background.mean());
-print(true_full_locs.mean());
-print(true_full_fluxes.mean());
-
 # load psf
 psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
@@ -83,13 +78,6 @@ for epoch in range(n_epochs):
 	n_stars = torch.sum(true_full_fluxes[:, :, 0] > 0, dim = 1);
 
 	psf_trained = psf_transform.forward()
-
-	print((psf_trained**2).mean());
-	print(full_image.mean());
-	print(full_background.mean());
-	print(locs.mean());
-	print(fluxes.mean());
-	print(n_stars);
 
 	# get loss
 	loss = get_psf_loss(full_image, full_background,
