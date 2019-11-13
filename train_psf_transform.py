@@ -79,6 +79,13 @@ for epoch in range(n_epochs):
 
 	psf_trained = psf_transform.forward()
 
+	print((psf_trained**2).mean());
+	print(full_image.mean());
+	print(full_background.mean());
+	print(locs.mean());
+	print(fluxes.mean());
+	print(n_stars);
+
 	# get loss
 	loss = get_psf_loss(full_image, full_background,
 	                    locs, fluxes, n_stars,
