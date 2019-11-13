@@ -50,7 +50,7 @@ print(data_params)
 sky_intensity = full_background.reshape(full_background.shape[1], -1).mean(1)
 
 # load psf
-psf_dir = '../data/'
+psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 
