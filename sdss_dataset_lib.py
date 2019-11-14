@@ -175,7 +175,8 @@ class SDSSHubbleData(Dataset):
                         field = 136,
                         bands = [2],
                         x0 = 630,
-                        x1 = 310):
+                        x1 = 310,
+                        fudge_conversion = 1.14):
 
         super(SDSSHubbleData, self).__init__()
 
@@ -253,7 +254,7 @@ class SDSSHubbleData(Dataset):
         hubble_nmgy = convert_mag_to_nmgy(self.hubble_rmag)
 
         # self.fudge_conversion = 1.2593
-        self.fudge_conversion = 1. / (1 - 0.122)
+        self.fudge_conversion = fudge_conversion
         self.fluxes_full = hubble_nmgy * self.nelec_per_nmgy[which_cols] * self.fudge_conversion # / self.psf_max
 
         assert len(self.fluxes_full) == len(self.locs_full_x0)

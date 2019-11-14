@@ -169,11 +169,14 @@ def get_encoder_loss(star_encoder,
         logit_loc_log_var = torch.ones((logit_loc_log_var.shape))
         log_flux_log_var = torch.ones((log_flux_log_var.shape))
 
-    return get_params_loss(logit_loc_mean, logit_loc_log_var, \
+    loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
+        get_params_loss(logit_loc_mean, logit_loc_log_var, \
                             log_flux_mean, log_flux_log_var, log_probs, \
                             subimage_locs, subimage_fluxes,
                             true_is_on_array.float(),
                             star_encoder.weights)
+
+    return loss, counter_loss, locs_loss, fluxes_loss, perm_indx, log_probs
 
 def eval_star_encoder_loss(star_encoder, train_loader,
                 optimizer = None, train = False,
