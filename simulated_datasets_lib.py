@@ -268,7 +268,7 @@ class StarsDataset(Dataset):
             fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim = 2) * \
                                 is_on_array.unsqueeze(2).float()
         else:
-            fluxes = (fluxes * is_on_array.float()).unsqueeze(2)
+            fluxes = (base_fluxes * is_on_array.float()).unsqueeze(2)
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,
