@@ -27,7 +27,7 @@ torch.backends.cudnn.benchmark = False
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
 					hubble_cat_file = './hubble_data/NCG7089/' + \
                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-					bands = [2, 3])
+					bands = [2])
 
 # image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -42,7 +42,8 @@ psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 
-psf_og = np.array([psf_r, psf_i])
+# psf_og = np.array([psf_r, psf_i])
+psf_og = np.array([psf_r])
 
 # define transform
 psf_transform = PsfLocalTransform(torch.Tensor(psf_og).to(device),
@@ -98,7 +99,7 @@ for epoch in range(n_epochs):
 	test_losses[epoch] = avg_loss
 
 	if (epoch % print_every) == 0:
-	    outfile = './fits/results_11122019/true_psf_transform_630x310'
+	    outfile = './fits/results_11122019/true_psf_transform_630x310_r'
 	    print("writing the psf transform parameters to " + outfile)
 	    torch.save(psf_transform.state_dict(), outfile)
 
