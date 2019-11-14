@@ -96,7 +96,7 @@ psf_transform.to(device)
 
 filename = './fits/results_11122019/wake_sleep_r-loc630x310'
 # filename = './fits/results_11122019/true_psf_encoder_630x310_r'
-init_encoder = './fits/results_11122019/starnet_r'
+init_encoder = './fits/results_11122019/starnet-old_psf'
 
 # optimzers
 psf_lr = 0.1
