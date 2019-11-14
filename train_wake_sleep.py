@@ -111,7 +111,7 @@ sleep_optimizer = optim.Adam([
 
 for iteration in range(0, 6):
     #######################
-    wake phase training
+    # wake phase training
     #######################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
 
