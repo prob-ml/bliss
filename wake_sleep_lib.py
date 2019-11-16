@@ -168,7 +168,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
     print("writing the psf parameters to " + outfile)
     torch.save(psf_transform.state_dict(), outfile)
 
-    if train_encoder:
+    if train_encoder_fluxes:
         outfile = out_filename + '-encoder-iter' + str(iteration)
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
