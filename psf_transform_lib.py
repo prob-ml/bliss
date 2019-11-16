@@ -64,7 +64,7 @@ class PsfLocalTransform(nn.Module):
         l_pad = (self.image_slen - self.psf_slen) // 2
         psf_image = pad(psf_transformed, (l_pad, ) * 4)
 
-        psf_image_normalization = 1.0 # psf_image.view(self.n_bands, -1).sum(1)
+        psf_image_normalization = psf_image.view(self.n_bands, -1).sum(1)
 
         return psf_image * (self.normalization / psf_image_normalization).unsqueeze(-1).unsqueeze(-1)
 
@@ -101,9 +101,9 @@ def get_psf_loss(full_images, full_backgrounds,
     _full_image = full_images[:, :, pad:(slen - pad), pad:(slen - pad)].unsqueeze(0)
     _recon_means = recon_means[:, :, pad:(slen - pad), pad:(slen - pad)].clamp(min = 100, max = 2 * _full_image.max())
 
-    # mask = (_recon_means - _full_image).abs() / _full_image < 1.0
-    recon_loss = - eval_normal_logprob(_full_image,
+    mask = (_recon_means - _full_image).abs() / _full_image < 1.0
+    recon_loss = - (eval_normal_logprob(_full_image,
                 _recon_means,
-                torch.log(_recon_means)).view(n_samples, -1).sum(1)
+                torch.log(_recon_means)) * mask).view(n_samples, -1).sum(1)
 
     return recon_means, recon_loss
