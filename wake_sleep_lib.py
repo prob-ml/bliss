@@ -124,7 +124,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
 
         # get loss
-        if train_encoder_fluxes:
+        if not train_encoder_fluxes:
             sampled_fluxes_full_image = sampled_fluxes_full_image.detach()
 
         neg_logprob = get_psf_loss(full_image, full_background,
