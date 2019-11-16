@@ -105,7 +105,9 @@ init_encoder = './fits/results_11162019/starnet_r'
 psf_lr = 0.1
 wake_optimizer = optim.Adam([
                     {'params': psf_transform.parameters(),
-                    'lr': psf_lr}],
+                    'lr': psf_lr},
+                    {'params': star_encoder.enc_final.parameters(),
+					'lr': 5e-5}],
                     weight_decay = 1e-5)
 
 sleep_optimizer = optim.Adam([
@@ -144,7 +146,7 @@ for iteration in range(0, 6):
                     optimizer = wake_optimizer,
                     n_epochs = 80,
                     n_samples = 50,
-                    out_filename = filename + '-psf_transform',
+                    out_filename = filename,
                     iteration = iteration,
                     use_iwae = True)
 

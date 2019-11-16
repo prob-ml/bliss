@@ -98,7 +98,8 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
 def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
                 n_epochs, n_samples, out_filename, iteration,
                 epoch0 = 0,
-                use_iwae = False):
+                use_iwae = False,
+                train_encoder_fluxes = False):
 
     cached_grid = simulated_datasets_lib._get_mgrid(full_image.shape[-1]).to(device).detach()
     print_every = 20
@@ -119,13 +120,16 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                 star_encoder.sample_star_encoder(full_image, full_background,
                                         n_samples, return_map = False,
                                         return_log_q = use_iwae,
-                                        training = False)
+                                        training = train_encoder)
 
 
         # get loss
+        if train_encoder_fluxes:
+            sampled_fluxes_full_image = sampled_fluxes_full_image.detach()
+
         neg_logprob = get_psf_loss(full_image, full_background,
                                     sampled_locs_full_image.detach(),
-                                    sampled_fluxes_full_image.detach(),
+                                    sampled_fluxes_full_image,
                                     n_stars = sampled_n_stars_full.detach(),
                                     psf = psf,
                                     pad = 5, grid = cached_grid)[1]
@@ -152,7 +156,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                         epoch, avg_loss / counter, elapsed))
 
             test_losses.append(avg_loss / counter)
-            np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
+            np.savetxt(out_filename + '-psf_transform-test_losses-' + 'iter' + str(iteration),
                         test_losses)
 
             # reset
@@ -160,9 +164,14 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
             counter = 0
             t0 = time.time()
 
-    outfile = out_filename + '-iter' + str(iteration)
+    outfile = out_filename + 'psf_transform-iter' + str(iteration)
     print("writing the psf parameters to " + outfile)
     torch.save(psf_transform.state_dict(), outfile)
+
+    if train_encoder:
+        outfile = out_filename + '-encoder-iter' + str(iteration)
+        print("writing the encoder parameters to " + outfile)
+        torch.save(star_encoder.state_dict(), outfile)
 
 
 # TODO: this should be the same as run_wake ... just with a different optimizer
