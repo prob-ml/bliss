@@ -314,5 +314,5 @@ def load_dataset_from_params(psf, data_params,
                             min_stars = min_stars,
                             alpha = alpha,
                             sky_intensity = sky_intensity,
-                            transpose_psf = transpose_psf
+                            transpose_psf = transpose_psf,
                             add_noise = add_noise)
