@@ -146,7 +146,7 @@ def _draw_pareto_maxed(f_min, f_max, alpha, shape):
     return pareto_samples
 
 class StarSimulator:
-    def __init__(self, psf, slen, sky_intensity):
+    def __init__(self, psf, slen, sky_intensity, transpose_psf):
         assert len(psf.shape) == 3
 
         self.n_bands = psf.shape[0]
@@ -160,6 +160,9 @@ class StarSimulator:
             self.psf = torch.Tensor(_expand_psf(self.psf_og, slen)).to(device)
         else:
             self.psf = torch.Tensor(_trim_psf(self.psf_og, slen)).to(device)
+
+        if transpose_psf:
+            self.psf = self.psf.transpose(1, 2)
 
         # TODO:
         # should we then upsample??
@@ -201,6 +204,7 @@ class StarsDataset(Dataset):
                          f_max,
                          sky_intensity,
                          alpha,
+                         transpose_psf,
                          add_noise = True):
 
         self.slen = slen
@@ -208,7 +212,7 @@ class StarsDataset(Dataset):
 
         assert sky_intensity.shape == (self.n_bands, )
         self.sky_intensity = sky_intensity
-        self.simulator = StarSimulator(psf, slen, sky_intensity)
+        self.simulator = StarSimulator(psf, slen, sky_intensity, transpose_psf)
 
         # image parameters
         self.max_stars = max_stars
@@ -286,6 +290,7 @@ class StarsDataset(Dataset):
 def load_dataset_from_params(psf, data_params,
                                 n_images,
                                 sky_intensity,
+                                transpose_psf,
                                 add_noise = True):
     # data parameters
     slen = data_params['slen']
@@ -309,4 +314,5 @@ def load_dataset_from_params(psf, data_params,
                             min_stars = min_stars,
                             alpha = alpha,
                             sky_intensity = sky_intensity,
+                            transpose_psf = transpose_psf
                             add_noise = add_noise)
