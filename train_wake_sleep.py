@@ -148,6 +148,7 @@ for iteration in range(0, 6):
                     n_samples = 50,
                     out_filename = filename,
                     iteration = iteration,
+                    train_encoder_fluxes = True, 
                     use_iwae = True)
 
     ########################

@@ -120,7 +120,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                 star_encoder.sample_star_encoder(full_image, full_background,
                                         n_samples, return_map = False,
                                         return_log_q = use_iwae,
-                                        training = train_encoder)
+                                        training = train_encoder_fluxes)
 
 
         # get loss
