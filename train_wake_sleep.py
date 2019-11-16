@@ -55,8 +55,8 @@ psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 
 # psf_og = np.array([psf_r, psf_i])
-# psf_og = np.array([psf_r])
-psf_og = np.loadtxt('./data/my_r_psf.txt')[None]
+psf_og = np.array([psf_r])
+# psf_og = np.loadtxt('./data/my_r_psf.txt')[None]
 
 # draw data
 print('generating data: ')
@@ -67,7 +67,7 @@ star_dataset = \
                             data_params,
                             n_images = n_images,
                             sky_intensity = sky_intensity,
-                            transpose_psf = True,
+                            transpose_psf = False,
                             add_noise = True)
 
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
@@ -95,9 +95,10 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									kernel_size = 3)
 psf_transform.to(device)
 
-filename = './fits/results_11162019/wake-sleep_630x310_r'
+filename = './fits/debugging/still_debugging'
 # filename = './fits/results_11122019/true_psf_encoder_630x310_r'
-init_encoder = './fits/results_11162019/starnet_r'
+# init_encoder = './fits/results_11162019/starnet_r'
+init_encoder = './fits/results_11052019/starnet3'
 
 # optimzers
 psf_lr = 0.1
