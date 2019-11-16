@@ -55,8 +55,8 @@ psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 
 # psf_og = np.array([psf_r, psf_i])
-psf_og = np.array([psf_r])
-# psf_og = np.loadtxt('./data/my_r_psf2.txt')[None]
+# psf_og = np.array([psf_r])
+psf_og = np.loadtxt('./data/my_r_psf.txt')[None]
 
 # draw data
 print('generating data: ')
