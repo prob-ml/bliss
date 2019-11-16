@@ -56,7 +56,7 @@ psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 
 # psf_og = np.array([psf_r, psf_i])
 # psf_og = np.array([psf_r])
-psf_og = np.loadtxt('./data/my_r_psf.txt')[None]
+psf_og = np.loadtxt('./data/my_r_psf2.txt')[None]
 
 # draw data
 print('generating data: ')
@@ -94,9 +94,9 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									kernel_size = 3)
 psf_transform.to(device)
 
-filename = './fits/results_11122019/wake_sleep_r-loc630x310'
+filename = './fits/debugging/debuggin_wake_sleep'
 # filename = './fits/results_11122019/true_psf_encoder_630x310_r'
-init_encoder = './fits/results_11122019/starnet-old_psf'
+init_encoder = './fits/results_11052019/starnet3'
 
 # optimzers
 psf_lr = 0.1
@@ -172,6 +172,6 @@ for iteration in range(0, 6):
     run_sleep(star_encoder,
                 loader,
                 sleep_optimizer,
-                n_epochs = 21,
+                n_epochs = 11,
                 out_filename = filename + '-encoder',
                 iteration = iteration + 1)
