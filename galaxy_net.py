@@ -5,13 +5,12 @@ import torch.nn.functional as f
 from torch.distributions import Normal, Categorical, Bernoulli
 
 
-
 class Flatten(nn.Module):
-    def forward(self, tensor):
+    def fwd(self, tensor):
         return tensor.view(tensor.size(0), -1)
 
 
-class CenteredGalaxyEncoder(nn.Module): #recognition, inference 
+class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
 
     def __init__(self, slen, latent_dim, num_bands, hidden=256):
         super(CenteredGalaxyEncoder, self).__init__()
@@ -53,11 +52,11 @@ class CenteredGalaxyEncoder(nn.Module): #recognition, inference
     def forward(self, subimage):
         z = self.features(subimage)
         z_mean = self.fc_mean(z)
-        z_var = 1e-4 + torch.exp(self.fc_var(z)) #1e-4 to avoid NaNs, .exp gives you positive and variance increase quickly. Exp is better matched for logs. (trial and error, but makes big difference)
+        z_var = 1e-4 + torch.exp(self.fc_var(z))  # 1e-4 to avoid NaNs, .exp gives you positive and variance increase quickly. Exp is better matched for logs. (trial and error, but makes big difference)
         return z_mean, z_var
 
 
-class CenteredGalaxyDecoder(nn.Module): #generator
+class CenteredGalaxyDecoder(nn.Module):  # generator
 
     def __init__(self, slen, latent_dim, num_bands, hidden=256):
         super(CenteredGalaxyDecoder, self).__init__()
@@ -70,7 +69,7 @@ class CenteredGalaxyDecoder(nn.Module): #generator
             nn.Linear(latent_dim, hidden),
             nn.ReLU(),
 
-            nn.Linear(hidden, 64 * (slen // 2 + 1) ** 2), #shrink dimensions
+            nn.Linear(hidden, 64 * (slen // 2 + 1) ** 2),  # shrink dimensions
             nn.ReLU()
             )
 
@@ -155,7 +154,7 @@ class OneCenteredGalaxy(nn.Module):
         # sampling images from the real distribution
         recon_mean, recon_var, kl_z = self.forward(image, background) # z | x ~ decoder
 
-        # -log p(x | a, z), dimensions: torch.Size([nsamples, num_bands, slen, slen])
+        # -log p(x | a, z), dimensions: torch.Size([ nsamples, num_bands, slen, slen])
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 
         #image.size(0) = first dimension = number of samples, .sum(1) sum over all dimensions except sample. 

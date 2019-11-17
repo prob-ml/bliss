@@ -1,2 +1,11 @@
 sftp-config.json
 WeakLensingDeblending
+/.idea/$PRODUCT_WORKSPACE_FILE$
+/.idea/galaxy-net.iml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/other.xml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/vagrant.xml
+/.idea/vcs.xml
+/.idea/workspace.xml
