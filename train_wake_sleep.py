@@ -31,7 +31,7 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # get sdss data
-bands = [2, 3]
+bands = [2]
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
@@ -54,9 +54,10 @@ psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 
-psf_og = np.array([psf_r, psf_i])
-# psf_og = np.array([psf_r])
+# psf_og = np.array([psf_r, psf_i])
+psf_og = np.array([psf_r])
 # psf_og = np.loadtxt('./data/my_r_psf2.txt')[None]
+assert psf_og.shape[0] == full_image.shape[1]
 
 # draw data
 print('generating data: ')
@@ -67,7 +68,7 @@ star_dataset = \
                             data_params,
                             n_images = n_images,
                             sky_intensity = sky_intensity,
-                            transpose_psf = False,
+                            transpose_psf = True,
                             add_noise = True)
 
 print('data generation time: {:.3f}secs'.format(time.time() - t0))
@@ -95,24 +96,15 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									kernel_size = 3)
 psf_transform.to(device)
 
-# filename = './fits/debugging/still_debugging'
-# filename = './fits/results_11122019/true_psf_encoder_630x310_r'
-filename = './fits/results_11172019/wake-sleep_630x310_ri'
-init_encoder = './fits/results_11172019/starnet_ri'
-# init_encoder = './fits/results_11052019/starnet3'
+filename = './fits/results_11182019/wake-sleep_630x310_r'
+init_encoder = './fits/results_11182019/starnet_r'
 
 # optimzers
 psf_lr = 0.1
 wake_optimizer = optim.Adam([
                     {'params': psf_transform.parameters(),
-                    'lr': psf_lr},
-                    {'params': star_encoder.enc_final.parameters(),
-					'lr': 5e-5}],
+                    'lr': psf_lr}],
                     weight_decay = 1e-5)
-# wake_optimizer = optim.Adam([
-#                     {'params': psf_transform.parameters(),
-#                     'lr': psf_lr}],
-#                     weight_decay = 1e-5)
 
 sleep_optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
@@ -152,7 +144,7 @@ for iteration in range(0, 6):
                     n_samples = 50,
                     out_filename = filename,
                     iteration = iteration,
-                    train_encoder_fluxes = True,
+                    train_encoder_fluxes = False,
                     use_iwae = True)
 
     ########################
@@ -161,10 +153,10 @@ for iteration in range(0, 6):
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
     # load encoder
-    # if iteration == 0:
-    #     encoder_file = init_encoder
-    # else:
-    #     encoder_file = filename + '-encoder-iter' + str(iteration)
+    if iteration == 0:
+        encoder_file = init_encoder
+    else:
+        encoder_file = filename + '-encoder-iter' + str(iteration)
     encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
