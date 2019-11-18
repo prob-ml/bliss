@@ -22,8 +22,8 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # set seed
-np.random.seed(4534)
-_ = torch.manual_seed(2534)
+np.random.seed(53)
+_ = torch.manual_seed(53)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
