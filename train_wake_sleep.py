@@ -161,11 +161,11 @@ for iteration in range(0, 3):
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
     # load encoder
-    # if iteration == 0:
-    #     encoder_file = init_encoder
-    # else:
-    #     encoder_file = filename + '-encoder-iter' + str(iteration)
-    encoder_file = filename + '-encoder-iter' + str(iteration)
+    if iteration == 0:
+        encoder_file = init_encoder
+    else:
+        encoder_file = filename + '-encoder-iter' + str(iteration)
+    # encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage));
