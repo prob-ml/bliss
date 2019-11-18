@@ -25,8 +25,8 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # set seed
-np.random.seed(34)
-_ = torch.manual_seed(34)
+np.random.seed(4534)
+_ = torch.manual_seed(2534)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -157,7 +157,7 @@ for iteration in range(0, 6):
         encoder_file = init_encoder
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
-    encoder_file = filename + '-encoder-iter' + str(iteration)
+    # encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage));
