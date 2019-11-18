@@ -19,20 +19,22 @@ torch.backends.cudnn.benchmark = True
 plt.switch_backend("Agg")
 
 parser = argparse.ArgumentParser(description='GalaxyNet', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--batch-size', type=int, default=50, metavar='N',
+parser.add_argument('--batch-size', type=int, default=64, metavar='BS',
                     help='input batch size for training.')
-parser.add_argument('--dataset', type=str, default="galbasic", metavar='N',
+parser.add_argument('--num-images', type=int, default=12800, metavar='NI',
+                    help='Number of images used in the data set')
+parser.add_argument('--dataset', type=str, default="galbasic", metavar='DS',
                     help='specifies the dataset.')
-parser.add_argument('--epochs', type=int, default=100, metavar='N',
+parser.add_argument('--epochs', type=int, default=100, metavar='E',
                     help='number of epochs to train.')
 parser.add_argument('--seed', type=int, default=64, metavar='S',
                     help='random seed.')
 parser.add_argument('--nocuda', action='store_true',
                     help="whether to using a discrete graphics card")
 parser.add_argument('--slen', type=int, default=15, help='Number of pixels in images.')
-parser.add_argument('--device', type=int, default=0, metavar='N',
+parser.add_argument('--device', type=int, default=0, metavar='DEV',
                     help='GPU device ID')
-parser.add_argument('--dir', type=str, default="test", metavar='N',
+parser.add_argument('--dir', type=str, default="test", metavar='DIR',
                     help='run-specific directory to read from / write to')
 parser.add_argument('--overwrite', action='store_true',
                     help='Whether to overwrite if directory already exists.')
@@ -115,16 +117,16 @@ def train_epoch(vae, train_loader, optimizer):
 def eval_epoch(vae, data_loader):
     vae.eval()  # set in evaluation mode.
     avg_loss = 0.0
-    # avg_mse = 0.0
+    avg_mse = 0.0
 
     with torch.no_grad():  # no need to compute gradients outside training.
         for batch_idx, data in enumerate(data_loader):
             image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
             background = data["background"].cuda()
             loss = vae.loss(image, background)
+            avg_loss += loss.item() #gets number from tensor containing single value.
             # mse = vae.mse(image, background)
             # avg_mse += mse.item()
-            avg_loss += loss.item() #gets number from tensor containing single value.
 
     avg_loss /= len(data_loader.sampler)
     # avg_mse = avg_mse/len(data_loader.sampler)
@@ -134,7 +136,7 @@ def eval_epoch(vae, data_loader):
 def train_module(vae, ds, epochs=10000, lr=1e-4):
     optimizer = Adam(vae.parameters(), lr=lr, weight_decay=1e-6)
 
-    tt_split = int(0.1 * len(ds))
+    tt_split = int(0.1 * len(ds))  # len(ds) = number of images?
     test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
     train_indices = np.mgrid[tt_split:len(ds)]
 
@@ -147,6 +149,8 @@ def train_module(vae, ds, epochs=10000, lr=1e-4):
 
     dir_path = Path(args.dir)
     dir_path.mkdir()
+
+    # TODO: Create a directory file for easy look-up.
     prop_file = open(f"{args.dir}/props.txt", 'w')
     print(f"dataset: {args.dataset} \n"
           f"epochs: {args.epochs} \n"
@@ -182,29 +186,26 @@ def train_module(vae, ds, epochs=10000, lr=1e-4):
             test_loss = eval_epoch(vae, test_loader)
             print("  * test loss: {:.0f}\n".format(test_loss))
             loss_file = Path(args.dir, "loss.txt")
+
+            #TODO: Add MSE for interpretation.
             with open(loss_file.as_posix(), 'a') as f:
-                f.write(f"epoch {epoch}, test loss: {test_loss})")
-                        # f" mse: {mse}\n")
+                f.write(f"epoch {epoch}, test loss: {test_loss}\n")
 
 
 def run():
-    """
-    Questions:
-    * What does vae.cuda() do?
-    """
     if args.dataset == 'galbasic':
-        ds = datasets.GalBasic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=1000,
+        ds = datasets.GalBasic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=args.num_images,
                                centered=True, sky=700)
 
     elif args.dataset == 'synthetic':  # default one.
-        ds = datasets.Synthetic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=1000,
+        ds = datasets.Synthetic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=args.num_images,
                                 centered=True, num_bands=1)
 
     else:
         raise NotImplementedError("That dataset has not yet been implemented.")
 
     vae = galaxy_net.OneCenteredGalaxy(args.slen, num_bands=1)
-    vae.cuda()
+    vae.cuda()  # loads the model into the gpu processor that was selected.
 
     print("training...")
     train_module(vae, ds, epochs=args.epochs)

@@ -105,9 +105,6 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         z = self.deconv(z)
         z = z[:, :, :self.slen, :self.slen]
 
-        peak_brightness = 10 * sigma
-        # centered_star = peak_brightness * self.star_proto
-
         # first half of the bands is now used.
         # expected number of photons has to be positive, this is why we use f.relu here.
         recon_mean = f.relu(z[:, :self.num_bands])
@@ -163,7 +160,7 @@ class OneCenteredGalaxy(nn.Module):
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 
         # image.size(0) = first dimension = number of samples, .sum(1) sum over all dimensions except sample.
-        recon_losses = recon_losses.view(image.size(0), -1).sum(1) #shape = [nsamples]
+        recon_losses = recon_losses.view(image.size(0), -1).sum(1)  # shape = [nsamples]
 
         # the expectation is subtle and implicit bc we are using stochastic optimization multiple times.
         # sum here is over the samples (only remaining dimensions)
@@ -171,15 +168,15 @@ class OneCenteredGalaxy(nn.Module):
 
         return loss
 
-    # def mse(self, image, background):
-    #     recon_mean, recon_var, kl_z = self.forward(image, background)
-    #     return torch.sqrt((recon_mean - image)**2).sum()
+    def mse(self, image, background):
+        recon_mean, recon_var, kl_z = self.forward(image, background)
+        return torch.sqrt((recon_mean - image)**2).sum()
 
 
 
 
-    #
-    #
+    # peak_brightness = 10 * sigma
+    # centered_star = peak_brightness * self.star_proto
     #     this is for a star still? what is star_proto suppose to represent.
     #     Note: do not use the star stuff anymore.
     #     radius = (self.slen - 1) // 2

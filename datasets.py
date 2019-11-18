@@ -30,6 +30,7 @@ class GalBasic(Dataset):
         self.centered = centered
         self.snr = snr
 
+        # TODO : implement LSST realistic noise, sky.
         # survey specific parameters.
         # self.survey_name = survey_name
         # self.survey = descwl.survey.Survey(no_analysis=True, survey_name=self.survey_name, filter_band='r')
@@ -47,8 +48,7 @@ class GalBasic(Dataset):
         # we can use the same size for everything for now.
         self.sigma = self.slen * self.pixel_scale / 8
 
-        #TODO : implement LSST realistic noise, sky.
-        #TODO : implement multiple bands with galsim.
+        # TODO : implement multiple bands with galsim.
         if self.num_bands > 1 or not self.centered or survey_name != 'lsst':
             raise NotImplementedError("Not yet implemented multiple bands, uncentering")
 
@@ -66,7 +66,7 @@ class GalBasic(Dataset):
 
         r = min(np.random.sample(), 0.99)  # magnitude needs to be < 1 .
         theta = np.random.sample() * np.pi * 2
-        e1, e2 = min(r * np.cos(theta), 0.4), min(r * np.sin(theta), 0.4)
+        e1, e2 = max(min(r * np.cos(theta), 0.4), -0.4), max(min(r * np.sin(theta), 0.4), -0.4)
 
         gal = galsim.Gaussian(flux=self.flux, sigma=self.sigma)
         gal = gal.shear(e1=e1, e2=e2)
