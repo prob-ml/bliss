@@ -103,16 +103,16 @@ init_encoder = './fits/results_11172019/starnet_r'
 
 # optimzers
 psf_lr = 0.1
-# wake_optimizer = optim.Adam([
-#                     {'params': psf_transform.parameters(),
-#                     'lr': psf_lr},
-#                     {'params': star_encoder.enc_final.parameters(),
-# 					'lr': 5e-5}],
-#                     weight_decay = 1e-5)
 wake_optimizer = optim.Adam([
                     {'params': psf_transform.parameters(),
-                    'lr': psf_lr}],
+                    'lr': psf_lr},
+                    {'params': star_encoder.enc_final.parameters(),
+					'lr': 5e-5}],
                     weight_decay = 1e-5)
+# wake_optimizer = optim.Adam([
+#                     {'params': psf_transform.parameters(),
+#                     'lr': psf_lr}],
+#                     weight_decay = 1e-5)
 
 sleep_optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
@@ -152,7 +152,7 @@ for iteration in range(0, 3):
                     n_samples = 50,
                     out_filename = filename,
                     iteration = iteration,
-                    train_encoder_fluxes = False,
+                    train_encoder_fluxes = True,
                     use_iwae = True)
 
     ########################
@@ -161,11 +161,11 @@ for iteration in range(0, 3):
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
     # load encoder
-    if iteration == 0:
-        encoder_file = init_encoder
-    else:
-        encoder_file = filename + '-encoder-iter' + str(iteration)
-    # encoder_file = filename + '-encoder-iter' + str(iteration)
+    # if iteration == 0:
+    #     encoder_file = init_encoder
+    # else:
+    #     encoder_file = filename + '-encoder-iter' + str(iteration)
+    encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage));
