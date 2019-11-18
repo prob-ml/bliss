@@ -31,7 +31,7 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # get sdss data
-bands = [2]
+bands = [2, 3]
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
@@ -54,8 +54,8 @@ psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 
-# psf_og = np.array([psf_r, psf_i])
-psf_og = np.array([psf_r])
+psf_og = np.array([psf_r, psf_i])
+# psf_og = np.array([psf_r])
 # psf_og = np.loadtxt('./data/my_r_psf2.txt')[None]
 
 # draw data
@@ -97,8 +97,8 @@ psf_transform.to(device)
 
 # filename = './fits/debugging/still_debugging'
 # filename = './fits/results_11122019/true_psf_encoder_630x310_r'
-filename = './fits/results_11172019/wake-sleep_630x310_r'
-init_encoder = './fits/results_11172019/starnet_r'
+filename = './fits/results_11172019/wake-sleep_630x310_ri'
+init_encoder = './fits/results_11172019/starnet_ri'
 # init_encoder = './fits/results_11052019/starnet3'
 
 # optimzers
