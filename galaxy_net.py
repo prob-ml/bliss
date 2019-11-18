@@ -137,7 +137,7 @@ class OneCenteredGalaxy(nn.Module):
         self.register_buffer("one", torch.ones(1))
 
     def forward(self, image, background):
-        z_mean, z_var = self.enc.forward(image - background)
+        z_mean, z_var = self.enc.forward(image - background) #shape = [nsamples, latent_dim]
 
         q_z = Normal(z_mean, z_var.sqrt())
         z = q_z.rsample()
@@ -163,15 +163,21 @@ class OneCenteredGalaxy(nn.Module):
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 
         # image.size(0) = first dimension = number of samples, .sum(1) sum over all dimensions except sample.
-        recon_losses = recon_losses.view(image.size(0), -1).sum(1)
+        recon_losses = recon_losses.view(image.size(0), -1).sum(1) #shape = [nsamples]
 
         # the expectation is subtle and implicit bc we are using stochastic optimization multiple times.
         # sum here is over the samples (only remaining dimensions)
-        loss = (recon_losses + kl_z).sum()  # this is actually actually ELBO
+        loss = (recon_losses + kl_z).sum()  # this is actually actually ELBO, shape=[nsamples]
 
         return loss
 
     # def mse(self, image, background):
+    #     recon_mean, recon_var, kl_z = self.forward(image, background)
+    #     return torch.sqrt((recon_mean - image)**2).sum()
+
+
+
+
     #
     #
     #     this is for a star still? what is star_proto suppose to represent.

@@ -115,15 +115,19 @@ def train_epoch(vae, train_loader, optimizer):
 def eval_epoch(vae, data_loader):
     vae.eval()  # set in evaluation mode.
     avg_loss = 0.0
+    # avg_mse = 0.0
 
     with torch.no_grad():  # no need to compute gradients outside training.
         for batch_idx, data in enumerate(data_loader):
             image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
             background = data["background"].cuda()
             loss = vae.loss(image, background)
-            avg_loss += loss.item()
+            # mse = vae.mse(image, background)
+            # avg_mse += mse.item()
+            avg_loss += loss.item() #gets number from tensor containing single value.
 
     avg_loss /= len(data_loader.sampler)
+    # avg_mse = avg_mse/len(data_loader.sampler)
     return avg_loss
 
 
@@ -177,9 +181,10 @@ def train_module(vae, ds, epochs=10000, lr=1e-4):
             print("  * evaluating test loss...")
             test_loss = eval_epoch(vae, test_loader)
             print("  * test loss: {:.0f}\n".format(test_loss))
-            loss_file = Path(args.dir, "loss.dat")
+            loss_file = Path(args.dir, "loss.txt")
             with open(loss_file.as_posix(), 'a') as f:
-                f.write(f"epoch {epoch}, test loss: {test_loss}\n")
+                f.write(f"epoch {epoch}, test loss: {test_loss})")
+                        # f" mse: {mse}\n")
 
 
 def run():

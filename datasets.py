@@ -13,9 +13,8 @@ from WeakLensingDeblending import descwl
 class GalBasic(Dataset):
 
     def __init__(self, slen, mean_galaxies=1, min_galaxies=1, max_galaxies=1,
-                 num_images=1000, num_bands=1, padding=3, centered=True,
-                 flux=50000, survey_name='lsst',
-                 snr=200, sky=700):
+                 num_images=1000, num_bands=1, padding=3, centered=True, survey_name='lsst',
+                 snr=200, sky=700, flux=None):
         """
         This class uses galsim.
         """
@@ -27,7 +26,7 @@ class GalBasic(Dataset):
         self.max_galaxies = max_galaxies
         self.num_images = num_images
         self.num_bands = num_bands
-        self.padding = padding
+        self.padding = padding  # not used if centered.
         self.centered = centered
         self.snr = snr
 
@@ -37,8 +36,19 @@ class GalBasic(Dataset):
         # self.sky = self.survey.mean_sky_level
         self.sky = sky
         self.pixel_scale = 0.2
-        self.flux = flux
 
+        # adjust flux depending on size.
+        if flux is None:
+            self.flux = (5e4) * (self.slen / 15) ** 2
+        else:
+            self.flux = flux
+
+        # do not want too small of sigma to avoid pixel galaxies.
+        # we can use the same size for everything for now.
+        self.sigma = self.slen * self.pixel_scale / 8
+
+        #TODO : implement LSST realistic noise, sky.
+        #TODO : implement multiple bands with galsim.
         if self.num_bands > 1 or not self.centered or survey_name != 'lsst':
             raise NotImplementedError("Not yet implemented multiple bands, uncentering")
 
@@ -54,19 +64,15 @@ class GalBasic(Dataset):
 
         # get random galaxy parameters.
 
-        # do not want too small of sigma to avoid pixel galaxies.
-        # we can use the same size for everything for now.
-        sigma = self.slen*self.pixel_scale / 8
-
         r = min(np.random.sample(), 0.99)  # magnitude needs to be < 1 .
         theta = np.random.sample() * np.pi * 2
-        e1, e2 = min(r * np.cos(theta),0.5), min(r * np.sin(theta),0.5)
+        e1, e2 = min(r * np.cos(theta), 0.4), min(r * np.sin(theta), 0.4)
 
-        gal = galsim.Gaussian(flux=self.flux, sigma=sigma)
+        gal = galsim.Gaussian(flux=self.flux, sigma=self.sigma)
         gal = gal.shear(e1=e1, e2=e2)
         img = gal.drawImage(nx=self.slen, ny=self.slen, scale=self.pixel_scale,
                             method='auto')
-                            # , poisson_flux=True)
+        # , poisson_flux=True)
 
         noisy_img = img.copy()
 
@@ -109,16 +115,14 @@ class Synthetic(Dataset):
         self.padding = padding
         self.centered = centered
         self.flux = flux
-        self.sky=700
-        self.snr=-1
-
+        self.sky = 700
+        self.snr = -1
 
     def __len__(self):
         return self.num_images
 
     def __getitem__(self, idx):
         # right now this completely ignores the index.
-
 
         background_sample = np.random.randn(self.num_bands, self.slen, self.slen) * np.sqrt(self.sky) + self.sky
         background = np.full_like(background_sample, self.sky, dtype=np.float32)
