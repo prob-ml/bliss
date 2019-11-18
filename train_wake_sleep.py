@@ -115,7 +115,7 @@ sleep_optimizer = optim.Adam([
                     'lr': 5e-5}],
                     weight_decay = 1e-5)
 
-for iteration in range(0, 6):
+for iteration in range(0, 3):
     #######################
     # wake phase training
     #######################
