@@ -35,7 +35,7 @@ bands = [2]
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-                                        bands = bands)
+                                        bands = bands, x0 = 650, x1 = 120)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -96,7 +96,7 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									kernel_size = 3)
 psf_transform.to(device)
 
-filename = './fits/results_11182019/wake-sleep_630x310_r'
+filename = './fits/results_11182019/wake-sleep_650x120_r'
 init_encoder = './fits/results_11182019/starnet_r'
 
 # optimzers
