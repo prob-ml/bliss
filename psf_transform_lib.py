@@ -60,6 +60,11 @@ class PsfLocalTransform(nn.Module):
 
         psf_transformed = self.apply_weights(weights_constrained)
 
+        # TODO: this is experimental
+        which_center = (self.psf.squeeze(0) > 1e-2).float()
+        psf_transformed = psf_transformed * which_center +
+                            (1 - which_center) * self.psf.squeeze(0)
+
         # pad psf for full image
         l_pad = (self.image_slen - self.psf_slen) // 2
         psf_image = pad(psf_transformed, (l_pad, ) * 4)
