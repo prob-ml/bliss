@@ -99,7 +99,7 @@ for epoch in range(n_epochs):
 	test_losses[epoch] = avg_loss
 
 	if (epoch % print_every) == 0:
-	    outfile = './fits/results_11118019/true_psf_transform_630x310_ri'
+	    outfile = './fits/results_11182019/true_psf_transform_630x310_ri'
 	    print("writing the psf transform parameters to " + outfile)
 	    torch.save(psf_transform.state_dict(), outfile)
 
