@@ -99,7 +99,7 @@ filename = './fits/results_11182019/wake-sleep_650x120_ri'
 init_encoder = './fits/results_11182019/starnet_ri'
 
 # optimzers
-psf_lr = 0.1
+psf_lr = 1e-3
 wake_optimizer = optim.Adam([
                     {'params': psf_transform.parameters(),
                     'lr': psf_lr}],
@@ -136,7 +136,7 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # reset learning rate
-    wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + 80 * iteration)
+    # wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + 80 * iteration)
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = wake_optimizer,
                     n_epochs = 80,

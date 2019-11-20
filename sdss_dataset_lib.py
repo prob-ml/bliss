@@ -194,7 +194,8 @@ class SDSSHubbleData(Dataset):
         self.bands = np.array(bands)
 
         self.which_r = int(np.argwhere(self.bands == 2))
-        self.which_other = int(np.argwhere(self.bands != 2))
+        if len(bands) > 1:
+            self.which_other = int(np.argwhere(self.bands != 2))
 
         # only handles two bands at the moment
         assert len(bands) <= 2
