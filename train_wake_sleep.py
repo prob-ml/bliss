@@ -58,6 +58,8 @@ psf_og = np.array([psf_r, psf_i])
 # psf_og = np.array([psf_r])
 assert psf_og.shape[0] == full_image.shape[1]
 
+psf_og = psf_og * (psf_og > 1e-2)
+
 # draw data
 print('generating data: ')
 n_images = 200
