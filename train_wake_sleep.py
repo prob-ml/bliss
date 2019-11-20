@@ -100,15 +100,7 @@ init_encoder = './fits/results_11182019/starnet_ri'
 
 # optimzers
 psf_lr = 1e-2
-wake_optimizer = optim.Adam([
-                    {'params': psf_transform.parameters(),
-                    'lr': psf_lr}],
-                    weight_decay = 1e-5)
 encoder_lr = 1e-5
-sleep_optimizer = optim.Adam([
-                    {'params': star_encoder.parameters(),
-                    'lr': encoder_lr}],
-                    weight_decay = 1e-5)
 
 # init losses:
 star_encoder.load_state_dict(torch.load(init_encoder,
@@ -148,6 +140,10 @@ for iteration in range(0, 6):
     star_encoder.to(device);
     star_encoder.eval();
 
+    wake_optimizer = optim.Adam([
+                        {'params': psf_transform.parameters(),
+                        'lr': psf_lr}],
+                        weight_decay = 1e-5)
     # reset learning rate
     # wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + iteration)
     run_wake(full_image, full_background, star_encoder, psf_transform,
@@ -185,6 +181,12 @@ for iteration in range(0, 6):
 
     loader.dataset.draw_poisson = True
     loader.dataset.mean_stars = 1740
+
+    # set optimizer
+    sleep_optimizer = optim.Adam([
+                        {'params': star_encoder.parameters(),
+                        'lr': encoder_lr}],
+                        weight_decay = 1e-5)
 
     run_sleep(star_encoder,
                 loader,
