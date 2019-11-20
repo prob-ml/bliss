@@ -54,8 +54,8 @@ sky_intensity = full_background.reshape(full_background.shape[1], -1).mean(1)
 psf_dir = './data/'
 # psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 # psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
-psf_r = np.loadtxt('../data/pl_psf_r.txt')
-psf_i = np.loadtxt('../data/pl_psf_i.txt')
+psf_r = np.loadtxt('./data/pl_psf_r.txt')
+psf_i = np.loadtxt('./data/pl_psf_i.txt')
 psf_og = np.array([psf_r, psf_i])
 # psf_og = np.array([psf_r])
 assert psf_og.shape[0] == full_image.shape[1]
@@ -96,9 +96,9 @@ star_encoder.to(device)
 # 									data_params['slen'],
 # 									kernel_size = 3)
 psfield = fitsio.FITS('./../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit')
-normalization_constant = ensor([0.1577, 0.1534]).to(device)
+normalization_constant = torch.Tensor([0.1577, 0.1534]).to(device)
 psf_params = torch.cat((psf_transform_lib2.get_psf_params(psfield, band = 2).unsqueeze(0),
-                       psf_transform_lib2.get_psf_params(psfield, band = 3).unsqueeze(0)))
+                       psf_transform_lib2.get_psf_params(psfield, band = 3).unsqueeze(0))).to(device)
 psf_transform = \
     psf_transform_lib2.PowerLawPSF(init_psf_params=psf_params,
                                     normalization_constant=normalization_constant)

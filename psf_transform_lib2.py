@@ -6,6 +6,7 @@ from torch.nn.functional import unfold, softmax, pad
 import image_utils
 from utils import eval_normal_logprob
 from simulated_datasets_lib import _get_mgrid
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def get_psf_params(psfield, band):
     sigma1 = psfield[6]['psf_sigma1'][0][0, band]
@@ -55,7 +56,7 @@ class PowerLawPSF(nn.Module):
         self.image_slen = image_slen
 
         grid = _get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        self.cached_radii_grid = (grid**2).sum(2).sqrt()
+        self.cached_radii_grid = (grid**2).sum(2).sqrt().to(device)
 
         # initial weights
         self.params = nn.Parameter(init_psf_params)

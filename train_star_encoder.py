@@ -38,8 +38,8 @@ print(data_params)
 psf_dir = './data/'
 # psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 # psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
-psf_r = np.loadtxt('../data/pl_psf_r.txt')
-psf_i = np.loadtxt('../data/pl_psf_i.txt')
+psf_r = np.loadtxt('./data/pl_psf_r.txt')
+psf_i = np.loadtxt('./data/pl_psf_i.txt')
 psf_og = np.array([psf_r, psf_i])
 # psf_og = np.array([psf_r])
 
