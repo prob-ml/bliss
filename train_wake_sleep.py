@@ -93,17 +93,9 @@ star_encoder.to(device)
 psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(device),
 									data_params['slen'],
 									kernel_size = 3)
-# psfield = fitsio.FITS('./../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit')
-# normalization_constant = torch.Tensor([0.1577, 0.1534]).to(device)
-# psf_params = torch.cat((psf_transform_lib2.get_psf_params(psfield, band = 2).unsqueeze(0),
-#                        psf_transform_lib2.get_psf_params(psfield, band = 3).unsqueeze(0))).to(device)
-# psf_transform = \
-#     psf_transform_lib2.PowerLawPSF(init_psf_params=psf_params,
-#                                     normalization_constant=normalization_constant)
 psf_transform.to(device)
 
 filename = './fits/results_11182019/wake-sleep_650x120_ri'
-# filename = './fits/results_11182019/starnet_true_psf_630x310_ri'
 init_encoder = './fits/results_11182019/starnet_ri'
 
 # optimzers
@@ -161,7 +153,7 @@ for iteration in range(0, 6):
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = wake_optimizer,
                     n_epochs = 80,
-                    n_samples = 1,
+                    n_samples = 50,
                     out_filename = filename,
                     iteration = iteration,
                     train_encoder_fluxes = False,
@@ -190,6 +182,9 @@ for iteration in range(0, 6):
                                 map_location=lambda storage, loc: storage));
     psf_transform.to(device)
     loader.dataset.simulator.psf = psf_transform.forward().detach()
+
+    loader.dataset.draw_poisson = True
+    loader.dataset.mean_stars = 1165
 
     run_sleep(star_encoder,
                 loader,

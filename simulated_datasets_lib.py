@@ -236,6 +236,8 @@ class StarsDataset(Dataset):
             torch.ones(self.n_images, self.n_bands, self.slen, self.slen).to(device) * \
                             self.sky_intensity.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
 
+        self.draw_poisson = False
+
     def __len__(self):
         return self.n_images
 
@@ -249,9 +251,12 @@ class StarsDataset(Dataset):
 
     def draw_batch_parameters(self, batchsize, return_images = True):
         # draw number of stars
-        n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
-                                    batchsize)
-        # n_stars = np.random.poisson(self.mean_stars, batchsize)
+        if self.draw_poisson:
+            n_stars = np.random.poisson(self.mean_stars, batchsize)
+        else:
+            n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
+                                        batchsize)
+
         n_stars = torch.Tensor(n_stars).clamp(max = self.max_stars,
                         min = self.min_stars).type(torch.LongTensor).to(device)
         is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
