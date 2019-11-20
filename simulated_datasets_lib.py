@@ -218,7 +218,7 @@ class StarsDataset(Dataset):
         self.max_stars = max_stars
         self.mean_stars = mean_stars
         self.min_stars = min_stars
-        self.add_noise = add_noise
+        self.add_noise = add_noise; self.draw_poisson = False
 
         # prior parameters
         self.f_min = f_min
@@ -236,7 +236,7 @@ class StarsDataset(Dataset):
             torch.ones(self.n_images, self.n_bands, self.slen, self.slen).to(device) * \
                             self.sky_intensity.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
 
-        self.draw_poisson = False
+        
 
     def __len__(self):
         return self.n_images
