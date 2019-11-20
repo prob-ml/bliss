@@ -120,6 +120,10 @@ for iteration in range(0, 6):
     # wake phase training
     #######################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
+    wake_optimizer = optim.Adam([
+                        {'params': psf_transform.parameters(),
+                        'lr': psf_lr}],
+                        weight_decay = 1e-5)
 
     if iteration > 0:
         # load psf transform
@@ -140,10 +144,6 @@ for iteration in range(0, 6):
     star_encoder.to(device);
     star_encoder.eval();
 
-    wake_optimizer = optim.Adam([
-                        {'params': psf_transform.parameters(),
-                        'lr': psf_lr}],
-                        weight_decay = 1e-5)
     # reset learning rate
     # wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + iteration)
     run_wake(full_image, full_background, star_encoder, psf_transform,
@@ -159,6 +159,12 @@ for iteration in range(0, 6):
     # sleep phase training
     ########################
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
+
+    # set optimizer
+    sleep_optimizer = optim.Adam([
+                        {'params': star_encoder.parameters(),
+                        'lr': encoder_lr}],
+                        weight_decay = 1e-5)
 
     # load encoder
     if iteration == 0:
@@ -182,11 +188,6 @@ for iteration in range(0, 6):
     loader.dataset.draw_poisson = True
     loader.dataset.mean_stars = 1740
 
-    # set optimizer
-    sleep_optimizer = optim.Adam([
-                        {'params': star_encoder.parameters(),
-                        'lr': encoder_lr}],
-                        weight_decay = 1e-5)
 
     run_sleep(star_encoder,
                 loader,
