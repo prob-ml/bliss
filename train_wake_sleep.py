@@ -184,7 +184,7 @@ for iteration in range(0, 6):
     loader.dataset.simulator.psf = psf_transform.forward().detach()
 
     loader.dataset.draw_poisson = True
-    loader.dataset.mean_stars = 1165
+    loader.dataset.mean_stars = 1740
 
     run_sleep(star_encoder,
                 loader,
