@@ -99,7 +99,7 @@ filename = './fits/results_11182019/wake-sleep_650x120_ri'
 init_encoder = './fits/results_11182019/starnet_ri'
 
 # optimzers
-psf_lr = 1e-3
+psf_lr = 1e-2
 wake_optimizer = optim.Adam([
                     {'params': psf_transform.parameters(),
                     'lr': psf_lr}],
