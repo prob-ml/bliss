@@ -193,6 +193,9 @@ class SDSSHubbleData(Dataset):
         assert 2 in bands
         self.bands = np.array(bands)
 
+        self.which_r = int(np.argwhere(self.bands == 2))
+        self.which_other = int(np.argwhere(self.bands != 2))
+
         # only handles two bands at the moment
         assert len(bands) <= 2
 
@@ -227,6 +230,9 @@ class SDSSHubbleData(Dataset):
         # right ascension and declination
         self.hubble_ra = HTcat[:,21]
         self.hubble_dc = HTcat[:,22]
+
+        # color information
+        self.hubble_color = HTcat[:,9] - HTcat[:,10]
 
         # convert hubble r.a and declination to pixel coordinates
         # (0, 0) is top left of self.sdss_image_full
@@ -280,14 +286,16 @@ class SDSSHubbleData(Dataset):
         self.sdss_image = torch.Tensor(self.sdss_image)
         self.sdss_background = torch.Tensor(self.sdss_background)
 
+        self.hubble_color = torch.Tensor(self.hubble_color[which_locs])
+
         if len(self.bands) > 1:
             self._estimate_colors()
         else:
             self.fluxes = self.r_fluxes.unsqueeze(1)
 
     def _align_images(self):
-        indx = self.bands[self.bands != 2]
-        other_band = 'ugriz'[indx[0]]
+        indx = self.bands[self.which_other]
+        other_band = 'ugriz'[indx]
         frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(other_band, self.run, self.camcol, self.field)
         field_dir = pathlib.Path(self.sdss_dir).joinpath(str(self.run), str(self.camcol), str(self.field))
         frame_path = str(field_dir.joinpath(frame_name))
@@ -307,28 +315,27 @@ class SDSSHubbleData(Dataset):
                 torch.Tensor([[[[self.shift_x1 / (self.sdss_image_full.shape[-1] - 1),
                                 self.shift_x0 / (self.sdss_image_full.shape[-2] - 1)]]]]) * 2
 
-        self.sdss_image_full[self.bands != 2] = \
-            torch.nn.functional.grid_sample(self.sdss_image_full[self.bands != 2].unsqueeze(0),
+        self.sdss_image_full[self.which_other] = \
+            torch.nn.functional.grid_sample(self.sdss_image_full[self.which_other].unsqueeze(0).unsqueeze(0),
                                             grid).squeeze()
 
     def _estimate_colors(self):
         locs_indx = torch.round(self.locs * (self.slen - 1)).type(torch.long)
 
         # pixels in the r-band
-        image_r_pixels = self.sdss_image[self.bands == 2][0, locs_indx[:, 0], locs_indx[:, 1]]
+        image_r_pixels = self.sdss_image[self.which_r][locs_indx[:, 0], locs_indx[:, 1]]
 
         # pixels in the other band
-        image_other_pixels = self.sdss_image[self.bands != 2][0, locs_indx[:, 0], locs_indx[:, 1]]
+        image_other_pixels = self.sdss_image[self.which_other][locs_indx[:, 0], locs_indx[:, 1]]
 
         # flux ratio
         flux_ratio = (image_other_pixels / image_r_pixels)
 
         # set fluxes
         self.fluxes = torch.zeros(len(self.r_fluxes), len(self.bands))
-        self.fluxes[:, self.bands == 2] = self.r_fluxes.unsqueeze(1)
-        self.fluxes[:, self.bands != 2] = (self.r_fluxes * flux_ratio).unsqueeze(1)
 
-
+        self.fluxes[:, int(np.argwhere(self.bands == 2))] = self.r_fluxes
+        self.fluxes[:, int(np.argwhere(self.bands != 2))] = (self.r_fluxes * flux_ratio)
 
     # only one image in a dataset right now;
     # __len__ and __getitem__ are unnecessary atm ...
