@@ -118,7 +118,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
             log_q_locs, log_q_fluxes, log_q_n_stars = \
                 star_encoder.sample_star_encoder(full_image, full_background,
-                                        n_samples, return_map = False,
+                                        n_samples, return_map = True,
                                         return_log_q = use_iwae,
                                         training = train_encoder_fluxes)
 

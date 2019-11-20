@@ -52,10 +52,8 @@ sky_intensity = full_background.reshape(full_background.shape[1], -1).mean(1)
 
 # load psf
 psf_dir = './data/'
-# psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
-# psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
-psf_r = np.loadtxt('./data/pl_psf_r.txt')
-psf_i = np.loadtxt('./data/pl_psf_i.txt')
+psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
+psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 psf_og = np.array([psf_r, psf_i])
 # psf_og = np.array([psf_r])
 assert psf_og.shape[0] == full_image.shape[1]
@@ -92,16 +90,16 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
 star_encoder.to(device)
 
 # define psf transform
-# psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(device),
-# 									data_params['slen'],
-# 									kernel_size = 3)
-psfield = fitsio.FITS('./../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit')
-normalization_constant = torch.Tensor([0.1577, 0.1534]).to(device)
-psf_params = torch.cat((psf_transform_lib2.get_psf_params(psfield, band = 2).unsqueeze(0),
-                       psf_transform_lib2.get_psf_params(psfield, band = 3).unsqueeze(0))).to(device)
-psf_transform = \
-    psf_transform_lib2.PowerLawPSF(init_psf_params=psf_params,
-                                    normalization_constant=normalization_constant)
+psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(device),
+									data_params['slen'],
+									kernel_size = 3)
+# psfield = fitsio.FITS('./../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit')
+# normalization_constant = torch.Tensor([0.1577, 0.1534]).to(device)
+# psf_params = torch.cat((psf_transform_lib2.get_psf_params(psfield, band = 2).unsqueeze(0),
+#                        psf_transform_lib2.get_psf_params(psfield, band = 3).unsqueeze(0))).to(device)
+# psf_transform = \
+#     psf_transform_lib2.PowerLawPSF(init_psf_params=psf_params,
+#                                     normalization_constant=normalization_constant)
 psf_transform.to(device)
 
 filename = './fits/results_11202019/wake-sleep_650x120_ri'
@@ -114,10 +112,10 @@ wake_optimizer = optim.Adam([
                     {'params': psf_transform.parameters(),
                     'lr': psf_lr}],
                     weight_decay = 1e-5)
-
+encoder_lr = 1e-5
 sleep_optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
-                    'lr': 1e-5}],
+                    'lr': encoder_lr}],
                     weight_decay = 1e-5)
 
 # init losses:
@@ -159,11 +157,11 @@ for iteration in range(0, 6):
     star_encoder.eval();
 
     # reset learning rate
-    # wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + 80 * iteration)
+    # wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + iteration)
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = wake_optimizer,
                     n_epochs = 80,
-                    n_samples = 50,
+                    n_samples = 1,
                     out_filename = filename,
                     iteration = iteration,
                     train_encoder_fluxes = False,
