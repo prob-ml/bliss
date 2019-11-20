@@ -102,9 +102,9 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 #                                     normalization_constant=normalization_constant)
 psf_transform.to(device)
 
-filename = './fits/results_11202019/wake-sleep_650x120_ri'
+filename = './fits/results_11182019/wake-sleep_650x120_ri'
 # filename = './fits/results_11182019/starnet_true_psf_630x310_ri'
-init_encoder = './fits/results_11202019/starnet_ri'
+init_encoder = './fits/results_11182019/starnet_ri'
 
 # optimzers
 psf_lr = 1e-2
