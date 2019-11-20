@@ -62,14 +62,14 @@ class PsfLocalTransform(nn.Module):
 
         # TODO: this is experimental
         which_center = (self.psf.squeeze(0) > 1e-2).float()
-        psf_transformed = psf_transformed * which_center +
+        psf_transformed = psf_transformed * which_center + \
                             (1 - which_center) * self.psf.squeeze(0)
 
         # pad psf for full image
         l_pad = (self.image_slen - self.psf_slen) // 2
         psf_image = pad(psf_transformed, (l_pad, ) * 4)
 
-        psf_image_normalization = psf_image.view(self.n_bands, -1).sum(1)
+        psf_image_normalization = self.normalization # psf_image.view(self.n_bands, -1).sum(1)
 
         return psf_image * (self.normalization / psf_image_normalization).unsqueeze(-1).unsqueeze(-1)
 
