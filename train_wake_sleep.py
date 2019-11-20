@@ -95,7 +95,8 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									kernel_size = 3)
 psf_transform.to(device)
 
-filename = './fits/results_11182019/wake-sleep_650x120_ri'
+# filename = './fits/results_11182019/wake-sleep_650x120_ri'
+filename = './fits/results_11182019/starnet_true_psf_630x310_ri'
 init_encoder = './fits/results_11182019/starnet_ri'
 
 # optimzers
@@ -110,41 +111,54 @@ sleep_optimizer = optim.Adam([
                     'lr': 5e-5}],
                     weight_decay = 1e-5)
 
+# init losses:
+star_encoder.load_state_dict(torch.load(init_encoder,
+                               map_location=lambda storage, loc: storage));
+star_encoder.to(device);
+star_encoder.eval();
+
+test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
+    inv_kl_lib.eval_star_encoder_loss(star_encoder,
+                                    loader, train = False)
+
+print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
+    test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
+
 for iteration in range(0, 6):
     #######################
     # wake phase training
     #######################
-    print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
-
-    if iteration > 0:
-        # load psf transform
-        psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
-        print('loading psf_transform from: ', psf_transform_file)
-        psf_transform.load_state_dict(torch.load(psf_transform_file,
-                                    map_location=lambda storage, loc: storage))
-        psf_transform.to(device)
-
-        encoder_file = filename + '-encoder-iter' + str(iteration)
-    else:
-        encoder_file = init_encoder
-
-    # load encoder
-    print('loading encoder from: ', encoder_file)
-    star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage));
-    star_encoder.to(device);
-    star_encoder.eval();
-
-    # reset learning rate
-    # wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + 80 * iteration)
-    run_wake(full_image, full_background, star_encoder, psf_transform,
-                    optimizer = wake_optimizer,
-                    n_epochs = 80,
-                    n_samples = 50,
-                    out_filename = filename,
-                    iteration = iteration,
-                    train_encoder_fluxes = False,
-                    use_iwae = True)
+    # print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
+    #
+    # if iteration > 0:
+    #     # load psf transform
+    #     psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
+    #     print('loading psf_transform from: ', psf_transform_file)
+    #     psf_transform.load_state_dict(torch.load(psf_transform_file,
+    #                                 map_location=lambda storage, loc: storage))
+    #     psf_transform.to(device)
+    #
+    #     encoder_file = filename + '-encoder-iter' + str(iteration)
+    # else:
+    #     encoder_file = init_encoder
+    #
+    # # load encoder
+    # print('loading encoder from: ', encoder_file)
+    # star_encoder.load_state_dict(torch.load(encoder_file,
+    #                                map_location=lambda storage, loc: storage));
+    # star_encoder.to(device);
+    # star_encoder.eval();
+    #
+    # # reset learning rate
+    # # wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + 80 * iteration)
+    # run_wake(full_image, full_background, star_encoder, psf_transform,
+    #                 optimizer = wake_optimizer,
+    #                 n_epochs = 80,
+    #                 n_samples = 50,
+    #                 out_filename = filename,
+    #                 iteration = iteration,
+    #                 train_encoder_fluxes = False,
+    #                 use_iwae = True)
 
     ########################
     # sleep phase training
@@ -163,8 +177,8 @@ for iteration in range(0, 6):
     star_encoder.to(device)
 
     # load trained transform
-    psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
-    # psf_transform_file = './fits/results_11122019/true_psf_transform_630x310_r'
+    # psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
+    psf_transform_file = './fits/results_11182019/true_psf_transform_630x310_ri'
     print('loading psf_transform from: ', psf_transform_file)
     psf_transform.load_state_dict(torch.load(psf_transform_file,
                                 map_location=lambda storage, loc: storage));
