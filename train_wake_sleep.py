@@ -120,9 +120,11 @@ for iteration in range(0, 6):
     # wake phase training
     #######################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
+
+    # define optimizer
     wake_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
-                        'lr': psf_lr}],
+                        'lr': psf_lr / (1 + iteration)}],
                         weight_decay = 1e-5)
 
     if iteration > 0:
@@ -144,8 +146,6 @@ for iteration in range(0, 6):
     star_encoder.to(device);
     star_encoder.eval();
 
-    # reset learning rate
-    # wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + iteration)
     run_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = wake_optimizer,
                     n_epochs = 80,
@@ -187,7 +187,6 @@ for iteration in range(0, 6):
 
     loader.dataset.draw_poisson = True
     loader.dataset.mean_stars = 1740
-
 
     run_sleep(star_encoder,
                 loader,
