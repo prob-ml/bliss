@@ -25,9 +25,10 @@ class TestImageBatching(unittest.TestCase):
         subimage_slen = 10
         step = 9
         edge_padding = 0
+        n_bands = 2
 
         # full image:
-        full_images = torch.randn(5, 1, full_slen, full_slen)
+        full_images = torch.randn(5, n_bands, full_slen, full_slen)
 
         # batch image
         images_batched = image_utils.tile_images(full_images, subimage_slen, step)
@@ -44,7 +45,7 @@ class TestImageBatching(unittest.TestCase):
             x0 = tile_coords[i % n_patches, 0]
             x1 = tile_coords[i % n_patches, 1]
 
-            foo = full_images[b].squeeze()[x0:(x0 + subimage_slen), x1:(x1 + subimage_slen)]
+            foo = full_images[b, :, x0:(x0 + subimage_slen), x1:(x1 + subimage_slen)]
 
             assert np.all(images_batched[i].squeeze() == foo)
 
@@ -57,6 +58,7 @@ class TestImageBatching(unittest.TestCase):
         subimage_slen = 10
         step = 9
         edge_padding = 0
+        n_bands = 2
 
         # draw full image parameters
         n_images = 5
@@ -74,7 +76,8 @@ class TestImageBatching(unittest.TestCase):
 
         # draw fluxes
         fluxes = _draw_pareto_maxed(100, 1e6, alpha = 0.5,
-                                shape = (n_images, max_stars)) * is_on_array.float()
+                                shape = (n_images, max_stars, n_bands)) * \
+                is_on_array.unsqueeze(2).float()
 
         # tile coordinates
         tile_coords = \
@@ -88,11 +91,12 @@ class TestImageBatching(unittest.TestCase):
 
         # check we have the correct number and pattern of nonzero entries
         assert torch.all((subimage_locs * subimage_is_on_array.unsqueeze(2).float()) == subimage_locs)
-        assert torch.all((subimage_fluxes * subimage_is_on_array.float()) == subimage_fluxes)
+        assert torch.all((subimage_fluxes * subimage_is_on_array.unsqueeze(2).float()) == subimage_fluxes)
 
         assert torch.all((subimage_locs != 0).view(subimage_locs.shape[0], -1).float().sum(1) == \
                             subimage_n_stars.float() * 2)
-        assert torch.all((subimage_fluxes != 0).float().sum(1) == subimage_n_stars.float())
+        assert torch.all((subimage_fluxes != 0).view(subimage_fluxes.shape[0], -1).float().sum(1) == \
+                            subimage_n_stars.float() * n_bands)
 
 
         # now convert to full parameters
@@ -104,25 +108,26 @@ class TestImageBatching(unittest.TestCase):
                                                             subimage_slen,
                                                             edge_padding)
         for i in range(n_images):
-            fluxes_i = fluxes[i, :]
-            fluxes2_i = fluxes2[i, :]
+            for b in range(n_bands):
+                fluxes_i = fluxes[i, :, b]
+                fluxes2_i = fluxes2[i, :, b]
 
-            which_on = fluxes_i > 0
-            which_on2 = fluxes2_i > 0
+                which_on = fluxes_i > 0
+                which_on2 = fluxes2_i > 0
 
-            assert which_on.sum() == which_on2.sum()
-            assert which_on.sum() == n_stars[i]
+                assert which_on.sum() == which_on2.sum()
+                assert which_on.sum() == n_stars[i]
 
-            fluxes_i, indx = fluxes_i[which_on].sort()
-            fluxes2_i, indx2 = fluxes2_i[which_on2].sort()
+                fluxes_i, indx = fluxes_i[which_on].sort()
+                fluxes2_i, indx2 = fluxes2_i[which_on2].sort()
 
-            assert torch.all(fluxes_i == fluxes2_i)
+                assert torch.all(fluxes_i == fluxes2_i)
 
-            locs_i = locs[i, which_on][indx]
-            locs2_i = locs2[i, which_on2][indx2]
+                locs_i = locs[i, which_on][indx]
+                locs2_i = locs2[i, which_on2][indx2]
 
-            # print((locs_i - locs2_i).abs().max())
-            assert (locs_i - locs2_i).abs().max() < 1e-6
+                # print((locs_i - locs2_i).abs().max())
+                assert (locs_i - locs2_i).abs().max() < 1e-6, (locs_i - locs2_i).abs().max()
 
 
 

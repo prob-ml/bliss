@@ -130,8 +130,9 @@ class StarEncoder(nn.Module):
         #    total possible detections, and each detection has
         #    seven parameters (thhee means, three variances, for two locs and one
         #    flux; and one probability)
+        self.n_params_per_star = (4 + 2 * self.n_bands)
         self.dim_out_all = \
-            int(0.5 * self.max_detections * (self.max_detections + 1)  * 6 + \
+            int(0.5 * self.max_detections * (self.max_detections + 1) * self.n_params_per_star + \
                     1 + self.max_detections)
         self._get_hidden_indices()
 
@@ -145,6 +146,7 @@ class StarEncoder(nn.Module):
         # forward to the layer that is shared by all n_stars
         assert torch.all(image > 0.)
         assert torch.all((image - background) > -1000.)
+        assert image.shape == background.shape
 
         log_img = torch.log(image - background + 1000)
 
@@ -226,12 +228,12 @@ class StarEncoder(nn.Module):
         # reshape
         logit_loc_mean =  logit_loc_mean.reshape(batchsize, n_samples, self.max_detections, 2).transpose(0, 1)
         logit_loc_logvar = logit_loc_logvar.reshape(batchsize, n_samples, self.max_detections, 2).transpose(0, 1)
-        log_flux_mean = log_flux_mean.reshape(batchsize, n_samples, self.max_detections).transpose(0, 1)
-        log_flux_logvar = log_flux_logvar.reshape(batchsize, n_samples, self.max_detections).transpose(0, 1)
+        log_flux_mean = log_flux_mean.reshape(batchsize, n_samples, self.max_detections, self.n_bands).transpose(0, 1)
+        log_flux_logvar = log_flux_logvar.reshape(batchsize, n_samples, self.max_detections, self.n_bands).transpose(0, 1)
 
         if squeeze_output:
-            return logit_loc_mean.squeeze(), logit_loc_logvar.squeeze(), \
-                        log_flux_mean.squeeze(), log_flux_logvar.squeeze()
+            return logit_loc_mean.squeeze(0), logit_loc_logvar.squeeze(0), \
+                        log_flux_mean.squeeze(0), log_flux_logvar.squeeze(0)
         else:
             return logit_loc_mean, logit_loc_logvar, \
                         log_flux_mean, log_flux_logvar
@@ -247,16 +249,16 @@ class StarEncoder(nn.Module):
                         self.dim_out_all).type(torch.LongTensor).to(device)
 
         self.fluxes_mean_indx_mat = \
-            torch.full((self.max_detections + 1, self.max_detections),
+            torch.full((self.max_detections + 1, self.n_bands * self.max_detections),
                         self.dim_out_all).type(torch.LongTensor).to(device)
         self.fluxes_var_indx_mat = \
-            torch.full((self.max_detections + 1, self.max_detections),
+            torch.full((self.max_detections + 1, self.n_bands * self.max_detections),
                         self.dim_out_all).type(torch.LongTensor).to(device)
 
         self.prob_indx = torch.zeros(self.max_detections + 1).type(torch.LongTensor).to(device)
 
         for n_detections in range(1, self.max_detections + 1):
-            indx0 = int(0.5 * n_detections * (n_detections - 1) * 6) + \
+            indx0 = int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_star) + \
                             (n_detections  - 1) + 1
 
             indx1 = (2 * n_detections) + indx0
@@ -266,12 +268,12 @@ class StarEncoder(nn.Module):
             self.locs_mean_indx_mat[n_detections, 0:(2 * n_detections)] = torch.arange(indx0, indx1)
             self.locs_var_indx_mat[n_detections, 0:(2 * n_detections)] = torch.arange(indx1, indx2)
 
-            indx3 = indx2 + n_detections
-            indx4 = indx3 + n_detections
+            indx3 = indx2 + (n_detections * self.n_bands)
+            indx4 = indx3 + (n_detections * self.n_bands)
 
             # indices for fluxes
-            self.fluxes_mean_indx_mat[n_detections, 0:n_detections] = torch.arange(indx2, indx3)
-            self.fluxes_var_indx_mat[n_detections, 0:n_detections] = torch.arange(indx3, indx4)
+            self.fluxes_mean_indx_mat[n_detections, 0:(n_detections * self.n_bands)] = torch.arange(indx2, indx3)
+            self.fluxes_var_indx_mat[n_detections, 0:(n_detections * self.n_bands)] = torch.arange(indx3, indx4)
 
             self.prob_indx[n_detections] = indx4
 
@@ -285,6 +287,7 @@ class StarEncoder(nn.Module):
         assert images_full.shape[2] == self.full_slen
         assert images_full.shape[3] == self.full_slen
 
+
         batchsize = images_full.shape[0]
 
         image_stamps = \
@@ -293,6 +296,8 @@ class StarEncoder(nn.Module):
                                     self.step)
 
         if (locs is not None) and (fluxes is not None):
+            assert fluxes.shape[2] == self.n_bands
+
             # get parameters in patch as well
             subimage_locs, subimage_fluxes, n_stars, is_on_array = \
                 image_utils.get_params_in_patches(self.tile_coords,
@@ -308,7 +313,7 @@ class StarEncoder(nn.Module):
             if clip_max_stars:
                 n_stars = n_stars.clamp(max = self.max_detections)
                 subimage_locs = subimage_locs[:, 0:self.max_detections, :]
-                subimage_fluxes = subimage_fluxes[:, 0:self.max_detections]
+                subimage_fluxes = subimage_fluxes[:, 0:self.max_detections, :]
                 is_on_array = is_on_array[:, 0:self.max_detections]
 
         else:
@@ -331,11 +336,13 @@ class StarEncoder(nn.Module):
         n_samples = subimage_locs_sampled.shape[0]
         n_image_stamps = subimage_locs_sampled.shape[1]
 
+        assert self.n_bands == subimage_fluxes_sampled.shape[-1]
+
         assert (n_image_stamps % self.tile_coords.shape[0]) == 0
 
         locs_full_image, fluxes_full_image, n_stars_full = \
             image_utils.get_full_params_from_patch_params(subimage_locs_sampled.view(n_samples * n_image_stamps, -1, 2),
-                                                          subimage_fluxes_sampled.view(n_samples * n_image_stamps, -1),
+                                                          subimage_fluxes_sampled.view(n_samples * n_image_stamps, -1, self.n_bands),
                                                         self.tile_coords,
                                                         self.full_slen,
                                                         self.stamp_slen,
@@ -375,7 +382,7 @@ class StarEncoder(nn.Module):
                 n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
 
             else:
-                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples)
+                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples).view(n_samples, -1)
         else:
             n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
 
@@ -392,7 +399,7 @@ class StarEncoder(nn.Module):
             log_flux_sd = torch.zeros(log_flux_logvar.shape).to(device)
         else:
             logit_loc_sd = torch.exp(0.5 * logit_loc_logvar)
-            log_flux_sd = torch.exp(0.5 * log_flux_logvar)
+            log_flux_sd = torch.exp(0.5 * log_flux_logvar).clamp(max = 0.5)
 
         # sample locations
         locs_randn = torch.randn(logit_loc_mean.shape).to(device)
@@ -406,7 +413,7 @@ class StarEncoder(nn.Module):
         log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
 
         subimage_fluxes_sampled = \
-            torch.exp(log_flux_sampled) * is_on_array.float()
+            torch.exp(log_flux_sampled) * is_on_array.unsqueeze(3).float()
 
         # get parameters on full image
         locs_full_image, fluxes_full_image, n_stars_full = \
@@ -419,7 +426,7 @@ class StarEncoder(nn.Module):
                                                         is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
             log_q_fluxes = (utils.eval_normal_logprob(log_flux_sampled, log_flux_mean,
                                                 log_flux_logvar) * \
-                                                is_on_array.float()).view(n_samples, -1).sum(1)
+                                                is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
             log_q_n_stars = torch.gather(log_probs, 1, n_stars_sampled.transpose(0, 1)).transpose(0, 1).sum(1)
 
         else:

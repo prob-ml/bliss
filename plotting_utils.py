@@ -70,7 +70,6 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
     # full_est_locs and full_true_locs are locations in the coordinates of the
     # full image, in pixel units, scaled between 0 and 1
 
-
     # trim image to subimage
     image_patch = full_image[x0:(x0 + subimage_slen), x1:(x1 + subimage_slen)]
 
