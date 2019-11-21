@@ -128,6 +128,22 @@ for iteration in range(0, 6):
     #######################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
 
+    if iteration > 0:
+        # load psf transform
+        psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
+        print('loading psf_transform from: ', psf_transform_file)
+        psf_transform.load_state_dict(torch.load(psf_transform_file,
+                                    map_location=lambda storage, loc: storage))
+        psf_transform.to(device)
+        encoder_file = filename + '-encoder-iter' + str(iteration)
+
+    # load encoder
+    print('loading encoder from: ', encoder_file)
+    star_encoder.load_state_dict(torch.load(encoder_file,
+                                   map_location=lambda storage, loc: storage));
+    star_encoder.to(device);
+    star_encoder.eval();
+
     # update optimizer: decay learning rate
     wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + iteration)
 
@@ -145,6 +161,23 @@ for iteration in range(0, 6):
     # sleep phase training
     ########################
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
+    if iteration == 0:
+        encoder_file = init_encoder
+    else:
+        encoder_file = filename + '-encoder-iter' + str(iteration)
+
+    print('loading encoder from: ', encoder_file)
+    star_encoder.load_state_dict(torch.load(encoder_file,
+                                   map_location=lambda storage, loc: storage));
+    star_encoder.to(device)
+
+    # load trained transform
+    psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
+    # psf_transform_file = './fits/results_11122019/true_psf_transform_630x310_r'
+    print('loading psf_transform from: ', psf_transform_file)
+    psf_transform.load_state_dict(torch.load(psf_transform_file,
+                                map_location=lambda storage, loc: storage));
+    psf_transform.to(device)
 
     # update psf
     loader.dataset.simulator.psf = psf_transform.forward().detach()
