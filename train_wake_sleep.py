@@ -26,8 +26,8 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # set seed
-np.random.seed(4534)
-_ = torch.manual_seed(2534)
+np.random.seed(34524532534)
+_ = torch.manual_seed(10735435)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -36,7 +36,7 @@ bands = [2, 3]
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-                                        bands = bands, x0 = 650, x1 = 120)
+                                        bands = bands)
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
@@ -55,7 +55,6 @@ psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 psf_og = np.array([psf_r, psf_i])
-# psf_og = np.array([psf_r])
 assert psf_og.shape[0] == full_image.shape[1]
 
 # draw data
@@ -86,8 +85,12 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            edge_padding = 2,
                                            n_bands = len(bands),
                                            max_detections = 2)
-
+init_encoder = './fits/results_11202019/starnet_ri'
+print('loading encoder from: ', init_encoder)
+star_encoder.load_state_dict(torch.load(init_encoder,
+                               map_location=lambda storage, loc: storage));
 star_encoder.to(device)
+
 
 # define psf transform
 psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(device),
@@ -95,19 +98,20 @@ psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(devi
 									kernel_size = 3)
 psf_transform.to(device)
 
-filename = './fits/results_11182019/wake-sleep_650x120_ri'
-init_encoder = './fits/results_11182019/starnet_ri'
-
 # optimzers
 psf_lr = 1e-2
+wake_optimizer = optim.Adam([
+                    {'params': psf_transform.parameters(),
+                    'lr': psf_lr}],
+                    weight_decay = 1e-5)
+
 encoder_lr = 1e-5
+sleep_optimizer = optim.Adam([
+                    {'params': star_encoder.parameters(),
+                    'lr': encoder_lr}],
+                    weight_decay = 1e-5)
 
-# init losses:
-star_encoder.load_state_dict(torch.load(init_encoder,
-                               map_location=lambda storage, loc: storage));
-star_encoder.to(device);
-star_encoder.eval();
-
+# initial loss:
 test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
     inv_kl_lib.eval_star_encoder_loss(star_encoder,
                                     loader, train = False)
@@ -115,38 +119,17 @@ test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
 print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
+# file header to save results
+filename = './fits/results_11202019/wake-sleep_630x310_ri'
+
 for iteration in range(0, 6):
     #######################
     # wake phase training
     #######################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
 
-    # define optimizer
-    wake_optimizer = optim.Adam([
-                        {'params': psf_transform.parameters(),
-                        'lr': psf_lr / (1 + iteration)},
-                        {'params': star_encoder.enc_final.parameters(),
-                        'lr': encoder_lr}],
-                        weight_decay = 1e-5)
-
-    if iteration > 0:
-        # load psf transform
-        psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration - 1)
-        print('loading psf_transform from: ', psf_transform_file)
-        psf_transform.load_state_dict(torch.load(psf_transform_file,
-                                    map_location=lambda storage, loc: storage))
-        psf_transform.to(device)
-
-        encoder_file = filename + '-encoder-iter' + str(iteration)
-    else:
-        encoder_file = init_encoder
-
-    # load encoder
-    print('loading encoder from: ', encoder_file)
-    star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage));
-    star_encoder.to(device);
-    star_encoder.eval();
+    # update optimizer: decay learning rate
+    wake_optimizer.param_groups[0]['lr'] = psf_lr / (1 + iteration)
 
     run_wake(full_image, full_background,
                     star_encoder, psf_transform,
@@ -163,34 +146,10 @@ for iteration in range(0, 6):
     ########################
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
-    # set optimizer
-    sleep_optimizer = optim.Adam([
-                        {'params': star_encoder.parameters(),
-                        'lr': encoder_lr}],
-                        weight_decay = 1e-5)
-
-    # load encoder
-    # if iteration == 0:
-    #     encoder_file = init_encoder
-    # else:
-    #     encoder_file = filename + '-encoder-iter' + str(iteration)
-    encoder_file = filename + '-encoder-iter' + str(iteration)
-    print('loading encoder from: ', encoder_file)
-    star_encoder.load_state_dict(torch.load(encoder_file,
-                                   map_location=lambda storage, loc: storage));
-    star_encoder.to(device)
-
-    # load trained transform
-    psf_transform_file = filename + '-psf_transform' + '-iter' + str(iteration)
-    print('loading psf_transform from: ', psf_transform_file)
-    psf_transform.load_state_dict(torch.load(psf_transform_file,
-                                map_location=lambda storage, loc: storage));
-    psf_transform.to(device)
+    # update psf
     loader.dataset.simulator.psf = psf_transform.forward().detach()
 
-    loader.dataset.draw_poisson = True
-    loader.dataset.mean_stars = 1740
-
+    star_encoder.eval(); 
     run_sleep(star_encoder,
                 loader,
                 sleep_optimizer,

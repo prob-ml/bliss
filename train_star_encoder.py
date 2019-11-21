@@ -22,8 +22,8 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # set seed
-np.random.seed(4534)
-_ = torch.manual_seed(2534)
+np.random.seed(65765)
+_ = torch.manual_seed(3453453)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -36,16 +36,12 @@ print(data_params)
 # load psf
 # psf_dir = './../multiband_pcat/Data/idR-002583-2-0136/psfs/'
 psf_dir = './data/'
-# psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
-# psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
-psf_r = np.loadtxt('./data/pl_psf_r.txt')
-psf_i = np.loadtxt('./data/pl_psf_i.txt')
+psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
+psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 psf_og = np.array([psf_r, psf_i])
-# psf_og = np.array([psf_r])
 
 # sky intensity: for the r and i band
 sky_intensity = torch.Tensor([686., 1123.]).to(device)
-# sky_intensity = torch.Tensor([686.]).to(device)
 
 # draw data
 print('generating data: ')
