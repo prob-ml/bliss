@@ -26,8 +26,8 @@ print('device: ', device)
 print('torch version: ', torch.__version__)
 
 # set seed
-np.random.seed(34524532534)
-_ = torch.manual_seed(10735435)
+np.random.seed(34532534)
+_ = torch.manual_seed(5435)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -138,7 +138,7 @@ for iteration in range(0, 6):
                     n_samples = 50,
                     out_filename = filename,
                     iteration = iteration,
-                    train_encoder_fluxes = True,
+                    train_encoder_fluxes = False,
                     use_iwae = True)
 
     ########################
