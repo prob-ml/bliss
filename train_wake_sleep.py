@@ -136,6 +136,8 @@ for iteration in range(0, 6):
                                     map_location=lambda storage, loc: storage))
         psf_transform.to(device)
         encoder_file = filename + '-encoder-iter' + str(iteration)
+    else:
+        encoder_file =  init_encoder
 
     # load encoder
     print('loading encoder from: ', encoder_file)
