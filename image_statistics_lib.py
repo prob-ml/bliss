@@ -1,6 +1,17 @@
 import torch
 import numpy as np
 
+def filter_params(locs, fluxes, slen, pad = 5):
+    assert len(locs.shape) == 2
+    assert len(fluxes.shape) == 1
+
+    _locs = locs * (slen - 1)
+    which_params = (_locs[:, 0] > pad) & (_locs[:, 0] < (slen - pad)) & \
+                        (_locs[:, 1] > pad) & (_locs[:, 1] < (slen - pad))
+
+
+    return locs[which_params], fluxes[which_params]
+
 def get_locs_error(locs, true_locs):
     # get matrix of Linf error in locations
     # truth x estimated
@@ -12,7 +23,10 @@ def get_fluxes_error(fluxes, true_fluxes):
     return torch.abs(torch.log10(fluxes).unsqueeze(0) - \
                      torch.log10(true_fluxes).unsqueeze(1))
 
-def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes):
+def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5):
+
+    est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
+    true_locs, true_fluxes = filter_params(true_locs, true_fluxes, slen, pad)
 
     if (est_fluxes is None) or (true_fluxes is None):
         fluxes_error = 0.
@@ -27,14 +41,20 @@ def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes):
 
     return completeness_bool.mean(), tpr_bool.mean(), completeness_bool, tpr_bool
 
-def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
+def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
+                            pad = 5, mag_vec = None):
+
+    est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
+    true_locs, true_fluxes = filter_params(true_locs, true_fluxes, slen, pad)
+
     true_mag = torch.log10(true_fluxes)
 
-    # round to nearest half integer
-    max_mag = torch.ceil(true_mag.max() * 2) / 2
-    min_mag = torch.floor(true_mag.min() * 2) / 2
+    if mag_vec is None:
+        # round to nearest half integer
+        max_mag = torch.ceil(true_mag.max() * 2) / 2
+        min_mag = torch.floor(true_mag.min() * 2) / 2
 
-    mag_vec = np.arange(min_mag, max_mag + 0.1, 0.5)
+        mag_vec = np.arange(min_mag, max_mag + 0.1, 0.5)
 
     completeness_vec = np.zeros(len(mag_vec) - 1)
 
@@ -50,13 +70,18 @@ def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
 
     return completeness_vec, mag_vec, counts_vec
 
-def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes):
+def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5, mag_vec = None):
+
+    est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
+    true_locs, true_fluxes = filter_params(true_locs, true_fluxes, slen, pad)
+
     est_mag = torch.log10(est_fluxes)
 
-    max_mag = torch.ceil(est_mag.max() * 2) / 2
-    min_mag = torch.floor(est_mag.min() * 2) / 2
+    if mag_vec is None: 
+        max_mag = torch.ceil(est_mag.max() * 2) / 2
+        min_mag = torch.floor(est_mag.min() * 2) / 2
 
-    mag_vec = np.arange(min_mag, max_mag + 0.1, 0.5)
+        mag_vec = np.arange(min_mag, max_mag + 0.1, 0.5)
 
     tpr_vec = np.zeros(len(mag_vec) - 1)
     counts_vec = np.zeros(len(mag_vec) - 1)

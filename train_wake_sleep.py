@@ -32,7 +32,7 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # get sdss data
-bands = [2]
+bands = [2, 3]
 sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_stage_dir/',
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
@@ -54,7 +54,7 @@ sky_intensity = full_background.reshape(full_background.shape[1], -1).mean(1)
 psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
-psf_og = np.array([psf_r])
+psf_og = np.array([psf_r, psf_i])
 assert psf_og.shape[0] == full_image.shape[1]
 
 # draw data
@@ -85,7 +85,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            edge_padding = 2,
                                            n_bands = len(bands),
                                            max_detections = 2)
-init_encoder = './fits/results_11202019/starnet_r'
+init_encoder = './fits/results_11202019/starnet_ri'
 print('loading encoder from: ', init_encoder)
 star_encoder.load_state_dict(torch.load(init_encoder,
                                map_location=lambda storage, loc: storage));
@@ -120,7 +120,7 @@ print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; flu
     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
 # file header to save results
-filename = './fits/results_11202019/wake-sleep_630x310_r'
+filename = './fits/results_11202019/wake-sleep_630x310_ri'
 
 for iteration in range(0, 6):
     #######################
@@ -135,6 +135,8 @@ for iteration in range(0, 6):
         psf_transform.load_state_dict(torch.load(psf_transform_file,
                                     map_location=lambda storage, loc: storage))
         psf_transform.to(device)
+
+        # encoder file
         encoder_file = filename + '-encoder-iter' + str(iteration)
     else:
         encoder_file =  init_encoder
