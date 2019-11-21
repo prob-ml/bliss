@@ -196,7 +196,7 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
     if background_bias is not None:
         outfile = out_filename + '-background-iter' + str(iteration)
-        sky_intensity = background_bias.forward().view(n_bands, -1).mean(1).detach().cpu()
+        sky_intensity = background_bias.forward().view(background_bias.n_bands, -1).mean(1).detach().cpu()
         np.savetxt(outfile, sky_intensity.numpy())
 
 

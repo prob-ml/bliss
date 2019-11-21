@@ -99,7 +99,7 @@ filename = './fits/results_11182019/wake-sleep_650x120_ri'
 init_encoder = './fits/results_11182019/starnet_ri'
 
 # define BackgroundBias
-background_bias = BackgroundBias(psf_og.shape[0])
+background_bias = BackgroundBias(full_background)
 background_bias.to(device)
 
 # optimzers
