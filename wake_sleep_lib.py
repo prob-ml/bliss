@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 import numpy as np
 
@@ -95,8 +96,23 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
 #
 #     return avg_loss
 
+class BackgroundBias(nn.Module):
+    def __init__(self, n_bands):
+
+        super(BackgroundBias, self).__init__()
+
+        self.n_bands = n_bands
+
+        init_bias = torch.zeros((1, self.n_bands, 1, 1))
+        self.bias = nn.Parameter(init_bias)
+
+    def forward(self):
+        return self.bias
+
+
 def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
                 n_epochs, n_samples, out_filename, iteration,
+                background_bias = None,
                 epoch0 = 0,
                 use_iwae = False,
                 train_encoder_fluxes = False):
@@ -114,6 +130,9 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
         # get psf
         psf = psf_transform.forward()
+
+        if background_bias is not None:
+            full_background = full_background + background_bias.forward()
 
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
             log_q_locs, log_q_fluxes, log_q_n_stars = \
@@ -172,6 +191,12 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         outfile = out_filename + '-encoder-iter' + str(iteration)
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
+
+    if background_bias is not None:
+        outfile = out_filename + '-background-iter' + str(iteration)
+        bias = background_bias.forward().detach().cpu().squeeze(0).squeeze(-1).squeeze(-1)
+        np.savetxt(outfile, bias.numpy())
+
 
 
 # TODO: this should be the same as run_wake ... just with a different optimizer

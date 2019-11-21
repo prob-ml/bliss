@@ -9,7 +9,7 @@ import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as inv_kl_lib
 
-from wake_sleep_lib import run_joint_wake, run_wake, run_sleep
+from wake_sleep_lib import run_joint_wake, run_wake, run_sleep, BackgroundBias
 
 import psf_transform_lib
 import psf_transform_lib2
@@ -98,6 +98,10 @@ psf_transform.to(device)
 filename = './fits/results_11182019/wake-sleep_650x120_ri'
 init_encoder = './fits/results_11182019/starnet_ri'
 
+# define BackgroundBias
+background_bias = BackgroundBias(psf_og.shape[0])
+background_bias.to(device)
+
 # optimzers
 psf_lr = 1e-2
 encoder_lr = 1e-5
@@ -124,7 +128,9 @@ for iteration in range(0, 6):
     # define optimizer
     wake_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
-                        'lr': psf_lr / (1 + iteration)}],
+                        'lr': psf_lr / (1 + iteration)},
+                        {'params': background_bias.parameters(),
+                        'lr': 10. / (1 + iteration)}],
                         weight_decay = 1e-5)
 
     if iteration > 0:
@@ -150,10 +156,13 @@ for iteration in range(0, 6):
                     optimizer = wake_optimizer,
                     n_epochs = 80,
                     n_samples = 50,
+                    background_bias = background_bias,
                     out_filename = filename,
                     iteration = iteration,
                     train_encoder_fluxes = False,
                     use_iwae = True)
+
+    print('background bias: ', background_bias.forward())
 
     ########################
     # sleep phase training
@@ -184,6 +193,8 @@ for iteration in range(0, 6):
                                 map_location=lambda storage, loc: storage));
     psf_transform.to(device)
     loader.dataset.simulator.psf = psf_transform.forward().detach()
+
+    loader.dataset.simulator.sky_intensity += background_bias.forward().detach().squeeze()
 
     loader.dataset.draw_poisson = True
     loader.dataset.mean_stars = 1740
