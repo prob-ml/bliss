@@ -98,10 +98,6 @@ psf_transform.to(device)
 filename = './fits/results_11182019/wake-sleep_650x120_ri'
 init_encoder = './fits/results_11182019/starnet_ri'
 
-# define BackgroundBias
-background_bias = BackgroundBias(full_background)
-background_bias.to(device)
-
 # optimzers
 psf_lr = 1e-2
 encoder_lr = 1e-5
@@ -129,8 +125,8 @@ for iteration in range(0, 6):
     wake_optimizer = optim.Adam([
                         {'params': psf_transform.parameters(),
                         'lr': psf_lr / (1 + iteration)},
-                        {'params': background_bias.parameters(),
-                        'lr': 10. / (1 + iteration)}],
+                        {'params': star_encoder.enc_final.parameters(),
+                        'lr': encoder_lr}],
                         weight_decay = 1e-5)
 
     if iteration > 0:
@@ -152,18 +148,15 @@ for iteration in range(0, 6):
     star_encoder.to(device);
     star_encoder.eval();
 
-    run_wake(full_image, background_bias.forward().detach(),
+    run_wake(full_image, full_background,
                     star_encoder, psf_transform,
                     optimizer = wake_optimizer,
                     n_epochs = 80,
                     n_samples = 50,
-                    background_bias = background_bias,
                     out_filename = filename,
                     iteration = iteration,
-                    train_encoder_fluxes = False,
+                    train_encoder_fluxes = True,
                     use_iwae = True)
-
-    print('background: ', background_bias.forward())
 
     ########################
     # sleep phase training
@@ -177,11 +170,11 @@ for iteration in range(0, 6):
                         weight_decay = 1e-5)
 
     # load encoder
-    if iteration == 0:
-        encoder_file = init_encoder
-    else:
-        encoder_file = filename + '-encoder-iter' + str(iteration)
-    # encoder_file = filename + '-encoder-iter' + str(iteration)
+    # if iteration == 0:
+    #     encoder_file = init_encoder
+    # else:
+    #     encoder_file = filename + '-encoder-iter' + str(iteration)
+    encoder_file = filename + '-encoder-iter' + str(iteration)
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage));
@@ -194,8 +187,6 @@ for iteration in range(0, 6):
                                 map_location=lambda storage, loc: storage));
     psf_transform.to(device)
     loader.dataset.simulator.psf = psf_transform.forward().detach()
-
-    loader.dataset.simulator.sky_intensity = background_bias.forward().view(n_bands, -1).mean(1).detach()
 
     loader.dataset.draw_poisson = True
     loader.dataset.mean_stars = 1740
