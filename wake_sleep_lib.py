@@ -131,9 +131,12 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # get psf
         psf = psf_transform.forward()
 
+        if background_bias is not None:
+            full_background = full_background + background_bias.forward()
+
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
             log_q_locs, log_q_fluxes, log_q_n_stars = \
-                star_encoder.sample_star_encoder(full_image, full_background,
+                star_encoder.sample_star_encoder(full_image, full_background.detach(),
                                         n_samples, return_map = False,
                                         return_log_q = use_iwae,
                                         training = train_encoder_fluxes)
@@ -142,9 +145,6 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # get loss
         if not train_encoder_fluxes:
             sampled_fluxes_full_image = sampled_fluxes_full_image.detach()
-
-        if background_bias is not None:
-            full_background = full_background + background_bias.forward()
 
         neg_logprob = get_psf_loss(full_image, full_background,
                                     sampled_locs_full_image.detach(),
