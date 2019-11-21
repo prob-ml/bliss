@@ -221,7 +221,7 @@ class StarsDataset(Dataset):
         self.add_noise = add_noise
 
         # TODO: make this an argument
-        self.draw_poisson = True
+        self.draw_poisson = False
 
         # prior parameters
         self.f_min = f_min
