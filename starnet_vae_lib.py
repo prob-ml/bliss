@@ -399,7 +399,7 @@ class StarEncoder(nn.Module):
             log_flux_sd = torch.zeros(log_flux_logvar.shape).to(device)
         else:
             logit_loc_sd = torch.exp(0.5 * logit_loc_logvar)
-            log_flux_sd = torch.exp(0.5 * log_flux_logvar)
+            log_flux_sd = torch.exp(0.5 * log_flux_logvar).clamp(max = 0.5)
 
         # sample locations
         locs_randn = torch.randn(logit_loc_mean.shape).to(device)
