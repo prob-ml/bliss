@@ -97,17 +97,19 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration
 #     return avg_loss
 
 class BackgroundBias(nn.Module):
-    def __init__(self, n_bands):
+    def __init__(self, backgrounds):
 
         super(BackgroundBias, self).__init__()
 
-        self.n_bands = n_bands
+        assert len(backgrounds.shape) == 4
+        self.n_bands = backgrounds.shape[1]
+        self.backgrounds = backgrounds
 
         init_bias = torch.zeros((1, self.n_bands, 1, 1))
         self.bias = nn.Parameter(init_bias)
 
     def forward(self):
-        return self.bias
+        return self.bias + self.backgrounds
 
 
 def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
@@ -131,12 +133,9 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # get psf
         psf = psf_transform.forward()
 
-        if background_bias is not None:
-            full_background = full_background + background_bias.forward()
-
         sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
             log_q_locs, log_q_fluxes, log_q_n_stars = \
-                star_encoder.sample_star_encoder(full_image, full_background.detach(),
+                star_encoder.sample_star_encoder(full_image, full_background,
                                         n_samples, return_map = False,
                                         return_log_q = use_iwae,
                                         training = train_encoder_fluxes)
@@ -145,6 +144,9 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
         # get loss
         if not train_encoder_fluxes:
             sampled_fluxes_full_image = sampled_fluxes_full_image.detach()
+
+        if background_bias is not None:
+            full_background = background_bias.forward()
 
         neg_logprob = get_psf_loss(full_image, full_background,
                                     sampled_locs_full_image.detach(),
@@ -194,8 +196,8 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
     if background_bias is not None:
         outfile = out_filename + '-background-iter' + str(iteration)
-        bias = background_bias.forward().detach().cpu().squeeze(0).squeeze(-1).squeeze(-1)
-        np.savetxt(outfile, bias.numpy())
+        sky_intensity = background_bias.forward().view(n_bands, -1).mean(1).detach().cpu()
+        np.savetxt(outfile, sky_intensity.numpy())
 
 
 

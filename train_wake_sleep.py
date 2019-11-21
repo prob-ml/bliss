@@ -152,7 +152,8 @@ for iteration in range(0, 6):
     star_encoder.to(device);
     star_encoder.eval();
 
-    run_wake(full_image, full_background, star_encoder, psf_transform,
+    run_wake(full_image, background_bias.forward().detach(),
+                    star_encoder, psf_transform,
                     optimizer = wake_optimizer,
                     n_epochs = 80,
                     n_samples = 50,
@@ -162,7 +163,7 @@ for iteration in range(0, 6):
                     train_encoder_fluxes = False,
                     use_iwae = True)
 
-    print('background bias: ', background_bias.forward())
+    print('background: ', background_bias.forward())
 
     ########################
     # sleep phase training
@@ -194,7 +195,7 @@ for iteration in range(0, 6):
     psf_transform.to(device)
     loader.dataset.simulator.psf = psf_transform.forward().detach()
 
-    loader.dataset.simulator.sky_intensity += background_bias.forward().detach().squeeze()
+    loader.dataset.simulator.sky_intensity = background_bias.forward().view(n_bands, -1).mean(1).detach()
 
     loader.dataset.draw_poisson = True
     loader.dataset.mean_stars = 1740
