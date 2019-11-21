@@ -382,7 +382,7 @@ class StarEncoder(nn.Module):
                 n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
 
             else:
-                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples)
+                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples).view(n_samples, -1)
         else:
             n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
 

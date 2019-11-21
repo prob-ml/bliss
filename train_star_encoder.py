@@ -38,10 +38,10 @@ print(data_params)
 psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
-psf_og = np.array([psf_r, psf_i])
+psf_og = np.array([psf_r])
 
 # sky intensity: for the r and i band
-sky_intensity = torch.Tensor([686., 1123.]).to(device)
+sky_intensity = torch.Tensor([686.]).to(device)
 
 # draw data
 print('generating data: ')
@@ -116,11 +116,11 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_11202019/starnet_ri'
+        outfile = './fits/results_11202019/starnet_r'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_11202019/test_losses-starnet_ri', test_losses)
+        np.savetxt('./fits/results_11202019/test_losses-starnet_r', test_losses)
 
 print('done')
