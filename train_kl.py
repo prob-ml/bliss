@@ -1,5 +1,5 @@
 import numpy as np
-import fitsio 
+import fitsio
 
 import torch
 import torch.optim as optim
@@ -69,12 +69,6 @@ psf_transform = psf_transform_lib.PsfLocalTransform(psf_og,
 									full_image.shape[-1],
 									kernel_size = 3)
 psf_transform.to(device)
-
-# identity initializaiton
-w = torch.zeros(psf_transform.psf_slen ** 2, psf_transform.n_bands, psf_transform.kernel_size ** 2)
-w[:, :, 4] = 100.
-
-psf_transform.weights = w.to(device)
 
 # filename = './fits/results_11042019/wake_sleep-loc630x310-11042019'
 
