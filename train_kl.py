@@ -1,4 +1,5 @@
 import numpy as np
+import fitsio 
 
 import torch
 import torch.optim as optim
@@ -57,11 +58,11 @@ star_encoder.to(device)
 # star_encoder.apply(set_bn_eval);
 
 # load psf
-psf_dir = '../../multiband_pcat/Data/idR-002583-2-0136/psfs/'
+psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 
-psf_og = torch.Tensor(np.array([psf_r]))
+psf_og = torch.Tensor(np.array([psf_r])).to(device)
 
 # define psf transform
 psf_transform = psf_transform_lib.PsfLocalTransform(psf_og,
@@ -73,7 +74,7 @@ psf_transform.to(device)
 w = torch.zeros(psf_transform.psf_slen ** 2, psf_transform.n_bands, psf_transform.kernel_size ** 2)
 w[:, :, 4] = 100.
 
-psf_transform.weights = w
+psf_transform.weights = w.to(device)
 
 # filename = './fits/results_11042019/wake_sleep-loc630x310-11042019'
 
@@ -97,6 +98,6 @@ vae_optimizer = optim.Adam([
 run_joint_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = vae_optimizer,
                     n_epochs = 200,
-                    n_samples = 100,
+                    n_samples = 20,
                     encoder_outfile = './fits/results_11202019/kl_starnet',
                     psf_outfile = '././fits/results_11202019/identity_psf')
