@@ -10,7 +10,8 @@ from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
 class PsfLocalTransform(nn.Module):
     def __init__(self, psf,
                     image_slen = 101,
-                    kernel_size = 3):
+                    kernel_size = 3,
+                    init_bias = 5):
 
         super(PsfLocalTransform, self).__init__()
 
@@ -37,7 +38,7 @@ class PsfLocalTransform(nn.Module):
         # initializtion
         init_weight = torch.zeros(self.psf_slen ** 2, self.n_bands,\
                                     kernel_size ** 2)
-        init_weight[:, :, 4] = 5
+        init_weight[:, :, 4] = init_bias
         self.weight = nn.Parameter(init_weight)
 
     def tile_psf(self):
