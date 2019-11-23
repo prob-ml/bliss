@@ -176,7 +176,8 @@ class SDSSHubbleData(Dataset):
                         bands = [2],
                         x0 = 630,
                         x1 = 310,
-                        fudge_conversion = 1.14):
+                        fudge_conversion = 1.14,
+                        align_bands = True):
 
         super(SDSSHubbleData, self).__init__()
 
@@ -250,7 +251,7 @@ class SDSSHubbleData(Dataset):
         self.locs_full_x0 = pix_coordinates[1] # the row of pixel
         self.locs_full_x1 = pix_coordinates[0] # the column of pixel
 
-        if len(self.bands) > 1:
+        if (len(self.bands) > 1) and align_bands:
             self._align_images()
 
         # convert hubble magnitude to n_electron count
