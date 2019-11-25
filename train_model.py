@@ -21,8 +21,8 @@ plt.switch_backend("Agg")
 parser = argparse.ArgumentParser(description='GalaxyNet', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--batch-size', type=int, default=64, metavar='BS',
                     help='input batch size for training.')
-parser.add_argument('--num-images', type=int, default=12800, metavar='NI',
-                    help='Number of images used in the data set')
+parser.add_argument('--num-images', type=int, default=1000, metavar='NI',
+                    help='Number of images used to train in a single epoch.')
 parser.add_argument('--dataset', type=str, default="galbasic", metavar='DS',
                     help='specifies the dataset.')
 parser.add_argument('--epochs', type=int, default=100, metavar='E',
@@ -40,7 +40,7 @@ parser.add_argument('--overwrite', action='store_true',
                     help='Whether to overwrite if directory already exists.')
 args = parser.parse_args()
 
-args.dir = "data/" + args.dir
+args.dir = "/home/imendoza/deblend/galaxy-net/data/" + args.dir
 
 torch.cuda.manual_seed(args.seed)
 np.random.seed(args.seed)
@@ -108,14 +108,14 @@ def train_epoch(vae, train_loader, optimizer):
 
         optimizer.zero_grad()  # clears the gradients of all optimized torch.Tensors
         loss.backward()
-        optimizer.step()
+        optimizer.step()  # only part where weights are changed.
 
     avg_loss /= len(train_loader.sampler)
     return avg_loss
 
 
 def eval_epoch(vae, data_loader):
-    vae.eval()  # set in evaluation mode.
+    vae.eval()  # set in evaluation mode = no need to compute gradients or allocate memory for them.
     avg_loss = 0.0
     avg_mse = 0.0
 
@@ -124,13 +124,13 @@ def eval_epoch(vae, data_loader):
             image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
             background = data["background"].cuda()
             loss = vae.loss(image, background)
-            avg_loss += loss.item() #gets number from tensor containing single value.
-            # mse = vae.mse(image, background)
-            # avg_mse += mse.item()
+            avg_loss += loss.item()  # gets number from tensor containing single value.
+            mse = vae.mse(image, background)
+            avg_mse += mse.item()
 
     avg_loss /= len(data_loader.sampler)
-    # avg_mse = avg_mse/len(data_loader.sampler)
-    return avg_loss
+    avg_mse /= len(data_loader.sampler)
+    return avg_loss, avg_mse
 
 
 def train_module(vae, ds, epochs=10000, lr=1e-4):
@@ -150,7 +150,7 @@ def train_module(vae, ds, epochs=10000, lr=1e-4):
     dir_path = Path(args.dir)
     dir_path.mkdir()
 
-    # TODO: Create a directory file for easy look-up.
+    # TODO: Create a directory file for easy look-up once we start producing several of these.
     prop_file = open(f"{args.dir}/props.txt", 'w')
     print(f"dataset: {args.dataset} \n"
           f"epochs: {args.epochs} \n"
@@ -178,18 +178,19 @@ def train_module(vae, ds, epochs=10000, lr=1e-4):
             params = Path(args.dir, 'params')
             params.mkdir(parents=True, exist_ok=True)
             vae_file = params.joinpath("vae_params_{}.dat".format(epoch))
-            dec_file = params.joinpath("dec_params_{}.dat".format(epoch))
+            # dec_file = params.joinpath("dec_params_{}.dat".format(epoch))
             torch.save(vae.state_dict(), vae_file.as_posix())
-            torch.save(vae.dec.state_dict(), dec_file.as_posix())
+            # torch.save(vae.dec.state_dict(), dec_file.as_posix()) ### why did you have both?
 
             print("  * evaluating test loss...")
-            test_loss = eval_epoch(vae, test_loader)
+            test_loss, avg_mse = eval_epoch(vae, test_loader)
             print("  * test loss: {:.0f}\n".format(test_loss))
+            print(f" * avg_mse: {avg_mse}")
             loss_file = Path(args.dir, "loss.txt")
 
             #TODO: Add MSE for interpretation.
             with open(loss_file.as_posix(), 'a') as f:
-                f.write(f"epoch {epoch}, test loss: {test_loss}\n")
+                f.write(f"epoch {epoch}, test loss: {test_loss}, avg mse: {avg_mse}\n")
 
 
 def run():

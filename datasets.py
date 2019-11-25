@@ -6,9 +6,27 @@ from scipy.interpolate import RegularGridInterpolator
 import scipy.stats as stats
 from torch.utils.data import Dataset
 from WeakLensingDeblending import descwl
+import fitsio as fits
 
 
-# sky level and exposure, etc. for LSST
+class ColorData(Dataset):
+
+    def __init__(self):
+        """
+        This class reads the color ab_magnitude information from the OneDegSq.fits file and returns samples from this
+        6x800k matrix.
+        """
+        super(ColorData, self).__init__()
+        self.color_names = ['u_ab', 'g_ab', 'r_ab', 'i_ab', 'z_ab', 'y_ab']
+        self.table = fits.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
+        self.colors = self.table[self.color_names]  # array of tuples of len = 6.
+
+    def __len__(self):
+        return self.table.shape[0]
+
+    def __getitem__(self, idx):
+        return np.array([self.colors[idx][i] for i in range(len(self.color_names))])
+
 
 class GalBasic(Dataset):
 

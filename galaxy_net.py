@@ -97,7 +97,7 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
             nn.ConvTranspose2d(64, 2 * self.num_bands, 3, padding=0)  # why channels=2 * num bands?
         )
 
-    def forward(self, z, sigma=26.4575):
+    def forward(self, z):
         z = self.fc(z)
 
         # view takes in -1 and automatically determines that dimension. This dimension is the number of samples.
@@ -134,7 +134,7 @@ class OneCenteredGalaxy(nn.Module):
         self.register_buffer("one", torch.ones(1))
 
     def forward(self, image, background):
-        z_mean, z_var = self.enc.forward(image - background) #shape = [nsamples, latent_dim]
+        z_mean, z_var = self.enc.forward(image - background)  # shape = [nsamples, latent_dim]
 
         q_z = Normal(z_mean, z_var.sqrt())
         z = q_z.rsample()
@@ -170,17 +170,4 @@ class OneCenteredGalaxy(nn.Module):
 
     def mse(self, image, background):
         recon_mean, recon_var, kl_z = self.forward(image, background)
-        return torch.sqrt((recon_mean - image)**2).sum()
-
-
-
-
-    # peak_brightness = 10 * sigma
-    # centered_star = peak_brightness * self.star_proto
-    #     this is for a star still? what is star_proto suppose to represent.
-    #     Note: do not use the star stuff anymore.
-    #     radius = (self.slen - 1) // 2
-    #     star_proto = torch.zeros(1, num_bands, self.slen, self.slen)
-    #     star_proto[0, :, (radius - 1):(radius + 2), (radius - 1):(radius + 2)] = 0.5
-    #     star_proto[0, :, radius, radius] = 1.0
-    #     self.register_buffer("star_proto", star_proto)
+        return torch.sqrt(((recon_mean - image) ** 2).sum())
