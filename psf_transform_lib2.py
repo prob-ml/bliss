@@ -63,6 +63,7 @@ class PowerLawPSF(nn.Module):
 
         # initial psf
         self.init_psf = self.get_psf()
+        self.init_psf_sum = self.init_psf.sum(-1).sum(-1)
 
     def get_psf(self):
         # TODO make the psf function vectorized ...
@@ -79,6 +80,8 @@ class PowerLawPSF(nn.Module):
 
     def forward(self):
         psf = self.get_psf()
+        psf = psf * (self.init_psf_sum / psf.sum(-1).sum(-1)).unsqueeze(-1).unsqueeze(-1)
+
         l_pad = (self.image_slen - self.psf_slen) // 2
 
         return pad(psf, (l_pad, ) * 4)
