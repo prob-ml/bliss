@@ -70,7 +70,7 @@ class PsfLocalTransform(nn.Module):
         l_pad = (self.image_slen - self.psf_slen) // 2
         psf_image = pad(psf_transformed, (l_pad, ) * 4)
 
-        psf_image_normalization = psf_image.view(self.n_bands, -1).sum(1)
+        psf_image_normalization = self.normalization # psf_image.view(self.n_bands, -1).sum(1)
 
         return psf_image * (self.normalization / psf_image_normalization).unsqueeze(-1).unsqueeze(-1)
 
