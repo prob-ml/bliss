@@ -63,7 +63,7 @@ class PowerLawPSF(nn.Module):
 
         # initial psf
         self.init_psf = self.get_psf()
-        self.init_psf_sum = self.init_psf.sum(-1).sum(-1)
+        self.init_psf_sum = self.init_psf.sum(-1).sum(-1).detach()
 
     def get_psf(self):
         # TODO make the psf function vectorized ...
