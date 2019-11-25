@@ -77,7 +77,7 @@ def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5, mag
 
     est_mag = torch.log10(est_fluxes)
 
-    if mag_vec is None: 
+    if mag_vec is None:
         max_mag = torch.ceil(est_mag.max() * 2) / 2
         min_mag = torch.floor(est_mag.min() * 2) / 2
 
@@ -99,3 +99,22 @@ def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5, mag
                             est_fluxes[which_est], true_fluxes)[1]
 
     return tpr_vec, mag_vec, counts_vec
+
+def get_l1_error(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5):
+    est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
+
+    true_locs, true_fluxes = filter_params(true_locs, true_fluxes, slen, pad)
+    fluxes_error = get_fluxes_error(est_fluxes, true_fluxes)
+
+    locs_error = get_locs_error(est_locs * (slen - 1), true_locs * (slen - 1))
+
+    tpr_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 0).float()
+
+    locs_matched_error = locs_error[:, tpr_bool == 1]
+    fluxes_matched_error = fluxes_error[:, tpr_bool == 1]
+
+    seq_tensor = torch.Tensor([i for i in range(fluxes_matched_error.shape[1])]).type(torch.long)
+
+    locs_error, which_match = locs_matched_error.min(0)
+
+    return locs_error, fluxes_matched_error[which_match, seq_tensor]
