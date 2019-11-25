@@ -94,13 +94,13 @@ star_encoder.to(device)
 
 
 # define psf transform
-# psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(device),
-# 									data_params['slen'],
-# 									kernel_size = 3)
-psfield = fitsio.FITS('./../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit')
-psf_params = psf_transform_lib2.get_psf_params(psfield, band = 2).unsqueeze(0)
-psf_transform = psf_transform_lib2.PowerLawPSF(init_psf_params=psf_params,
-                                normalization_constant=torch.Tensor([0.1577]))
+psf_transform = psf_transform_lib.PsfLocalTransform(torch.Tensor(psf_og).to(device),
+									data_params['slen'],
+									kernel_size = 3)
+# psfield = fitsio.FITS('./../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit')
+# psf_params = psf_transform_lib2.get_psf_params(psfield, band = 2).unsqueeze(0)
+# psf_transform = psf_transform_lib2.PowerLawPSF(init_psf_params=psf_params,
+#                                 normalization_constant=torch.Tensor([0.1577]))
 psf_transform.to(device)
 
 # optimzers
