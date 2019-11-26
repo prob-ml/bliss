@@ -157,6 +157,7 @@ class OneCenteredGalaxy(nn.Module):
         recon_mean, recon_var, kl_z = self.forward(image, background)  # z | x ~ decoder
 
         # -log p(x | a, z), dimensions: torch.Size([ nsamples, num_bands, slen, slen])
+        # assuming covariance is diagonal.
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 
         # image.size(0) = first dimension = number of samples, .sum(1) sum over all dimensions except sample.

@@ -5,215 +5,89 @@ import numpy as np
 import subprocess
 import timeit
 from pathlib import Path
-
+import torch
 import matplotlib.pyplot as plt
 
-import torch
-from torch.utils.data import DataLoader, sampler
-from torch.optim import Adam
-
-import datasets
-import galaxy_net
+import train_color, train_galaxy
 
 torch.backends.cudnn.benchmark = True
 plt.switch_backend("Agg")
 
-parser = argparse.ArgumentParser(description='GalaxyNet', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--batch-size', type=int, default=64, metavar='BS',
-                    help='input batch size for training.')
-parser.add_argument('--num-images', type=int, default=1000, metavar='NI',
-                    help='Number of images used to train in a single epoch.')
-parser.add_argument('--dataset', type=str, default="galbasic", metavar='DS',
-                    help='specifies the dataset.')
-parser.add_argument('--epochs', type=int, default=100, metavar='E',
-                    help='number of epochs to train.')
-parser.add_argument('--seed', type=int, default=64, metavar='S',
-                    help='random seed.')
-parser.add_argument('--nocuda', action='store_true',
-                    help="whether to using a discrete graphics card")
-parser.add_argument('--slen', type=int, default=15, help='Number of pixels in images.')
-parser.add_argument('--device', type=int, default=0, metavar='DEV',
-                    help='GPU device ID')
-parser.add_argument('--dir', type=str, default="test", metavar='DIR',
-                    help='run-specific directory to read from / write to')
-parser.add_argument('--overwrite', action='store_true',
-                    help='Whether to overwrite if directory already exists.')
-args = parser.parse_args()
-
-args.dir = "/home/imendoza/deblend/galaxy-net/data/" + args.dir
-
-torch.cuda.manual_seed(args.seed)
-np.random.seed(args.seed)
+all_models = {
+    'centered_galaxy': train_galaxy.TrainGalaxy,
+    'color': train_color.TrainColor
+}
 
 
-def plot_reconstruction(data_loader, vae, epoch, sleep=False):
-    num_examples = min(10, args.batch_size)
-
-    plt.ioff()
-    plt.figure(figsize=(5 * 3, 2 + 4 * num_examples))
-    plt.tight_layout()
-    plt.suptitle("Epoch {:d}".format(epoch))
-
-    num_cols = 3  # also look at recon_var
-
-    with torch.no_grad():
-        for batch_idx, data in enumerate(data_loader):
-            image = data["image"].cuda()  # copies from cpu to gpu memory.
-            background = data["background"].cuda()  # maybe not having background will be a problem.
-            num_galaxies = data["num_galaxies"]
-            vae.eval()
-
-            if sleep:  # what does this part do?
-                really_is_on, _, _, image = vae.synthetic_image(background)
-                num_galaxies = really_is_on.sum(dim=0).cpu().int().detach().numpy()
-
-            recon_mean, recon_var, _ = vae(image, background)
-
-            for i in range(num_examples):
-                vmax1 = image[i, 0].max()  # we are looking at the ith sample in the first band.
-                plt.subplot(num_examples, num_cols, num_cols * i + 1)
-                plt.title("image [{} galaxies]".format(num_galaxies[i]))
-                plt.imshow(image[i, 0].data.cpu().numpy(), vmax=vmax1)
-                plt.colorbar()
-
-                plt.subplot(num_examples, num_cols, num_cols * i + 2)
-                plt.title("recon_mean")
-                plt.imshow(recon_mean[i, 0].data.cpu().numpy(), vmax=vmax1)
-                plt.colorbar()
-
-                plt.subplot(num_examples, num_cols, num_cols * i + 3)
-                plt.title("recon_var")
-                plt.imshow(recon_var[i, 0].data.cpu().numpy(), vmax=vmax1)
-                plt.colorbar()
-
-            break
-
-    plots = Path(args.dir, 'sleep_plots' if sleep else 'plots')
-    plots.mkdir(parents=True, exist_ok=True)
-    plot_file = plots.joinpath("plot_epoch_{}".format(epoch))
-    plt.savefig(plot_file.as_posix())
-    plt.close()
-
-
-def train_epoch(vae, train_loader, optimizer):
-    vae.train()  # set in training mode.
-    avg_loss = 0.0
-
-    for batch_idx, data in enumerate(train_loader):
-        image = data["image"].cuda()
-        background = data["background"].cuda()
-
-        loss = vae.loss(image, background)
-        avg_loss += loss.item()
-
-        optimizer.zero_grad()  # clears the gradients of all optimized torch.Tensors
-        loss.backward()
-        optimizer.step()  # only part where weights are changed.
-
-    avg_loss /= len(train_loader.sampler)
-    return avg_loss
-
-
-def eval_epoch(vae, data_loader):
-    vae.eval()  # set in evaluation mode = no need to compute gradients or allocate memory for them.
-    avg_loss = 0.0
-    avg_mse = 0.0
-
-    with torch.no_grad():  # no need to compute gradients outside training.
-        for batch_idx, data in enumerate(data_loader):
-            image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
-            background = data["background"].cuda()
-            loss = vae.loss(image, background)
-            avg_loss += loss.item()  # gets number from tensor containing single value.
-            mse = vae.mse(image, background)
-            avg_mse += mse.item()
-
-    avg_loss /= len(data_loader.sampler)
-    avg_mse /= len(data_loader.sampler)
-    return avg_loss, avg_mse
-
-
-def train_module(vae, ds, epochs=10000, lr=1e-4):
-    optimizer = Adam(vae.parameters(), lr=lr, weight_decay=1e-6)
-
-    tt_split = int(0.1 * len(ds))  # len(ds) = number of images?
-    test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
-    train_indices = np.mgrid[tt_split:len(ds)]
-
-    test_loader = DataLoader(ds, batch_size=args.batch_size,
-                             num_workers=2, pin_memory=True,
-                             sampler=sampler.SubsetRandomSampler(test_indices))
-    train_loader = DataLoader(ds, batch_size=args.batch_size,
-                              num_workers=2, pin_memory=True,
-                              sampler=sampler.SubsetRandomSampler(train_indices))
-
+def training(train_module, epochs):
     dir_path = Path(args.dir)
     dir_path.mkdir()
-
-    # TODO: Create a directory file for easy look-up once we start producing several of these.
-    prop_file = open(f"{args.dir}/props.txt", 'w')
-    print(f"dataset: {args.dataset} \n"
-          f"epochs: {args.epochs} \n"
-          f"batch_size: {args.batch_size}\n"
-          f"learning rate: {lr}\n"
-          f"sky level: {ds.sky}\n"
-          f"slen: {ds.slen}\n"
-          f"snr: {ds.snr}\n"
-          f"flux: {ds.flux}\n"
-          f"num bands: {ds.num_bands}", file=prop_file)
-    prop_file.close()
 
     for epoch in range(0, epochs):
         np.random.seed(args.seed + epoch)
         start_time = timeit.default_timer()
-        batch_loss = train_epoch(vae, train_loader, optimizer)
+        batch_loss = train_module.train_epoch()
         elapsed = timeit.default_timer() - start_time
         print('[{}] loss: {:.3f}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
 
         if epoch % 10 == 0:
-            print("  * plotting reconstructions...")
-            plot_reconstruction(test_loader, vae, epoch)
-
-            print("  * writing the network's parameters to disk...")
-            params = Path(args.dir, 'params')
-            params.mkdir(parents=True, exist_ok=True)
-            vae_file = params.joinpath("vae_params_{}.dat".format(epoch))
-            # dec_file = params.joinpath("dec_params_{}.dat".format(epoch))
-            torch.save(vae.state_dict(), vae_file.as_posix())
-            # torch.save(vae.dec.state_dict(), dec_file.as_posix()) ### why did you have both?
-
-            print("  * evaluating test loss...")
-            test_loss, avg_mse = eval_epoch(vae, test_loader)
-            print("  * test loss: {:.0f}\n".format(test_loss))
-            print(f" * avg_mse: {avg_mse}")
-            loss_file = Path(args.dir, "loss.txt")
-
-            #TODO: Add MSE for interpretation.
-            with open(loss_file.as_posix(), 'a') as f:
-                f.write(f"epoch {epoch}, test loss: {test_loss}, avg mse: {avg_mse}\n")
+            train_module.evaluate_and_log()
 
 
 def run():
-    if args.dataset == 'galbasic':
-        ds = datasets.GalBasic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=args.num_images,
-                               centered=True, sky=700)
+    if args.model not in all_models:
+        raise NotImplementedError("Not implemented this model yet.")
 
-    elif args.dataset == 'synthetic':  # default one.
-        ds = datasets.Synthetic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=args.num_images,
-                                centered=True, num_bands=1)
-
-    else:
-        raise NotImplementedError("That dataset has not yet been implemented.")
-
-    vae = galaxy_net.OneCenteredGalaxy(args.slen, num_bands=1)
-    vae.cuda()  # loads the model into the gpu processor that was selected.
-
-    print("training...")
-    train_module(vae, ds, epochs=args.epochs)
+    train_module = all_models[args.model].from_args(args)
+    train_module.vae.cuda()
+    training(train_module, epochs=args.epochs)
 
 
 if __name__ == "__main__":
-    # check if directory exists
+    print('hello')
+    print()
+
+    # Setup arguments.
+    parser = argparse.ArgumentParser(description='Training model',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--device', type=int, default=0, metavar='DEV',
+                        help='GPU device ID')
+    parser.add_argument('--dir', type=str, default="test", metavar='DIR',
+                        help='run-specific directory to read from / write to')
+    parser.add_argument('--overwrite', action='store_true',
+                        help='Whether to overwrite if directory already exists.')
+    parser.add_argument('--seed', type=int, default=64, metavar='S',
+                        help='Random seed for tensor flow cuda.')
+    parser.add_argument('--nocuda', action='store_true',
+                        help="whether to using a discrete graphics card")
+
+    # specify model and dataset.
+    parser.add_argument('--model', type=str, help='What model we are training?')
+    parser.add_argument('--dataset', type=str, default="galbasic", metavar='DS',
+                        help='Specifies the dataset to be used to train the model.')
+
+    # General training arguments.
+    parser.add_argument('--batch-size', type=int, default=64, metavar='BS',
+                        help='input batch size for training.')
+    parser.add_argument('--num-examples', type=int, default=1000, metavar='NI',
+                        help='Number of examples used to train in a single epoch.')
+    parser.add_argument('--epochs', type=int, default=100, metavar='E',
+                        help='number of epochs to train.')
+    params1 = list(vars(parser.parse_known_args()).keys())
+
+    # galaxy training models
+    one_centered_galaxy_group = parser.add_argument_group('One Centered Galaxy Model', 'Specify options for the galaxy '
+                                                                                       'model to train')
+    train_galaxy.TrainGalaxy.add_args(one_centered_galaxy_group, params1)
+
+    args = parser.parse_args()
+
+    # Additional settings.
+    args.dir = "/home/imendoza/deblend/galaxy-net/data/" + args.dir
+    torch.cuda.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
+    # check if directory exists or if we should overwrite.
     if Path(args.dir).is_dir() and not args.overwrite:
         raise IOError("Directory already exists.")
 

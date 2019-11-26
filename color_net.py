@@ -118,9 +118,9 @@ class ColorNet(nn.Module):
         recon_mean, recon_var, kl_z = self.forward(color_sample)
         return (recon_mean - color_sample).sum()
 
-        # recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(color_sample)
-        # recon_losses = recon_losses.sum(1)
-        #
-        # loss = (recon_losses + kl_z).sum()
+        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(color_sample)
+        recon_losses = recon_losses.sum(1)
 
-        # return loss
+        loss = (recon_losses + kl_z).sum()
+
+        return loss

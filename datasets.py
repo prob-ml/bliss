@@ -1,12 +1,17 @@
-import pathlib
-import pickle
 import galsim
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator
 import scipy.stats as stats
 from torch.utils.data import Dataset
-from WeakLensingDeblending import descwl
 import fitsio as fits
+import os
+
+os.chdir("/home/imendoza/deblend/galaxy-net")
+
+
+class Catsim(Dataset):
+
+    def __init__(self):
+        super(Catsim, self).__init__()
 
 
 class ColorData(Dataset):
@@ -34,7 +39,8 @@ class GalBasic(Dataset):
                  num_images=1000, num_bands=1, padding=3, centered=True, survey_name='lsst',
                  snr=200, sky=700, flux=None):
         """
-        This class uses galsim.
+        This class uses and returns a random Gaussian Galaxy, the flux is adjusted based on slen and sky so that the
+        ratio from image to background is approximately 0.30 like in Jeff's original code.
         """
         super(GalBasic, self).__init__()  # runs init of the super class.
 
