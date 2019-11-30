@@ -8,29 +8,29 @@ import os
 os.chdir("/home/imendoza/deblend/galaxy-net")
 
 
-class Catsim(Dataset):
-
-    def __init__(self):
-        super(Catsim, self).__init__()
-
-
-class ColorData(Dataset):
+class CatsimData(Dataset):
 
     def __init__(self):
         """
-        This class reads the color ab_magnitude information from the OneDegSq.fits file and returns samples from this
-        6x800k matrix.
+        This class reads the relevant parameters OneDegSq.fits file and returns samples from this
+        ~800k row matrix.
         """
-        super(ColorData, self).__init__()
-        self.color_names = ['u_ab', 'g_ab', 'r_ab', 'i_ab', 'z_ab', 'y_ab']
+        super(CatsimData, self).__init__()
+
+        self.param_names = ['ra', 'dec', 'redshift',
+                            'fluxnorm_bulge', 'fluxnorm_disk', 'fluxnorm_agn',
+                            'a_b', 'a_d', 'b_b', 'b_d', 'pa_bulge', 'pa_disk',
+                            'u_ab', 'g_ab', 'r_ab', 'i_ab', 'z_ab', 'y_ab']
+        self.num_params = len(self.param_names)
+
         self.table = fits.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
-        self.colors = self.table[self.color_names]  # array of tuples of len = 6.
+        self.params = self.table[self.param_names]  # array of tuples of len = 18.
 
     def __len__(self):
         return self.table.shape[0]
 
     def __getitem__(self, idx):
-        return np.array([self.colors[idx][i] for i in range(len(self.color_names))])
+        return np.array([self.params[idx][i] for i in range(len(self.param_names))])
 
 
 class GalBasic(Dataset):
@@ -64,7 +64,7 @@ class GalBasic(Dataset):
 
         # adjust flux depending on size.
         if flux is None:
-            self.flux = (5e4) * (self.slen / 15) ** 2
+            self.flux = 5e4 * (self.slen / 15) ** 2
         else:
             self.flux = flux
 

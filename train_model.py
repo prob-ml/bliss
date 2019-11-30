@@ -8,51 +8,48 @@ from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
 
-import train_color, train_galaxy
+import train_galaxy
 
 torch.backends.cudnn.benchmark = True
 plt.switch_backend("Agg")
 
 all_models = {
     'centered_galaxy': train_galaxy.TrainGalaxy,
-    'color': train_color.TrainColor
+    # 'catalogue': train_catalogue.TrainCatalogue
 }
 
 
-def training(train_module, epochs):
-    dir_path = Path(args.dir)
-    dir_path.mkdir()
+def training(train_module, epochs=None, seed=None, evaluate=None, **kwargs):
 
     for epoch in range(0, epochs):
-        np.random.seed(args.seed + epoch)
+        np.random.seed(seed + epoch)
         start_time = timeit.default_timer()
         batch_loss = train_module.train_epoch()
         elapsed = timeit.default_timer() - start_time
         print('[{}] loss: {:.3f}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
 
-        if epoch % 10 == 0:
-            train_module.evaluate_and_log()
+        if evaluate is not None:
+            if epoch % evaluate == 0:
+                train_module.evaluate_and_log(epoch)
 
 
-def run():
-    if args.model not in all_models:
+def run(args):
+    if args['model'] not in all_models:
         raise NotImplementedError("Not implemented this model yet.")
 
-    train_module = all_models[args.model].from_args(args)
+    train_module = all_models[args['model']].from_args(args)
     train_module.vae.cuda()
-    training(train_module, epochs=args.epochs)
+    training(train_module, **args)
 
 
 if __name__ == "__main__":
-    print('hello')
-    print()
 
     # Setup arguments.
-    parser = argparse.ArgumentParser(description='Training model',
+    parser = argparse.ArgumentParser(description='Training model [argument parser]',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--device', type=int, default=0, metavar='DEV',
                         help='GPU device ID')
-    parser.add_argument('--dir', type=str, default="test", metavar='DIR',
+    parser.add_argument('--dir-name', type=str, default="test", metavar='DIR',
                         help='run-specific directory to read from / write to')
     parser.add_argument('--overwrite', action='store_true',
                         help='Whether to overwrite if directory already exists.')
@@ -60,9 +57,12 @@ if __name__ == "__main__":
                         help='Random seed for tensor flow cuda.')
     parser.add_argument('--nocuda', action='store_true',
                         help="whether to using a discrete graphics card")
+    parser.add_argument('--evaluate', type=int, default=None, help='Whether to evaluate and log the model at some'
+                                                                   'specific number of epochs.')
 
     # specify model and dataset.
-    parser.add_argument('--model', type=str, help='What model we are training?')
+    parser.add_argument('--model', type=str, help='What model we are training?', choices=list(all_models.keys()),
+                        required=True)
     parser.add_argument('--dataset', type=str, default="galbasic", metavar='DS',
                         help='Specifies the dataset to be used to train the model.')
 
@@ -73,26 +73,32 @@ if __name__ == "__main__":
                         help='Number of examples used to train in a single epoch.')
     parser.add_argument('--epochs', type=int, default=100, metavar='E',
                         help='number of epochs to train.')
-    params1 = list(vars(parser.parse_known_args()).keys())
 
     # galaxy training models
     one_centered_galaxy_group = parser.add_argument_group('One Centered Galaxy Model', 'Specify options for the galaxy '
-                                                                                       'model to train')
-    train_galaxy.TrainGalaxy.add_args(one_centered_galaxy_group, params1)
+                                                                                       'model to train.')
+    train_galaxy.TrainGalaxy.add_args(one_centered_galaxy_group)
 
-    args = parser.parse_args()
+    # we are done.
+    pargs = parser.parse_args()
+    args_dict = vars(pargs)
 
     # Additional settings.
-    args.dir = "/home/imendoza/deblend/galaxy-net/data/" + args.dir
-    torch.cuda.manual_seed(args.seed)
-    np.random.seed(args.seed)
+    args_dict['dir_name'] = "/home/imendoza/deblend/galaxy-net/data/" + args_dict['dir_name']
+    project_dir = Path(args_dict['dir_name'])
+
+    torch.cuda.manual_seed(pargs.seed)
+    np.random.seed(pargs.seed)
 
     # check if directory exists or if we should overwrite.
-    if Path(args.dir).is_dir() and not args.overwrite:
+    if project_dir.is_dir() and not args_dict['overwrite']:
         raise IOError("Directory already exists.")
 
-    elif Path(args.dir).is_dir():
-        subprocess.run(f"rm -r {args.dir}", shell=True)
+    elif project_dir.is_dir():
+        subprocess.run(f"rm -r {project_dir.as_posix()}", shell=True)
 
-    with torch.cuda.device(args.device):
-        run()
+    project_dir.mkdir()
+
+    # run.
+    with torch.cuda.device(args_dict['device']):
+        run(args_dict)

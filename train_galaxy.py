@@ -16,14 +16,28 @@ class TrainGalaxy(object):
     def __init__(self, slen: int = 30, epochs: int = 1000, batch_size: int = 100, num_examples=1000,
                  num_bands: int = 1, dir_name: str = None, dataset: str = 'galbasic'):
 
+        def decide_dataset():
+            if self.dataset == 'galbasic':
+                return datasets.GalBasic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
+                                         num_images=self.num_examples,
+                                         centered=True, sky=700)
+
+            elif self.dataset == 'synthetic':  # Jeff coded this one as a proof of concept.
+                return datasets.Synthetic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
+                                          num_images=self.num_examples,
+                                          centered=True, num_bands=self.num_bands)
+
+            else:
+                raise NotImplementedError("Not implemented that galaxy dataset yet.")
+
         self.dataset = dataset
         self.slen = slen
         self.num_bands = num_bands
         self.epochs = epochs
         self.batch_size = batch_size
         self.num_examples = num_examples
-        self.lr = 1e-6
-        self.decide_dataset()
+        self.lr = 1e-4
+        self.ds = decide_dataset()
 
         self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=8)
 
@@ -32,43 +46,49 @@ class TrainGalaxy(object):
         train_indices = np.mgrid[tt_split:len(self.ds)]
 
         self.optimizer = Adam(self.vae.parameters(), lr=self.lr, weight_decay=1e-6)
-        self.test_loader = DataLoader(self.ds, batch_size=batch_size,
+        self.test_loader = DataLoader(self.ds, batch_size=self.batch_size,
                                       num_workers=2, pin_memory=True,
                                       sampler=SubsetRandomSampler(test_indices))
-        self.train_loader = DataLoader(self.ds, batch_size=batch_size,
+        self.train_loader = DataLoader(self.ds, batch_size=self.batch_size,
                                        num_workers=2, pin_memory=True,
                                        sampler=SubsetRandomSampler(train_indices))
 
         self.dir_name = dir_name  # where to save results.
-        self.save_props()
-
-    def decide_dataset(self):
-        if self.dataset == 'galbasic':
-            self.ds = datasets.GalBasic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
-                                        num_images=self.num_examples,
-                                        centered=True, sky=700)
-
-        elif self.dataset == 'synthetic':  # default one.
-            self.ds = datasets.Synthetic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
-                                         num_images=self.num_examples,
-                                         centered=True, num_bands=self.num_bands)
-
-        else:
-            raise NotImplementedError("Not implemented that galaxy dataset yet.")
+        self.save_props()  # save relevant properties to a file so we know how to reconstruct these results.
 
     def save_props(self):
         # TODO: Create a directory file for easy look-up once we start producing several of these.
-        prop_file = open(f"{self.dir}/props.txt", 'w')
+        prop_file = open(f"{self.dir_name}/props.txt", 'w')
         print(f"dataset: {self.dataset} \n"
               f"epochs: {self.epochs} \n"
               f"batch_size: {self.batch_size}\n"
+              f"num_examples: {self.num_examples}\n"
               f"learning rate: {self.lr}\n"
-              f"sky level: {self.ds.sky}\n"
               f"slen: {self.slen}\n"
+              f"sky level: {self.ds.sky}\n"
               f"snr: {self.ds.snr}\n"
               f"flux: {self.ds.flux}\n"
+              f"latent dim: {self.vae.latent_dim}\n",
               f"num bands: {self.num_bands}", file=prop_file)
         prop_file.close()
+
+    def train_epoch(self):
+        self.vae.train()
+        avg_loss = 0.0
+
+        for batch_idx, data in enumerate(self.train_loader):
+            image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
+            background = data["background"].cuda()
+
+            loss = self.vae.loss(image, background)
+            avg_loss += loss.item()
+
+            self.optimizer.zero_grad()  # clears the gradients of all optimized torch.Tensors
+            loss.backward()  # propagate this loss in the network.
+            self.optimizer.step()  # only part where weights are changed.
+
+        avg_loss /= len(self.train_loader.sampler)
+        return avg_loss
 
     def evaluate_and_log(self, epoch):
         print("  * plotting reconstructions...")
@@ -91,21 +111,6 @@ class TrainGalaxy(object):
 
         with open(loss_file.as_posix(), 'a') as f:
             f.write(f"epoch {epoch}, test loss: {test_loss}, avg mse: {avg_mse}\n")
-
-    def train_epoch(self):
-        self.vae.train()
-        avg_loss = 0.0
-
-        for batch_idx, color_sample in enumerate(self.train_loader):
-            loss = self.vae.loss(color_sample)
-            avg_loss += loss.item()
-
-            self.optimizer.zero_grad()  # clears the gradients of all optimized torch.Tensors
-            loss.backward()  # propagate this loss in the network.
-            self.optimizer.step()  # only part where weights are changed.
-
-        avg_loss /= len(self.train_loader.sampler)
-        return avg_loss
 
     def eval_epoch(self):
         self.vae.eval()  # set in evaluation mode = no need to compute gradients or allocate memory for them.
@@ -170,18 +175,16 @@ class TrainGalaxy(object):
         plt.close()
 
     @classmethod
-    def add_args(cls, parser, arguments_so_far):
+    def add_args(cls, parser):
         parameters = inspect.signature(cls).parameters
         for param in parameters:
-            if param not in arguments_so_far and param != 'self':
+            if param not in utils.general_args and param != 'self':
                 arg_form = utils.to_argparse_form(param)
-                print(arg_form, parameters[param].annotation, parameters[param].default)
                 parser.add_argument(arg_form, type=parameters[param].annotation, default=parameters[param].default,
                                     help='')
 
     @classmethod
-    def from_args(cls, args):
+    def from_args(cls, args_dict):
         parameters = inspect.signature(cls).parameters
-        args_dict = vars(args)
         filtered_dict = {param: value for param, value in args_dict.items() if param in parameters}
         return cls(**filtered_dict)

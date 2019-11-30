@@ -3,14 +3,14 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.optim import Adam
 import datasets
-import color_net
+import catalogue_net
 import numpy as np
 
 
-class TrainColor(object):
+class TrainCatalogue(object):
     def __init__(self, epochs=1000, batch_size=100, latent_dim=12, num_bands=6, dir_name=None):
-        self.ds = datasets.ColorData()
-        self.vae = color_net.ColorNet(latent_dim=latent_dim, num_bands=num_bands)
+        self.ds = datasets.CatsimData()
+        self.vae = catalogue_net.CatalogueNet(latent_dim=latent_dim, num_params=self.ds.num_params)
 
         tt_split = int(0.1 * len(self.ds))  # len(ds) = number of images?
         test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
@@ -48,8 +48,8 @@ class TrainColor(object):
         self.vae.train()
         avg_loss = 0.0
 
-        for batch_idx, color_sample in enumerate(self.train_loader):
-            loss = self.vae.loss(color_sample)
+        for batch_idx, sample in enumerate(self.train_loader):
+            loss = self.vae.loss(sample)
             avg_loss += loss.item()
 
             self.optimizer.zero_grad()  # clears the gradients of all optimized torch.Tensors

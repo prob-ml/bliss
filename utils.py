@@ -11,3 +11,17 @@ def to_argparse_form(s):
         else:
             new_s += c
     return new_s
+
+
+general_args = [
+    'device',
+    'dir_name',
+    'overwrite',
+    'seed',
+    'nocuda',
+    'model',
+    'dataset',
+    'batch_size',
+    'num_examples',
+    'epochs'
+]
