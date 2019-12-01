@@ -38,14 +38,14 @@ class CatalogueEncoder(nn.Module):
         self.fc_mean = nn.Linear(hidden, self.latent_dim)
         self.fc_var = nn.Linear(hidden, self.latent_dim)
 
-    def forward(self, sample):
+    def forward(self, data):
         """
         1e-4 here is to avoid NaNs, .exp gives you positive and variance increase quickly.
         Exp is better matched for logs. (trial and error, but makes big difference)
         :param subimage: image to be encoded.
         :return:
         """
-        z = self.features(sample)
+        z = self.features(data)
         z_mean = self.fc_mean(z)
         z_var = 1e-4 + torch.exp(self.fc_var(z))  # 1e-4 prevents having too small a variance.
         return z_mean, z_var
@@ -80,7 +80,7 @@ class CatalogueDecoder(nn.Module):  # generator
 
 class CatalogueNet(nn.Module):
 
-    def __init__(self, num_params, latent_dim=54):
+    def __init__(self, num_params, latent_dim=20):
         super(CatalogueNet, self).__init__()
 
         self.latent_dim = latent_dim
@@ -92,8 +92,8 @@ class CatalogueNet(nn.Module):
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
-    def forward(self, sample):
-        z_mean, z_var = self.enc.forward(sample)  # shape = [nsamples, latent_dim]
+    def forward(self, data):
+        z_mean, z_var = self.enc.forward(data)  # shape = [nsamples, latent_dim]
 
         q_z = Normal(z_mean, z_var.sqrt())
         z = q_z.rsample()
@@ -108,12 +108,18 @@ class CatalogueNet(nn.Module):
 
         return recon_mean, recon_var, kl_z
 
-    def loss(self, sample):
-        recon_mean, recon_var, kl_z = self.forward(sample)
+    def loss(self, data):
+        recon_mean, recon_var, kl_z = self.forward(data)
 
-        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(sample)
+        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(data)
         recon_losses = recon_losses.sum(1)
 
         loss = (recon_losses + kl_z).sum()
 
         return loss
+
+    def get_sample(self):
+        p_z = Normal(self.zero, self.one)
+        z = p_z.rsample()
+        recon_mean, _ = self.dec.forward(z)
+        return recon_mean

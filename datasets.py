@@ -8,6 +8,12 @@ import os
 os.chdir("/home/imendoza/deblend/galaxy-net")
 
 
+# TODO : implement LSST realistic noise, sky.
+# survey specific parameters.
+# self.survey_name = survey_name
+# self.survey = descwl.survey.Survey(no_analysis=True, survey_name=self.survey_name, filter_band='r')
+# self.sky = self.survey.mean_sky_level
+
 class CatsimData(Dataset):
 
     def __init__(self):
@@ -17,48 +23,45 @@ class CatsimData(Dataset):
         """
         super(CatsimData, self).__init__()
 
-        self.param_names = ['ra', 'dec', 'redshift',
+        # pa_disk = pa_bulge (by assumption)
+        self.param_names = ['redshift',
                             'fluxnorm_bulge', 'fluxnorm_disk', 'fluxnorm_agn',
-                            'a_b', 'a_d', 'b_b', 'b_d', 'pa_bulge', 'pa_disk',
+                            'a_b', 'a_d', 'b_b', 'b_d', 'pa_disk',
                             'u_ab', 'g_ab', 'r_ab', 'i_ab', 'z_ab', 'y_ab']
         self.num_params = len(self.param_names)
 
         self.table = fits.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
+        np.random.shuffle(self.table)  # shuffle just in case order of galaxies matters in original table.
         self.params = self.table[self.param_names]  # array of tuples of len = 18.
 
     def __len__(self):
         return self.table.shape[0]
 
     def __getitem__(self, idx):
-        return np.array([self.params[idx][i] for i in range(len(self.param_names))])
+        return np.array([self.params[idx][i] for i in range(len(self.param_names))], dtype=np.float32)
 
 
 class GalBasic(Dataset):
 
-    def __init__(self, slen, mean_galaxies=1, min_galaxies=1, max_galaxies=1,
-                 num_images=1000, num_bands=1, padding=3, centered=True, survey_name='lsst',
+    def __init__(self, slen, num_images=1000, padding=3, survey_name='lsst',
                  snr=200, sky=700, flux=None):
         """
         This class uses and returns a random Gaussian Galaxy, the flux is adjusted based on slen and sky so that the
         ratio from image to background is approximately 0.30 like in Jeff's original code.
+
+        This only works with num_bands = 1.
+
+        There is always only oen galaxy and it is always randomly located somewhere in the center pixel.
         """
         super(GalBasic, self).__init__()  # runs init of the super class.
 
         self.slen = slen  # number of pixel dimensions.
-        self.mean_galaxies = mean_galaxies
-        self.min_galaxies = min_galaxies
-        self.max_galaxies = max_galaxies
         self.num_images = num_images
-        self.num_bands = num_bands
         self.padding = padding  # not used if centered.
-        self.centered = centered
         self.snr = snr
+        self.centered = True
+        self.num_bands = 1
 
-        # TODO : implement LSST realistic noise, sky.
-        # survey specific parameters.
-        # self.survey_name = survey_name
-        # self.survey = descwl.survey.Survey(no_analysis=True, survey_name=self.survey_name, filter_band='r')
-        # self.sky = self.survey.mean_sky_level
         self.sky = sky
         self.pixel_scale = 0.2
 
@@ -72,28 +75,29 @@ class GalBasic(Dataset):
         # we can use the same size for everything for now.
         self.sigma = self.slen * self.pixel_scale / 8
 
-        # TODO : implement multiple bands with galsim.
         if self.num_bands > 1 or not self.centered or survey_name != 'lsst':
-            raise NotImplementedError("Not yet implemented multiple bands, uncentering")
+            raise NotImplementedError("Not yet implemented multiple bands, not centered galaxy.")
 
     def __len__(self):
         return self.num_images
 
     def __getitem__(self, idx):
-        # right now this completely ignores the index and returns some random Gaussian galaxy using galsim.
-        # scale is LSST scale.
+        """
+        Right now this completely ignores the index and returns some random Gaussian galaxy using galsim.
 
-        poisson_galaxies = np.random.poisson(self.mean_galaxies)
-        num_galaxies = np.maximum(np.minimum(poisson_galaxies, self.max_galaxies), self.min_galaxies)
+        :param idx:
+        :return:
+        """
 
         # get random galaxy parameters.
-
         r = min(np.random.sample(), 0.99)  # magnitude needs to be < 1 .
         theta = np.random.sample() * np.pi * 2
         e1, e2 = max(min(r * np.cos(theta), 0.4), -0.4), max(min(r * np.sin(theta), 0.4), -0.4)
+        loc = np.random.rand(2) - 0.5
 
         gal = galsim.Gaussian(flux=self.flux, sigma=self.sigma)
         gal = gal.shear(e1=e1, e2=e2)
+        gal = gal.shift(dx=loc[0], dy=loc[1])  # randomly somewhere in the center pixel.
         img = gal.drawImage(nx=self.slen, ny=self.slen, scale=self.pixel_scale,
                             method='auto')
         # , poisson_flux=True)
@@ -102,7 +106,6 @@ class GalBasic(Dataset):
 
         # add noise.
         rng = galsim.BaseDeviate(0)
-        noise = galsim.GaussianNoise(rng=rng)
         noise = galsim.PoissonNoise(rng=rng, sky_level=self.sky)
         _ = noisy_img.addNoiseSNR(noise, self.snr, preserve_flux=True)
 
@@ -115,7 +118,7 @@ class GalBasic(Dataset):
 
         return {'image': image,
                 'background': background,
-                'num_galaxies': num_galaxies}
+                'num_galaxies': 1}
 
 
 class Synthetic(Dataset):

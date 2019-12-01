@@ -22,6 +22,8 @@ general_args = [
     'model',
     'dataset',
     'batch_size',
-    'num_examples',
-    'epochs'
+    'training_examples',
+    'evaluation_examples',
+    'epochs',
+
 ]

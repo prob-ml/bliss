@@ -14,13 +14,14 @@ import utils
 class TrainGalaxy(object):
 
     def __init__(self, slen: int = 30, epochs: int = 1000, batch_size: int = 100, num_examples=1000,
-                 num_bands: int = 1, dir_name: str = None, dataset: str = 'galbasic'):
+                 dir_name: str = None, num_bands: int = 1, dataset: str = 'galbasic'):
 
         def decide_dataset():
             if self.dataset == 'galbasic':
-                return datasets.GalBasic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
-                                         num_images=self.num_examples,
-                                         centered=True, sky=700)
+                if self.num_bands > 1:
+                    raise NotImplementedError()
+
+                return datasets.GalBasic(self.slen, num_images=self.num_examples, sky=700)
 
             elif self.dataset == 'synthetic':  # Jeff coded this one as a proof of concept.
                 return datasets.Synthetic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
@@ -32,16 +33,16 @@ class TrainGalaxy(object):
 
         self.dataset = dataset
         self.slen = slen
-        self.num_bands = num_bands
         self.epochs = epochs
         self.batch_size = batch_size
         self.num_examples = num_examples
+        self.num_bands = num_bands
         self.lr = 1e-4
         self.ds = decide_dataset()
 
         self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=8)
 
-        tt_split = int(0.1 * len(self.ds))  # len(ds) = number of images?
+        tt_split = int(0.1 * len(self.ds))
         test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
         train_indices = np.mgrid[tt_split:len(self.ds)]
 
@@ -69,7 +70,7 @@ class TrainGalaxy(object):
               f"snr: {self.ds.snr}\n"
               f"flux: {self.ds.flux}\n"
               f"latent dim: {self.vae.latent_dim}\n",
-              f"num bands: {self.num_bands}", file=prop_file)
+              f"num bands: {self.ds.num_bands}", file=prop_file)
         prop_file.close()
 
     def train_epoch(self):
@@ -106,8 +107,8 @@ class TrainGalaxy(object):
 
         print("  * evaluating test loss...")
         test_loss, avg_mse = self.eval_epoch()
-        print("  * test loss: {:.0f}\n".format(test_loss))
-        print(f" * avg_mse: {avg_mse}")
+        print("  * test loss: {:.0f}".format(test_loss))
+        print(f" * avg_mse: {avg_mse}\n")
 
         with open(loss_file.as_posix(), 'a') as f:
             f.write(f"epoch {epoch}, test loss: {test_loss}, avg mse: {avg_mse}\n")
@@ -181,7 +182,7 @@ class TrainGalaxy(object):
             if param not in utils.general_args and param != 'self':
                 arg_form = utils.to_argparse_form(param)
                 parser.add_argument(arg_form, type=parameters[param].annotation, default=parameters[param].default,
-                                    help='')
+                                    help='A parameter.')
 
     @classmethod
     def from_args(cls, args_dict):

@@ -5,26 +5,38 @@ from torch.optim import Adam
 import datasets
 import catalogue_net
 import numpy as np
+from pathlib import Path
+import inspect
+import utils
 
 
 class TrainCatalogue(object):
-    def __init__(self, epochs=1000, batch_size=100, latent_dim=12, num_bands=6, dir_name=None):
+
+    def __init__(self, epochs=1000, batch_size=64, latent_dim: int = 10, training_examples=100, evaluation_examples=10,
+                 dir_name=None):
+
         self.ds = datasets.CatsimData()
         self.vae = catalogue_net.CatalogueNet(latent_dim=latent_dim, num_params=self.ds.num_params)
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.training_examples = training_examples
+        self.evaluation_examples = evaluation_examples
+        self.lr = 1e-4
 
-        tt_split = int(0.1 * len(self.ds))  # len(ds) = number of images?
+        tt_split = int(0.1 * len(self.ds))
         test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
         train_indices = np.mgrid[tt_split:len(self.ds)]
 
-        self.optimizer = Adam(self.vae.parameters(), lr=lr, weight_decay=1e-6)
-        self.test_loader = DataLoader(self.ds, batch_size=batch_size,
+        self.optimizer = Adam(self.vae.parameters(), lr=self.lr, weight_decay=1e-6)
+        self.test_loader = DataLoader(self.ds, batch_size=self.batch_size,
                                       num_workers=2, pin_memory=True,
                                       sampler=SubsetRandomSampler(test_indices))
-        self.train_loader = DataLoader(self.ds, batch_size=batch_size,
+        self.train_loader = DataLoader(self.ds, batch_size=self.batch_size,
                                        num_workers=2, pin_memory=True,
                                        sampler=SubsetRandomSampler(train_indices))
 
         self.dir_name = dir_name  # where to save results.
+        self.save_props()
 
     def save_props(self):
         pass
@@ -32,11 +44,12 @@ class TrainCatalogue(object):
     def evaluate_and_log(self, epoch):
         params = Path(self.dir_name, 'params')
         params.mkdir(parents=True, exist_ok=True)
-        vae_file = params.joinpath("vae_params_{}.dat".format(epoch))
-        loss_file = Path(args.dir, "loss.txt")
+
         print("  * writing the network's parameters to disk...")
+        vae_file = params.joinpath("vae_params_{}.dat".format(epoch))
         torch.save(self.vae.state_dict(), vae_file.as_posix())
 
+        loss_file = Path(self.dir_name, "loss.txt")
         print("  * evaluating test loss...")
         test_loss = self.eval_epoch()
         print("  * test loss: {:.0f}\n".format(test_loss))
@@ -44,28 +57,51 @@ class TrainCatalogue(object):
         with open(loss_file.as_posix(), 'a') as f:
             f.write(f"epoch {epoch}, test loss: {test_loss}\n")
 
-    def train_epoch(self, data):
+    def train_epoch(self):
         self.vae.train()
         avg_loss = 0.0
 
         for batch_idx, sample in enumerate(self.train_loader):
-            loss = self.vae.loss(sample)
+            loss = self.vae.loss(sample.cuda())
             avg_loss += loss.item()
 
             self.optimizer.zero_grad()  # clears the gradients of all optimized torch.Tensors
             loss.backward()  # propagate this loss in the network.
             self.optimizer.step()  # only part where weights are changed.
 
-        avg_loss /= len(self.train_loader.sampler)
+            if batch_idx > self.training_examples:  # break after enough examples have been taken.
+                break
 
-    def eval_epoch(self, data):
+        avg_loss /= self.batch_size * self.training_examples
+        return avg_loss
+
+    def eval_epoch(self):
         self.vae.eval()  # set in evaluation mode = no need to compute gradients or allocate memory for them.
         avg_loss = 0.0
 
         with torch.no_grad():  # no need to compute gradients outside training.
-            for batch_idx, data in enumerate(self.test_loader):
-                loss = self.vae.loss(data)
+            for batch_idx, sample in enumerate(self.test_loader):
+
+                loss = self.vae.loss(sample.cuda())
                 avg_loss += loss.item()  # gets number from tensor containing single value.
 
-        avg_loss /= len(self.test_loader.sampler)
+                if batch_idx > self.evaluation_examples:  # break after enough examples have been taken.
+                    break
+
+        avg_loss /= self.batch_size * self.evaluation_examples
         return avg_loss
+
+    @classmethod
+    def add_args(cls, parser):
+        parameters = inspect.signature(cls).parameters
+        for param in parameters:
+            if param not in utils.general_args and param != 'self':
+                arg_form = utils.to_argparse_form(param)
+                parser.add_argument(arg_form, type=parameters[param].annotation, default=parameters[param].default,
+                                    help='A parameter.')
+
+    @classmethod
+    def from_args(cls, args_dict):
+        parameters = inspect.signature(cls).parameters
+        filtered_dict = {param: value for param, value in args_dict.items() if param in parameters}
+        return cls(**filtered_dict)
