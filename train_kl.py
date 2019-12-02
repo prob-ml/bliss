@@ -82,7 +82,7 @@ psf_transform.to(device)
 # star_encoder.to(device)
 
 # load optimizer
-encoder_lr = 1e-5
+encoder_lr = 1e-3
 vae_optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
                     'lr': encoder_lr}],
@@ -92,6 +92,6 @@ vae_optimizer = optim.Adam([
 run_joint_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = vae_optimizer,
                     n_epochs = 2000,
-                    n_samples = 40,
+                    n_samples = 15,
                     encoder_outfile = './fits/results_11202019/kl_starnet',
                     psf_outfile = '././fits/results_11202019/identity_psf')
