@@ -203,7 +203,8 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
 # TODO: this should be the same as run_wake ... just with a different optimizer
 def get_kl_loss(full_image, full_background, star_encoder, psf_transform,
-                    n_samples, cached_grid = None):
+                    n_samples, cached_grid = None,
+                    training = True):
 
     # get psf
     psf = psf_transform.forward()
@@ -214,7 +215,7 @@ def get_kl_loss(full_image, full_background, star_encoder, psf_transform,
                                     n_samples,
                                     return_map = False,
                                     return_log_q = True,
-                                    training = True)
+                                    training = training)
 
     # get loss
     neg_logprob = get_psf_loss(full_image, full_background,
@@ -252,7 +253,10 @@ def run_joint_wake(full_image, full_background, star_encoder, psf_transform, opt
             get_kl_loss(full_image, full_background, star_encoder, psf_transform,
                             n_samples, cached_grid)
 
-        ps_loss = loss_i.detach() * log_q_n_stars + loss_i
+        control_var, _ = get_kl_loss(full_image, full_background, star_encoder, psf_transform,
+                                        n_samples, cached_grid, training = False)
+
+        ps_loss = (loss_i - control_var).detach() * log_q_n_stars + loss_i
 
         ps_loss.mean().backward()
         optimizer.step()
