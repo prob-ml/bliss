@@ -202,6 +202,35 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
 
 # TODO: this should be the same as run_wake ... just with a different optimizer
+def get_kl_loss(full_image, full_background, star_encoder, psf_transform,
+                    n_samples, cached_grid = None):
+
+    # get psf
+    psf = psf_transform.forward()
+
+    sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
+        log_q_locs, log_q_fluxes, log_q_n_stars = \
+            star_encoder.sample_star_encoder(full_image, full_background,
+                                    n_samples,
+                                    return_map = False,
+                                    return_log_q = True,
+                                    training = True)
+
+    # get loss
+    neg_logprob = get_psf_loss(full_image, full_background,
+                                sampled_locs_full_image,
+                                sampled_fluxes_full_image,
+                                n_stars = sampled_n_stars_full.detach(),
+                                psf = psf,
+                                pad = 5, grid = cached_grid)[1]
+
+    entropy_term = - log_q_locs - log_q_fluxes - log_q_n_stars
+
+    loss_i = neg_logprob - entropy_term
+
+    return loss_i, log_q_n_stars
+
+
 def run_joint_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
                     n_epochs, n_samples, encoder_outfile, psf_outfile,
                     use_iwae = False):
@@ -219,28 +248,9 @@ def run_joint_wake(full_image, full_background, star_encoder, psf_transform, opt
 
         optimizer.zero_grad()
 
-        # get psf
-        psf = psf_transform.forward()
-
-        sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
-            log_q_locs, log_q_fluxes, log_q_n_stars = \
-                star_encoder.sample_star_encoder(full_image, full_background,
-                                        n_samples,
-                                        return_map = False,
-                                        return_log_q = True,
-                                        training = True)
-
-        # get loss
-        neg_logprob = get_psf_loss(full_image, full_background,
-                                    sampled_locs_full_image,
-                                    sampled_fluxes_full_image,
-                                    n_stars = sampled_n_stars_full.detach(),
-                                    psf = psf,
-                                    pad = 5, grid = cached_grid)[1]
-
-        entropy_term = - log_q_locs - log_q_fluxes - log_q_n_stars
-
-        loss_i = neg_logprob - entropy_term
+        loss_i, log_q_n_stars = \
+            get_kl_loss(full_image, full_background, star_encoder, psf_transform,
+                            n_samples, cached_grid)
 
         ps_loss = loss_i.detach() * log_q_n_stars + loss_i
 

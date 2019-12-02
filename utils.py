@@ -18,6 +18,8 @@ def get_is_on_from_n_stars(n_stars, max_stars):
 
 def get_is_on_from_n_stars_2d(n_stars, max_stars):
     # n stars sis n_samples x batchsize
+    assert torch.all(n_stars >= 0)
+    assert torch.all(n_stars <= max_detections)
 
     n_samples = n_stars.shape[0]
     batchsize = n_stars.shape[1]
