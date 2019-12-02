@@ -371,7 +371,7 @@ class StarEncoder(nn.Module):
         h = self._forward_to_last_hidden(image_stamps, background_stamps)
 
         # get log probs
-        log_probs = self._get_logprobs_from_last_hidden_layer(h)
+        log_probs = self._get_logprobs_from_last_hidden_layer(h); 
 
         if not training:
             h = h.detach()

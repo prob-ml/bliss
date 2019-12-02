@@ -18,8 +18,8 @@ def get_is_on_from_n_stars(n_stars, max_stars):
 
 def get_is_on_from_n_stars_2d(n_stars, max_stars):
     # n stars sis n_samples x batchsize
-    assert torch.all(n_stars >= 0)
-    assert torch.all(n_stars <= max_detections)
+    assert not torch.any(torch.isnan(n_stars)); assert torch.all(n_stars >= 0)
+    assert torch.all(n_stars <= max_stars)
 
     n_samples = n_stars.shape[0]
     batchsize = n_stars.shape[1]
@@ -52,7 +52,7 @@ def sample_class_weights(class_weights, n_samples = 1):
     # draw a sample from Categorical variable with
     # probabilities class_weights
 
-    cat_rv = categorical.Categorical(probs = class_weights)
+    assert not torch.any(torch.isnan(class_weights)); cat_rv = categorical.Categorical(probs = class_weights)
     return cat_rv.sample((n_samples, )).detach().squeeze()
 
 def sample_normal(mean, logvar):
