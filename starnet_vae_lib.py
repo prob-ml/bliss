@@ -370,19 +370,20 @@ class StarEncoder(nn.Module):
         # pass through NN
         h = self._forward_to_last_hidden(image_stamps, background_stamps)
 
+        # get log probs
+        log_probs = self._get_logprobs_from_last_hidden_layer(h)
+
         if not training:
             h = h.detach()
-
-        # get log probs
-        log_probs = self._get_logprobs_from_last_hidden_layer(h).detach()
+            log_probs = log_probs.detach()
 
         # sample number of stars
         if n_stars is None:
             if return_map:
-                n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
+                n_stars_sampled = torch.argmax(log_probs.detach(), dim = 1).repeat(n_samples).view(n_samples, -1)
 
             else:
-                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples).view(n_samples, -1)
+                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs.detach()), n_samples).view(n_samples, -1)
         else:
             n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
 
