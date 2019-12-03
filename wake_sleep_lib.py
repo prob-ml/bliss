@@ -207,7 +207,7 @@ def get_kl_loss(full_image, full_background, star_encoder, psf_transform,
                     training = True):
 
     # get psf
-    psf = psf_transform.forward()
+    psf = psf_transform.forward().detach()
 
     sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
         log_q_locs, log_q_fluxes, log_q_n_stars = \
@@ -227,7 +227,7 @@ def get_kl_loss(full_image, full_background, star_encoder, psf_transform,
 
     entropy_term = - log_q_locs - log_q_fluxes - log_q_n_stars
 
-    loss_i = neg_logprob - entropy_term
+    loss_i = neg_logprob - entropy_term; 
 
     return loss_i, log_q_n_stars
 

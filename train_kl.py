@@ -75,14 +75,14 @@ psf_transform.to(device)
 ########################
 # Initial training of encoder
 ########################
-init_encoder = './fits/results_11202019/kl_starnet'
-print('loading encoder from: ', init_encoder)
-star_encoder.load_state_dict(torch.load(init_encoder,
-                               map_location=lambda storage, loc: storage));
+# init_encoder = './fits/results_11202019/kl_starnet'
+# print('loading encoder from: ', init_encoder)
+# star_encoder.load_state_dict(torch.load(init_encoder,
+#                                map_location=lambda storage, loc: storage));
 star_encoder.to(device)
 
 # load optimizer
-encoder_lr = 1e-3
+encoder_lr = 1e-4
 vae_optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
                     'lr': encoder_lr}],
