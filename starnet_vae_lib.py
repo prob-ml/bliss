@@ -24,7 +24,8 @@ class Normalize2d(nn.Module):
 
 
 class StarEncoder(nn.Module):
-    def __init__(self, full_slen, stamp_slen, step, edge_padding, n_bands, max_detections):
+    def __init__(self, full_slen, stamp_slen, step, edge_padding, n_bands, max_detections,
+                        fmin = 0.0):
 
         super(StarEncoder, self).__init__()
 
@@ -33,6 +34,8 @@ class StarEncoder(nn.Module):
         self.stamp_slen = stamp_slen # dimension of the individual image patches
         self.step = step # number of pixels to shift every subimage
         self.n_bands = n_bands
+
+        self.fmin = fmin
 
         self.edge_padding = edge_padding
 
@@ -371,7 +374,7 @@ class StarEncoder(nn.Module):
         h = self._forward_to_last_hidden(image_stamps, background_stamps)
 
         # get log probs
-        log_probs = self._get_logprobs_from_last_hidden_layer(h); 
+        log_probs = self._get_logprobs_from_last_hidden_layer(h);
 
         if not training:
             h = h.detach()
@@ -414,7 +417,7 @@ class StarEncoder(nn.Module):
         log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
 
         subimage_fluxes_sampled = \
-            torch.exp(log_flux_sampled) * is_on_array.unsqueeze(3).float()
+            (torch.exp(log_flux_sampled) + self.f_min) * is_on_array.unsqueeze(3).float()
 
         # get parameters on full image
         locs_full_image, fluxes_full_image, n_stars_full = \

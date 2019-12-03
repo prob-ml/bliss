@@ -44,7 +44,8 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
                                            step = 2,
                                            edge_padding = 2,
                                            n_bands = full_image.shape[1],
-                                           max_detections = 2)
+                                           max_detections = 2,
+                                           fmin = 1000.)
 
 star_encoder.to(device)
 
@@ -75,10 +76,10 @@ psf_transform.to(device)
 ########################
 # Initial training of encoder
 ########################
-init_encoder = './fits/results_11202019/kl_starnet'
-print('loading encoder from: ', init_encoder)
-star_encoder.load_state_dict(torch.load(init_encoder,
-                               map_location=lambda storage, loc: storage));
+# init_encoder = './fits/results_11202019/kl_starnet'
+# print('loading encoder from: ', init_encoder)
+# star_encoder.load_state_dict(torch.load(init_encoder,
+#                                map_location=lambda storage, loc: storage));
 star_encoder.to(device)
 
 # load optimizer
@@ -93,5 +94,5 @@ run_joint_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = vae_optimizer,
                     n_epochs = 2000,
                     n_samples = 15,
-                    encoder_outfile = './fits/results_11202019/kl_starnet',
+                    encoder_outfile = './fits/results_11202019/kl_starnet2',
                     psf_outfile = '././fits/results_11202019/identity_psf')
