@@ -417,7 +417,7 @@ class StarEncoder(nn.Module):
         log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
 
         subimage_fluxes_sampled = \
-            (torch.exp(log_flux_sampled) + self.f_min) * is_on_array.unsqueeze(3).float()
+            (torch.exp(log_flux_sampled) + self.fmin) * is_on_array.unsqueeze(3).float()
 
         # get parameters on full image
         locs_full_image, fluxes_full_image, n_stars_full = \
