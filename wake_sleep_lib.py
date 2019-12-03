@@ -217,6 +217,16 @@ def get_kl_loss(full_image, full_background, star_encoder, psf_transform,
                                     return_log_q = True,
                                     training = training)
 
+    # priors
+    # TODO: pass in prior params as arguments
+    poisson_prior = sampled_n_stars_full.float() * np.log(2000.) - \
+                        torch.lgamma(sampled_n_stars_full.float() + 1)
+
+    flux_prior = torch.log(sampled_fluxes_full_image + 1e-16) * \
+                (sampled_fluxes_full_image > 0).float().detach() * (3/2)
+
+    flux_prior = flux_prior.sum(-1).sum(-1)
+
     # get loss
     neg_logprob = get_psf_loss(full_image, full_background,
                                 sampled_locs_full_image,
@@ -227,7 +237,7 @@ def get_kl_loss(full_image, full_background, star_encoder, psf_transform,
 
     entropy_term = - log_q_locs - log_q_fluxes - log_q_n_stars
 
-    loss_i = neg_logprob - entropy_term; 
+    loss_i = neg_logprob - poisson_prior - flux_prior - entropy_term
 
     return loss_i, log_q_n_stars
 
