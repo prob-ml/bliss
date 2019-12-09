@@ -109,8 +109,9 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         # expected number of photons has to be positive, this is why we use f.relu here.
         recon_mean = f.relu(z[:, :self.num_bands])
 
-        # sometimes nn can get variance to be really large, if sigma gets really large then small learning
-        # this avoids variance getting too large.
+        # sometimes nn can get variance to be really small, if sigma gets really small then small learning
+        # this is what the 1e-4 is for.
+        # We also want var >= mean because of the poisson noise, which is also imposed here.
         var_multiplier = 1 + 10 * torch.sigmoid(z[:, self.num_bands:(2 * self.num_bands)])
         recon_var = 1e-4 + var_multiplier * recon_mean
 
@@ -165,7 +166,7 @@ class OneCenteredGalaxy(nn.Module):
 
         # the expectation is subtle and implicit bc we are using stochastic optimization multiple times.
         # sum here is over the samples (only remaining dimensions)
-        loss = (recon_losses + kl_z).sum()  # this is actually actually ELBO, shape=[nsamples]
+        loss = (recon_losses + kl_z).sum()  # this is actually just ELBO, shape=[nsamples]
 
         return loss
 

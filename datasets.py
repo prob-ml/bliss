@@ -2,17 +2,54 @@ import galsim
 import numpy as np
 import scipy.stats as stats
 from torch.utils.data import Dataset
-import fitsio as fits
+from astropy.table import Table
 import os
+import draw_catsim
 
 os.chdir("/home/imendoza/deblend/galaxy-net")
 
 
-# TODO : implement LSST realistic noise, sky.
-# survey specific parameters.
-# self.survey_name = survey_name
-# self.survey = descwl.survey.Survey(no_analysis=True, survey_name=self.survey_name, filter_band='r')
-# self.sky = self.survey.mean_sky_level
+class CatsimGalaxies(Dataset):
+
+    def __init__(self, params, stamp_size=10, min_snr=0.05, filter_dict=None, add_noise=True, verbose=False, snr=None):
+        """
+        This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalogue) and returns a
+        galaxy drawn from the catalogue with realistic seeing conditions using the WeakLensingDeblending functions.
+
+        :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST survey.
+        """
+
+        self.snr = snr
+        self.params = params
+        self.filtered_dict = self.params['filter_dict']
+        self.bands = self.params['bands']
+
+        self.table = Table.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
+        np.random.shuffle(self.table)  # shuffle just in case order of galaxies matters in original table.
+
+        self.cat = self.get_filtered_table()
+
+    def __len__(self):
+        return len(self.cat)
+
+    def __getitem__(self, idx):
+        entry = self.cat[idx]
+        obs = draw_catsim.create_obs(self.params)
+        image_size = obs[0].image_width  # should be the same across bands.
+        final = np.zeros((len(self.bands), image_size, image_size))
+
+        for i, band in enumerate(self.bands):
+            final[i, :, :] = draw_catsim.single_band(entry, band, obs[i], self.params,
+                                                     no_psf=False, draw_method='auto', snr=self.snr)
+
+        return final
+
+    def get_filtered_table(self):
+        cat = self.table.copy()
+        for param, pfilter in self.filtered_dict.items():
+            cat = cat[pfilter(param, cat)]
+        return cat
+
 
 class CatsimData(Dataset):
 
@@ -30,7 +67,7 @@ class CatsimData(Dataset):
                             'u_ab', 'g_ab', 'r_ab', 'i_ab', 'z_ab', 'y_ab']
         self.num_params = len(self.param_names)
 
-        self.table = fits.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
+        self.table = Table.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
         np.random.shuffle(self.table)  # shuffle just in case order of galaxies matters in original table.
         self.params = self.table[self.param_names]  # array of tuples of len = 18.
 
