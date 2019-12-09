@@ -11,44 +11,45 @@ os.chdir("/home/imendoza/deblend/galaxy-net")
 
 class CatsimGalaxies(Dataset):
 
-    def __init__(self, params, stamp_size=10, min_snr=0.05, filter_dict=None, add_noise=True, verbose=False, snr=None):
+    def __init__(self, survey_name=None, bands=None, stamp_size=10, filter_dict=None, **render_kwargs):
         """
         This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalogue) and returns a
         galaxy drawn from the catalogue with realistic seeing conditions using the WeakLensingDeblending functions.
 
         :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST survey.
+        :param render_kwargs: Additional keyword arguments that will go into the renderer.
         """
+        params = draw_catsim.get_default_params()
+        self.survey_name = params['survey_name'] if not survey_name else survey_name
+        self.bands = params['bands'] if not bands else bands
+        self.filtered_dict = CatsimGalaxies.get_default_filters() if filter_dict is None else filter_dict
 
-        self.snr = snr
-        self.params = params
-        self.filtered_dict = self.params['filter_dict']
-        self.bands = self.params['bands']
-
-        self.table = Table.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
+        self.table = Table.read(params['catalog_name'])
         np.random.shuffle(self.table)  # shuffle just in case order of galaxies matters in original table.
-
         self.cat = self.get_filtered_table()
+
+        self.renderer = draw_catsim.Render(survey_name, bands, stamp_size,
+                                           **render_kwargs)
 
     def __len__(self):
         return len(self.cat)
 
     def __getitem__(self, idx):
         entry = self.cat[idx]
-        obs = draw_catsim.create_obs(self.params)
-        image_size = obs[0].image_width  # should be the same across bands.
-        final = np.zeros((len(self.bands), image_size, image_size))
-
-        for i, band in enumerate(self.bands):
-            final[i, :, :] = draw_catsim.single_band(entry, band, obs[i], self.params,
-                                                     no_psf=False, draw_method='auto', snr=self.snr)
-
-        return final
+        return self.renderer.draw(entry)
 
     def get_filtered_table(self):
         cat = self.table.copy()
         for param, pfilter in self.filtered_dict.items():
             cat = cat[pfilter(param, cat)]
         return cat
+
+    @staticmethod
+    def get_default_filters():
+        filters = dict(
+            i_ab=lambda param, x: x[param] <= 25.3  # cut on magnitude same as BTK.
+        )
+        return filters
 
 
 class CatsimData(Dataset):

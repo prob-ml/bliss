@@ -1,44 +1,10 @@
 from WeakLensingDeblending import descwl
 import numpy as np
-from astropy.table import Table
+from astropy.table import Column
 import galsim
 
 
-# survey_name = 'LSST'
-# bands = ['y', 'z', 'i', 'r', 'g', 'u']
-# obs_generator = []
-# catalogue_name = "/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits"
-# catalogue = Table.read(catalogue_name)
-
-# ToDo: Find average size/maximum size of galaxies to know what stamp size to use.
-# can use the get_size function that Sowmya wrote.
-
-def get_size(catalog, pixel_scale, i_obs_cond):
-    """Returns a astropy.table.column with the size of the galaxy.
-    Galaxy size is estimated as second moments size (r_sec) computed as
-    described in A1 of Chang et.al 2012. The PSF second moment size, psf_r_sec,
-    is computed by galsim from the psf model in obs_cond in the i band.
-    The object size is the defined as sqrt(r_sec**2 + 2*psf_r_sec**2).
-    Args:
-        Args: Class containing input parameters.
-        catalog: Catalog with entries corresponding to one blend.
-        i_obs_cond: `descwl.survey.Survey` class describing
-            observing conditions in i band.
-    Returns:
-        `astropy.table.Column`s: size of the galaxy.
-    """
-    f = catalog['fluxnorm_bulge'] / (catalog['fluxnorm_disk'] + catalog['fluxnorm_bulge'])
-    hlr_d = np.sqrt(catalog['a_d'] * catalog['b_d'])
-    hlr_b = np.sqrt(catalog['a_b'] * catalog['b_b'])
-    r_sec = np.hypot(hlr_d * (1 - f) ** 0.5 * 4.66,
-                     hlr_b * f ** 0.5 * 1.46)
-    psf = i_obs_cond.psf_model
-    psf_r_sec = psf.calculateMomentRadius()
-    size = np.sqrt(r_sec ** 2 + psf_r_sec ** 2) / pixel_scale
-    return Column(size, name='size')
-
-
-def get_params():
+def get_default_params():
     params = dict(
         survey_name='LSST',
         catalog_name="/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits",
@@ -48,73 +14,124 @@ def get_params():
     return params
 
 
-def create_obs(params):
-    obs = []
-    for band in params['bands']:
-        # dictionary of default values.
-        survey_dict = descwl.survey.Survey.get_defaults(
-            survey_name=params['survey_name'], filter_band=band)
-        survey_dict['image_width'] = params['stamp_size'] / survey_dict['pixel_scale']  # pixels
-        survey_dict['image_height'] = params['stamp_size'] / survey_dict['pixel_scale']
+class Render(object):
 
-        descwl_survey = descwl.survey.Survey(no_analysis=True,
-                                             survey_name=params['survey_name'],
-                                             filter_band=band, **survey_dict)
-        obs.append(descwl_survey)
+    def __init__(self, survey_name, bands, stamp_size, snr=None, no_psf=None,
+                 min_snr=0.05, truncate_radius=30, add_noise=True, preserve_flux=True,
+                 verbose=False):
+        """
+        Knows how to draw a single entry in CATSIM in the given bands.
+        """
+        self.survey_name = survey_name
+        self.bands = bands
+        self.stamp_size = stamp_size  # arcsecs
+        self.pixel_scale = descwl.survey.Survey.get_defaults(survey_name, '*')['pixel_scale']
+        self.image_size = self.stamp_size / self.pixel_scale  # pixels.
+        self.snr = snr
+        self.min_snr = min_snr
+        self.truncate_radius = truncate_radius
+        self.no_psf = no_psf
+        self.add_noise = add_noise
+        self.galsim_draw_method = 'phot' if no_psf else 'auto'
+        self.preserve_flux = True  # when changing SNR.
+        self.verbose = self.verbose
 
-    return obs
+    def get_obs(self):
+        obs = []
+        for band in self.bands:
+            # dictionary of default values.
+            survey_dict = descwl.survey.Survey.get_defaults(
+                survey_name=self.survey_name, filter_band=band)
 
+            assert self.pixel_scale == survey_dict['pixel_scale'], "Pixel scale does not match particular band?"
+            survey_dict['image_width'] = self.stamp_size / self.pixel_scale  # pixels
+            survey_dict['image_height'] = self.stamp_size / self.pixel_scale
 
-def single_band(entry, band, single_obs, params, no_psf=True, draw_method='auto', snr=None):
-    """
-    Builds galaxy from a single entry in the catalogue.
-    :param entry:
-    :param obs_cond:
-    :return:
-    """
+            descwl_survey = descwl.survey.Survey(no_analysis=True,
+                                                 survey_name=self.survey_name,
+                                                 filter_band=band, **survey_dict)
+            obs.append(descwl_survey)
 
-    # random deviation from exactly in center of center pixel.
-    entry['ra'], entry['dec'] = (np.random.rand(2) - 0.5) * single_obs.pixel_scale
+        return obs
 
-    galaxy_builder = descwl.model.GalaxyBuilder(
-        single_obs, no_disk=False, no_bulge=False,
-        no_agn=False, verbose_model=False)
-    galaxy = galaxy_builder.from_catalog(entry,
-                                         entry['ra'],
-                                         entry['dec'],
-                                         band)
+    def get_size(self, cat):
+        """
+        Return the size of the catalog given the current rendering observing conditions / survey.
+        """
+        obs = self.get_obs()
+        assert 'i' in self.bands, "This function requires the i band to be present."
+        i_obs = obs[self.bands.index('i')]
+        f = cat['fluxnorm_bulge'] / (cat['fluxnorm_disk'] + cat['fluxnorm_bulge'])
+        hlr_d = np.sqrt(cat['a_d'] * cat['b_d'])
+        hlr_b = np.sqrt(cat['a_b'] * cat['b_b'])
+        r_sec = np.hypot(hlr_d * (1 - f) ** 0.5 * 4.66,
+                         hlr_b * f ** 0.5 * 1.46)
+        psf = i_obs.psf_model
+        psf_r_sec = psf.calculateMomentRadius()
+        size = np.sqrt(r_sec ** 2 + psf_r_sec ** 2) / self.pixel_scale
+        return Column(size, name='size')
 
-    iso_render_engine = descwl.render.Engine(
-        survey=single_obs,
-        min_snr=params['min_snr'],
-        truncate_radius=30,
-        no_margin=False,
-        verbose_render=False)
+    def draw(self, entry):
+        """
+        Return a multi-band image corresponding to the entry from the catalogue given.
+        """
+        obs = self.get_obs()
+        final = np.zeros((len(self.bands), self.image_size, self.image_size))
 
-    try:
-        iso_render_engine.render_galaxy(
-            galaxy, variations_x=None, variations_s=None, variations_g=None,
-            no_fisher=True, calculate_bias=False, no_analysis=True, no_psf=no_psf, draw_method=draw_method)
+        for i, band in enumerate(self.bands):
+            final[i, :, :] = self.single_band(entry, obs[i], band)
 
-    # Deal with not visible sources.
-    except descwl.render.SourceNotVisible:
-        if params['verbose']:
-            print("Source not visible")
-        raise RuntimeError()
+        return final
 
-    image_temp = galsim.Image(single_obs.image_width, single_obs.image_height)
-    image_temp += single_obs.image
+    def single_band(self, entry, single_obs, band):
+        """
+        Builds galaxy from a single entry in the catalogue.
+        :param entry:
+        :param single_obs:
+        :param band:
+        :return:
+        """
 
-    if params['add_noise']:
-        generator = galsim.random.BaseDeviate(
-            seed=np.random.randint(99999999))
-        noise = galsim.PoissonNoise(
-            rng=generator,
-            sky_level=single_obs.mean_sky_level)
+        # random deviation from exactly in center of center pixel, in arcsecs.
+        entry['ra'], entry['dec'] = (np.random.rand(2) - 0.5) * self.pixel_scale
 
-        if snr:
-            image_temp.addNoiseSNR(noise, snr=snr, preserve_flux=True)
-        else:
-            image_temp.addNoise(noise)
+        galaxy_builder = descwl.model.GalaxyBuilder(single_obs, no_disk=False, no_bulge=False,
+                                                    no_agn=False, verbose_model=False)
 
-    return image_temp
+        galaxy = galaxy_builder.from_catalog(entry, entry['ra'], entry['dec'], band)
+
+        iso_render_engine = descwl.render.Engine(
+            survey=single_obs,
+            min_snr=self.min_snr,
+            truncate_radius=self.truncate_radius,
+            no_margin=False,
+            verbose_render=False)
+
+        try:
+            iso_render_engine.render_galaxy(
+                galaxy, variations_x=None, variations_s=None, variations_g=None,
+                no_fisher=True, calculate_bias=False, no_analysis=True, no_psf=self.no_psf,
+                draw_method=self.galsim_draw_method)
+
+        # Deal with not visible sources.
+        except descwl.render.SourceNotVisible:
+            if self.verbose:
+                print("Source not visible")
+            raise RuntimeError()
+
+        image_temp = galsim.Image(self.image_size, self.image_size)
+        image_temp += self.image_size
+
+        if self.add_noise:
+            generator = galsim.random.BaseDeviate(
+                seed=np.random.randint(99999999))
+            noise = galsim.PoissonNoise(
+                rng=generator,
+                sky_level=single_obs.mean_sky_level)
+
+            if self.snr:
+                image_temp.addNoiseSNR(noise, snr=self.snr, preserve_flux=self.preserve_flux)
+            else:
+                image_temp.addNoise(noise)
+
+        return image_temp.array
