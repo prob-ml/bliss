@@ -16,7 +16,7 @@ def get_default_params():
 
 class Render(object):
 
-    def __init__(self, survey_name, bands, stamp_size, snr=None, no_psf=None,
+    def __init__(self, survey_name, bands, stamp_size, snr=None, no_psf=None, draw_method='auto',
                  min_snr=0.05, truncate_radius=30, add_noise=True, preserve_flux=True,
                  verbose=False):
         """
@@ -33,7 +33,7 @@ class Render(object):
         self.truncate_radius = truncate_radius
         self.no_psf = no_psf
         self.add_noise = add_noise
-        self.galsim_draw_method = 'phot' if no_psf else 'auto'
+        self.draw_method = draw_method
         self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
 
@@ -124,7 +124,7 @@ class Render(object):
             iso_render_engine.render_galaxy(
                 galaxy, variations_x=None, variations_s=None, variations_g=None,
                 no_fisher=True, calculate_bias=False, no_analysis=True, no_psf=self.no_psf,
-                draw_method=self.galsim_draw_method)
+                draw_method=self.draw_method)
 
         except descwl.render.SourceNotVisible:
             if self.verbose:
@@ -139,7 +139,7 @@ class Render(object):
                 seed=np.random.randint(99999999))
             noise = galsim.PoissonNoise(
                 rng=generator,
-                sky_level=single_obs.mean_sky_level)
+                sky_level=single_obs.mean_sky_level)  # remember PoissonNoise assumes background already subtracted off.
 
             if self.snr:
                 image_temp.addNoiseSNR(noise, snr=self.snr, preserve_flux=self.preserve_flux)
