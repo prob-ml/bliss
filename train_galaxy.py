@@ -10,7 +10,7 @@ from pathlib import Path
 import inspect
 import utils
 
-
+# ToDo: Update parameters based on catsim galaxies.
 class TrainGalaxy(object):
 
     def __init__(self, slen: int = 30, epochs: int = 1000, batch_size: int = 100, num_examples=1000,
@@ -27,6 +27,13 @@ class TrainGalaxy(object):
                 return datasets.Synthetic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
                                           num_images=self.num_examples,
                                           centered=True, num_bands=self.num_bands)
+
+            # ToDo: make this better
+            elif self.dataset == 'galcatsim':
+                ds = datasets.CatsimGalaxies(snr=200, add_noise=True, stamp_size=10, verbose=False)
+                self.slen = ds.renderer.image_size
+                self.num_bands = len(ds.bands)
+                return ds
 
             else:
                 raise NotImplementedError("Not implemented that galaxy dataset yet.")
@@ -66,11 +73,12 @@ class TrainGalaxy(object):
               f"num_examples: {self.num_examples}\n"
               f"learning rate: {self.lr}\n"
               f"slen: {self.slen}\n"
-              f"sky level: {self.ds.sky}\n"
-              f"snr: {self.ds.snr}\n"
-              f"flux: {self.ds.flux}\n"
+              # f"sky level: {self.ds.sky}\n"
+              # f"snr: {self.ds.snr}\n"
+              # f"flux: {self.ds.flux}\n"
               f"latent dim: {self.vae.latent_dim}\n",
-              f"num bands: {self.ds.num_bands}", file=prop_file)
+              # f"num bands: {self.ds.num_bands}",
+              file=prop_file)
         prop_file.close()
 
     def train_epoch(self):

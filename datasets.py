@@ -5,6 +5,7 @@ from torch.utils.data import Dataset
 from astropy.table import Table
 import os
 import draw_catsim
+from WeakLensingDeblending import descwl
 
 os.chdir("/home/imendoza/deblend/galaxy-net")
 
@@ -23,20 +24,32 @@ class CatsimGalaxies(Dataset):
         self.survey_name = params['survey_name'] if not survey_name else survey_name
         self.bands = params['bands'] if not bands else bands
         self.filtered_dict = CatsimGalaxies.get_default_filters() if filter_dict is None else filter_dict
+        self.stamp_size = stamp_size
+
+        self.renderer = draw_catsim.Render(self.survey_name, self.bands, self.stamp_size,
+                                           **render_kwargs)
 
         self.table = Table.read(params['catalog_name'])
-        np.random.shuffle(self.table)  # shuffle just in case order of galaxies matters in original table.
+        self.table = self.table[np.random.permutation(len(self.table))]  # shuffle just in case order matters.
         self.cat = self.get_filtered_table()
-
-        self.renderer = draw_catsim.Render(survey_name, bands, stamp_size,
-                                           **render_kwargs)
 
     def __len__(self):
         return len(self.cat)
 
+    # ToDo: Remove all non-visible sources.
     def __getitem__(self, idx):
-        entry = self.cat[idx]
-        return self.renderer.draw(entry)
+        while True:  # loop until visible galaxy is selected.
+            try:
+                entry = self.cat[idx]
+                final, background = self.renderer.draw(entry)
+                break
+
+            except descwl.render.SourceNotVisible:
+                idx = np.random.choice(np.arange(len(self.cat)))  # select some other random galaxy to return.
+
+        return {'image': final,
+                'background': background,
+                'num_galaxies': 1}
 
     def get_filtered_table(self):
         cat = self.table.copy()

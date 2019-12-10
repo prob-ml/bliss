@@ -24,17 +24,18 @@ class Render(object):
         """
         self.survey_name = survey_name
         self.bands = bands
+        self.num_bands = len(self.bands)
         self.stamp_size = stamp_size  # arcsecs
         self.pixel_scale = descwl.survey.Survey.get_defaults(survey_name, '*')['pixel_scale']
-        self.image_size = self.stamp_size / self.pixel_scale  # pixels.
+        self.image_size = int(self.stamp_size / self.pixel_scale)  # pixels.
         self.snr = snr
         self.min_snr = min_snr
         self.truncate_radius = truncate_radius
         self.no_psf = no_psf
         self.add_noise = add_noise
         self.galsim_draw_method = 'phot' if no_psf else 'auto'
-        self.preserve_flux = True  # when changing SNR.
-        self.verbose = self.verbose
+        self.preserve_flux = preserve_flux  # when changing SNR.
+        self.verbose = verbose
 
     def get_obs(self):
         obs = []
@@ -44,8 +45,8 @@ class Render(object):
                 survey_name=self.survey_name, filter_band=band)
 
             assert self.pixel_scale == survey_dict['pixel_scale'], "Pixel scale does not match particular band?"
-            survey_dict['image_width'] = self.stamp_size / self.pixel_scale  # pixels
-            survey_dict['image_height'] = self.stamp_size / self.pixel_scale
+            survey_dict['image_width'] = self.image_size  # pixels
+            survey_dict['image_height'] = self.image_size
 
             descwl_survey = descwl.survey.Survey(no_analysis=True,
                                                  survey_name=self.survey_name,
@@ -59,8 +60,9 @@ class Render(object):
         Return the size of the catalog given the current rendering observing conditions / survey.
         """
         obs = self.get_obs()
-        assert 'i' in self.bands, "This function requires the i band to be present."
+        assert 'i' in self.bands, "Requires the i band to be present."
         i_obs = obs[self.bands.index('i')]
+
         f = cat['fluxnorm_bulge'] / (cat['fluxnorm_disk'] + cat['fluxnorm_bulge'])
         hlr_d = np.sqrt(cat['a_d'] * cat['b_d'])
         hlr_b = np.sqrt(cat['a_b'] * cat['b_b'])
@@ -74,15 +76,26 @@ class Render(object):
     def draw(self, entry):
         """
         Return a multi-band image corresponding to the entry from the catalogue given.
+        The final image includes its background based on survey's sky level.
         """
         obs = self.get_obs()
-        final = np.zeros((len(self.bands), self.image_size, self.image_size))
+        final = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
+        backs = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
 
         for i, band in enumerate(self.bands):
-            final[i, :, :] = self.single_band(entry, obs[i], band)
+            image = self.single_band(entry, obs[i], band)
+            background = self.get_background(obs[i])
+            final[i, :, :] = image + background  # final image includes background.
+            backs[i, :, :] = background
 
-        return final
+        return final, backs
 
+    def get_background(self, single_obs):
+        background = np.zeros((self.image_size, self.image_size), dtype=np.float32)
+        background[:, :] = single_obs.mean_sky_level
+        return background
+
+    # ToDo: More flexibility than drawing exactly centered.
     def single_band(self, entry, single_obs, band):
         """
         Builds galaxy from a single entry in the catalogue.
@@ -113,14 +126,13 @@ class Render(object):
                 no_fisher=True, calculate_bias=False, no_analysis=True, no_psf=self.no_psf,
                 draw_method=self.galsim_draw_method)
 
-        # Deal with not visible sources.
         except descwl.render.SourceNotVisible:
             if self.verbose:
                 print("Source not visible")
-            raise RuntimeError()
+            raise descwl.render.SourceNotVisible  # pass it on with a warning.
 
         image_temp = galsim.Image(self.image_size, self.image_size)
-        image_temp += self.image_size
+        image_temp += single_obs.image
 
         if self.add_noise:
             generator = galsim.random.BaseDeviate(

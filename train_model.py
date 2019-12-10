@@ -64,7 +64,8 @@ if __name__ == "__main__":
     # specify model and dataset.
     parser.add_argument('--model', type=str, help='What model we are training?', choices=list(all_models.keys()),
                         required=True)
-    parser.add_argument('--dataset', type=str, default=None, metavar='DS', choices=['galbasic', 'synthetic'],
+    parser.add_argument('--dataset', type=str, default=None, metavar='DS',
+                        choices=['galbasic', 'synthetic', 'galcatsim'],
                         help='Specifies the dataset to be used to train the model.')
 
     # General training arguments.
