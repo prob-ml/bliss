@@ -10,11 +10,12 @@ from pathlib import Path
 import inspect
 import utils
 
-# ToDo: Update parameters based on catsim galaxies.
+
 class TrainGalaxy(object):
 
-    def __init__(self, slen: int = 30, epochs: int = 1000, batch_size: int = 100, num_examples=1000,
-                 dir_name: str = None, num_bands: int = 1, dataset: str = 'galbasic'):
+    def __init__(self, slen: int = 30, epochs: int = 1000, batch_size: int = 64,
+                 training_examples=100, evaluation_examples=10, num_bands: int = 1, dir_name: str = None,
+                 dataset: str = 'galbasic', num_workers: int = 2):
 
         def decide_dataset():
             if self.dataset == 'galbasic':
@@ -28,9 +29,9 @@ class TrainGalaxy(object):
                                           num_images=self.num_examples,
                                           centered=True, num_bands=self.num_bands)
 
-            # ToDo: make this better
+            # ToDo: make this better, right now it ignores num_bands and slen.
             elif self.dataset == 'galcatsim':
-                ds = datasets.CatsimGalaxies(snr=200, add_noise=True, stamp_size=10, verbose=False)
+                ds = datasets.CatsimGalaxies(snr=200, add_noise=True, stamp_size=8, verbose=False)
                 self.slen = ds.renderer.image_size
                 self.num_bands = len(ds.bands)
                 return ds
@@ -42,7 +43,8 @@ class TrainGalaxy(object):
         self.slen = slen
         self.epochs = epochs
         self.batch_size = batch_size
-        self.num_examples = num_examples
+        self.training_examples = training_examples
+        self.evaluation_examples = evaluation_examples
         self.num_bands = num_bands
         self.lr = 1e-4
         self.ds = decide_dataset()
@@ -55,10 +57,10 @@ class TrainGalaxy(object):
 
         self.optimizer = Adam(self.vae.parameters(), lr=self.lr, weight_decay=1e-6)
         self.test_loader = DataLoader(self.ds, batch_size=self.batch_size,
-                                      num_workers=2, pin_memory=True,
+                                      num_workers=num_workers, pin_memory=True,
                                       sampler=SubsetRandomSampler(test_indices))
         self.train_loader = DataLoader(self.ds, batch_size=self.batch_size,
-                                       num_workers=2, pin_memory=True,
+                                       num_workers=num_workers, pin_memory=True,
                                        sampler=SubsetRandomSampler(train_indices))
 
         self.dir_name = dir_name  # where to save results.
@@ -70,14 +72,15 @@ class TrainGalaxy(object):
         print(f"dataset: {self.dataset} \n"
               f"epochs: {self.epochs} \n"
               f"batch_size: {self.batch_size}\n"
-              f"num_examples: {self.num_examples}\n"
+              f"training_examples: {self.training_examples}\n"
+              f"evaluation_examples: {self.evaluation_examples}\n"
               f"learning rate: {self.lr}\n"
               f"slen: {self.slen}\n"
               # f"sky level: {self.ds.sky}\n"
               # f"snr: {self.ds.snr}\n"
               # f"flux: {self.ds.flux}\n"
               f"latent dim: {self.vae.latent_dim}\n",
-              # f"num bands: {self.ds.num_bands}",
+              f"num bands: {self.num_bands}",
               file=prop_file)
         prop_file.close()
 
@@ -86,6 +89,10 @@ class TrainGalaxy(object):
         avg_loss = 0.0
 
         for batch_idx, data in enumerate(self.train_loader):
+
+            if batch_idx >= self.training_examples:
+                break
+
             image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
             background = data["background"].cuda()
 
@@ -96,7 +103,7 @@ class TrainGalaxy(object):
             loss.backward()  # propagate this loss in the network.
             self.optimizer.step()  # only part where weights are changed.
 
-        avg_loss /= len(self.train_loader.sampler)
+        avg_loss /= self.batch_size * self.training_examples
         return avg_loss
 
     def evaluate_and_log(self, epoch):
@@ -128,6 +135,10 @@ class TrainGalaxy(object):
 
         with torch.no_grad():  # no need to compute gradients outside training.
             for batch_idx, data in enumerate(self.test_loader):
+
+                if batch_idx > self.evaluation_examples:  # break after enough examples have been taken.
+                    break
+
                 image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
                 background = data["background"].cuda()
                 loss = self.vae.loss(image, background)
@@ -135,8 +146,8 @@ class TrainGalaxy(object):
                 mse = self.vae.mse(image, background)
                 avg_mse += mse.item()
 
-        avg_loss /= len(self.test_loader.sampler)
-        avg_mse /= len(self.test_loader.sampler)
+        avg_loss /= self.batch_size * self.evaluation_examples
+        avg_mse /= self.batch_size * self.evaluation_examples
         return avg_loss, avg_mse
 
     def plot_reconstruction(self, epoch):

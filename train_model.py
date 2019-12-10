@@ -54,7 +54,7 @@ if __name__ == "__main__":
                         help='run-specific directory to read from / write to')
     parser.add_argument('--overwrite', action='store_true',
                         help='Whether to overwrite if directory already exists.')
-    parser.add_argument('--seed', type=int, default=64, metavar='S',
+    parser.add_argument('--seed', type=int, default=42, metavar='S',
                         help='Random seed for tensor flow cuda.')
     parser.add_argument('--nocuda', action='store_true',
                         help="whether to using a discrete graphics card")
