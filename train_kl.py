@@ -35,7 +35,7 @@ sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
-full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device)
+full_background = sdss_hubble_data.sdss_background.unsqueeze(0).to(device) + 88.
 
 
 # define VAE
@@ -68,7 +68,7 @@ psf_og = torch.Tensor(np.array([psf_r])).to(device)
 # define psf transform
 psf_transform = psf_transform_lib.PsfLocalTransform(psf_og,
 									full_image.shape[-1],
-									kernel_size = 3)
+									kernel_size = 3, init_bias = 10)
 psf_transform.to(device)
 
 # filename = './fits/results_11042019/wake_sleep-loc630x310-11042019'
@@ -92,7 +92,7 @@ vae_optimizer = optim.Adam([
 
 run_joint_wake(full_image, full_background, star_encoder, psf_transform,
                     optimizer = vae_optimizer,
-                    n_epochs = 2000,
-                    n_samples = 1,
-                    encoder_outfile = './fits/results_11202019/map_starnet2',
+                    n_epochs = 4000,
+                    n_samples = 40,
+                    encoder_outfile = './fits/results_11202019/kl_starnet2',
                     psf_outfile = '././fits/results_11202019/identity_psf')
