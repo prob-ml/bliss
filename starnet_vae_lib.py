@@ -24,7 +24,8 @@ class Normalize2d(nn.Module):
 
 
 class StarEncoder(nn.Module):
-    def __init__(self, full_slen, stamp_slen, step, edge_padding, n_bands, max_detections):
+    def __init__(self, full_slen, stamp_slen, step, edge_padding, n_bands, max_detections,
+                        fmin = 0.0):
 
         super(StarEncoder, self).__init__()
 
@@ -34,11 +35,12 @@ class StarEncoder(nn.Module):
         self.step = step # number of pixels to shift every subimage
         self.n_bands = n_bands
 
+        self.fmin = fmin
+
         self.edge_padding = edge_padding
 
         self.tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
                                                         stamp_slen, step);
-        self.n_patches = self.tile_coords.shape[0]
 
 
         # TODO: make this variable for mean stars
@@ -284,9 +286,17 @@ class StarEncoder(nn.Module):
                             trim_images = False, clip_max_stars = False):
         assert len(images_full.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
         assert images_full.shape[1] == self.n_bands
-        assert images_full.shape[2] == self.full_slen
-        assert images_full.shape[3] == self.full_slen
 
+        full_slen = images_full.shape[-1]
+
+        if not (images_full.shape[-1] == self.full_slen):
+            # get the coordinates
+            tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
+                                                        self.stamp_slen,
+                                                        self.step);
+        else:
+            # else, use the cached coordinates
+            tile_coords = self.tile_coords
 
         batchsize = images_full.shape[0]
 
@@ -300,10 +310,10 @@ class StarEncoder(nn.Module):
 
             # get parameters in patch as well
             subimage_locs, subimage_fluxes, n_stars, is_on_array = \
-                image_utils.get_params_in_patches(self.tile_coords,
+                image_utils.get_params_in_patches(tile_coords,
                                                   locs,
                                                   fluxes,
-                                                  self.full_slen,
+                                                  full_slen,
                                                   self.stamp_slen,
                                                   self.edge_padding)
 
@@ -332,19 +342,28 @@ class StarEncoder(nn.Module):
     # Modules to sample our variational distribution and get parameters on the full image
     ######################
     def _get_full_params_from_sampled_params(self, subimage_locs_sampled,
-                                                subimage_fluxes_sampled):
+                                                subimage_fluxes_sampled,
+                                                full_slen):
+
         n_samples = subimage_locs_sampled.shape[0]
         n_image_stamps = subimage_locs_sampled.shape[1]
 
         assert self.n_bands == subimage_fluxes_sampled.shape[-1]
 
-        assert (n_image_stamps % self.tile_coords.shape[0]) == 0
+        if not (full_slen == self.full_slen):
+            tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
+                                                        self.stamp_slen,
+                                                        self.step);
+        else:
+            tile_coords = self.tile_coords
+
+        assert (n_image_stamps % tile_coords.shape[0]) == 0
 
         locs_full_image, fluxes_full_image, n_stars_full = \
             image_utils.get_full_params_from_patch_params(subimage_locs_sampled.view(n_samples * n_image_stamps, -1, 2),
                                                           subimage_fluxes_sampled.view(n_samples * n_image_stamps, -1, self.n_bands),
-                                                        self.tile_coords,
-                                                        self.full_slen,
+                                                        tile_coords,
+                                                        full_slen,
                                                         self.stamp_slen,
                                                         self.edge_padding)
 
@@ -361,6 +380,8 @@ class StarEncoder(nn.Module):
         # our sampling only works for one image at a time at the moment ...
         assert full_image.shape[0] == 1
 
+        full_slen = full_image.shape[-1]
+
         # the image stamps
         image_stamps = self.get_image_stamps(full_image,
                             locs = None, fluxes = None, trim_images = False)[0]
@@ -370,19 +391,20 @@ class StarEncoder(nn.Module):
         # pass through NN
         h = self._forward_to_last_hidden(image_stamps, background_stamps)
 
+        # get log probs
+        log_probs = self._get_logprobs_from_last_hidden_layer(h);
+
         if not training:
             h = h.detach()
-
-        # get log probs
-        log_probs = self._get_logprobs_from_last_hidden_layer(h).detach()
+            log_probs = log_probs.detach()
 
         # sample number of stars
         if n_stars is None:
             if return_map:
-                n_stars_sampled = torch.argmax(log_probs, dim = 1).repeat(n_samples).view(n_samples, -1)
+                n_stars_sampled = torch.argmax(log_probs.detach(), dim = 1).repeat(n_samples).view(n_samples, -1)
 
             else:
-                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs), n_samples).view(n_samples, -1)
+                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs.detach()), n_samples).view(n_samples, -1)
         else:
             n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
 
@@ -413,12 +435,13 @@ class StarEncoder(nn.Module):
         log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
 
         subimage_fluxes_sampled = \
-            torch.exp(log_flux_sampled) * is_on_array.unsqueeze(3).float()
+            (torch.exp(log_flux_sampled) + self.fmin) * is_on_array.unsqueeze(3).float()
 
         # get parameters on full image
         locs_full_image, fluxes_full_image, n_stars_full = \
             self._get_full_params_from_sampled_params(subimage_locs_sampled,
-                                                        subimage_fluxes_sampled)
+                                                        subimage_fluxes_sampled,
+                                                        full_slen)
 
         if return_log_q:
             log_q_locs = (utils.eval_normal_logprob(logit_locs_sampled, logit_loc_mean,

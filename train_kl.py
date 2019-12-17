@@ -44,7 +44,8 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = full_image.shape[-1],
                                            step = 2,
                                            edge_padding = 2,
                                            n_bands = full_image.shape[1],
-                                           max_detections = 2)
+                                           max_detections = 2,
+                                           fmin = 1000.)
 
 star_encoder.to(device)
 
@@ -79,10 +80,10 @@ psf_transform.to(device)
 # print('loading encoder from: ', init_encoder)
 # star_encoder.load_state_dict(torch.load(init_encoder,
 #                                map_location=lambda storage, loc: storage));
-# star_encoder.to(device)
+star_encoder.to(device)
 
 # load optimizer
-encoder_lr = 1e-5
+encoder_lr = 1e-4
 vae_optimizer = optim.Adam([
                     {'params': star_encoder.parameters(),
                     'lr': encoder_lr}],

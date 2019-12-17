@@ -202,6 +202,46 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
 
 
 # TODO: this should be the same as run_wake ... just with a different optimizer
+def get_kl_loss(full_image, full_background, star_encoder, psf_transform,
+                    n_samples, cached_grid = None,
+                    training = True):
+
+    # get psf
+    psf = psf_transform.forward().detach()
+
+    sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
+        log_q_locs, log_q_fluxes, log_q_n_stars = \
+            star_encoder.sample_star_encoder(full_image, full_background,
+                                    n_samples,
+                                    return_map = False,
+                                    return_log_q = True,
+                                    training = training)
+
+    # priors
+    # TODO: pass in prior params as arguments
+    poisson_prior = sampled_n_stars_full.float() * np.log(2000.) - \
+                        torch.lgamma(sampled_n_stars_full.float() + 1)
+
+    flux_prior = torch.log(sampled_fluxes_full_image + 1e-16) * \
+                (sampled_fluxes_full_image > 0).float().detach() * (3/2)
+
+    flux_prior = flux_prior.sum(-1).sum(-1)
+
+    # get loss
+    neg_logprob = get_psf_loss(full_image, full_background,
+                                sampled_locs_full_image,
+                                sampled_fluxes_full_image,
+                                n_stars = sampled_n_stars_full.detach(),
+                                psf = psf,
+                                pad = 5, grid = cached_grid)[1]
+
+    entropy_term = - log_q_locs - log_q_fluxes - log_q_n_stars
+
+    loss_i = neg_logprob - poisson_prior - flux_prior - entropy_term
+
+    return loss_i, log_q_n_stars
+
+
 def run_joint_wake(full_image, full_background, star_encoder, psf_transform, optimizer,
                     n_epochs, n_samples, encoder_outfile, psf_outfile,
                     use_iwae = False):
@@ -219,30 +259,14 @@ def run_joint_wake(full_image, full_background, star_encoder, psf_transform, opt
 
         optimizer.zero_grad()
 
-        # get psf
-        psf = psf_transform.forward()
+        loss_i, log_q_n_stars = \
+            get_kl_loss(full_image, full_background, star_encoder, psf_transform,
+                            n_samples, cached_grid)
 
-        sampled_locs_full_image, sampled_fluxes_full_image, sampled_n_stars_full, \
-            log_q_locs, log_q_fluxes, log_q_n_stars = \
-                star_encoder.sample_star_encoder(full_image, full_background,
-                                        n_samples,
-                                        return_map = False,
-                                        return_log_q = True,
-                                        training = True)
+        control_var, _ = get_kl_loss(full_image, full_background, star_encoder, psf_transform,
+                                        n_samples, cached_grid, training = False)
 
-        # get loss
-        neg_logprob = get_psf_loss(full_image, full_background,
-                                    sampled_locs_full_image,
-                                    sampled_fluxes_full_image,
-                                    n_stars = sampled_n_stars_full.detach(),
-                                    psf = psf,
-                                    pad = 5, grid = cached_grid)[1]
-
-        entropy_term = - log_q_locs - log_q_fluxes - log_q_n_stars
-
-        loss_i = neg_logprob - entropy_term
-
-        ps_loss = loss_i.detach() * log_q_n_stars + loss_i
+        ps_loss = (loss_i - control_var).detach() * log_q_n_stars + loss_i
 
         ps_loss.mean().backward()
         optimizer.step()

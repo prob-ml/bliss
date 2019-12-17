@@ -3,14 +3,18 @@ import numpy as np
 
 def filter_params(locs, fluxes, slen, pad = 5):
     assert len(locs.shape) == 2
-    assert len(fluxes.shape) == 1
+
+    if fluxes is not None:
+        assert len(fluxes.shape) == 1
 
     _locs = locs * (slen - 1)
     which_params = (_locs[:, 0] > pad) & (_locs[:, 0] < (slen - pad)) & \
                         (_locs[:, 1] > pad) & (_locs[:, 1] < (slen - pad))
 
-
-    return locs[which_params], fluxes[which_params]
+    if fluxes is not None:
+        return locs[which_params], fluxes[which_params]
+    else:
+        return locs[which_params], None
 
 def get_locs_error(locs, true_locs):
     # get matrix of Linf error in locations
@@ -23,7 +27,8 @@ def get_fluxes_error(fluxes, true_fluxes):
     return torch.abs(torch.log10(fluxes).unsqueeze(0) - \
                      torch.log10(true_fluxes).unsqueeze(1))
 
-def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5):
+def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5,
+                        slack = 0.5):
 
     est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
     true_locs, true_fluxes = filter_params(true_locs, true_fluxes, slen, pad)
@@ -35,9 +40,9 @@ def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 
 
     locs_error = get_locs_error(est_locs * (slen - 1), true_locs * (slen - 1))
 
-    completeness_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 1).float()
+    completeness_bool = torch.any((locs_error < slack) * (fluxes_error < slack), dim = 1).float()
 
-    tpr_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 0).float()
+    tpr_bool = torch.any((locs_error < slack) * (fluxes_error < slack), dim = 0).float()
 
     return completeness_bool.mean(), tpr_bool.mean(), completeness_bool, tpr_bool
 
