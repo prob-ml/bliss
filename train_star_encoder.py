@@ -30,8 +30,9 @@ torch.backends.cudnn.benchmark = False
 # data parameters
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
-data_params['min_stars'] = 2000
-data_params['max_stars']= 2000
+data_params['min_stars'] = 1000
+data_params['max_stars']= 1300
+data_params['mean_stars'] = 1200
 
 print(data_params)
 
