@@ -30,9 +30,6 @@ torch.backends.cudnn.benchmark = False
 # data parameters
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
-data_params['min_stars'] = 1000
-data_params['max_stars']= 1300
-data_params['mean_stars'] = 1200
 
 print(data_params)
 
@@ -85,7 +82,7 @@ optimizer = optim.Adam([
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
-n_epochs = 1001
+n_epochs = 201
 print_every = 20
 print('training')
 

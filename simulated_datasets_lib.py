@@ -269,11 +269,11 @@ class StarsDataset(Dataset):
                 is_on_array.unsqueeze(2).float()
 
         # draw fluxes
-        # base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
-        #                         shape = (batchsize, self.max_stars))
-        # just for fun: lets see what happens
-        base_log_fluxes = torch.rand(batchsize, self.max_stars).to(device) * (np.log(self.f_max) - np.log(self.f_min)) + np.log(self.f_min)
-        base_fluxes = torch.exp(base_log_fluxes)
+        base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
+                                shape = (batchsize, self.max_stars))
+        # # just for fun: lets see what happens
+        # base_log_fluxes = torch.rand(batchsize, self.max_stars).to(device) * (np.log(self.f_max) - np.log(self.f_min)) + np.log(self.f_min)
+        # base_fluxes = torch.exp(base_log_fluxes)
 
         if self.n_bands > 1:
             colors = torch.randn(batchsize, self.max_stars, self.n_bands - 1).to(device) * 0.2 - 0.14
