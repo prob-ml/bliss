@@ -30,11 +30,12 @@ torch.backends.cudnn.benchmark = False
 # data parameters
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
+data_params['min_stars'] = 500
+data_params['max_stars']= 500
 
 print(data_params)
 
 # load psf
-# psf_dir = './../multiband_pcat/Data/idR-002583-2-0136/psfs/'
 psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
