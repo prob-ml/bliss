@@ -20,7 +20,7 @@ import fitsio
 
 import json
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 print('device: ', device)
 
 print('torch version: ', torch.__version__)

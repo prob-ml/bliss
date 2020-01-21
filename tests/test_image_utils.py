@@ -15,7 +15,7 @@ from simulated_datasets_lib import _draw_pareto_maxed
 
 import json
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 class TestImageBatching(unittest.TestCase):
     def test_tile_coords(self):

@@ -12,7 +12,7 @@ from psf_transform_lib import get_psf_loss
 
 import time
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration):
     print_every = 10

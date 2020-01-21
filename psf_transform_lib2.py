@@ -6,7 +6,7 @@ from torch.nn.functional import unfold, softmax, pad
 import image_utils
 from utils import eval_normal_logprob
 from simulated_datasets_lib import _get_mgrid
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 def get_psf_params(psfield, band):
     sigma1 = psfield[6]['psf_sigma1'][0][0, band]
