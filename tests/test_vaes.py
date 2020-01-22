@@ -183,7 +183,8 @@ class TestStarEncoder(unittest.TestCase):
 
         locs_full_image, fluxes_full_image, n_stars_full = \
             star_encoder._get_full_params_from_sampled_params(subimage_locs_sampled,
-                                                        subimage_fluxes_sampled)
+                                                        subimage_fluxes_sampled,
+                                                        star_encoder.full_slen)
 
         # test against individually un-patched parameters
         for i in range(n_samples):

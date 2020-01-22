@@ -16,10 +16,10 @@ import json
 
 import fitsio
 
-psf_dir = './../multiband_pcat/Data/idR-002583-2-0136/psfs/'
+psf_dir = './data/'
 psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
-psf_g = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-g.fits')[0].read()
-psf_og = np.array([psf_r, psf_g])
+psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
+psf_og = np.array([psf_r, psf_i])
 
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
@@ -40,7 +40,8 @@ class TestSDSSDataset(unittest.TestCase):
                                     data_params,
                                     n_images = n_images,
                                     sky_intensity = torch.Tensor([686., 1000.]),
-                                    add_noise = True)
+                                    add_noise = True,
+                                    transpose_psf = False)
 
         # get loader
         batchsize = 8

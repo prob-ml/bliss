@@ -142,8 +142,10 @@ class TestStarEncoderObjective(unittest.TestCase):
                                         _log_flux_mean[perm, :],
                                         _log_flux_log_var[perm, :]).sum()
 
-            assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5
-            assert torch.abs(fluxes_loss[i] - min_fluxes_loss) < 1e-5
+            assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5, \
+                    torch.abs(locs_loss[i] - min_locs_loss)
+            assert torch.abs(fluxes_loss[i] - min_fluxes_loss) < 1e-5, \
+                    torch.abs(fluxes_loss[i] - min_fluxes_loss)
 
         # locs_log_probs_all_perm, fluxes_log_probs_all_perm = \
         #     inv_kl_lib._get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array)
