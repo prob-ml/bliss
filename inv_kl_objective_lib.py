@@ -35,19 +35,22 @@ def _permute_losses_mat(losses_mat, perm):
 
     return torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
 
-def get_locs_logprob_all_combs(true_locs, logit_loc_mean, logit_loc_log_var):
+def get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
 
     batchsize = true_locs.shape[0]
 
     # get losses for locations
-    _logit_loc_mean = logit_loc_mean.view(batchsize, 1, logit_loc_mean.shape[1], 2)
-    _logit_loc_log_var = logit_loc_log_var.view(batchsize, 1, logit_loc_mean.shape[1], 2)
+    _loc_mean = loc_mean.view(batchsize, 1, loc_mean.shape[1], 2)
+    _loc_log_var = loc_log_var.view(batchsize, 1, loc_mean.shape[1], 2)
     _true_locs = true_locs.view(batchsize, true_locs.shape[1], 1, 2)
+
+    # this is to return a large error if star is off
+    _true_locs = _true_locs + (_true_locs == 0).float() * 1e16
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    locs_log_probs_all = utils.eval_logitnormal_logprob(_true_locs,
-                            _logit_loc_mean, _logit_loc_log_var).sum(dim = 3)
+    locs_log_probs_all = utils.eval_normal_logprob(_true_locs,
+                            _loc_mean, _loc_log_var).sum(dim = 3)
 
     return locs_log_probs_all
 
@@ -110,7 +113,7 @@ def get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, is_on_array):
     return locs_loss, fluxes_loss, indx
 
 
-def get_params_loss(logit_loc_mean, logit_loc_log_var, \
+def get_params_loss(loc_mean, loc_log_var, \
                         log_flux_mean, log_flux_log_var, log_probs,
                         true_locs, true_fluxes, true_is_on_array,
                         weights):
@@ -121,8 +124,8 @@ def get_params_loss(logit_loc_mean, logit_loc_log_var, \
     # the log prob for each observed location x mean
     locs_log_probs_all = \
         get_locs_logprob_all_combs(true_locs,
-                                    logit_loc_mean,
-                                    logit_loc_log_var)
+                                    loc_mean,
+                                    loc_log_var)
 
     flux_log_probs_all = \
         get_fluxes_logprob_all_combs(true_fluxes, \
@@ -161,16 +164,16 @@ def get_encoder_loss(star_encoder,
                                       trim_images = False)[0]
 
     # get variational parameters
-    logit_loc_mean, logit_loc_log_var, \
+    loc_mean, loc_log_var, \
         log_flux_mean, log_flux_log_var, log_probs = \
             star_encoder(image_stamps, background_stamps, true_n_stars)
 
     if use_l2_loss:
-        logit_loc_log_var = torch.ones((logit_loc_log_var.shape))
+        loc_log_var = torch.ones((logit_loc_log_var.shape))
         log_flux_log_var = torch.ones((log_flux_log_var.shape))
 
     loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
-        get_params_loss(logit_loc_mean, logit_loc_log_var, \
+        get_params_loss(loc_mean, loc_log_var, \
                             log_flux_mean, log_flux_log_var, log_probs, \
                             subimage_locs, subimage_fluxes,
                             true_is_on_array.float(),

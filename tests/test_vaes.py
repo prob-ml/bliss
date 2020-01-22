@@ -42,16 +42,19 @@ class TestStarEncoder(unittest.TestCase):
         n_star_stamps = torch.Tensor(np.random.choice(max_detections, n_image_stamps)).type(torch.LongTensor)
 
         # forward
-        logit_loc_mean, logit_loc_logvar, \
+        loc_mean, loc_logvar, \
             log_flux_mean, log_flux_logvar, log_probs = \
                 star_encoder(image_stamps, background_stamps, n_star_stamps)
 
-        # test we have the correct pattern of zeros
-        assert ((logit_loc_mean != 0).sum(1)[:, 0] == n_star_stamps).all()
-        assert ((logit_loc_mean != 0).sum(1)[:, 1] == n_star_stamps).all()
+        assert torch.all(loc_mean <= 1.0)
+        assert torch.all(loc_mean >= 0.0)
 
-        assert ((logit_loc_logvar != 0).sum(1)[:, 0] == n_star_stamps).all()
-        assert ((logit_loc_logvar != 0).sum(1)[:, 1] == n_star_stamps).all()
+        # test we have the correct pattern of zeros
+        assert ((loc_mean != 0).sum(1)[:, 0] == n_star_stamps).all()
+        assert ((loc_mean != 0).sum(1)[:, 1] == n_star_stamps).all()
+
+        assert ((loc_logvar != 0).sum(1)[:, 0] == n_star_stamps).all()
+        assert ((loc_logvar != 0).sum(1)[:, 1] == n_star_stamps).all()
 
         for n in range(n_bands):
             assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_stamps).all()
@@ -62,8 +65,8 @@ class TestStarEncoder(unittest.TestCase):
 
         # check pattern of zeros
         is_on_array = utils.get_is_on_from_n_stars(n_star_stamps, star_encoder.max_detections)
-        assert torch.all((logit_loc_mean * is_on_array.unsqueeze(2).float()) == logit_loc_mean)
-        assert torch.all((logit_loc_logvar * is_on_array.unsqueeze(2).float()) == logit_loc_logvar)
+        assert torch.all((loc_mean * is_on_array.unsqueeze(2).float()) == loc_mean)
+        assert torch.all((loc_logvar * is_on_array.unsqueeze(2).float()) == loc_logvar)
 
 
         assert torch.all((log_flux_mean * is_on_array.unsqueeze(2).float()) == log_flux_mean)
@@ -75,16 +78,16 @@ class TestStarEncoder(unittest.TestCase):
 
         for i in range(n_image_stamps):
             if(n_star_stamps[i] == 0):
-                assert torch.all(logit_loc_mean[i] == 0)
-                assert torch.all(logit_loc_logvar[i] == 0)
+                assert torch.all(loc_mean[i] == 0)
+                assert torch.all(loc_logvar[i] == 0)
                 assert torch.all(log_flux_mean[i] == 0)
                 assert torch.all(log_flux_logvar[i] == 0)
             else:
                 n_stars_i = int(n_star_stamps[i])
 
-                assert torch.all(logit_loc_mean[i, 0:n_stars_i, :].flatten() == \
-                                    h_out[i, star_encoder.locs_mean_indx_mat[n_stars_i][0:(2 * n_stars_i)]])
-                assert torch.all(logit_loc_logvar[i, 0:n_stars_i, :].flatten() == \
+                assert torch.all(loc_mean[i, 0:n_stars_i, :].flatten() == \
+                                    torch.sigmoid(h_out)[i, star_encoder.locs_mean_indx_mat[n_stars_i][0:(2 * n_stars_i)]])
+                assert torch.all(loc_logvar[i, 0:n_stars_i, :].flatten() == \
                                     h_out[i, star_encoder.locs_var_indx_mat[n_stars_i][0:(2 * n_stars_i)]])
 
                 assert torch.all(log_flux_mean[i, 0:n_stars_i, :].flatten() == \
@@ -101,18 +104,18 @@ class TestStarEncoder(unittest.TestCase):
         # assert torch.all(log_probs == star_encoder.log_softmax(free_probs))
 
         # test that everything works even when n_stars is None
-        logit_loc_mean, logit_loc_logvar, \
+        loc_mean, loc_logvar, \
             log_flux_mean, log_flux_logvar, log_probs = \
                 star_encoder(image_stamps, background_stamps, n_stars = None)
 
         map_n_stars = torch.argmax(log_probs, dim = 1)
 
-        _logit_loc_mean, _logit_loc_logvar, \
+        _loc_mean, _loc_logvar, \
             _log_flux_mean, _log_flux_logvar, _log_probs = \
                 star_encoder(image_stamps, background_stamps, n_stars = map_n_stars)
 
-        assert torch.all(logit_loc_mean == _logit_loc_mean)
-        assert torch.all(logit_loc_logvar == _logit_loc_logvar)
+        assert torch.all(loc_mean == _loc_mean)
+        assert torch.all(loc_logvar == _loc_logvar)
         assert torch.all(log_flux_mean == _log_flux_mean)
         assert torch.all(log_flux_logvar == _log_flux_logvar)
         assert torch.all(log_probs == _log_probs)
@@ -142,18 +145,19 @@ class TestStarEncoder(unittest.TestCase):
         n_star_stamps_sampled = torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_stamps))).type(torch.LongTensor)
 
         h = star_encoder._forward_to_last_hidden(image_stamps, background_stamps).detach()
-        logit_loc_mean, logit_loc_logvar, \
+        loc_mean, loc_logvar, \
             log_flux_mean, log_flux_logvar = \
                 star_encoder._get_params_from_last_hidden_layer(h, n_star_stamps_sampled)
 
         # CHECK THAT THIS MATCHES MY OLD PARAMETERS
         for i in range(n_samples):
-            logit_loc_mean_i, logit_loc_logvar_i, \
+            loc_mean_i, loc_logvar_i, \
                 log_flux_mean_i, log_flux_logvar_i, _ = \
                     star_encoder(image_stamps, background_stamps, n_star_stamps_sampled[i])
 
-            assert torch.all(logit_loc_mean_i == logit_loc_mean[i])
-            assert torch.all(logit_loc_logvar_i == logit_loc_logvar[i])
+            assert (loc_mean_i - loc_mean[i]).abs().max() < 1e-6, \
+                        (loc_mean_i - loc_mean[i]).abs().max()
+            assert torch.all(loc_logvar_i == loc_logvar[i])
             assert torch.all(log_flux_mean_i == log_flux_mean[i])
             assert torch.all(log_flux_logvar_i == log_flux_logvar[i])
 

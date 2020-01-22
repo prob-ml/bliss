@@ -76,7 +76,7 @@ class TestImageBatching(unittest.TestCase):
 
         # draw fluxes
         # fudge factor because sometimes there are ties in the fluxes; this messes up my unnittest
-        fudge_factor = torch.randn((n_images, max_stars, n_bands)) * 1e-6
+        fudge_factor = torch.randn((n_images, max_stars, n_bands)) * 1e-3
         fluxes = (_draw_pareto_maxed(100, 1e6, alpha = 0.5,
                                 shape = (n_images, max_stars, n_bands)) + fudge_factor) * \
                 is_on_array.unsqueeze(2).float()
