@@ -187,8 +187,8 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
     assert (patch_fluxes.shape[0] % tile_coords.shape[0]) == 0
     batchsize = int(patch_fluxes.shape[0] / tile_coords.shape[0])
 
-    assert torch.all(patch_locs <= 1.)
-    assert torch.all(patch_locs >= 0.)
+    # assert torch.all(patch_locs <= 1.)
+    # assert torch.all(patch_locs >= 0.)
     assert (patch_fluxes.shape[0] % batchsize) == 0
     n_stars_in_batch = int(patch_fluxes.shape[0] * patch_fluxes.shape[1] / batchsize)
 
@@ -204,7 +204,7 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
     patch_is_on_bool = (fluxes_full_image > 0).any(2).float() # if flux in any band is nonzero
     n_stars = torch.sum(patch_is_on_bool > 0, dim = 1)
 
-    # puts all the on stars in front 
+    # puts all the on stars in front
     is_on_array_full = utils.get_is_on_from_n_stars(n_stars, n_stars.max())
     indx = is_on_array_full.clone()
     indx[indx == 1] = torch.nonzero(patch_is_on_bool)[:, 1]
