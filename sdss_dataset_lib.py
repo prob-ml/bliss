@@ -164,6 +164,9 @@ class SloanDigitalSkySurvey(Dataset):
 def convert_mag_to_nmgy(mag):
     return 10**((22.5 - mag) / 2.5)
 
+def convert_nmgy_to_mag(nmgy):
+    return 22.5 - 2.5 * torch.log10(nmgy)
+
 class SDSSHubbleData(Dataset):
 
     def __init__(self, sdssdir = '../../celeste_net/sdss_stage_dir/',
@@ -176,7 +179,8 @@ class SDSSHubbleData(Dataset):
                         bands = [2],
                         x0 = 630,
                         x1 = 310,
-                        fudge_conversion = 1.14,
+                        fudge_conversion = 1.0,
+                        background_bias = [0.0],
                         align_bands = True):
 
         super(SDSSHubbleData, self).__init__()
@@ -184,6 +188,8 @@ class SDSSHubbleData(Dataset):
         assert os.path.exists(sdssdir)
 
         self.slen = slen
+        self.x0 = x0
+        self.x1 = x1
 
         # get sdss data
         self.run = run
@@ -261,7 +267,6 @@ class SDSSHubbleData(Dataset):
         which_cols = np.floor(self.locs_full_x1 / len(self.nelec_per_nmgy_full)).astype(int)
         hubble_nmgy = convert_mag_to_nmgy(self.hubble_rmag)
 
-        # self.fudge_conversion = 1.2593
         self.fudge_conversion = fudge_conversion
         self.fluxes_full = hubble_nmgy * self.nelec_per_nmgy[which_cols] * self.fudge_conversion # / self.psf_max
 
@@ -281,6 +286,10 @@ class SDSSHubbleData(Dataset):
         # just a subset
         self.sdss_image = self.sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)]
         self.sdss_background = self.sdss_background_full[:, x0:(x0 + slen), x1:(x1 + slen)]
+
+        self.background_bias = background_bias
+        assert len(self.background_bias) == len(self.bands)
+        self.sdss_background += self.background_bias[:, None, None]
 
         # convert to torch.Tensor
         self.locs = torch.Tensor(self.locs) / (self.slen - 1)

@@ -6,6 +6,7 @@ def filter_params(locs, fluxes, slen, pad = 5):
 
     if fluxes is not None:
         assert len(fluxes.shape) == 1
+        assert len(fluxes) == len(locs)
 
     _locs = locs * (slen - 1)
     which_params = (_locs[:, 0] > pad) & (_locs[:, 0] < (slen - pad)) & \
