@@ -276,7 +276,7 @@ class StarsDataset(Dataset):
         # base_fluxes = torch.exp(base_log_fluxes)
 
         if self.n_bands > 1:
-            colors = torch.randn(batchsize, self.max_stars, self.n_bands - 1).to(device) * 0.2 - 0.14
+            colors = torch.randn(batchsize, self.max_stars, self.n_bands - 1).to(device) * 0.15 - 0.3
 
             _fluxes = 10**(- colors / 2.5) * base_fluxes.unsqueeze(2)
 
