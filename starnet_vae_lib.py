@@ -375,7 +375,8 @@ class StarEncoder(nn.Module):
     def sample_star_encoder(self, full_image,
                                 full_background,
                                 n_samples = 1,
-                                return_map = False,
+                                return_map_n_stars = False,
+                                return_map_star_params = False,
                                 n_stars = None,
                                 return_log_q = False,
                                 training = False):
@@ -403,7 +404,7 @@ class StarEncoder(nn.Module):
 
         # sample number of stars
         if n_stars is None:
-            if return_map:
+            if return_map_n_stars:
                 n_stars_sampled = torch.argmax(log_probs.detach(), dim = 1).repeat(n_samples).view(n_samples, -1)
 
             else:
@@ -419,7 +420,7 @@ class StarEncoder(nn.Module):
             log_flux_mean, log_flux_logvar = \
                 self._get_params_from_last_hidden_layer(h, n_stars_sampled)
 
-        if return_map:
+        if return_map_star_params:
             loc_sd = torch.zeros(loc_logvar.shape).to(device)
             log_flux_sd = torch.zeros(log_flux_logvar.shape).to(device)
         else:
