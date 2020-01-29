@@ -102,11 +102,13 @@ def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid = None):
     max_stars = locs.shape[1]
     assert locs.shape[2] == 2
 
-    assert fluxes.shape[0] == batchsize
-    assert fluxes.shape[1] == max_stars
+    assert fluxes.shape[0] == locs.shape[0]
+    assert fluxes.shape[1] == locs.shape[1]
     assert fluxes.shape[2] == n_bands
     assert len(n_stars) == batchsize
     assert len(n_stars.shape) == 1
+
+    assert max(n_stars) <= locs.shape[1]
 
     if cached_grid is None:
         grid = _get_mgrid(slen)
