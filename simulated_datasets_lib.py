@@ -60,7 +60,7 @@ def _get_mgrid(slen):
     return torch.Tensor(np.dstack((y, x))) / offset
 
 def plot_one_star(slen, locs, psf, cached_grid = None):
-    # locs is batchsize x x_loc x y_loc: takes values between 0 and 1
+    # locs is batchsize x 2: takes values between 0 and 1
     # psf is a slen x slen tensor
 
     # assert torch.all(locs <= 1)
