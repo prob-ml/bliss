@@ -37,7 +37,7 @@ sdss_hubble_data = sdss_dataset_lib.SDSSHubbleData(sdssdir='../celeste_net/sdss_
                                        hubble_cat_file = './hubble_data/NCG7089/' + \
                                         'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
                                         bands = bands,
-                                        background_bias = torch.Tensor([168., 222.]))
+                                        background_bias = torch.Tensor([240., 318.]))
 
 # sdss image
 full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
