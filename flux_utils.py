@@ -117,8 +117,8 @@ class EstimateFluxes(nn.Module):
 
         return neg_loglik - flux_prior
 
-    def optimize(self):
-        optimizer = optim.LBFGS(self.parameters())
+    def optimize(self, max_iter = 20):
+        optimizer = optim.LBFGS(self.parameters(), max_iter = 20)
 
         def closure():
             optimizer.zero_grad()

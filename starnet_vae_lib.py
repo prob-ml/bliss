@@ -236,7 +236,7 @@ class StarEncoder(nn.Module):
 
         loc_mean = torch.sigmoid(loc_logit_mean) * (loc_logit_mean != 0).float()
 
-        # set all to zero if we don't estimate the variance 
+        # set all to zero if we don't estimate the variance
         log_flux_logvar = log_flux_logvar * self.estimate_flux_var
 
         if squeeze_output:
@@ -438,7 +438,7 @@ class StarEncoder(nn.Module):
 
         # sample fluxes
         fluxes_randn = torch.randn(log_flux_mean.shape).to(device);
-        log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
+        log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd * self.estimate_flux_var
 
         subimage_fluxes_sampled = \
             torch.exp(log_flux_sampled) * is_on_array.unsqueeze(3).float()
