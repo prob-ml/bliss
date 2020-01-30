@@ -146,7 +146,8 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
                                 sampled_locs_full_image,
                                 sampled_n_stars_full,
                                 psf.detach(),
-                                ,
+                                # TODO: let this take a full background ...
+                                full_background.reshape(full_background.shape[1], -1).mean(1),
                                 pad = 5,
                                 init_fluxes = sampled_fluxes_full_image)
 
@@ -194,15 +195,15 @@ def run_wake(full_image, full_background, star_encoder, psf_transform, optimizer
     print("writing the psf parameters to " + outfile)
     torch.save(psf_transform.state_dict(), outfile)
 
-    if train_encoder_fluxes:
-        outfile = out_filename + '-encoder-iter' + str(iteration)
-        print("writing the encoder parameters to " + outfile)
-        torch.save(star_encoder.state_dict(), outfile)
-
-    if background_bias is not None:
-        outfile = out_filename + '-background-iter' + str(iteration)
-        sky_intensity = background_bias.forward().view(background_bias.n_bands, -1).mean(1).detach().cpu()
-        np.savetxt(outfile, sky_intensity.numpy())
+    # if train_encoder_fluxes:
+    #     outfile = out_filename + '-encoder-iter' + str(iteration)
+    #     print("writing the encoder parameters to " + outfile)
+    #     torch.save(star_encoder.state_dict(), outfile)
+    #
+    # if background_bias is not None:
+    #     outfile = out_filename + '-background-iter' + str(iteration)
+    #     sky_intensity = background_bias.forward().view(background_bias.n_bands, -1).mean(1).detach().cpu()
+    #     np.savetxt(outfile, sky_intensity.numpy())
 
 
 
