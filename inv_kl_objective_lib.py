@@ -169,8 +169,8 @@ def get_encoder_loss(star_encoder,
             star_encoder(image_stamps, background_stamps, true_n_stars)
 
     if use_l2_loss:
-        loc_log_var = torch.ones((loc_log_var.shape))
-        log_flux_log_var = torch.ones((log_flux_log_var.shape))
+        loc_log_var = torch.zeros((loc_log_var.shape))
+        log_flux_log_var = torch.zeros((log_flux_log_var.shape))
 
     loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
         get_params_loss(loc_mean, loc_log_var, \

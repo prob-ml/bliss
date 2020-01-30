@@ -24,8 +24,9 @@ class Normalize2d(nn.Module):
 
 
 class StarEncoder(nn.Module):
-    def __init__(self, full_slen, stamp_slen, step, edge_padding, n_bands, max_detections,
-                        fmin = 0.0):
+    def __init__(self, full_slen, stamp_slen, step, edge_padding,
+                        n_bands, max_detections,
+                        estimate_flux_var = True):
 
         super(StarEncoder, self).__init__()
 
@@ -35,14 +36,13 @@ class StarEncoder(nn.Module):
         self.step = step # number of pixels to shift every subimage
         self.n_bands = n_bands
 
-        self.fmin = fmin
+        self.estimate_flux_var = float(estimate_flux_var)
 
         self.edge_padding = edge_padding
 
         self.tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
                                                         stamp_slen, step)
         self.n_patches = self.tile_coords.shape[0]
-
 
         # TODO: make this variable for mean stars
         mean_stars_per_patch = 0.4
@@ -235,6 +235,9 @@ class StarEncoder(nn.Module):
         log_flux_logvar = log_flux_logvar.reshape(batchsize, n_samples, self.max_detections, self.n_bands).transpose(0, 1)
 
         loc_mean = torch.sigmoid(loc_logit_mean) * (loc_logit_mean != 0).float()
+
+        # set all to zero if we don't estimate the variance 
+        log_flux_logvar = log_flux_logvar * self.estimate_flux_var
 
         if squeeze_output:
             return loc_mean.squeeze(0), loc_logvar.squeeze(0), \
@@ -438,7 +441,7 @@ class StarEncoder(nn.Module):
         log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd
 
         subimage_fluxes_sampled = \
-            (torch.exp(log_flux_sampled) + self.fmin) * is_on_array.unsqueeze(3).float()
+            torch.exp(log_flux_sampled) * is_on_array.unsqueeze(3).float()
 
         # get parameters on full image
         locs_full_image, fluxes_full_image, n_stars_full = \

@@ -70,7 +70,8 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            step = 2,
                                            edge_padding = 2,
                                            n_bands = psf_og.shape[0],
-                                           max_detections = 2)
+                                           max_detections = 2,
+                                           estimate_flux_var = False)
 
 star_encoder.to(device)
 
@@ -116,11 +117,11 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_2020-01-21/starnet_ri'
+        outfile = './fits/results_2020-01-30/starnet_ri'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_2020-01-21/test_losses-starnet_ri', test_losses)
+        np.savetxt('./fits/results_2020-01-30/test_losses-starnet_ri', test_losses)
 
 print('done')
