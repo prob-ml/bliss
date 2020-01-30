@@ -9,7 +9,7 @@ import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as inv_kl_lib
 
-from wake_sleep_lib import run_joint_wake, run_wake, run_sleep, BackgroundBias
+from wake_sleep_lib import run_wake, run_sleep
 
 import psf_transform_lib
 import psf_transform_lib2
