@@ -57,7 +57,7 @@ def _get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
     # return torch.Tensor(np.dstack((x, y))) / offset
-    return torch.Tensor(np.dstack((y, x))) / offset
+    return (torch.Tensor(np.dstack((y, x))) / offset).to(device)
 
 def plot_one_star(slen, locs, psf, cached_grid = None):
     # locs is batchsize x 2: takes values between 0 and 1
