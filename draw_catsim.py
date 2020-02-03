@@ -2,6 +2,7 @@ from WeakLensingDeblending import descwl
 import numpy as np
 from astropy.table import Column
 import galsim
+import prof
 
 
 def get_default_params():
@@ -16,11 +17,11 @@ def get_default_params():
 
 class Render(object):
 
-    def __init__(self, survey_name, bands, stamp_size, snr=None, no_psf=None, draw_method='auto',
+    def __init__(self, survey_name, bands, stamp_size, snr=None, no_psf=False, draw_method='auto',
                  min_snr=0.05, truncate_radius=30, add_noise=True, preserve_flux=True,
-                 verbose=False):
+                 verbose=False, fix_size=False):
         """
-        Knows how to draw a single entry in CATSIM in the given bands.
+        Can draw a single entry in CATSIM in the given bands.
         """
         self.survey_name = survey_name
         self.bands = bands
@@ -36,6 +37,7 @@ class Render(object):
         self.draw_method = draw_method
         self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
+        self.fix_size = fix_size
 
     def get_obs(self):
         obs = []
@@ -57,7 +59,8 @@ class Render(object):
 
     def get_size(self, cat):
         """
-        Return the size of the catalog given the current rendering observing conditions / survey.
+        Return a astropy.Column with the size of each entry of the catalog given the current
+        rendering observing conditions / survey.
         """
         obs = self.get_obs()
         assert 'i' in self.bands, "Requires the i band to be present."
@@ -82,6 +85,31 @@ class Render(object):
         final = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
         backs = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
 
+        if self.fix_size:
+            # use prof package to not reinvent the wheel.
+            hlr_d = None
+            if entry['a_d'] != 0.0 and entry['b_d'] != 0.0:
+                hlr_d_old = np.sqrt(entry['b_d'] * entry['a_d'])
+                q_d = entry['b_d'] / entry['a_d']
+                hlr_d = self.image_size * self.pixel_scale / 15
+                a_d = hlr_d / np.sqrt(q_d)
+                b_d = hlr_d * np.sqrt(q_d)
+                entry['a_d'] = a_d
+                entry['b_d'] = b_d
+
+            if entry['a_b'] != 0.0 and entry['b_b'] != 0.0:
+
+                if hlr_d is not None:
+                    hlr_b_old = np.sqrt(entry['b_b'] * entry['a_b'])
+                    hlr_b = hlr_d * hlr_b_old / hlr_d_old
+                else:
+                    hlr_b = self.image_size * self.pixel_scale / 15
+                q_b = entry['b_b'] / entry['a_b']
+                entry['a_b'] = hlr_b / np.sqrt(q_b)
+                entry['b_b'] = hlr_b * np.sqrt(q_b)
+
+            # print(entry['a_b'], entry['a_d'], entry['a_b'], entry['b_b'])
+
         for i, band in enumerate(self.bands):
             image = self.single_band(entry, obs[i], band)
             background = self.get_background(obs[i])
@@ -95,7 +123,7 @@ class Render(object):
         background[:, :] = single_obs.mean_sky_level
         return background
 
-    # ToDo: More flexibility than drawing exactly centered.
+    # ToDo: More flexibility than drawing randomly centered in central pixel.
     def single_band(self, entry, single_obs, band):
         """
         Builds galaxy from a single entry in the catalogue.
@@ -106,6 +134,7 @@ class Render(object):
         """
 
         # random deviation from exactly in center of center pixel, in arcsecs.
+        # NOT shared across all bands.
         entry['ra'], entry['dec'] = (np.random.rand(2) - 0.5) * self.pixel_scale
 
         galaxy_builder = descwl.model.GalaxyBuilder(single_obs, no_disk=False, no_bulge=False,
@@ -124,7 +153,7 @@ class Render(object):
             iso_render_engine.render_galaxy(
                 galaxy, variations_x=None, variations_s=None, variations_g=None,
                 no_fisher=True, calculate_bias=False, no_analysis=True, no_psf=self.no_psf,
-                draw_method=self.draw_method)
+                draw_method=self.draw_method)  # saves image in single_obs
 
         except descwl.render.SourceNotVisible:
             if self.verbose:

@@ -13,25 +13,24 @@ import utils
 
 class TrainGalaxy(object):
 
-    def __init__(self, slen: int = 30, epochs: int = 1000, batch_size: int = 64,
+    def __init__(self, slen: int = 40, epochs: int = 1000, batch_size: int = 64,
                  training_examples=100, evaluation_examples=10, num_bands: int = 1, dir_name: str = None,
                  dataset: str = 'galbasic', num_workers: int = 2):
 
         def decide_dataset():
-            if self.dataset == 'galbasic':
-                if self.num_bands > 1:
-                    raise NotImplementedError()
 
-                return datasets.GalBasic(self.slen, num_images=self.num_examples, sky=700)
-
-            elif self.dataset == 'synthetic':  # Jeff coded this one as a proof of concept.
+            if self.dataset == 'synthetic':  # Jeff coded this one as a proof of concept.
                 return datasets.Synthetic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
-                                          num_images=self.num_examples,
-                                          centered=True, num_bands=self.num_bands)
+                                          centered=True, num_bands=self.num_bands, num_images=1000)
 
-            # ToDo: make this better, right now it ignores num_bands and slen.
+            elif self.dataset == 'galbasic':
+                assert self.num_bands == 1, "Galbasic only uses 1 band for now."
+
+                return datasets.GalBasic(self.slen, num_images=10000, sky=700)
+
+            # ToDo: make this better, right now it ignores num_bands, slen, render_kwargs...
             elif self.dataset == 'galcatsim':
-                ds = datasets.CatsimGalaxies(snr=200, add_noise=True, stamp_size=8, verbose=False)
+                ds = datasets.CatsimGalaxies(snr=200, add_noise=True, verbose=False, fix_size=True)
                 self.slen = ds.renderer.image_size
                 self.num_bands = len(ds.bands)
                 return ds
@@ -67,7 +66,7 @@ class TrainGalaxy(object):
         self.save_props()  # save relevant properties to a file so we know how to reconstruct these results.
 
     def save_props(self):
-        # TODO: Create a directory file for easy look-up once we start producing several of these.
+        # TODO: Create a directory file for easy look-up once we start producing a lot of these.
         prop_file = open(f"{self.dir_name}/props.txt", 'w')
         print(f"dataset: {self.dataset} \n"
               f"epochs: {self.epochs} \n"
@@ -76,11 +75,11 @@ class TrainGalaxy(object):
               f"evaluation_examples: {self.evaluation_examples}\n"
               f"learning rate: {self.lr}\n"
               f"slen: {self.slen}\n"
-              # f"sky level: {self.ds.sky}\n"
-              # f"snr: {self.ds.snr}\n"
-              # f"flux: {self.ds.flux}\n"
               f"latent dim: {self.vae.latent_dim}\n",
               f"num bands: {self.num_bands}",
+              # f"sky level: {self.ds.sky}\n",
+              # f"snr: {self.ds.snr}\n",
+              # f"flux: {self.ds.flux}\n",
               file=prop_file)
         prop_file.close()
 

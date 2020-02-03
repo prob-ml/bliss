@@ -12,14 +12,20 @@ os.chdir("/home/imendoza/deblend/galaxy-net")
 
 class CatsimGalaxies(Dataset):
 
-    def __init__(self, survey_name=None, bands=None, stamp_size=10, filter_dict=None, **render_kwargs):
+    def __init__(self, survey_name=None, bands=None, stamp_size=8, filter_dict=None, **render_kwargs):
         """
         This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalogue) and returns a
-        galaxy drawn from the catalogue with realistic seeing conditions using the WeakLensingDeblending functions.
+        galaxy drawn from the catalogue with realistic seeing conditions using functions from WeakLensingDeblending.
+
+        For now, only one galaxy can be returned at once.
 
         :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST survey.
         :param render_kwargs: Additional keyword arguments that will go into the renderer.
+        :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is to exclude >=25.3 i_ab.
+        :param stamp_size: In arcsecs.
         """
+        assert stamp_size >= 8, "Does not seem to work well if the number of pixels is too low."
+
         params = draw_catsim.get_default_params()
         self.survey_name = params['survey_name'] if not survey_name else survey_name
         self.bands = params['bands'] if not bands else bands
@@ -30,7 +36,7 @@ class CatsimGalaxies(Dataset):
                                            **render_kwargs)
 
         self.table = Table.read(params['catalog_name'])
-        self.table = self.table[np.random.permutation(len(self.table))]  # shuffle just in case order matters.
+        self.table = self.table[np.random.permutation(len(self.table))]  # shuffle in case that order matters.
         self.cat = self.get_filtered_table()
 
     def __len__(self):
@@ -45,7 +51,7 @@ class CatsimGalaxies(Dataset):
                 break
 
             except descwl.render.SourceNotVisible:
-                idx = np.random.choice(np.arange(len(self.cat)))  # select some other random galaxy to return.
+                idx = np.random.choice(np.arange(len(self)))  # select some other random galaxy to return.
 
         return {'image': final,
                 'background': background,
@@ -65,58 +71,30 @@ class CatsimGalaxies(Dataset):
         return filters
 
 
-class CatsimData(Dataset):
-
-    def __init__(self):
-        """
-        This class reads the relevant parameters OneDegSq.fits file and returns samples from this
-        ~800k row matrix.
-        """
-        super(CatsimData, self).__init__()
-
-        # pa_disk = pa_bulge (by assumption)
-        self.param_names = ['redshift',
-                            'fluxnorm_bulge', 'fluxnorm_disk', 'fluxnorm_agn',
-                            'a_b', 'a_d', 'b_b', 'b_d', 'pa_disk',
-                            'u_ab', 'g_ab', 'r_ab', 'i_ab', 'z_ab', 'y_ab']
-        self.num_params = len(self.param_names)
-
-        self.table = Table.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
-        np.random.shuffle(self.table)  # shuffle just in case order of galaxies matters in original table.
-        self.params = self.table[self.param_names]  # array of tuples of len = 18.
-
-    def __len__(self):
-        return self.table.shape[0]
-
-    def __getitem__(self, idx):
-        return np.array([self.params[idx][i] for i in range(len(self.param_names))], dtype=np.float32)
-
-
 class GalBasic(Dataset):
 
-    def __init__(self, slen, num_images=1000, padding=3, survey_name='lsst',
-                 snr=200, sky=700, flux=None):
+    def __init__(self, slen, num_images=None, survey_name='lsst',
+                 snr=200, sky=700, flux=None, num_galaxies=1):
         """
         This class uses and returns a random Gaussian Galaxy, the flux is adjusted based on slen and sky so that the
         ratio from image to background is approximately 0.30 like in Jeff's original code.
-
-        This only works with num_bands = 1.
 
         There is always only oen galaxy and it is always randomly located somewhere in the center pixel.
         """
         super(GalBasic, self).__init__()  # runs init of the super class.
 
+        assert slen >= 40, "Does not seem to work well if the number of pixels is too low."
+
         self.slen = slen  # number of pixel dimensions.
-        self.num_images = num_images
-        self.padding = padding  # not used if centered.
         self.snr = snr
         self.centered = True
         self.num_bands = 1
-
+        self.num_galaxies = num_galaxies
         self.sky = sky
         self.pixel_scale = 0.2
+        self.num_images = num_images
 
-        # adjust flux depending on size.
+        # adjust flux depending on size and same ratio as Jeff.
         if flux is None:
             self.flux = 5e4 * (self.slen / 15) ** 2
         else:
@@ -127,10 +105,11 @@ class GalBasic(Dataset):
         self.sigma = self.slen * self.pixel_scale / 8
 
         if self.num_bands > 1 or not self.centered or survey_name != 'lsst':
-            raise NotImplementedError("Not yet implemented multiple bands, not centered galaxy.")
+            raise NotImplementedError("Not yet implemented multiple bands, not centered galaxy, "
+                                      "not lsst survey, or more than one galaxy.")
 
     def __len__(self):
-        return self.num_images
+        return self.num_images  # meaningless
 
     def __getitem__(self, idx):
         """
@@ -151,7 +130,6 @@ class GalBasic(Dataset):
         gal = gal.shift(dx=loc[0], dy=loc[1])  # randomly somewhere in the center pixel.
         img = gal.drawImage(nx=self.slen, ny=self.slen, scale=self.pixel_scale,
                             method='auto')
-        # , poisson_flux=True)
 
         noisy_img = img.copy()
 
@@ -175,7 +153,7 @@ class GalBasic(Dataset):
 class Synthetic(Dataset):
 
     def __init__(self, slen, mean_galaxies=2, min_galaxies=0, max_galaxies=3,
-                 num_images=1600, num_bands=5, padding=3, centered=False,
+                 num_bands=5, padding=3, centered=False, num_images=1000,
                  flux=30000):
         """
         Questions:
@@ -197,7 +175,7 @@ class Synthetic(Dataset):
         self.snr = -1
 
     def __len__(self):
-        return self.num_images
+        return self.num_images  # meaningless.
 
     def __getitem__(self, idx):
         # right now this completely ignores the index.
@@ -238,3 +216,30 @@ class Synthetic(Dataset):
         return {'image': image,
                 'background': background,
                 'num_galaxies': num_galaxies}
+
+
+class CatsimData(Dataset):
+
+    def __init__(self):
+        """
+        This class reads the relevant parameters OneDegSq.fits file and returns samples from this
+        ~800k row matrix.
+        """
+        super(CatsimData, self).__init__()
+
+        # pa_disk = pa_bulge (by assumption)
+        self.param_names = ['redshift',
+                            'fluxnorm_bulge', 'fluxnorm_disk', 'fluxnorm_agn',
+                            'a_b', 'a_d', 'b_b', 'b_d', 'pa_disk',
+                            'u_ab', 'g_ab', 'r_ab', 'i_ab', 'z_ab', 'y_ab']
+        self.num_params = len(self.param_names)
+
+        self.table = Table.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
+        np.random.shuffle(self.table)  # shuffle just in case order of galaxies matters in original table.
+        self.params = self.table[self.param_names]  # array of tuples of len = 18.
+
+    def __len__(self):
+        return self.table.shape[0]
+
+    def __getitem__(self, idx):
+        return np.array([self.params[idx][i] for i in range(len(self.param_names))], dtype=np.float32)
