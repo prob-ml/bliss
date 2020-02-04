@@ -58,10 +58,10 @@ psf_og = power_law_psf.forward().detach()
 ###############
 # sky intensity: for the r and i band
 ###############
-sky_intensity = torch.ones(psf_og.shape[0],
+background = (torch.ones(psf_og.shape[0],
                         data_params['slen'],
                         data_params['slen']) * \
-                torch.Tensor([686., 1123.])[:, None, None].to(device)
+                torch.Tensor([686., 1123.])[:, None, None]).to(device)
 
 # sky_intensity = torch.Tensor([926., 1441.]).to(device)
 # sky_intensity = torch.Tensor([854.]).to(device)
@@ -76,7 +76,7 @@ t0 = time.time()
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(psf_og,
                             data_params,
-                            sky_intensity = sky_intensity,
+                            background = background,
                             n_images = n_images,
                             transpose_psf = False,
                             add_noise = True)
