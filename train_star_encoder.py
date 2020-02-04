@@ -45,23 +45,26 @@ print(data_params)
 # psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 # psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 # psf_og = np.array([psf_r, psf_i])
-bands = [2, 3]
-psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
-init_psf_params = torch.zeros(len(bands), 6)
-for i in range(len(bands)):
-    init_psf_params[i] = psf_transform_lib2.get_psf_params(
-                                    psfield_file,
-                                    band = bands[i])
+# bands = [2, 3]
+# psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+# init_psf_params = torch.zeros(len(bands), 6)
+# for i in range(len(bands)):
+#     init_psf_params[i] = psf_transform_lib2.get_psf_params(
+#                                     psfield_file,
+#                                     band = bands[i])
+init_psf_params = torch.Tensor(np.load('../fits/true_psf_params'))
 power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params.to(device))
 psf_og = power_law_psf.forward().detach()
 
 ###############
 # sky intensity: for the r and i band
 ###############
-background = (torch.ones(psf_og.shape[0],
-                        data_params['slen'],
-                        data_params['slen']) * \
-                torch.Tensor([686., 1123.])[:, None, None]).to(device)
+# background = (torch.ones(psf_og.shape[0],
+#                         data_params['slen'],
+#                         data_params['slen']) * \
+#                 torch.Tensor([686., 1123.])[:, None, None]).to(device)
+background = (torch.Tensor([686., 1123.])[:, None, None]) + \
+            torch.Tensor(np.load('../fits/true_background_bias'))).to(device)
 
 # sky_intensity = torch.Tensor([926., 1441.]).to(device)
 # sky_intensity = torch.Tensor([854.]).to(device)
@@ -151,11 +154,11 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_2020-02-04/starnet_ri_sdss_params'
+        outfile = './fits/results_2020-02-04/starnet_ri_true_params'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_2020-02-04/test_losses-starnet_ri_sdss_params', test_losses)
+        np.savetxt('./fits/results_2020-02-04/test_losses-starnet_ri_true_params', test_losses)
 
 print('done')

@@ -151,6 +151,12 @@ class StarSimulator:
     def __init__(self, psf, slen, background, transpose_psf):
         assert len(psf.shape) == 3
 
+        assert len(background.shape) == 3
+        assert background.shape[0] == psf.shape[0]
+        assert background.shape[1] == slen
+        assert background.shape[2] == slen
+        self.background = background
+
         self.n_bands = psf.shape[0]
         self.psf_og = psf
 
@@ -173,11 +179,6 @@ class StarSimulator:
         # self.psf = self.psf / torch.sum(self.psf)
 
         self.cached_grid = _get_mgrid(slen).to(device)
-
-        assert background.shape[0] == self.n_bands
-        assert background.shape[1] == slen
-        assert background.shape[2] == slen
-        self.background = background
 
     def draw_image_from_params(self, locs, fluxes, n_stars,
                                         add_noise = True):
