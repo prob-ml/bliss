@@ -41,6 +41,7 @@ psf_og = np.array([psf_r, psf_i])
 
 # sky intensity: for the r and i band
 sky_intensity = torch.Tensor([926., 1441.]).to(device)
+print('sky_intensity', sky_intensity)
 # sky_intensity = torch.Tensor([854.]).to(device)
 
 # draw data
