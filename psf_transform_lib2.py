@@ -6,9 +6,14 @@ from torch.nn.functional import unfold, softmax, pad
 import image_utils
 from utils import eval_normal_logprob
 from simulated_datasets_lib import _get_mgrid
+
+import fitsio
+
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
-def get_psf_params(psfield, band):
+def get_psf_params(psfield_fit_file, band):
+    psfield = fitsio.FITS(psfield_fit_file)
+
     sigma1 = psfield[6]['psf_sigma1'][0][0, band]
     sigma2 = psfield[6]['psf_sigma2'][0][0, band]
     sigmap = psfield[6]['psf_sigmap'][0][0, band]
@@ -39,7 +44,6 @@ def get_psf(slen, psf_params, cached_radii_grid = None):
 
 class PowerLawPSF(nn.Module):
     def __init__(self, init_psf_params,
-                    normalization_constant,
                     psf_slen = 25,
                     image_slen =  101):
 
@@ -47,10 +51,8 @@ class PowerLawPSF(nn.Module):
 
         assert len(init_psf_params.shape) == 2
         self.n_bands = init_psf_params.shape[0]
-        assert len(normalization_constant) == self.n_bands
 
-        self.init_psf_params = init_psf_params
-        self.normalization_constant = normalization_constant
+        self.init_psf_params = init_psf_params.clone()
 
         self.psf_slen = psf_slen
         self.image_slen = image_slen
@@ -59,7 +61,15 @@ class PowerLawPSF(nn.Module):
         self.cached_radii_grid = (grid**2).sum(2).sqrt().to(device)
 
         # initial weights
-        self.params = nn.Parameter(init_psf_params)
+        self.params = nn.Parameter(init_psf_params.clone())
+
+        # get normalization_constant
+        self.normalization_constant = torch.zeros(self.n_bands)
+        for i in range(self.n_bands):
+            self.normalization_constant[i] = \
+                1 / get_psf(self.psf_slen,
+                            self.init_psf_params[i],
+                            self.cached_radii_grid).sum()
 
         # initial psf
         self.init_psf = self.get_psf()
@@ -85,3 +95,28 @@ class PowerLawPSF(nn.Module):
         l_pad = (self.image_slen - self.psf_slen) // 2
 
         return pad(psf, (l_pad, ) * 4)
+
+class BackgroundBias(nn.Module):
+    def __init__(self, init_background_params,
+                    image_slen =  101):
+
+        super(BackgroundBias, self).__init__()
+
+        assert len(init_background_params.shape) == 2
+        self.n_bands = init_background_params.shape[0]
+
+        self.init_background_params = init_background_params.clone()
+
+        self.image_slen = image_slen
+
+        # get grid
+        _mgrid = _get_mgrid(image_slen)
+        self.mgrid = torch.stack([_mgrid for i in range(self.n_bands)], dim = 0)
+
+        # initial weights
+        self.params = nn.Parameter(init_background_params.clone())
+
+    def forward(self):
+        return self.params[:, 0][:, None, None] + \
+                    self.params[:, 1][:, None, None] * self.mgrid[:, :, :, 0] + \
+                    self.params[:, 2][:, None, None] * self.mgrid[:, :, :, 1]
