@@ -21,29 +21,48 @@ print('device: ', device)
 
 print('torch version: ', torch.__version__)
 
+###############
 # set seed
+###############
 np.random.seed(65765)
 _ = torch.manual_seed(3453453)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+###############
 # data parameters
+###############
 with open('./data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)
 
+###############
 # load psf
-psf_dir = './data/'
-psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
-psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
-psf_og = np.array([psf_r, psf_i])
+###############
+# psf_dir = './data/'
+# psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
+# psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
+# psf_og = np.array([psf_r, psf_i])
+psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+init_psf_params = torch.zeros(len(bands), 6)
+for i in range(len(bands)):
+    init_psf_params[i] = psf_transform_lib2.get_psf_params(
+                                    psfield_file,
+                                    band = bands[i])
+power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params)
+psf_og = power_law_psf.forward().detach().numpy()
 
+###############
 # sky intensity: for the r and i band
-sky_intensity = torch.Tensor([926., 1441.]).to(device)
+###############
+sky_intensity = torch.Tensor([686., 1123.]).to(device)
+# sky_intensity = torch.Tensor([926., 1441.]).to(device)
 # sky_intensity = torch.Tensor([854.]).to(device)
 
+###############
 # draw data
+###############
 print('generating data: ')
 n_images = 200
 t0 = time.time()
@@ -64,7 +83,9 @@ loader = torch.utils.data.DataLoader(
                  batch_size=batchsize,
                  shuffle=True)
 
+###############
 # define VAE
+###############
 star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            stamp_slen = 7,
                                            step = 2,
@@ -75,7 +96,9 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
 
 star_encoder.to(device)
 
+###############
 # define optimizer
+###############
 learning_rate = 1e-3
 weight_decay = 1e-5
 optimizer = optim.Adam([
@@ -83,6 +106,10 @@ optimizer = optim.Adam([
                     'lr': learning_rate}],
                     weight_decay = weight_decay)
 
+
+###############
+# Train!
+###############
 n_epochs = 201
 print_every = 20
 print('training')
@@ -117,11 +144,11 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_2020-01-30/starnet_ri'
+        outfile = './fits/results_2020-02-04/starnet_ri_sdss_params'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_2020-01-30/test_losses-starnet_ri', test_losses)
+        np.savetxt('./fits/results_2020-02-04/test_losses-starnet_ri_sdss_params', test_losses)
 
 print('done')
