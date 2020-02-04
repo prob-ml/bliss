@@ -9,6 +9,7 @@ import sdss_psf
 import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as objectives_lib
+import psf_transform_lib2 
 
 import time
 
@@ -44,14 +45,15 @@ print(data_params)
 # psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 # psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 # psf_og = np.array([psf_r, psf_i])
+bands = [2, 3]
 psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 init_psf_params = torch.zeros(len(bands), 6)
 for i in range(len(bands)):
     init_psf_params[i] = psf_transform_lib2.get_psf_params(
                                     psfield_file,
                                     band = bands[i])
-power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params)
-psf_og = power_law_psf.forward().detach().numpy()
+power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params.to(device))
+psf_og = power_law_psf.forward().detach().cpu().numpy()
 
 ###############
 # sky intensity: for the r and i band
