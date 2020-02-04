@@ -58,10 +58,13 @@ psf_og = power_law_psf.forward().detach()
 ###############
 # sky intensity: for the r and i band
 ###############
-sky_intensity = torch.Tensor([686., 1123.]).to(device)
+sky_intensity = torch.ones(psf_og.shape[0],
+                        data_params['slen'],
+                        data_params['slen']) * \
+                torch.Tensor([686., 1123.])[:, None, None].to(device)
+
 # sky_intensity = torch.Tensor([926., 1441.]).to(device)
 # sky_intensity = torch.Tensor([854.]).to(device)
-print('sky_intensity', sky_intensity)
 
 
 ###############

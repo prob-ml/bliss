@@ -12,7 +12,7 @@ from torch import optim
 
 class EstimateFluxes(nn.Module):
     def __init__(self, observed_image, locs, n_stars,
-                         psf, sky_intensity,
+                         psf, background,
                          alpha = 0.5,
                          pad = 5,
                          init_fluxes = None):
@@ -23,7 +23,9 @@ class EstimateFluxes(nn.Module):
 
         # observed image is batchsize (or 1) x n_bands x slen x slen
         assert len(observed_image.shape) == 4
+        assert len(background.shape) == 4
         self.observed_image = observed_image
+        self.background = background
 
         # batchsize
         assert len(n_stars) == locs.shape[0]
@@ -31,7 +33,7 @@ class EstimateFluxes(nn.Module):
 
         # get n_bands
         assert observed_image.shape[1] == psf.shape[0]
-        assert len(sky_intensity) == psf.shape[0]
+        assert background.shape[1] == psf.shape[0]
         self.n_bands = psf.shape[0]
 
         self.max_stars = locs.shape[1]
@@ -52,8 +54,6 @@ class EstimateFluxes(nn.Module):
                                                       self.slen, self.slen) * \
                         self.is_on_array[:, :, None, None, None]
 
-        self.sky_intensity = sky_intensity
-
         if init_fluxes is None:
             self._init_fluxes(locs)
         else:
@@ -71,7 +71,7 @@ class EstimateFluxes(nn.Module):
         locs_indx = torch.round(locs * (self.slen - 1)).type(torch.long).clamp(max = self.slen - 2,
                                                                             min = 2)
 
-        sky_subtr_image = self.observed_image - self.sky_intensity[None, :, None, None]
+        sky_subtr_image = self.observed_image - self.background
         self.init_fluxes = torch.zeros(batchsize, self.max_stars, self.n_bands)
 
         for i in range(locs.shape[0]):
@@ -100,7 +100,7 @@ class EstimateFluxes(nn.Module):
 
     def forward(self):
         return (torch.exp(self.log_flux[:, :, :, None, None]) * self.star_basis).sum(1) + \
-                    self.sky_intensity[None, :, None, None]
+                    self.background
 
     def get_loss(self):
         # log likelihood terms

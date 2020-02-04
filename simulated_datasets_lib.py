@@ -148,7 +148,7 @@ def _draw_pareto_maxed(f_min, f_max, alpha, shape):
     return pareto_samples
 
 class StarSimulator:
-    def __init__(self, psf, slen, sky_intensity, transpose_psf):
+    def __init__(self, psf, slen, background, transpose_psf):
         assert len(psf.shape) == 3
 
         self.n_bands = psf.shape[0]
@@ -174,16 +174,17 @@ class StarSimulator:
 
         self.cached_grid = _get_mgrid(slen).to(device)
 
-        assert len(sky_intensity) == self.n_bands
-        assert len(sky_intensity.shape) == 1
-        self.sky_intensity = sky_intensity.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+        assert background.shape[0] == self.n_bands
+        assert background.shape[1] == slen
+        assert background.shape[2] == slen
+        self.background = background
 
     def draw_image_from_params(self, locs, fluxes, n_stars,
                                         add_noise = True):
         images_mean = \
             plot_multiple_stars(self.slen, locs, n_stars, fluxes,
                                     self.psf, self.cached_grid) + \
-                self.sky_intensity
+                self.background[None, :, :, :]
 
         # add noise
         if add_noise:
@@ -204,7 +205,7 @@ class StarsDataset(Dataset):
                          min_stars,
                          f_min,
                          f_max,
-                         sky_intensity,
+                         background,
                          alpha,
                          transpose_psf,
                          add_noise = True):
@@ -212,9 +213,8 @@ class StarsDataset(Dataset):
         self.slen = slen
         self.n_bands = psf.shape[0]
 
-        assert sky_intensity.shape == (self.n_bands, )
-        self.sky_intensity = sky_intensity
-        self.simulator = StarSimulator(psf, slen, sky_intensity, transpose_psf)
+        self.simulator = StarSimulator(psf, slen, background, transpose_psf)
+        self.background = background[None, :, :, :]
 
         # image parameters
         self.max_stars = max_stars
@@ -237,19 +237,13 @@ class StarsDataset(Dataset):
         # set data
         self.set_params_and_images()
 
-        self.background = \
-            torch.ones(self.n_images, self.n_bands, self.slen, self.slen).to(device) * \
-                            self.sky_intensity.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-
-
-
     def __len__(self):
         return self.n_images
 
     def __getitem__(self, idx):
 
         return {'image': self.images[idx],
-                'background': self.background[idx],
+                'background': self.background[0],
                 'locs': self.locs[idx],
                 'fluxes': self.fluxes[idx],
                 'n_stars': self.n_stars[idx]}
@@ -302,7 +296,7 @@ class StarsDataset(Dataset):
 
 def load_dataset_from_params(psf, data_params,
                                 n_images,
-                                sky_intensity,
+                                background,
                                 transpose_psf,
                                 add_noise = True):
     # data parameters
@@ -326,6 +320,6 @@ def load_dataset_from_params(psf, data_params,
                             mean_stars = mean_stars,
                             min_stars = min_stars,
                             alpha = alpha,
-                            sky_intensity = sky_intensity,
+                            background = background,
                             transpose_psf = transpose_psf,
                             add_noise = add_noise)
