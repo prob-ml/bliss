@@ -52,7 +52,7 @@ print(data_params)
 #     init_psf_params[i] = psf_transform_lib2.get_psf_params(
 #                                     psfield_file,
 #                                     band = bands[i])
-init_psf_params = torch.Tensor(np.load('../fits/true_psf_params'))
+init_psf_params = torch.Tensor(np.load('./fits/results_2020-02-04/true_psf_params.npy'))
 power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params.to(device))
 psf_og = power_law_psf.forward().detach()
 
@@ -63,8 +63,8 @@ psf_og = power_law_psf.forward().detach()
 #                         data_params['slen'],
 #                         data_params['slen']) * \
 #                 torch.Tensor([686., 1123.])[:, None, None]).to(device)
-background = (torch.Tensor([686., 1123.])[:, None, None]) + \
-            torch.Tensor(np.load('../fits/true_background_bias'))).to(device)
+background = (torch.Tensor([686., 1123.])[:, None, None] + \
+            torch.Tensor(np.load('./fits/results_2020-02-04/true_background_bias.npy'))).to(device)
 
 # sky_intensity = torch.Tensor([926., 1441.]).to(device)
 # sky_intensity = torch.Tensor([854.]).to(device)
