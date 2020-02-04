@@ -45,7 +45,7 @@ def _expand_psf(psf, slen):
     # sim for slen
     assert (slen % 2) == 1
 
-    psf_expanded = np.zeros((n_bands, slen, slen))
+    psf_expanded = torch.zeros((n_bands, slen, slen))
 
     offset = int((slen - psf_slen) / 2)
 
@@ -159,9 +159,9 @@ class StarSimulator:
 
         # get psf shape to match image shape
         if (slen >= self.psf_og.shape[-1]):
-            self.psf = torch.Tensor(_expand_psf(self.psf_og, slen)).to(device)
+            self.psf = _expand_psf(self.psf_og, slen).to(device)
         else:
-            self.psf = torch.Tensor(_trim_psf(self.psf_og, slen)).to(device)
+            self.psf = _trim_psf(self.psf_og, slen).to(device)
 
         if transpose_psf:
             self.psf = self.psf.transpose(1, 2)

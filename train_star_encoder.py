@@ -9,7 +9,7 @@ import sdss_psf
 import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as objectives_lib
-import psf_transform_lib2 
+import psf_transform_lib2
 
 import time
 
@@ -53,7 +53,7 @@ for i in range(len(bands)):
                                     psfield_file,
                                     band = bands[i])
 power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params.to(device))
-psf_og = power_law_psf.forward().detach().cpu().numpy()
+psf_og = power_law_psf.forward().detach()
 
 ###############
 # sky intensity: for the r and i band
