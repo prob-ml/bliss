@@ -13,7 +13,7 @@ from torch import optim
 class EstimateFluxes(nn.Module):
     def __init__(self, observed_image, locs, n_stars,
                          psf, background,
-                         fmin,
+                         fmin = 1e-3,
                          alpha = 0.5,
                          pad = 5,
                          init_fluxes = None):
@@ -150,9 +150,7 @@ class EstimateFluxes(nn.Module):
 
         old_loss = 1e16
         for i in range(max_outer_iter):
-            optimizer.step(closure)
-
-            loss = self.get_loss()
+            loss = optimizer.step(closure)
 
             if print_every:
                 print(loss)
