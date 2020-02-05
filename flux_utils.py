@@ -65,6 +65,8 @@ class EstimateFluxes(nn.Module):
         self.color_mean = 0.3
         self.color_var = 0.15**2
 
+        self.init_loss = self.get_loss()
+
     def _init_fluxes(self, locs):
         batchsize = locs.shape[0]
 
@@ -99,13 +101,16 @@ class EstimateFluxes(nn.Module):
         self.init_fluxes = self.init_fluxes / self.psf.view(self.n_bands, -1).max(1)[0][None, None, :]
 
     def forward(self):
-        return (torch.exp(self.log_flux[:, :, :, None, None]) * self.star_basis).sum(1) + \
+        recon_mean = (torch.exp(self.log_flux[:, :, :, None, None]) * self.star_basis).sum(1) + \
                     self.background
+        return recon_mean.clamp(min = 1e-6)
 
     def get_loss(self):
         # log likelihood terms
         recon_mean = self.forward()
         error = 0.5 * ((self.observed_image - recon_mean)**2 / recon_mean) + 0.5 * torch.log(recon_mean)
+        assert (~torch.isnan(error)).all()
+
         neg_loglik = error[:, :, self.pad:(self.slen - self.pad), self.pad:(self.slen - self.pad)].sum()
 
         # prior terms
@@ -115,10 +120,21 @@ class EstimateFluxes(nn.Module):
             color_prior = - 0.5 * (colors - self.color_mean)**2 / self.color_var
             flux_prior += (color_prior * self.is_on_array.unsqueeze(-1)).sum()
 
-        return neg_loglik - flux_prior
+        assert ~torch.isnan(flux_prior)
 
-    def optimize(self, max_iter = 20):
-        optimizer = optim.LBFGS(self.parameters(), max_iter = 20)
+        loss = neg_loglik - flux_prior
+
+        return loss
+
+    def optimize(self,
+                max_outer_iter = 10,
+                max_inner_iter = 20,
+                tol = 1e-3
+                print_every = False):
+
+        optimizer = optim.LBFGS(self.parameters(),
+                            max_iter = max_inner_iter,
+                            line_search_fn = 'strong_wolfe')
 
         def closure():
             optimizer.zero_grad()
@@ -126,7 +142,20 @@ class EstimateFluxes(nn.Module):
             loss.backward()
             return loss
 
-        optimizer.step(closure)
+        old_loss = 1e16
+        for i in range(max_outer_iter):
+            optimizer.step(closure)
+
+            loss = self.get_loss()
+
+            if print_every:
+                print(loss)
+
+            diff = (loss - old_loss).abs()
+            if diff < (tol * self.init_loss):
+                break
+
+            old_loss = loss
 
     def return_fluxes(self):
         return torch.exp(self.log_flux.data)

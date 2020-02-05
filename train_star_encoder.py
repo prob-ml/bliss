@@ -59,12 +59,12 @@ psf_og = power_law_psf.forward().detach()
 ###############
 # sky intensity: for the r and i band
 ###############
-# background = (torch.ones(psf_og.shape[0],
-#                         data_params['slen'],
-#                         data_params['slen']) * \
-#                 torch.Tensor([686., 1123.])[:, None, None]).to(device)
-background = (torch.Tensor([686., 1123.])[:, None, None] + \
-            torch.Tensor(np.load('./fits/results_2020-02-04/true_background_bias.npy'))).to(device)
+background = (torch.ones(psf_og.shape[0],
+                        data_params['slen'],
+                        data_params['slen']) * \
+                torch.Tensor([686., 1123.])[:, None, None]).to(device)
+# background = (torch.Tensor([686., 1123.])[:, None, None] + \
+#             torch.Tensor(np.load('./fits/results_2020-02-04/true_background_bias.npy'))).to(device)
 
 # sky_intensity = torch.Tensor([926., 1441.]).to(device)
 # sky_intensity = torch.Tensor([854.]).to(device)
@@ -102,7 +102,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            edge_padding = 2,
                                            n_bands = psf_og.shape[0],
                                            max_detections = 2,
-                                           estimate_flux_var = False)
+                                           estimate_flux = False)
 
 star_encoder.to(device)
 
@@ -154,11 +154,11 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_2020-02-04/starnet_ri_true_back'
+        outfile = './fits/results_2020-02-04/starnet_ri'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_2020-02-04/test_losses-starnet_ri_true_back', test_losses)
+        np.savetxt('./fits/results_2020-02-04/test_losses-starnet_ri', test_losses)
 
 print('done')
