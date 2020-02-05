@@ -45,14 +45,15 @@ print(data_params)
 # psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 # psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 # psf_og = np.array([psf_r, psf_i])
-bands = [2, 3]
-psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
-init_psf_params = torch.zeros(len(bands), 6)
-for i in range(len(bands)):
-    init_psf_params[i] = psf_transform_lib2.get_psf_params(
-                                    psfield_file,
-                                    band = bands[i])
-# init_psf_params = torch.Tensor(np.load('./fits/results_2020-02-04/true_psf_params.npy'))
+
+# bands = [2, 3]
+# psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+# init_psf_params = torch.zeros(len(bands), 6)
+# for i in range(len(bands)):
+#     init_psf_params[i] = psf_transform_lib2.get_psf_params(
+#                                     psfield_file,
+#                                     band = bands[i])
+init_psf_params = torch.Tensor(np.load('./fits/results_2020-02-04/true_psf_params.npy'))
 power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params.to(device))
 psf_og = power_law_psf.forward().detach()
 
@@ -154,11 +155,11 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_2020-02-05/starnet_ri_true_back'
+        outfile = './fits/results_2020-02-05/starnet_ri_true_back_true_psf'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_2020-02-05/test_losses-starnet_ri_true_back', test_losses)
+        np.savetxt('./fits/results_2020-02-05/test_losses-starnet_ri_true_back_true_psf', test_losses)
 
 print('done')
