@@ -151,8 +151,8 @@ class StarEncoder(nn.Module):
         assert torch.all((image - background) > -1000.)
         assert image.shape == background.shape
 
-        log_img = torch.log(image - background + 1000)
-
+        # log_img = torch.log(image - background + 1000)
+        log_img = torch.log(image - image.min() + 1.)
         # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
         # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
         # mins = log_img.view(log_img.shape[0], self.n_bands, -1).min(-1)[0]
