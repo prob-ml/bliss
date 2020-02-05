@@ -129,7 +129,7 @@ class EstimateFluxes(nn.Module):
     def optimize(self,
                 max_outer_iter = 10,
                 max_inner_iter = 20,
-                tol = 1e-3
+                tol = 1e-3,
                 print_every = False):
 
         optimizer = optim.LBFGS(self.parameters(),
