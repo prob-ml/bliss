@@ -59,10 +59,10 @@ psf_og = power_law_psf.forward().detach()
 ###############
 # sky intensity: for the r and i band
 ###############
-background = (torch.ones(psf_og.shape[0],
-                        data_params['slen'],
-                        data_params['slen']) * \
-                torch.Tensor([686., 1123.])[:, None, None]).to(device)
+# background = (torch.ones(psf_og.shape[0],
+#                         data_params['slen'],
+#                         data_params['slen']) * \
+#                 torch.Tensor([686., 1123.])[:, None, None]).to(device)
 background = (torch.Tensor([686., 1123.])[:, None, None] + \
             torch.Tensor(np.load('./fits/results_2020-02-04/true_background_bias.npy'))).to(device)
 
