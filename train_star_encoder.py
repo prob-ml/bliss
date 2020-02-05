@@ -45,7 +45,7 @@ print(data_params)
 # psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
 # psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
 # psf_og = np.array([psf_r, psf_i])
-# bands = [2, 3]
+bands = [2, 3]
 psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 init_psf_params = torch.zeros(len(bands), 6)
 for i in range(len(bands)):
