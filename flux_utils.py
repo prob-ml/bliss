@@ -66,7 +66,6 @@ class EstimateFluxes(nn.Module):
         self.color_var = 0.15**2
 
         self.init_loss = self.get_loss()
-        self.tol = self.init_loss * 1e-3
 
     def _init_fluxes(self, locs):
         batchsize = locs.shape[0]
@@ -130,6 +129,7 @@ class EstimateFluxes(nn.Module):
     def optimize(self,
                 max_outer_iter = 10,
                 max_inner_iter = 20,
+                tol = 1e-3
                 print_every = False):
 
         optimizer = optim.LBFGS(self.parameters(),
@@ -152,7 +152,7 @@ class EstimateFluxes(nn.Module):
                 print(loss)
 
             diff = (loss - old_loss).abs()
-            if diff < self.tol:
+            if diff < (tol * self.init_loss):
                 break
 
             old_loss = loss
