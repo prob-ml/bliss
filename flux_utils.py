@@ -13,6 +13,7 @@ from torch import optim
 class EstimateFluxes(nn.Module):
     def __init__(self, observed_image, locs, n_stars,
                          psf, background,
+                         fmin = 1e-3,
                          alpha = 0.5,
                          pad = 5,
                          init_fluxes = None):
@@ -20,6 +21,7 @@ class EstimateFluxes(nn.Module):
         super(EstimateFluxes, self).__init__()
 
         self.pad = pad
+        self.fmin = fmin
 
         # observed image is batchsize (or 1) x n_bands x slen x slen
         assert len(observed_image.shape) == 4
@@ -58,7 +60,9 @@ class EstimateFluxes(nn.Module):
             self._init_fluxes(locs)
         else:
             self.init_fluxes = init_fluxes
-        self.log_flux = nn.Parameter(torch.log(self.init_fluxes.clone().clamp(min = 1.)))
+
+        self.init_param = torch.log(self.init_fluxes.clamp(min = self.fmin + 1) - self.fmin)
+        self.param = nn.Parameter(self.init_param.clone())
 
         self.alpha = alpha
         # TODO: pass these as an argument
@@ -101,7 +105,8 @@ class EstimateFluxes(nn.Module):
         self.init_fluxes = self.init_fluxes / self.psf.view(self.n_bands, -1).max(1)[0][None, None, :]
 
     def forward(self):
-        recon_mean = (torch.exp(self.log_flux[:, :, :, None, None]) * self.star_basis).sum(1) + \
+        fluxes = torch.exp(self.param[:, :, :, None, None]) + self.fmin
+        recon_mean = (fluxes * self.star_basis).sum(1) + \
                     self.background
         return recon_mean.clamp(min = 1e-6)
 
@@ -114,9 +119,10 @@ class EstimateFluxes(nn.Module):
         neg_loglik = error[:, :, self.pad:(self.slen - self.pad), self.pad:(self.slen - self.pad)].sum()
 
         # prior terms
-        flux_prior = - (self.alpha + 1) * (self.log_flux[:, :, 0] * self.is_on_array).sum()
+        log_flux = self.param + np.log(self.fmin)
+        flux_prior = - (self.alpha + 1) * (log_flux[:, :, 0] * self.is_on_array).sum()
         if self.n_bands > 1:
-            colors = 2.5 * (self.log_flux[:, :, 1:] - self.log_flux[:, :, 0:1]) / np.log(10.)
+            colors = 2.5 * (log_flux[:, :, 1:] - log_flux[:, :, 0:1]) / np.log(10.)
             color_prior = - 0.5 * (colors - self.color_mean)**2 / self.color_var
             flux_prior += (color_prior * self.is_on_array.unsqueeze(-1)).sum()
 
@@ -144,9 +150,7 @@ class EstimateFluxes(nn.Module):
 
         old_loss = 1e16
         for i in range(max_outer_iter):
-            optimizer.step(closure)
-
-            loss = self.get_loss()
+            loss = optimizer.step(closure)
 
             if print_every:
                 print(loss)
@@ -158,4 +162,4 @@ class EstimateFluxes(nn.Module):
             old_loss = loss
 
     def return_fluxes(self):
-        return torch.exp(self.log_flux.data)
+        return torch.exp(self.param.data) + self.fmin
