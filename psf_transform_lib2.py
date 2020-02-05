@@ -86,7 +86,7 @@ class PowerLawPSF(nn.Module):
             else:
                 psf = torch.cat((psf, _psf.unsqueeze(0)))
 
-        return psf
+        return psf.clamp(min = 0.)
 
     def forward(self):
         psf = self.get_psf()
