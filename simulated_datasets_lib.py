@@ -187,7 +187,6 @@ class StarSimulator:
                                     self.psf, self.cached_grid) + \
                 self.background[None, :, :, :]
 
-        images_mean = images_mean.clamp(min = 1e-6)
         # add noise
         if add_noise:
             images = torch.sqrt(images_mean) * torch.randn(images_mean.shape).to(device) + \

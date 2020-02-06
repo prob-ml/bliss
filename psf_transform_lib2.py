@@ -1,5 +1,7 @@
 import torch
 
+import numpy as np
+
 import torch.nn as nn
 from torch.nn.functional import unfold, softmax, pad
 
@@ -14,19 +16,23 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 def get_psf_params(psfield_fit_file, band):
     psfield = fitsio.FITS(psfield_fit_file)
 
-    sigma1 = psfield[6]['psf_sigma1'][0][0, band]
-    sigma2 = psfield[6]['psf_sigma2'][0][0, band]
-    sigmap = psfield[6]['psf_sigmap'][0][0, band]
+    sigma1 = psfield[6]['psf_sigma1'][0][0, band]**2
+    sigma2 = psfield[6]['psf_sigma2'][0][0, band]**2
+    sigmap = psfield[6]['psf_sigmap'][0][0, band]**2
+
     beta = psfield[6]['psf_beta'][0][0, band]
     b = psfield[6]['psf_b'][0][0, band]
     p0 = psfield[6]['psf_p0'][0][0, band]
 
-    return torch.Tensor([sigma1, sigma2, sigmap, beta, b, p0])
+    # I think these parameters are constrained to be positive
+    # take log; we will take exp later
+    return torch.log(torch.Tensor([sigma1, sigma2, sigmap, beta, b, p0]))
 
 def psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
-    term1 = torch.exp(-r**2 / (2 * sigma1**2))
-    term2 = b * torch.exp(-r**2 / (2 * sigma2**2))
-    term3 = p0 * (1 + r**2 / (beta * sigmap**2))**(-beta / 2)
+
+    term1 = torch.exp(-r**2 / (2 * sigma1))
+    term2 = b * torch.exp(-r**2 / (2 * sigma2))
+    term3 = p0 * (1 + r**2 / (beta * sigmap))**(-beta / 2)
 
     return (term1 + term2 + term3) / (1 + b + p0)
 
@@ -39,8 +45,9 @@ def get_psf(slen, psf_params, cached_radii_grid = None):
     else:
         radii_grid = cached_radii_grid
 
-    return psf_fun(radii_grid, psf_params[0], psf_params[1], psf_params[2],
-                   psf_params[3], psf_params[4], psf_params[5])
+    _psf_params = torch.exp(psf_params)
+    return psf_fun(radii_grid, _psf_params[0], _psf_params[1], _psf_params[2],
+                   _psf_params[3], _psf_params[4], _psf_params[5])
 
 class PowerLawPSF(nn.Module):
     def __init__(self, init_psf_params,
@@ -86,7 +93,9 @@ class PowerLawPSF(nn.Module):
             else:
                 psf = torch.cat((psf, _psf.unsqueeze(0)))
 
-        return psf.clamp(min = 0.)
+        assert (psf > 0).all()
+
+        return psf
 
     def forward(self):
         psf = self.get_psf()
