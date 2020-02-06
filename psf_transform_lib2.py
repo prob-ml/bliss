@@ -95,28 +95,3 @@ class PowerLawPSF(nn.Module):
         l_pad = (self.image_slen - self.psf_slen) // 2
 
         return pad(psf, (l_pad, ) * 4)
-
-class BackgroundBias(nn.Module):
-    def __init__(self, init_background_params,
-                    image_slen =  101):
-
-        super(BackgroundBias, self).__init__()
-
-        assert len(init_background_params.shape) == 2
-        self.n_bands = init_background_params.shape[0]
-
-        self.init_background_params = init_background_params.clone()
-
-        self.image_slen = image_slen
-
-        # get grid
-        _mgrid = _get_mgrid(image_slen)
-        self.mgrid = torch.stack([_mgrid for i in range(self.n_bands)], dim = 0)
-
-        # initial weights
-        self.params = nn.Parameter(init_background_params.clone())
-
-    def forward(self):
-        return self.params[:, 0][:, None, None] + \
-                    self.params[:, 1][:, None, None] * self.mgrid[:, :, :, 0] + \
-                    self.params[:, 2][:, None, None] * self.mgrid[:, :, :, 1]
