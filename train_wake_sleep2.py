@@ -148,7 +148,7 @@ for iteration in range(0, 6):
     if iteration == 0:
         encoder_file = init_encoder
     else:
-        encoder_file = init_encoder # filename + '-encoder-iter' + str(iteration)
+        encoder_file = filename + '-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
             torch.Tensor(np.load('./fits/results_2020-02-06/powerlaw_psf_params-iter' + \
                                     str(iteration - 1) + '.npy')).to(device)
