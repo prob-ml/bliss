@@ -147,6 +147,7 @@ for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     if iteration == 0:
         encoder_file = init_encoder
+        planar_background_params = None
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
