@@ -39,8 +39,8 @@ def _fit_plane_to_background(background):
 
     planar_params = np.zeros((n_bands, 3))
     for i in range(n_bands):
-        y = background[i].flatten().detach().numpy()
-        grid = _get_mgrid(slen).detach().numpy()
+        y = background[i].flatten().detach().cpu().numpy()
+        grid = _get_mgrid(slen).detach().cpu().numpy()
 
         x = np.ones((slen**2, 3))
         x[:, 1:] = np.array([grid[:, :, 0].flatten(), grid[:, :, 1].flatten()]).transpose()
