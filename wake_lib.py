@@ -173,7 +173,7 @@ class EstimateModelParams(nn.Module):
 
     def _get_init_background(self, sample_every = 25):
         sampled_background = _sample_image(self.observed_image, sample_every)
-        self.init_background_params = torch.Tensor(_fit_plane_to_background(sampled_background))
+        self.init_background_params = torch.Tensor(_fit_plane_to_background(sampled_background)).to(device)
 
     def _get_init_fluxes(self):
 
