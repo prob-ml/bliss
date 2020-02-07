@@ -76,7 +76,7 @@ psf_og = power_law_psf.forward().detach()
 planar_background_params = torch.zeros(len(bands), 3).to(device)
 planar_background_params[:, 0] = torch.Tensor([686., 1123.])
 planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
-                            planar_background_params = planar_background_params.to(device))
+                            init_background_params = planar_background_params.to(device))
 
 background = planar_background.forward().detach()
 
@@ -112,9 +112,12 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            edge_padding = 2,
                                            n_bands = len(bands),
                                            max_detections = 2,
-                                           estimate_flux_var = False)
+                                           estimate_flux = False)
 
 init_encoder = './fits/results_2020-02-06/starnet_ri'
+star_encoder.load_state_dict(torch.load(init_encoder,
+                                   map_location=lambda storage, loc: storage))
+star_encoder.to(device)
 
 ####################
 # optimzers
@@ -147,10 +150,10 @@ for iteration in range(0, 6):
         encoder_file = filename + '-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
             torch.Tensor(np.load('./fits/results_2020-02-06/powerlaw_psf_params-iter' + \
-                                    str(iteration - 1) + '.npy'))
+                                    str(iteration - 1) + '.npy')).to(device)
         planar_background_params = \
             torch.Tensor(np.load('./fits/results_2020-02-06/planarback_params-iter' + \
-                                    str(iteration - 1) + '.npy'))
+                                    str(iteration - 1) + '.npy')).to(device)
 
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
@@ -159,7 +162,7 @@ for iteration in range(0, 6):
 
     map_locs_full_image, _, map_n_stars_full = \
         star_encoder.sample_star_encoder(full_image,
-                                            full_background,
+                                            torch.ones(full_image.shape).to(device),
                                             return_map_n_stars = True,
                                             return_map_star_params = True)[0:3]
 
