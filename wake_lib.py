@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch import optim
 
 import numpy as np
 
@@ -275,4 +276,43 @@ class EstimateModelParams(nn.Module):
 
         if max_iter > 1:
             if i == (max_iter - 1):
+                print('warning: max iterations reached')
+
+    def run_coordinate_ascent(self, tol = 1e-3,
+                                    max_inner_iter = 10,
+                                    max_outer_iter = 20):
+
+        old_loss = 1e16
+        init_loss = self.get_loss(use_cached_star_basis = True)[1].detach()
+
+        for i in range(max_outer_iter):
+            print('\noptimizing fluxes + background. ')
+            optimizer1 = optim.LBFGS(list(self.flux_params_class.parameters()) +
+                                         list(self.planar_background.parameters()),
+                                max_iter = max_inner_iter,
+                                line_search_fn = 'strong_wolfe')
+
+            self._run_optimizer(optimizer1, tol = 1e-3, max_iter = 1,
+                                use_cached_star_basis = True)
+
+            print('loss: ', self.get_loss(use_cached_star_basis = True)[1].detach())
+
+            print('\noptimizing psf. ')
+            psf_optimizer = optim.LBFGS(list(self.power_law_psf.parameters()),
+                                max_iter = max_inner_iter,
+                                line_search_fn = 'strong_wolfe')
+
+            self._run_optimizer(psf_optimizer, tol = 1e-3, max_iter = 1,
+                                        use_cached_star_basis = False)
+
+            loss = self.get_loss(use_cached_star_basis = False)[1].detach()
+            print('loss: ', loss)
+
+            if (old_loss - loss) < (tol * init_loss):
+                break
+
+            old_loss = loss
+
+        if max_outer_iter > 1:
+            if i == (max_outer_iter - 1):
                 print('warning: max iterations reached')
