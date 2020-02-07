@@ -148,7 +148,7 @@ for iteration in range(0, 6):
     if iteration == 0:
         encoder_file = init_encoder
     else:
-        encoder_file = filename + '-encoder-iter' + str(iteration)
+        encoder_file = init_encoder # filename + '-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
             torch.Tensor(np.load('./fits/results_2020-02-06/powerlaw_psf_params-iter' + \
                                     str(iteration - 1) + '.npy')).to(device)
@@ -184,15 +184,15 @@ for iteration in range(0, 6):
     ########################
     # sleep phase training
     ########################
-    print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
-
-    # update psf
-    loader.dataset.simulator.psf = estimator.get_psf().detach()
-    loader.dataset.simulator.background = estimator.get_background().squeeze(0).detach()
-
-    run_sleep(star_encoder,
-                loader,
-                sleep_optimizer,
-                n_epochs = 11,
-                out_filename = filename + '-encoder',
-                iteration = iteration + 1)
+    # print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
+    #
+    # # update psf
+    # loader.dataset.simulator.psf = estimator.get_psf().detach()
+    # loader.dataset.simulator.background = estimator.get_background().squeeze(0).detach()
+    #
+    # run_sleep(star_encoder,
+    #             loader,
+    #             sleep_optimizer,
+    #             n_epochs = 11,
+    #             out_filename = filename + '-encoder',
+    #             iteration = iteration + 1)
