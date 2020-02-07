@@ -159,7 +159,7 @@ for iteration in range(0, 6):
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage))
-    star_encoder.to(device)
+    star_encoder.to(device); star_encoder.eval(); 
 
     map_locs_full_image, _, map_n_stars_full = \
         star_encoder.sample_star_encoder(full_image,
