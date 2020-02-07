@@ -60,7 +60,7 @@ psf_og = power_law_psf.forward().detach()
 # sky intensity: for the r and i band
 ###############
 import wake_lib
-init_background_params = torch.zeros(len(bands), 3)
+init_background_params = torch.zeros(len(bands), 3).to(device)
 init_background_params[:, 0] = torch.Tensor([686., 1123.])
 planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
                             init_background_params = init_background_params)

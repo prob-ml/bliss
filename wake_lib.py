@@ -67,7 +67,7 @@ class PlanarBackground(nn.Module):
         self.image_slen = image_slen
 
         # get grid
-        _mgrid = _get_mgrid(image_slen)
+        _mgrid = _get_mgrid(image_slen).to(device)
         self.mgrid = torch.stack([_mgrid for i in range(self.n_bands)], dim = 0)
 
         # initial weights
