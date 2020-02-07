@@ -53,7 +53,7 @@ bands = [2, 3]
 #     init_psf_params[i] = psf_transform_lib2.get_psf_params(
 #                                     psfield_file,
 #                                     band = bands[i])
-init_psf_params = torch.Tensor(np.load('./fits/true_powerlaw_psf_params.npy'))
+init_psf_params = torch.Tensor(np.load('./fits/results_2020-02-06/true_powerlaw_psf_params.npy'))
 power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params.to(device))
 psf_og = power_law_psf.forward().detach()
 
@@ -63,9 +63,9 @@ psf_og = power_law_psf.forward().detach()
 import wake_lib
 # init_background_params = torch.zeros(len(bands), 3).to(device)
 # init_background_params[:, 0] = torch.Tensor([686., 1123.])
-init_background_params = torch.Tensor(np.load('./fits/true_planarback_params.npy'))
+init_background_params = torch.Tensor(np.load('./fits/results_2020-02-06/true_planarback_params.npy'))
 planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
-                            init_background_params = init_background_params)
+                            init_background_params = init_background_params.to(device))
 
 background = planar_background.forward().detach()
 
