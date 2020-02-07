@@ -62,12 +62,12 @@ print(data_params)
 
 bands = [2, 3]
 psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
-powerlaw_psf_params = torch.zeros(len(bands), 6)
+powerlaw_psf_params = torch.zeros(len(bands), 6).to(device)
 for i in range(len(bands)):
     powerlaw_psf_params[i] = psf_transform_lib2.get_psf_params(
                                     psfield_file,
                                     band = bands[i])
-power_law_psf = psf_transform_lib2.PowerLawPSF(powerlaw_psf_params.to(device))
+power_law_psf = psf_transform_lib2.PowerLawPSF(powerlaw_psf_params)
 psf_og = power_law_psf.forward().detach()
 
 ###############
@@ -76,7 +76,7 @@ psf_og = power_law_psf.forward().detach()
 planar_background_params = torch.zeros(len(bands), 3).to(device)
 planar_background_params[:, 0] = torch.Tensor([686., 1123.])
 planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
-                            init_background_params = planar_background_params.to(device))
+                            init_background_params = planar_background_params)
 
 background = planar_background.forward().detach()
 
