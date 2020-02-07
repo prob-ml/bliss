@@ -181,7 +181,7 @@ class EstimateModelParams(nn.Module):
                                                                             min = 2)
 
         sky_subtr_image = self.observed_image - self.init_background
-        self.init_fluxes = torch.zeros(self.batchsize, self.max_stars, self.n_bands)
+        self.init_fluxes = torch.zeros(self.batchsize, self.max_stars, self.n_bands).to(device)
 
         for i in range(self.locs.shape[0]):
             if self.observed_image.shape[0] == 1:

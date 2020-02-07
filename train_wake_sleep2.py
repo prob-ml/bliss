@@ -9,6 +9,7 @@ import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as inv_kl_lib
 
+from wake_sleep_lib import run_sleep
 import wake_lib
 
 import psf_transform_lib
@@ -173,12 +174,12 @@ for iteration in range(0, 6):
                                             init_background_params = planar_background_params,
                                             init_fluxes = None,
                                             fmin = data_params['f_min'])
-    estimator.run_coordinate_ascent()
+    estimator.run_coordinate_ascent(tol = 1e-3, max_inner_iter = 50, max_outer_iter = 50)
 
-    np.save('../fits/results_2020-02-06/powerlaw_psf_params-iter' + str(iteration),
-        list(estimator.power_law_psf.parameters())[0].data.numpy())
-    np.save('../fits/results_2020-02-06/planarback_params-iter' + str(iteration),
-        list(estimator.planar_background.parameters())[0].data.numpy())
+    np.save('./fits/results_2020-02-06/powerlaw_psf_params-iter' + str(iteration),
+        list(estimator.power_law_psf.parameters())[0].data.cpu().numpy())
+    np.save('./fits/results_2020-02-06/planarback_params-iter' + str(iteration),
+        list(estimator.planar_background.parameters())[0].data.cpu().numpy())
 
     ########################
     # sleep phase training
