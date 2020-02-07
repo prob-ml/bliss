@@ -184,15 +184,15 @@ for iteration in range(0, 6):
     ########################
     # sleep phase training
     ########################
-    # print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
-    #
-    # # update psf
-    # loader.dataset.simulator.psf = estimator.get_psf().detach()
-    # loader.dataset.simulator.background = estimator.get_background().squeeze(0).detach()
-    #
-    # run_sleep(star_encoder,
-    #             loader,
-    #             sleep_optimizer,
-    #             n_epochs = 11,
-    #             out_filename = filename + '-encoder',
-    #             iteration = iteration + 1)
+    print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
+
+    # update psf
+    loader.dataset.simulator.psf = estimator.get_psf().detach()
+    loader.dataset.simulator.background = estimator.get_background().squeeze(0).detach()
+
+    run_sleep(star_encoder,
+                loader,
+                sleep_optimizer,
+                n_epochs = 11,
+                out_filename = filename + '-encoder',
+                iteration = iteration + 1)
