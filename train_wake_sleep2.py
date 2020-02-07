@@ -176,6 +176,10 @@ for iteration in range(0, 6):
                                             fmin = data_params['f_min'])
     estimator.run_coordinate_ascent(tol = 1e-3, max_inner_iter = 50, max_outer_iter = 50)
 
+    print(map_n_stars_full)
+    print((map_locs_full_image**2).mean())
+    print('**final loss**', estimator.get_loss()[1])
+
     np.save('./fits/results_2020-02-06/powerlaw_psf_params-iter' + str(iteration),
         list(estimator.power_law_psf.parameters())[0].data.cpu().numpy())
     np.save('./fits/results_2020-02-06/planarback_params-iter' + str(iteration),
