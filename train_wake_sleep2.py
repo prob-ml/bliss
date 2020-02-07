@@ -159,7 +159,7 @@ for iteration in range(0, 6):
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage))
-    star_encoder.to(device); star_encoder.eval(); 
+    star_encoder.to(device); star_encoder.eval();
 
     map_locs_full_image, _, map_n_stars_full = \
         star_encoder.sample_star_encoder(full_image,
@@ -184,6 +184,8 @@ for iteration in range(0, 6):
         list(estimator.power_law_psf.parameters())[0].data.cpu().numpy())
     np.save('./fits/results_2020-02-06/planarback_params-iter' + str(iteration),
         list(estimator.planar_background.parameters())[0].data.cpu().numpy())
+    np.save('./fits/results_2020-02-06/fluxes-iter' + str(iteration),
+        estimator.get_fluxes().data.cpu().numpy())
 
     ########################
     # sleep phase training
