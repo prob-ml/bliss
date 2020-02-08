@@ -17,7 +17,7 @@ def get_default_params():
 
 class Render(object):
 
-    def __init__(self, survey_name, bands, stamp_size, snr=None, no_psf=False, draw_method='auto',
+    def __init__(self, survey_name, bands, stamp_size, snr=None,
                  min_snr=0.05, truncate_radius=30, add_noise=True, preserve_flux=True,
                  verbose=False, fix_size=False):
         """
@@ -32,9 +32,7 @@ class Render(object):
         self.snr = snr
         self.min_snr = min_snr
         self.truncate_radius = truncate_radius
-        self.no_psf = no_psf
         self.add_noise = add_noise
-        self.draw_method = draw_method
         self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
         self.fix_size = fix_size
@@ -152,8 +150,7 @@ class Render(object):
         try:
             iso_render_engine.render_galaxy(
                 galaxy, variations_x=None, variations_s=None, variations_g=None,
-                no_fisher=True, calculate_bias=False, no_analysis=True, no_psf=self.no_psf,
-                draw_method=self.draw_method)  # saves image in single_obs
+                no_fisher=True, calculate_bias=False, no_analysis=True)  # saves image in single_obs
 
         except descwl.render.SourceNotVisible:
             if self.verbose:
