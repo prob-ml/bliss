@@ -28,6 +28,7 @@ all_datasets = [
 ]
 
 
+# @profile
 def training(train_module, epochs=None, seed=None, evaluate=None, **kwargs):
     for epoch in range(0, epochs):
         np.random.seed(seed + epoch)
@@ -41,6 +42,7 @@ def training(train_module, epochs=None, seed=None, evaluate=None, **kwargs):
                 train_module.evaluate_and_log(epoch)
 
 
+#@profile
 def run(args):
     if args['model'] not in all_models:
         raise NotImplementedError("Not implemented this model yet.")
@@ -55,7 +57,7 @@ if __name__ == "__main__":
     # Setup arguments.
     parser = argparse.ArgumentParser(description='Training model [argument parser]',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--device', type=int, default=0, metavar='DEV',
+    parser.add_argument('--device', type=int, default=1, metavar='DEV',
                         help='GPU device ID')
     parser.add_argument('--dir-name', type=str, default="test", metavar='DIR',
                         help='run-specific directory to read from / write to')
@@ -65,8 +67,6 @@ if __name__ == "__main__":
                         help='Random seed for tensor flow cuda.')
     parser.add_argument('--nocuda', action='store_true',
                         help="whether to using a discrete graphics card")
-    parser.add_argument('--evaluate', type=int, default=None, help='Whether to evaluate and log the model at some '
-                                                                   'specific number of epochs.')
 
     # General training arguments.
     parser.add_argument('--batch-size', type=int, default=64, metavar='BS',
@@ -77,6 +77,8 @@ if __name__ == "__main__":
                         help='Number of training examples (batches) used to train in a single epoch.')
     parser.add_argument('--evaluation-examples', type=int, default=10, metavar='EE',
                         help='Number of evaluation examples (batches) used to evaluate in a single epoch.')
+    parser.add_argument('--evaluate', type=int, default=None, help='Whether to evaluate and log the model at some '
+                                                                   'specific number of epochs.')
 
     # specify model and dataset.
     parser.add_argument('--model', type=str, help='What model we are training?', choices=list(all_models.keys()),

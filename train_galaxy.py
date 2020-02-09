@@ -13,30 +13,9 @@ import utils
 
 class TrainGalaxy(object):
 
-    def __init__(self, slen: int = 40, epochs: int = 1000, batch_size: int = 64,
-                 training_examples=100, evaluation_examples=10, num_bands: int = 1, dir_name: str = None,
-                 dataset: str = 'galbasic', num_workers: int = 2):
-
-        def decide_dataset():
-
-            if self.dataset == 'synthetic':  # Jeff coded this one as a proof of concept.
-                return datasets.Synthetic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
-                                          centered=True, num_bands=self.num_bands, num_images=1000)
-
-            elif self.dataset == 'galbasic':
-                assert self.num_bands == 1, "Galbasic only uses 1 band for now."
-
-                return datasets.GalBasic(self.slen, num_images=10000, sky=700)
-
-            # ToDo: make this better, right now it ignores num_bands, slen, render_kwargs...
-            elif self.dataset == 'galcatsim':
-                ds = datasets.CatsimGalaxies(snr=200, add_noise=True, verbose=False, fix_size=True)
-                self.slen = ds.renderer.image_size
-                self.num_bands = len(ds.bands)
-                return ds
-
-            else:
-                raise NotImplementedError("Not implemented that galaxy dataset yet.")
+    def __init__(self, slen: int = 40, num_bands: int = 1, num_workers: int = 2, fixed_size: utils.str_bool = False,
+                 epochs=None, batch_size=None, training_examples=None, evaluation_examples=None, evaluate=None,
+                 dir_name=None, dataset=None):
 
         self.dataset = dataset
         self.slen = slen
@@ -44,9 +23,12 @@ class TrainGalaxy(object):
         self.batch_size = batch_size
         self.training_examples = training_examples
         self.evaluation_examples = evaluation_examples
+        self.evaluate = evaluate
         self.num_bands = num_bands
+        self.num_workers = num_workers
         self.lr = 1e-4
-        self.ds = decide_dataset()
+        self.fixed_size = fixed_size
+        self.ds = self.decide_dataset()
 
         self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=8)
 
@@ -55,42 +37,64 @@ class TrainGalaxy(object):
         train_indices = np.mgrid[tt_split:len(self.ds)]
 
         self.optimizer = Adam(self.vae.parameters(), lr=self.lr, weight_decay=1e-6)
-        self.test_loader = DataLoader(self.ds, batch_size=self.batch_size,
-                                      num_workers=num_workers, pin_memory=True,
-                                      sampler=SubsetRandomSampler(test_indices))
+
+        if self.evaluate:
+            self.test_loader = DataLoader(self.ds, batch_size=self.batch_size,
+                                          num_workers=self.num_workers, pin_memory=True,
+                                          sampler=SubsetRandomSampler(test_indices))
+
         self.train_loader = DataLoader(self.ds, batch_size=self.batch_size,
-                                       num_workers=num_workers, pin_memory=True,
+                                       num_workers=self.num_workers, pin_memory=True,
                                        sampler=SubsetRandomSampler(train_indices))
 
         self.dir_name = dir_name  # where to save results.
         self.save_props()  # save relevant properties to a file so we know how to reconstruct these results.
 
+    def decide_dataset(self):
+
+        # TODO: The other two datasets non catsim should also be updated. (save props+clear defaults)
+        if self.dataset == 'synthetic':  # Jeff coded this one as a proof of concept.
+            return datasets.Synthetic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
+                                      centered=True, num_bands=self.num_bands, num_images=1000)
+
+        elif self.dataset == 'galbasic':
+            assert self.num_bands == 1, "Galbasic only uses 1 band for now."
+
+            return datasets.GalBasic(self.slen, num_images=10000, sky=700)
+
+        elif self.dataset == 'galcatsim':
+            assert self.num_bands == 6, 'Can only use 6 bands with catsim'
+
+            ds = datasets.CatsimGalaxies(image_size=self.slen, fixed_size=self.fixed_size)
+            return ds
+
+        else:
+            raise NotImplementedError("Not implemented that galaxy dataset yet.")
+
     def save_props(self):
         # TODO: Create a directory file for easy look-up once we start producing a lot of these.
         prop_file = open(f"{self.dir_name}/props.txt", 'w')
-        print(f"dataset: {self.dataset} \n"
-              f"epochs: {self.epochs} \n"
+        print(f"dataset: {self.dataset}\n"
+              f"epochs: {self.epochs}\n"
               f"batch_size: {self.batch_size}\n"
               f"training_examples: {self.training_examples}\n"
               f"evaluation_examples: {self.evaluation_examples}\n"
+              f"evaluate: {self.evaluate}\n"
               f"learning rate: {self.lr}\n"
               f"slen: {self.slen}\n"
               f"latent dim: {self.vae.latent_dim}\n",
-              f"num bands: {self.num_bands}",
-              # f"sky level: {self.ds.sky}\n",
-              # f"snr: {self.ds.snr}\n",
-              # f"flux: {self.ds.flux}\n",
+              f"num bands: {self.num_bands}\n",
+              f"num workers: {self.num_workers}\n",
               file=prop_file)
+        self.ds.print_props(prop_file)
         prop_file.close()
 
+    # @profile
     def train_epoch(self):
         self.vae.train()
         avg_loss = 0.0
 
         for batch_idx, data in enumerate(self.train_loader):
-
-            if batch_idx >= self.training_examples:
-                break
 
             image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
             background = data["background"].cuda()
@@ -101,6 +105,9 @@ class TrainGalaxy(object):
             self.optimizer.zero_grad()  # clears the gradients of all optimized torch.Tensors
             loss.backward()  # propagate this loss in the network.
             self.optimizer.step()  # only part where weights are changed.
+
+            if batch_idx + 1 >= self.training_examples:
+                break
 
         avg_loss /= self.batch_size * self.training_examples
         return avg_loss

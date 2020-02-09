@@ -12,7 +12,8 @@ os.chdir("/home/imendoza/deblend/galaxy-net")
 
 class CatsimGalaxies(Dataset):
 
-    def __init__(self, survey_name=None, bands=None, stamp_size=8, filter_dict=None, **render_kwargs):
+    def __init__(self, survey_name=None, image_size=40, filter_dict=None, fixed_size=False, snr=200, bands=None,
+                 **render_kwargs):
         """
         This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalogue) and returns a
         galaxy drawn from the catalogue with realistic seeing conditions using functions from WeakLensingDeblending.
@@ -24,26 +25,38 @@ class CatsimGalaxies(Dataset):
         :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is to exclude >=25.3 i_ab.
         :param stamp_size: In arcsecs.
         """
-        assert stamp_size >= 8, "Does not seem to work well if the number of pixels is too low."
+
+        assert survey_name is None, "Only using default survey name for now = LSST"
+        assert image_size >= 40, "Does not seem to work well if the number of pixels is too low."
+        assert filter_dict is None, "Not supporting different dict yet, need to change argparse + save_props below."
+        assert bands is None, "Only using default number of bands = 6 for now."
 
         params = draw_catsim.get_default_params()
         self.survey_name = params['survey_name'] if not survey_name else survey_name
         self.bands = params['bands'] if not bands else bands
-        self.filtered_dict = CatsimGalaxies.get_default_filters() if filter_dict is None else filter_dict
-        self.stamp_size = stamp_size
+        self.image_size = image_size
+        self.pixel_scale = descwl.survey.Survey.get_defaults(self.survey_name, '*')['pixel_scale']
+        self.stamp_size = self.pixel_scale * self.image_size  # arcsecs.
+        self.snr = snr
 
-        self.renderer = draw_catsim.Render(self.survey_name, self.bands, self.stamp_size,
-                                           **render_kwargs)
+        self.fixed_size = fixed_size
+
+        self.renderer = draw_catsim.Render(self.survey_name, self.bands, self.stamp_size, self.pixel_scale,
+                                           snr=self.snr, **render_kwargs)
 
         self.table = Table.read(params['catalog_name'])
         self.table = self.table[np.random.permutation(len(self.table))]  # shuffle in case that order matters.
+        self.filtered_dict = CatsimGalaxies.get_default_filters() if filter_dict is None else filter_dict
         self.cat = self.get_filtered_table()
+
+        self.prepare_cat()
 
     def __len__(self):
         return len(self.cat)
 
     # ToDo: Remove all non-visible sources.
     def __getitem__(self, idx):
+
         while True:  # loop until visible galaxy is selected.
             try:
                 entry = self.cat[idx]
@@ -57,16 +70,62 @@ class CatsimGalaxies(Dataset):
                 'background': background,
                 'num_galaxies': 1}
 
+    def print_props(self, prop_file):
+        print(f"snr: {self.snr} \n"
+              f"fixed size: {self.fixed_size} \n"
+              f"survey name: {self.survey_name} \n"
+              f"bands: {self.bands}\n"
+              f"pixel scale: {self.pixel_scale}\n"
+              f"filter_dict: Default\n"
+              f"min_snr: {self.renderer.min_snr}\n"
+              f"truncate_radius: {self.renderer.truncate_radius}\n"
+              f"add_noise: {self.renderer.add_noise}\n"
+              f"preserve_flux: {self.renderer.preserve_flux}\n",
+              file=prop_file)
+
+    def prepare_cat(self):
+        # random deviation from exactly in center of center pixel, in arcsecs.
+        self.cat['ra'] = (np.random.rand(len(self.cat)) - 0.5) * self.pixel_scale  # arcsecs
+        self.cat['dec'] = (np.random.rand(len(self.cat)) - 0.5) * self.pixel_scale
+
+        if self.fixed_size:
+            for i, _ in enumerate(self.cat):
+                self.cat[i] = self.fix_size(self.cat[i])
+
     def get_filtered_table(self):
         cat = self.table.copy()
         for param, pfilter in self.filtered_dict.items():
             cat = cat[pfilter(param, cat)]
         return cat
 
+    def fix_size(self, entry):
+        hlr_d = None
+        if entry['a_d'] != 0.0 and entry['b_d'] != 0.0:
+            hlr_d_old = np.sqrt(entry['b_d'] * entry['a_d'])
+            q_d = entry['b_d'] / entry['a_d']
+            hlr_d = self.stamp_size / 15
+            a_d = hlr_d / np.sqrt(q_d)
+            b_d = hlr_d * np.sqrt(q_d)
+            entry['a_d'] = a_d
+            entry['b_d'] = b_d
+
+        if entry['a_b'] != 0.0 and entry['b_b'] != 0.0:
+
+            if hlr_d is not None:
+                hlr_b_old = np.sqrt(entry['b_b'] * entry['a_b'])
+                hlr_b = hlr_d * hlr_b_old / hlr_d_old
+            else:
+                hlr_b = self.stamp_size / 15
+            q_b = entry['b_b'] / entry['a_b']
+            entry['a_b'] = hlr_b / np.sqrt(q_b)
+            entry['b_b'] = hlr_b * np.sqrt(q_b)
+
+        return entry
+
     @staticmethod
     def get_default_filters():
         filters = dict(
-            i_ab=lambda param, x: x[param] <= 25.3  # cut on magnitude same as BTK.
+            i_ab=lambda param, x: x[param] <= 25.3  # cut on magnitude same as BTK does.
         )
         return filters
 
@@ -149,6 +208,9 @@ class GalBasic(Dataset):
                 'background': background,
                 'num_galaxies': 1}
 
+    def print_props(self, prop_file):
+        pass
+
 
 class Synthetic(Dataset):
 
@@ -216,6 +278,9 @@ class Synthetic(Dataset):
         return {'image': image,
                 'background': background,
                 'num_galaxies': num_galaxies}
+
+    def print_props(self, prop_file):
+        pass
 
 
 class CatsimData(Dataset):

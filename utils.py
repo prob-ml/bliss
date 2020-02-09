@@ -13,6 +13,15 @@ def to_argparse_form(s):
     return new_s
 
 
+def str_bool(s):
+    if s.lower() in ['yes', 'true', '1']:
+        return True
+    elif s.lower() in ['no', 'false', '0']:
+        return False
+    else:
+        raise ValueError("Invalid value for str_bool.")
+
+
 general_args = [
     'device',
     'dir_name',
@@ -24,6 +33,6 @@ general_args = [
     'batch_size',
     'training_examples',
     'evaluation_examples',
+    'evaluate',
     'epochs',
-
 ]
