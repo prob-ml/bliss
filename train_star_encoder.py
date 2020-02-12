@@ -17,7 +17,7 @@ import json
 
 from torch.distributions import normal
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print('device: ', device)
 
 print('torch version: ', torch.__version__)
@@ -60,7 +60,7 @@ psf_og = power_law_psf.forward().detach()
 ###############
 # sky intensity: for the r and i band
 ###############
-# import wake_lib
+import wake_lib
 # init_background_params = torch.zeros(len(bands), 3).to(device)
 # init_background_params[:, 0] = torch.Tensor([686., 1123.])
 init_background_params = torch.Tensor(np.load('./fits/results_2020-02-06/true_planarback_params.npy'))

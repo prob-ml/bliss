@@ -8,7 +8,7 @@ from simulated_datasets_lib import _get_mgrid, plot_one_star
 from psf_transform_lib2 import PowerLawPSF
 import utils
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def _sample_image(observed_image, sample_every = 10):

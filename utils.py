@@ -3,7 +3,7 @@ import numpy as np
 
 from torch.distributions import normal, categorical
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Functions to work with n_stars
 def get_is_on_from_n_stars(n_stars, max_stars):

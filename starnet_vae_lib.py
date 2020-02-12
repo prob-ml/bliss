@@ -8,7 +8,7 @@ import utils
 
 from torch.distributions import poisson
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class Flatten(nn.Module):
     def forward(self, tensor):

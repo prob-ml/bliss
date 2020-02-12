@@ -12,7 +12,7 @@ sys.path.insert(0, '../')
 import sdss_psf
 import utils
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def _trim_psf(psf, slen):
     # crop the psf to length slen x slen
