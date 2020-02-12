@@ -47,23 +47,23 @@ print(data_params)
 # psf_og = np.array([psf_r, psf_i])
 
 bands = [2, 3]
-psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
-init_psf_params = torch.zeros(len(bands), 6)
-for i in range(len(bands)):
-    init_psf_params[i] = psf_transform_lib2.get_psf_params(
-                                    psfield_file,
-                                    band = bands[i])
-# init_psf_params = torch.Tensor(np.load('./fits/results_2020-02-06/true_powerlaw_psf_params.npy'))
-# power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params.to(device))
-# psf_og = power_law_psf.forward().detach()
+# psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+# init_psf_params = torch.zeros(len(bands), 6)
+# for i in range(len(bands)):
+#     init_psf_params[i] = psf_transform_lib2.get_psf_params(
+#                                     psfield_file,
+#                                     band = bands[i])
+init_psf_params = torch.Tensor(np.load('./fits/results_2020-02-06/true_powerlaw_psf_params.npy'))
+power_law_psf = psf_transform_lib2.PowerLawPSF(init_psf_params.to(device))
+psf_og = power_law_psf.forward().detach()
 
 ###############
 # sky intensity: for the r and i band
 ###############
-import wake_lib
-init_background_params = torch.zeros(len(bands), 3).to(device)
-init_background_params[:, 0] = torch.Tensor([686., 1123.])
-# init_background_params = torch.Tensor(np.load('./fits/results_2020-02-06/true_planarback_params.npy'))
+# import wake_lib
+# init_background_params = torch.zeros(len(bands), 3).to(device)
+# init_background_params[:, 0] = torch.Tensor([686., 1123.])
+init_background_params = torch.Tensor(np.load('./fits/results_2020-02-06/true_planarback_params.npy'))
 planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
                             init_background_params = init_background_params.to(device))
 
@@ -153,11 +153,11 @@ for epoch in range(n_epochs):
         print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
-        outfile = './fits/results_2020-02-11/starnet_ri'
+        outfile = './fits/results_2020-02-11/starnet_ri_trueback_truepsf'
         print("writing the encoder parameters to " + outfile)
         torch.save(star_encoder.state_dict(), outfile)
 
         test_losses[:, epoch // print_every] = np.array([test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss])
-        np.savetxt('./fits/results_2020-02-11/test_losses-starnet_ri', test_losses)
+        np.savetxt('./fits/results_2020-02-11/test_losses-starnet_ri_trueback_truepsf', test_losses)
 
 print('done')
