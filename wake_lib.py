@@ -278,6 +278,17 @@ class EstimateModelParams(nn.Module):
             if i == (max_iter - 1):
                 print('warning: max iterations reached')
 
+    def optimize_fluxes_background(self, max_iter = 10):
+        optimizer1 = optim.LBFGS(list(self.flux_params_class.parameters()) +
+                                     list(self.planar_background.parameters()),
+                            max_iter = 10,
+                            line_search_fn = 'strong_wolfe')
+
+        self._run_optimizer(optimizer1,
+                            tol = 1e-3,
+                            max_iter = max_iter,
+                            use_cached_star_basis = True)
+
     def run_coordinate_ascent(self, tol = 1e-3,
                                     max_inner_iter = 10,
                                     max_outer_iter = 20):
