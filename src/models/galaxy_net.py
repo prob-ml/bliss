@@ -153,6 +153,13 @@ class OneCenteredGalaxy(nn.Module):
         return recon_mean, recon_var, kl_z
 
     def loss(self, image, background, k=1):
+        """
+
+        :param image: The complete image that includes the background.
+        :param background:
+        :param k:
+        :return:
+        """
         # TODO: use k
         # sampling images from the real distribution
         recon_mean, recon_var, kl_z = self.forward(image, background)  # z | x ~ decoder

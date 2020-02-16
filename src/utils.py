@@ -1,3 +1,14 @@
+from pathlib import Path
+from os.path import dirname
+
+src_path = Path(dirname(__file__))
+root_path = Path(dirname(dirname(__file__)))
+
+packages_path = root_path.joinpath("packages")
+reports_path = root_path.joinpath("reports")
+data_path = root_path.joinpath("data")
+
+
 def to_argparse_form(s):
     """
     Turns a string s into the form that is required by argparser.

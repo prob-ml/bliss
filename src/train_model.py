@@ -7,10 +7,11 @@ import timeit
 from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
+import __init__  # make sure this file can be executed.
 
-import train_galaxy
-import train_catalogue
-import datasets
+from src.train import train_galaxy
+from src.train import train_catalog
+from src import utils
 
 torch.backends.cudnn.benchmark = True
 plt.switch_backend("Agg")
@@ -18,14 +19,27 @@ plt.switch_backend("Agg")
 # specify all the models (as a class) that can be trained.
 all_models = {
     'centered_galaxy': train_galaxy.TrainGalaxy,
-    'catalogue': train_catalogue.TrainCatalogue
+    'catalog': train_catalog.TrainCatalog
 }
 
 all_datasets = [
     'synthetic',
     'galbasic',
     'galcatsim'
+    'h5_catalog'
 ]
+
+testing_name = "testing1"
+
+
+def setup():
+    """
+    Make sure that the testing directory exists among other things.
+    """
+    testing_path = utils.reports_path.joinpath(testing_name)
+    if not testing_path.is_dir():
+        testing_path.mkdir()
+    return testing_path
 
 
 # @profile
@@ -42,7 +56,7 @@ def training(train_module, epochs=None, seed=None, evaluate=None, **kwargs):
                 train_module.evaluate_and_log(epoch)
 
 
-#@profile
+# @profile
 def run(args):
     if args['model'] not in all_models:
         raise NotImplementedError("Not implemented this model yet.")
@@ -53,6 +67,7 @@ def run(args):
 
 
 if __name__ == "__main__":
+    testing_path = setup()
 
     # Setup arguments.
     parser = argparse.ArgumentParser(description='Training model [argument parser]',
@@ -90,29 +105,28 @@ if __name__ == "__main__":
                                                           'Specify options for the galaxy model to train.')
     train_galaxy.TrainGalaxy.add_args(one_centered_galaxy_group)
 
-    catalogue_group = parser.add_argument_group('[Catalogue Model]',
-                                                'Specify options for the catalogue model to train.')
-    train_catalogue.TrainCatalogue.add_args(catalogue_group)
+    catalog_group = parser.add_argument_group('[catalog Model]',
+                                              'Specify options for the catalog model to train.')
+    train_catalog.TrainCatalog.add_args(catalog_group)
 
     # we are done.
     pargs = parser.parse_args()
     args_dict = vars(pargs)
 
     # Additional settings.
-    args_dict['dir_name'] = "/home/imendoza/deblend/galaxy-net/data/" + args_dict['dir_name']
+    args_dict['dir_name'] = testing_path + args_dict['dir_name']
     project_dir = Path(args_dict['dir_name'])
-
-    torch.cuda.manual_seed(pargs.seed)
-    np.random.seed(pargs.seed)
 
     # check if directory exists or if we should overwrite.
     if project_dir.is_dir() and not args_dict['overwrite']:
         raise IOError("Directory already exists.")
-
     elif project_dir.is_dir():
         subprocess.run(f"rm -r {project_dir.as_posix()}", shell=True)
 
     project_dir.mkdir()
+
+    torch.cuda.manual_seed(pargs.seed)
+    np.random.seed(pargs.seed)
 
     # run.
     with torch.cuda.device(args_dict['device']):

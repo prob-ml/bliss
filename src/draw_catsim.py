@@ -1,14 +1,15 @@
-from WeakLensingDeblending import descwl
+from packages.WeakLensingDeblending import descwl
 import numpy as np
 from astropy.table import Column
 import galsim
-import prof
+
+from src import utils
 
 
 def get_default_params():
     params = dict(
         survey_name='LSST',
-        catalog_name="/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits",
+        catalog_file_path=utils.data_path.joinpath("raw/OneDegSq.fits"),
         bands=['y', 'z', 'i', 'r', 'g', 'u'],
     )
 
@@ -36,6 +37,7 @@ class Render(object):
         self.add_noise = add_noise
         self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
+
 
     # @profile
     def get_obs(self):
@@ -77,20 +79,20 @@ class Render(object):
 
     def draw(self, entry):
         """
-        Return a multi-band image corresponding to the entry from the catalogue given.
+        Return a multi-band image corresponding to the entry from the catalog given.
         The final image includes its background based on survey's sky level.
         """
         obs = self.get_obs()
-        final = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
+        image = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
         backs = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
 
         for i, band in enumerate(self.bands):
-            image = self.single_band(entry, obs[i], band)
+            image_no_background = self.single_band(entry, obs[i], band)
             background = self.get_background(obs[i])
-            final[i, :, :] = image + background  # final image includes background.
+            image[i, :, :] = image_no_background + background  # final image includes background.
             backs[i, :, :] = background
 
-        return final, backs
+        return image, backs
 
     def get_background(self, single_obs):
         background = np.zeros((self.image_size, self.image_size), dtype=np.float32)
@@ -100,7 +102,7 @@ class Render(object):
     #@profile
     def single_band(self, entry, single_obs, band):
         """
-        Builds galaxy from a single entry in the catalogue.
+        Builds galaxy from a single entry in the catalog.
         :param entry:
         :param single_obs:
         :param band:

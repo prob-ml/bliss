@@ -3,20 +3,59 @@ import numpy as np
 import scipy.stats as stats
 from torch.utils.data import Dataset
 from astropy.table import Table
-import os
-import draw_catsim
-from WeakLensingDeblending import descwl
+from packages.WeakLensingDeblending import descwl
+import h5py
 
-os.chdir("/home/imendoza/deblend/galaxy-net")
+from src import draw_catsim
+
+
+def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):
+    # TODO: The other two datasets non catsim should also be updated. (save props+clear defaults)
+    if dataset_name == 'synthetic':  # Jeff coded this one as a proof of concept.
+        ds = Synthetic(slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
+                       centered=True, num_bands=num_bands, num_images=1000)
+
+    elif dataset_name == 'galbasic':
+        assert num_bands == 1, "Galbasic only uses 1 band for now."
+
+        ds = GalBasic(slen, num_images=10000, sky=700)
+
+    elif dataset_name == 'galcatsim':
+        assert num_bands == 6, 'Can only use 6 bands with catsim'
+
+        ds = CatsimGalaxies(image_size=slen, fixed_size=fixed_size)
+
+    elif dataset_name == 'h5_catalog':
+        assert h5_file is not None, "Forgot to specify h5 file to use."
+        ds = H5_Catalog(h5_file=h5_file)
+
+    else:
+        raise NotImplementedError("Not implemented that galaxy dataset yet.")
+
+    return ds
+
+
+class H5_Catalog(Dataset):
+    def __init__(self, h5_file):
+        # make sure its well formed.
+
+        #
+        pass
+
+    def __len__(self):
+        pass
+
+    def __getitem__(self, idx):
+        pass
 
 
 class CatsimGalaxies(Dataset):
 
     def __init__(self, survey_name=None, image_size=40, filter_dict=None, fixed_size=False, snr=200, bands=None,
-                 **render_kwargs):
+                 h5_file=None, **render_kwargs):
         """
-        This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalogue) and returns a
-        galaxy drawn from the catalogue with realistic seeing conditions using functions from WeakLensingDeblending.
+        This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog) and returns a
+        galaxy drawn from the catalog with realistic seeing conditions using functions from WeakLensingDeblending.
 
         For now, only one galaxy can be returned at once.
 
@@ -44,7 +83,7 @@ class CatsimGalaxies(Dataset):
         self.renderer = draw_catsim.Render(self.survey_name, self.bands, self.stamp_size, self.pixel_scale,
                                            snr=self.snr, **render_kwargs)
 
-        self.table = Table.read(params['catalog_name'])
+        self.table = Table.read(params['catalog_file_path'])
         self.table = self.table[np.random.permutation(len(self.table))]  # shuffle in case that order matters.
         self.filtered_dict = CatsimGalaxies.get_default_filters() if filter_dict is None else filter_dict
         self.cat = self.get_filtered_table()
@@ -71,7 +110,8 @@ class CatsimGalaxies(Dataset):
                 'num_galaxies': 1}
 
     def print_props(self, prop_file):
-        print(f"snr: {self.snr} \n"
+        print(f"image_size: {self.image_size} \n"
+              f"snr: {self.snr} \n"
               f"fixed size: {self.fixed_size} \n"
               f"survey name: {self.survey_name} \n"
               f"bands: {self.bands}\n"
@@ -282,29 +322,3 @@ class Synthetic(Dataset):
     def print_props(self, prop_file):
         pass
 
-
-class CatsimData(Dataset):
-
-    def __init__(self):
-        """
-        This class reads the relevant parameters OneDegSq.fits file and returns samples from this
-        ~800k row matrix.
-        """
-        super(CatsimData, self).__init__()
-
-        # pa_disk = pa_bulge (by assumption)
-        self.param_names = ['redshift',
-                            'fluxnorm_bulge', 'fluxnorm_disk', 'fluxnorm_agn',
-                            'a_b', 'a_d', 'b_b', 'b_d', 'pa_disk',
-                            'u_ab', 'g_ab', 'r_ab', 'i_ab', 'z_ab', 'y_ab']
-        self.num_params = len(self.param_names)
-
-        self.table = Table.read("/home/imendoza/deblend/galaxy-net/params/OneDegSq.fits")
-        np.random.shuffle(self.table)  # shuffle just in case order of galaxies matters in original table.
-        self.params = self.table[self.param_names]  # array of tuples of len = 18.
-
-    def __len__(self):
-        return self.table.shape[0]
-
-    def __getitem__(self, idx):
-        return np.array([self.params[idx][i] for i in range(len(self.param_names))], dtype=np.float32)

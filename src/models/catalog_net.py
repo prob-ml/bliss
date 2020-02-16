@@ -5,14 +5,14 @@ import torch.nn.functional as f
 from torch.distributions import Normal
 
 
-class CatalogueEncoder(nn.Module):
+class CatalogEncoder(nn.Module):
 
     def __init__(self, num_params, latent_dim, hidden=256):
         """
 
         :rtype: NoneType
         """
-        super(CatalogueEncoder, self).__init__()
+        super(CatalogEncoder, self).__init__()
 
         self.latent_dim = latent_dim
         self.num_params = num_params
@@ -51,10 +51,10 @@ class CatalogueEncoder(nn.Module):
         return z_mean, z_var
 
 
-class CatalogueDecoder(nn.Module):  # generator
+class CatalogDecoder(nn.Module):  # generator
 
     def __init__(self, num_params, latent_dim, hidden=256):
-        super(CatalogueDecoder, self).__init__()
+        super(CatalogDecoder, self).__init__()
 
         self.latent_dim = latent_dim
         self.num_params = num_params
@@ -78,16 +78,16 @@ class CatalogueDecoder(nn.Module):  # generator
         return recon_mean, recon_var
 
 
-class CatalogueNet(nn.Module):
+class catalogNet(nn.Module):
 
     def __init__(self, num_params, latent_dim=20):
-        super(CatalogueNet, self).__init__()
+        super(catalogNet, self).__init__()
 
         self.latent_dim = latent_dim
         self.num_params = num_params
 
-        self.enc = CatalogueEncoder(self.num_params, self.latent_dim)
-        self.dec = CatalogueDecoder(self.num_params, self.latent_dim)
+        self.enc = CatalogEncoder(self.num_params, self.latent_dim)
+        self.dec = CatalogDecoder(self.num_params, self.latent_dim)
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))

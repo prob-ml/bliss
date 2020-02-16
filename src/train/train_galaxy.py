@@ -2,13 +2,14 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.optim import Adam
-import datasets
-import galaxy_net
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import inspect
-import utils
+
+from src import utils
+from src.data import galaxy_datasets
+from src.models import galaxy_net
 
 
 class TrainGalaxy(object):
@@ -28,7 +29,7 @@ class TrainGalaxy(object):
         self.num_workers = num_workers
         self.lr = 1e-4
         self.fixed_size = fixed_size
-        self.ds = self.decide_dataset()
+        self.ds = galaxy_datasets.decide_dataset(self.dataset, self.slen, self.num_bands, fixed_size=self.fixed_size)
 
         self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=8)
 
@@ -49,27 +50,6 @@ class TrainGalaxy(object):
 
         self.dir_name = dir_name  # where to save results.
         self.save_props()  # save relevant properties to a file so we know how to reconstruct these results.
-
-    def decide_dataset(self):
-
-        # TODO: The other two datasets non catsim should also be updated. (save props+clear defaults)
-        if self.dataset == 'synthetic':  # Jeff coded this one as a proof of concept.
-            return datasets.Synthetic(self.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
-                                      centered=True, num_bands=self.num_bands, num_images=1000)
-
-        elif self.dataset == 'galbasic':
-            assert self.num_bands == 1, "Galbasic only uses 1 band for now."
-
-            return datasets.GalBasic(self.slen, num_images=10000, sky=700)
-
-        elif self.dataset == 'galcatsim':
-            assert self.num_bands == 6, 'Can only use 6 bands with catsim'
-
-            ds = datasets.CatsimGalaxies(image_size=self.slen, fixed_size=self.fixed_size)
-            return ds
-
-        else:
-            raise NotImplementedError("Not implemented that galaxy dataset yet.")
 
     def save_props(self):
         # TODO: Create a directory file for easy look-up once we start producing a lot of these.

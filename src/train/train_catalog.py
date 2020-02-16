@@ -2,21 +2,22 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.optim import Adam
-import datasets
-import catalogue_net
 import numpy as np
 from pathlib import Path
 import inspect
 import utils
 
+from src.data import catalog_datasets
+from src.models import catalog_net
 
-class TrainCatalogue(object):
+
+class TrainCatalog(object):
 
     def __init__(self, epochs=1000, batch_size=64, latent_dim: int = 10, training_examples=100, evaluation_examples=10,
                  dir_name=None):
 
-        self.ds = datasets.CatsimData()
-        self.vae = catalogue_net.CatalogueNet(latent_dim=latent_dim, num_params=self.ds.num_params)
+        self.ds = catalog_datasets.CatsimData()
+        self.vae = catalog_net.catalogNet(latent_dim=latent_dim, num_params=self.ds.num_params)
         self.epochs = epochs
         self.batch_size = batch_size
         self.training_examples = training_examples
