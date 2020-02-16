@@ -47,3 +47,5 @@ general_args = [
     'evaluate',
     'epochs',
 ]
+
+image_h5_name = 'img{}'

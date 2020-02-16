@@ -6,10 +6,11 @@ from astropy.table import Table
 from packages.WeakLensingDeblending import descwl
 import h5py
 
+from src import utils
 from src import draw_catsim
 
 
-def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):
+def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, sky_factor=20, h5_file=None):
     # TODO: The other two datasets non catsim should also be updated. (save props+clear defaults)
     if dataset_name == 'synthetic':  # Jeff coded this one as a proof of concept.
         ds = Synthetic(slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
@@ -23,11 +24,11 @@ def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None
     elif dataset_name == 'galcatsim':
         assert num_bands == 6, 'Can only use 6 bands with catsim'
 
-        ds = CatsimGalaxies(image_size=slen, fixed_size=fixed_size)
+        ds = CatsimGalaxies(image_size=slen, fixed_size=fixed_size, sky_factor=sky_factor)
 
     elif dataset_name == 'h5_catalog':
         assert h5_file is not None, "Forgot to specify h5 file to use."
-        ds = H5_Catalog(h5_file=h5_file)
+        ds = H5Catalog(h5_file=h5_file)
 
     else:
         raise NotImplementedError("Not implemented that galaxy dataset yet.")
@@ -35,18 +36,24 @@ def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None
     return ds
 
 
-class H5_Catalog(Dataset):
+class H5Catalog(Dataset):
     def __init__(self, h5_file):
-        # make sure its well formed.
+        h5_file_path = utils.data_path.joinpath(f"processed/{h5_file}")
+        self.file = h5py.File(h5_file_path, 'r')
 
-        #
-        pass
+        assert 'background' in self.file, "Background is not in file"
+        assert utils.image_h5_name.format('0') in self.file, "There is not a single image " \
+                                                             "in this file or it was formed incorrectly"
 
     def __len__(self):
-        pass
+        """
+        Number of images saved in the file.
+        :return:
+        """
+        return len(self.file.keys()) - 1
 
     def __getitem__(self, idx):
-        pass
+        return self.file[utils.image_h5_name.format(idx)][:]
 
 
 class CatsimGalaxies(Dataset):
@@ -109,6 +116,7 @@ class CatsimGalaxies(Dataset):
                 'background': background,
                 'num_galaxies': 1}
 
+    # Todo: add option to just print without a file.
     def print_props(self, prop_file):
         print(f"image_size: {self.image_size} \n"
               f"snr: {self.snr} \n"
@@ -120,7 +128,8 @@ class CatsimGalaxies(Dataset):
               f"min_snr: {self.renderer.min_snr}\n"
               f"truncate_radius: {self.renderer.truncate_radius}\n"
               f"add_noise: {self.renderer.add_noise}\n"
-              f"preserve_flux: {self.renderer.preserve_flux}\n",
+              f"preserve_flux: {self.renderer.preserve_flux}\n"
+              f"sky factor: {self.renderer.sky_factor}",
               file=prop_file)
 
     def prepare_cat(self):
@@ -165,7 +174,7 @@ class CatsimGalaxies(Dataset):
     @staticmethod
     def get_default_filters():
         filters = dict(
-            i_ab=lambda param, x: x[param] <= 25.3  # cut on magnitude same as BTK does.
+            i_ab=lambda param, x: x[param] <= 23  # cut on magnitude same as BTK does.
         )
         return filters
 
@@ -173,7 +182,7 @@ class CatsimGalaxies(Dataset):
 class GalBasic(Dataset):
 
     def __init__(self, slen, num_images=None, survey_name='lsst',
-                 snr=200, sky=700, flux=None, num_galaxies=1):
+                 snr=200, sky=700, flux=None, num_galaxies=1, preserve_flux=True):
         """
         This class uses and returns a random Gaussian Galaxy, the flux is adjusted based on slen and sky so that the
         ratio from image to background is approximately 0.30 like in Jeff's original code.
@@ -192,6 +201,7 @@ class GalBasic(Dataset):
         self.sky = sky
         self.pixel_scale = 0.2
         self.num_images = num_images
+        self.preserve_flux = preserve_flux
 
         # adjust flux depending on size and same ratio as Jeff.
         if flux is None:
@@ -206,6 +216,7 @@ class GalBasic(Dataset):
         if self.num_bands > 1 or not self.centered or survey_name != 'lsst':
             raise NotImplementedError("Not yet implemented multiple bands, not centered galaxy, "
                                       "not lsst survey, or more than one galaxy.")
+        assert preserve_flux, "preserve flux must be true otherwise poisson assumption not satisfied."
 
     def __len__(self):
         return self.num_images  # meaningless

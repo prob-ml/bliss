@@ -7,8 +7,7 @@ from src import utils
 
 
 def generate_images(dataset_name, outdir_name, outfile_name, num_images=1,
-                    slen=40, num_bands=6, fixed_size=False,
-                    image_name='img{}', prop_name="prop.txt"):
+                    slen=40, num_bands=6, fixed_size=False, sky_factor=20, prop_name="prop.txt"):
     """
 
     :param dataset_name: The name of the dataset from :mod:`galaxy_datasets` that you want to use.
@@ -20,7 +19,8 @@ def generate_images(dataset_name, outdir_name, outfile_name, num_images=1,
     output_path = utils.data_path.joinpath(f"processed/{outdir_name}")
     output_path.mkdir(exist_ok=True)
 
-    ds = galaxy_datasets.decide_dataset(dataset_name, slen, num_bands, fixed_size=fixed_size)
+    ds = galaxy_datasets.decide_dataset(dataset_name, slen, num_bands, fixed_size=fixed_size,
+                                        sky_factor=sky_factor)
 
     # save the properties of the dataset used.
     prop_file_path = output_path.joinpath(prop_name)
@@ -34,18 +34,10 @@ def generate_images(dataset_name, outdir_name, outfile_name, num_images=1,
             random_idx = random.randrange(len(ds))
             image = ds[random_idx]['image']
             background = ds[random_idx]['background']
-            hds = images_file.create_dataset(image_name.format(i), image.shape, dtype=image.dtype)
+            hds = images_file.create_dataset(utils.image_h5_name.format(i), image.shape, dtype=image.dtype)
             hds[:, :, :] = image
             hds.flush()
         hds = images_file.create_dataset('background', background.shape, dtype=background.dtype)
         hds[:, :, :] = background
         hds.flush()
 
-# which dataset to generate images from
-
-# how many images to generate.
-
-# other arguments for the datasets.
-
-
-# generate and save each image one by one.

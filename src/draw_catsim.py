@@ -20,7 +20,7 @@ def get_default_params():
 class Render(object):
 
     def __init__(self, survey_name, bands, stamp_size, pixel_scale, snr=None,
-                 min_snr=0.05, truncate_radius=30, add_noise=True, preserve_flux=False,
+                 min_snr=0.05, truncate_radius=30, add_noise=True, preserve_flux=True, sky_factor=1,
                  verbose=False):
         """
         Can draw a single entry in CATSIM in the given bands.
@@ -37,6 +37,12 @@ class Render(object):
         self.add_noise = add_noise
         self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
+        self.sky_factor = sky_factor
+
+        # ToDo: Move this sanity checks to the dataset.
+        assert self.sky_factor >= 20, "Sky factor should be big to adjust background."
+        assert self.preserve_flux, "Preserve flux should be true because otherwise " \
+                                   "Poisson assumption is not satisfied!"
 
 
     # @profile
@@ -96,7 +102,7 @@ class Render(object):
 
     def get_background(self, single_obs):
         background = np.zeros((self.image_size, self.image_size), dtype=np.float32)
-        background[:, :] = single_obs.mean_sky_level
+        background[:, :] = single_obs.mean_sky_level / self.sky_factor
         return background
 
     #@profile
@@ -139,7 +145,7 @@ class Render(object):
                 seed=np.random.randint(99999999))
             noise = galsim.PoissonNoise(
                 rng=generator,
-                sky_level=single_obs.mean_sky_level)  # remember PoissonNoise assumes background already subtracted off.
+                sky_level=single_obs.mean_sky_level / self.sky_factor)  # remember PoissonNoise assumes background already subtracted off.
 
             if self.snr:
                 image_temp.addNoiseSNR(noise, snr=self.snr, preserve_flux=self.preserve_flux)
