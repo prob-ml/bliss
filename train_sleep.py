@@ -9,6 +9,7 @@ import sleep_lib
 import psf_transform_lib
 
 import json
+import time 
 
 from torch.distributions import normal
 
@@ -37,7 +38,7 @@ print(data_params)
 # load psf
 ###############
 bands = [2, 3]
-psfield_file = '../../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 init_psf_params = psf_transform_lib.get_psf_params(
                                     psfield_file,
                                     bands = bands)
