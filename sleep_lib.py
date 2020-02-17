@@ -69,18 +69,6 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
 
     return flux_log_probs_all
 
-# def get_weights_from_n_stars(n_stars):
-#     weights = torch.zeros(len(n_stars)).to(device)
-#     for i in range(max(n_stars) + 1):
-#         weights[n_stars == i] = len(n_stars) / torch.sum(n_stars == i).float()
-#
-#     return weights / weights.min()
-def get_weights_vec(one_hot_encoding, weights):
-    # weights_vec= torch.zeros(len(n_stars)).to(device)
-    # for i in range(max(n_stars) + 1):
-    #     weights_vec[n_stars == i] = weights[i]
-
-    return torch.matmul(one_hot_encoding, weights)
 
 def _get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array):
     max_detections = flux_log_probs_all.shape[-1]
@@ -141,9 +129,6 @@ def get_params_loss(loc_mean, loc_log_var, \
 
     loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
 
-    # weights_vec = get_weights_vec(one_hot_encoding, weights).detach()
-    # assert len(weights_vec) == len(loss_vec)
-    # loss = (loss_vec * weights_vec).mean()
     loss = loss_vec.mean()
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm_indx
@@ -216,14 +201,6 @@ def eval_star_encoder_loss(star_encoder, train_loader,
             get_encoder_loss(star_encoder, images, backgrounds,
                                 true_locs, true_fluxes)[0:4]
 
-        # if(loss > 1000):
-        #     print('breaking ... ')
-        #     np.savez('./fits/debugging_images', images = images.cpu().numpy(),
-                    # locs = true_locs.cpu().numpy(),
-                    # fluxes = true_fluxes.cpu().numpy(),
-                    # backgrounds = backgrounds.cpu().numpy())
-        #     torch.save(star_encoder.state_dict(), './fits/debugging_encoder')
-
         if train:
             if optimizer is not None:
                 loss.backward()
@@ -235,3 +212,42 @@ def eval_star_encoder_loss(star_encoder, train_loader,
         avg_locs_loss += locs_loss.sum().item() / (len(train_loader.dataset) * star_encoder.n_patches)
 
     return avg_loss, avg_counter_loss, avg_locs_loss, avg_fluxes_loss
+
+
+def run_sleep(star_encoder, loader, optimizer, n_epochs,
+                out_filename, print_every = 10):
+
+    test_losses = np.zeros((4, n_epochs))
+
+    for epoch in range(n_epochs):
+        t0 = time.time()
+
+        # draw fresh data
+        loader.dataset.set_params_and_images()
+
+        avg_loss, counter_loss, locs_loss, fluxes_loss = \
+            inv_kl_lib.eval_star_encoder_loss(star_encoder, loader,
+                                                optimizer, train = True)
+
+        elapsed = time.time() - t0
+        print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                        epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
+
+        test_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, fluxes_loss])
+        np.savetxt(out_filename + '-test_losses', test_losses)
+
+        if ((epoch % print_every) == 0) or (epoch == (n_epochs-1)):
+            loader.dataset.set_params_and_images()
+            _ = inv_kl_lib.eval_star_encoder_loss(star_encoder,
+                                                loader, train = True)
+
+            loader.dataset.set_params_and_images()
+            test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
+                inv_kl_lib.eval_star_encoder_loss(star_encoder,
+                                                loader, train = False)
+
+            print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
+                test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
+
+            print("writing the encoder parameters to " + out_filename)
+            torch.save(star_encoder.state_dict(), out_filename)

@@ -15,45 +15,6 @@ import time
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def run_sleep(star_encoder, loader, optimizer, n_epochs, out_filename, iteration):
-    print_every = 10
-
-    test_losses = np.zeros((4, n_epochs))
-
-    for epoch in range(n_epochs):
-        t0 = time.time()
-
-        # draw fresh data
-        loader.dataset.set_params_and_images()
-
-        avg_loss, counter_loss, locs_loss, fluxes_loss = \
-            inv_kl_lib.eval_star_encoder_loss(star_encoder, loader,
-                                                optimizer, train = True)
-
-        elapsed = time.time() - t0
-        print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-                        epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
-
-        test_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, fluxes_loss])
-        np.savetxt(out_filename + '-test_losses-' + 'iter' + str(iteration),
-                    test_losses)
-
-        if ((epoch % print_every) == 0) or (epoch == (n_epochs-1)):
-            # loader.dataset.set_params_and_images()
-            # _ = inv_kl_lib.eval_star_encoder_loss(star_encoder,
-            #                                     loader, train = True)
-            #
-            # loader.dataset.set_params_and_images()
-            # test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-            #     inv_kl_lib.eval_star_encoder_loss(star_encoder,
-            #                                     loader, train = False)
-            #
-            # print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
-            #     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
-
-            outfile = out_filename + '-iter' + str(iteration)
-            print("writing the encoder parameters to " + outfile)
-            torch.save(star_encoder.state_dict(), outfile)
 
 
 # def train_psf_transform_one_epoch(sampled_locs_full_image,
