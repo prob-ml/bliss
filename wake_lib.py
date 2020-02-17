@@ -5,7 +5,7 @@ from torch import optim
 import numpy as np
 
 from simulated_datasets_lib import _get_mgrid, plot_one_star
-from psf_transform_lib2 import PowerLawPSF
+from psf_transform_lib import PowerLawPSF
 import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

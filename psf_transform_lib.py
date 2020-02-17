@@ -7,6 +7,10 @@ import image_utils
 from utils import eval_normal_logprob
 from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
 
+import fitsio
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 #######################
 # Convolutional PSF transform
 ########################
@@ -84,23 +88,23 @@ class PsfLocalTransform(nn.Module):
 def get_psf_params(psfield_fit_file, bands):
     psfield = fitsio.FITS(psfield_fit_file)
 
-     psf_params = torch.zeros(len(bands), 6)
+    psf_params = torch.zeros(len(bands), 6)
 
-     for i in range(len(bands)):
-         band = bands[i]
+    for i in range(len(bands)):
+     band = bands[i]
 
-        sigma1 = psfield[6]['psf_sigma1'][0][0, band]**2
-        sigma2 = psfield[6]['psf_sigma2'][0][0, band]**2
-        sigmap = psfield[6]['psf_sigmap'][0][0, band]**2
+    sigma1 = psfield[6]['psf_sigma1'][0][0, band]**2
+    sigma2 = psfield[6]['psf_sigma2'][0][0, band]**2
+    sigmap = psfield[6]['psf_sigmap'][0][0, band]**2
 
-        beta = psfield[6]['psf_beta'][0][0, band]
-        b = psfield[6]['psf_b'][0][0, band]
-        p0 = psfield[6]['psf_p0'][0][0, band]
+    beta = psfield[6]['psf_beta'][0][0, band]
+    b = psfield[6]['psf_b'][0][0, band]
+    p0 = psfield[6]['psf_p0'][0][0, band]
 
-        # I think these parameters are constrained to be positive
-        # take log; we will take exp later
-        psf_params[i] =
-            torch.log(torch.Tensor([sigma1, sigma2, sigmap, beta, b, p0]))
+    # I think these parameters are constrained to be positive
+    # take log; we will take exp later
+    psf_params[i] = \
+        torch.log(torch.Tensor([sigma1, sigma2, sigmap, beta, b, p0]))
 
     return psf_params
 
