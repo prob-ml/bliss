@@ -1,27 +1,38 @@
 import torch
 
+import numpy as np
+
 import torch.nn as nn
 from torch.nn.functional import unfold, softmax, pad
 
 import image_utils
 from utils import eval_normal_logprob
 from simulated_datasets_lib import _get_mgrid
+
+import fitsio
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def get_psf_params(psfield, band):
-    sigma1 = psfield[6]['psf_sigma1'][0][0, band]
-    sigma2 = psfield[6]['psf_sigma2'][0][0, band]
-    sigmap = psfield[6]['psf_sigmap'][0][0, band]
+def get_psf_params(psfield_fit_file, band):
+    psfield = fitsio.FITS(psfield_fit_file)
+
+    sigma1 = psfield[6]['psf_sigma1'][0][0, band]**2
+    sigma2 = psfield[6]['psf_sigma2'][0][0, band]**2
+    sigmap = psfield[6]['psf_sigmap'][0][0, band]**2
+
     beta = psfield[6]['psf_beta'][0][0, band]
     b = psfield[6]['psf_b'][0][0, band]
     p0 = psfield[6]['psf_p0'][0][0, band]
 
-    return torch.Tensor([sigma1, sigma2, sigmap, beta, b, p0])
+    # I think these parameters are constrained to be positive
+    # take log; we will take exp later
+    return torch.log(torch.Tensor([sigma1, sigma2, sigmap, beta, b, p0]))
 
 def psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
-    term1 = torch.exp(-r**2 / (2 * sigma1**2))
-    term2 = b * torch.exp(-r**2 / (2 * sigma2**2))
-    term3 = p0 * (1 + r**2 / (beta * sigmap**2))**(-beta / 2)
+
+    term1 = torch.exp(-r**2 / (2 * sigma1))
+    term2 = b * torch.exp(-r**2 / (2 * sigma2))
+    term3 = p0 * (1 + r**2 / (beta * sigmap))**(-beta / 2)
 
     return (term1 + term2 + term3) / (1 + b + p0)
 
@@ -34,12 +45,12 @@ def get_psf(slen, psf_params, cached_radii_grid = None):
     else:
         radii_grid = cached_radii_grid
 
-    return psf_fun(radii_grid, psf_params[0], psf_params[1], psf_params[2],
-                   psf_params[3], psf_params[4], psf_params[5])
+    _psf_params = torch.exp(psf_params)
+    return psf_fun(radii_grid, _psf_params[0], _psf_params[1], _psf_params[2],
+                   _psf_params[3], _psf_params[4], _psf_params[5])
 
 class PowerLawPSF(nn.Module):
     def __init__(self, init_psf_params,
-                    normalization_constant,
                     psf_slen = 25,
                     image_slen =  101):
 
@@ -47,10 +58,8 @@ class PowerLawPSF(nn.Module):
 
         assert len(init_psf_params.shape) == 2
         self.n_bands = init_psf_params.shape[0]
-        assert len(normalization_constant) == self.n_bands
 
-        self.init_psf_params = init_psf_params
-        self.normalization_constant = normalization_constant
+        self.init_psf_params = init_psf_params.clone()
 
         self.psf_slen = psf_slen
         self.image_slen = image_slen
@@ -59,7 +68,15 @@ class PowerLawPSF(nn.Module):
         self.cached_radii_grid = (grid**2).sum(2).sqrt().to(device)
 
         # initial weights
-        self.params = nn.Parameter(init_psf_params)
+        self.params = nn.Parameter(init_psf_params.clone())
+
+        # get normalization_constant
+        self.normalization_constant = torch.zeros(self.n_bands)
+        for i in range(self.n_bands):
+            self.normalization_constant[i] = \
+                1 / get_psf(self.psf_slen,
+                            self.init_psf_params[i],
+                            self.cached_radii_grid).sum()
 
         # initial psf
         self.init_psf = self.get_psf()
@@ -75,6 +92,8 @@ class PowerLawPSF(nn.Module):
                 psf = _psf.unsqueeze(0)
             else:
                 psf = torch.cat((psf, _psf.unsqueeze(0)))
+
+        assert (psf > 0).all()
 
         return psf
 

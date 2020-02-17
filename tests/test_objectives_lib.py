@@ -34,8 +34,8 @@ class TestStarEncoderObjective(unittest.TestCase):
         true_fluxes = torch.exp(torch.randn(batchsize, max_stars, n_bands))
 
         # estimated parameters
-        logit_loc_mean = torch.randn(batchsize, max_detections, 2)
-        logit_loc_log_var = torch.randn(batchsize, max_detections, 2)
+        loc_mean = torch.randn(batchsize, max_detections, 2)
+        loc_log_var = torch.randn(batchsize, max_detections, 2)
 
         log_flux_mean  = torch.randn(batchsize, max_detections, n_bands)
         log_flux_log_var = torch.randn(batchsize, max_detections, n_bands)
@@ -43,7 +43,7 @@ class TestStarEncoderObjective(unittest.TestCase):
         # get loss for locations
         locs_log_probs_all = \
             inv_kl_lib.get_locs_logprob_all_combs(true_locs,
-                                    logit_loc_mean, logit_loc_log_var)
+                                    loc_mean, loc_log_var)
 
         # get loss for fluxes
         flux_log_probs_all = \
@@ -67,9 +67,9 @@ class TestStarEncoderObjective(unittest.TestCase):
                     assert flux_loss_ij == flux_log_probs_all[i, j, k]
 
                     locs_loss_ij = \
-                        utils.eval_logitnormal_logprob(true_locs[i, j],
-                                                logit_loc_mean[i, k],
-                                                logit_loc_log_var[i, k]).sum()
+                        utils.eval_normal_logprob(true_locs[i, j],
+                                                loc_mean[i, k],
+                                                loc_log_var[i, k]).sum()
 
                     assert locs_loss_ij == locs_log_probs_all[i, j, k]
 
@@ -89,8 +89,8 @@ class TestStarEncoderObjective(unittest.TestCase):
 
 
         # estimated parameters
-        logit_loc_mean = torch.randn(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
-        logit_loc_log_var = torch.randn(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
+        loc_mean = torch.randn(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
+        loc_log_var = torch.randn(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
 
         log_flux_mean  = torch.randn(batchsize, max_detections, n_bands) * is_on_array.unsqueeze(2)
         log_flux_log_var = torch.randn(batchsize, max_detections, n_bands) * is_on_array.unsqueeze(2)
@@ -98,7 +98,7 @@ class TestStarEncoderObjective(unittest.TestCase):
         # get loss for locations
         locs_log_probs_all = \
             inv_kl_lib.get_locs_logprob_all_combs(true_locs,
-                                    logit_loc_mean, logit_loc_log_var)
+                                    loc_mean, loc_log_var)
 
         # get loss for fluxes
         flux_log_probs_all = \
@@ -124,8 +124,8 @@ class TestStarEncoderObjective(unittest.TestCase):
                 continue
 
             _true_locs = true_locs[i, 0:_n_stars, :]
-            _logit_loc_mean = logit_loc_mean[i, 0:_n_stars, :]
-            _logit_loc_log_var = logit_loc_log_var[i, 0:_n_stars, :]
+            _loc_mean = loc_mean[i, 0:_n_stars, :]
+            _loc_log_var = loc_log_var[i, 0:_n_stars, :]
 
             _true_fluxes = true_fluxes[i, 0:_n_stars, :]
             _log_flux_mean = log_flux_mean[i, 0:_n_stars, :]
@@ -133,8 +133,8 @@ class TestStarEncoderObjective(unittest.TestCase):
 
             min_locs_loss = 1e16
             for perm in permutations(range(_n_stars)):
-                locs_loss_perm = -utils.eval_logitnormal_logprob(_true_locs,
-                                    _logit_loc_mean[perm, :], _logit_loc_log_var[perm, :])
+                locs_loss_perm = -utils.eval_normal_logprob(_true_locs,
+                                    _loc_mean[perm, :], _loc_log_var[perm, :])
 
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_locs_loss = locs_loss_perm.sum()
@@ -142,8 +142,10 @@ class TestStarEncoderObjective(unittest.TestCase):
                                         _log_flux_mean[perm, :],
                                         _log_flux_log_var[perm, :]).sum()
 
-            assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5
-            assert torch.abs(fluxes_loss[i] - min_fluxes_loss) < 1e-5
+            assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5, \
+                    torch.abs(locs_loss[i] - min_locs_loss)
+            assert torch.abs(fluxes_loss[i] - min_fluxes_loss) < 1e-5, \
+                    torch.abs(fluxes_loss[i] - min_fluxes_loss)
 
         # locs_log_probs_all_perm, fluxes_log_probs_all_perm = \
         #     inv_kl_lib._get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array)

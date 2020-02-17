@@ -88,6 +88,7 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
         est_locs = (_full_est_locs[which_est_locs, :] - torch.Tensor([[x0, x1]])) / (subimage_slen - 1)
     else:
         est_locs = None
+        which_est_locs = None
 
 
     if full_true_locs is not None:
@@ -104,6 +105,7 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
         true_locs = (_full_true_locs[which_true_locs, :] - torch.Tensor([[x0, x1]])) / (subimage_slen - 1)
     else:
         true_locs = None
+        which_true_locs = None
 
     plot_image(fig, image_patch,
                     true_locs = true_locs,
@@ -113,3 +115,5 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
                     global_fig = global_fig,
                     diverging_cmap = diverging_cmap,
                     color = color, marker = marker, alpha = alpha)
+
+    return which_true_locs, which_est_locs

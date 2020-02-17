@@ -1,1 +1,0 @@
-psfs copied from './../multiband_pcat/Data/idR-002583-2-0136/psfs/'
