@@ -217,21 +217,20 @@ def run_wake(image, star_encoder, init_psf_params,
         # counter += 1
 
         if ((epoch % print_every) == 0) or (epoch == n_epochs):
-            print('foo')
-            # loss = get_wake_loss(image, star_encoder, model_params,
-            #                         n_samples, run_map).detach()
-            #
-            # elapsed = time.time() - t0
-            # print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-            #             epoch, loss, elapsed))
-            #
-            # test_losses.append(loss)
-            # np.savetxt(out_filename + '-wake_losses', test_losses)
-            #
-            # # reset
-            # # avg_loss = 0.0
-            # # counter = 0
-            # t0 = time.time()
+            eval_loss = get_wake_loss(image, star_encoder, model_params,
+                                    n_samples = 1, run_map = True).detach()
+
+            elapsed = time.time() - t0
+            print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                        epoch, eval_loss, elapsed))
+
+            test_losses.append(eval_loss)
+            np.savetxt(out_filename + '-wake_losses', test_losses)
+
+            # reset
+            avg_loss = 0.0
+            counter = 0
+            t0 = time.time()
 
         np.save(out_filename + '-powerlaw_psf_params',
             list(model_params.power_law_psf.parameters())[0].data.cpu().numpy())
