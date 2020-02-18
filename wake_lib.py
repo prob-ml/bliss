@@ -180,11 +180,14 @@ def run_wake(image, star_encoder, init_psf_params,
     t0 = time.time()
     test_losses = []
 
-    optimizer = optim.Adam(model_params.parameters(), lr = lr)
+    optimizer = optim.Adam([{'params': model_params.power_law_psf.parameters(),
+                            'lr': lr},
+                            {'params': model_params.planar_background.parameters(),
+                            'lr': 1e-1})
 
     if run_map:
         n_samples = 1
-        
+
     for epoch in range(1, n_epochs + 1):
 
         optimizer.zero_grad()

@@ -157,7 +157,8 @@ for iteration in range(0, n_iter):
     star_encoder.to(device);
     star_encoder.eval();
 
-    model_params, map_losses[iteration] = wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
+    model_params, map_losses[iteration] = \
+        wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
                         planar_background_params,
                         n_samples = 60,
                         out_filename = outfolder + 'iter' + str(iteration),
