@@ -9,7 +9,7 @@ import sleep_lib
 import psf_transform_lib
 
 import json
-import time 
+import time
 
 from torch.distributions import normal
 
@@ -38,10 +38,11 @@ print(data_params)
 # load psf
 ###############
 bands = [2, 3]
-psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
-init_psf_params = psf_transform_lib.get_psf_params(
-                                    psfield_file,
-                                    bands = bands)
+# psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
+# init_psf_params = psf_transform_lib.get_psf_params(
+#                                     psfield_file,
+#                                     bands = bands)
+init_psf_params = torch.Tensor(np.load('./data/fitted_powerlaw_psf_params.npy'))
 power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.to(device))
 psf_og = power_law_psf.forward().detach()
 
@@ -49,8 +50,9 @@ psf_og = power_law_psf.forward().detach()
 # sky intensity: for the r and i band
 ###############
 import wake_lib
-init_background_params = torch.zeros(len(bands), 3).to(device)
-init_background_params[:, 0] = torch.Tensor([686., 1123.])
+# init_background_params = torch.zeros(len(bands), 3).to(device)
+# init_background_params[:, 0] = torch.Tensor([686., 1123.])
+init_background_params = torch.Tensor(np.load('./data/fitted_planar_backgrounds.npy'))
 planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
                             init_background_params = init_background_params.to(device))
 background = planar_background.forward().detach()
@@ -109,7 +111,7 @@ n_epochs = 201
 print_every = 20
 print('training')
 
-out_filename = './fits/results_2020-02-17/starnet_ri'
+out_filename = './fits/results_2020-02-17/starnet_ri_fitted-back-psf'
 
 sleep_lib.run_sleep(star_encoder, loader, optimizer, n_epochs,
                         out_filename = out_filename,
