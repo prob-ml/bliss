@@ -28,8 +28,8 @@ print('torch version: ', torch.__version__)
 #######################
 # set seed
 ########################
-np.random.seed(34532534)
-_ = torch.manual_seed(5435)
+np.random.seed(32090275)
+_ = torch.manual_seed(120457)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -105,7 +105,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            max_detections = 2,
                                            estimate_flux = True)
 
-init_encoder = './fits/results_2020-02-17/starnet_ri'
+init_encoder = './fits/results_2020-02-18/starnet_ri'
 star_encoder.load_state_dict(torch.load(init_encoder,
                                    map_location=lambda storage, loc: storage))
 star_encoder.to(device)
@@ -129,7 +129,7 @@ print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; flu
     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
 # file header to save results
-outfolder = './fits/results_2020-02-17/map'
+outfolder = './fits/results_2020-02-18/'
 
 n_iter = 6
 map_losses = torch.zeros(n_iter)
@@ -162,7 +162,7 @@ for iteration in range(0, n_iter):
                         n_samples = 60,
                         out_filename = outfolder + 'iter' + str(iteration),
                         lr = 1e-3,
-                        run_map = True)
+                        run_map = False)
 
     print(list(model_params.planar_background.parameters())[0])
     print(list(model_params.power_law_psf.parameters())[0])
