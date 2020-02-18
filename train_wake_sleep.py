@@ -159,7 +159,7 @@ for iteration in range(0, 6):
                         planar_background_params,
                         n_samples = 60,
                         out_filename = outfolder + 'iter' + str(iteration),
-                        lr = 1e-3)
+                        lr = 1e-1)
 
     print(list(model_params.planar_background.parameters())[0])
     print(list(model_params.power_law_psf.parameters())[0])

@@ -8,7 +8,7 @@ from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
 from psf_transform_lib import PowerLawPSF
 import utils
 
-import time 
+import time
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -189,7 +189,12 @@ def run_wake(image, star_encoder, init_psf_params,
                                         fluxes_full_image,
                                         n_stars_full,
                                         init_psf_params,
-                                        init_background_params);avg_loss = 0.0; counter = 0; t0 = time.time(); test_losses= []; print(list(model_params.planar_background.parameters())[0]); print(list(model_params.power_law_psf.parameters())[0])
+                                        init_background_params)
+
+    avg_loss = 0.0
+    counter = 0
+    t0 = time.time()
+    test_losses = []
 
     optimizer = optim.Adam(model_params.parameters(), lr = lr)
 
@@ -197,7 +202,7 @@ def run_wake(image, star_encoder, init_psf_params,
 
         optimizer.zero_grad()
 
-        loss = model_params.get_loss()[1]
+        loss = model_params.get_loss()[1] / n_samples
         loss.backward()
         optimizer.step()
 
