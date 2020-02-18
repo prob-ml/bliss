@@ -141,12 +141,12 @@ for iteration in range(0, 6):
         powerlaw_psf_params = init_psf_params
         planar_background_params = None
     else:
-        encoder_file = filename + '-encoder-iter' + str(iteration)
+        encoder_file = outfolder + 'wake-sleep-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
             torch.Tensor(np.load(outfolder + 'iter' + str(iteration - 1) +\
                                     '-powerlaw_psf_params.npy')).to(device)
         planar_background_params = \
-            totorch.Tensor(np.load(outfolder + 'iter' + str(iteration - 1) +\
+            torch.Tensor(np.load(outfolder + 'iter' + str(iteration - 1) +\
                                     '-planarback_params.npy')).to(device)
 
     print('loading encoder from: ', encoder_file)
@@ -157,7 +157,7 @@ for iteration in range(0, 6):
 
     model_params = wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
                         planar_background_params,
-                        n_samples = 10,
+                        n_samples = 60,
                         out_filename = outfolder + 'iter' + str(iteration),
                         lr = 1e-3)
 

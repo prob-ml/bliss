@@ -189,7 +189,7 @@ def run_wake(image, star_encoder, init_psf_params,
                                         fluxes_full_image,
                                         n_stars_full,
                                         init_psf_params,
-                                        init_background_params);avg_loss = 0.0; counter = 0; t0 = time.time(); test_losses= []
+                                        init_background_params);avg_loss = 0.0; counter = 0; t0 = time.time(); test_losses= []; print(list(model_params.planar_background.parameters())[0]); print(list(model_params.power_law_psf.parameters())[0])
 
     optimizer = optim.Adam(model_params.parameters(), lr = lr)
 
