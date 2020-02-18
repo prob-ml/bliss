@@ -141,7 +141,7 @@ for iteration in range(0, n_iter):
     if iteration == 0:
         encoder_file = init_encoder
         powerlaw_psf_params = init_psf_params
-        planar_background_params = None
+        planar_background_params = init_background_params
     else:
         encoder_file = outfolder + 'wake-sleep-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
