@@ -162,7 +162,7 @@ for iteration in range(0, n_iter):
                         planar_background_params,
                         n_samples = 60,
                         out_filename = outfolder + 'iter' + str(iteration),
-                        lr = 1e-3,
+                        lr = 0.0, # 1e-5,
                         run_map = False)
 
     print(list(model_params.planar_background.parameters())[0])
