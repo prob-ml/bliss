@@ -161,6 +161,22 @@ class ModelParams(nn.Module):
 
         return recon_mean, loss
 
+def get_wake_loss(image, star_encoder, model_params, n_samples, run_map = False):
+
+    locs_sampled, fluxes_sampled, n_stars_sampled = \
+        star_encoder.sample_star_encoder(image,
+                                        torch.ones(image.shape).to(device),
+                                        return_map_n_stars = run_map,
+                                        return_map_star_params = run_map,
+                                        n_samples = n_samples)[0:3]
+
+
+    loss = model_params.get_loss(locs = locs_sampled.detach(),
+                                fluxes = fluxes_sampled.detach(),
+                                n_stars = n_stars_sampled.detach())[1].mean()
+
+    return loss
+
 def run_wake(image, star_encoder, init_psf_params,
                 init_background_params,
                 n_samples,
@@ -192,68 +208,39 @@ def run_wake(image, star_encoder, init_psf_params,
 
         optimizer.zero_grad()
 
-        locs_sampled, fluxes_sampled, n_stars_sampled = \
-            star_encoder.sample_star_encoder(image,
-                                            torch.ones(image.shape).to(device),
-                                            return_map_n_stars = run_map,
-                                            return_map_star_params = run_map,
-                                            n_samples = n_samples)[0:3]
+        loss = get_wake_loss(image, star_encoder, model_params,
+                                n_samples, run_map)
 
-
-        loss = model_params.get_loss(locs = locs_sampled.detach(),
-                                    fluxes = fluxes_sampled.detach(),
-                                    n_stars = n_stars_sampled.detach())[1].mean()
         loss.backward()
         optimizer.step()
 
-        avg_loss += loss.detach()
-        counter += 1
+        # avg_loss += loss.detach()
+        # counter += 1
 
         if ((epoch % print_every) == 0) or (epoch == n_epochs):
+            loss = get_wake_loss(image, star_encoder, model_params,
+                                    n_samples, run_map).detach()
+
             elapsed = time.time() - t0
             print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-                        epoch, avg_loss / counter, elapsed))
+                        epoch, loss, elapsed))
 
-            test_losses.append(avg_loss / counter)
+            test_losses.append(loss)
             np.savetxt(out_filename + '-wake_losses', test_losses)
 
             # reset
-            avg_loss = 0.0
-            counter = 0
+            # avg_loss = 0.0
+            # counter = 0
             t0 = time.time()
-
-            locs_map, fluxes_map, n_stars_map = \
-                star_encoder.sample_star_encoder(image,
-                                                torch.ones(image.shape).to(device),
-                                                return_map_n_stars = True,
-                                                return_map_star_params = True,
-                                                n_samples = 1)[0:3]
-
-
-            map_loss = model_params.get_loss(locs = locs_map.detach(),
-                                        fluxes = fluxes_map.detach(),
-                                        n_stars = n_stars_map.detach())[1].mean()
-
-            print('*** map loss: ', map_loss)
-
-
 
         np.save(out_filename + '-powerlaw_psf_params',
             list(model_params.power_law_psf.parameters())[0].data.cpu().numpy())
         np.save(out_filename + '-planarback_params',
             list(model_params.planar_background.parameters())[0].data.cpu().numpy())
 
-    locs_map, fluxes_map, n_stars_map = \
-        star_encoder.sample_star_encoder(image,
-                                        torch.ones(image.shape).to(device),
-                                        return_map_n_stars = True,
-                                        return_map_star_params = True,
-                                        n_samples = 1)[0:3]
 
-
-    map_loss = model_params.get_loss(locs = locs_map.detach(),
-                                fluxes = fluxes_map.detach(),
-                                n_stars = n_stars_map.detach())[1].mean()
+    map_loss = get_wake_loss(image, star_encoder, model_params,
+                        n_samples = 1, run_map = True)
 
     return model_params, map_loss
 
