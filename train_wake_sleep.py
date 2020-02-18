@@ -131,7 +131,9 @@ print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; flu
 # file header to save results
 outfolder = './fits/results_2020-02-17/'
 
-for iteration in range(0, 6):
+n_iter = 6
+map_losses = torch.zeros(n_iter)
+for iteration in range(0, n_iter):
     #######################
     # wake phase training
     #######################
@@ -155,7 +157,7 @@ for iteration in range(0, 6):
     star_encoder.to(device);
     star_encoder.eval();
 
-    model_params = wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
+    model_params, map_losses[i] = wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
                         planar_background_params,
                         n_samples = 60,
                         out_filename = outfolder + 'iter' + str(iteration),
@@ -163,6 +165,8 @@ for iteration in range(0, 6):
 
     print(list(model_params.planar_background.parameters())[0])
     print(list(model_params.power_law_psf.parameters())[0])
+    print(map_losses[i])
+    np.save(outfolder + 'map_losses', map_losses.cpu().detach())
 
     ########################
     # sleep phase training

@@ -82,7 +82,7 @@ class PlanarBackground(nn.Module):
 
 
 class ModelParams(nn.Module):
-    def __init__(self, observed_image, locs, fluxes, n_stars,
+    def __init__(self, observed_image,
                          init_psf_params,
                          init_background_params,
                          pad = 5):
@@ -90,9 +90,6 @@ class ModelParams(nn.Module):
         super(ModelParams, self).__init__()
 
         self.pad = pad
-        self.locs = locs
-        self.fluxes = fluxes
-        self.n_stars = n_stars
 
         # observed image is batchsize (or 1) x n_bands x slen x slen
         assert len(observed_image.shape) == 4
@@ -100,27 +97,16 @@ class ModelParams(nn.Module):
         self.observed_image = observed_image
         self.slen = observed_image.shape[-1]
 
-        # batchsize
-        assert len(n_stars) == locs.shape[0]
-        assert len(n_stars) == fluxes.shape[0]
-        self.batchsize = locs.shape[0]
-
         # get n_bands
         assert observed_image.shape[1] == init_psf_params.shape[0]
-        assert fluxes.shape[2] == observed_image.shape[1]
         self.n_bands = init_psf_params.shape[0]
 
         # get psf
         self.init_psf_params = init_psf_params
         self.power_law_psf = PowerLawPSF(self.init_psf_params,
                                             image_slen = self.slen)
-        self.init_psf = self.power_law_psf.forward().detach()
-
-        self.max_stars = locs.shape[1]
-        assert locs.shape[2] == 2
-
-        # boolean for stars being on
-        self.is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
+        self.init_psf = self.power_law_psf.forward().detach().clone()
+        self.psf = self.power_law_psf.forward()
 
         # set up initial background parameters
         if init_background_params is None:
@@ -128,7 +114,6 @@ class ModelParams(nn.Module):
         else:
             assert init_background_params.shape[0] == self.n_bands
             self.init_background_params = init_background_params
-
             self.planar_background = PlanarBackground(image_slen=self.slen,
                             init_background_params=self.init_background_params)
 
@@ -136,9 +121,9 @@ class ModelParams(nn.Module):
 
         self.cached_grid = _get_mgrid(observed_image.shape[-1]).to(device)
 
-    def _plot_stars(self, psf):
-        self.stars = plot_multiple_stars(self.slen, self.locs, self.n_stars,
-                                        self.fluxes, psf, self.cached_grid)
+    def _plot_stars(self, locs, fluxes, n_stars, psf):
+        self.stars = plot_multiple_stars(self.slen, locs, n_stars,
+                                        fluxes, psf, self.cached_grid)
 
     def _get_init_background(self, sample_every = 25):
         sampled_background = _sample_image(self.observed_image, sample_every)
@@ -152,20 +137,27 @@ class ModelParams(nn.Module):
     def get_psf(self):
         return self.power_law_psf.forward()
 
-    def get_loss(self, use_cached_stars = False):
+    def get_loss(self, use_cached_stars = False,
+                        locs = None, fluxes = None, n_stars = None):
         background = self.get_background()
 
         if not use_cached_stars:
+            assert locs is not None
+            assert fluxes is not None
+            assert n_stars is not None
+
             psf = self.get_psf()
-            self._plot_stars(psf)
+            self._plot_stars(locs, fluxes, n_stars, psf)
         else:
+            assert hasattr(self, 'stars')
             self.stars = self.stars.detach()
 
         recon_mean = self.stars + background
 
         error = 0.5 * ((self.observed_image - recon_mean)**2 / recon_mean) + 0.5 * torch.log(recon_mean)
 
-        loss = error[:, :, self.pad:(self.slen - self.pad), self.pad:(self.slen - self.pad)].sum()
+        loss = error[:, :, self.pad:(self.slen - self.pad),
+                        self.pad:(self.slen - self.pad)].reshape(error.shape[0], -1).sum(1)
 
         return recon_mean, loss
 
@@ -177,19 +169,10 @@ def run_wake(image, star_encoder, init_psf_params,
                 lr = 1e-3,
                 print_every = 10):
 
-    locs_full_image, fluxes_full_image, n_stars_full = \
-        star_encoder.sample_star_encoder(image,
-                                        torch.ones(image.shape).to(device),
-                                        return_map_n_stars = False,
-                                        return_map_star_params = False,
-                                        n_samples = n_samples)[0:3]
 
     model_params = ModelParams(image,
-                                        locs_full_image,
-                                        fluxes_full_image,
-                                        n_stars_full,
-                                        init_psf_params,
-                                        init_background_params)
+                                init_psf_params,
+                                init_background_params)
 
     avg_loss = 0.0
     counter = 0
@@ -202,7 +185,17 @@ def run_wake(image, star_encoder, init_psf_params,
 
         optimizer.zero_grad()
 
-        loss = model_params.get_loss()[1] / n_samples
+        locs_sampled, fluxes_sampled, n_stars_sampled = \
+            star_encoder.sample_star_encoder(image,
+                                            torch.ones(image.shape).to(device),
+                                            return_map_n_stars = False,
+                                            return_map_star_params = False,
+                                            n_samples = n_samples)[0:3]
+
+
+        loss = model_params.get_loss(locs = locs_sampled.detach(),
+                                    fluxes = fluxes_sampled.detach(),
+                                    n_stars = n_stars_sampled.detach())[1].mean()
         loss.backward()
         optimizer.step()
 
@@ -215,7 +208,7 @@ def run_wake(image, star_encoder, init_psf_params,
                         epoch, avg_loss / counter, elapsed))
 
             test_losses.append(avg_loss / counter)
-            np.savetxt(out_filename + '-test_losses', test_losses)
+            np.savetxt(out_filename + '-wake_losses', test_losses)
 
             # reset
             avg_loss = 0.0
@@ -226,7 +219,21 @@ def run_wake(image, star_encoder, init_psf_params,
             list(model_params.power_law_psf.parameters())[0].data.cpu().numpy())
         np.save(out_filename + '-planarback_params',
             list(model_params.planar_background.parameters())[0].data.cpu().numpy())
-    return model_params
+
+
+    locs_map, fluxes_map, n_stars_map = \
+        star_encoder.sample_star_encoder(image,
+                                        torch.ones(image.shape).to(device),
+                                        return_map_n_stars = True,
+                                        return_map_star_params = True,
+                                        n_samples = 1)[0:3]
+
+
+    map_loss = model_params.get_loss(locs = locs_map.detach(),
+                                fluxes = fluxes_map.detach(),
+                                n_stars = n_stars_map.detach())[1].mean()
+
+    return model_params, map_loss
 
 
 # class FluxParams(nn.Module):
