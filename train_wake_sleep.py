@@ -160,7 +160,7 @@ for iteration in range(0, n_iter):
     model_params, map_losses[iteration] = \
         wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
                         planar_background_params,
-                        n_samples = 50,
+                        n_samples = 60,
                         out_filename = outfolder + 'iter' + str(iteration),
                         lr = 0.0, # 1e-5,
                         run_map = False)

@@ -161,21 +161,6 @@ class ModelParams(nn.Module):
 
         return recon_mean, loss
 
-def get_wake_loss(image, star_encoder, model_params, n_samples, run_map = False):
-
-    locs_sampled, fluxes_sampled, n_stars_sampled = \
-        star_encoder.sample_star_encoder(image,
-                                        torch.ones(image.shape).to(device),
-                                        return_map_n_stars = run_map,
-                                        return_map_star_params = run_map,
-                                        n_samples = n_samples)[0:3]
-
-
-    loss = model_params.get_loss(locs = locs_sampled.detach(),
-                                fluxes = fluxes_sampled.detach(),
-                                n_stars = n_stars_sampled.detach())[1].mean()
-
-    return loss
 
 def run_wake(image, star_encoder, init_psf_params,
                 init_background_params,
@@ -190,6 +175,20 @@ def run_wake(image, star_encoder, init_psf_params,
     model_params = ModelParams(image,
                                 init_psf_params,
                                 init_background_params)
+
+    def get_wake_loss(n_samples, run_map = False):
+        locs_sampled, fluxes_sampled, n_stars_sampled = \
+            star_encoder.sample_star_encoder(image,
+                                            torch.ones(image.shape).to(device),
+                                            return_map_n_stars = run_map,
+                                            return_map_star_params = run_map,
+                                            n_samples = n_samples)[0:3]
+
+        loss = model_params.get_loss(locs = locs_sampled.detach(),
+                                    fluxes = fluxes_sampled.detach(),
+                                    n_stars = n_stars_sampled.detach())[1].mean()
+
+        return loss
 
     avg_loss = 0.0
     counter = 0
@@ -208,8 +207,7 @@ def run_wake(image, star_encoder, init_psf_params,
 
         optimizer.zero_grad()
 
-        loss = get_wake_loss(image, star_encoder, model_params,
-                                n_samples, run_map)
+        loss = get_wake_loss(n_samples, run_map)
 
         loss.backward()
         optimizer.step()
@@ -218,21 +216,19 @@ def run_wake(image, star_encoder, init_psf_params,
         # counter += 1
 
         if ((epoch % print_every) == 0) or (epoch == n_epochs):
-            print('foo')
-            # loss = get_wake_loss(image, star_encoder, model_params,
-            #                         n_samples, run_map).detach()
-            #
-            # elapsed = time.time() - t0
-            # print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-            #             epoch, loss, elapsed))
-            #
-            # test_losses.append(loss)
-            # np.savetxt(out_filename + '-wake_losses', test_losses)
-            #
-            # # reset
-            # # avg_loss = 0.0
-            # # counter = 0
-            # t0 = time.time()
+            loss = get_wake_loss(n_samples, run_map).detach()
+
+            elapsed = time.time() - t0
+            print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                        epoch, loss, elapsed))
+
+            test_losses.append(loss)
+            np.savetxt(out_filename + '-wake_losses', test_losses)
+
+            # reset
+            # avg_loss = 0.0
+            # counter = 0
+            t0 = time.time()
 
         np.save(out_filename + '-powerlaw_psf_params',
             list(model_params.power_law_psf.parameters())[0].data.cpu().numpy())
