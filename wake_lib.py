@@ -216,7 +216,7 @@ def run_wake(image, star_encoder, init_psf_params,
         # counter += 1
 
         if ((epoch % print_every) == 0) or (epoch == n_epochs):
-            loss = get_wake_loss(n_samples, run_map).detach()
+            # loss = get_wake_loss(n_samples, run_map).detach()
 
             elapsed = time.time() - t0
             print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
