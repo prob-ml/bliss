@@ -7,8 +7,8 @@ import sdss_dataset_lib
 
 import simulated_datasets_lib
 import starnet_vae_lib
-import inv_kl_objective_lib as inv_kl_lib
 
+import sleep_lib
 from sleep_lib import run_sleep
 import wake_lib
 
@@ -58,7 +58,7 @@ print(data_params)
 psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
 init_psf_params = psf_transform_lib.get_psf_params(
                                     psfield_file,
-                                    bands = bands)
+                                    bands = bands).to(device)
 power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.to(device))
 psf_og = power_law_psf.forward().detach()
 
@@ -157,8 +157,8 @@ for iteration in range(0, 6):
 
     model_params = wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
                         planar_background_params,
-                        n_samples = 100,
-                        outfile = outfolder + 'iter' + str(iteration),
+                        n_samples = 10,
+                        out_filename = outfolder + 'iter' + str(iteration),
                         lr = 1e-3)
 
     print(list(model_params.planar_background.parameters())[0])
@@ -177,5 +177,4 @@ for iteration in range(0, 6):
                 loader,
                 sleep_optimizer,
                 n_epochs = 11,
-                out_filename = filename + '-encoder',
-                iteration = iteration + 1)
+                out_filename = outfolder + 'wake-sleep-encoder-iter' + str(iteration + 1))

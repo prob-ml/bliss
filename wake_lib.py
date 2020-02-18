@@ -8,6 +8,8 @@ from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
 from psf_transform_lib import PowerLawPSF
 import utils
 
+import time 
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -122,7 +124,7 @@ class ModelParams(nn.Module):
 
         # set up initial background parameters
         if init_background_params is None:
-            self._set_init_background()
+            self._get_init_background()
         else:
             assert init_background_params.shape[0] == self.n_bands
             self.init_background_params = init_background_params
@@ -177,17 +179,17 @@ def run_wake(image, star_encoder, init_psf_params,
 
     locs_full_image, fluxes_full_image, n_stars_full = \
         star_encoder.sample_star_encoder(image,
-                                        torch.ones(full_image.shape).to(device),
+                                        torch.ones(image.shape).to(device),
                                         return_map_n_stars = False,
                                         return_map_star_params = False,
                                         n_samples = n_samples)[0:3]
 
-    model_params = wake_lib.ModelParams(image,
+    model_params = ModelParams(image,
                                         locs_full_image,
                                         fluxes_full_image,
                                         n_stars_full,
                                         init_psf_params,
-                                        init_background_params)
+                                        init_background_params);avg_loss = 0.0; counter = 0; t0 = time.time(); test_losses= []
 
     optimizer = optim.Adam(model_params.parameters(), lr = lr)
 
@@ -216,9 +218,9 @@ def run_wake(image, star_encoder, init_psf_params,
             t0 = time.time()
 
         np.save(out_filename + '-powerlaw_psf_params',
-            list(estimator.power_law_psf.parameters())[0].data.cpu().numpy())
+            list(model_params.power_law_psf.parameters())[0].data.cpu().numpy())
         np.save(out_filename + '-planarback_params',
-            list(estimator.planar_background.parameters())[0].data.cpu().numpy())
+            list(model_params.planar_background.parameters())[0].data.cpu().numpy())
     return model_params
 
 
