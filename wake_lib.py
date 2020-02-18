@@ -167,7 +167,7 @@ def run_wake(image, star_encoder, init_psf_params,
                 out_filename,
                 n_epochs = 100,
                 lr = 1e-3,
-                print_every = 10,
+                print_every = 20,
                 run_map = False):
 
 
@@ -222,26 +222,26 @@ def run_wake(image, star_encoder, init_psf_params,
             counter = 0
             t0 = time.time()
 
+            locs_map, fluxes_map, n_stars_map = \
+                star_encoder.sample_star_encoder(image,
+                                                torch.ones(image.shape).to(device),
+                                                return_map_n_stars = True,
+                                                return_map_star_params = True,
+                                                n_samples = 1)[0:3]
+
+
+            map_loss = model_params.get_loss(locs = locs_map.detach(),
+                                        fluxes = fluxes_map.detach(),
+                                        n_stars = n_stars_map.detach())[1].mean()
+
+            print('*** map loss: ', map_loss)
+
+
+
         np.save(out_filename + '-powerlaw_psf_params',
             list(model_params.power_law_psf.parameters())[0].data.cpu().numpy())
         np.save(out_filename + '-planarback_params',
             list(model_params.planar_background.parameters())[0].data.cpu().numpy())
-
-        locs_map, fluxes_map, n_stars_map = \
-            star_encoder.sample_star_encoder(image,
-                                            torch.ones(image.shape).to(device),
-                                            return_map_n_stars = True,
-                                            return_map_star_params = True,
-                                            n_samples = 1)[0:3]
-
-
-        map_loss = model_params.get_loss(locs = locs_map.detach(),
-                                    fluxes = fluxes_map.detach(),
-                                    n_stars = n_stars_map.detach())[1].mean()
-
-        print('map loss: ', map_loss)
-
-
 
     locs_map, fluxes_map, n_stars_map = \
         star_encoder.sample_star_encoder(image,
