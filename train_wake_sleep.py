@@ -9,11 +9,10 @@ import simulated_datasets_lib
 import starnet_vae_lib
 import inv_kl_objective_lib as inv_kl_lib
 
-from wake_sleep_lib import run_sleep
+from sleep_lib import run_sleep
 import wake_lib
 
 import psf_transform_lib
-import psf_transform_lib2
 
 import time
 
@@ -56,29 +55,20 @@ print(data_params)
 ###############
 # load psf
 ###############
-# psf_dir = './data/'
-# psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
-# psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
-# psf_og = np.array([psf_r, psf_i])
-
-bands = [2, 3]
 psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit'
-powerlaw_psf_params = torch.zeros(len(bands), 6).to(device)
-for i in range(len(bands)):
-    powerlaw_psf_params[i] = psf_transform_lib2.get_psf_params(
+init_psf_params = psf_transform_lib.get_psf_params(
                                     psfield_file,
-                                    band = bands[i])
-power_law_psf = psf_transform_lib2.PowerLawPSF(powerlaw_psf_params)
+                                    bands = bands)
+power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.to(device))
 psf_og = power_law_psf.forward().detach()
 
 ###############
 # sky intensity: for the r and i band
 ###############
-planar_background_params = torch.zeros(len(bands), 3).to(device)
-planar_background_params[:, 0] = torch.Tensor([686., 1123.])
+init_background_params = torch.zeros(len(bands), 3).to(device)
+init_background_params[:, 0] = torch.Tensor([686., 1123.])
 planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
-                            init_background_params = planar_background_params)
-
+                            init_background_params = init_background_params.to(device))
 background = planar_background.forward().detach()
 
 ###############
@@ -113,15 +103,16 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            edge_padding = 2,
                                            n_bands = len(bands),
                                            max_detections = 2,
-                                           estimate_flux = False)
+                                           estimate_flux = True)
 
-init_encoder = './fits/results_2020-02-06/starnet_ri'
+init_encoder = './fits/results_2020-02-17/starnet_ri'
 star_encoder.load_state_dict(torch.load(init_encoder,
                                    map_location=lambda storage, loc: storage))
 star_encoder.to(device)
+star_encoder.eval();
 
 ####################
-# optimzers
+# optimzer
 #####################
 encoder_lr = 1e-5
 sleep_optimizer = optim.Adam([
@@ -131,14 +122,14 @@ sleep_optimizer = optim.Adam([
 
 # initial loss:
 test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-    inv_kl_lib.eval_star_encoder_loss(star_encoder,
+    sleep_lib.eval_star_encoder_loss(star_encoder,
                                     loader, train = False)
 
 print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
 # file header to save results
-filename = './fits/results_2020-02-06/wake-sleep_630x310_ri'
+outfolder = './fits/results_2020-02-17/'
 
 for iteration in range(0, 6):
     #######################
@@ -147,46 +138,31 @@ for iteration in range(0, 6):
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
     if iteration == 0:
         encoder_file = init_encoder
+        powerlaw_psf_params = init_psf_params
         planar_background_params = None
     else:
         encoder_file = filename + '-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
-            torch.Tensor(np.load('./fits/results_2020-02-06/powerlaw_psf_params-iter' + \
-                                    str(iteration - 1) + '.npy')).to(device)
+            torch.Tensor(np.load(outfolder + 'iter' + str(iteration - 1) +\
+                                    '-powerlaw_psf_params.npy')).to(device)
         planar_background_params = \
-            torch.Tensor(np.load('./fits/results_2020-02-06/planarback_params-iter' + \
-                                    str(iteration - 1) + '.npy')).to(device)
+            totorch.Tensor(np.load(outfolder + 'iter' + str(iteration - 1) +\
+                                    '-planarback_params.npy')).to(device)
 
     print('loading encoder from: ', encoder_file)
     star_encoder.load_state_dict(torch.load(encoder_file,
                                    map_location=lambda storage, loc: storage))
-    star_encoder.to(device); star_encoder.eval();
+    star_encoder.to(device);
+    star_encoder.eval();
 
-    map_locs_full_image, _, map_n_stars_full = \
-        star_encoder.sample_star_encoder(full_image,
-                                            torch.ones(full_image.shape).to(device),
-                                            return_map_n_stars = True,
-                                            return_map_star_params = True)[0:3]
+    model_params = wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
+                        planar_background_params,
+                        n_samples = 100,
+                        outfile = outfolder + 'iter' + str(iteration),
+                        lr = 1e-3)
 
-    estimator = wake_lib.EstimateModelParams(full_image,
-                                            map_locs_full_image,
-                                            map_n_stars_full,
-                                            init_psf_params = powerlaw_psf_params,
-                                            init_background_params = planar_background_params,
-                                            init_fluxes = None,
-                                            fmin = data_params['f_min'])
-    estimator.run_coordinate_ascent(tol = 1e-3, max_inner_iter = 50, max_outer_iter = 50)
-
-    print(map_n_stars_full)
-    print((map_locs_full_image**2).mean())
-    print('**final loss**', estimator.get_loss()[1])
-
-    np.save('./fits/results_2020-02-06/powerlaw_psf_params-iter' + str(iteration),
-        list(estimator.power_law_psf.parameters())[0].data.cpu().numpy())
-    np.save('./fits/results_2020-02-06/planarback_params-iter' + str(iteration),
-        list(estimator.planar_background.parameters())[0].data.cpu().numpy())
-    np.save('./fits/results_2020-02-06/fluxes-iter' + str(iteration),
-        estimator.get_fluxes().data.cpu().numpy())
+    print(list(model_params.planar_background.parameters())[0])
+    print(list(model_params.power_law_psf.parameters())[0])
 
     ########################
     # sleep phase training
@@ -194,8 +170,8 @@ for iteration in range(0, 6):
     print('RUNNING SLEEP PHASE. ITER = ' + str(iteration + 1))
 
     # update psf
-    loader.dataset.simulator.psf = estimator.get_psf().detach()
-    loader.dataset.simulator.background = estimator.get_background().squeeze(0).detach()
+    loader.dataset.simulator.psf = model_params.get_psf().detach()
+    loader.dataset.simulator.background = model_params.get_background().squeeze(0).detach()
 
     run_sleep(star_encoder,
                 loader,

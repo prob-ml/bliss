@@ -167,6 +167,60 @@ class ModelParams(nn.Module):
 
         return recon_mean, loss
 
+def run_wake(image, star_encoder, init_psf_params,
+                init_background_params,
+                n_samples,
+                out_filename,
+                n_epochs = 100,
+                lr = 1e-3,
+                print_every = 10):
+
+    locs_full_image, fluxes_full_image, n_stars_full = \
+        star_encoder.sample_star_encoder(image,
+                                        torch.ones(full_image.shape).to(device),
+                                        return_map_n_stars = False,
+                                        return_map_star_params = False,
+                                        n_samples = n_samples)[0:3]
+
+    model_params = wake_lib.ModelParams(image,
+                                        locs_full_image,
+                                        fluxes_full_image,
+                                        n_stars_full,
+                                        init_psf_params,
+                                        init_background_params)
+
+    optimizer = optim.Adam(model_params.parameters(), lr = lr)
+
+    for epoch in range(1, n_epochs + 1):
+
+        optimizer.zero_grad()
+
+        loss = model_params.get_loss()[1]
+        loss.backward()
+        optimizer.step()
+
+        avg_loss += loss.detach()
+        counter += 1
+
+        if ((epoch % print_every) == 0) or (epoch == n_epochs):
+            elapsed = time.time() - t0
+            print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                        epoch, avg_loss / counter, elapsed))
+
+            test_losses.append(avg_loss / counter)
+            np.savetxt(out_filename + '-test_losses', test_losses)
+
+            # reset
+            avg_loss = 0.0
+            counter = 0
+            t0 = time.time()
+
+        np.save(out_filename + '-powerlaw_psf_params',
+            list(estimator.power_law_psf.parameters())[0].data.cpu().numpy())
+        np.save(out_filename + '-planarback_params',
+            list(estimator.planar_background.parameters())[0].data.cpu().numpy())
+    return model_params
+
 
 # class FluxParams(nn.Module):
 #     def __init__(self, init_fluxes, fmin):
