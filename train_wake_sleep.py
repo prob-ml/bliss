@@ -129,7 +129,7 @@ print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; flu
     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
 # file header to save results
-outfolder = './fits/results_2020-02-17/'
+outfolder = './fits/results_2020-02-17/map'
 
 n_iter = 6
 map_losses = torch.zeros(n_iter)
@@ -161,7 +161,8 @@ for iteration in range(0, n_iter):
                         planar_background_params,
                         n_samples = 60,
                         out_filename = outfolder + 'iter' + str(iteration),
-                        lr = 1e-3)
+                        lr = 1e-3,
+                        run_map = True)
 
     print(list(model_params.planar_background.parameters())[0])
     print(list(model_params.power_law_psf.parameters())[0])

@@ -167,7 +167,8 @@ def run_wake(image, star_encoder, init_psf_params,
                 out_filename,
                 n_epochs = 100,
                 lr = 1e-3,
-                print_every = 10):
+                print_every = 10,
+                run_map = False):
 
 
     model_params = ModelParams(image,
@@ -181,6 +182,9 @@ def run_wake(image, star_encoder, init_psf_params,
 
     optimizer = optim.Adam(model_params.parameters(), lr = lr)
 
+    if run_map:
+        n_samples = 1
+        
     for epoch in range(1, n_epochs + 1):
 
         optimizer.zero_grad()
@@ -188,8 +192,8 @@ def run_wake(image, star_encoder, init_psf_params,
         locs_sampled, fluxes_sampled, n_stars_sampled = \
             star_encoder.sample_star_encoder(image,
                                             torch.ones(image.shape).to(device),
-                                            return_map_n_stars = False,
-                                            return_map_star_params = False,
+                                            return_map_n_stars = run_map,
+                                            return_map_star_params = run_map,
                                             n_samples = n_samples)[0:3]
 
 
