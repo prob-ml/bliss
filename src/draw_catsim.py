@@ -19,7 +19,7 @@ def get_default_params():
 # ToDo: More flexibility than drawing randomly centered in central pixel.
 class Render(object):
 
-    def __init__(self, survey_name, bands, stamp_size, pixel_scale, snr=None,
+    def __init__(self, survey_name, bands, stamp_size, pixel_scale, snr=None, dtype=None,
                  min_snr=0.05, truncate_radius=30, add_noise=True, preserve_flux=True, sky_factor=1,
                  verbose=False):
         """
@@ -38,11 +38,13 @@ class Render(object):
         self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
         self.sky_factor = sky_factor
+        self.dtype = dtype
 
         # ToDo: Move this sanity checks to the dataset.
-        assert self.sky_factor >= 20, "Sky factor should be big to adjust background."
+        # assert self.sky_factor >= 20, "Sky factor should be big to adjust background."
         assert self.preserve_flux, "Preserve flux should be true because otherwise " \
                                    "Poisson assumption is not satisfied!"
+        assert self.dtype is np.float32, "dtype should be np.float32"
 
 
     # @profile
@@ -89,8 +91,8 @@ class Render(object):
         The final image includes its background based on survey's sky level.
         """
         obs = self.get_obs()
-        image = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
-        backs = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=np.float32)
+        image = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=self.dtype)
+        backs = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=self.dtype)
 
         for i, band in enumerate(self.bands):
             image_no_background = self.single_band(entry, obs[i], band)
@@ -101,7 +103,7 @@ class Render(object):
         return image, backs
 
     def get_background(self, single_obs):
-        background = np.zeros((self.image_size, self.image_size), dtype=np.float32)
+        background = np.zeros((self.image_size, self.image_size), dtype=self.dtype)
         background[:, :] = single_obs.mean_sky_level / self.sky_factor
         return background
 

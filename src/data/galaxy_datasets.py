@@ -39,27 +39,38 @@ def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, sky_factor=2
 class H5Catalog(Dataset):
     def __init__(self, h5_file):
         h5_file_path = utils.data_path.joinpath(f"processed/{h5_file}")
-        self.file = h5py.File(h5_file_path, 'r')
 
-        assert 'background' in self.file, "Background is not in file"
-        assert utils.image_h5_name.format('0') in self.file, "There is not a single image " \
-                                                             "in this file or it was formed incorrectly"
+        self.file = h5py.File(h5_file_path, 'r')
+        assert utils.image_h5_name in self.file, "The dataset is not in this file"
+
+        self.dset = self.file[utils.image_h5_name]
+        assert utils.background_h5_name in self.dset.attrs, "Background is not in file"
+
+        self.background = self.dset.attrs[utils.background_h5_name]
 
     def __len__(self):
         """
         Number of images saved in the file.
         :return:
         """
-        return len(self.file.keys()) - 1
+        return self.dset.shape[0]
 
     def __getitem__(self, idx):
-        return self.file[utils.image_h5_name.format(idx)][:]
+        return {'image': self.dset[idx],
+                'background': self.background,
+                'num_galaxies': 1}
+
+    def print_props(self, prop_file):
+        pass
+
+    def __exit__(self):
+        self.file.close()
 
 
 class CatsimGalaxies(Dataset):
 
     def __init__(self, survey_name=None, image_size=40, filter_dict=None, fixed_size=False, snr=200, bands=None,
-                 h5_file=None, **render_kwargs):
+                 dtype=np.float32, **render_kwargs):
         """
         This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog) and returns a
         galaxy drawn from the catalog with realistic seeing conditions using functions from WeakLensingDeblending.
@@ -76,19 +87,22 @@ class CatsimGalaxies(Dataset):
         assert image_size >= 40, "Does not seem to work well if the number of pixels is too low."
         assert filter_dict is None, "Not supporting different dict yet, need to change argparse + save_props below."
         assert bands is None, "Only using default number of bands = 6 for now."
+        assert dtype is np.float32, "Only float32 is supported for now."
 
         params = draw_catsim.get_default_params()
         self.survey_name = params['survey_name'] if not survey_name else survey_name
         self.bands = params['bands'] if not bands else bands
+        self.num_bands = len(self.bands)
         self.image_size = image_size
         self.pixel_scale = descwl.survey.Survey.get_defaults(self.survey_name, '*')['pixel_scale']
         self.stamp_size = self.pixel_scale * self.image_size  # arcsecs.
         self.snr = snr
+        self.dtype = dtype
 
         self.fixed_size = fixed_size
 
         self.renderer = draw_catsim.Render(self.survey_name, self.bands, self.stamp_size, self.pixel_scale,
-                                           snr=self.snr, **render_kwargs)
+                                           snr=self.snr, dtype=self.dtype, **render_kwargs)
 
         self.table = Table.read(params['catalog_file_path'])
         self.table = self.table[np.random.permutation(len(self.table))]  # shuffle in case that order matters.
@@ -129,7 +143,8 @@ class CatsimGalaxies(Dataset):
               f"truncate_radius: {self.renderer.truncate_radius}\n"
               f"add_noise: {self.renderer.add_noise}\n"
               f"preserve_flux: {self.renderer.preserve_flux}\n"
-              f"sky factor: {self.renderer.sky_factor}",
+              f"sky factor: {self.renderer.sky_factor}\n",
+              f"dtype: {self.renderer.dtype}",
               file=prop_file)
 
     def prepare_cat(self):

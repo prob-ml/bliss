@@ -25,7 +25,7 @@ all_models = {
 all_datasets = [
     'synthetic',
     'galbasic',
-    'galcatsim'
+    'galcatsim',
     'h5_catalog'
 ]
 
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     args_dict = vars(pargs)
 
     # Additional settings.
-    args_dict['dir_name'] = testing_path + args_dict['dir_name']
+    args_dict['dir_name'] = testing_path.joinpath(args_dict['dir_name'])
     project_dir = Path(args_dict['dir_name'])
 
     # check if directory exists or if we should overwrite.

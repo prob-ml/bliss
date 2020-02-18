@@ -14,7 +14,8 @@ from src.models import galaxy_net
 
 class TrainGalaxy(object):
 
-    def __init__(self, slen: int = 40, num_bands: int = 1, num_workers: int = 2, fixed_size: utils.str_bool = False,
+    def __init__(self, slen: int = 40, num_bands: int = 1, num_workers: int = 2, h5_file: str = '',
+                 fixed_size: utils.str_bool = False,
                  epochs=None, batch_size=None, training_examples=None, evaluation_examples=None, evaluate=None,
                  dir_name=None, dataset=None):
 
@@ -29,7 +30,8 @@ class TrainGalaxy(object):
         self.num_workers = num_workers
         self.lr = 1e-4
         self.fixed_size = fixed_size
-        self.ds = galaxy_datasets.decide_dataset(self.dataset, self.slen, self.num_bands, fixed_size=self.fixed_size)
+        self.ds = galaxy_datasets.decide_dataset(self.dataset, self.slen, self.num_bands, fixed_size=self.fixed_size,
+                                                 h5_file=h5_file)
 
         self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=8)
 

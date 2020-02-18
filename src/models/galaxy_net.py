@@ -177,6 +177,6 @@ class OneCenteredGalaxy(nn.Module):
 
         return loss
 
-    def mse(self, image, background):
+    def rmse(self, image, background):
         recon_mean, recon_var, kl_z = self.forward(image, background)
         return torch.sqrt(((recon_mean - image) ** 2).sum())

@@ -48,4 +48,5 @@ general_args = [
     'epochs',
 ]
 
-image_h5_name = 'img{}'
+image_h5_name = 'images'
+background_h5_name = 'background'

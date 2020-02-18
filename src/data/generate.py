@@ -6,38 +6,31 @@ from src.data import galaxy_datasets
 from src import utils
 
 
-def generate_images(dataset_name, outdir_name, outfile_name, num_images=1,
-                    slen=40, num_bands=6, fixed_size=False, sky_factor=20, prop_name="prop.txt"):
+def generate_images(dataset_name, out_path, prop_file_path=None, num_images=1,
+                    slen=40, num_bands=6, fixed_size=False, sky_factor=20):
     """
 
     :param dataset_name: The name of the dataset from :mod:`galaxy_datasets` that you want to use.
     :param num_images: number of images to save.
-    :param outdir_name: The directory where you want to save the images in the `processed` directory.
     :return:
     """
-
-    output_path = utils.data_path.joinpath(f"processed/{outdir_name}")
-    output_path.mkdir(exist_ok=True)
+    assert num_images >= 1, "At least one image must be produced."
 
     ds = galaxy_datasets.decide_dataset(dataset_name, slen, num_bands, fixed_size=fixed_size,
                                         sky_factor=sky_factor)
 
-    # save the properties of the dataset used.
-    prop_file_path = output_path.joinpath(prop_name)
-    with open(prop_file_path, 'w') as prop_file:
-        ds.print_props(prop_file)
+    if prop_file_path:
+        with open(prop_file_path, 'w') as prop_file:
+            ds.print_props(prop_file)
 
-    image_file_path = output_path.joinpath(f"{outfile_name}.hdf5")
-
-    with h5py.File(image_file_path, "w") as images_file:
+    with h5py.File(out_path, 'w') as images_file:
+        hds_shape = (num_images, ds.num_bands, ds.image_size, ds.image_size)
+        hds = images_file.create_dataset(utils.image_h5_name, hds_shape, dtype=ds.dtype)
         for i in range(num_images):
             random_idx = random.randrange(len(ds))
             image = ds[random_idx]['image']
             background = ds[random_idx]['background']
-            hds = images_file.create_dataset(utils.image_h5_name.format(i), image.shape, dtype=image.dtype)
-            hds[:, :, :] = image
+            hds[i, :, :, :] = image
             hds.flush()
-        hds = images_file.create_dataset('background', background.shape, dtype=background.dtype)
-        hds[:, :, :] = background
+        hds.attrs[utils.background_h5_name] = background
         hds.flush()
-
