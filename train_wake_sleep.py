@@ -59,17 +59,13 @@ psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136
 init_psf_params = psf_transform_lib.get_psf_params(
                                     psfield_file,
                                     bands = bands).to(device)
-power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.to(device))
-psf_og = power_law_psf.forward().detach()
 
-###############
-# sky intensity: for the r and i band
-###############
-init_background_params = torch.zeros(len(bands), 3).to(device)
-init_background_params[:, 0] = torch.Tensor([686., 1123.])
-planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
-                            init_background_params = init_background_params.to(device))
-background = planar_background.forward().detach()
+# this will empirically estimate the background
+model_params = wake_lib.ModelParams(full_image,
+                                init_psf_params = init_psf_params,
+                                init_background_params = None)
+psf_og = model_params.get_psf().detach()
+background = model_params.get_background().detach()
 
 ###############
 # draw data
@@ -131,6 +127,16 @@ print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; flu
 # file header to save results
 outfolder = './fits/results_2020-02-18/'
 
+############################
+# Initial sleep phase with empirically estimated background
+############################
+run_sleep(star_encoder,
+            loader,
+            sleep_optimizer,
+            n_epochs = 11,
+            out_filename = outfolder + 'wake-sleep-encoder-iter0')
+
+
 n_iter = 6
 map_losses = torch.zeros(n_iter)
 for iteration in range(0, n_iter):
@@ -157,16 +163,12 @@ for iteration in range(0, n_iter):
     star_encoder.to(device);
     star_encoder.eval();
 
-    if iteraiton > 0:
-        lr = 1e-3
-    else:
-        lr = 0.0
     model_params, map_losses[iteration] = \
         wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
                         planar_background_params,
                         n_samples = 50,
                         out_filename = outfolder + 'iter' + str(iteration),
-                        lr = lr,
+                        lr = 1e-3,
                         run_map = False)
 
     print(list(model_params.planar_background.parameters())[0])
