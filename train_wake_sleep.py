@@ -141,7 +141,7 @@ for iteration in range(0, n_iter):
     if iteration == 0:
         encoder_file = init_encoder
         powerlaw_psf_params = init_psf_params
-        planar_background_params = init_background_params
+        planar_background_params = None
     else:
         encoder_file = outfolder + 'wake-sleep-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
@@ -157,12 +157,16 @@ for iteration in range(0, n_iter):
     star_encoder.to(device);
     star_encoder.eval();
 
+    if iteraiton > 0:
+        lr = 1e-3
+    else:
+        lr = 0.0
     model_params, map_losses[iteration] = \
         wake_lib.run_wake(full_image, star_encoder, powerlaw_psf_params,
                         planar_background_params,
                         n_samples = 50,
                         out_filename = outfolder + 'iter' + str(iteration),
-                        lr = 0.0, # 1e-5,
+                        lr = lr,
                         run_map = False)
 
     print(list(model_params.planar_background.parameters())[0])
