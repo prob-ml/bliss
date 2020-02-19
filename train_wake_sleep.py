@@ -65,7 +65,7 @@ model_params = wake_lib.ModelParams(full_image,
                                 init_psf_params = init_psf_params,
                                 init_background_params = None)
 psf_og = model_params.get_psf().detach()
-background = model_params.get_background().detach()
+background = model_params.get_background().detach().squeeze(0)
 
 ###############
 # draw data
