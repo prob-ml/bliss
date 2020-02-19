@@ -131,7 +131,7 @@ print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; flu
 # file header to save results
 outfolder = './fits/results_2020-02-18/'
 
-n_iter = 1
+n_iter = 6
 map_losses = torch.zeros(n_iter)
 for iteration in range(0, n_iter):
     #######################
