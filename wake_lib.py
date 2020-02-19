@@ -198,7 +198,7 @@ def run_wake(image, star_encoder, init_psf_params,
     optimizer = optim.Adam([{'params': model_params.power_law_psf.parameters(),
                             'lr': lr},
                             {'params': model_params.planar_background.parameters(),
-                            'lr': 0.0}])
+                            'lr': lr}])
 
     if run_map:
         n_samples = 1
