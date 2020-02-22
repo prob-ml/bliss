@@ -5,7 +5,6 @@ from torch.optim import Adam
 import numpy as np
 from pathlib import Path
 import inspect
-import utils
 
 from src.data import catalog_datasets
 from src.models import catalog_net
@@ -15,6 +14,9 @@ class TrainCatalog(object):
 
     def __init__(self, epochs=1000, batch_size=64, latent_dim: int = 10, training_examples=100, evaluation_examples=10,
                  dir_name=None):
+
+        raise NotImplementedError("Should not be used until it is brought up to date with the other"
+                                  "train files.")
 
         self.ds = catalog_datasets.CatsimData()
         self.vae = catalog_net.catalogNet(latent_dim=latent_dim, num_params=self.ds.num_params)
@@ -92,14 +94,10 @@ class TrainCatalog(object):
         avg_loss /= self.batch_size * self.evaluation_examples
         return avg_loss
 
+
     @classmethod
     def add_args(cls, parser):
-        parameters = inspect.signature(cls).parameters
-        for param in parameters:
-            if param not in utils.general_args and param != 'self':
-                arg_form = utils.to_argparse_form(param)
-                parser.add_argument(arg_form, type=parameters[param].annotation, default=parameters[param].default,
-                                    help='A parameter.')
+        raise NotImplementedError("Not implemented this yet.")
 
     @classmethod
     def from_args(cls, args_dict):

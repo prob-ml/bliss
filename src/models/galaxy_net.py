@@ -177,6 +177,22 @@ class OneCenteredGalaxy(nn.Module):
 
         return loss
 
-    def rmse(self, image, background):
+    def rmse_pp(self, image, background):
+        """
+        Per pixel avg. rmse.
+        :param image:
+        :param background:
+        :return:
+        """
         recon_mean, recon_var, kl_z = self.forward(image, background)
-        return torch.sqrt(((recon_mean - image) ** 2).sum())
+        return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen
+
+    def l1_pp(self, image, background):
+        """
+        Per pixel avg. l1 norm
+        :param image:
+        :param background:
+        :return:
+        """
+        recon_mean, recon_var, kl_z = self.forward(image, background)
+        return torch.norm(recon_mean - image, p=1) / self.slen

@@ -94,19 +94,19 @@ class catalogNet(nn.Module):
 
     def forward(self, data):
         z_mean, z_var = self.enc.forward(data)  # shape = [nsamples, latent_dim]
-
-        q_z = Normal(z_mean, z_var.sqrt())
-        z = q_z.rsample()
-
-        log_q_z = q_z.log_prob(z).sum(1)
-        p_z = Normal(self.zero, self.one)
-
-        log_p_z = p_z.log_prob(z).sum(1)  # using stochastic optimization by sampling only one z from prior.
-        kl_z = (log_q_z - log_p_z)
-
-        recon_mean, recon_var = self.dec.forward(z)  # this reconstructed mean/variances images (per pixel quantities)
-
-        return recon_mean, recon_var, kl_z
+        raise NotImplementedError("If plan to use it, make sure to factorize it with the lines in galaxy_net.")
+        # q_z = Normal(z_mean, z_var.sqrt())
+        # z = q_z.rsample()
+        #
+        # log_q_z = q_z.log_prob(z).sum(1)
+        # p_z = Normal(self.zero, self.one)
+        #
+        # log_p_z = p_z.log_prob(z).sum(1)  # using stochastic optimization by sampling only one z from prior.
+        # kl_z = (log_q_z - log_p_z)
+        #
+        # recon_mean, recon_var = self.dec.forward(z)  # this reconstructed mean/variances images (per pixel quantities)
+        #
+        # return recon_mean, recon_var, kl_z
 
     def loss(self, data):
         recon_mean, recon_var, kl_z = self.forward(data)

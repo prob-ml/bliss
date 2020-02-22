@@ -6,11 +6,11 @@ from astropy.table import Table
 from packages.WeakLensingDeblending import descwl
 import h5py
 
-from src import utils
-from src import draw_catsim
+from src.utils import const
+from src.models import draw_catsim
 
 
-def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, sky_factor=20, h5_file=None):
+def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):
     # TODO: The other two datasets non catsim should also be updated. (save props+clear defaults)
     if dataset_name == 'synthetic':  # Jeff coded this one as a proof of concept.
         ds = Synthetic(slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
@@ -24,7 +24,7 @@ def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, sky_factor=2
     elif dataset_name == 'galcatsim':
         assert num_bands == 6, 'Can only use 6 bands with catsim'
 
-        ds = CatsimGalaxies(image_size=slen, fixed_size=fixed_size, sky_factor=sky_factor)
+        ds = CatsimGalaxies(image_size=slen, fixed_size=fixed_size)
 
     elif dataset_name == 'h5_catalog':
         assert h5_file is not None, "Forgot to specify h5 file to use."
@@ -38,15 +38,15 @@ def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, sky_factor=2
 
 class H5Catalog(Dataset):
     def __init__(self, h5_file):
-        h5_file_path = utils.data_path.joinpath(f"processed/{h5_file}")
+        h5_file_path = const.data_path.joinpath(f"processed/{h5_file}")
 
         self.file = h5py.File(h5_file_path, 'r')
-        assert utils.image_h5_name in self.file, "The dataset is not in this file"
+        assert const.image_h5_name in self.file, "The dataset is not in this file"
 
-        self.dset = self.file[utils.image_h5_name]
-        assert utils.background_h5_name in self.dset.attrs, "Background is not in file"
+        self.dset = self.file[const.image_h5_name]
+        assert const.background_h5_name in self.dset.attrs, "Background is not in file"
 
-        self.background = self.dset.attrs[utils.background_h5_name]
+        self.background = self.dset.attrs[const.background_h5_name]
 
     def __len__(self):
         """
@@ -143,7 +143,6 @@ class CatsimGalaxies(Dataset):
               f"truncate_radius: {self.renderer.truncate_radius}\n"
               f"add_noise: {self.renderer.add_noise}\n"
               f"preserve_flux: {self.renderer.preserve_flux}\n"
-              f"sky factor: {self.renderer.sky_factor}\n",
               f"dtype: {self.renderer.dtype}",
               file=prop_file)
 
@@ -196,7 +195,7 @@ class CatsimGalaxies(Dataset):
 
 class GalBasic(Dataset):
 
-    def __init__(self, slen, num_images=None, survey_name='lsst',
+    def __init__(self, slen, num_images=1000, survey_name='lsst',
                  snr=200, sky=700, flux=None, num_galaxies=1, preserve_flux=True):
         """
         This class uses and returns a random Gaussian Galaxy, the flux is adjusted based on slen and sky so that the
@@ -234,7 +233,11 @@ class GalBasic(Dataset):
         assert preserve_flux, "preserve flux must be true otherwise poisson assumption not satisfied."
 
     def __len__(self):
-        return self.num_images  # meaningless
+        """
+        Number of training examples in one epoch.
+        :return:
+        """
+        return self.num_images
 
     def __getitem__(self, idx):
         """
@@ -303,7 +306,7 @@ class Synthetic(Dataset):
         self.snr = -1
 
     def __len__(self):
-        return self.num_images  # meaningless.
+        return self.num_images
 
     def __getitem__(self, idx):
         # right now this completely ignores the index.

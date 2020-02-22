@@ -2,17 +2,12 @@
 """
 Should be executed from galaxy-net folder.
 """
-import sys
-from os.path import dirname
-
-sys.path.insert(0, dirname(dirname(__file__)))  # galaxy-net
 
 import argparse
 from src.data import generate
-from src import utils
+from src.utils import const
 import h5py
 
-# ToDo: add how many images you want.
 parser = argparse.ArgumentParser(description='Generate images',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--dir', type=str, required=True)
@@ -27,7 +22,7 @@ pargs = parser.parse_args()
 assert pargs.generate or pargs.merge, "At least one of generate/merge is required."
 
 # files and directories needed
-output_path = utils.data_path.joinpath(f"processed/{pargs.dir}")
+output_path = const.data_path.joinpath(f"processed/{pargs.dir}")
 output_path.mkdir(exist_ok=True)
 
 if pargs.generate:
@@ -38,7 +33,7 @@ if pargs.generate:
     assert not out_path.exists() or pargs.overwrite, "Trying to overwrite file."
 
     generate.generate_images("galcatsim", out_path, prop_file_path, num_images=pargs.num_images,
-                             slen=40, num_bands=6, fixed_size=False, sky_factor=50)
+                             slen=40, num_bands=6, fixed_size=False)
 
 if pargs.merge:
     new_file_path = output_path.joinpath("images.hdf5")
@@ -47,17 +42,17 @@ if pargs.merge:
     for pth in output_path.iterdir():
         if pth.suffix == ".hdf5":
             with h5py.File(pth, 'r') as currfile:
-                ds = currfile[utils.image_h5_name]
+                ds = currfile[const.image_h5_name]
                 total_images += ds.shape[0]
                 shape = ds.shape
                 dtype = ds.dtype
 
     with h5py.File(new_file_path, 'w') as nfile:
-        fds = nfile.create_dataset(utils.image_h5_name, shape=(total_images, *shape[1:]), dtype=dtype)
+        fds = nfile.create_dataset(const.image_h5_name, shape=(total_images, *shape[1:]), dtype=dtype)
         for i, pth in enumerate(output_path.iterdir()):
             if pth.suffix == ".hdf5":
                 with h5py.File(pth, 'r') as currfile:
-                    ds = currfile[utils.image_h5_name]
+                    ds = currfile[const.image_h5_name]
                     num_images = ds.shape[0]
                     fds[i * num_images:(i + 1) * num_images, :, :, :] = ds[:, :, :, :]
-                    fds.attrs[utils.background_h5_name] = ds.attrs[utils.background_h5_name]
+                    fds.attrs[const.background_h5_name] = ds.attrs[const.background_h5_name]

@@ -7,11 +7,9 @@ import timeit
 from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
-import __init__  # make sure this file can be executed.
 
 from src.train import train_galaxy
-from src.train import train_catalog
-from src import utils
+from src.utils import const
 
 torch.backends.cudnn.benchmark = True
 plt.switch_backend("Agg")
@@ -19,7 +17,7 @@ plt.switch_backend("Agg")
 # specify all the models (as a class) that can be trained.
 all_models = {
     'centered_galaxy': train_galaxy.TrainGalaxy,
-    'catalog': train_catalog.TrainCatalog
+    # 'catalog': train_catalog.TrainCatalog
 }
 
 all_datasets = [
@@ -29,17 +27,16 @@ all_datasets = [
     'h5_catalog'
 ]
 
-testing_name = "testing1"
-
 
 def setup():
     """
     Make sure that the testing directory exists among other things.
     """
-    testing_path = utils.reports_path.joinpath(testing_name)
-    if not testing_path.is_dir():
-        testing_path.mkdir()
-    return testing_path
+    testing_name = "testing1"
+    test_path = const.reports_path.joinpath(testing_name)
+    if not test_path.is_dir():
+        test_path.mkdir()
+    return test_path
 
 
 # @profile
@@ -88,10 +85,6 @@ if __name__ == "__main__":
                         help='input batch size for training.')
     parser.add_argument('--epochs', type=int, default=100, metavar='E',
                         help='number of epochs to train.')
-    parser.add_argument('--training-examples', type=int, default=100, metavar='TE',
-                        help='Number of training examples (batches) used to train in a single epoch.')
-    parser.add_argument('--evaluation-examples', type=int, default=10, metavar='EE',
-                        help='Number of evaluation examples (batches) used to evaluate in a single epoch.')
     parser.add_argument('--evaluate', type=int, default=None, help='Whether to evaluate and log the model at some '
                                                                    'specific number of epochs.')
 
@@ -105,9 +98,9 @@ if __name__ == "__main__":
                                                           'Specify options for the galaxy model to train.')
     train_galaxy.TrainGalaxy.add_args(one_centered_galaxy_group)
 
-    catalog_group = parser.add_argument_group('[catalog Model]',
-                                              'Specify options for the catalog model to train.')
-    train_catalog.TrainCatalog.add_args(catalog_group)
+    # catalog_group = parser.add_argument_group('[catalog Model]',
+    #                                           'Specify options for the catalog model to train.')
+    # train_catalog.TrainCatalog.add_args(catalog_group)
 
     # we are done.
     pargs = parser.parse_args()

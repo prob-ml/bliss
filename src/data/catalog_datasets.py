@@ -10,6 +10,9 @@ class CatsimData(Dataset):
         This class reads the relevant parameters OneDegSq.fits file and returns samples from this
         ~800k row matrix.
         """
+        raise NotImplementedError("Should not be used until it is brought up to daten with the other"
+                                  "datasets.")
+
         super(CatsimData, self).__init__()
 
         # pa_disk = pa_bulge (by assumption)

@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from src import utils
+from src.utils import const
 
 
 def draw_multiband(image, filename, figsize=(18, 18), ending='.jpg'):
@@ -8,7 +8,7 @@ def draw_multiband(image, filename, figsize=(18, 18), ending='.jpg'):
     :param image:
     :return:
     """
-    file_path = utils.reports_path.joinpath(f"figures/{filename}{ending}")
+    file_path = const.reports_path.joinpath(f"figures/{filename}{ending}")
 
     num_bands = image.shape[0]
     fig, axes = plt.subplots(2, 3, figsize=figsize)

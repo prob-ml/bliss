@@ -1,8 +1,8 @@
 from pathlib import Path
 from os.path import dirname
 
-src_path = Path(dirname(__file__))
-root_path = Path(dirname(dirname(__file__)))
+src_path = Path(dirname(dirname(__file__)))
+root_path = Path(dirname(dirname(dirname(__file__))))
 
 packages_path = root_path.joinpath("packages")
 reports_path = root_path.joinpath("reports")
@@ -42,8 +42,6 @@ general_args = [
     'model',
     'dataset',
     'batch_size',
-    'training_examples',
-    'evaluation_examples',
     'evaluate',
     'epochs',
 ]

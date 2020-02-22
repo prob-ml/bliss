@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import inspect
 
-from src import utils
+from src.utils import const
 from src.data import galaxy_datasets
 from src.models import galaxy_net
 
@@ -15,31 +15,46 @@ from src.models import galaxy_net
 class TrainGalaxy(object):
 
     def __init__(self, slen: int = 40, num_bands: int = 1, num_workers: int = 2, h5_file: str = '',
-                 fixed_size: utils.str_bool = False,
-                 epochs=None, batch_size=None, training_examples=None, evaluation_examples=None, evaluate=None,
+                 fixed_size: const.str_bool = False, epochs=None, batch_size=None, evaluate=None,
                  dir_name=None, dataset=None):
+        """
+        This function now iterates through the whole dataset in each epoch, with the number of objects in each epoch
+        depending on the __len__ attribute of the dataset.
+        :param slen:
+        :param num_bands:
+        :param num_workers:
+        :param h5_file:
+        :param fixed_size:
+        :param epochs:
+        :param batch_size:
+        :param evaluate:
+        :param dir_name:
+        :param dataset:
+        """
+
+        # constants for optimization and network.
+        self.latent_dim = 8
+        self.lr = 1e-4
+        self.weight_decay = 1e-6
 
         self.dataset = dataset
         self.slen = slen
         self.epochs = epochs
         self.batch_size = batch_size
-        self.training_examples = training_examples
-        self.evaluation_examples = evaluation_examples
         self.evaluate = evaluate
         self.num_bands = num_bands
         self.num_workers = num_workers
-        self.lr = 1e-4
         self.fixed_size = fixed_size
         self.ds = galaxy_datasets.decide_dataset(self.dataset, self.slen, self.num_bands, fixed_size=self.fixed_size,
                                                  h5_file=h5_file)
 
-        self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=8)
+        self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=self.latent_dim)
 
         tt_split = int(0.1 * len(self.ds))
         test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
         train_indices = np.mgrid[tt_split:len(self.ds)]
 
-        self.optimizer = Adam(self.vae.parameters(), lr=self.lr, weight_decay=1e-6)
+        self.optimizer = Adam(self.vae.parameters(), lr=self.lr, weight_decay=self.weight_decay)
 
         if self.evaluate:
             self.test_loader = DataLoader(self.ds, batch_size=self.batch_size,
@@ -57,10 +72,9 @@ class TrainGalaxy(object):
         # TODO: Create a directory file for easy look-up once we start producing a lot of these.
         prop_file = open(f"{self.dir_name}/props.txt", 'w')
         print(f"dataset: {self.dataset}\n"
+              f"dataset size: {len(self.dataset)}\n"
               f"epochs: {self.epochs}\n"
               f"batch_size: {self.batch_size}\n"
-              f"training_examples: {self.training_examples}\n"
-              f"evaluation_examples: {self.evaluation_examples}\n"
               f"evaluate: {self.evaluate}\n"
               f"learning rate: {self.lr}\n"
               f"slen: {self.slen}\n"
@@ -75,11 +89,13 @@ class TrainGalaxy(object):
     def train_epoch(self):
         self.vae.train()
         avg_loss = 0.0
+        nsamples = 0  # number of total samples that were trained on in this epoch.
 
         for batch_idx, data in enumerate(self.train_loader):
 
             image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
             background = data["background"].cuda()
+            nsamples += image.shape[0]
 
             loss = self.vae.loss(image, background)
             avg_loss += loss.item()
@@ -88,10 +104,9 @@ class TrainGalaxy(object):
             loss.backward()  # propagate this loss in the network.
             self.optimizer.step()  # only part where weights are changed.
 
-            if batch_idx + 1 >= self.training_examples:
-                break
+        avg_loss /= nsamples
+        print('nsamples:', nsamples)
 
-        avg_loss /= self.batch_size * self.training_examples
         return avg_loss
 
     def evaluate_and_log(self, epoch):
@@ -109,34 +124,38 @@ class TrainGalaxy(object):
         torch.save(self.vae.state_dict(), vae_file.as_posix())
 
         print("  * evaluating test loss...")
-        test_loss, avg_mse = self.eval_epoch()
+        test_loss, avg_rmse, avg_l1 = self.eval_epoch()
         print("  * test loss: {:.0f}".format(test_loss))
-        print(f" * avg_mse: {avg_mse}\n")
+        print(f" * avg_mse: {avg_rmse}\n")
+        print(f" * avg_l1: {avg_l1}\n")
 
         with open(loss_file.as_posix(), 'a') as f:
-            f.write(f"epoch {epoch}, test loss: {test_loss}, avg mse: {avg_mse}\n")
+            f.write(f"epoch {epoch}, test loss: {test_loss}, avg rmse: {avg_rmse}, "
+                    f"avg l1: {avg_l1}\n")
 
     def eval_epoch(self):
         self.vae.eval()  # set in evaluation mode = no need to compute gradients or allocate memory for them.
         avg_loss = 0.0
-        avg_mse = 0.0
+        avg_rmse = 0.0
+        avg_l1 = 0.0
+        nexamples = 0
 
         with torch.no_grad():  # no need to compute gradients outside training.
             for batch_idx, data in enumerate(self.test_loader):
-
-                if batch_idx > self.evaluation_examples:  # break after enough examples have been taken.
-                    break
-
                 image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
                 background = data["background"].cuda()
+                nexamples += image.shape[0]
+
                 loss = self.vae.loss(image, background)
                 avg_loss += loss.item()  # gets number from tensor containing single value.
-                mse = self.vae.mse(image, background)
-                avg_mse += mse.item()
+                avg_rmse += self.vae.rmse_pp(image, background).item()
+                avg_l1 += self.vae.l1_pp(image, background).item()
 
-        avg_loss /= self.batch_size * self.evaluation_examples
-        avg_mse /= self.batch_size * self.evaluation_examples
-        return avg_loss, avg_mse
+        avg_loss /= nexamples
+        avg_rmse /= nexamples
+        avg_l1 /= nexamples
+        print('nexamples:', nexamples)
+        return avg_loss, avg_rmse, avg_l1
 
     def plot_reconstruction(self, epoch):
         num_examples = min(10, self.batch_size)
@@ -186,8 +205,8 @@ class TrainGalaxy(object):
     def add_args(cls, parser):
         parameters = inspect.signature(cls).parameters
         for param in parameters:
-            if param not in utils.general_args and param != 'self':
-                arg_form = utils.to_argparse_form(param)
+            if param not in const.general_args and param != 'self':
+                arg_form = const.to_argparse_form(param)
                 parser.add_argument(arg_form, type=parameters[param].annotation, default=parameters[param].default,
                                     help='A parameter.')
 
