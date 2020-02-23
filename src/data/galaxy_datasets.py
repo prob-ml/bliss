@@ -27,7 +27,8 @@ def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None
         ds = CatsimGalaxies(image_size=slen, fixed_size=fixed_size)
 
     elif dataset_name == 'h5_catalog':
-        assert h5_file is not None, "Forgot to specify h5 file to use."
+        assert num_bands == 6, 'Can only use 6 bands with catsim images'
+        assert h5_file is not '', "Forgot to specify h5 file to use."
         ds = H5Catalog(h5_file=h5_file)
 
     else:
@@ -70,7 +71,7 @@ class H5Catalog(Dataset):
 class CatsimGalaxies(Dataset):
 
     def __init__(self, survey_name=None, image_size=40, filter_dict=None, fixed_size=False, snr=200, bands=None,
-                 dtype=np.float32, **render_kwargs):
+                 dtype=np.float32, preserve_flux=False, **render_kwargs):
         """
         This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog) and returns a
         galaxy drawn from the catalog with realistic seeing conditions using functions from WeakLensingDeblending.
@@ -88,7 +89,9 @@ class CatsimGalaxies(Dataset):
         assert filter_dict is None, "Not supporting different dict yet, need to change argparse + save_props below."
         assert bands is None, "Only using default number of bands = 6 for now."
         assert dtype is np.float32, "Only float32 is supported for now."
+        assert preserve_flux is False, "Otherwise variance of the noise will change which is not desirable."
 
+        # ToDo: Create a test or assertion to check that mean == variance approx.
         params = draw_catsim.get_default_params()
         self.survey_name = params['survey_name'] if not survey_name else survey_name
         self.bands = params['bands'] if not bands else bands
@@ -98,11 +101,13 @@ class CatsimGalaxies(Dataset):
         self.stamp_size = self.pixel_scale * self.image_size  # arcsecs.
         self.snr = snr
         self.dtype = dtype
+        self.preserve_flux = preserve_flux
 
         self.fixed_size = fixed_size
 
         self.renderer = draw_catsim.Render(self.survey_name, self.bands, self.stamp_size, self.pixel_scale,
-                                           snr=self.snr, dtype=self.dtype, **render_kwargs)
+                                           snr=self.snr, dtype=self.dtype, preserve_flux=self.preserve_flux,
+                                           **render_kwargs)
 
         self.table = Table.read(params['catalog_file_path'])
         self.table = self.table[np.random.permutation(len(self.table))]  # shuffle in case that order matters.

@@ -7,16 +7,19 @@ import subprocess
 from os.path import dirname
 from pathlib import Path
 
-project_path = Path(dirname(dirname(__file__)))
-path = f"PYTHONPATH={project_path.as_posix()}"
+project_path = Path(dirname(dirname(__file__)))  # path to galaxy-net
+path = f"PYTHONPATH={project_path.as_posix()} "
 
-# for i in range(13):
-#     subprocess.run(f"./execute/generate-images.py --dir test3 --filename images{i} --num-images 2000 --overwrite "
+# for i in range(15):
+#     subprocess.run(f"{path}"
+#                    f"./src/generate-images.py --dir test2 --filename images{i} --num-images 2000 --overwrite "
 #                    f"--generate &",
 #                    shell=True)
 
-# subprocess.run(f"./execute/generate-images.py --dir test3 --merge", shell=True)
+# subprocess.run(f"{path}"
+#                f"./src/generate-images.py --dir test2 --merge", shell=True)
 
 subprocess.run(f"{path} "
-               f"./src/train_model.py -h",
+               f"./src/train_model.py --model centered_galaxy --dataset h5_catalog --num-bands 6 "
+               f"--epochs 100 --num-workers 0 --overwrite --h5-file test2/images.hdf5 --evaluate 5 --dir-name test1",
                shell=True)

@@ -17,6 +17,7 @@ def get_default_params():
 
 
 # ToDo: More flexibility than drawing randomly centered in central pixel.
+# ToDo: Only get background once.
 class Render(object):
 
     def __init__(self, survey_name, bands, stamp_size, pixel_scale, snr=None, dtype=None,
@@ -38,11 +39,6 @@ class Render(object):
         self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
         self.dtype = dtype
-
-        # ToDo: Move this sanity checks to the dataset.
-        assert self.preserve_flux, "Preserve flux should be true because otherwise " \
-                                   "Poisson assumption is not satisfied!"
-        assert self.dtype is np.float32, "dtype should be np.float32"
 
     # @profile
     def get_obs(self):
@@ -94,7 +90,7 @@ class Render(object):
         for i, band in enumerate(self.bands):
             image_no_background = self.single_band(entry, obs[i], band)
             background = self.get_background(obs[i])
-            image[i, :, :] = image_no_background + background  # final image includes background.
+            image[i, :, :] = image_no_background + background
             backs[i, :, :] = background
 
         return image, backs
@@ -107,7 +103,7 @@ class Render(object):
     #@profile
     def single_band(self, entry, single_obs, band):
         """
-        Builds galaxy from a single entry in the catalog.
+        Builds galaxy from a single entry in the catalog. With no background sky level added.
         :param entry:
         :param single_obs:
         :param band:
@@ -146,6 +142,8 @@ class Render(object):
                 rng=generator,
                 sky_level=single_obs.mean_sky_level)  # remember PoissonNoise assumes background already subtracted off.
 
+            # Both of the adding noise methods add noise on the image consisting of the (galaxy flux + background), but
+            # then remove the background at the end.
             if self.snr:
                 image_temp.addNoiseSNR(noise, snr=self.snr, preserve_flux=self.preserve_flux)
             else:

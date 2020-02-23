@@ -50,7 +50,11 @@ class TrainGalaxy(object):
 
         self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=self.latent_dim)
 
-        tt_split = int(0.1 * len(self.ds))
+        split = 0.1
+        self.size_test = int(split * len(self.ds))
+        self.size_train = len(self.ds) - self.size_test
+
+        tt_split = int(split * len(self.ds))
         test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
         train_indices = np.mgrid[tt_split:len(self.ds)]
 
@@ -72,7 +76,7 @@ class TrainGalaxy(object):
         # TODO: Create a directory file for easy look-up once we start producing a lot of these.
         prop_file = open(f"{self.dir_name}/props.txt", 'w')
         print(f"dataset: {self.dataset}\n"
-              f"dataset size: {len(self.dataset)}\n"
+              f"dataset size: {len(self.ds)}\n"
               f"epochs: {self.epochs}\n"
               f"batch_size: {self.batch_size}\n"
               f"evaluate: {self.evaluate}\n"
@@ -89,13 +93,11 @@ class TrainGalaxy(object):
     def train_epoch(self):
         self.vae.train()
         avg_loss = 0.0
-        nsamples = 0  # number of total samples that were trained on in this epoch.
 
         for batch_idx, data in enumerate(self.train_loader):
 
             image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
             background = data["background"].cuda()
-            nsamples += image.shape[0]
 
             loss = self.vae.loss(image, background)
             avg_loss += loss.item()
@@ -104,8 +106,7 @@ class TrainGalaxy(object):
             loss.backward()  # propagate this loss in the network.
             self.optimizer.step()  # only part where weights are changed.
 
-        avg_loss /= nsamples
-        print('nsamples:', nsamples)
+        avg_loss /= self.size_train
 
         return avg_loss
 
@@ -126,8 +127,8 @@ class TrainGalaxy(object):
         print("  * evaluating test loss...")
         test_loss, avg_rmse, avg_l1 = self.eval_epoch()
         print("  * test loss: {:.0f}".format(test_loss))
-        print(f" * avg_mse: {avg_rmse}\n")
-        print(f" * avg_l1: {avg_l1}\n")
+        print(f" * avg_rmse: {avg_rmse}")
+        print(f" * avg_l1: {avg_l1}")
 
         with open(loss_file.as_posix(), 'a') as f:
             f.write(f"epoch {epoch}, test loss: {test_loss}, avg rmse: {avg_rmse}, "
@@ -138,23 +139,20 @@ class TrainGalaxy(object):
         avg_loss = 0.0
         avg_rmse = 0.0
         avg_l1 = 0.0
-        nexamples = 0
 
         with torch.no_grad():  # no need to compute gradients outside training.
             for batch_idx, data in enumerate(self.test_loader):
                 image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
                 background = data["background"].cuda()
-                nexamples += image.shape[0]
 
                 loss = self.vae.loss(image, background)
                 avg_loss += loss.item()  # gets number from tensor containing single value.
                 avg_rmse += self.vae.rmse_pp(image, background).item()
                 avg_l1 += self.vae.l1_pp(image, background).item()
 
-        avg_loss /= nexamples
-        avg_rmse /= nexamples
-        avg_l1 /= nexamples
-        print('nexamples:', nexamples)
+        avg_loss /= self.size_test
+        avg_rmse /= self.size_test
+        avg_l1 /= self.size_test
         return avg_loss, avg_rmse, avg_l1
 
     def plot_reconstruction(self, epoch):

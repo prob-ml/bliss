@@ -37,22 +37,27 @@ if pargs.generate:
 
 if pargs.merge:
     new_file_path = output_path.joinpath("images.hdf5")
+    assert not new_file_path.exists(), "The merged file is already there."
 
+    h5_files = [pth for pth in output_path.iterdir() if pth.suffix == '.hdf5']
+
+    # first, we figure out the total number of images to copy.
     total_images = 0.
-    for pth in output_path.iterdir():
-        if pth.suffix == ".hdf5":
-            with h5py.File(pth, 'r') as currfile:
-                ds = currfile[const.image_h5_name]
-                total_images += ds.shape[0]
-                shape = ds.shape
-                dtype = ds.dtype
+    for pth in h5_files:
+        with h5py.File(pth, 'r') as currfile:
+            ds = currfile[const.image_h5_name]
+            total_images += ds.shape[0]
+            shape = ds.shape
+            dtype = ds.dtype
 
+    # then we copy them.
     with h5py.File(new_file_path, 'w') as nfile:
         fds = nfile.create_dataset(const.image_h5_name, shape=(total_images, *shape[1:]), dtype=dtype)
-        for i, pth in enumerate(output_path.iterdir()):
-            if pth.suffix == ".hdf5":
-                with h5py.File(pth, 'r') as currfile:
-                    ds = currfile[const.image_h5_name]
-                    num_images = ds.shape[0]
-                    fds[i * num_images:(i + 1) * num_images, :, :, :] = ds[:, :, :, :]
-                    fds.attrs[const.background_h5_name] = ds.attrs[const.background_h5_name]
+        images_copied = 0
+        for pth in h5_files:
+            with h5py.File(pth, 'r') as currfile:
+                ds = currfile[const.image_h5_name]
+                num_images = ds.shape[0]
+                fds[images_copied:images_copied + num_images, :, :, :] = ds[:, :, :, :]
+                fds.attrs[const.background_h5_name] = ds.attrs[const.background_h5_name]
+                images_copied += num_images
