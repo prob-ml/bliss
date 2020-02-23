@@ -16,8 +16,7 @@ def get_default_params():
     return params
 
 
-# ToDo: More flexibility than drawing randomly centered in central pixel.
-# ToDo: Only get background once.
+# ToDo: LATER More flexibility than drawing randomly centered in central pixel.
 class Render(object):
 
     def __init__(self, survey_name, bands, stamp_size, pixel_scale, snr=None, dtype=None,
@@ -25,6 +24,9 @@ class Render(object):
                  verbose=False):
         """
         Can draw a single entry in CATSIM in the given bands.
+
+        NOTE: Background is constant given the band, survey_name, image size, and default survey_dict, so it can
+        be obtained in advance only once.
         """
         self.survey_name = survey_name
         self.bands = bands
@@ -40,8 +42,16 @@ class Render(object):
         self.verbose = verbose
         self.dtype = dtype
 
+        self.obs = self.get_obs()
+        self.background = self.get_background()
+
     # @profile
     def get_obs(self):
+        """
+        Returns a list of :class:`Survey` objects, each of them has an image attribute which is
+        where images are written to by iso_render_engine.render_galaxy.
+        :return:
+        """
         obs = []
         for band in self.bands:
             # dictionary of default values.
@@ -59,14 +69,28 @@ class Render(object):
 
         return obs
 
+    def get_background(self):
+        background = np.zeros((self.num_bands, self.image_size, self.image_size), dtype=self.dtype)
+        for i, single_obs in enumerate(self.obs):
+            background[i, :, :] = single_obs.mean_sky_level
+        return background
+
+    def reset_obs(self):
+        """
+        Reset it so we can draw on it again.
+        :return:
+        """
+        for single_obs in self.obs:
+            single_obs.image = galsim.Image(bounds=single_obs.image_bounds, scale=self.pixel_scale,
+                                            dtype=np.float32)
+
     def get_size(self, cat):
         """
         Return a astropy.Column with the size of each entry of the catalog given the current
         rendering observing conditions / survey.
         """
-        obs = self.get_obs()
         assert 'i' in self.bands, "Requires the i band to be present."
-        i_obs = obs[self.bands.index('i')]
+        i_obs = self.obs[self.bands.index('i')]
 
         f = cat['fluxnorm_bulge'] / (cat['fluxnorm_disk'] + cat['fluxnorm_bulge'])
         hlr_d = np.sqrt(cat['a_d'] * cat['b_d'])
@@ -83,22 +107,15 @@ class Render(object):
         Return a multi-band image corresponding to the entry from the catalog given.
         The final image includes its background based on survey's sky level.
         """
-        obs = self.get_obs()
-        image = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=self.dtype)
-        backs = np.zeros((len(self.bands), self.image_size, self.image_size), dtype=self.dtype)
+        image = np.zeros((self.num_bands, self.image_size, self.image_size), dtype=self.dtype)
 
         for i, band in enumerate(self.bands):
-            image_no_background = self.single_band(entry, obs[i], band)
-            background = self.get_background(obs[i])
-            image[i, :, :] = image_no_background + background
-            backs[i, :, :] = background
+            image_no_background = self.single_band(entry, self.obs[i], band)
+            image[i, :, :] = image_no_background + self.background[i]
 
-        return image, backs
+        self.reset_obs()
 
-    def get_background(self, single_obs):
-        background = np.zeros((self.image_size, self.image_size), dtype=self.dtype)
-        background[:, :] = single_obs.mean_sky_level
-        return background
+        return image, self.background
 
     #@profile
     def single_band(self, entry, single_obs, band):
@@ -122,7 +139,10 @@ class Render(object):
             no_margin=False,
             verbose_render=False)
 
+        # Up to this point, single_obs has not been changed by the previous 3 statements.
+
         try:
+            # this line draws the given galaxy image onto single_obs.image, this is the only change.
             iso_render_engine.render_galaxy(
                 galaxy, variations_x=None, variations_s=None, variations_g=None,
                 no_fisher=True, calculate_bias=False, no_analysis=True)  # saves image in single_obs

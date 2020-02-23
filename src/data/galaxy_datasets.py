@@ -5,13 +5,14 @@ from torch.utils.data import Dataset
 from astropy.table import Table
 from packages.WeakLensingDeblending import descwl
 import h5py
+import sys
 
 from src.utils import const
 from src.models import draw_catsim
 
 
 def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):
-    # TODO: The other two datasets non catsim should also be updated. (save props+clear defaults)
+    # TODO: LATER The other two datasets non catsim should also be updated. (save props+clear defaults)
     if dataset_name == 'synthetic':  # Jeff coded this one as a proof of concept.
         ds = Synthetic(slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
                        centered=True, num_bands=num_bands, num_images=1000)
@@ -108,6 +109,7 @@ class CatsimGalaxies(Dataset):
         self.renderer = draw_catsim.Render(self.survey_name, self.bands, self.stamp_size, self.pixel_scale,
                                            snr=self.snr, dtype=self.dtype, preserve_flux=self.preserve_flux,
                                            **render_kwargs)
+        self.background = self.renderer.background
 
         self.table = Table.read(params['catalog_file_path'])
         self.table = self.table[np.random.permutation(len(self.table))]  # shuffle in case that order matters.
@@ -135,8 +137,7 @@ class CatsimGalaxies(Dataset):
                 'background': background,
                 'num_galaxies': 1}
 
-    # Todo: add option to just print without a file.
-    def print_props(self, prop_file):
+    def print_props(self, output=sys.stdout):
         print(f"image_size: {self.image_size} \n"
               f"snr: {self.snr} \n"
               f"fixed size: {self.fixed_size} \n"
@@ -149,7 +150,7 @@ class CatsimGalaxies(Dataset):
               f"add_noise: {self.renderer.add_noise}\n"
               f"preserve_flux: {self.renderer.preserve_flux}\n"
               f"dtype: {self.renderer.dtype}",
-              file=prop_file)
+              file=output)
 
     def prepare_cat(self):
         # random deviation from exactly in center of center pixel, in arcsecs.

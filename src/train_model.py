@@ -41,6 +41,15 @@ def setup():
 
 # @profile
 def training(train_module, epochs=None, seed=None, evaluate=None, **kwargs):
+    """
+
+    :param train_module:
+    :param epochs:
+    :param seed:
+    :param evaluate:
+    :param kwargs: Not used.
+    :return:
+    """
     for epoch in range(0, epochs):
         np.random.seed(seed + epoch)
         start_time = timeit.default_timer()
@@ -55,6 +64,10 @@ def training(train_module, epochs=None, seed=None, evaluate=None, **kwargs):
 
 # @profile
 def run(args):
+    """
+    :param args: A dict.
+    :return:
+    """
     if args['model'] not in all_models:
         raise NotImplementedError("Not implemented this model yet.")
 

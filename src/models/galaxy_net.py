@@ -160,7 +160,7 @@ class OneCenteredGalaxy(nn.Module):
         :param k:
         :return:
         """
-        # TODO: use k
+        # TODO LATER: use k
         # sampling images from the real distribution
         recon_mean, recon_var, kl_z = self.forward(image, background)  # z | x ~ decoder
 
@@ -185,7 +185,7 @@ class OneCenteredGalaxy(nn.Module):
         :return:
         """
         recon_mean, recon_var, kl_z = self.forward(image, background)
-        return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen
+        return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
 
     def l1_pp(self, image, background):
         """
@@ -195,4 +195,4 @@ class OneCenteredGalaxy(nn.Module):
         :return:
         """
         recon_mean, recon_var, kl_z = self.forward(image, background)
-        return torch.norm(recon_mean - image, p=1) / self.slen
+        return torch.norm(recon_mean - image, p=1) / self.slen ** 2

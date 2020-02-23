@@ -15,8 +15,8 @@ from src.models import galaxy_net
 class TrainGalaxy(object):
 
     def __init__(self, slen: int = 40, num_bands: int = 1, num_workers: int = 2, h5_file: str = '',
-                 fixed_size: const.str_bool = False, epochs=None, batch_size=None, evaluate=None,
-                 dir_name=None, dataset=None):
+                 fixed_size: const.str_bool = False, reconstruct_one: const.str_bool = True, epochs=None,
+                 batch_size=None, evaluate=None, dir_name=None, dataset=None):
         """
         This function now iterates through the whole dataset in each epoch, with the number of objects in each epoch
         depending on the __len__ attribute of the dataset.
@@ -25,12 +25,15 @@ class TrainGalaxy(object):
         :param num_workers:
         :param h5_file:
         :param fixed_size:
+        :param reconstruct_one: Whether to plot all bands or only the 'i' band. [Default: True]
         :param epochs:
         :param batch_size:
         :param evaluate:
         :param dir_name:
         :param dataset:
         """
+        assert num_workers == 0 or not dataset == "h5_catalog", "Num of workers should be 0 when not generating " \
+                                                                "galaxies on the fly."
 
         # constants for optimization and network.
         self.latent_dim = 8
@@ -45,8 +48,11 @@ class TrainGalaxy(object):
         self.num_bands = num_bands
         self.num_workers = num_workers
         self.fixed_size = fixed_size
+        self.reconstruct_one = reconstruct_one
+
         self.ds = galaxy_datasets.decide_dataset(self.dataset, self.slen, self.num_bands, fixed_size=self.fixed_size,
                                                  h5_file=h5_file)
+        assert len(self.ds) >= 1000, "Dataset is too small."
 
         self.vae = galaxy_net.OneCenteredGalaxy(self.slen, num_bands=self.num_bands, latent_dim=self.latent_dim)
 
@@ -156,48 +162,60 @@ class TrainGalaxy(object):
         return avg_loss, avg_rmse, avg_l1
 
     def plot_reconstruction(self, epoch):
+        """
+        Now for each epoch to evaluate, it creates a new folder with the reconstructions that include each of the bands.
+        :param epoch:
+        :return:
+        """
         num_examples = min(10, self.batch_size)
-
-        plt.ioff()
-        plt.figure(figsize=(5 * 3, 2 + 4 * num_examples))
-        plt.tight_layout()
-        plt.suptitle("Epoch {:d}".format(epoch))
 
         num_cols = 3  # also look at recon_var
 
+        plots_path = Path(self.dir_name, f'plots')
+        if self.reconstruct_one:
+            bands_indices = [min(2, self.num_bands - 1)]  # only i band if available, otherwise the highest band.
+        else:
+            bands_indices = range(self.num_bands)
+            plots_path = plots_path.joinpath(f"epoch_{epoch}")
+        plots_path.mkdir(parents=True, exist_ok=True)
+
+        plt.ioff()
         with torch.no_grad():
             for batch_idx, data in enumerate(self.test_loader):
                 image = data["image"].cuda()  # copies from cpu to gpu memory.
-                background = data["background"].cuda()  # maybe not having background will be a problem.
+                background = data["background"].cuda()  # not having background will be a problem.
                 num_galaxies = data["num_galaxies"]
                 self.vae.eval()
 
                 recon_mean, recon_var, _ = self.vae(image, background)
+                for j in bands_indices:
+                    plt.figure(figsize=(5 * 3, 2 + 4 * num_examples))
+                    plt.tight_layout()
+                    plt.suptitle("Epoch {:d}".format(epoch))
 
-                for i in range(num_examples):
-                    vmax1 = image[i, 0].max()  # we are looking at the ith sample in the first band.
-                    plt.subplot(num_examples, num_cols, num_cols * i + 1)
-                    plt.title("image [{} galaxies]".format(num_galaxies[i]))
-                    plt.imshow(image[i, 0].data.cpu().numpy(), vmax=vmax1)
-                    plt.colorbar()
+                    for i in range(num_examples):
+                        vmax1 = image[i, j].max()  # we are looking at the ith sample in the jth band.
+                        plt.subplot(num_examples, num_cols, num_cols * i + 1)
+                        plt.title("image [{} galaxies]".format(num_galaxies[i]))
+                        plt.imshow(image[i, j].data.cpu().numpy(), vmax=vmax1)
+                        plt.colorbar()
 
-                    plt.subplot(num_examples, num_cols, num_cols * i + 2)
-                    plt.title("recon_mean")
-                    plt.imshow(recon_mean[i, 0].data.cpu().numpy(), vmax=vmax1)
-                    plt.colorbar()
+                        plt.subplot(num_examples, num_cols, num_cols * i + 2)
+                        plt.title("recon_mean")
+                        plt.imshow(recon_mean[i, j].data.cpu().numpy(), vmax=vmax1)
+                        plt.colorbar()
 
-                    plt.subplot(num_examples, num_cols, num_cols * i + 3)
-                    plt.title("recon_var")
-                    plt.imshow(recon_var[i, 0].data.cpu().numpy(), vmax=vmax1)
-                    plt.colorbar()
+                        plt.subplot(num_examples, num_cols, num_cols * i + 3)
+                        plt.title("recon_var")
+                        plt.imshow(recon_var[i, j].data.cpu().numpy(), vmax=vmax1)
+                        plt.colorbar()
+
+                    plot_file = plots_path.joinpath(f"plot_{epoch}_{j}")
+                    plt.savefig(plot_file.as_posix())
+                    plt.close()
 
                 break
 
-        plots = Path(self.dir_name, 'plots')
-        plots.mkdir(parents=True, exist_ok=True)
-        plot_file = plots.joinpath("plot_epoch_{}".format(epoch))
-        plt.savefig(plot_file.as_posix())
-        plt.close()
 
     @classmethod
     def add_args(cls, parser):

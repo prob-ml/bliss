@@ -22,7 +22,6 @@ def generate_images(dataset_name, out_path, prop_file_path=None, num_images=1,
         with open(prop_file_path, 'w') as prop_file:
             ds.print_props(prop_file)
 
-    # ToDo: Get background from dataset once that is added as an attribute.
     with h5py.File(out_path, 'w') as images_file:
         hds_shape = (num_images, ds.num_bands, ds.image_size, ds.image_size)
         hds = images_file.create_dataset(const.image_h5_name, hds_shape, dtype=ds.dtype)
@@ -30,8 +29,7 @@ def generate_images(dataset_name, out_path, prop_file_path=None, num_images=1,
             random_idx = random.randrange(len(ds))
             output = ds[random_idx]
             image = output['image']
-            background = output['background']
             hds[i, :, :, :] = image
             hds.flush()
-        hds.attrs[const.background_h5_name] = background
+        hds.attrs[const.background_h5_name] = ds.background
         hds.flush()
