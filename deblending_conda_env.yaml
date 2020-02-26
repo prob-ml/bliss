@@ -1,13 +1,15 @@
-name: pytorch_update
+name: deblending_pytorch_env
 channels:
   - pytorch
   - defaults
 dependencies:
+  - _libgcc_mutex=0.1=main
   - backcall=0.1.0=py36_0
   - blas=1.0=mkl
   - ca-certificates=2018.12.5=0
   - certifi=2018.11.29=py36_0
   - cffi=1.11.5=py36h9745a5d_0
+  - cudatoolkit=10.1.243=h6bb024c_0
   - cycler=0.10.0=py36h93f1223_0
   - dbus=1.13.2=h714fa37_1
   - decorator=4.3.0=py36_0
@@ -73,6 +75,8 @@ dependencies:
   - sip=4.19.8=py36hf484d3e_0
   - six=1.11.0=py36h372c433_1
   - sqlite=3.26.0=h7b6447c_0
+  - tbb=2019.8=hfd86e86_0
+  - tbb4py=2019.8=py36hfd86e86_0
   - tk=8.6.8=hbc83047_0
   - tornado=5.0.2=py36_0
   - tqdm=4.23.4=py36_0
@@ -82,19 +86,13 @@ dependencies:
   - xz=5.2.4=h14c3975_4
   - zeromq=4.2.5=h439df22_0
   - zlib=1.2.11=ha838bed_2
+  - pytorch=1.4.0=py3.6_cuda10.1.243_cudnn7.6.3_0
   - pytorch-cpu=1.0.0=py3.6_cpu_1
+  - torchvision=0.5.0=py36_cu101
   - torchvision-cpu=0.2.1=py_2
   - pip:
     - astropy==3.2.1
     - fitsio==0.9.12
-    - imageio==2.6.1
-    - joblib==0.13.2
-    - munkres==1.1.2
-    - networkx==2.3
-    - pyfits==3.5
-    - pywavelets==1.0.3
-    - scikit-image==0.15.0
-    - torch==1.1.0
-    - torchvision==0.2.1
-prefix: /home/runjing_liu/anaconda3/envs/pytorch_update
+    - torch==1.4.0
+prefix: /home/runingli/anaconda3/envs/deblending_pytorch_env
 
