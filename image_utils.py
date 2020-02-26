@@ -58,17 +58,17 @@ def tile_images(images, subimage_slen, step):
 
     n_bands = images.shape[1]
     for b in range(n_bands):
-        images_batched_b = _extract_patches_2d(images[:, b:(b+1), :, :],
+        image_patches_b = _extract_patches_2d(images[:, b:(b+1), :, :],
                                             patch_shape = [subimage_slen, subimage_slen],
                                             step = [step, step],
                                             batch_first = True).reshape(-1, 1, subimage_slen, subimage_slen)
 
         if b == 0:
-            images_batched = images_batched_b
+            image_patches = image_patches_b
         else:
-            images_batched = torch.cat((images_batched, images_batched_b), dim = 1)
+            image_patches = torch.cat((image_patches, image_patches_b), dim = 1)
 
-    return images_batched
+    return image_patches
 
 def get_tile_coords(image_xlen, image_ylen, subimage_slen, step):
     # this function is used in conjuction with tile_images above.
