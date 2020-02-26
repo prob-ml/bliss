@@ -24,32 +24,26 @@ class Normalize2d(nn.Module):
 
 
 class StarEncoder(nn.Module):
-    def __init__(self, full_slen, stamp_slen, step, edge_padding,
+    def __init__(self, slen, patch_slen, step, edge_padding,
                         n_bands, max_detections,
                         estimate_flux = True):
 
         super(StarEncoder, self).__init__()
 
         # image parameters
-        self.full_slen = full_slen # dimension of full image: we assume its square for now
-        self.stamp_slen = stamp_slen # dimension of the individual image patches
+        self.slen = slen # dimension of full image: we assume its square for now
+        self.patch_slen = patch_slen # dimension of the individual image patches
         self.step = step # number of pixels to shift every subimage
-        self.n_bands = n_bands
+        self.n_bands = n_bands # number of bands
 
+        # whether or not we return a variational distribution on the flux
         self.estimate_flux = float(estimate_flux)
 
         self.edge_padding = edge_padding
 
-        self.tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
-                                                        stamp_slen, step)
+        self.tile_coords = image_utils.get_tile_coords(self.slen, self.slen,
+                                                    self.patch_slen, self.step)
         self.n_patches = self.tile_coords.shape[0]
-
-        # TODO: make this variable for mean stars
-        mean_stars_per_patch = 0.4
-        poisson_dstr = poisson.Poisson(rate = mean_stars_per_patch)
-        inv_weights = torch.exp(poisson_dstr.log_prob(torch.arange(max_detections + 1).float()))
-
-        self.weights = (inv_weights.max() / inv_weights).to(device)
 
         # max number of detections
         self.max_detections = max_detections
@@ -85,7 +79,7 @@ class StarEncoder(nn.Module):
 
         # output dimension of convolutions
         conv_out_dim = \
-            self.enc_conv(torch.zeros(1, n_bands, stamp_slen, stamp_slen)).size(1)
+            self.enc_conv(torch.zeros(1, n_bands, patch_slen, patch_slen)).size(1)
 
         # fully connected layers
         self.enc_fc = nn.Sequential(
@@ -145,33 +139,23 @@ class StarEncoder(nn.Module):
     ############################
     # The layers of our neural network
     ############################
-    def _forward_to_pooled_hidden(self, image, background):
+    def _forward_to_pooled_hidden(self, image):
         # forward to the layer that is shared by all n_stars
-        assert torch.all(image > 0.)
-        assert torch.all((image - background) > -1000.)
-        assert image.shape == background.shape
 
-        # log_img = torch.log(image - background + 1000)
         log_img = torch.log(image - image.min() + 1.)
-        # means = log_img.view(image.shape[0], self.n_bands, -1).mean(-1)
-        # stds = log_img.view(image.shape[0], self.n_bands, -1).std(-1)
-        # mins = log_img.view(log_img.shape[0], self.n_bands, -1).min(-1)[0]
-        # maxes = log_img.view(log_img.shape[0], self.n_bands, -1).max(-1)[0]
-        #
-        # log_img = (log_img - mins.unsqueeze(-1).unsqueeze(-1)) / (maxes - mins).unsqueeze(-1).unsqueeze(-1)
 
         h = self.enc_conv(log_img)
 
         return self.enc_fc(h)
 
-    def _forward_to_last_hidden(self, image_stamps, background_stamps):
+    def _forward_to_last_hidden(self, image_patches):
         # concatenate all output parameters for all possible n_stars
 
-        h = self._forward_to_pooled_hidden(image_stamps, background_stamps)
+        h = self._forward_to_pooled_hidden(image_patches)
 
         return self.enc_final(h)
 
-        # h_out = torch.zeros(image_stamps.shape[0], 1).to(device)
+        # h_out = torch.zeros(image_patches.shape[0], 1).to(device)
         # for i in range(0, self.max_detections + 1):
         #     h_i = self._forward_conditional_nstars(h, i)
         #
@@ -182,9 +166,9 @@ class StarEncoder(nn.Module):
     ######################
     # Forward modules
     ######################
-    def forward(self, image_stamps, background_stamps, n_stars = None):
+    def forward(self, image_patches, n_stars = None):
         # pass through neural network
-        h = self._forward_to_last_hidden(image_stamps, background_stamps)
+        h = self._forward_to_last_hidden(image_patches)
 
         # get probability of n_stars
         log_probs = self._get_logprobs_from_last_hidden_layer(h)
@@ -289,140 +273,137 @@ class StarEncoder(nn.Module):
     ######################
     # Modules for patching images and parameters
     ######################
-    def get_image_stamps(self, images_full, locs, fluxes,
+    def get_image_patches(self, images, locs, fluxes,
                             trim_images = False, clip_max_stars = False):
-        assert len(images_full.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
-        assert images_full.shape[1] == self.n_bands
+        assert len(images.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
+        assert images.shape[1] == self.n_bands
 
-        full_slen = images_full.shape[-1]
+        full_slen = images.shape[-1]
 
-        if not (images_full.shape[-1] == self.full_slen):
+        if not (images.shape[-1] == self.slen):
             # get the coordinates
             tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
-                                                        self.stamp_slen,
+                                                        self.patch_slen,
                                                         self.step);
         else:
             # else, use the cached coordinates
             tile_coords = self.tile_coords
 
-        batchsize = images_full.shape[0]
+        batchsize = images.shape[0]
 
-        image_stamps = \
-            image_utils.tile_images(images_full,
-                                    self.stamp_slen,
+        image_patches = \
+            image_utils.tile_images(images,
+                                    self.patch_slen,
                                     self.step)
 
         if (locs is not None) and (fluxes is not None):
             assert fluxes.shape[2] == self.n_bands
 
             # get parameters in patch as well
-            subimage_locs, subimage_fluxes, n_stars, is_on_array = \
+            patch_locs, patch_fluxes, n_stars, is_on_array = \
                 image_utils.get_params_in_patches(tile_coords,
                                                   locs,
                                                   fluxes,
                                                   full_slen,
-                                                  self.stamp_slen,
+                                                  self.patch_slen,
                                                   self.edge_padding)
 
-            # if (self.weights is None) or (images_full.shape[0] != self.batchsize):
+            # if (self.weights is None) or (images.shape[0] != self.batchsize):
             #     self.weights = get_weights(n_stars.clamp(max = self.max_detections))
 
             if clip_max_stars:
                 n_stars = n_stars.clamp(max = self.max_detections)
-                subimage_locs = subimage_locs[:, 0:self.max_detections, :]
-                subimage_fluxes = subimage_fluxes[:, 0:self.max_detections, :]
+                patch_locs = patch_locs[:, 0:self.max_detections, :]
+                patch_fluxes = patch_fluxes[:, 0:self.max_detections, :]
                 is_on_array = is_on_array[:, 0:self.max_detections]
 
         else:
-            subimage_locs = None
-            subimage_fluxes = None
+            patch_locs = None
+            patch_fluxes = None
             n_stars = None
             is_on_array = None
 
         if trim_images:
-            image_stamps = image_utils.trim_images(image_stamps, self.edge_padding)
+            image_patches = image_utils.trim_images(image_patches, self.edge_padding)
 
-        return image_stamps, subimage_locs, subimage_fluxes, \
+        return image_patches, patch_locs, patch_fluxes, \
                     n_stars, is_on_array
 
     ######################
     # Modules to sample our variational distribution and get parameters on the full image
     ######################
-    def _get_full_params_from_sampled_params(self, subimage_locs_sampled,
-                                                subimage_fluxes_sampled,
+    def _get_full_params_from_sampled_params(self, patch_locs_sampled,
+                                                patch_fluxes_sampled,
                                                 full_slen):
 
-        n_samples = subimage_locs_sampled.shape[0]
-        n_image_stamps = subimage_locs_sampled.shape[1]
+        n_samples = patch_locs_sampled.shape[0]
+        n_image_patches = patch_locs_sampled.shape[1]
 
-        assert self.n_bands == subimage_fluxes_sampled.shape[-1]
+        assert self.n_bands == patch_fluxes_sampled.shape[-1]
 
-        if not (full_slen == self.full_slen):
+        if not (full_slen == self.slen):
             tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
-                                                        self.stamp_slen,
+                                                        self.patch_slen,
                                                         self.step);
         else:
             tile_coords = self.tile_coords
 
-        assert (n_image_stamps % tile_coords.shape[0]) == 0
+        assert (n_image_patches % tile_coords.shape[0]) == 0
 
         locs_full_image, fluxes_full_image, n_stars_full = \
-            image_utils.get_full_params_from_patch_params(subimage_locs_sampled.view(n_samples * n_image_stamps, -1, 2),
-                                                          subimage_fluxes_sampled.view(n_samples * n_image_stamps, -1, self.n_bands),
+            image_utils.get_full_params_from_patch_params(patch_locs_sampled.view(n_samples * n_image_patches, -1, 2),
+                                                          patch_fluxes_sampled.view(n_samples * n_image_patches, -1, self.n_bands),
                                                         tile_coords,
                                                         full_slen,
-                                                        self.stamp_slen,
+                                                        self.patch_slen,
                                                         self.edge_padding)
 
         return locs_full_image, fluxes_full_image, n_stars_full
 
-    def sample_star_encoder(self, full_image,
-                                full_background,
+    def sample_star_encoder(self, image,
                                 n_samples = 1,
                                 return_map_n_stars = False,
                                 return_map_star_params = False,
-                                n_stars = None,
+                                patch_n_stars = None,
                                 return_log_q = False,
                                 training = False):
 
         # our sampling only works for one image at a time at the moment ...
-        assert full_image.shape[0] == 1
+        assert image.shape[0] == 1
 
-        full_slen = full_image.shape[-1]
+        full_slen = image.shape[-1]
 
-        # the image stamps
-        image_stamps = self.get_image_stamps(full_image,
-                            locs = None, fluxes = None, trim_images = False)[0]
-        background_stamps = self.get_image_stamps(full_background,
+        # the image patches
+        image_patches = self.get_image_patches(image,
                             locs = None, fluxes = None, trim_images = False)[0]
 
         # pass through NN
-        h = self._forward_to_last_hidden(image_stamps, background_stamps)
+        h = self._forward_to_last_hidden(image_patches)
 
-        # get log probs
-        log_probs = self._get_logprobs_from_last_hidden_layer(h);
+        # get log probs for number of stars
+        log_probs_nstar_patch = self._get_logprobs_from_last_hidden_layer(h);
 
         if not training:
             h = h.detach()
-            log_probs = log_probs.detach()
+            log_probs_nstar_patch = log_probs_nstar_patch.detach()
 
         # sample number of stars
-        if n_stars is None:
+        if patch_n_stars is None:
             if return_map_n_stars:
-                n_stars_sampled = torch.argmax(log_probs.detach(), dim = 1).repeat(n_samples).view(n_samples, -1)
+                patch_n_stars_sampled = torch.argmax(log_probs_nstar_patch.detach(), dim = 1).repeat(n_samples).view(n_samples, -1)
 
             else:
-                n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs.detach()), n_samples).view(n_samples, -1)
+                patch_n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs_nstar_patch.detach()), n_samples).view(n_samples, -1)
         else:
-            n_stars_sampled = n_stars.repeat(n_samples).view(n_samples, -1)
+            patch_n_stars_sampled = patch_n_stars.repeat(n_samples).view(n_samples, -1)
 
-        is_on_array = utils.get_is_on_from_n_stars_2d(n_stars_sampled,
+        is_on_array = utils.get_is_on_from_n_stars_2d(patch_n_stars_sampled,
                                 self.max_detections)
 
-        # get variational parameters
+        # get variational parameters: these are on image patches
         loc_mean, loc_logvar, \
             log_flux_mean, log_flux_logvar = \
-                self._get_params_from_last_hidden_layer(h, n_stars_sampled)
+                self._get_params_from_last_hidden_layer(h, patch_n_stars_sampled)
 
         if return_map_star_params:
             loc_sd = torch.zeros(loc_logvar.shape).to(device)
@@ -432,32 +413,31 @@ class StarEncoder(nn.Module):
             log_flux_sd = torch.exp(0.5 * log_flux_logvar).clamp(max = 0.5)
 
         # sample locations
-        locs_randn = torch.randn(loc_mean.shape).to(device)
-
-        subimage_locs_sampled = (loc_mean + locs_randn * loc_sd) * \
+        _locs_randn = torch.randn(loc_mean.shape).to(device)
+        patch_locs_sampled = (loc_mean + _locs_randn * loc_sd) * \
                                     is_on_array.unsqueeze(3).float()
 
         # sample fluxes
-        fluxes_randn = torch.randn(log_flux_mean.shape).to(device);
-        log_flux_sampled = log_flux_mean + fluxes_randn * log_flux_sd * self.estimate_flux
+        _fluxes_randn = torch.randn(log_flux_mean.shape).to(device);
+        patch_log_flux_sampled = log_flux_mean + _fluxes_randn * log_flux_sd * self.estimate_flux
 
-        subimage_fluxes_sampled = \
-            torch.exp(log_flux_sampled) * is_on_array.unsqueeze(3).float()
+        patch_fluxes_sampled = \
+            torch.exp(patch_log_flux_sampled) * is_on_array.unsqueeze(3).float()
 
         # get parameters on full image
         locs_full_image, fluxes_full_image, n_stars_full = \
-            self._get_full_params_from_sampled_params(subimage_locs_sampled,
-                                                        subimage_fluxes_sampled,
+            self._get_full_params_from_sampled_params(patch_locs_sampled,
+                                                        patch_fluxes_sampled,
                                                         full_slen)
 
         if return_log_q:
-            log_q_locs = (utils.eval_normal_logprob(subimage_locs_sampled, loc_mean,
+            log_q_locs = (utils.eval_normal_logprob(patch_locs_sampled, loc_mean,
                                                         loc_logvar) * \
                                                         is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
             log_q_fluxes = (utils.eval_normal_logprob(log_flux_sampled, log_flux_mean,
                                                 log_flux_logvar) * \
                                                 is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
-            log_q_n_stars = torch.gather(log_probs, 1, n_stars_sampled.transpose(0, 1)).transpose(0, 1).sum(1)
+            log_q_n_stars = torch.gather(log_probs_nstar_patch, 1, n_stars_sampled.transpose(0, 1)).transpose(0, 1).sum(1)
 
         else:
             log_q_locs = None
@@ -466,99 +446,3 @@ class StarEncoder(nn.Module):
 
         return locs_full_image, fluxes_full_image, n_stars_full, \
                 log_q_locs, log_q_fluxes, log_q_n_stars
-
-
-# def get_weights(n_stars):
-#     weights = torch.zeros(max(n_stars) + 1).to(device)
-#     for i in range(max(n_stars) + 1):
-#         weights[i] = len(n_stars) / torch.sum(n_stars == i).float()
-#     return weights / weights.min()
-
-# def get_results_on_full_image(self, images_full, backgrounds_full,
-#                                     true_n_stars = None, n_samples = 0):
-#     # first convert full iimages to image stamps
-#
-#     # get image stamps
-#     image_stamps = self.get_image_stamps(images_full, None, None,
-#                                           trim_images = False)[0]
-#     background_stamps = self.get_image_stamps(backgrounds_full, None, None,
-#                                           trim_images = False)[0]
-#
-#     # get variational parameters on stamps
-#     loc_logit_mean, logit_loc_log_var, \
-#         log_flux_mean, log_flux_log_var, log_probs = \
-#             self.forward(image_stamps, background_stamps, true_n_stars)
-#
-#     # get map estimates on image stamps
-#     if true_n_stars is None:
-#         map_n_stars = torch.argmax(log_probs, dim = 1)
-#     else:
-#         map_n_stars = true_n_stars
-#
-#     is_on_array = get_is_on_from_n_stars(map_n_stars, self.max_detections)
-#
-#     map_locs = torch.sigmoid(loc_logit_mean).detach() * is_on_array.unsqueeze(2).float()
-#     map_fluxes = torch.exp(log_flux_mean).detach() * is_on_array.float()
-#
-#     # convert stamp parameters to parameters on the full image
-#     map_locs_full_image, map_fluxes_full_image, n_stars_full = \
-#         image_utils.get_full_params_from_patch_params(map_locs,
-#                                                       map_fluxes,
-#                                                     self.tile_coords,
-#                                                     self.full_slen,
-#                                                     self.stamp_slen,
-#                                                     self.edge_padding,
-#                                                     self.batchsize)
-#
-#     if n_samples > 0:
-#         # TODO: this is not thoroughly tested ...
-#         logit_loc_sample = loc_logit_mean.unsqueeze(3) + \
-#                                 torch.randn((loc_logit_mean.shape[0],
-#                                             loc_logit_mean.shape[1],
-#                                             loc_logit_mean.shape[2],
-#                                             n_samples)) * \
-#                                 torch.exp(0.5 * logit_loc_log_var).unsqueeze(3)
-#
-#         locs_sampled = torch.sigmoid(logit_loc_sample) * is_on_array.unsqueeze(2).unsqueeze(3).float()
-#
-#         log_flux_sample = log_flux_mean.unsqueeze(2) + \
-#                                 torch.randn((log_flux_mean.shape[0],
-#                                             log_flux_mean.shape[1],
-#                                             n_samples)) * \
-#                                 torch.exp(0.5 * log_flux_log_var).unsqueeze(2)
-#         fluxes_sampled = torch.exp(log_flux_sample) * is_on_array.unsqueeze(2).float()
-#
-#         locs_sampled_full_image, fluxes_sampled_full_image, _ = \
-#             image_utils.get_full_params_from_patch_params(locs_sampled.view(locs_sampled.shape[0], -1, 2),
-#                                                           fluxes_sampled.view(fluxes_sampled.shape[0], -1),
-#                                                         self.tile_coords,
-#                                                         self.full_slen,
-#                                                         self.stamp_slen,
-#                                                         self.edge_padding,
-#                                                         self.batchsize)
-#
-#         return map_locs_full_image, map_fluxes_full_image, n_stars_full, \
-#                 locs_sampled_full_image, fluxes_sampled_full_image
-#
-#     else:
-#         return map_locs_full_image, map_fluxes_full_image, n_stars_full
-#
-
-# def _get_params_from_last_hidden_layer(self, h, n_stars):
-#
-#     assert h.shape[1] == self.dim_out_all
-#     assert h.shape[0] == len(n_stars)
-#
-#     batchsize = h.size(0)
-#     _h = torch.cat((h, torch.zeros(batchsize, 1).to(device)), dim = 1)
-#
-#     loc_logit_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_stars])
-#     loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_stars])
-#
-#     log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_stars])
-#     log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_stars])
-#
-#     return loc_logit_mean.reshape(batchsize, self.max_detections, 2), \
-#             loc_logvar.reshape(batchsize, self.max_detections, 2), \
-#             log_flux_mean.reshape(batchsize, self.max_detections), \
-#             log_flux_logvar.reshape(batchsize, self.max_detections)
