@@ -189,7 +189,7 @@ class PowerLawPSF(nn.Module):
 #######################
 # Function to get loss
 #######################
-def get_psf_loss(full_images, full_backgrounds,
+def get_recon_loss(full_images, full_backgrounds,
                     locs, fluxes, n_stars, psf,
                     pad = 5,
                     grid = None):

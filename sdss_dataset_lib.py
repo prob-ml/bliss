@@ -224,7 +224,7 @@ class SDSSHubbleData(Dataset):
         # self.psf_full = sdss_psf.psf_at_points(0, 0, psf_fit_file = self.psf_file)
         # self.psf = _trim_psf(self.psf_full, slen)
 
-        # the full SDSS image
+        # the full SDSS image, ~1500 x 2000 pixels
         self.sdss_image_full = torch.Tensor(self.sdss_data[0]['image'])
         self.sdss_background_full = torch.Tensor(self.sdss_data[0]['background'])
 
