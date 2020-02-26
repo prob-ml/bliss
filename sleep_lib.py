@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import math
-import time 
+import time
 
 from torch.distributions import normal
 
@@ -104,8 +104,7 @@ def get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, is_on_array):
 
 def get_params_loss(loc_mean, loc_log_var, \
                         log_flux_mean, log_flux_log_var, log_probs,
-                        true_locs, true_fluxes, true_is_on_array,
-                        weights):
+                        true_locs, true_fluxes, true_is_on_array):
 
     max_detections = log_flux_mean.shape[1]
 
@@ -134,25 +133,22 @@ def get_params_loss(loc_mean, loc_log_var, \
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm_indx
 
-def get_encoder_loss(star_encoder,
-                        images_full,
-                        backgrounds_full,
+def get_sleep_loss(star_encoder,
+                        images,
+                        backgrounds,
                         true_locs,
                         true_fluxes, use_l2_loss = False):
 
-    # extract image_patches patches
-    image_stamps, subimage_locs, subimage_fluxes, true_n_stars, true_is_on_array = \
-        star_encoder.get_image_stamps(images_full, true_locs, true_fluxes,
-                                        clip_max_stars = True)
+    # extract image patches
+    image_patches, true_patch_locs, true_patch_fluxes, \
+        true_patch_n_stars, true_patch_is_on_array = \
+            star_encoder.get_image_patches(images, true_locs, true_fluxes,
+                                            clip_max_stars = True)
 
-    background_stamps = \
-        star_encoder.get_image_stamps(backgrounds_full, None, None,
-                                      trim_images = False)[0]
-
-    # get variational parameters
+    # get variational parameters on each patch
     loc_mean, loc_log_var, \
         log_flux_mean, log_flux_log_var, log_probs = \
-            star_encoder(image_stamps, background_stamps, true_n_stars)
+            star_encoder(image_patches, true_patch_n_stars)
 
     if use_l2_loss:
         loc_log_var = torch.zeros((loc_log_var.shape))
@@ -161,13 +157,12 @@ def get_encoder_loss(star_encoder,
     loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
         get_params_loss(loc_mean, loc_log_var, \
                             log_flux_mean, log_flux_log_var, log_probs, \
-                            subimage_locs, subimage_fluxes,
-                            true_is_on_array.float(),
-                            star_encoder.weights)
+                            true_patch_locs, true_patch_fluxes,
+                            true_patch_is_on_array.float())
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm_indx, log_probs
 
-def eval_star_encoder_loss(star_encoder, train_loader,
+def run_sleep(star_encoder, train_loader,
                 optimizer = None, train = False,
                 residual_vae = None):
 
@@ -199,7 +194,7 @@ def eval_star_encoder_loss(star_encoder, train_loader,
 
         # evaluate log q
         loss, counter_loss, locs_loss, fluxes_loss = \
-            get_encoder_loss(star_encoder, images, backgrounds,
+            get_sleep_loss(star_encoder, images, backgrounds,
                                 true_locs, true_fluxes)[0:4]
 
         if train:
