@@ -275,14 +275,14 @@ class StarEncoder(nn.Module):
     ######################
     def get_image_patches(self, images, locs, fluxes,
                             trim_images = False, clip_max_stars = False):
-        assert len(images.shape) == 4 # should be batchsize x n_bands x full_slen x full_slen
+        assert len(images.shape) == 4 # should be batchsize x n_bands x slen x slen
         assert images.shape[1] == self.n_bands
 
-        full_slen = images.shape[-1]
+        slen = images.shape[-1]
 
         if not (images.shape[-1] == self.slen):
             # get the coordinates
-            tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
+            tile_coords = image_utils.get_tile_coords(slen, slen,
                                                         self.patch_slen,
                                                         self.step);
         else:
@@ -304,7 +304,7 @@ class StarEncoder(nn.Module):
                 image_utils.get_params_in_patches(tile_coords,
                                                   locs,
                                                   fluxes,
-                                                  full_slen,
+                                                  slen,
                                                   self.patch_slen,
                                                   self.edge_padding)
 
@@ -334,15 +334,15 @@ class StarEncoder(nn.Module):
     ######################
     def _get_full_params_from_sampled_params(self, patch_locs_sampled,
                                                 patch_fluxes_sampled,
-                                                full_slen):
+                                                slen):
 
         n_samples = patch_locs_sampled.shape[0]
         n_image_patches = patch_locs_sampled.shape[1]
 
         assert self.n_bands == patch_fluxes_sampled.shape[-1]
 
-        if not (full_slen == self.slen):
-            tile_coords = image_utils.get_tile_coords(full_slen, full_slen,
+        if not (slen == self.slen):
+            tile_coords = image_utils.get_tile_coords(slen, slen,
                                                         self.patch_slen,
                                                         self.step);
         else:
@@ -350,15 +350,15 @@ class StarEncoder(nn.Module):
 
         assert (n_image_patches % tile_coords.shape[0]) == 0
 
-        locs_full_image, fluxes_full_image, n_stars_full = \
+        locs, fluxes, n_stars = \
             image_utils.get_full_params_from_patch_params(patch_locs_sampled.view(n_samples * n_image_patches, -1, 2),
                                                           patch_fluxes_sampled.view(n_samples * n_image_patches, -1, self.n_bands),
                                                         tile_coords,
-                                                        full_slen,
+                                                        slen,
                                                         self.patch_slen,
                                                         self.edge_padding)
 
-        return locs_full_image, fluxes_full_image, n_stars_full
+        return locs, fluxes, n_stars
 
     def sample_star_encoder(self, image,
                                 n_samples = 1,
@@ -371,7 +371,7 @@ class StarEncoder(nn.Module):
         # our sampling only works for one image at a time at the moment ...
         assert image.shape[0] == 1
 
-        full_slen = image.shape[-1]
+        slen = image.shape[-1]
 
         # the image patches
         image_patches = self.get_image_patches(image,
@@ -390,10 +390,12 @@ class StarEncoder(nn.Module):
         # sample number of stars
         if patch_n_stars is None:
             if return_map_n_stars:
-                patch_n_stars_sampled = torch.argmax(log_probs_nstar_patch.detach(), dim = 1).repeat(n_samples).view(n_samples, -1)
+                patch_n_stars_sampled = \
+                    torch.argmax(log_probs_nstar_patch.detach(), dim = 1).repeat(n_samples).view(n_samples, -1)
 
             else:
-                patch_n_stars_sampled = utils.sample_class_weights(torch.exp(log_probs_nstar_patch.detach()), n_samples).view(n_samples, -1)
+                patch_n_stars_sampled = \
+                    utils.sample_class_weights(torch.exp(log_probs_nstar_patch.detach()), n_samples).view(n_samples, -1)
         else:
             patch_n_stars_sampled = patch_n_stars.repeat(n_samples).view(n_samples, -1)
 
@@ -425,10 +427,10 @@ class StarEncoder(nn.Module):
             torch.exp(patch_log_flux_sampled) * is_on_array.unsqueeze(3).float()
 
         # get parameters on full image
-        locs_full_image, fluxes_full_image, n_stars_full = \
+        locs, fluxes, n_stars = \
             self._get_full_params_from_sampled_params(patch_locs_sampled,
                                                         patch_fluxes_sampled,
-                                                        full_slen)
+                                                        slen)
 
         if return_log_q:
             log_q_locs = (utils.eval_normal_logprob(patch_locs_sampled, loc_mean,
@@ -444,5 +446,5 @@ class StarEncoder(nn.Module):
             log_q_fluxes = None
             log_q_n_stars = None
 
-        return locs_full_image, fluxes_full_image, n_stars_full, \
+        return locs, fluxes, n_stars, \
                 log_q_locs, log_q_fluxes, log_q_n_stars
