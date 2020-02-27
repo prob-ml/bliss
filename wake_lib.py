@@ -165,7 +165,6 @@ def get_wake_loss(image, star_encoder, model_params, n_samples, run_map = False)
 
     locs_sampled, fluxes_sampled, n_stars_sampled = \
         star_encoder.sample_star_encoder(image,
-                                        torch.ones(image.shape).to(device),
                                         return_map_n_stars = run_map,
                                         return_map_star_params = run_map,
                                         n_samples = n_samples)[0:3]
