@@ -137,7 +137,7 @@ run_sleep(star_encoder,
             out_filename = outfolder + 'wake-sleep-encoder-iter0')
 
 
-n_iter = 6
+n_iter = 1
 map_losses = torch.zeros(n_iter)
 for iteration in range(0, n_iter):
     #######################
@@ -169,6 +169,7 @@ for iteration in range(0, n_iter):
                         n_samples = 50,
                         out_filename = outfolder + 'iter' + str(iteration),
                         lr = 1e-3,
+                        n_epochs = 500, 
                         run_map = False)
 
     print(list(model_params.planar_background.parameters())[0])
