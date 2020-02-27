@@ -27,6 +27,8 @@ def _trim_psf(psf, slen):
     assert (psf_slen % 2) == 1
     psf_center = (psf_slen - 1) / 2
 
+    assert psf_slen >= slen
+
     r = np.floor(slen / 2)
     l_indx = int(psf_center  - r)
     u_indx = int(psf_center + r + 1)
@@ -34,6 +36,8 @@ def _trim_psf(psf, slen):
     return psf[:, l_indx:u_indx, l_indx:u_indx]
 
 def _expand_psf(psf, slen):
+    # pad the psf with zeros so that it is size slen
+
     # first dimension of psf is number of bands
     assert len(psf.shape) == 3
     n_bands = psf.shape[0]
@@ -44,6 +48,8 @@ def _expand_psf(psf, slen):
     assert (psf_slen % 2) == 1
     # sim for slen
     assert (slen % 2) == 1
+
+    assert psf_slen <= slen
 
     psf_expanded = torch.zeros((n_bands, slen, slen))
 
@@ -189,6 +195,10 @@ class StarSimulator:
 
         # add noise
         if add_noise:
+            if torch.any(images_mean <= 0):
+                print('warning: image mean less than 0')
+                images_mean = images_mean.clamp(min = 1.0)
+                
             images = torch.sqrt(images_mean) * torch.randn(images_mean.shape).to(device) + \
                                                             images_mean
         else:
@@ -208,7 +218,7 @@ class StarsDataset(Dataset):
                          f_max,
                          background,
                          alpha,
-                         transpose_psf,
+                         transpose_psf = False,
                          add_noise = True):
 
         self.slen = slen
@@ -268,9 +278,6 @@ class StarsDataset(Dataset):
         # draw fluxes
         base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
                                 shape = (batchsize, self.max_stars))
-        # # just for fun: lets see what happens
-        # base_log_fluxes = torch.rand(batchsize, self.max_stars).to(device) * (np.log(self.f_max) - np.log(self.f_min)) + np.log(self.f_min)
-        # base_fluxes = torch.exp(base_log_fluxes)
 
         if self.n_bands > 1:
             colors = torch.randn(batchsize, self.max_stars, self.n_bands - 1).to(device) * 0.15 + 0.3
@@ -298,7 +305,7 @@ class StarsDataset(Dataset):
 def load_dataset_from_params(psf, data_params,
                                 n_images,
                                 background,
-                                transpose_psf,
+                                transpose_psf = False,
                                 add_noise = True):
     # data parameters
     slen = data_params['slen']

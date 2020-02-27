@@ -4,9 +4,11 @@ from torch import optim
 
 import numpy as np
 
-from simulated_datasets_lib import _get_mgrid, plot_one_star
-from psf_transform_lib2 import PowerLawPSF
+from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
+from psf_transform_lib import PowerLawPSF
 import utils
+
+import time
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -78,46 +80,22 @@ class PlanarBackground(nn.Module):
                     self.params[:, 1][:, None, None] * self.mgrid[:, :, :, 0] + \
                     self.params[:, 2][:, None, None] * self.mgrid[:, :, :, 1]
 
-class FluxParams(nn.Module):
-    def __init__(self, init_fluxes, fmin):
-        super(FluxParams, self).__init__()
 
-        self.fmin = fmin
-        self.init_flux_params = self._free_flux_params(init_fluxes)
-        self.flux_params = nn.Parameter(self.init_flux_params.clone())
-
-    def _free_flux_params(self, fluxes):
-        return torch.log(fluxes.clamp(min = self.fmin + 1) - self.fmin)
-
-    def get_fluxes(self):
-        return torch.exp(self.flux_params) + self.fmin
-
-class EstimateModelParams(nn.Module):
-    def __init__(self, observed_image, locs, n_stars,
+class ModelParams(nn.Module):
+    def __init__(self, observed_image,
                          init_psf_params,
                          init_background_params,
-                         init_fluxes = None,
-                         fmin = 1e-3,
-                         alpha = 0.5,
                          pad = 5):
 
-        super(EstimateModelParams, self).__init__()
+        super(ModelParams, self).__init__()
 
         self.pad = pad
-        self.alpha = alpha
-        self.fmin = fmin
-        self.locs = locs
-        self.n_stars = n_stars
 
         # observed image is batchsize (or 1) x n_bands x slen x slen
         assert len(observed_image.shape) == 4
 
         self.observed_image = observed_image
         self.slen = observed_image.shape[-1]
-
-        # batchsize
-        assert len(n_stars) == locs.shape[0]
-        self.batchsize = locs.shape[0]
 
         # get n_bands
         assert observed_image.shape[1] == init_psf_params.shape[0]
@@ -127,13 +105,8 @@ class EstimateModelParams(nn.Module):
         self.init_psf_params = init_psf_params
         self.power_law_psf = PowerLawPSF(self.init_psf_params,
                                             image_slen = self.slen)
-        self.init_psf = self.power_law_psf.forward().detach()
-
-        self.max_stars = locs.shape[1]
-        assert locs.shape[2] == 2
-
-        # boolean for stars being on
-        self.is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
+        self.init_psf = self.power_law_psf.forward().detach().clone()
+        self.psf = self.power_law_psf.forward()
 
         # set up initial background parameters
         if init_background_params is None:
@@ -141,74 +114,22 @@ class EstimateModelParams(nn.Module):
         else:
             assert init_background_params.shape[0] == self.n_bands
             self.init_background_params = init_background_params
-
-        self.planar_background = PlanarBackground(image_slen=self.slen,
-                        init_background_params=self.init_background_params)
+            self.planar_background = PlanarBackground(image_slen=self.slen,
+                            init_background_params=self.init_background_params)
 
         self.init_background = self.planar_background.forward().detach()
 
-        # initial flux parameters
-        if init_fluxes is None:
-            self._get_init_fluxes()
-        else:
-            self.init_fluxes = init_fluxes
-
-        self.flux_params_class = FluxParams(self.init_fluxes, self.fmin)
-
-        # TODO: pass these as an argument
-        self.color_mean = 0.3
-        self.color_var = 0.15**2
-
         self.cached_grid = _get_mgrid(observed_image.shape[-1]).to(device)
-        self._set_star_basis(self.init_psf)
 
-    def _set_star_basis(self, psf):
-        self.star_basis = \
-            plot_one_star(self.slen, self.locs.view(-1, 2), psf,
-                          cached_grid = self.cached_grid).view(self.batchsize,
-                                                      self.max_stars,
-                                                      self.n_bands,
-                                                      self.slen, self.slen) * \
-                        self.is_on_array[:, :, None, None, None]
+    def _plot_stars(self, locs, fluxes, n_stars, psf):
+        self.stars = plot_multiple_stars(self.slen, locs, n_stars,
+                                        fluxes, psf, self.cached_grid)
 
     def _get_init_background(self, sample_every = 25):
         sampled_background = _sample_image(self.observed_image, sample_every)
         self.init_background_params = torch.Tensor(_fit_plane_to_background(sampled_background)).to(device)
-
-    def _get_init_fluxes(self):
-
-        locs_indx = torch.round(self.locs * (self.slen - 1)).type(torch.long).clamp(max = self.slen - 2,
-                                                                            min = 2)
-
-        sky_subtr_image = self.observed_image - self.init_background
-        self.init_fluxes = torch.zeros(self.batchsize, self.max_stars, self.n_bands).to(device)
-
-        for i in range(self.locs.shape[0]):
-            if self.observed_image.shape[0] == 1:
-                obs_indx = 0
-            else:
-                obs_indx = i
-
-            # # take the min over a box of the location
-            # init_fluxes_i = torch.zeros(9, self.max_stars, self.n_bands)
-            # n = 0
-            # for j in [-1, 0, 1]:
-            #     for k in [-1, 0, 1]:
-            #         init_fluxes_i[n] = sky_subtr_image[obs_indx, :,
-            #                             locs_indx[i, :, 0] + j,
-            #                             locs_indx[i, :, 1] + k].transpose(0, 1)
-            #         n +=1
-            #
-            # self.init_fluxes[i] = init_fluxes_i.mean(0)
-
-            self.init_fluxes[i] = \
-                sky_subtr_image[obs_indx, :,
-                    locs_indx[i, :, 0], locs_indx[i, :, 1]].transpose(0, 1)
-
-        self.init_fluxes = self.init_fluxes / self.init_psf.view(self.n_bands, -1).max(1)[0][None, None, :]
-
-    def get_fluxes(self):
-        return self.flux_params_class.get_fluxes()
+        self.planar_background = PlanarBackground(image_slen=self.slen,
+                        init_background_params=self.init_background_params)
 
     def get_background(self):
         return self.planar_background.forward().unsqueeze(0)
@@ -216,114 +137,358 @@ class EstimateModelParams(nn.Module):
     def get_psf(self):
         return self.power_law_psf.forward()
 
-    def get_loss(self, use_cached_star_basis = False):
+    def get_loss(self, use_cached_stars = False,
+                        locs = None, fluxes = None, n_stars = None):
         background = self.get_background()
-        fluxes = self.get_fluxes()
 
-        if not use_cached_star_basis:
+        if not use_cached_stars:
+            assert locs is not None
+            assert fluxes is not None
+            assert n_stars is not None
+
             psf = self.get_psf()
-            self._set_star_basis(psf)
+            self._plot_stars(locs, fluxes, n_stars, psf)
         else:
-            self.star_basis = self.star_basis.detach()
+            assert hasattr(self, 'stars')
+            self.stars = self.stars.detach()
 
-
-        recon_mean = (fluxes[:, :, :, None, None] * self.star_basis).sum(1) + \
-                                    background
-        recon_mean = recon_mean.clamp(min = 1)
+        recon_mean = self.stars + background
 
         error = 0.5 * ((self.observed_image - recon_mean)**2 / recon_mean) + 0.5 * torch.log(recon_mean)
 
-        neg_loglik = error[:, :, self.pad:(self.slen - self.pad), self.pad:(self.slen - self.pad)].sum()
-        assert ~torch.isnan(neg_loglik)
-
-        # prior terms
-        log_flux = torch.log(fluxes)
-        flux_prior = - (self.alpha + 1) * (log_flux[:, :, 0] * self.is_on_array).sum()
-        if self.n_bands > 1:
-            colors = 2.5 * (log_flux[:, :, 1:] - log_flux[:, :, 0:1]) / np.log(10.)
-            color_prior = - 0.5 * (colors - self.color_mean)**2 / self.color_var
-            flux_prior += (color_prior * self.is_on_array.unsqueeze(-1)).sum()
-        assert ~torch.isnan(flux_prior)
-
-        loss = neg_loglik - flux_prior
+        loss = error[:, :, self.pad:(self.slen - self.pad),
+                        self.pad:(self.slen - self.pad)].reshape(error.shape[0], -1).sum(1)
 
         return recon_mean, loss
 
-    def _run_optimizer(self, optimizer, tol,
-                            use_cached_star_basis = False,
-                            max_iter = 20, print_every = False):
+def get_wake_loss(image, star_encoder, model_params, n_samples, run_map = False):
 
-        def closure():
-            optimizer.zero_grad()
-            loss = self.get_loss(use_cached_star_basis)[1]
-            loss.backward()
+    locs_sampled, fluxes_sampled, n_stars_sampled = \
+        star_encoder.sample_star_encoder(image,
+                                        return_map_n_stars = run_map,
+                                        return_map_star_params = run_map,
+                                        n_samples = n_samples)[0:3]
 
-            return loss
 
-        init_loss = optimizer.step(closure)
-        old_loss = init_loss.clone()
+    loss = model_params.get_loss(locs = locs_sampled.detach(),
+                                fluxes = fluxes_sampled.detach(),
+                                n_stars = n_stars_sampled.detach())[1].mean()
 
-        for i in range(1, max_iter):
-            loss = optimizer.step(closure)
+    return loss
 
-            if print_every:
-                print(loss)
+def run_wake(image, star_encoder, init_psf_params,
+                init_background_params,
+                n_samples,
+                out_filename,
+                n_epochs = 100,
+                lr = 1e-3,
+                print_every = 20,
+                run_map = False):
 
-            if (old_loss - loss) < (init_loss * tol):
-                break
+    model_params = ModelParams(image,
+                                init_psf_params,
+                                init_background_params)
 
-            old_loss = loss
+    avg_loss = 0.0
+    counter = 0
+    t0 = time.time()
+    test_losses = []
 
-        if max_iter > 1:
-            if i == (max_iter - 1):
-                print('warning: max iterations reached')
+    optimizer = optim.Adam([{'params': model_params.power_law_psf.parameters(),
+                            'lr': lr},
+                            {'params': model_params.planar_background.parameters(),
+                            'lr': lr}])
 
-    def optimize_fluxes_background(self, max_iter = 10):
-        optimizer1 = optim.LBFGS(list(self.flux_params_class.parameters()) +
-                                     list(self.planar_background.parameters()),
-                            max_iter = 10,
-                            line_search_fn = 'strong_wolfe')
+    if run_map:
+        n_samples = 1
 
-        self._run_optimizer(optimizer1,
-                            tol = 1e-3,
-                            max_iter = max_iter,
-                            use_cached_star_basis = True)
+    for epoch in range(1, n_epochs + 1):
 
-    def run_coordinate_ascent(self, tol = 1e-3,
-                                    max_inner_iter = 10,
-                                    max_outer_iter = 20):
+        optimizer.zero_grad()
 
-        old_loss = 1e16
-        init_loss = self.get_loss(use_cached_star_basis = True)[1].detach()
+        loss = get_wake_loss(image, star_encoder, model_params,
+                                n_samples, run_map)
 
-        for i in range(max_outer_iter):
-            print('\noptimizing fluxes + background. ')
-            optimizer1 = optim.LBFGS(list(self.flux_params_class.parameters()) +
-                                         list(self.planar_background.parameters()),
-                                max_iter = max_inner_iter,
-                                line_search_fn = 'strong_wolfe')
+        loss.backward()
+        optimizer.step()
 
-            self._run_optimizer(optimizer1, tol = 1e-3, max_iter = 1,
-                                use_cached_star_basis = True)
+        # avg_loss += loss.detach()
+        # counter += 1
 
-            print('loss: ', self.get_loss(use_cached_star_basis = True)[1].detach())
+        if ((epoch % print_every) == 0) or (epoch == n_epochs):
+            eval_loss = get_wake_loss(image, star_encoder, model_params,
+                                    n_samples = 1, run_map = True).detach()
 
-            print('\noptimizing psf. ')
-            psf_optimizer = optim.LBFGS(list(self.power_law_psf.parameters()),
-                                max_iter = max_inner_iter,
-                                line_search_fn = 'strong_wolfe')
+            elapsed = time.time() - t0
+            print('[{}] loss: {:0.4f} \t[{:.1f} seconds]'.format(\
+                        epoch, eval_loss, elapsed))
 
-            self._run_optimizer(psf_optimizer, tol = 1e-3, max_iter = 1,
-                                        use_cached_star_basis = False)
+            test_losses.append(eval_loss)
+            np.savetxt(out_filename + '-wake_losses', test_losses)
 
-            loss = self.get_loss(use_cached_star_basis = False)[1].detach()
-            print('loss: ', loss)
+            # reset
+            avg_loss = 0.0
+            counter = 0
+            t0 = time.time()
 
-            if (old_loss - loss) < (tol * init_loss):
-                break
+        np.save(out_filename + '-powerlaw_psf_params',
+            list(model_params.power_law_psf.parameters())[0].data.cpu().numpy())
+        np.save(out_filename + '-planarback_params',
+            list(model_params.planar_background.parameters())[0].data.cpu().numpy())
 
-            old_loss = loss
 
-        if max_outer_iter > 1:
-            if i == (max_outer_iter - 1):
-                print('warning: max iterations reached')
+    map_loss = get_wake_loss(image, star_encoder, model_params,
+                        n_samples = 1, run_map = True)
+
+    return model_params, map_loss
+
+
+# class FluxParams(nn.Module):
+#     def __init__(self, init_fluxes, fmin):
+#         super(FluxParams, self).__init__()
+#
+#         self.fmin = fmin
+#         self.init_flux_params = self._free_flux_params(init_fluxes)
+#         self.flux_params = nn.Parameter(self.init_flux_params.clone())
+#
+#     def _free_flux_params(self, fluxes):
+#         return torch.log(fluxes.clamp(min = self.fmin + 1) - self.fmin)
+#
+#     def get_fluxes(self):
+#         return torch.exp(self.flux_params) + self.fmin
+#
+# class EstimateModelParams(nn.Module):
+#     def __init__(self, observed_image, locs, n_stars,
+#                          init_psf_params,
+#                          init_background_params,
+#                          init_fluxes = None,
+#                          fmin = 1e-3,
+#                          alpha = 0.5,
+#                          pad = 5):
+#
+#         super(EstimateModelParams, self).__init__()
+#
+#         self.pad = pad
+#         self.alpha = alpha
+#         self.fmin = fmin
+#         self.locs = locs
+#         self.n_stars = n_stars
+#
+#         # observed image is batchsize (or 1) x n_bands x slen x slen
+#         assert len(observed_image.shape) == 4
+#
+#         self.observed_image = observed_image
+#         self.slen = observed_image.shape[-1]
+#
+#         # batchsize
+#         assert len(n_stars) == locs.shape[0]
+#         self.batchsize = locs.shape[0]
+#
+#         # get n_bands
+#         assert observed_image.shape[1] == init_psf_params.shape[0]
+#         self.n_bands = init_psf_params.shape[0]
+#
+#         # get psf
+#         self.init_psf_params = init_psf_params
+#         self.power_law_psf = PowerLawPSF(self.init_psf_params,
+#                                             image_slen = self.slen)
+#         self.init_psf = self.power_law_psf.forward().detach()
+#
+#         self.max_stars = locs.shape[1]
+#         assert locs.shape[2] == 2
+#
+#         # boolean for stars being on
+#         self.is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
+#
+#         # set up initial background parameters
+#         if init_background_params is None:
+#             self._get_init_background()
+#         else:
+#             assert init_background_params.shape[0] == self.n_bands
+#             self.init_background_params = init_background_params
+#
+#         self.planar_background = PlanarBackground(image_slen=self.slen,
+#                         init_background_params=self.init_background_params)
+#
+#         self.init_background = self.planar_background.forward().detach()
+#
+#         # initial flux parameters
+#         if init_fluxes is None:
+#             self._get_init_fluxes()
+#         else:
+#             self.init_fluxes = init_fluxes
+#
+#         self.flux_params_class = FluxParams(self.init_fluxes, self.fmin)
+#
+#         # TODO: pass these as an argument
+#         self.color_mean = 0.3
+#         self.color_var = 0.15**2
+#
+#         self.cached_grid = _get_mgrid(observed_image.shape[-1]).to(device)
+#         self._set_star_basis(self.init_psf)
+#
+#     def _set_star_basis(self, psf):
+#         self.star_basis = \
+#             plot_one_star(self.slen, self.locs.view(-1, 2), psf,
+#                           cached_grid = self.cached_grid).view(self.batchsize,
+#                                                       self.max_stars,
+#                                                       self.n_bands,
+#                                                       self.slen, self.slen) * \
+#                         self.is_on_array[:, :, None, None, None]
+#
+#     def _get_init_background(self, sample_every = 25):
+#         sampled_background = _sample_image(self.observed_image, sample_every)
+#         self.init_background_params = torch.Tensor(_fit_plane_to_background(sampled_background)).to(device)
+#
+#     def _get_init_fluxes(self):
+#
+#         locs_indx = torch.round(self.locs * (self.slen - 1)).type(torch.long).clamp(max = self.slen - 2,
+#                                                                             min = 2)
+#
+#         sky_subtr_image = self.observed_image - self.init_background
+#         self.init_fluxes = torch.zeros(self.batchsize, self.max_stars, self.n_bands).to(device)
+#
+#         for i in range(self.locs.shape[0]):
+#             if self.observed_image.shape[0] == 1:
+#                 obs_indx = 0
+#             else:
+#                 obs_indx = i
+#
+#             # # take the min over a box of the location
+#             # init_fluxes_i = torch.zeros(9, self.max_stars, self.n_bands)
+#             # n = 0
+#             # for j in [-1, 0, 1]:
+#             #     for k in [-1, 0, 1]:
+#             #         init_fluxes_i[n] = sky_subtr_image[obs_indx, :,
+#             #                             locs_indx[i, :, 0] + j,
+#             #                             locs_indx[i, :, 1] + k].transpose(0, 1)
+#             #         n +=1
+#             #
+#             # self.init_fluxes[i] = init_fluxes_i.mean(0)
+#
+#             self.init_fluxes[i] = \
+#                 sky_subtr_image[obs_indx, :,
+#                     locs_indx[i, :, 0], locs_indx[i, :, 1]].transpose(0, 1)
+#
+#         self.init_fluxes = self.init_fluxes / self.init_psf.view(self.n_bands, -1).max(1)[0][None, None, :]
+#
+#     def get_fluxes(self):
+#         return self.flux_params_class.get_fluxes()
+#
+#     def get_background(self):
+#         return self.planar_background.forward().unsqueeze(0)
+#
+#     def get_psf(self):
+#         return self.power_law_psf.forward()
+#
+#     def get_loss(self, use_cached_star_basis = False):
+#         background = self.get_background()
+#         fluxes = self.get_fluxes()
+#
+#         if not use_cached_star_basis:
+#             psf = self.get_psf()
+#             self._set_star_basis(psf)
+#         else:
+#             self.star_basis = self.star_basis.detach()
+#
+#
+#         recon_mean = (fluxes[:, :, :, None, None] * self.star_basis).sum(1) + \
+#                                     background
+#         recon_mean = recon_mean.clamp(min = 1)
+#
+#         error = 0.5 * ((self.observed_image - recon_mean)**2 / recon_mean) + 0.5 * torch.log(recon_mean)
+#
+#         neg_loglik = error[:, :, self.pad:(self.slen - self.pad), self.pad:(self.slen - self.pad)].sum()
+#         assert ~torch.isnan(neg_loglik)
+#
+#         # prior terms
+#         log_flux = torch.log(fluxes)
+#         flux_prior = - (self.alpha + 1) * (log_flux[:, :, 0] * self.is_on_array).sum()
+#         if self.n_bands > 1:
+#             colors = 2.5 * (log_flux[:, :, 1:] - log_flux[:, :, 0:1]) / np.log(10.)
+#             color_prior = - 0.5 * (colors - self.color_mean)**2 / self.color_var
+#             flux_prior += (color_prior * self.is_on_array.unsqueeze(-1)).sum()
+#         assert ~torch.isnan(flux_prior)
+#
+#         loss = neg_loglik - flux_prior
+#
+#         return recon_mean, loss
+#
+#     def _run_optimizer(self, optimizer, tol,
+#                             use_cached_star_basis = False,
+#                             max_iter = 20, print_every = False):
+#
+#         def closure():
+#             optimizer.zero_grad()
+#             loss = self.get_loss(use_cached_star_basis)[1]
+#             loss.backward()
+#
+#             return loss
+#
+#         init_loss = optimizer.step(closure)
+#         old_loss = init_loss.clone()
+#
+#         for i in range(1, max_iter):
+#             loss = optimizer.step(closure)
+#
+#             if print_every:
+#                 print(loss)
+#
+#             if (old_loss - loss) < (init_loss * tol):
+#                 break
+#
+#             old_loss = loss
+#
+#         if max_iter > 1:
+#             if i == (max_iter - 1):
+#                 print('warning: max iterations reached')
+#
+#     def optimize_fluxes_background(self, max_iter = 10):
+#         optimizer1 = optim.LBFGS(list(self.flux_params_class.parameters()) +
+#                                      list(self.planar_background.parameters()),
+#                             max_iter = 10,
+#                             line_search_fn = 'strong_wolfe')
+#
+#         self._run_optimizer(optimizer1,
+#                             tol = 1e-3,
+#                             max_iter = max_iter,
+#                             use_cached_star_basis = True)
+#
+#     def run_coordinate_ascent(self, tol = 1e-3,
+#                                     max_inner_iter = 10,
+#                                     max_outer_iter = 20):
+#
+#         old_loss = 1e16
+#         init_loss = self.get_loss(use_cached_star_basis = True)[1].detach()
+#
+#         for i in range(max_outer_iter):
+#             print('\noptimizing fluxes + background. ')
+#             optimizer1 = optim.LBFGS(list(self.flux_params_class.parameters()) +
+#                                          list(self.planar_background.parameters()),
+#                                 max_iter = max_inner_iter,
+#                                 line_search_fn = 'strong_wolfe')
+#
+#             self._run_optimizer(optimizer1, tol = 1e-3, max_iter = 1,
+#                                 use_cached_star_basis = True)
+#
+#             print('loss: ', self.get_loss(use_cached_star_basis = True)[1].detach())
+#
+#             print('\noptimizing psf. ')
+#             psf_optimizer = optim.LBFGS(list(self.power_law_psf.parameters()),
+#                                 max_iter = max_inner_iter,
+#                                 line_search_fn = 'strong_wolfe')
+#
+#             self._run_optimizer(psf_optimizer, tol = 1e-3, max_iter = 1,
+#                                         use_cached_star_basis = False)
+#
+#             loss = self.get_loss(use_cached_star_basis = False)[1].detach()
+#             print('loss: ', loss)
+#
+#             if (old_loss - loss) < (tol * init_loss):
+#                 break
+#
+#             old_loss = loss
+#
+#         if max_outer_iter > 1:
+#             if i == (max_outer_iter - 1):
+#                 print('warning: max iterations reached')

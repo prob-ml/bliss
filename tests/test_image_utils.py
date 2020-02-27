@@ -87,24 +87,24 @@ class TestImageBatching(unittest.TestCase):
                                         subimage_slen, step)
 
         # get patches
-        subimage_locs, subimage_fluxes, subimage_n_stars, subimage_is_on_array = \
+        patch_locs, patch_fluxes, patch_n_stars, patch_is_on_array = \
             image_utils.get_params_in_patches(tile_coords, locs, fluxes,
                                                 full_slen, subimage_slen)
 
         # check we have the correct number and pattern of nonzero entries
-        assert torch.all((subimage_locs * subimage_is_on_array.unsqueeze(2).float()) == subimage_locs)
-        assert torch.all((subimage_fluxes * subimage_is_on_array.unsqueeze(2).float()) == subimage_fluxes)
+        assert torch.all((patch_locs * patch_is_on_array.unsqueeze(2).float()) == patch_locs)
+        assert torch.all((patch_fluxes * patch_is_on_array.unsqueeze(2).float()) == patch_fluxes)
 
-        assert torch.all((subimage_locs != 0).view(subimage_locs.shape[0], -1).float().sum(1) == \
-                            subimage_n_stars.float() * 2)
-        assert torch.all((subimage_fluxes != 0).view(subimage_fluxes.shape[0], -1).float().sum(1) == \
-                            subimage_n_stars.float() * n_bands)
+        assert torch.all((patch_locs != 0).view(patch_locs.shape[0], -1).float().sum(1) == \
+                            patch_n_stars.float() * 2)
+        assert torch.all((patch_fluxes != 0).view(patch_fluxes.shape[0], -1).float().sum(1) == \
+                            patch_n_stars.float() * n_bands)
 
 
         # now convert to full parameters
         locs2, fluxes2, n_stars2 = \
-            image_utils.get_full_params_from_patch_params(subimage_locs,
-                                                            subimage_fluxes,
+            image_utils.get_full_params_from_patch_params(patch_locs,
+                                                            patch_fluxes,
                                                             tile_coords,
                                                             full_slen,
                                                             subimage_slen,
@@ -165,7 +165,7 @@ class TestImageBatching(unittest.TestCase):
                                             subimage_slen, step)
 
             # get patch parameters
-            subimage_locs, subimage_fluxes, subimage_n_stars, subimage_is_on_array = \
+            patch_locs, patch_fluxes, patch_n_stars, patch_is_on_array = \
                 image_utils.get_params_in_patches(tile_coords, locs, fluxes,
                                                     full_slen, subimage_slen,
                                                      edge_padding)
@@ -173,9 +173,9 @@ class TestImageBatching(unittest.TestCase):
             n_patches_per_image = tile_coords.shape[0]
             for i in range(n_images):
                 # get patches for that image
-                _subimage_locs = subimage_locs[(i * n_patches_per_image):(i + 1)*n_patches_per_image]
-                _subimage_fluxes = subimage_fluxes[(i * n_patches_per_image):(i + 1)*n_patches_per_image]
-                _subimage_n_stars = subimage_n_stars[(i * n_patches_per_image):(i + 1)*n_patches_per_image]
+                _patch_locs = patch_locs[(i * n_patches_per_image):(i + 1)*n_patches_per_image]
+                _patch_fluxes = patch_fluxes[(i * n_patches_per_image):(i + 1)*n_patches_per_image]
+                _patch_n_stars = patch_n_stars[(i * n_patches_per_image):(i + 1)*n_patches_per_image]
 
                 which_patch = (locs[i][0][0] * (full_slen - 1) > (tile_coords[:, 0] + edge_padding)) & \
                         (locs[i][0][0] * (full_slen - 1) < (tile_coords[:, 0] + subimage_slen - edge_padding - 1)) & \
@@ -188,11 +188,11 @@ class TestImageBatching(unittest.TestCase):
 
                 tested = True
                 assert which_patch.sum() == 1, 'need to choose step so that tiles are disjoint'
-                assert (_subimage_locs[which_patch] != 0).all()
-                assert (_subimage_locs[~which_patch] == 0).all()
+                assert (_patch_locs[which_patch] != 0).all()
+                assert (_patch_locs[~which_patch] == 0).all()
 
-                assert _subimage_n_stars[which_patch] == 1
-                assert (_subimage_n_stars[~which_patch] == 0).all()
+                assert _patch_n_stars[which_patch] == 1
+                assert (_patch_n_stars[~which_patch] == 0).all()
 
                 patch_x0 = (locs[i][0][0] * (full_slen - 1) - (tile_coords[which_patch, 0] + edge_padding)) / \
                         (subimage_slen - 2 * edge_padding - 1)
@@ -200,9 +200,9 @@ class TestImageBatching(unittest.TestCase):
                 patch_x1 = (locs[i][0][1] * (full_slen - 1) - (tile_coords[which_patch, 1] + edge_padding)) / \
                             (subimage_slen - 2 * edge_padding - 1)
 
-                assert _subimage_locs[which_patch].squeeze()[0] == patch_x0
-                assert _subimage_locs[which_patch].squeeze()[1] == patch_x1
-                assert (fluxes[i, 0, :] == _subimage_fluxes[which_patch].squeeze()).all()
+                assert _patch_locs[which_patch].squeeze()[0] == patch_x0
+                assert _patch_locs[which_patch].squeeze()[1] == patch_x1
+                assert (fluxes[i, 0, :] == _patch_fluxes[which_patch].squeeze()).all()
 
         assert tested
 
@@ -225,28 +225,28 @@ class TestImageBatching(unittest.TestCase):
                                         subimage_slen, step)
 
         # get subimage parameters
-        subimage_locs = torch.zeros(tile_coords.shape[0], max_stars, 2)
-        subimage_fluxes = torch.zeros(tile_coords.shape[0], max_stars, n_bands)
-        subimage_n_stars = torch.zeros(tile_coords.shape[0])
+        patch_locs = torch.zeros(tile_coords.shape[0], max_stars, 2)
+        patch_fluxes = torch.zeros(tile_coords.shape[0], max_stars, n_bands)
+        patch_n_stars = torch.zeros(tile_coords.shape[0])
 
         # we add a star in one random subimage
         indx = np.random.choice(tile_coords.shape[0])
-        subimage_locs[indx, 0, :] = torch.rand(2)
-        subimage_fluxes[indx, 0, :] = torch.rand(n_bands)
-        subimage_n_stars[indx] = 1
+        patch_locs[indx, 0, :] = torch.rand(2)
+        patch_fluxes[indx, 0, :] = torch.rand(n_bands)
+        patch_n_stars[indx] = 1
 
         locs_full_image, fluxes_full_image, n_stars = \
-            image_utils.get_full_params_from_patch_params(subimage_locs, subimage_fluxes,
+            image_utils.get_full_params_from_patch_params(patch_locs, patch_fluxes,
                                                 tile_coords,
                                                 full_slen,
                                                 subimage_slen,
                                                 edge_padding)
 
-        assert (fluxes_full_image.squeeze() == subimage_fluxes[indx, 0, :]).all()
+        assert (fluxes_full_image.squeeze() == patch_fluxes[indx, 0, :]).all()
         assert n_stars == 1
 
 
-        test_loc = (subimage_locs[indx, 0, :] * \
+        test_loc = (patch_locs[indx, 0, :] * \
                         (subimage_slen - 2 * edge_padding - 1) + \
                         tile_coords[indx, :] + edge_padding) / (full_slen - 1)
 
@@ -254,27 +254,27 @@ class TestImageBatching(unittest.TestCase):
 
 
         # check this works with negative locs
-        subimage_locs[indx, 0, :] = torch.Tensor([-0.1, 0.5])
+        patch_locs[indx, 0, :] = torch.Tensor([-0.1, 0.5])
         locs_full_image, fluxes_full_image, n_stars = \
-            image_utils.get_full_params_from_patch_params(subimage_locs, subimage_fluxes,
+            image_utils.get_full_params_from_patch_params(patch_locs, patch_fluxes,
                                                 tile_coords,
                                                 full_slen,
                                                 subimage_slen,
                                                 edge_padding)
-        test_loc = (subimage_locs[indx, 0, :] * \
+        test_loc = (patch_locs[indx, 0, :] * \
                         (subimage_slen - 2 * edge_padding - 1) + \
                         tile_coords[indx, :] + edge_padding) / (full_slen - 1)
         assert (test_loc == locs_full_image.squeeze()).all()
 
         # abd with locs > 1
-        subimage_locs[indx, 0, :] = torch.Tensor([0.1, 1.3])
+        patch_locs[indx, 0, :] = torch.Tensor([0.1, 1.3])
         locs_full_image, fluxes_full_image, n_stars = \
-            image_utils.get_full_params_from_patch_params(subimage_locs, subimage_fluxes,
+            image_utils.get_full_params_from_patch_params(patch_locs, patch_fluxes,
                                                 tile_coords,
                                                 full_slen,
                                                 subimage_slen,
                                                 edge_padding)
-        test_loc = (subimage_locs[indx, 0, :] * \
+        test_loc = (patch_locs[indx, 0, :] * \
                         (subimage_slen - 2 * edge_padding - 1) + \
                         tile_coords[indx, :] + edge_padding) / (full_slen - 1)
         assert (test_loc == locs_full_image.squeeze()).all()

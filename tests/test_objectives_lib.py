@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './../')
 
-import inv_kl_objective_lib as inv_kl_lib
+import sleep_lib 
 import simulated_datasets_lib
 import starnet_vae_lib
 import utils
@@ -42,12 +42,12 @@ class TestStarEncoderObjective(unittest.TestCase):
 
         # get loss for locations
         locs_log_probs_all = \
-            inv_kl_lib.get_locs_logprob_all_combs(true_locs,
+            sleep_lib.get_locs_logprob_all_combs(true_locs,
                                     loc_mean, loc_log_var)
 
         # get loss for fluxes
         flux_log_probs_all = \
-            inv_kl_lib.get_fluxes_logprob_all_combs(true_fluxes, \
+            sleep_lib.get_fluxes_logprob_all_combs(true_fluxes, \
                                 log_flux_mean, log_flux_log_var)
 
         # for my sanity
@@ -97,17 +97,17 @@ class TestStarEncoderObjective(unittest.TestCase):
 
         # get loss for locations
         locs_log_probs_all = \
-            inv_kl_lib.get_locs_logprob_all_combs(true_locs,
+            sleep_lib.get_locs_logprob_all_combs(true_locs,
                                     loc_mean, loc_log_var)
 
         # get loss for fluxes
         flux_log_probs_all = \
-            inv_kl_lib.get_fluxes_logprob_all_combs(true_fluxes, \
+            sleep_lib.get_fluxes_logprob_all_combs(true_fluxes, \
                                 log_flux_mean, log_flux_log_var)
 
 
 
-        locs_loss, fluxes_loss, _ = inv_kl_lib.get_min_perm_loss(locs_log_probs_all,
+        locs_loss, fluxes_loss, _ = sleep_lib.get_min_perm_loss(locs_log_probs_all,
                                     flux_log_probs_all, is_on_array)
 
         # a quick check for zer0 and one stars
@@ -148,7 +148,7 @@ class TestStarEncoderObjective(unittest.TestCase):
                     torch.abs(fluxes_loss[i] - min_fluxes_loss)
 
         # locs_log_probs_all_perm, fluxes_log_probs_all_perm = \
-        #     inv_kl_lib._get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array)
+        #     sleep_lib._get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array)
         # print(locs_log_probs_all_perm[0].argmax())
         #
         # perm_list = []
@@ -182,7 +182,7 @@ class TestStarEncoderObjective(unittest.TestCase):
     #     perm = run_batch_hungarian_alg_parallel(locs_log_probs_all, is_on_array)
     #
     #     # get losses according to the found permutation
-    #     perm_losses = inv_kl_lib._permute_losses_mat(locs_log_probs_all, perm)
+    #     perm_losses = sleep_lib._permute_losses_mat(locs_log_probs_all, perm)
     #
     #     # check it worked
     #     for i in range(batchsize):
@@ -200,8 +200,8 @@ class TestStarEncoderObjective(unittest.TestCase):
     #     weights = starnet_vae_lib.get_weights(n_stars)
     #
     #     # get weights vector
-    #     one_hot = inv_kl_lib.get_one_hot_encoding_from_int(n_stars, max(n_stars) + 1)
-    #     weights_vec = inv_kl_lib.get_weights_vec(one_hot, weights)
+    #     one_hot = sleep_lib.get_one_hot_encoding_from_int(n_stars, max(n_stars) + 1)
+    #     weights_vec = sleep_lib.get_weights_vec(one_hot, weights)
     #
     #     # get counts:
     #     counts = torch.zeros(max_stars + 1)

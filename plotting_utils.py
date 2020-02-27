@@ -58,7 +58,7 @@ def plot_categorical_probs(log_prob_vec, fig):
              'o', markersize = 5, color = 'blue')
 
 def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
-                    x0, x1, subimage_slen,
+                    x0, x1, patch_slen,
                     vmin = None, vmax = None,
                     add_colorbar = False,
                     global_fig = None,
@@ -71,7 +71,7 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
     # full image, in pixel units, scaled between 0 and 1
 
     # trim image to subimage
-    image_patch = full_image[x0:(x0 + subimage_slen), x1:(x1 + subimage_slen)]
+    image_patch = full_image[x0:(x0 + patch_slen), x1:(x1 + patch_slen)]
 
     # get locations in the subimage
     if full_est_locs is not None:
@@ -81,11 +81,11 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
         _full_est_locs = full_est_locs * (full_image.shape[-1] - 1)
 
         which_est_locs = (_full_est_locs[:, 0] > x0) & \
-                        (_full_est_locs[:, 0] < (x0 + subimage_slen - 1)) & \
+                        (_full_est_locs[:, 0] < (x0 + patch_slen - 1)) & \
                         (_full_est_locs[:, 1] > x1) & \
-                        (_full_est_locs[:, 1] < (x1 + subimage_slen - 1))
+                        (_full_est_locs[:, 1] < (x1 + patch_slen - 1))
 
-        est_locs = (_full_est_locs[which_est_locs, :] - torch.Tensor([[x0, x1]])) / (subimage_slen - 1)
+        est_locs = (_full_est_locs[which_est_locs, :] - torch.Tensor([[x0, x1]])) / (patch_slen - 1)
     else:
         est_locs = None
         which_est_locs = None
@@ -98,11 +98,11 @@ def plot_subimage(fig, full_image, full_est_locs, full_true_locs,
         _full_true_locs = full_true_locs * (full_image.shape[-1] - 1)
 
         which_true_locs = (_full_true_locs[:, 0] > x0) & \
-                        (_full_true_locs[:, 0] < (x0 + subimage_slen - 1)) & \
+                        (_full_true_locs[:, 0] < (x0 + patch_slen - 1)) & \
                         (_full_true_locs[:, 1] > x1) & \
-                        (_full_true_locs[:, 1] < (x1 + subimage_slen - 1))
+                        (_full_true_locs[:, 1] < (x1 + patch_slen - 1))
 
-        true_locs = (_full_true_locs[which_true_locs, :] - torch.Tensor([[x0, x1]])) / (subimage_slen - 1)
+        true_locs = (_full_true_locs[which_true_locs, :] - torch.Tensor([[x0, x1]])) / (patch_slen - 1)
     else:
         true_locs = None
         which_true_locs = None
