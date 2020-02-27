@@ -93,8 +93,8 @@ loader = torch.utils.data.DataLoader(
 ###############
 # define VAE
 ###############
-star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
-                                           stamp_slen = 7,
+star_encoder = starnet_vae_lib.StarEncoder(slen = data_params['slen'],
+                                           patch_slen = 7,
                                            step = 2,
                                            edge_padding = 2,
                                            n_bands = len(bands),
@@ -118,7 +118,7 @@ sleep_optimizer = optim.Adam([
 
 # initial loss:
 test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-    sleep_lib.eval_star_encoder_loss(star_encoder,
+    sleep_lib.eval_sleep(star_encoder,
                                     loader, train = False)
 
 print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
