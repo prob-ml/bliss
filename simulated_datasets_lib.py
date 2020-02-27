@@ -170,10 +170,13 @@ class StarSimulator:
         self.slen = slen
 
         # get psf shape to match image shape
+        # if slen is even, we still make psf dimension odd.
+        #   otherwise, the psf won't have a peak in the center pixel. 
+        _slen = slen + ((slen % 2) == 0) * 1
         if (slen >= self.psf_og.shape[-1]):
-            self.psf = _expand_psf(self.psf_og, slen).to(device)
+            self.psf = _expand_psf(self.psf_og, _slen).to(device)
         else:
-            self.psf = _trim_psf(self.psf_og, slen).to(device)
+            self.psf = _trim_psf(self.psf_og, _slen).to(device)
 
         if transpose_psf:
             self.psf = self.psf.transpose(1, 2)
@@ -198,7 +201,7 @@ class StarSimulator:
             if torch.any(images_mean <= 0):
                 print('warning: image mean less than 0')
                 images_mean = images_mean.clamp(min = 1.0)
-                
+
             images = torch.sqrt(images_mean) * torch.randn(images_mean.shape).to(device) + \
                                                             images_mean
         else:
