@@ -93,8 +93,8 @@ loader = torch.utils.data.DataLoader(
 ###############
 # define VAE
 ###############
-star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
-                                           stamp_slen = 7,
+star_encoder = starnet_vae_lib.StarEncoder(slen = data_params['slen'],
+                                           patch_slen = 7,
                                            step = 2,
                                            edge_padding = 2,
                                            n_bands = len(bands),
@@ -118,7 +118,7 @@ sleep_optimizer = optim.Adam([
 
 # initial loss:
 test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-    sleep_lib.eval_star_encoder_loss(star_encoder,
+    sleep_lib.eval_sleep(star_encoder,
                                     loader, train = False)
 
 print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
@@ -137,7 +137,7 @@ run_sleep(star_encoder,
             out_filename = outfolder + 'wake-sleep-encoder-iter0')
 
 
-n_iter = 6
+n_iter = 1
 map_losses = torch.zeros(n_iter)
 for iteration in range(0, n_iter):
     #######################
@@ -169,6 +169,7 @@ for iteration in range(0, n_iter):
                         n_samples = 50,
                         out_filename = outfolder + 'iter' + str(iteration),
                         lr = 1e-3,
+                        n_epochs = 500, 
                         run_map = False)
 
     print(list(model_params.planar_background.parameters())[0])
