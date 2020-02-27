@@ -93,13 +93,13 @@ def get_psf_params(psfield_fit_file, bands):
     for i in range(len(bands)):
         band = bands[i]
 
-        sigma1 = psfield[6]['psf_sigma1'][0][0, band]**2
-        sigma2 = psfield[6]['psf_sigma2'][0][0, band]**2
-        sigmap = psfield[6]['psf_sigmap'][0][0, band]**2
+        sigma1 = psfield[6]['psf_sigma1'][0][band]**2
+        sigma2 = psfield[6]['psf_sigma2'][0][band]**2
+        sigmap = psfield[6]['psf_sigmap'][0][band]**2
 
-        beta = psfield[6]['psf_beta'][0][0, band]
-        b = psfield[6]['psf_b'][0][0, band]
-        p0 = psfield[6]['psf_p0'][0][0, band]
+        beta = psfield[6]['psf_beta'][0][band]
+        b = psfield[6]['psf_b'][0][band]
+        p0 = psfield[6]['psf_p0'][0][band]
 
         # I think these parameters are constrained to be positive
         # take log; we will take exp later

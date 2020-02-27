@@ -323,7 +323,7 @@ class SDSSHubbleData(Dataset):
 
         self.sdss_image_full[self.which_other] = \
             torch.nn.functional.grid_sample(self.sdss_image_full[self.which_other].unsqueeze(0).unsqueeze(0),
-                                            grid).squeeze()
+                                            grid, align_corners=True).squeeze()
 
     def _estimate_colors(self):
         locs_indx = torch.round(self.locs * (self.slen - 1)).type(torch.long)
