@@ -59,7 +59,7 @@ background = planar_background.forward().detach()
 # draw data
 ###############
 print('generating data: ')
-n_images = 4
+n_images = 200
 t0 = time.time()
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(psf_og,
