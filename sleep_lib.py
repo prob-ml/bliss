@@ -133,7 +133,7 @@ def get_params_loss(loc_mean, loc_log_var, \
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm_indx
 
-def get_sleep_loss(star_encoder,
+def get_inv_kl_loss(star_encoder,
                         images,
                         backgrounds,
                         true_locs,
@@ -162,9 +162,8 @@ def get_sleep_loss(star_encoder,
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm_indx, log_probs
 
-def run_sleep(star_encoder, train_loader,
-                optimizer = None, train = False,
-                residual_vae = None):
+def eval_sleep(star_encoder, train_loader,
+                optimizer = None, train = False):
 
     avg_loss = 0.0
     avg_counter_loss = 0.0
@@ -177,14 +176,6 @@ def run_sleep(star_encoder, train_loader,
         images = data['image'].to(device)
         backgrounds = data['background'].to(device)
 
-        if residual_vae is not None:
-            # add noise
-            residual_vae.eval()
-            eta = torch.randn(images.shape[0], residual_vae.latent_dim).to(device)
-            residuals = residual_vae.decode(eta)[0] # just taking the mean ...
-
-            images = images * residuals + images
-
         if train:
             star_encoder.train()
             if optimizer is not None:
@@ -194,7 +185,7 @@ def run_sleep(star_encoder, train_loader,
 
         # evaluate log q
         loss, counter_loss, locs_loss, fluxes_loss = \
-            get_sleep_loss(star_encoder, images, backgrounds,
+            get_inv_kl_loss(star_encoder, images, backgrounds,
                                 true_locs, true_fluxes)[0:4]
 
         if train:
@@ -222,7 +213,7 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs,
         loader.dataset.set_params_and_images()
 
         avg_loss, counter_loss, locs_loss, fluxes_loss = \
-            eval_star_encoder_loss(star_encoder, loader,
+            eval_sleep(star_encoder, loader,
                                                 optimizer, train = True)
 
         elapsed = time.time() - t0
@@ -234,13 +225,11 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs,
 
         if ((epoch % print_every) == 0) or (epoch == (n_epochs-1)):
             loader.dataset.set_params_and_images()
-            _ = eval_star_encoder_loss(star_encoder,
-                                                loader, train = True)
+            _ = eval_sleep(star_encoder, loader, train = True)
 
             loader.dataset.set_params_and_images()
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-                eval_star_encoder_loss(star_encoder,
-                                                loader, train = False)
+                eval_sleep(star_encoder, loader, train = False)
 
             print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
                 test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))

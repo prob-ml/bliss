@@ -42,7 +42,7 @@ init_psf_params = psf_transform_lib.get_psf_params(
                                     psfield_file,
                                     bands = bands)
 # init_psf_params = torch.Tensor(np.load('./data/fitted_powerlaw_psf_params.npy'))
-# power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.to(device))
+power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.to(device))
 psf_og = power_law_psf.forward().detach()
 
 ###############
@@ -51,15 +51,15 @@ psf_og = power_law_psf.forward().detach()
 init_background_params = torch.zeros(len(bands), 3).to(device)
 init_background_params[:, 0] = torch.Tensor([686., 1123.])
 # init_background_params = torch.Tensor(np.load('./data/fitted_planar_backgrounds.npy'))
-# planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
-                            # init_background_params = init_background_params.to(device))
+planar_background = wake_lib.PlanarBackground(image_slen = data_params['slen'],
+                            init_background_params = init_background_params.to(device))
 background = planar_background.forward().detach()
 
 ###############
 # draw data
 ###############
 print('generating data: ')
-n_images = 200
+n_images = 4
 t0 = time.time()
 star_dataset = \
     simulated_datasets_lib.load_dataset_from_params(psf_og,
