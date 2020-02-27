@@ -101,7 +101,7 @@ star_encoder = starnet_vae_lib.StarEncoder(full_slen = data_params['slen'],
                                            max_detections = 2,
                                            estimate_flux = True)
 
-init_encoder = './fits/results_2020-02-18/starnet_ri'
+init_encoder = './fits/results_2020-02-26/starnet_ri'
 star_encoder.load_state_dict(torch.load(init_encoder,
                                    map_location=lambda storage, loc: storage))
 star_encoder.to(device)
@@ -125,7 +125,7 @@ print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; flu
     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
 # file header to save results
-outfolder = './fits/results_2020-02-18/'
+outfolder = './fits/results_2020-02-26/'
 
 ############################
 # Initial sleep phase with empirically estimated background
