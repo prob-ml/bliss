@@ -54,13 +54,13 @@ def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes,
 
     locs_error = get_locs_error(est_locs * (slen - 1), true_locs * (slen - 1))
 
-    completeness_bool = torch.any((locs_error < slack) * (mag_error < slack), dim = 1).float()
+    tpr_bool = torch.any((locs_error < slack) * (mag_error < slack), dim = 1).float()
 
-    tpr_bool = torch.any((locs_error < slack) * (mag_error < slack), dim = 0).float()
+    ppv_bool = torch.any((locs_error < slack) * (mag_error < slack), dim = 0).float()
 
-    return completeness_bool.mean(), tpr_bool.mean(), completeness_bool, tpr_bool
+    return tpr_bool.mean(), ppv_bool.mean(), tpr_bool, ppv_bool
 
-def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
+def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
                             nelec_per_nmgy,
                             pad = 5, mag_vec = None):
 
@@ -77,7 +77,7 @@ def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
 
         mag_vec = np.arange(min_mag, max_mag + 0.1, 0.5)
 
-    completeness_vec = np.zeros(len(mag_vec) - 1)
+    tpr_vec = np.zeros(len(mag_vec) - 1)
 
     counts_vec = np.zeros(len(mag_vec) - 1)
 
@@ -85,14 +85,14 @@ def get_completeness_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
         which_true = (true_mags > mag_vec[i]) & (true_mags < mag_vec[i + 1])
         counts_vec[i] = torch.sum(which_true)
 
-        completeness_vec[i] = \
+        tpr_vec[i] = \
             get_summary_stats(est_locs, true_locs[which_true], slen,
                             est_fluxes, true_fluxes[which_true],
                             nelec_per_nmgy, pad = pad)[0]
 
-    return completeness_vec, mag_vec, counts_vec
+    return tpr_vec, mag_vec, counts_vec
 
-def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
+def get_ppv_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
                 nelec_per_nmgy,
                 pad = 5, mag_vec = None):
 
@@ -107,7 +107,7 @@ def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
 
         mag_vec = np.arange(min_mag, max_mag + 0.1, 0.5)
 
-    tpr_vec = np.zeros(len(mag_vec) - 1)
+    ppv_vec = np.zeros(len(mag_vec) - 1)
     counts_vec = np.zeros(len(mag_vec) - 1)
 
     for i in range(len(mag_vec) - 1):
@@ -118,12 +118,12 @@ def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
         if torch.sum(which_est) == 0:
             continue
 
-        tpr_vec[i] = \
+        ppv_vec[i] = \
             get_summary_stats(est_locs[which_est], true_locs, slen,
                             est_fluxes[which_est], true_fluxes,
                             nelec_per_nmgy, pad = pad)[1]
 
-    return tpr_vec, mag_vec, counts_vec
+    return ppv_vec, mag_vec, counts_vec
 
 def get_l1_error(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5):
     est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
@@ -133,10 +133,10 @@ def get_l1_error(est_locs, true_locs, slen, est_fluxes, true_fluxes, pad = 5):
 
     locs_error = get_locs_error(est_locs * (slen - 1), true_locs * (slen - 1))
 
-    tpr_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 0).float()
+    ppv_bool = torch.any((locs_error < 0.5) * (fluxes_error < 0.5), dim = 0).float()
 
-    locs_matched_error = locs_error[:, tpr_bool == 1]
-    fluxes_matched_error = fluxes_error[:, tpr_bool == 1]
+    locs_matched_error = locs_error[:, ppv_bool == 1]
+    fluxes_matched_error = fluxes_error[:, ppv_bool == 1]
 
     seq_tensor = torch.Tensor([i for i in range(fluxes_matched_error.shape[1])]).type(torch.long)
 
