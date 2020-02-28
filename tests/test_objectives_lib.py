@@ -11,7 +11,7 @@ sys.path.insert(0, './../')
 
 import sleep_lib 
 import simulated_datasets_lib
-import starnet_vae_lib
+import starnet_lib
 import utils
 
 from itertools import permutations
@@ -197,7 +197,7 @@ class TestStarEncoderObjective(unittest.TestCase):
     #     n_stars = torch.randint(0, max_stars + 1, (100, ))
     #
     #     # get weights
-    #     weights = starnet_vae_lib.get_weights(n_stars)
+    #     weights = starnet_lib.get_weights(n_stars)
     #
     #     # get weights vector
     #     one_hot = sleep_lib.get_one_hot_encoding_from_int(n_stars, max(n_stars) + 1)

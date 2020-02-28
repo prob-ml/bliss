@@ -103,8 +103,10 @@ class ModelParams(nn.Module):
 
         # get psf
         self.init_psf_params = init_psf_params
+        # if image slen is even, add one. psf dimension must be odd
+        psf_slen = self.slen + ((self.slen % 2) == 0) * 1
         self.power_law_psf = PowerLawPSF(self.init_psf_params,
-                                            image_slen = self.slen)
+                                            image_slen = psf_slen)
         self.init_psf = self.power_law_psf.forward().detach().clone()
         self.psf = self.power_law_psf.forward()
 

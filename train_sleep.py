@@ -4,7 +4,7 @@ import torch
 import torch.optim as optim
 
 import simulated_datasets_lib
-import starnet_vae_lib
+import starnet_lib
 import sleep_lib
 import psf_transform_lib
 import wake_lib
@@ -81,10 +81,10 @@ loader = torch.utils.data.DataLoader(
 ###############
 # define VAE
 ###############
-star_encoder = starnet_vae_lib.StarEncoder(slen = data_params['slen'],
-                                           patch_slen = 7,
+star_encoder = starnet_lib.StarEncoder(slen = data_params['slen'],
+                                           patch_slen = 8,
                                            step = 2,
-                                           edge_padding = 2,
+                                           edge_padding = 3,
                                            n_bands = psf_og.shape[0],
                                            max_detections = 2,
                                            estimate_flux = True)
@@ -109,7 +109,7 @@ n_epochs = 201
 print_every = 20
 print('training')
 
-out_filename = './fits/results_2020-02-26/starnet_ri'
+out_filename = './fits/results_2020-02-27/starnet_ri'
 
 sleep_lib.run_sleep(star_encoder, loader, optimizer, n_epochs,
                         out_filename = out_filename,
