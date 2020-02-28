@@ -104,7 +104,8 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
     which_locs_array = (locs.unsqueeze(1) > tile_coords + edge_padding - 0.5) & \
-                        (locs.unsqueeze(1) < tile_coords - 0.5 + subimage_slen - edge_padding)
+                        (locs.unsqueeze(1) < tile_coords - 0.5 + subimage_slen - edge_padding) & \
+                        (locs.unsqueeze(1) != 0)
     which_locs_array = (which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]).float()
 
     patch_locs = \
