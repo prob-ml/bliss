@@ -144,12 +144,11 @@ for iteration in range(0, n_iter):
     # wake phase training
     #######################
     print('RUNNING WAKE PHASE. ITER = ' + str(iteration))
+    encoder_file = outfolder + 'wake-sleep-encoder-iter' + str(iteration)
     if iteration == 0:
-        encoder_file = init_encoder
         powerlaw_psf_params = init_psf_params
         planar_background_params = None
     else:
-        encoder_file = outfolder + 'wake-sleep-encoder-iter' + str(iteration)
         powerlaw_psf_params = \
             torch.Tensor(np.load(outfolder + 'iter' + str(iteration - 1) +\
                                     '-powerlaw_psf_params.npy')).to(device)
