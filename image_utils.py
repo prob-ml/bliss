@@ -103,16 +103,15 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
 
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
-    which_locs_array = (locs.unsqueeze(1) > tile_coords + edge_padding) & \
-                        (locs.unsqueeze(1) < tile_coords + subimage_slen - 1 - edge_padding)
+    which_locs_array = (locs.unsqueeze(1) > tile_coords + edge_padding - 0.5) & \
+                        (locs.unsqueeze(1) < tile_coords - 0.5 + subimage_slen - edge_padding)
     which_locs_array = (which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]).float()
 
     patch_locs = \
         (which_locs_array.unsqueeze(3) * locs.unsqueeze(1) - \
-            tile_coords - edge_padding).view(subimage_batchsize, max_stars, 2) / \
-                (subimage_slen - 1 - 2 * edge_padding)
+            (tile_coords + edge_padding - 0.5)).view(subimage_batchsize, max_stars, 2) / \
+                (subimage_slen - 2 * edge_padding)
     patch_locs = torch.relu(patch_locs) # by subtracting off, some are negative now; just set these to 0
-
     if fluxes is not None:
         assert fullimage_batchsize == fluxes.shape[0]
         assert max_stars == fluxes.shape[1]
@@ -158,8 +157,8 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
     n_bands = patch_fluxes.shape[2]
     fluxes = patch_fluxes.view(batchsize, n_stars_in_batch, n_bands)
 
-    scale = (stamp_slen - 1 - 2 * edge_padding)
-    bias = tile_coords.repeat(batchsize, 1).unsqueeze(1).float() + edge_padding
+    scale = (stamp_slen - 2 * edge_padding)
+    bias = tile_coords.repeat(batchsize, 1).unsqueeze(1).float() + edge_padding - 0.5
     locs = (patch_locs * scale + bias) / (full_slen - 1)
 
     locs = locs.view(batchsize, n_stars_in_batch, 2)
