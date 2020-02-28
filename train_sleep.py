@@ -4,7 +4,7 @@ import torch
 import torch.optim as optim
 
 import simulated_datasets_lib
-import starnet_vae_lib
+import starnet_lib
 import sleep_lib
 import psf_transform_lib
 import wake_lib
@@ -81,7 +81,7 @@ loader = torch.utils.data.DataLoader(
 ###############
 # define VAE
 ###############
-star_encoder = starnet_vae_lib.StarEncoder(slen = data_params['slen'],
+star_encoder = starnet_lib.StarEncoder(slen = data_params['slen'],
                                            patch_slen = 8,
                                            step = 2,
                                            edge_padding = 3,

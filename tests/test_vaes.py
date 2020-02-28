@@ -8,7 +8,7 @@ import numpy as np
 import sys
 sys.path.insert(0, './')
 sys.path.insert(0, '../')
-import starnet_vae_lib
+import starnet_lib
 
 import utils
 import image_utils
@@ -27,7 +27,7 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_vae_lib.StarEncoder(slen = 101,
+        star_encoder = starnet_lib.StarEncoder(slen = 101,
                                                    patch_slen = patch_slen,
                                                    step = 2,
                                                    edge_padding = 3,
@@ -128,7 +128,7 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_vae_lib.StarEncoder(slen = 101,
+        star_encoder = starnet_lib.StarEncoder(slen = 101,
                                                    patch_slen = patch_slen,
                                                    step = 2,
                                                    edge_padding = 3,
@@ -166,7 +166,7 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_vae_lib.StarEncoder(slen = 101,
+        star_encoder = starnet_lib.StarEncoder(slen = 101,
                                                    patch_slen = patch_slen,
                                                    step = 2,
                                                    edge_padding = 3,
