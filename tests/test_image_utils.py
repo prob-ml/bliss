@@ -17,6 +17,9 @@ import json
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+np.random.seed(43534)
+_ = torch.manual_seed(24534)
+
 class TestImageBatching(unittest.TestCase):
     def test_tile_coords(self):
 
@@ -56,7 +59,7 @@ class TestImageBatching(unittest.TestCase):
         # define parameters in full image
         full_slen = 100
         subimage_slen = 10
-        step = 9
+        step = 10
         edge_padding = 0
         n_bands = 2
 
@@ -97,6 +100,7 @@ class TestImageBatching(unittest.TestCase):
 
         assert torch.all((patch_locs != 0).view(patch_locs.shape[0], -1).float().sum(1) == \
                             patch_n_stars.float() * 2)
+
         assert torch.all((patch_fluxes != 0).view(patch_fluxes.shape[0], -1).float().sum(1) == \
                             patch_n_stars.float() * n_bands)
 
@@ -139,10 +143,10 @@ class TestImageBatching(unittest.TestCase):
         tested = False
         while not tested:
             # define parameters in full image
-            full_slen = 101
-            subimage_slen = 7
+            full_slen = 100
+            subimage_slen = 8
             step = 2
-            edge_padding = 2
+            edge_padding = 3
             n_bands = 2
 
             # draw full image parameters
@@ -194,11 +198,11 @@ class TestImageBatching(unittest.TestCase):
                 assert _patch_n_stars[which_patch] == 1
                 assert (_patch_n_stars[~which_patch] == 0).all()
 
-                patch_x0 = (locs[i][0][0] * (full_slen - 1) - (tile_coords[which_patch, 0] + edge_padding)) / \
-                        (subimage_slen - 2 * edge_padding - 1)
+                patch_x0 = (locs[i][0][0] * (full_slen - 1) - (tile_coords[which_patch, 0] + edge_padding - 0.5)) / \
+                        (subimage_slen - 2 * edge_padding)
 
-                patch_x1 = (locs[i][0][1] * (full_slen - 1) - (tile_coords[which_patch, 1] + edge_padding)) / \
-                            (subimage_slen - 2 * edge_padding - 1)
+                patch_x1 = (locs[i][0][1] * (full_slen - 1) - (tile_coords[which_patch, 1] + edge_padding - 0.5)) / \
+                            (subimage_slen - 2 * edge_padding)
 
                 assert _patch_locs[which_patch].squeeze()[0] == patch_x0
                 assert _patch_locs[which_patch].squeeze()[1] == patch_x1
@@ -247,8 +251,8 @@ class TestImageBatching(unittest.TestCase):
 
 
         test_loc = (patch_locs[indx, 0, :] * \
-                        (subimage_slen - 2 * edge_padding - 1) + \
-                        tile_coords[indx, :] + edge_padding) / (full_slen - 1)
+                        (subimage_slen - 2 * edge_padding) + \
+                        tile_coords[indx, :] + edge_padding - 0.5) / (full_slen - 1)
 
         assert (test_loc == locs_full_image.squeeze()).all()
 
@@ -262,8 +266,8 @@ class TestImageBatching(unittest.TestCase):
                                                 subimage_slen,
                                                 edge_padding)
         test_loc = (patch_locs[indx, 0, :] * \
-                        (subimage_slen - 2 * edge_padding - 1) + \
-                        tile_coords[indx, :] + edge_padding) / (full_slen - 1)
+                        (subimage_slen - 2 * edge_padding) + \
+                        tile_coords[indx, :] + edge_padding - 0.5) / (full_slen - 1)
         assert (test_loc == locs_full_image.squeeze()).all()
 
         # abd with locs > 1
@@ -275,8 +279,8 @@ class TestImageBatching(unittest.TestCase):
                                                 subimage_slen,
                                                 edge_padding)
         test_loc = (patch_locs[indx, 0, :] * \
-                        (subimage_slen - 2 * edge_padding - 1) + \
-                        tile_coords[indx, :] + edge_padding) / (full_slen - 1)
+                        (subimage_slen - 2 * edge_padding) + \
+                        tile_coords[indx, :] + edge_padding - 0.5) / (full_slen - 1)
         assert (test_loc == locs_full_image.squeeze()).all()
 
 

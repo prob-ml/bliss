@@ -73,7 +73,7 @@ class TestStarEncoder(unittest.TestCase):
 
         # we check the variational parameters against the hidden parameters
         # one by one
-        h_out = star_encoder._forward_to_last_hidden(image_patches)
+        h_out = star_encoder.get_var_params_all(image_patches)
 
         for i in range(n_image_patches):
             if(n_star_patches[i] == 0):
@@ -142,10 +142,10 @@ class TestStarEncoder(unittest.TestCase):
         image_patches = torch.randn(n_image_patches, n_bands, patch_slen, patch_slen) + 10.
         n_star_patches_sampled = torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_patches))).type(torch.LongTensor)
 
-        h = star_encoder._forward_to_last_hidden(image_patches).detach()
+        h = star_encoder.get_var_params_all(image_patches).detach()
         loc_mean, loc_logvar, \
             log_flux_mean, log_flux_logvar = \
-                star_encoder._get_params_from_last_hidden_layer(h, n_star_patches_sampled)
+                star_encoder.get_var_params_for_n_stars(h, n_star_patches_sampled)
 
         # CHECK THAT THIS MATCHES MY OLD PARAMETERS
         for i in range(n_samples):
