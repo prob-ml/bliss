@@ -25,6 +25,7 @@ def _trim_psf(psf, slen):
     psf_slen = psf.shape[2]
     assert psf.shape[1] == psf_slen
     assert (psf_slen % 2) == 1
+    assert (slen % 2) == 1
     psf_center = (psf_slen - 1) / 2
 
     assert psf_slen >= slen
@@ -171,7 +172,7 @@ class StarSimulator:
 
         # get psf shape to match image shape
         # if slen is even, we still make psf dimension odd.
-        #   otherwise, the psf won't have a peak in the center pixel. 
+        #   otherwise, the psf won't have a peak in the center pixel.
         _slen = slen + ((slen % 2) == 0) * 1
         if (slen >= self.psf_og.shape[-1]):
             self.psf = _expand_psf(self.psf_og, _slen).to(device)

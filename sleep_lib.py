@@ -213,8 +213,7 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs,
         loader.dataset.set_params_and_images()
 
         avg_loss, counter_loss, locs_loss, fluxes_loss = \
-            eval_sleep(star_encoder, loader,
-                                                optimizer, train = True)
+            eval_sleep(star_encoder, loader, optimizer, train = True)
 
         elapsed = time.time() - t0
         print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
