@@ -172,7 +172,7 @@ class SDSSHubbleData(Dataset):
     def __init__(self, sdssdir = '../../celeste_net/sdss_stage_dir/',
                         hubble_cat_file = '../hubble_data/NCG7089/' + \
                                          'hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt.txt',
-                        slen = 101,
+                        slen = 100,
                         run = 2583,
                         camcol = 2,
                         field = 136,
