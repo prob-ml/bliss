@@ -94,14 +94,14 @@ loader = torch.utils.data.DataLoader(
 # define VAE
 ###############
 star_encoder = starnet_vae_lib.StarEncoder(slen = data_params['slen'],
-                                           patch_slen = 7,
+                                           patch_slen = 8,
                                            step = 2,
-                                           edge_padding = 2,
+                                           edge_padding = 3,
                                            n_bands = len(bands),
                                            max_detections = 2,
                                            estimate_flux = True)
 
-init_encoder = './fits/results_2020-02-26/starnet_ri'
+init_encoder = './fits/results_2020-02-27/starnet_ri'
 star_encoder.load_state_dict(torch.load(init_encoder,
                                    map_location=lambda storage, loc: storage))
 star_encoder.to(device)
@@ -125,7 +125,7 @@ print('**** INIT test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; flu
     test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
 # file header to save results
-outfolder = './fits/results_2020-02-26/'
+outfolder = './fits/results_2020-02-27/'
 
 ############################
 # Initial sleep phase with empirically estimated background
@@ -169,7 +169,7 @@ for iteration in range(0, n_iter):
                         n_samples = 50,
                         out_filename = outfolder + 'iter' + str(iteration),
                         lr = 1e-3,
-                        n_epochs = 500, 
+                        n_epochs = 500,
                         run_map = False)
 
     print(list(model_params.planar_background.parameters())[0])
