@@ -131,20 +131,17 @@ class TrainGalaxy(object):
         torch.save(self.vae.state_dict(), vae_file.as_posix())
 
         print("  * evaluating test loss...")
-        test_loss, avg_rmse, avg_l1 = self.eval_epoch()
+        test_loss, avg_rmse = self.eval_epoch()
         print("  * test loss: {:.0f}".format(test_loss))
         print(f" * avg_rmse: {avg_rmse}")
-        print(f" * avg_l1: {avg_l1}")
 
         with open(loss_file.as_posix(), 'a') as f:
-            f.write(f"epoch {epoch}, test loss: {test_loss}, avg rmse: {avg_rmse}, "
-                    f"avg l1: {avg_l1}\n")
+            f.write(f"epoch {epoch}, test loss: {test_loss}, avg rmse: {avg_rmse} ")
 
     def eval_epoch(self):
         self.vae.eval()  # set in evaluation mode = no need to compute gradients or allocate memory for them.
         avg_loss = 0.0
         avg_rmse = 0.0
-        avg_l1 = 0.0
 
         with torch.no_grad():  # no need to compute gradients outside training.
             for batch_idx, data in enumerate(self.test_loader):
@@ -154,12 +151,10 @@ class TrainGalaxy(object):
                 loss = self.vae.loss(image, background)
                 avg_loss += loss.item()  # gets number from tensor containing single value.
                 avg_rmse += self.vae.rmse_pp(image, background).item()
-                avg_l1 += self.vae.l1_pp(image, background).item()
 
         avg_loss /= self.size_test
         avg_rmse /= self.size_test
-        avg_l1 /= self.size_test
-        return avg_loss, avg_rmse, avg_l1
+        return avg_loss, avg_rmse
 
     def plot_reconstruction(self, epoch):
         """
@@ -195,6 +190,7 @@ class TrainGalaxy(object):
 
                     for i in range(num_examples):
                         vmax1 = image[i, j].max()  # we are looking at the ith sample in the jth band.
+                        vmax2 = max(image[i, j].max(), recon_mean[i, j].max())
                         plt.subplot(num_examples, num_cols, num_cols * i + 1)
                         plt.title("image [{} galaxies]".format(num_galaxies[i]))
                         plt.imshow(image[i, j].data.cpu().numpy(), vmax=vmax1)
@@ -207,7 +203,7 @@ class TrainGalaxy(object):
 
                         plt.subplot(num_examples, num_cols, num_cols * i + 3)
                         plt.title("recon_var")
-                        plt.imshow(recon_var[i, j].data.cpu().numpy(), vmax=vmax1)
+                        plt.imshow(recon_var[i, j].data.cpu().numpy(), vmax=vmax2)
                         plt.colorbar()
 
                     plot_file = plots_path.joinpath(f"plot_{epoch}_{j}")

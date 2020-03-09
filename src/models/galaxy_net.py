@@ -186,13 +186,3 @@ class OneCenteredGalaxy(nn.Module):
         """
         recon_mean, recon_var, kl_z = self.forward(image, background)
         return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
-
-    def l1_pp(self, image, background):
-        """
-        Per pixel avg. l1 norm
-        :param image:
-        :param background:
-        :return:
-        """
-        recon_mean, recon_var, kl_z = self.forward(image, background)
-        return torch.norm(recon_mean - image, p=1) / self.slen ** 2

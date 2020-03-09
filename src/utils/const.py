@@ -33,6 +33,7 @@ def str_bool(s):
         raise ValueError("Invalid value for str_bool.")
 
 
+# General arguments needed for any neural network run.
 general_args = [
     'device',
     'dir_name',
@@ -44,6 +45,19 @@ general_args = [
     'batch_size',
     'evaluate',
     'epochs',
+]
+
+# specify all the models (as a class) that can be trained.
+all_models = {
+    'centered_galaxy': train_galaxy.TrainGalaxy,
+    # 'catalog': train_catalog.TrainCatalog
+}
+
+all_datasets = [
+    'synthetic',
+    'galbasic',
+    'galcatsim',
+    'h5_catalog'
 ]
 
 image_h5_name = 'images'

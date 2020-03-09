@@ -14,20 +14,6 @@ from src.utils import const
 torch.backends.cudnn.benchmark = True
 plt.switch_backend("Agg")
 
-# specify all the models (as a class) that can be trained.
-all_models = {
-    'centered_galaxy': train_galaxy.TrainGalaxy,
-    # 'catalog': train_catalog.TrainCatalog
-}
-
-all_datasets = [
-    'synthetic',
-    'galbasic',
-    'galcatsim',
-    'h5_catalog'
-]
-
-
 def setup():
     """
     Make sure that the testing directory exists among other things.
@@ -68,15 +54,15 @@ def run(args):
     :param args: A dict.
     :return:
     """
-    if args['model'] not in all_models:
+    if args['model'] not in const.all_models:
         raise NotImplementedError("Not implemented this model yet.")
 
-    train_module = all_models[args['model']].from_args(args)
+    train_module = const.all_models[args['model']].from_args(args)
     train_module.vae.cuda()
     training(train_module, **args)
 
 
-if __name__ == "__main__":
+def main():
     testing_path = setup()
 
     # Setup arguments.
@@ -102,9 +88,11 @@ if __name__ == "__main__":
                                                                    'specific number of epochs.')
 
     # specify model and dataset.
-    parser.add_argument('--model', type=str, help='What model we are training?', choices=list(all_models.keys()),
+    parser.add_argument('--model', type=str, help='What model we are training?',
+                        choices=list(const.all_models.keys()),
                         required=True)
-    parser.add_argument('--dataset', type=str, default=None, choices=all_datasets,
+
+    parser.add_argument('--dataset', type=str, default=None, choices=const.all_datasets,
                         help='Specifies the dataset to be used to train the model.')
 
     one_centered_galaxy_group = parser.add_argument_group('[One Centered Galaxy Model]',
@@ -117,14 +105,14 @@ if __name__ == "__main__":
 
     # we are done.
     pargs = parser.parse_args()
-    args_dict = vars(pargs)
+    args = vars(pargs)
 
     # Additional settings.
-    args_dict['dir_name'] = testing_path.joinpath(args_dict['dir_name'])
-    project_dir = Path(args_dict['dir_name'])
+    args['dir_name'] = testing_path.joinpath(args['dir_name'])
+    project_dir = Path(args['dir_name'])
 
     # check if directory exists or if we should overwrite.
-    if project_dir.is_dir() and not args_dict['overwrite']:
+    if project_dir.is_dir() and not args['overwrite']:
         raise IOError("Directory already exists.")
     elif project_dir.is_dir():
         subprocess.run(f"rm -r {project_dir.as_posix()}", shell=True)
@@ -135,5 +123,9 @@ if __name__ == "__main__":
     np.random.seed(pargs.seed)
 
     # run.
-    with torch.cuda.device(args_dict['device']):
-        run(args_dict)
+    with torch.cuda.device(args['device']):
+        run(args)
+
+
+if __name__ == "__main__":
+    main()

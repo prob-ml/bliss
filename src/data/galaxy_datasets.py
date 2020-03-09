@@ -8,12 +8,12 @@ import h5py
 import sys
 
 from src.utils import const
-from src.models import draw_catsim
+from src.data import draw_catsim
 
 
 def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):
     # TODO: LATER The other two datasets non catsim should also be updated. (save props+clear defaults)
-    if dataset_name == 'synthetic':  # Jeff coded this one as a proof of concept.
+    if dataset_name == 'synthetic':
         ds = Synthetic(slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
                        centered=True, num_bands=num_bands, num_images=1000)
 
@@ -293,9 +293,7 @@ class Synthetic(Dataset):
                  num_bands=5, padding=3, centered=False, num_images=1000,
                  flux=30000):
         """
-        Questions:
-        - What is s_density?
-        - What  is A**B where both are matrices?
+        Jeff coded this one as a proof of concept.
         """
         super(Synthetic, self).__init__()
 
