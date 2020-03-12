@@ -1,4 +1,3 @@
-from pathlib import Path
 from os.path import dirname
 import sys
 
