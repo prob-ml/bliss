@@ -10,7 +10,6 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, '../')
 import simulated_datasets_lib
-import sdss_dataset_lib
 
 import json
 

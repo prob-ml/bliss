@@ -112,12 +112,12 @@ def get_params_loss(loc_mean, loc_log_var, \
     # the log prob for each observed location x mean
     locs_log_probs_all = \
         get_locs_logprob_all_combs(true_locs,
-                                    loc_mean,
-                                    loc_log_var)
+                                   loc_mean,
+                                   loc_log_var)
 
     flux_log_probs_all = \
-        get_fluxes_logprob_all_combs(true_fluxes, \
-                                    log_flux_mean, log_flux_log_var)
+        get_fluxes_logprob_all_combs(true_fluxes,
+                                     log_flux_mean, log_flux_log_var)
 
     locs_loss, fluxes_loss, perm_indx = \
         get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, true_is_on_array)
@@ -142,13 +142,13 @@ def get_inv_kl_loss(star_encoder,
     # extract image patches
     image_patches, true_patch_locs, true_patch_fluxes, \
         true_patch_n_stars, true_patch_is_on_array = \
-            star_encoder.get_image_patches(images, true_locs, true_fluxes,
-                                            clip_max_stars = True)
+        star_encoder.get_image_patches(images, true_locs, true_fluxes,
+                                       clip_max_stars=True)
 
     # get variational parameters on each patch
     loc_mean, loc_log_var, \
         log_flux_mean, log_flux_log_var, log_probs = \
-            star_encoder(image_patches, true_patch_n_stars)
+        star_encoder(image_patches, true_patch_n_stars)
 
     if use_l2_loss:
         loc_log_var = torch.zeros((loc_log_var.shape))
