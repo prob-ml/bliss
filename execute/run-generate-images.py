@@ -3,8 +3,9 @@
 Runs one of the other python files in execute in a loop or so. Nothing major should be in here.
 Please run from outside the execute folder. In the root 'galaxy-net' directory.
 """
-from __init__ import PYPATH
 import subprocess
+
+from __init__ import PYPATH
 
 
 def main():
