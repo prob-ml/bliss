@@ -1,23 +1,18 @@
+import sys
+
 import numpy as np
-import scipy.stats as stats
-
-import torch
-from torch.utils.data import Dataset, DataLoader, sampler
-
 import torch
 import torch.nn.functional as F
+from torch.utils.data import Dataset
 
-import sys
 sys.path.insert(0, '../')
-import sdss_psf
 import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def _trim_psf(psf, slen):
-    # crop the psf to length slen x slen
-    # centered at the middle
 
+def _check_psf(psf, slen):
+    # first dimension of psf is number of bands
     assert len(psf.shape) == 3
     n_bands = psf.shape[0]
 
@@ -25,30 +20,43 @@ def _trim_psf(psf, slen):
     psf_slen = psf.shape[2]
     assert psf.shape[1] == psf_slen
     assert (psf_slen % 2) == 1
+    # same for slen
     assert (slen % 2) == 1
+
+
+def _trim_psf(psf, slen):
+    """
+    Crop the psf to length slen x slen,
+    centered at the middle
+    :param psf:
+    :param slen:
+    :return:
+    """
+    #
+
+    _check_psf(psf, slen)
+    psf_slen = psf.shape[2]
     psf_center = (psf_slen - 1) / 2
 
     assert psf_slen >= slen
 
     r = np.floor(slen / 2)
-    l_indx = int(psf_center  - r)
+    l_indx = int(psf_center - r)
     u_indx = int(psf_center + r + 1)
 
     return psf[:, l_indx:u_indx, l_indx:u_indx]
 
+
 def _expand_psf(psf, slen):
-    # pad the psf with zeros so that it is size slen
+    """
+    Pad the psf with zeros so that it is size slen,
+    :param psf:
+    :param slen:
+    :return:
+    """
 
-    # first dimension of psf is number of bands
-    assert len(psf.shape) == 3
-    n_bands = psf.shape[0]
-
+    _check_psf(psf, slen)
     psf_slen = psf.shape[2]
-    assert psf.shape[1] == psf_slen
-    # dimension of psf should be odd
-    assert (psf_slen % 2) == 1
-    # sim for slen
-    assert (slen % 2) == 1
 
     assert psf_slen <= slen
 
@@ -56,25 +64,27 @@ def _expand_psf(psf, slen):
 
     offset = int((slen - psf_slen) / 2)
 
-    psf_expanded[:, offset:(offset+psf_slen), offset:(offset+psf_slen)] = psf
+    psf_expanded[:, offset:(offset + psf_slen), offset:(offset + psf_slen)] = psf
 
     return psf_expanded
+
 
 def _get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
-    # return torch.Tensor(np.dstack((x, y))) / offset
     return (torch.Tensor(np.dstack((y, x))) / offset).to(device)
 
-def plot_one_star(slen, locs, psf, cached_grid = None):
-    # locs is batchsize x 2: takes values between 0 and 1
-    # psf is a slen x slen tensor
 
-    # assert torch.all(locs <= 1)
-    # assert torch.all(locs >= 0)
+def plot_one_star(slen, locs, psf, cached_grid=None):
+    """
 
-    # slen = psf.shape[-1]
-    # assert slen == psf.shape[-2]
+    :param slen:
+    :param locs: is batchsize x 2: takes values between 0 and 1
+    :param psf: is a slen x slen tensor
+    :param cached_grid:
+    :return:
+    """
+
     assert len(psf.shape) == 3
     n_bands = psf.shape[0]
 
@@ -92,21 +102,27 @@ def plot_one_star(slen, locs, psf, cached_grid = None):
     locs = (locs - 0.5) * 2
     grid_loc = grid.view(1, slen, slen, 2) - locs[:, [1, 0]].view(batchsize, 1, 1, 2)
 
-    star = F.grid_sample(psf.expand(batchsize, n_bands, -1, -1), grid_loc, align_corners = True)
+    star = F.grid_sample(psf.expand(batchsize, n_bands, -1, -1), grid_loc, align_corners=True)
 
     # normalize so one star still sums to 1
-    return star # / star.sum(3, keepdim=True).sum(2, keepdim=True)
+    return star  # / star.sum(3, keepdim=True).sum(2, keepdim=True)
 
-def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid = None):
-    # locs is batchsize x max_stars x x_loc x y_loc
-    # fluxes is batchsize x n_bands x max_stars
-    # n_stars is length batchsize
-    # psf is a n_bands x slen x slen tensor
+
+def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid=None):
+    """
+
+    :param slen:
+    :param locs: is batchsize x max_stars x x_loc x y_loc
+    :param n_stars: length x batchsize
+    :param fluxes: is batchsize x n_bands x max_stars
+    :param psf: is a n_bands x slen x slen tensor
+    :param cached_grid: Grid where the stars should be plotted.
+    :return:
+    """
 
     n_bands = psf.shape[0]
 
     batchsize = locs.shape[0]
-    max_stars = locs.shape[1]
     assert locs.shape[2] == 2
 
     assert fluxes.shape[0] == locs.shape[0]
@@ -124,23 +140,25 @@ def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid = None):
         assert cached_grid.shape[1] == slen
         grid = cached_grid
 
-    stars = 0. #torch.zeros((batchsize, 1, slen, slen)).to(device)
+    stars = 0.  # torch.zeros((batchsize, 1, slen, slen)).to(device)
 
     for n in range(max(n_stars)):
         is_on_n = (n < n_stars).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
         fluxes_n = fluxes[:, n, :]
 
-        one_star = plot_one_star(slen, locs_n, psf, cached_grid = grid)
+        one_star = plot_one_star(slen, locs_n, psf, cached_grid=grid)
 
         stars += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(batchsize, n_bands, 1, 1)
 
     return stars
 
+
 def _draw_pareto(f_min, alpha, shape):
     uniform_samples = torch.rand(shape).to(device)
 
-    return f_min / (1 - uniform_samples)**(1 / alpha)
+    return f_min / (1 - uniform_samples) ** (1 / alpha)
+
 
 def _draw_pareto_maxed(f_min, f_max, alpha, shape):
     # draw pareto conditioned on being less than f_max
@@ -153,6 +171,7 @@ def _draw_pareto_maxed(f_min, f_max, alpha, shape):
             _draw_pareto(f_min, alpha, torch.sum(indx))
 
     return pareto_samples
+
 
 class StarSimulator:
     def __init__(self, psf, slen, background, transpose_psf):
@@ -174,7 +193,7 @@ class StarSimulator:
         # if slen is even, we still make psf dimension odd.
         #   otherwise, the psf won't have a peak in the center pixel.
         _slen = slen + ((slen % 2) == 0) * 1
-        if (slen >= self.psf_og.shape[-1]):
+        if slen >= self.psf_og.shape[-1]:
             self.psf = _expand_psf(self.psf_og, _slen).to(device)
         else:
             self.psf = _trim_psf(self.psf_og, _slen).to(device)
@@ -191,20 +210,20 @@ class StarSimulator:
         self.cached_grid = _get_mgrid(slen).to(device)
 
     def draw_image_from_params(self, locs, fluxes, n_stars,
-                                        add_noise = True):
+                               add_noise=True):
         images_mean = \
             plot_multiple_stars(self.slen, locs, n_stars, fluxes,
-                                    self.psf, self.cached_grid) + \
-                self.background[None, :, :, :]
+                                self.psf, self.cached_grid) + \
+            self.background[None, :, :, :]
 
         # add noise
         if add_noise:
             if torch.any(images_mean <= 0):
                 print('warning: image mean less than 0')
-                images_mean = images_mean.clamp(min = 1.0)
+                images_mean = images_mean.clamp(min=1.0)
 
-            images = torch.sqrt(images_mean) * torch.randn(images_mean.shape).to(device) + \
-                                                            images_mean
+            images = (torch.sqrt(images_mean) * torch.randn(images_mean.shape).to(device)
+                      + images_mean)
         else:
             images = images_mean
 
@@ -214,16 +233,16 @@ class StarSimulator:
 class StarsDataset(Dataset):
 
     def __init__(self, psf, n_images,
-                        slen,
-                         max_stars,
-                         mean_stars,
-                         min_stars,
-                         f_min,
-                         f_max,
-                         background,
-                         alpha,
-                         transpose_psf = False,
-                         add_noise = True):
+                 slen,
+                 max_stars,
+                 mean_stars,
+                 min_stars,
+                 f_min,
+                 f_max,
+                 background,
+                 alpha,
+                 transpose_psf=False,
+                 add_noise=True):
 
         self.slen = slen
         self.n_bands = psf.shape[0]
@@ -247,9 +266,9 @@ class StarsDataset(Dataset):
         self.alpha = alpha
 
         # dataset parameters
-        self.n_images = n_images
+        self.n_images = n_images  # = batchsize.
 
-        # set data
+        # set the first batch of data.
         self.set_params_and_images()
 
     def __len__(self):
@@ -263,54 +282,53 @@ class StarsDataset(Dataset):
                 'fluxes': self.fluxes[idx],
                 'n_stars': self.n_stars[idx]}
 
-    def draw_batch_parameters(self, batchsize, return_images = True):
+    def draw_batch_parameters(self, batchsize, return_images=True):
         # draw number of stars
         if self.draw_poisson:
             n_stars = np.random.poisson(self.mean_stars, batchsize)
         else:
             n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
-                                        batchsize)
+                                       batchsize)
 
-        n_stars = torch.Tensor(n_stars).clamp(max = self.max_stars,
-                        min = self.min_stars).type(torch.LongTensor).to(device)
+        n_stars = torch.Tensor(n_stars).clamp(max=self.max_stars,
+                                              min=self.min_stars).type(torch.LongTensor).to(device)
         is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
 
         # draw locations
-        locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * \
-                is_on_array.unsqueeze(2).float()
+        locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * is_on_array.unsqueeze(2).float()
 
         # draw fluxes
-        base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha = self.alpha,
-                                shape = (batchsize, self.max_stars))
+        base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha=self.alpha,
+                                         shape=(batchsize, self.max_stars))
 
         if self.n_bands > 1:
             colors = torch.randn(batchsize, self.max_stars, self.n_bands - 1).to(device) * 0.15 + 0.3
 
-            _fluxes = 10**( colors / 2.5) * base_fluxes.unsqueeze(2)
+            _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(2)
 
-            fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim = 2) * \
-                                is_on_array.unsqueeze(2).float()
+            fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim=2) * \
+                     is_on_array.unsqueeze(2).float()
         else:
             fluxes = (base_fluxes * is_on_array.float()).unsqueeze(2)
 
         if return_images:
             images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,
-                                                add_noise = self.add_noise)
-
+                                                           add_noise=self.add_noise)
             return locs, fluxes, n_stars, images
+
         else:
             return locs, fluxes, n_stars
 
     def set_params_and_images(self):
         self.locs, self.fluxes, self.n_stars, self.images = \
-            self.draw_batch_parameters(self.n_images, return_images = True)
+            self.draw_batch_parameters(self.n_images, return_images=True)
 
 
 def load_dataset_from_params(psf, data_params,
-                                n_images,
-                                background,
-                                transpose_psf = False,
-                                add_noise = True):
+                             n_images,
+                             background,
+                             transpose_psf=False,
+                             add_noise=True):
     # data parameters
     slen = data_params['slen']
 
@@ -324,14 +342,14 @@ def load_dataset_from_params(psf, data_params,
 
     # draw data
     return StarsDataset(psf,
-                            n_images,
-                            slen = slen,
-                            f_min=f_min,
-                            f_max=f_max,
-                            max_stars = max_stars,
-                            mean_stars = mean_stars,
-                            min_stars = min_stars,
-                            alpha = alpha,
-                            background = background,
-                            transpose_psf = transpose_psf,
-                            add_noise = add_noise)
+                        n_images,
+                        slen=slen,
+                        f_min=f_min,
+                        f_max=f_max,
+                        max_stars=max_stars,
+                        mean_stars=mean_stars,
+                        min_stars=min_stars,
+                        alpha=alpha,
+                        background=background,
+                        transpose_psf=transpose_psf,
+                        add_noise=add_noise)

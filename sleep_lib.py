@@ -1,15 +1,14 @@
-import torch
-import numpy as np
 import math
 import time
+from itertools import permutations
 
-from torch.distributions import normal
+import numpy as np
+import torch
 
 import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-from itertools import permutations
 
 def isnan(x):
     return x != x
@@ -25,7 +24,8 @@ def get_categorical_loss(log_probs, one_hot_encoding):
     assert log_probs.shape[1] == one_hot_encoding.shape[1]
 
     return torch.sum(
-        -log_probs * one_hot_encoding, dim = 1)
+        -log_probs * one_hot_encoding, dim=1)
+
 
 def _permute_losses_mat(losses_mat, perm):
     batchsize = losses_mat.shape[0]
@@ -36,8 +36,8 @@ def _permute_losses_mat(losses_mat, perm):
 
     return torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
 
-def get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
 
+def get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
     batchsize = true_locs.shape[0]
 
     # get losses for locations
@@ -51,9 +51,10 @@ def get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
     locs_log_probs_all = utils.eval_normal_logprob(_true_locs,
-                            _loc_mean, _loc_log_var).sum(dim = 3)
+                                                   _loc_mean, _loc_log_var).sum(dim=3)
 
     return locs_log_probs_all
+
 
 def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
     batchsize = true_fluxes.shape[0]
@@ -66,7 +67,7 @@ def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
     flux_log_probs_all = utils.eval_lognormal_logprob(_true_fluxes,
-                                _log_flux_mean, _log_flux_log_var).sum(dim = 3)
+                                                      _log_flux_mean, _log_flux_log_var).sum(dim=3)
 
     return flux_log_probs_all
 
@@ -76,36 +77,36 @@ def _get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array
     batchsize = flux_log_probs_all.shape[0]
 
     locs_loss_all_perm = torch.zeros(batchsize,
-                                        math.factorial(max_detections)).to(device)
+                                     math.factorial(max_detections)).to(device)
     fluxes_loss_all_perm = torch.zeros(batchsize,
-                                        math.factorial(max_detections)).to(device)
+                                       math.factorial(max_detections)).to(device)
     i = 0
     for perm in permutations(range(max_detections)):
         locs_loss_all_perm[:, i] = \
-            (locs_log_probs_all[:, perm, :].diagonal(dim1 = 1, dim2 = 2) * \
-            is_on_array).sum(1)
+            (locs_log_probs_all[:, perm, :].diagonal(dim1=1, dim2=2) *
+             is_on_array).sum(1)
 
         fluxes_loss_all_perm[:, i] = \
-            (flux_log_probs_all[:, perm].diagonal(dim1 = 1, dim2 = 2) * \
-            is_on_array).sum(1)
+            (flux_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) *
+             is_on_array).sum(1)
         i += 1
 
     return locs_loss_all_perm, fluxes_loss_all_perm
+
 
 def get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, is_on_array):
     locs_log_probs_all_perm, fluxes_log_probs_all_perm = \
         _get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array)
 
-    locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim = 1)
+    locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
     fluxes_loss = -torch.gather(fluxes_log_probs_all_perm, 1, indx.unsqueeze(1)).squeeze()
 
     return locs_loss, fluxes_loss, indx
 
 
 def get_params_loss(loc_mean, loc_log_var, \
-                        log_flux_mean, log_flux_log_var, log_probs,
-                        true_locs, true_fluxes, true_is_on_array):
-
+                    log_flux_mean, log_flux_log_var, log_probs,
+                    true_locs, true_fluxes, true_is_on_array):
     max_detections = log_flux_mean.shape[1]
 
     # this is batchsize x (max_stars x max_detections)
@@ -122,7 +123,6 @@ def get_params_loss(loc_mean, loc_log_var, \
     locs_loss, fluxes_loss, perm_indx = \
         get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, true_is_on_array)
 
-
     true_n_stars = true_is_on_array.sum(1)
     one_hot_encoding = utils.get_one_hot_encoding_from_int(true_n_stars, log_probs.shape[1])
     counter_loss = get_categorical_loss(log_probs, one_hot_encoding)
@@ -133,21 +133,21 @@ def get_params_loss(loc_mean, loc_log_var, \
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm_indx
 
-def get_inv_kl_loss(star_encoder,
-                        images,
-                        backgrounds,
-                        true_locs,
-                        true_fluxes, use_l2_loss = False):
 
+def get_inv_kl_loss(star_encoder,
+                    images,
+                    backgrounds,
+                    true_locs,
+                    true_fluxes, use_l2_loss=False):
     # extract image patches
     image_patches, true_patch_locs, true_patch_fluxes, \
-        true_patch_n_stars, true_patch_is_on_array = \
+    true_patch_n_stars, true_patch_is_on_array = \
         star_encoder.get_image_patches(images, true_locs, true_fluxes,
                                        clip_max_stars=True)
 
     # get variational parameters on each patch
     loc_mean, loc_log_var, \
-        log_flux_mean, log_flux_log_var, log_probs = \
+    log_flux_mean, log_flux_log_var, log_probs = \
         star_encoder(image_patches, true_patch_n_stars)
 
     if use_l2_loss:
@@ -156,15 +156,15 @@ def get_inv_kl_loss(star_encoder,
 
     loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
         get_params_loss(loc_mean, loc_log_var, \
-                            log_flux_mean, log_flux_log_var, log_probs, \
-                            true_patch_locs, true_patch_fluxes,
-                            true_patch_is_on_array.float())
+                        log_flux_mean, log_flux_log_var, log_probs, \
+                        true_patch_locs, true_patch_fluxes,
+                        true_patch_is_on_array.float())
 
     return loss, counter_loss, locs_loss, fluxes_loss, perm_indx, log_probs
 
-def eval_sleep(star_encoder, train_loader,
-                optimizer = None, train = False):
 
+def eval_sleep(star_encoder, train_loader,
+               optimizer=None, train=False):
     avg_loss = 0.0
     avg_counter_loss = 0.0
     avg_locs_loss = 0.0
@@ -186,7 +186,7 @@ def eval_sleep(star_encoder, train_loader,
         # evaluate log q
         loss, counter_loss, locs_loss, fluxes_loss = \
             get_inv_kl_loss(star_encoder, images, backgrounds,
-                                true_locs, true_fluxes)[0:4]
+                            true_locs, true_fluxes)[0:4]
 
         if train:
             if optimizer is not None:
@@ -202,8 +202,7 @@ def eval_sleep(star_encoder, train_loader,
 
 
 def run_sleep(star_encoder, loader, optimizer, n_epochs,
-                out_filename, print_every = 10):
-
+              out_filename, print_every=10):
     test_losses = np.zeros((4, n_epochs))
 
     for epoch in range(n_epochs):
@@ -213,24 +212,25 @@ def run_sleep(star_encoder, loader, optimizer, n_epochs,
         loader.dataset.set_params_and_images()
 
         avg_loss, counter_loss, locs_loss, fluxes_loss = \
-            eval_sleep(star_encoder, loader, optimizer, train = True)
+            eval_sleep(star_encoder, loader, optimizer, train=True)
 
         elapsed = time.time() - t0
-        print('[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} seconds]'.format(\
-                        epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
+        print(
+            '[{}] loss: {:0.4f}; counter loss: {:0.4f}; locs loss: {:0.4f}; fluxes loss: {:0.4f} \t[{:.1f} '
+            'seconds]'.format(epoch, avg_loss, counter_loss, locs_loss, fluxes_loss, elapsed))
 
         test_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, fluxes_loss])
         np.savetxt(out_filename + '-test_losses', test_losses)
 
-        if ((epoch % print_every) == 0) or (epoch == (n_epochs-1)):
+        if ((epoch % print_every) == 0) or (epoch == (n_epochs - 1)):
             loader.dataset.set_params_and_images()
-            _ = eval_sleep(star_encoder, loader, train = True)
+            _ = eval_sleep(star_encoder, loader, train=True)
 
             loader.dataset.set_params_and_images()
             test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = \
-                eval_sleep(star_encoder, loader, train = False)
+                eval_sleep(star_encoder, loader, train=False)
 
-            print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format(\
+            print('**** test loss: {:.3f}; counter loss: {:.3f}; locs loss: {:.3f}; fluxes loss: {:.3f} ****'.format( \
                 test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss))
 
             print("writing the encoder parameters to " + out_filename)

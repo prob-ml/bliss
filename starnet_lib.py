@@ -1,14 +1,10 @@
 import torch
 import torch.nn as nn
 
-import numpy as np
-
 import image_utils
 import utils
 
-from torch.distributions import poisson
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 
 class Flatten(nn.Module):
@@ -25,18 +21,33 @@ class Normalize2d(nn.Module):
         return (tensor - mean) / torch.sqrt(var + 1e-5)
 
 
-class StarEncoder(nn.Module):
+class SourceEncoder(nn.Module):
     def __init__(self, slen, patch_slen, step, edge_padding,
                  n_bands, max_detections,
                  n_source_params=None):
+        """
+        This class implements the source encoder, which is supposed to take in a synthetic image of size slen * slen
+        and returns a NN latent variable representation of this image.
 
-        super(StarEncoder, self).__init__()
+        * EXAMPLE on padding: If the patch_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
+
+        :param slen: dimension of full image, we assume its square for now
+        :param patch_slen: dimension of the individual image patches (usually 8 for stars, and _ for galaxies)
+        :param step: number of pixels to shift every subimage/patch.
+        :param edge_padding:
+        :param n_bands :number of bands
+        :param max_detections:
+        :param n_source_params:
+        """
+        # TODO: Clarify what n_source_params is.
+
+        super(SourceEncoder, self).__init__()
 
         # image parameters
-        self.slen = slen  # dimension of full image: we assume its square for now
-        self.patch_slen = patch_slen  # dimension of the individual image patches
-        self.step = step  # number of pixels to shift every subimage
-        self.n_bands = n_bands  # number of bands
+        self.slen = slen
+        self.patch_slen = patch_slen
+        self.step = step
+        self.n_bands = n_bands
 
         self.edge_padding = edge_padding
 
@@ -47,7 +58,7 @@ class StarEncoder(nn.Module):
         # max number of detections
         self.max_detections = max_detections
 
-        # convolutional NN paramters
+        # convolutional NN parameters
         enc_conv_c = 20
         enc_kern = 3
         enc_hidden = 256
@@ -95,36 +106,9 @@ class StarEncoder(nn.Module):
             nn.ReLU(),
         )
 
-        # add final layer, whose size depends on the number of stars to output
-        # for i in range(0, max_detections + 1):
-        #     # i = 0, 1, ..., max_detections
-        #     len_out = i * 6 + 1
-        #     width_hidden = len_out * 10
-        #
-        #     module_a = nn.Sequential(nn.Linear(enc_hidden, width_hidden),
-        #                             nn.ReLU(),
-        #                             nn.Linear(width_hidden, width_hidden),
-        #                             # nn.ReLU(),
-        #                             # nn.Linear(width_hidden, width_hidden),
-        #                             nn.ReLU())
-        #     self.add_module('enc_a_detect' + str(i), module_a)
-        #
-        #     module_b = nn.Sequential(nn.Linear(width_hidden + enc_hidden, width_hidden),
-        #                             nn.ReLU(),
-        #                             nn.Linear(width_hidden, width_hidden),
-        #                             # nn.ReLU(),
-        #                             # nn.Linear(width_hidden, width_hidden),
-        #                             nn.ReLU())
-        #
-        #     self.add_module('enc_b_detect' + str(i), module_b)
-        #
-        #     final_module_name = 'enc_final_detect' + str(i)
-        #     final_module = nn.Linear(2 * width_hidden + enc_hidden, len_out)
-        #     self.add_module(final_module_name, final_module)
-
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
-        #    seven parameters (thhee means, three variances, for two locs and one
+        #    seven parameters (the means, three variances, for two locs and one
         #    flux; and one probability)
         if n_source_params is None:
             self.n_source_params = self.n_bands
@@ -132,6 +116,7 @@ class StarEncoder(nn.Module):
             self.constrain_source_params = True
         else:
             self.n_source_params = n_source_params
+
             # these can be anywhere in the reals
             self.constrain_source_params = False
 
@@ -159,24 +144,15 @@ class StarEncoder(nn.Module):
 
     def get_var_params_all(self, image_patches):
         # concatenate all output parameters for all possible n_stars
-
         h = self._forward_to_pooled_hidden(image_patches)
-
         return self.enc_final(h)
-
-        # h_out = torch.zeros(image_patches.shape[0], 1).to(device)
-        # for i in range(0, self.max_detections + 1):
-        #     h_i = self._forward_conditional_nstars(h, i)
-        #
-        #     h_out = torch.cat((h_out, h_i), dim = 1)
-        #
-        # return h_out[:, 1:h_out.shape[1]]
 
     ######################
     # Forward modules
     ######################
     def forward(self, image_patches, n_stars=None):
-        # pass through neural network
+        # pass through neural network, h is the array fo variational distribution parameters.
+        # h has shape:
         h = self.get_var_params_all(image_patches)
 
         # get probability of n_stars
@@ -320,9 +296,6 @@ class StarEncoder(nn.Module):
                                                   self.patch_slen,
                                                   self.edge_padding)
 
-            # if (self.weights is None) or (images.shape[0] != self.batchsize):
-            #     self.weights = get_weights(n_stars.clamp(max = self.max_detections))
-
             if clip_max_stars:
                 patch_n_stars = patch_n_stars.clamp(max=self.max_detections)
                 patch_locs = patch_locs[:, 0:self.max_detections, :]
@@ -461,5 +434,5 @@ class StarEncoder(nn.Module):
             log_q_fluxes = None
             log_q_n_stars = None
 
-        return locs, fluxes, n_stars, \
-               log_q_locs, log_q_fluxes, log_q_n_stars
+        return (locs, fluxes, n_stars,
+                log_q_locs, log_q_fluxes, log_q_n_stars)
