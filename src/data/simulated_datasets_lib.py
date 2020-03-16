@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 sys.path.insert(0, '../')
-import utils
+from src import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

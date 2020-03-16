@@ -5,7 +5,7 @@ from itertools import permutations
 import numpy as np
 import torch
 
-import utils
+from src import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

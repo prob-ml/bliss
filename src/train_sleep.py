@@ -5,11 +5,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-import psf_transform_lib
-import simulated_datasets_lib
-import sleep_lib
-import starnet_lib
-import wake_lib
+from src import sleep_lib, starnet_lib, simulated_datasets_lib, psf_transform_lib, wake_lib
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print('device: ', device)
@@ -27,7 +23,7 @@ torch.backends.cudnn.benchmark = False
 ###############
 # data parameters
 ###############
-with open('./data/default_star_parameters.json', 'r') as fp:
+with open('../data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 
 print(data_params)

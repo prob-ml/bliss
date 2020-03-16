@@ -9,7 +9,7 @@ import torch
 import sys
 sys.path.insert(0, './')
 sys.path.insert(0, '../')
-import simulated_datasets_lib
+from src import simulated_datasets_lib
 
 import json
 
@@ -38,11 +38,11 @@ class TestSDSSDataset(unittest.TestCase):
                                                 data_params['slen']) * 686.
         star_dataset = \
             simulated_datasets_lib.load_dataset_from_params(psf_og,
-                                    data_params,
-                                    n_images = n_images,
-                                    background = background,
-                                    add_noise = True,
-                                    transpose_psf = False)
+                                                            data_params,
+                                                            n_images=n_images,
+                                                            background=background,
+                                                            add_noise=True,
+                                                            transpose_psf=False)
 
         # get loader
         batchsize = 8

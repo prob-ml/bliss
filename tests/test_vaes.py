@@ -8,12 +8,8 @@ import numpy as np
 import sys
 sys.path.insert(0, './')
 sys.path.insert(0, '../')
-import starnet_lib
+from src import starnet_lib, utils, image_utils
 
-import utils
-import image_utils
-
-import json
 
 class TestStarEncoder(unittest.TestCase):
     def test_hidden_indx(self):
@@ -27,12 +23,12 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_lib.StarEncoder(slen = 101,
-                                                   patch_slen = patch_slen,
-                                                   step = 2,
-                                                   edge_padding = 3,
-                                                   n_bands = n_bands,
-                                                   max_detections = max_detections)
+        star_encoder = starnet_lib.StarEncoder(slen=101,
+                                               patch_slen=patch_slen,
+                                               step=2,
+                                               edge_padding=3,
+                                               n_bands=n_bands,
+                                               max_detections=max_detections)
 
         star_encoder.eval();
 
@@ -128,12 +124,12 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_lib.StarEncoder(slen = 101,
-                                                   patch_slen = patch_slen,
-                                                   step = 2,
-                                                   edge_padding = 3,
-                                                   n_bands = n_bands,
-                                                   max_detections = max_detections)
+        star_encoder = starnet_lib.StarEncoder(slen=101,
+                                               patch_slen=patch_slen,
+                                               step=2,
+                                               edge_padding=3,
+                                               n_bands=n_bands,
+                                               max_detections=max_detections)
 
         star_encoder.eval();
 
@@ -166,19 +162,19 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_lib.StarEncoder(slen = 101,
-                                                   patch_slen = patch_slen,
-                                                   step = 2,
-                                                   edge_padding = 3,
-                                                   n_bands = n_bands,
-                                                   max_detections = max_detections)
+        star_encoder = starnet_lib.StarEncoder(slen=101,
+                                               patch_slen=patch_slen,
+                                               step=2,
+                                               edge_padding=3,
+                                               n_bands=n_bands,
+                                               max_detections=max_detections)
 
         n_image_patches = star_encoder.tile_coords.shape[0]
 
         # draw sampled subimage parameters
         n_stars_sampled = torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_patches))).type(torch.long)
         is_on_array = utils.get_is_on_from_n_stars_2d(n_stars_sampled,
-                                                        max_detections).float()
+                                                      max_detections).float()
 
         subimage_locs_sampled = torch.rand((n_samples, n_image_patches, max_detections, 2)) * is_on_array.unsqueeze(3)
         subimage_fluxes_sampled = torch.rand((n_samples, n_image_patches, max_detections, n_bands)) * is_on_array.unsqueeze(3)
@@ -192,11 +188,11 @@ class TestStarEncoder(unittest.TestCase):
         for i in range(n_samples):
             locs_full_image_i, fluxes_full_image_i, n_stars_i  = \
                 image_utils.get_full_params_from_patch_params(subimage_locs_sampled[i],
-                                                    subimage_fluxes_sampled[i],
-                                                    star_encoder.tile_coords,
-                                                    star_encoder.slen,
-                                                    star_encoder.patch_slen,
-                                                    star_encoder.edge_padding)
+                                                              subimage_fluxes_sampled[i],
+                                                              star_encoder.tile_coords,
+                                                              star_encoder.slen,
+                                                              star_encoder.patch_slen,
+                                                              star_encoder.edge_padding)
 
             assert torch.all(locs_full_image_i == locs_full_image[i, 0:n_stars_i])
             assert torch.all(fluxes_full_image_i == fluxes_full_image[i, 0:n_stars_i])

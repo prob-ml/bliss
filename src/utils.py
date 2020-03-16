@@ -3,10 +3,8 @@ import numpy as np
 
 from torch.distributions import normal, categorical
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
-
-# Functions to work with n_stars
 def get_is_on_from_n_stars(n_stars, max_stars):
     assert len(n_stars.shape) == 1
 
@@ -18,18 +16,26 @@ def get_is_on_from_n_stars(n_stars, max_stars):
     return is_on_array
 
 
-def get_is_on_from_n_stars_2d(n_stars, max_stars):
-    # n stars is n_samples x batchsize
-    assert not torch.any(torch.isnan(n_stars));
-    assert torch.all(n_stars >= 0)
-    assert torch.all(n_stars <= max_stars)
+def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources):
+    """
 
-    n_samples = n_stars.shape[0]
-    batchsize = n_stars.shape[1]
+    :param patch_n_sources: A tensor of shape (n_samples x n_patches), indicating the number of sources at sample i, batch j.
+    :type patch_n_sources: class: `torch.Tensor`
+    :param max_sources:
+    :type max_sources: int
+    :return:
+    """
+    #
+    assert not torch.any(torch.isnan(n_sources))
+    assert torch.all(n_sources >= 0)
+    assert torch.all(n_sources <= max_sources)
 
-    is_on_array = torch.zeros((n_samples, batchsize, max_stars), dtype=torch.long).to(device)
-    for i in range(max_stars):
-        is_on_array[:, :, i] = (n_stars > i)
+    n_samples = n_sources.shape[0]
+    batchsize = n_sources.shape[1]
+
+    is_on_array = torch.zeros((n_samples, batchsize, max_sources), dtype=torch.long).to(device)
+    for i in range(max_sources):
+        is_on_array[:, :, i] = (n_sources > i)
 
     return is_on_array
 
@@ -46,11 +52,15 @@ def get_one_hot_encoding_from_int(z, n_classes):
     return z_one_hot
 
 
-# sampling functions
+#############################
+# Sampling functions
+############################
+
+
 def sample_class_weights(class_weights, n_samples=1):
     """
-    draw a sample from Categorical variable with
-    probabilities class_weights
+    Draw a sample from Categorical variable with
+    probabilities class_weights.
     """
 
     assert not torch.any(torch.isnan(class_weights));
@@ -62,7 +72,11 @@ def sample_normal(mean, logvar):
     return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).to(device)
 
 
-# log probabilities
+#############################
+# Log probabilities
+############################
+
+
 def _logit(x, tol=1e-8):
     return torch.log(x + tol) - torch.log(1 - x + tol)
 

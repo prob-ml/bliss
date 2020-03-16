@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 
-from simulated_datasets_lib import plot_multiple_stars
-import image_utils
 
 def plot_image(fig, image,
                 true_locs = None, estimated_locs = None,

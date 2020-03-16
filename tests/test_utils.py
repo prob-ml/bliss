@@ -6,10 +6,12 @@ import unittest
 import torch
 
 import sys
+
 sys.path.insert(0, './')
 sys.path.insert(0, './../')
 
-import utils
+from src import utils
+
 
 class TestUtils(unittest.TestCase):
     def test_get_one_hot(self):
@@ -17,7 +19,7 @@ class TestUtils(unittest.TestCase):
         # function. We check that it returns a valid one-hot encoding
 
         n_classes = 10
-        z = torch.randint(0, 10, (100, ))
+        z = torch.randint(0, 10, (100,))
 
         z_one_hot = utils.get_one_hot_encoding_from_int(z, n_classes)
 

@@ -1,11 +1,9 @@
 import torch
 
 import torch.nn as nn
-from torch.nn.functional import unfold, softmax, pad
+from torch.nn.functional import unfold, pad
 
-import image_utils
-from utils import eval_normal_logprob
-from simulated_datasets_lib import _get_mgrid, plot_multiple_stars
+from src.simulated_datasets_lib import _get_mgrid
 
 import fitsio
 

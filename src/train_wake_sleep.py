@@ -3,16 +3,8 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-import sdss_dataset_lib
-
-import simulated_datasets_lib
-import starnet_lib
-
-import sleep_lib
-from sleep_lib import run_sleep
-import wake_lib
-
-import psf_transform_lib
+from src import sleep_lib, starnet_lib, simulated_datasets_lib, sdss_dataset_lib, psf_transform_lib, wake_lib
+from src.sleep_lib import run_sleep
 
 import time
 
@@ -45,7 +37,7 @@ full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
 #######################
 # simulated data parameters
 #######################
-with open('./data/default_star_parameters.json', 'r') as fp:
+with open('../data/default_star_parameters.json', 'r') as fp:
     data_params = json.load(fp)
 print(data_params)
 

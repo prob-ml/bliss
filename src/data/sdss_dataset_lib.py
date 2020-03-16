@@ -4,7 +4,6 @@ import os
 import pickle
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
-import scipy.stats as stats
 import torch
 from torch.utils.data import Dataset
 import fitsio
@@ -12,11 +11,6 @@ import fitsio
 from astropy.io import fits
 from astropy.wcs import WCS
 
-import sdss_psf
-
-import matplotlib.pyplot as plt
-
-from simulated_datasets_lib import _trim_psf
 
 def _get_mgrid2(slen0, slen1):
     offset0 = (slen0 - 1) / 2

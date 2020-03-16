@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 
-import image_utils
-import utils
+from src import utils, image_utils
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
@@ -32,10 +31,11 @@ class SourceEncoder(nn.Module):
         * EXAMPLE on padding: If the patch_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
 
         :param slen: dimension of full image, we assume its square for now
-        :param patch_slen: dimension of the individual image patches (usually 8 for stars, and _ for galaxies)
+        :param patch_slen: dimension (in pixels) of the individual
+                           image patches (usually 8 for stars, and _ for galaxies).
         :param step: number of pixels to shift every subimage/patch.
-        :param edge_padding:
-        :param n_bands :number of bands
+        :param edge_padding: length of padding (in pixels).
+        :param n_bands : number of bands
         :param max_detections:
         :param n_source_params:
         """

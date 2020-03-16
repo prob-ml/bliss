@@ -6,19 +6,19 @@ import torch
 import numpy as np
 
 import sys
+
 sys.path.insert(0, '../')
 sys.path.insert(0, './')
-import image_utils
+from src import image_utils
 
-from utils import get_is_on_from_n_stars
-from simulated_datasets_lib import _draw_pareto_maxed
-
-import json
+from src.utils import get_is_on_from_n_stars
+from src.simulated_datasets_lib import _draw_pareto_maxed
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 np.random.seed(43534)
 _ = torch.manual_seed(24534)
+
 
 class TestImageBatching(unittest.TestCase):
     def test_tile_coords(self):
@@ -92,7 +92,7 @@ class TestImageBatching(unittest.TestCase):
         # get patches
         patch_locs, patch_fluxes, patch_n_stars, patch_is_on_array = \
             image_utils.get_params_in_patches(tile_coords, locs, fluxes,
-                                                full_slen, subimage_slen)
+                                              full_slen, subimage_slen)
 
         # check we have the correct number and pattern of nonzero entries
         assert torch.all((patch_locs * patch_is_on_array.unsqueeze(2).float()) == patch_locs)
@@ -108,11 +108,11 @@ class TestImageBatching(unittest.TestCase):
         # now convert to full parameters
         locs2, fluxes2, n_stars2 = \
             image_utils.get_full_params_from_patch_params(patch_locs,
-                                                            patch_fluxes,
-                                                            tile_coords,
-                                                            full_slen,
-                                                            subimage_slen,
-                                                            edge_padding)
+                                                          patch_fluxes,
+                                                          tile_coords,
+                                                          full_slen,
+                                                          subimage_slen,
+                                                          edge_padding)
         for i in range(n_images):
             for b in range(n_bands):
                 fluxes_i = fluxes[i, :, b]
@@ -171,8 +171,8 @@ class TestImageBatching(unittest.TestCase):
             # get patch parameters
             patch_locs, patch_fluxes, patch_n_stars, patch_is_on_array = \
                 image_utils.get_params_in_patches(tile_coords, locs, fluxes,
-                                                    full_slen, subimage_slen,
-                                                     edge_padding)
+                                                  full_slen, subimage_slen,
+                                                  edge_padding)
 
             n_patches_per_image = tile_coords.shape[0]
             for i in range(n_images):
@@ -241,10 +241,10 @@ class TestImageBatching(unittest.TestCase):
 
         locs_full_image, fluxes_full_image, n_stars = \
             image_utils.get_full_params_from_patch_params(patch_locs, patch_fluxes,
-                                                tile_coords,
-                                                full_slen,
-                                                subimage_slen,
-                                                edge_padding)
+                                                          tile_coords,
+                                                          full_slen,
+                                                          subimage_slen,
+                                                          edge_padding)
 
         assert (fluxes_full_image.squeeze() == patch_fluxes[indx, 0, :]).all()
         assert n_stars == 1
@@ -261,10 +261,10 @@ class TestImageBatching(unittest.TestCase):
         patch_locs[indx, 0, :] = torch.Tensor([-0.1, 0.5])
         locs_full_image, fluxes_full_image, n_stars = \
             image_utils.get_full_params_from_patch_params(patch_locs, patch_fluxes,
-                                                tile_coords,
-                                                full_slen,
-                                                subimage_slen,
-                                                edge_padding)
+                                                          tile_coords,
+                                                          full_slen,
+                                                          subimage_slen,
+                                                          edge_padding)
         test_loc = (patch_locs[indx, 0, :] * \
                         (subimage_slen - 2 * edge_padding) + \
                         tile_coords[indx, :] + edge_padding - 0.5) / (full_slen - 1)
@@ -274,10 +274,10 @@ class TestImageBatching(unittest.TestCase):
         patch_locs[indx, 0, :] = torch.Tensor([0.1, 1.3])
         locs_full_image, fluxes_full_image, n_stars = \
             image_utils.get_full_params_from_patch_params(patch_locs, patch_fluxes,
-                                                tile_coords,
-                                                full_slen,
-                                                subimage_slen,
-                                                edge_padding)
+                                                          tile_coords,
+                                                          full_slen,
+                                                          subimage_slen,
+                                                          edge_padding)
         test_loc = (patch_locs[indx, 0, :] * \
                         (subimage_slen - 2 * edge_padding) + \
                         tile_coords[indx, :] + edge_padding - 0.5) / (full_slen - 1)

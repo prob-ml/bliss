@@ -9,14 +9,10 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './../')
 
-import sleep_lib 
-import simulated_datasets_lib
-import starnet_lib
-import utils
+from src import sleep_lib, utils
 
 from itertools import permutations
 
-import json
 
 class TestStarEncoderObjective(unittest.TestCase):
 
@@ -43,12 +39,12 @@ class TestStarEncoderObjective(unittest.TestCase):
         # get loss for locations
         locs_log_probs_all = \
             sleep_lib.get_locs_logprob_all_combs(true_locs,
-                                    loc_mean, loc_log_var)
+                                                 loc_mean, loc_log_var)
 
         # get loss for fluxes
         flux_log_probs_all = \
             sleep_lib.get_fluxes_logprob_all_combs(true_fluxes, \
-                                log_flux_mean, log_flux_log_var)
+                                                   log_flux_mean, log_flux_log_var)
 
         # for my sanity
         assert list(locs_log_probs_all.shape) == \
@@ -61,15 +57,15 @@ class TestStarEncoderObjective(unittest.TestCase):
                 for k in range(max_detections):
                     flux_loss_ij = \
                         utils.eval_lognormal_logprob(true_fluxes[i, j],
-                                                        log_flux_mean[i, k],
-                                                        log_flux_log_var[i, k]).sum()
+                                                     log_flux_mean[i, k],
+                                                     log_flux_log_var[i, k]).sum()
 
                     assert flux_loss_ij == flux_log_probs_all[i, j, k]
 
                     locs_loss_ij = \
                         utils.eval_normal_logprob(true_locs[i, j],
-                                                loc_mean[i, k],
-                                                loc_log_var[i, k]).sum()
+                                                  loc_mean[i, k],
+                                                  loc_log_var[i, k]).sum()
 
                     assert locs_loss_ij == locs_log_probs_all[i, j, k]
 
@@ -98,17 +94,17 @@ class TestStarEncoderObjective(unittest.TestCase):
         # get loss for locations
         locs_log_probs_all = \
             sleep_lib.get_locs_logprob_all_combs(true_locs,
-                                    loc_mean, loc_log_var)
+                                                 loc_mean, loc_log_var)
 
         # get loss for fluxes
         flux_log_probs_all = \
             sleep_lib.get_fluxes_logprob_all_combs(true_fluxes, \
-                                log_flux_mean, log_flux_log_var)
+                                                   log_flux_mean, log_flux_log_var)
 
 
 
         locs_loss, fluxes_loss, _ = sleep_lib.get_min_perm_loss(locs_log_probs_all,
-                                    flux_log_probs_all, is_on_array)
+                                                                flux_log_probs_all, is_on_array)
 
         # a quick check for zer0 and one stars
         assert (locs_loss[n_stars == 0] == 0).all()
