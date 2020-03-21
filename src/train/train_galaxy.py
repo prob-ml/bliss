@@ -117,6 +117,11 @@ class TrainGalaxy(object):
         return avg_loss
 
     def evaluate_and_log(self, epoch):
+        """
+        Plot reconstructions and evaluate test loss. Also save vae and decoder for future use.
+        :param epoch:
+        :return:
+        """
         print("  * plotting reconstructions...")
         self.plot_reconstruction(epoch)
 
@@ -125,10 +130,12 @@ class TrainGalaxy(object):
         params.mkdir(parents=True, exist_ok=True)
         loss_file = Path(self.dir_name, "loss.txt")
         vae_file = params.joinpath("vae_params_{}.dat".format(epoch))
+        decoder_file = params.joinpath("decoder_params_{}.dat".format(epoch))
 
         # write into files.
         print("  * writing the network's parameters to disk...")
         torch.save(self.vae.state_dict(), vae_file.as_posix())
+        torch.save(self.vae.dec.state_dict(), decoder_file.as_posix())
 
         print("  * evaluating test loss...")
         test_loss, avg_rmse = self.eval_epoch()
@@ -136,7 +143,7 @@ class TrainGalaxy(object):
         print(f" * avg_rmse: {avg_rmse}")
 
         with open(loss_file.as_posix(), 'a') as f:
-            f.write(f"epoch {epoch}, test loss: {test_loss}, avg rmse: {avg_rmse} ")
+            f.write(f"epoch {epoch}, test loss: {test_loss}, avg rmse: {avg_rmse} \n")
 
     def eval_epoch(self):
         self.vae.eval()  # set in evaluation mode = no need to compute gradients or allocate memory for them.
@@ -190,7 +197,8 @@ class TrainGalaxy(object):
 
                     for i in range(num_examples):
                         vmax1 = image[i, j].max()  # we are looking at the ith sample in the jth band.
-                        vmax2 = max(image[i, j].max(), recon_mean[i, j].max())
+                        vmax2 = max(image[i, j].max(), recon_mean[i, j].max(), recon_var[i, j].max())
+
                         plt.subplot(num_examples, num_cols, num_cols * i + 1)
                         plt.title("image [{} galaxies]".format(num_galaxies[i]))
                         plt.imshow(image[i, j].data.cpu().numpy(), vmax=vmax1)
@@ -211,7 +219,6 @@ class TrainGalaxy(object):
                     plt.close()
 
                 break
-
 
     @classmethod
     def add_args(cls, parser):

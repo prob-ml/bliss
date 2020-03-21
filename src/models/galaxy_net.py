@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
-from torch.distributions import Normal, Categorical, Bernoulli
+from torch.distributions import Normal
 
 
 class Flatten(nn.Module):
@@ -71,6 +71,7 @@ class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
 
 class CenteredGalaxyDecoder(nn.Module):  # generator
 
+    # ToDo: Maybe add its own zeros and one? although messes up previous state dicts.
     def __init__(self, slen, latent_dim, num_bands, hidden=256):
         super(CenteredGalaxyDecoder, self).__init__()
 
@@ -98,6 +99,11 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         )
 
     def forward(self, z):
+        """
+
+        :param z: Has shape = latent_dim.
+        :return:
+        """
         z = self.fc(z)
 
         # view takes in -1 and automatically determines that dimension. This dimension is the number of samples.
@@ -117,6 +123,12 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
 
         # reconstructed mean and variance, these are per pixel.
         return recon_mean, recon_var
+
+    def get_sample(self, num_samples):
+        p_z = Normal(torch.zeros(1), torch.ones(1))
+        z = p_z.rsample(torch.tensor([num_samples, self.latent_dim])).view(-1)  # shape = (8,)
+        samples, _ = self.dec.forward(z)
+        return samples  # shape = (num_samples, num_bands, slen, slen)
 
 
 class OneCenteredGalaxy(nn.Module):

@@ -11,17 +11,31 @@ import matplotlib.pyplot as plt
 from src.train import train_galaxy
 from src.utils import const
 
+# specify all the models (as a class) that can be trained.
+all_models = {
+    'centered_galaxy': train_galaxy.TrainGalaxy,
+    # 'catalog': train_catalog.TrainCatalog
+}
+
+all_datasets = [
+    'synthetic',
+    'galbasic',
+    'galcatsim',
+    'h5_catalog'
+]
+
+# torch and plt setup.
 torch.backends.cudnn.benchmark = True
 plt.switch_backend("Agg")
+
 
 def setup():
     """
     Make sure that the testing directory exists among other things.
     """
-    testing_name = "testing1"
+    testing_name = "testing2"
     test_path = const.reports_path.joinpath(testing_name)
-    if not test_path.is_dir():
-        test_path.mkdir()
+    test_path.mkdir(parents=True, exist_ok=True)
     return test_path
 
 
@@ -54,10 +68,10 @@ def run(args):
     :param args: A dict.
     :return:
     """
-    if args['model'] not in const.all_models:
+    if args['model'] not in all_models:
         raise NotImplementedError("Not implemented this model yet.")
 
-    train_module = const.all_models[args['model']].from_args(args)
+    train_module = all_models[args['model']].from_args(args)
     train_module.vae.cuda()
     training(train_module, **args)
 
@@ -89,10 +103,10 @@ def main():
 
     # specify model and dataset.
     parser.add_argument('--model', type=str, help='What model we are training?',
-                        choices=list(const.all_models.keys()),
+                        choices=list(all_models.keys()),
                         required=True)
 
-    parser.add_argument('--dataset', type=str, default=None, choices=const.all_datasets,
+    parser.add_argument('--dataset', type=str, default=None, choices=all_datasets,
                         help='Specifies the dataset to be used to train the model.')
 
     one_centered_galaxy_group = parser.add_argument_group('[One Centered Galaxy Model]',

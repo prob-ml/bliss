@@ -6,9 +6,11 @@ from astropy.table import Table
 from packages.WeakLensingDeblending import descwl
 import h5py
 import sys
+import torch
 
 from src.utils import const
 from src.data import draw_catsim
+from src.models import galaxy_net
 
 
 def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):
@@ -38,6 +40,36 @@ def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None
     return ds
 
 
+class DecoderSample(Dataset):
+    def __init__(self, slen, latent_dim, num_bands, decoder_file, num_images):
+        """
+        Load and sample from the specified decoder in `decoder_file`.
+
+        :param slen: should match the ones loaded.
+        :param latent_dim:
+        :param num_bands:
+        :param decoder_file: The file from which to load the `state_dict` of the decoder.
+        :type decoder_file: Path object.
+        """
+        self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands)
+        self.dec.load_state_dict(torch.load(decoder_file.as_posix()))
+        self.num_images = num_images
+        self.num_bands = num_bands
+        self.slen = slen
+
+    def __len__(self):
+        return self.num_images
+
+    def __getitem__(self, idx):
+        """
+        Return numpy object.
+        :param idx:
+        :return:
+        """
+        # get one sample, shape = (1, 6, slen, slen)
+        return self.dec.get_sample(1).view(-1, self.slen, self.slen).detach().numpy()
+
+
 class H5Catalog(Dataset):
     def __init__(self, h5_file):
         h5_file_path = const.data_path.joinpath(f"processed/{h5_file}")
@@ -58,7 +90,7 @@ class H5Catalog(Dataset):
         return self.dset.shape[0]
 
     def __getitem__(self, idx):
-        return {'image': self.dset[idx],
+        return {'image': self.dset[idx],  # shape = (num_bands, slen, slen)
                 'background': self.background,
                 'num_galaxies': 1}
 
@@ -121,7 +153,7 @@ class CatsimGalaxies(Dataset):
     def __len__(self):
         return len(self.cat)
 
-    # ToDo: Remove all non-visible sources.
+    # ToDo: Remove all non-visible sources from catalogue directly?
     def __getitem__(self, idx):
 
         while True:  # loop until visible galaxy is selected.
@@ -193,6 +225,8 @@ class CatsimGalaxies(Dataset):
 
     @staticmethod
     def get_default_filters():
+        # ToDo: Make a cut on the size? Something like:
+        # sizes = self.renderer.get_size(self.cat); cat = cat[sizes < 30] (size in pixels)
         filters = dict(
             i_ab=lambda param, x: x[param] <= 23  # cut on magnitude same as BTK does.
         )

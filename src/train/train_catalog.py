@@ -94,7 +94,6 @@ class TrainCatalog(object):
         avg_loss /= self.batch_size * self.evaluation_examples
         return avg_loss
 
-
     @classmethod
     def add_args(cls, parser):
         raise NotImplementedError("Not implemented this yet.")

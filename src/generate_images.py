@@ -8,6 +8,7 @@ from src.data import generate
 from src.utils import const
 import h5py
 
+# ToDo: Make sure that we want slen=50 as the default
 parser = argparse.ArgumentParser(description='Generate images',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--dir', type=str, required=True)
@@ -15,6 +16,7 @@ parser.add_argument('--filename', type=str, default=None)
 parser.add_argument('--num-images', type=int, default=None)
 parser.add_argument('--overwrite', action='store_true')
 parser.add_argument('--generate', action='store_true')
+parser.add_argument('--slen', type=int, default=50)
 parser.add_argument('--merge', action='store_true', help="Merge all files from directory with .hdf5 extension.")
 
 pargs = parser.parse_args()
@@ -32,8 +34,8 @@ if pargs.generate:
 
     assert not out_path.exists() or pargs.overwrite, "Trying to overwrite file."
 
-    generate.generate_images("galcatsim", out_path, prop_file_path, num_images=pargs.num_images,
-                             slen=40, num_bands=6, fixed_size=False)
+    generate.generate_images("galcatsim", out_path, prop_file_path=prop_file_path, num_images=pargs.num_images,
+                             slen=pargs.slen, num_bands=6, fixed_size=False)
 
 if pargs.merge:
     new_file_path = output_path.joinpath("images.hdf5")

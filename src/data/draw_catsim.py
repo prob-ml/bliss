@@ -84,6 +84,7 @@ class Render(object):
             single_obs.image = galsim.Image(bounds=single_obs.image_bounds, scale=self.pixel_scale,
                                             dtype=np.float32)
 
+    # noinspection DuplicatedCode
     def get_size(self, cat):
         """
         Return a astropy.Column with the size of each entry of the catalog given the current
@@ -99,7 +100,7 @@ class Render(object):
                          hlr_b * f ** 0.5 * 1.46)
         psf = i_obs.psf_model
         psf_r_sec = psf.calculateMomentRadius()
-        size = np.sqrt(r_sec ** 2 + psf_r_sec ** 2) / self.pixel_scale
+        size = np.sqrt(r_sec ** 2 + psf_r_sec ** 2) / self.pixel_scale  # size is in pixels.
         return Column(size, name='size')
 
     def draw(self, entry):
@@ -117,7 +118,6 @@ class Render(object):
 
         return image, self.background
 
-    #@profile
     def single_band(self, entry, single_obs, band):
         """
         Builds galaxy from a single entry in the catalog. With no background sky level added.

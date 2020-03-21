@@ -1,6 +1,6 @@
-import numpy as np
-import h5py
 import random
+
+import h5py
 
 from src.data import galaxy_datasets
 from src.utils import const
@@ -12,6 +12,11 @@ def generate_images(dataset_name, out_path, prop_file_path=None, num_images=1,
 
     :param dataset_name: The name of the dataset from :mod:`galaxy_datasets` that you want to use.
     :param num_images: number of images to save.
+    :param out_path:
+    :param slen:
+    :param num_bands:
+    :param fixed_size:
+    :param prop_file_path:
     :return:
     """
     assert num_images >= 1, "At least one image must be produced."
