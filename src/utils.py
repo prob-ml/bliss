@@ -5,6 +5,7 @@ from torch.distributions import normal, categorical
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
+
 def get_is_on_from_n_stars(n_stars, max_stars):
     assert len(n_stars.shape) == 1
 
