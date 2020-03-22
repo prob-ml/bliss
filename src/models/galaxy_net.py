@@ -124,11 +124,16 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         # reconstructed mean and variance, these are per pixel.
         return recon_mean, recon_var
 
-    def get_sample(self, num_samples):
+    def get_sample(self, num_samples, return_latent=False):
         p_z = Normal(torch.zeros(1), torch.ones(1))
         z = p_z.rsample(torch.tensor([num_samples, self.latent_dim])).view(-1)  # shape = (8,)
         samples, _ = self.dec.forward(z)
-        return samples  # shape = (num_samples, num_bands, slen, slen)
+
+        if return_latent:
+            return z, samples
+
+        else:
+            return samples  # shape = (num_samples, num_bands, slen, slen)
 
 
 class OneCenteredGalaxy(nn.Module):

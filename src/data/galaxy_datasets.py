@@ -55,9 +55,9 @@ class DecoderSamples(Dataset):
         """
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands)
         self.dec.load_state_dict(torch.load(decoder_file.as_posix()))
-        self.num_images = num_images
         self.num_bands = num_bands
         self.slen = slen
+        self.num_images = num_images
 
     def __len__(self):
         return self.num_images
@@ -68,8 +68,14 @@ class DecoderSamples(Dataset):
         :param idx:
         :return: shape = (n_bands, slen, slen)
         """
-        # get one sample, shape = (1, n_bands, slen, slen)
-        return self.dec.get_sample(1).view(-1, self.slen, self.slen).detach().numpy()
+
+        return self.dec.get_sample(1, return_latent=False).view(-1, self.slen, self.slen).detach().numpy()
+
+    def sample(self, n_samples):
+        # returns = (z, images) where z.shape = (n_samples, latent_dim) and images.shape =
+        # (n_samples, n_bands, slen, slen)
+
+        return self.dec.get_sample(n_samples, return_latent=True)
 
 
 class H5Catalog(Dataset):
