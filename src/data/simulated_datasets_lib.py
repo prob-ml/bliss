@@ -5,6 +5,9 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
+from DeblendingStarfields.src import utils
+
+from GalaxyModel.src.data.galaxy_datasets import DecoderSamples
 
 sys.path.insert(0, '../')
 from GalaxyModel.src import utils
@@ -74,6 +77,23 @@ def _get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
     return (torch.Tensor(np.dstack((y, x))) / offset).to(device)
+
+
+def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize, draw_poisson=True):
+    if draw_poisson:
+        n_sources = np.random.poisson(mean_sources, batchsize)
+    else:
+        n_sources = np.random.choice(np.arange(min_sources, max_sources + 1),
+                                     batchsize)
+
+    return torch.Tensor(n_sources).clamp(max=max_sources,
+                                         min=min_sources).type(torch.LongTensor).to(device)
+
+
+def _sample_locs(batchsize, max_sources, is_on_array):
+    # 2 = (x,y)
+    locs = torch.rand((batchsize, max_sources, 2)).to(device) * is_on_array.unsqueeze(2).float()
+    return locs
 
 
 def plot_one_star(slen, locs, psf, cached_grid=None):
@@ -155,6 +175,36 @@ def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid=None):
     return stars
 
 
+class GalaxySimulator:
+    def __init__(self, slen, background, decoder_file, n_images,
+                 min_galaxies, max_galaxies, mean_galaxies):
+        """
+
+        :param slen:
+        :param background:
+        :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
+        """
+        self.ds = DecoderSamples(slen, decoder_file)
+        self.background = background
+
+        self.min_galaxies = min_galaxies
+        self.max_galaxies = max_galaxies
+        self.mean_galaxies = mean_galaxies
+
+        self.n_images = n_images  # = batchsize
+
+    def sample(self, batchsize):
+        """
+        Sample locations, params, and images
+        :return:
+        """
+
+        locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * is_on_array.unsqueeze(2).float()
+
+    def draw_image_from_params(self, locs, params, n_galaxies):
+        self.locs =
+
+
 def _draw_pareto(f_min, alpha, shape):
     uniform_samples = torch.rand(shape).to(device)
 
@@ -172,18 +222,6 @@ def _draw_pareto_maxed(f_min, f_max, alpha, shape):
             _draw_pareto(f_min, alpha, torch.sum(indx))
 
     return pareto_samples
-
-
-class GalaxySimulator:
-    def __init__(self, slen, background, decoder_file):
-        """
-
-        :param slen:
-        :param background:
-        :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
-        """
-
-    def draw_image_from_params(self, locs, params, n_galaxies):
 
 
 class StarSimulator:
@@ -322,18 +360,13 @@ class StarsDataset(Dataset):
 
     def draw_batch_parameters(self, batchsize, return_images=True):
         # sample number of stars
-        if self.draw_poisson:
-            n_stars = np.random.poisson(self.mean_stars, batchsize)
-        else:
-            n_stars = np.random.choice(np.arange(self.min_stars, self.max_stars + 1),
-                                       batchsize)
+        n_stars = _sample_n_sources(self.mean_stars, self.min_stars, self.max_stars, batchsize,
+                                    draw_poisson=self.draw_poisson)
 
-        n_stars = torch.Tensor(n_stars).clamp(max=self.max_stars,
-                                              min=self.min_stars).type(torch.LongTensor).to(device)
         is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
 
         # sample locations
-        locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * is_on_array.unsqueeze(2).float()
+        locs = _sample_locs(batchsize, self.max_stars, is_on_array)
 
         # sample fluxes
         base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha=self.alpha,

@@ -7,6 +7,13 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 
 def get_is_on_from_n_stars(n_stars, max_stars):
+    """
+    Return a boolean array of shape=(batchsize, max_stars) whose (k,l)th entry indicates
+    whether there are more than l stars on the kth batch.
+    :param n_stars:
+    :param max_stars:
+    :return:
+    """
     assert len(n_stars.shape) == 1
 
     batchsize = len(n_stars)
