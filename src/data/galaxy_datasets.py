@@ -15,6 +15,7 @@ from GalaxyModel.src.models import galaxy_net
 
 def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):
     # TODO: LATER The other two datasets non catsim should also be updated. (save props+clear defaults)
+    # TODO: check consistency
     if dataset_name == 'synthetic':
         ds = Synthetic(slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
                        centered=True, num_bands=num_bands, num_images=1000)
