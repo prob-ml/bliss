@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './../')
 
-from src import utils
+from GalaxyModel.src import utils
 
 
 class TestUtils(unittest.TestCase):

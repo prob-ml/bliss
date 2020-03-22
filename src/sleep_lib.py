@@ -5,7 +5,7 @@ from itertools import permutations
 import numpy as np
 import torch
 
-from src import utils
+from GalaxyModel.src import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -143,7 +143,7 @@ def get_inv_kl_loss(star_encoder,
     image_patches, true_patch_locs, true_patch_fluxes, \
     true_patch_n_stars, true_patch_is_on_array = \
         star_encoder.get_image_patches(images, true_locs, true_fluxes,
-                                       clip_max_stars=True)
+                                       clip_max_sources=True)
 
     # get variational parameters on each patch
     loc_mean, loc_log_var, \

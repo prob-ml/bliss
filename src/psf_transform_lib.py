@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import unfold, pad
 
-from src.simulated_datasets_lib import _get_mgrid
+from GalaxyModel.src import _get_mgrid
 
 import fitsio
 

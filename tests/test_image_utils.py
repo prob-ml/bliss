@@ -9,10 +9,10 @@ import sys
 
 sys.path.insert(0, '../')
 sys.path.insert(0, './')
-from src import image_utils
+from GalaxyModel.src import image_utils
 
-from src.utils import get_is_on_from_n_stars
-from src.simulated_datasets_lib import _draw_pareto_maxed
+from GalaxyModel.src import get_is_on_from_n_stars
+from GalaxyModel.src import _draw_pareto_maxed
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

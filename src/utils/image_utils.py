@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from src import utils
+from GalaxyModel.src import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

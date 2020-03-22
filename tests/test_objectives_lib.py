@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, './')
 sys.path.insert(0, './../')
 
-from src import sleep_lib, utils
+from GalaxyModel.src import sleep_lib, utils
 
 from itertools import permutations
 

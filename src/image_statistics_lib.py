@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from src.sdss_dataset_lib import convert_nmgy_to_mag
+from GalaxyModel.src import convert_nmgy_to_mag
 
 def filter_params(locs, fluxes, slen, pad = 5):
     assert len(locs.shape) == 2

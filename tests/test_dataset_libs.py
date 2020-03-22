@@ -9,7 +9,7 @@ import torch
 import sys
 sys.path.insert(0, './')
 sys.path.insert(0, '../')
-from src import simulated_datasets_lib
+from GalaxyModel.src import simulated_datasets_lib
 
 import json
 

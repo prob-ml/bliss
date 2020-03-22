@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from src import utils, image_utils
+from GalaxyModel.src import utils, image_utils
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
@@ -262,7 +262,15 @@ class SourceEncoder(nn.Module):
     # Modules for patching images and parameters
     ######################
     def get_image_patches(self, images, locs=None, fluxes=None,
-                          clip_max_stars=False):
+                          clip_max_sources=False):
+        """
+
+        :param images: torch.Tensor of shape (batchsize x num_bands x slen x slen)
+        :param locs:
+        :param fluxes:
+        :param clip_max_sources:
+        :return:
+        """
         assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
         assert images.shape[1] == self.n_bands
 
@@ -288,7 +296,7 @@ class SourceEncoder(nn.Module):
             assert fluxes.shape[2] == self.n_source_params
 
             # get parameters in patch as well
-            patch_locs, patch_fluxes, patch_n_stars, patch_is_on_array = \
+            patch_locs, patch_fluxes, patch_n_sources, patch_is_on_array = \
                 image_utils.get_params_in_patches(tile_coords,
                                                   locs,
                                                   fluxes,
@@ -296,8 +304,8 @@ class SourceEncoder(nn.Module):
                                                   self.patch_slen,
                                                   self.edge_padding)
 
-            if clip_max_stars:
-                patch_n_stars = patch_n_stars.clamp(max=self.max_detections)
+            if clip_max_sources:
+                patch_n_sources = patch_n_sources.clamp(max=self.max_detections)
                 patch_locs = patch_locs[:, 0:self.max_detections, :]
                 patch_fluxes = patch_fluxes[:, 0:self.max_detections, :]
                 patch_is_on_array = patch_is_on_array[:, 0:self.max_detections]
@@ -305,11 +313,11 @@ class SourceEncoder(nn.Module):
         else:
             patch_locs = None
             patch_fluxes = None
-            patch_n_stars = None
+            patch_n_sources = None
             patch_is_on_array = None
 
-        return image_patches, patch_locs, patch_fluxes, \
-               patch_n_stars, patch_is_on_array
+        return (image_patches, patch_locs, patch_fluxes,
+                patch_n_sources, patch_is_on_array)
 
     ######################
     # Modules to sample our variational distribution and get parameters on the full image

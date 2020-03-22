@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from src import sleep_lib, starnet_lib, simulated_datasets_lib, psf_transform_lib, wake_lib
+from GalaxyModel.src import sleep_lib, starnet_lib, simulated_datasets_lib, psf_transform_lib, wake_lib
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print('device: ', device)

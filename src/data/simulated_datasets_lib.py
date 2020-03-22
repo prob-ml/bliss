@@ -5,8 +5,9 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
+
 sys.path.insert(0, '../')
-from src import utils
+from GalaxyModel.src import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -112,11 +113,11 @@ def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid=None):
     """
 
     :param slen:
-    :param locs: is batchsize x max_stars x x_loc x y_loc
-    :param n_stars: length x batchsize
+    :param locs: is (batchsize x max_stars x (x_loc, y_loc))
+    :param n_stars: batchsize
     :param fluxes: is batchsize x n_bands x max_stars
     :param psf: is a n_bands x slen x slen tensor
-    :param cached_grid: Grid where the stars should be plotted.
+    :param cached_grid: Grid where the stars should be plotted with shape (slen x slen)
     :return:
     """
 
@@ -173,6 +174,18 @@ def _draw_pareto_maxed(f_min, f_max, alpha, shape):
     return pareto_samples
 
 
+class GalaxySimulator:
+    def __init__(self, slen, background, decoder_file):
+        """
+
+        :param slen:
+        :param background:
+        :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
+        """
+
+    def draw_image_from_params(self, locs, params, n_galaxies):
+
+
 class StarSimulator:
     def __init__(self, psf, slen, background, transpose_psf):
         assert len(psf.shape) == 3
@@ -211,6 +224,16 @@ class StarSimulator:
 
     def draw_image_from_params(self, locs, fluxes, n_stars,
                                add_noise=True):
+        """
+
+        :param locs:
+        :param fluxes:
+        :param n_stars:
+        :param add_noise:
+        :return: `images`, torch.Tensor of shape (n_images x n_bands x slen x slen)
+
+        NOTE: The different sources in `images` are already aligned between bands.
+        """
         images_mean = \
             plot_multiple_stars(self.slen, locs, n_stars, fluxes,
                                 self.psf, self.cached_grid) + \
@@ -243,6 +266,21 @@ class StarsDataset(Dataset):
                  alpha,
                  transpose_psf=False,
                  add_noise=True):
+        """
+
+        :param psf:
+        :param n_images: same as batchsize.
+        :param slen:
+        :param max_stars: Default value 1500
+        :param mean_stars: Default value 1200
+        :param min_stars: Default value 0
+        :param f_min:
+        :param f_max:
+        :param background:
+        :param alpha:
+        :param transpose_psf:
+        :param add_noise:
+        """
 
         self.slen = slen
         self.n_bands = psf.shape[0]
@@ -283,7 +321,7 @@ class StarsDataset(Dataset):
                 'n_stars': self.n_stars[idx]}
 
     def draw_batch_parameters(self, batchsize, return_images=True):
-        # draw number of stars
+        # sample number of stars
         if self.draw_poisson:
             n_stars = np.random.poisson(self.mean_stars, batchsize)
         else:
@@ -294,10 +332,10 @@ class StarsDataset(Dataset):
                                               min=self.min_stars).type(torch.LongTensor).to(device)
         is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
 
-        # draw locations
+        # sample locations
         locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * is_on_array.unsqueeze(2).float()
 
-        # draw fluxes
+        # sample fluxes
         base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha=self.alpha,
                                          shape=(batchsize, self.max_stars))
 
@@ -306,8 +344,7 @@ class StarsDataset(Dataset):
 
             _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(2)
 
-            fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim=2) * \
-                     is_on_array.unsqueeze(2).float()
+            fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim=2) * is_on_array.unsqueeze(2).float()
         else:
             fluxes = (base_fluxes * is_on_array.float()).unsqueeze(2)
 
@@ -320,6 +357,10 @@ class StarsDataset(Dataset):
             return locs, fluxes, n_stars
 
     def set_params_and_images(self):
+        """
+        Images is now attached to a device.
+        :return:
+        """
         self.locs, self.fluxes, self.n_stars, self.images = \
             self.draw_batch_parameters(self.n_images, return_images=True)
 
