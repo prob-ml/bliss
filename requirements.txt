@@ -1,6 +1,0 @@
-astropy
-scipy
-matplotlib
-numpy
-torch
-h5py
