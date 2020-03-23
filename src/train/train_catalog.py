@@ -6,8 +6,8 @@ import numpy as np
 from pathlib import Path
 import inspect
 
-from GalaxyModel.src.data import catalog_datasets
-from GalaxyModel.src.models import catalog_net
+from data import catalog_datasets
+from models import catalog_net
 
 
 class TrainCatalog(object):

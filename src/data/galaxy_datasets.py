@@ -8,9 +8,9 @@ import h5py
 import sys
 import torch
 
-from GalaxyModel.src.utils import const
-from GalaxyModel.src.data import draw_catsim
-from GalaxyModel.src.models import galaxy_net
+from utils import const
+from data import draw_catsim
+from models import galaxy_net
 
 
 def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):

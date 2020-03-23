@@ -4,8 +4,8 @@ Should be executed from galaxy-net folder.
 """
 
 import argparse
-from GalaxyModel.src.data import generate
-from GalaxyModel.src.utils import const
+from data import generate
+from utils import const
 import h5py
 
 # ToDo: Make sure that we want slen=50 as the default

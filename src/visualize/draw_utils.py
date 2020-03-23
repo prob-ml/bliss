@@ -1,11 +1,14 @@
 import matplotlib.pyplot as plt
-from GalaxyModel.src.utils import const
+from utils import const
 
 
 def draw_multiband(image, filename, figsize=(18, 18), ending='.jpg'):
     """
     Draw a single multi-band image across six bands saving into filename saving it into reports/figures/filename.pdf
     :param image:
+    :param filename:
+    :param figsize:
+    :param ending:
     :return:
     """
     file_path = const.reports_path.joinpath(f"figures/{filename}{ending}")

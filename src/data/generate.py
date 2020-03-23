@@ -1,9 +1,8 @@
 import random
-
 import h5py
 
-from GalaxyModel.src.data import galaxy_datasets
-from GalaxyModel.src.utils import const
+from data import galaxy_datasets
+from utils import const
 
 
 def generate_images(dataset_name, out_path, prop_file_path=None, num_images=1,
