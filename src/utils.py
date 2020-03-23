@@ -27,23 +27,24 @@ def get_is_on_from_n_stars(n_stars, max_stars):
 def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources):
     """
 
-    :param patch_n_sources: A tensor of shape (n_samples x n_patches), indicating the number of sources at sample i, batch j.
+    :param patch_n_sources: A tensor of shape (n_samples x n_patches), indicating the number of sources
+                            at sample i, batch j. (n_samples = batchsize)
     :type patch_n_sources: class: `torch.Tensor`
     :param max_sources:
     :type max_sources: int
     :return:
     """
     #
-    assert not torch.any(torch.isnan(n_sources))
-    assert torch.all(n_sources >= 0)
-    assert torch.all(n_sources <= max_sources)
+    assert not torch.any(torch.isnan(patch_n_sources))
+    assert torch.all(patch_n_sources >= 0)
+    assert torch.all(patch_n_sources <= max_sources)
 
-    n_samples = n_sources.shape[0]
-    batchsize = n_sources.shape[1]
+    n_samples = patch_n_sources.shape[0]
+    batchsize = patch_n_sources.shape[1]
 
     is_on_array = torch.zeros((n_samples, batchsize, max_sources), dtype=torch.long).to(device)
     for i in range(max_sources):
-        is_on_array[:, :, i] = (n_sources > i)
+        is_on_array[:, :, i] = (patch_n_sources > i)
 
     return is_on_array
 

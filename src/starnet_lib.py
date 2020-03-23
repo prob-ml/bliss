@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 
-from GalaxyModel.src import utils, image_utils
+from DeblendingStarfields.src import utils
+from DeblendingStarfields.src.utils import image_utils
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 

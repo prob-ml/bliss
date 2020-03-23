@@ -7,10 +7,8 @@ from torch.utils.data import Dataset
 
 from DeblendingStarfields.src import utils
 
-from GalaxyModel.src.data.galaxy_datasets import DecoderSamples
 
 sys.path.insert(0, '../')
-from GalaxyModel.src import utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -92,6 +90,7 @@ def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize, draw_po
 
 def _sample_locs(batchsize, max_sources, is_on_array):
     # 2 = (x,y)
+    # torch.rand returns numbers between (0,1)
     locs = torch.rand((batchsize, max_sources, 2)).to(device) * is_on_array.unsqueeze(2).float()
     return locs
 
@@ -175,34 +174,34 @@ def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid=None):
     return stars
 
 
-class GalaxySimulator:
-    def __init__(self, slen, background, decoder_file, n_images,
-                 min_galaxies, max_galaxies, mean_galaxies):
-        """
-
-        :param slen:
-        :param background:
-        :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
-        """
-        self.ds = DecoderSamples(slen, decoder_file)
-        self.background = background
-
-        self.min_galaxies = min_galaxies
-        self.max_galaxies = max_galaxies
-        self.mean_galaxies = mean_galaxies
-
-        self.n_images = n_images  # = batchsize
-
-    def sample(self, batchsize):
-        """
-        Sample locations, params, and images
-        :return:
-        """
-
-        locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * is_on_array.unsqueeze(2).float()
-
-    def draw_image_from_params(self, locs, params, n_galaxies):
-        self.locs =
+# class GalaxySimulator:
+#     def __init__(self, slen, background, decoder_file, n_images,
+#                  min_galaxies, max_galaxies, mean_galaxies):
+#         """
+#
+#         :param slen:
+#         :param background:
+#         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
+#         """
+#         self.ds = DecoderSamples(slen, decoder_file)
+#         self.background = background
+#
+#         self.min_galaxies = min_galaxies
+#         self.max_galaxies = max_galaxies
+#         self.mean_galaxies = mean_galaxies
+#
+#         self.n_images = n_images  # = batchsize
+#
+#     def sample(self, batchsize):
+#         """
+#         Sample locations, params, and images
+#         :return:
+#         """
+#
+#         locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * is_on_array.unsqueeze(2).float()
+#
+#     def draw_image_from_params(self, locs, params, n_galaxies):
+#         self.locs =
 
 
 def _draw_pareto(f_min, alpha, shape):
@@ -339,7 +338,7 @@ class StarsDataset(Dataset):
         self.f_min = f_min
         self.f_max = f_max
 
-        self.alpha = alpha
+        self.alpha = alpha  # pareto parameter.
 
         # dataset parameters
         self.n_images = n_images  # = batchsize.
@@ -363,6 +362,7 @@ class StarsDataset(Dataset):
         n_stars = _sample_n_sources(self.mean_stars, self.min_stars, self.max_stars, batchsize,
                                     draw_poisson=self.draw_poisson)
 
+        # multiply by zero where they are no stars.
         is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
 
         # sample locations
@@ -391,9 +391,14 @@ class StarsDataset(Dataset):
 
     def set_params_and_images(self):
         """
-        Images is now attached to a device.
+        Images are now attached to a device.
         :return:
-        """
+        * locs: is (batchsize x max_stars x (x_loc, y_loc))
+        * n_stars: (batchsize)
+        * fluxes: (batchsize x n_bands x max_stars)
+        * images: (n_images x n_bands x slen x slen)
+         """
+
         self.locs, self.fluxes, self.n_stars, self.images = \
             self.draw_batch_parameters(self.n_images, return_images=True)
 
