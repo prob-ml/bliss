@@ -3,23 +3,23 @@ import numpy as np
 
 from torch.distributions import normal, categorical
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def get_is_on_from_n_stars(n_stars, max_stars):
+def get_is_on_from_n_sources(n_sources, max_sources):
     """
     Return a boolean array of shape=(batchsize, max_stars) whose (k,l)th entry indicates
     whether there are more than l stars on the kth batch.
-    :param n_stars:
-    :param max_stars:
+    :param n_sources:
+    :param max_sources:
     :return:
     """
-    assert len(n_stars.shape) == 1
+    assert len(n_sources.shape) == 1
 
-    batchsize = len(n_stars)
-    is_on_array = torch.zeros((batchsize, max_stars), dtype=torch.long).to(device)
-    for i in range(max_stars):
-        is_on_array[:, i] = (n_stars > i)
+    batchsize = len(n_sources)
+    is_on_array = torch.zeros((batchsize, n_sources), dtype=torch.long).to(device)
+    for i in range(n_sources):
+        is_on_array[:, i] = (n_sources > i)
 
     return is_on_array
 

@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 
-from DeblendingStarfields.src import utils
-from DeblendingStarfields.src.utils import image_utils
+from utils import const
+from utils import image_utils
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class Flatten(nn.Module):
@@ -387,11 +387,11 @@ class SourceEncoder(nn.Module):
 
             else:
                 patch_n_stars_sampled = \
-                    utils.sample_class_weights(torch.exp(log_probs_nstar_patch.detach()), n_samples).view(n_samples, -1)
+                    const.sample_class_weights(torch.exp(log_probs_nstar_patch.detach()), n_samples).view(n_samples, -1)
         else:
             patch_n_stars_sampled = patch_n_stars.repeat(n_samples).view(n_samples, -1)
 
-        is_on_array = utils.get_is_on_from_n_stars_2d(patch_n_stars_sampled,
+        is_on_array = const.get_is_on_from_n_stars_2d(patch_n_stars_sampled,
                                                       self.max_detections)
 
         # get variational parameters: these are on image patches
@@ -429,10 +429,10 @@ class SourceEncoder(nn.Module):
                                                       slen)
 
         if return_log_q:
-            log_q_locs = (utils.eval_normal_logprob(patch_locs_sampled, loc_mean,
+            log_q_locs = (const.eval_normal_logprob(patch_locs_sampled, loc_mean,
                                                     loc_logvar) *
                           is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
-            log_q_fluxes = (utils.eval_normal_logprob(log_flux_sampled, log_flux_mean,
+            log_q_fluxes = (const.eval_normal_logprob(log_flux_sampled, log_flux_mean,
                                                       log_flux_logvar) *
                             is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
             log_q_n_stars = torch.gather(log_probs_nstar_patch, 1, n_stars_sampled.transpose(0, 1)).transpose(0, 1).sum(

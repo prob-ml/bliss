@@ -5,12 +5,30 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
-from DeblendingStarfields.src import utils
+from utils import const
 
-
-sys.path.insert(0, '../')
+# from GalaxyModel.src.data.galaxy_datasets import DecoderSamples
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def _draw_pareto(f_min, alpha, shape):
+    uniform_samples = torch.rand(shape).to(device)
+
+    return f_min / (1 - uniform_samples) ** (1 / alpha)
+
+
+def _draw_pareto_maxed(f_min, f_max, alpha, shape):
+    # draw pareto conditioned on being less than f_max
+
+    pareto_samples = _draw_pareto(f_min, alpha, shape)
+
+    while torch.any(pareto_samples > f_max):
+        indx = pareto_samples > f_max
+        pareto_samples[indx] = \
+            _draw_pareto(f_min, alpha, torch.sum(indx))
+
+    return pareto_samples
 
 
 def _check_psf(psf, slen):
@@ -34,7 +52,6 @@ def _trim_psf(psf, slen):
     :param slen:
     :return:
     """
-    #
 
     _check_psf(psf, slen)
     psf_slen = psf.shape[2]
@@ -78,6 +95,15 @@ def _get_mgrid(slen):
 
 
 def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize, draw_poisson=True):
+    """
+    Return tensor of size batchsize.
+    :param mean_sources:
+    :param min_sources:
+    :param max_sources:
+    :param batchsize:
+    :param draw_poisson:
+    :return:
+    """
     if draw_poisson:
         n_sources = np.random.poisson(mean_sources, batchsize)
     else:
@@ -174,53 +200,54 @@ def plot_multiple_stars(slen, locs, n_stars, fluxes, psf, cached_grid=None):
     return stars
 
 
-# class GalaxySimulator:
-#     def __init__(self, slen, background, decoder_file, n_images,
-#                  min_galaxies, max_galaxies, mean_galaxies):
-#         """
-#
-#         :param slen:
-#         :param background:
-#         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
-#         """
-#         self.ds = DecoderSamples(slen, decoder_file)
-#         self.background = background
-#
-#         self.min_galaxies = min_galaxies
-#         self.max_galaxies = max_galaxies
-#         self.mean_galaxies = mean_galaxies
-#
-#         self.n_images = n_images  # = batchsize
-#
-#     def sample(self, batchsize):
-#         """
-#         Sample locations, params, and images
-#         :return:
-#         """
-#
-#         locs = torch.rand((batchsize, self.max_stars, 2)).to(device) * is_on_array.unsqueeze(2).float()
-#
-#     def draw_image_from_params(self, locs, params, n_galaxies):
-#         self.locs =
+class GalaxyDataset:
+    def __init__(self, slen, background, decoder_file, n_images,
+                 min_galaxies, max_galaxies, mean_galaxies, draw_poisson=True):
+        """
 
+        :param slen:
+        :param background:
+        :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
+        """
+        self.ds = DecoderSamples(slen, decoder_file)
+        self.num_bands = self.ds.num_bands
+        self.background = background
+        self.slen = slen
 
-def _draw_pareto(f_min, alpha, shape):
-    uniform_samples = torch.rand(shape).to(device)
+        self.min_galaxies = min_galaxies
+        self.max_galaxies = max_galaxies
+        self.mean_galaxies = mean_galaxies
 
-    return f_min / (1 - uniform_samples) ** (1 / alpha)
+        self.n_images = n_images  # = batchsize
+        self.draw_poisson = draw_poisson
 
+    def sample(self):
+        """
+        Sample locations, params, and images
+        :return:
+        """
+        grids = torch.zeros(self.n_images, self.num_bands, self.slen, self.slen)  # where galaxies are plotted.
 
-def _draw_pareto_maxed(f_min, f_max, alpha, shape):
-    # draw pareto conditioned on being less than f_max
+        # sample number of stars
+        n_galaxies = _sample_n_sources(self.mean_galaxies, self.min_galaxies, self.max_galaxies,
+                                       self.n_images, draw_poisson=self.draw_poisson)
+        is_on_array = const.get_is_on_from_n_sources(n_galaxies, self.max_galaxies)
+        locs = torch.rand((self.n_images, self.max_galaxies, 2)).to(device) * is_on_array.unsqueeze(2).float()
 
-    pareto_samples = _draw_pareto(f_min, alpha, shape)
+        galaxy_params = torch.zeros(self.n_images, self.max_galaxies, self.ds.latent_dim)
+        all_single_images = torch.zeros(self.n_images, self.max_galaxies,
+                                        self.ds.num_bands, self.slen, self.slen)
 
-    while torch.any(pareto_samples > f_max):
-        indx = pareto_samples > f_max
-        pareto_samples[indx] = \
-            _draw_pareto(f_min, alpha, torch.sum(indx))
+        for i in range(self.n_images):
+            n_galaxy = n_galaxies[i]
+            z, single_images = self.ds.sample(n_galaxy)
+            galaxy_params[i, 0:n_galaxy, :] = z
+            for grid, single_image in zip(grids, single_images):
+                loc = locs[i, j]
+                draw_single_image(grid, single_image, loc)
 
-    return pareto_samples
+    def draw_image_from_params(self, locs, params, n_galaxies):
+        pass
 
 
 class StarSimulator:
@@ -254,9 +281,6 @@ class StarSimulator:
         # TODO:
         # should we then upsample??
 
-        # normalize
-        # self.psf = self.psf / torch.sum(self.psf)
-
         self.cached_grid = _get_mgrid(slen).to(device)
 
     def draw_image_from_params(self, locs, fluxes, n_stars,
@@ -274,7 +298,7 @@ class StarSimulator:
         images_mean = \
             plot_multiple_stars(self.slen, locs, n_stars, fluxes,
                                 self.psf, self.cached_grid) + \
-            self.background[None, :, :, :]
+            self.background[None, :, :, :].to(device)
 
         # add noise
         if add_noise:
@@ -343,6 +367,9 @@ class StarsDataset(Dataset):
         # dataset parameters
         self.n_images = n_images  # = batchsize.
 
+        # data will be populated later.
+        self.locs, self.fluxes, self.n_stars, self.images = None, None, None, None
+
         # set the first batch of data.
         self.set_params_and_images()
 
@@ -362,8 +389,8 @@ class StarsDataset(Dataset):
         n_stars = _sample_n_sources(self.mean_stars, self.min_stars, self.max_stars, batchsize,
                                     draw_poisson=self.draw_poisson)
 
-        # multiply by zero where they are no stars.
-        is_on_array = utils.get_is_on_from_n_stars(n_stars, self.max_stars)
+        # multiply by zero where they are no stars (recall parameters have entry for up to max_stars)
+        is_on_array = const.get_is_on_from_n_sources(n_stars, self.max_stars)
 
         # sample locations
         locs = _sample_locs(batchsize, self.max_stars, is_on_array)
@@ -394,7 +421,7 @@ class StarsDataset(Dataset):
         Images are now attached to a device.
         :return:
         * locs: is (batchsize x max_stars x (x_loc, y_loc))
-        * n_stars: (batchsize)
+        * n_stars: = batchsize.
         * fluxes: (batchsize x n_bands x max_stars)
         * images: (n_images x n_bands x slen x slen)
          """
@@ -402,33 +429,33 @@ class StarsDataset(Dataset):
         self.locs, self.fluxes, self.n_stars, self.images = \
             self.draw_batch_parameters(self.n_images, return_images=True)
 
+    @classmethod
+    def load_dataset_from_params(cls, psf, data_params,
+                                 n_images,
+                                 background,
+                                 transpose_psf=False,
+                                 add_noise=True):
+        # data parameters
+        slen = data_params['slen']
 
-def load_dataset_from_params(psf, data_params,
-                             n_images,
-                             background,
-                             transpose_psf=False,
-                             add_noise=True):
-    # data parameters
-    slen = data_params['slen']
+        f_min = data_params['f_min']
+        f_max = data_params['f_max']
+        alpha = data_params['alpha']
 
-    f_min = data_params['f_min']
-    f_max = data_params['f_max']
-    alpha = data_params['alpha']
+        max_stars = data_params['max_stars']
+        mean_stars = data_params['mean_stars']
+        min_stars = data_params['min_stars']
 
-    max_stars = data_params['max_stars']
-    mean_stars = data_params['mean_stars']
-    min_stars = data_params['min_stars']
-
-    # draw data
-    return StarsDataset(psf,
-                        n_images,
-                        slen=slen,
-                        f_min=f_min,
-                        f_max=f_max,
-                        max_stars=max_stars,
-                        mean_stars=mean_stars,
-                        min_stars=min_stars,
-                        alpha=alpha,
-                        background=background,
-                        transpose_psf=transpose_psf,
-                        add_noise=add_noise)
+        # draw data
+        return cls(psf,
+                   n_images,
+                   slen=slen,
+                   f_min=f_min,
+                   f_max=f_max,
+                   max_stars=max_stars,
+                   mean_stars=mean_stars,
+                   min_stars=min_stars,
+                   alpha=alpha,
+                   background=background,
+                   transpose_psf=transpose_psf,
+                   add_noise=add_noise)
