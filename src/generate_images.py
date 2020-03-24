@@ -5,7 +5,7 @@ Should be executed from galaxy-net folder.
 
 import argparse
 from data import generate
-from utils import const
+from utils.const import const
 import h5py
 
 # ToDo: Make sure that we want slen=50 as the default

@@ -8,7 +8,7 @@ import h5py
 import sys
 import torch
 
-from utils import const
+from utils.const import const
 from data import draw_catsim
 from models import galaxy_net
 
@@ -58,6 +58,7 @@ class DecoderSamples(Dataset):
         self.num_bands = num_bands
         self.slen = slen
         self.num_images = num_images
+        self.latent_dim = latent_dim
 
     def __len__(self):
         return self.num_images
