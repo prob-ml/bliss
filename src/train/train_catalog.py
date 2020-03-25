@@ -7,7 +7,7 @@ from pathlib import Path
 import inspect
 
 from data import catalog_datasets
-from models import catalog_net
+from ..models import catalog_net
 
 
 class TrainCatalog(object):

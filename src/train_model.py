@@ -8,8 +8,8 @@ from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
 
-from train import train_galaxy
-from utils.const import const
+from .train import train_galaxy
+from .utils import const
 
 # specify all the models (as a class) that can be trained.
 all_models = {

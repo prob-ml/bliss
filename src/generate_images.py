@@ -4,9 +4,10 @@ Should be executed from galaxy-net folder.
 """
 
 import argparse
-from data import generate
-from utils.const import const
 import h5py
+
+from .data import generate
+from .utils import const
 
 # ToDo: Make sure that we want slen=50 as the default
 parser = argparse.ArgumentParser(description='Generate images',
