@@ -3,7 +3,7 @@ import numpy as np
 from astropy.table import Column
 import galsim
 
-from utils import const
+from ..utils import const
 
 
 def get_default_params():

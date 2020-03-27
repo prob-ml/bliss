@@ -6,7 +6,7 @@ import numpy as np
 from pathlib import Path
 import inspect
 
-from data import catalog_datasets
+from ..data import catalog_datasets
 from ..models import catalog_net
 
 

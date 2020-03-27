@@ -8,8 +8,8 @@ from pathlib import Path
 import inspect
 
 from ..utils import const
-from data import galaxy_datasets
-from models import galaxy_net
+from ..data import galaxy_datasets
+from ..models import galaxy_net
 
 
 class TrainGalaxy(object):

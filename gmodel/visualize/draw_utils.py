@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from utils.const import const
+from ..utils import const
 
 
 def draw_multiband(image, filename, figsize=(18, 18), ending='.jpg'):

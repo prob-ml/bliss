@@ -22,7 +22,7 @@ def main(extra):
 
 
 if __name__ == '__main__':
-    extra = ''
+    s = ''
     if len(sys.argv) > 1:
-        extra = sys.argv[1]
-    main(extra)
+        s = sys.argv[1]
+    main(s)
