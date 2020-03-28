@@ -1,4 +1,4 @@
-from packages.WeakLensingDeblending import descwl
+import descwl
 import numpy as np
 from astropy.table import Column
 import galsim

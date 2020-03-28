@@ -3,7 +3,7 @@ import numpy as np
 import scipy.stats as stats
 from torch.utils.data import Dataset
 from astropy.table import Table
-from packages.WeakLensingDeblending import descwl
+import descwl
 import h5py
 import sys
 import torch

@@ -9,7 +9,7 @@ requirements = [
 
 setup(
     name='gmodel',
-    version='0.3dev',
+    version='0.1dev',
     description='Galaxy Model consisting of single centered galaxies from a VAE.',
     long_description='Galaxy Model consisting of single centered galaxies from a VAE.',
     author='gmodel developers',
@@ -18,7 +18,7 @@ setup(
     packages=[
         'gmodel',
     ],
-    package_dir={'gmodel': 'gmodel'},
+    python_requires='>=3.6',
     # scripts=[],
     # include_package_data=True,
     # zip_safe=False,
