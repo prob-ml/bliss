@@ -17,8 +17,8 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert len(n_sources.shape) == 1
 
     batchsize = len(n_sources)
-    is_on_array = torch.zeros((batchsize, n_sources), dtype=torch.long).to(device)
-    for i in range(n_sources):
+    is_on_array = torch.zeros((batchsize, max_sources), dtype=torch.long).to(device)
+    for i in range(max_sources):
         is_on_array[:, i] = (n_sources > i)
 
     return is_on_array

@@ -4,7 +4,7 @@ from torch import optim
 
 import numpy as np
 
-from GalaxyModel.src import _get_mgrid, plot_multiple_stars
+from GalaxyModel.src import get_mgrid, plot_multiple_stars
 from GalaxyModel.src import PowerLawPSF
 
 import time
@@ -42,7 +42,7 @@ def _fit_plane_to_background(background):
     planar_params = np.zeros((n_bands, 3))
     for i in range(n_bands):
         y = background[i].flatten().detach().cpu().numpy()
-        grid = _get_mgrid(slen).detach().cpu().numpy()
+        grid = get_mgrid(slen).detach().cpu().numpy()
 
         x = np.ones((slen ** 2, 3))
         x[:, 1:] = np.array([grid[:, :, 0].flatten(), grid[:, :, 1].flatten()]).transpose()
@@ -68,7 +68,7 @@ class PlanarBackground(nn.Module):
         self.image_slen = image_slen
 
         # get grid
-        _mgrid = _get_mgrid(image_slen).to(device)
+        _mgrid = get_mgrid(image_slen).to(device)
         self.mgrid = torch.stack([_mgrid for i in range(self.n_bands)], dim=0)
 
         # initial weights
@@ -120,7 +120,7 @@ class ModelParams(nn.Module):
 
         self.init_background = self.planar_background.forward().detach()
 
-        self.cached_grid = _get_mgrid(observed_image.shape[-1]).to(device)
+        self.cached_grid = get_mgrid(observed_image.shape[-1]).to(device)
 
     def _plot_stars(self, locs, fluxes, n_stars, psf):
         self.stars = plot_multiple_stars(self.slen, locs, n_stars,
