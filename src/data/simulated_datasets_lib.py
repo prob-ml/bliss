@@ -234,19 +234,17 @@ class SourceDataset:
                  psf=None,
                  transpose_psf=False,
                  add_noise=True,
-                 draw_poisson=True):
+                 draw_poisson=True,
+                 is_star=True):
         """
 
         :param psf:
         :param n_images: same as batchsize.
         :param slen: side length of the image.
-        :param max_stars: Default value 1500
-        :param mean_stars: Default value 1200
-        :param min_stars: Default value 0
-        :param f_min:
-        :param f_max:
+        :param max_sources: Default value 1500
+        :param mean_sources: Default value 1200
+        :param min_sources: Default value 0
         :param background:
-        :param alpha:
         :param transpose_psf:
         :param add_noise:
         :param draw_poisson:
@@ -255,55 +253,72 @@ class SourceDataset:
         # image parameters
         self.slen = slen
         self.n_bands = n_bands
+        self.background = background
+        self.is_star = is_star
         self.n_images = n_images  # = batchsize.
 
         self.simulator = StarSimulator(self.slen, self.background, self.n_bands,
-                                       psf=psf, transpose_psf=transpose_psf, is_star=is_star)
+                                       psf=psf, transpose_psf=transpose_psf, is_star=self.is_star,
+                                       add_noise=add_noise, draw_poisson=draw_poisson)
+
+    def __len__(self):
+        return self.n_images
+
+    def __getitem__(self, idx):
+        # ToDo: compress parameters one dimension.
+        n_sources, locs, params = self.simulator.sample_parameters(1)
+
+        if self.is_star:
+            fluxes = params
+            gal_params, single_galaxies = None, None
+        else:
+            fluxes = None
+            gal_params, single_galaxies = params
+
+        images = self.simulator.draw_image_from_params(locs, n_sources, sources=single_galaxies,
+                                                       fluxes=fluxes)
+
+        return {'image': images,
+                'background': self.background,
+                'locs': locs,
+                'params': fluxes if self.is_star else gal_params,
+                'n_stars': n_sources
+
+
+class SourceSimulator:
+
+    def __init__(self, slen, background, n_bands, max_sources, mean_sources, min_sources,
+                 psf=None, transpose_psf=False, is_star=True, add_noise=True):
+
+        self.slen = slen  # side length of the image
+        self.n_bands = n_bands
+        self.background = background
 
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
         assert background.shape[1] == background.shape[2] == self.slen
         self.background = background[None, :, :, :]
 
+        self.cached_grid = get_mgrid(self.slen).to(device)
+        self.is_star = is_star
+
         self.max_sources = max_sources
         self.mean_sources = mean_sources
         self.min_sources = min_sources
 
-        self.add_noise = add_noise
-        self.draw_poisson = draw_poisson
-
-    def __len__(self):
-        return self.n_images
-
-    def __getitem__(self, idx):
-        return {'image': self.images[idx],
-                'background': self.background[0],
-                'locs': self.locs[idx],
-                'fluxes': self.fluxes[idx],
-                'n_stars': self.n_stars[idx]}
-
-
-class SourceSimulator:
-
-    def __init__(self, slen, background, n_bands, psf=None, transpose_psf=False, is_star=True):
-        self.background = background
-        self.slen = slen  # side length of the image
-        self.n_bands = n_bands
-        self.cached_grid = get_mgrid(self.slen).to(device)
-        self.is_star = is_star
-
         self.psf = psf
         self.transpose_psf = transpose_psf
 
-    def draw_image_from_params(self, locs, n_sources, sources=None, fluxes=None,
-                               add_noise=True):
+        self.add_noise = add_noise
+        self.cached_grid = get_mgrid(self.slen).to(device)
+
+    def draw_image_from_params(self, locs, n_sources, sources=None, fluxes=None):
         """
 
         :param locs:
         :param fluxes:
         :param sources: can either be `self.psf` or the galaxies to be plotted in locs.
         :param n_sources:
-        :param add_noise:
         :return: `images`, torch.Tensor of shape (n_images x n_bands x slen x slen)
 
         NOTE: The different sources in `images` are already aligned between bands.
@@ -320,8 +335,7 @@ class SourceSimulator:
                                    fluxes=fluxes, cached_grid=self.cached_grid, is_star=self.is_star) + \
             self.background[None, :, :, :].to(device)
 
-        # add noise
-        if add_noise:
+        if self.add_noise:
             if torch.any(images_mean <= 0):
                 print('warning: image mean less than 0')
                 images_mean = images_mean.clamp(min=1.0)
@@ -334,9 +348,12 @@ class SourceSimulator:
         return images
 
     def get_source_params(self, *args):
+        """
+        Return either fluxes or the (galaxy latent representation, images)
+        """
         return torch.empty()
 
-    def sample_parameters(self, batchsize, return_images=True):
+    def sample_parameters(self, batchsize):
         # sample number of sources
         n_sources = _sample_n_sources(self.mean_sources, self.min_sources, self.max_sources, batchsize,
                                       draw_poisson=self.draw_poisson)
@@ -352,69 +369,32 @@ class SourceSimulator:
         return n_sources, locs, params
 
 
-        if return_images:
-            images = self.simulator.draw_image_from_params(locs, fluxes, n_stars,
-                                                           add_noise=self.add_noise)
-            return locs, fluxes, n_stars, images
-
-        else:
-            return locs, fluxes, n_stars
-
-
 # ToDo: Decide if galaxies should be aligned across bands or not? (locs would change shape)
 class GalaxyDataset(SourceDataset):
     def __init__(self, gal_decoder_file, *args, **kwargs):
         """
-
-        :param slen:
-        :param background:
         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
         """
+        self.gal_decoder_file = gal_decoder_file
         super().__init__(*args, **kwargs)
-        self.ds = DecoderSamples(self.slen, gal_decoder_file)
-        self.num_bands = self.ds.num_bands
-        self.background = background
-        self.slen = slen
-
-        self.min_galaxies = min_galaxies
-        self.max_galaxies = max_galaxies
-        self.mean_galaxies = mean_galaxies
-
-        self.n_images = n_images  # = batchsize
-        self.draw_poisson = draw_poisson
-
-    def sample(self):
-        """
-        Sample locations, params, and images
-        :return:
-        """
-        grids = torch.zeros(self.n_images, self.num_bands, self.slen, self.slen)  # where galaxies are plotted.
-
-        # sample number of stars
-        n_galaxies = _sample_n_sources(self.mean_galaxies, self.min_galaxies, self.max_galaxies,
-                                       self.n_images, draw_poisson=self.draw_poisson)
-        is_on_array = const.get_is_on_from_n_sources(n_galaxies, self.max_galaxies)
-        locs = torch.rand((self.n_images, self.max_galaxies, 2)).to(device) * is_on_array.unsqueeze(2).float()
-
-        galaxy_params = torch.zeros(self.n_images, self.max_galaxies, self.ds.latent_dim)
-        all_single_images = torch.zeros(self.n_images, self.max_galaxies,
-                                        self.ds.num_bands, self.slen, self.slen)
-
-        # for i in range(self.n_images):
-        #     n_galaxy = n_galaxies[i]
-        #     z, single_images = self.ds.sample(n_galaxy)
-        #     galaxy_params[i, 0:n_galaxy, :] = z
-        #     for grid, single_image in zip(grids, single_images):
-        #         # loc = locs[i, j]
-        #         # draw_single_image(grid, single_image, loc)
-
-    def draw_image_from_params(self, locs, params, n_galaxies):
-        pass
 
 
 class GalaxySimulator(SourceSimulator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.ds = DecoderSamples(self.slen, self.gal_decoder_file)
+        self.latent_dim = self.ds.latent_dim
+        assert self.ds.num_bands == self.n_bands
+
+    def get_source_params(self, n_galaxy):
+        galaxy_params = torch.zeros(self.max_sources, self.latent_dim)
+        single_galaxies = torch.zeros(self.max_sources, self.n_bands, self.slen, self.slen)
+
+        z, galaxies = self.ds.sample(n_galaxy)
+        galaxy_params[0:n_galaxy, :] = z
+        single_galaxies[0:n_galaxy, : , :, :] = galaxies
+
+        return galaxy_params, single_galaxies
 
 
 class StarsDataset(SourceDataset):
@@ -425,36 +405,13 @@ class StarsDataset(SourceDataset):
         :param mean_sources: Default value 1200
         :param min_sources: Default value 0
         """
-        super().__init__(*args, **kwargs)
-        assert self.psf is not None
-
         # prior parameters
         self.f_min = f_min
         self.f_max = f_max
         self.alpha = alpha  # pareto parameter.
 
-    def __len__(self):
-        return self.n_images
+        super().__init__(*args, **kwargs)
 
-    def __getitem__(self, idx):
-        """
-        Images are now attached to a device.
-        :return:
-        * locs: is (batchsize x max_stars x (x_loc, y_loc))
-        * n_stars: = batchsize.
-        * fluxes: (batchsize x n_bands x max_stars)
-        * images: (n_images x n_bands x slen x slen)
-         """
-
-        return {'image': self.images[idx],
-                'background': self.background,
-                'locs': self.locs[idx],
-                'fluxes': self.fluxes[idx],
-                'n_stars': self.n_stars[idx]}
-
-    def set_params_and_images(self):
-        self.locs, self.fluxes, self.n_stars, self.images = \
-            self.draw_batch_parameters(self.n_images, return_images=True)
 
     @classmethod
     def load_dataset_from_params(cls, psf, data_params,
@@ -489,7 +446,12 @@ class StarsDataset(SourceDataset):
 
 
 class StarSimulator(SourceSimulator):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, f_min, f_max, alpha, *args, **kwargs):
+        """
+        :param f_min:
+        :param f_max:
+        :param alpha:
+        """
         super().__init__(*args, **kwargs)
         assert self.psf is not None
         assert self.is_star
@@ -498,6 +460,10 @@ class StarSimulator(SourceSimulator):
         assert self.background.shape[0] == self.psf.shape[0]
         assert self.background.shape[1] == self.slen
         assert self.background.shape[2] == self.slen
+
+        self.f_min = f_min
+        self.f_max = f_max
+        self.alpha = alpha
 
         self.psf_og = self.psf.clone()  # .detach() ?
         # get psf shape to match image shape
@@ -511,8 +477,6 @@ class StarSimulator(SourceSimulator):
 
         if self.transpose_psf:
             self.psf = self.psf.transpose(1, 2)
-
-        self.cached_grid = get_mgrid(self.slen).to(device)
 
     def get_source_params(self, batchsize, is_on_array):
         # sample fluxes
