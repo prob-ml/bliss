@@ -33,7 +33,7 @@ def setup():
     """
     Make sure that the testing directory exists among other things.
     """
-    testing_name = "testing2"
+    testing_name = "testing1"
     test_path = const.reports_path.joinpath(testing_name)
     test_path.mkdir(parents=True, exist_ok=True)
     return test_path

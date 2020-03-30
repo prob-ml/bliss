@@ -10,11 +10,11 @@ from __init__ import root_path
 def main():
     # spawn multi-processes to generate images.
     ps = []
-    for i in range(2):
+    for i in range(15):
         ps.append(
             subprocess.Popen(f"cd {root_path};"
                              f"python -m gmodel.generate_images --dir test1 --filename images{i} "
-                             f"--num-images 20 --overwrite --slen 50 --generate",
+                             f"--num-images 1500 --overwrite --slen 50 --generate",
                              shell=True))
 
     # wait for all processes to complete.

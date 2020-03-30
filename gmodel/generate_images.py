@@ -26,7 +26,7 @@ assert pargs.generate or pargs.merge, "At least one of generate/merge is require
 
 # files and directories needed
 output_path = const.data_path.joinpath(f"processed/{pargs.dir}")
-output_path.mkdir(exist_ok=False)
+output_path.mkdir(exist_ok=True)
 
 if pargs.generate:
     assert pargs.filename is not None and pargs.num_images is not None, "Required arguments for generate."
