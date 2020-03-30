@@ -4,25 +4,25 @@ Runs one of the other python files in execute in a loop or so. Nothing major sho
 Please run from outside the execute folder. In the root 'galaxy-net' directory.
 """
 import subprocess
-from __init__ import PYPATH
+from __init__ import root_path
 
 
 def main():
     # spawn multi-processes to generate images.
     ps = []
-    for i in range(15):
+    for i in range(2):
         ps.append(
-            subprocess.Popen(f"{PYPATH} "
-                             f"./src/generate_images.py --dir test3 --filename images{i} "
-                             f"--num-images 2000 --overwrite --slen 50 --generate",
+            subprocess.Popen(f"cd {root_path};"
+                             f"python -m gmodel.generate_images --dir test1 --filename images{i} "
+                             f"--num-images 20 --overwrite --slen 50 --generate",
                              shell=True))
 
     # wait for all processes to complete.
     _ = [p.communicate() for p in ps]
 
     # then we merge the results.
-    subprocess.run(f"{PYPATH} "
-                   f"./src/generate_images.py --dir test3 --merge",
+    subprocess.run(f"cd {root_path};"
+                   f"python -m gmodel.generate_images --dir test1 --merge",
                    shell=True)
 
 

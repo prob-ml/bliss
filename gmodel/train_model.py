@@ -62,7 +62,6 @@ def training(train_module, epochs=None, seed=None, evaluate=None, **kwargs):
                 train_module.evaluate_and_log(epoch)
 
 
-# @profile
 def run(args):
     """
     :param args: A dict.
