@@ -7,9 +7,11 @@ from ..utils import const
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
+# ToDo: Fix the import on the top forevoer?
 # ToDo: why is gmodel unrecognized and how to fix it?
 # ToDo: Make sure sampling from gmodel decoder returns what I expect and rerun (data got deleted)
+# ToDo: Double check images produced, galaxies varied enough?
+# ToDo: double check our galaxy population has a wide variety of representative fluxes, etc.
 
 
 def _draw_pareto(f_min, alpha, shape):
@@ -297,6 +299,7 @@ class SourceSimulator:
                                    fluxes=fluxes, cached_grid=self.cached_grid, is_star=self.is_star) + \
             self.background.unsqueeze(0).to(device)
 
+        # ToDo: Change so that it uses galsim (Poisson Noise?) for now.
         if self.add_noise:
             if torch.any(images_mean <= 0):
                 print('warning: image mean less than 0')
