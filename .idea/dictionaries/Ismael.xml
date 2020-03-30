@@ -8,6 +8,7 @@
       <w>mgrid</w>
       <w>nbands</w>
       <w>slen</w>
+      <w>tbackground</w>
     </words>
   </dictionary>
 </component>

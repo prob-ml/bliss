@@ -1,9 +1,18 @@
 import torch
 import numpy as np
+from pathlib import Path
+from os.path import dirname
 
 from torch.distributions import normal, categorical
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+src_path = Path(dirname(dirname(__file__)))
+root_path = Path(dirname(dirname(dirname(__file__))))
+
+data_path = root_path.joinpath("data")
+models_path = root_path.joinpath("models")
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):

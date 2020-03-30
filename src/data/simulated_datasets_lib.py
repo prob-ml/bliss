@@ -7,9 +7,10 @@ from ..utils import const
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-# ToDo: finish the simulator classes and replace *args, **kwargs with all arguments necessary.
-# ToDo: Add a load_dataset from params method to both and use it
+
+# ToDo: why is gmodel unrecognized and how to fix it?
 # ToDo: Make sure sampling from gmodel decoder returns what I expect and rerun (data got deleted)
+
 
 def _draw_pareto(f_min, alpha, shape):
     uniform_samples = torch.rand(shape).to(device)
@@ -115,7 +116,7 @@ def _sample_locs(max_sources, is_on_array, batchsize=1):
     return locs
 
 
-# ToDo: is the PSF different across bands in the star case?
+# ToDo: is the PSF different across bands in the star case?: yes
 def _plot_one_source(slen, locs, source, cached_grid=None, is_star=True):
     """
     :param slen:
@@ -161,7 +162,7 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
     """
 
     :param slen:
-    :param locs: is (batchsize x max_num_sources x (x_loc, y_loc))
+    :param locs: is (batchsize x max_num_sources x len(x_loc, y_loc))
     :param n_sources: has shape: (batchsize)
     :param sources: either a psf(star) with shape (n_bands x slen x slen) tensor, or a galaxy in which case it has
                    shape (batchsize x max_galaxies x n_bands x slen x slen)
@@ -173,7 +174,6 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
 
     batchsize = locs.shape[0]
     max_galaxies = locs.shape[1]
-    n_bands = sources.shape[0]
 
     assert len(locs.shape) == 3, "Using batchsize as the first dimension."
     assert locs.shape[2] == 2
@@ -191,6 +191,7 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
     if is_star:
         stars = 0.
         psf = sources
+        n_bands = psf.shape[0]
 
         assert fluxes is not None
         assert fluxes.shape[0] == locs.shape[0]
@@ -201,25 +202,29 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
         for n in range(max(n_sources)):
             is_on_n = (n < n_sources).float()
             locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-            fluxes_n = fluxes[:, n, :]
+            fluxes_n = fluxes[:, n, :]  # shape = (batchsize x n_bands)
             one_star = _plot_one_source(slen, locs_n, psf, cached_grid=grid, is_star=True)
             stars += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(batchsize, n_bands, 1, 1)
 
-            return stars
+        return stars
 
     else:  # is a galaxy.
         assert fluxes is None
         assert sources.shape[0] == locs.shape[0]  # batchsize
         assert sources.shape[1] == locs.shape[1]  # max_galaxies
 
-        galaxies = torch.zeros(batchsize, n_bands, slen, slen)
+        n_bands = sources.shape[2]
+
+        galaxies = torch.zeros(batchsize, n_bands, slen, slen).cuda(device)
         for n in range(max(n_sources)):
             is_on_n = (n < n_sources).float()
             locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
             source = sources[:, n, :, :, :]  # shape = (batchsize x n_bands x slen x slen)
-            one_galaxy = _plot_one_source(slen, locs_n, source, cached_grid=grid, is_star=False)
-            galaxies += one_galaxy * is_on_n.unsqueeze(1).view(batchsize, n_bands, 1, 1)
 
+            # shape=(batchsize, n_bands, slen, slen)
+            one_galaxy = _plot_one_source(slen, locs_n, source, cached_grid=grid, is_star=False)
+            # galaxies += one_galaxy * is_on_n.unsqueeze(1).view(batchsize, n_bands, 1, 1)
+            galaxies += one_galaxy
         return galaxies
 
 
@@ -285,7 +290,7 @@ class SourceSimulator:
             assert fluxes is not None
             sources = self.psf
         else:  # galaxies
-            assert sources is not None
+            assert fluxes is None and sources is not None
 
         images_mean = \
             _plot_multiple_sources(self.slen, locs, n_sources, sources,
@@ -304,7 +309,7 @@ class SourceSimulator:
 
         return images
 
-    def get_source_params(self, *args, **kwargs):
+    def get_source_params(self, n_sources, is_on_array=None, batchsize=1):
         """
         Return either fluxes or the (galaxy latent representation, images)
         """
@@ -319,9 +324,10 @@ class SourceSimulator:
         is_on_array = const.get_is_on_from_n_sources(n_sources, self.max_sources)
 
         # sample locations
-        locs = _sample_locs(batchsize, self.max_sources, is_on_array)
+        locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
 
-        params = self.get_source_params(n_sources, is_on_array)  # either fluxes or galaxy parameters.
+        # either fluxes or galaxy parameters.
+        params = self.get_source_params(n_sources, is_on_array=is_on_array, batchsize=batchsize)
 
         return n_sources, locs, params
 
@@ -374,31 +380,34 @@ class SourceDataset:
 
 
 class GalaxySimulator(SourceSimulator):
-    def __init__(self, *args, gal_decoder_file, **kwargs):
+    def __init__(self, galaxy_slen, gal_decoder_file, *args, **kwargs):
         """
         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
         """
-        super().__init__(*args, **kwargs)
-        self.gal_decoder_file = gal_decoder_file
-        self.ds = DecoderSamples(self.slen, self.gal_decoder_file)
+        super(GalaxySimulator, self).__init__(*args, **kwargs)
+        self.gal_decoder_path = const.models_path.joinpath(gal_decoder_file)
+        self.ds = DecoderSamples(galaxy_slen, self.gal_decoder_path, num_bands=self.n_bands)
+        self.galaxy_slen = galaxy_slen
         self.latent_dim = self.ds.latent_dim
-        assert self.ds.num_bands == self.n_bands
 
-    def get_source_params(self, n_galaxy):
+        assert self.ds.num_bands == self.n_bands == self.background.shape[0]
+
+    def get_source_params(self, n_galaxy, is_on_array=None, batchsize=1):
         assert len(n_galaxy.shape) == 1
-        batchsize = n_galaxy.shape[0]
+        assert n_galaxy.shape[0] == batchsize
 
         galaxy_params = torch.zeros(batchsize, self.max_sources, self.latent_dim)
-        single_galaxies = torch.zeros(batchsize, self.max_sources, self.n_bands, self.slen, self.slen)
+        single_galaxies = torch.zeros(batchsize, self.max_sources, self.n_bands, self.galaxy_slen, self.galaxy_slen)
 
         # z, shape = (num_samples, latent_dim)
         # galaxies, shape = (num_samples, n_bands, slen, slen)
-        num_samples = n_galaxy.sum()
+        num_samples = int(n_galaxy.sum().item())
         z, galaxies = self.ds.sample(num_samples)
-        count = 0.
+        count = 0
         for batch_i, n_gal in enumerate(n_galaxy):
-            galaxy_params[batch_i, 0:n_gal, :] = z[count:count+n_gal, :]
-            single_galaxies[batch_i, 0:n_gal, :, :, :] = galaxies[count:count+n_gal, :, :, :]
+            n_gal = int(n_gal)
+            galaxy_params[batch_i, 0:n_gal, :] = z[count:count + n_gal, :]
+            single_galaxies[batch_i, 0:n_gal, :, :, :] = galaxies[count:count + n_gal, :, :, :]
             count += n_gal
 
         return galaxy_params, single_galaxies
@@ -412,12 +421,48 @@ class GalaxyDataset(SourceDataset):
         """
         """
         simulator_kwargs.update(dict(is_star=False))
-        super().__init__(n_images, simulator_args, simulator_kwargs,
-                         is_star=False)
+        super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
+                                            is_star=False)
+
+    @classmethod
+    def load_dataset_from_params(cls, n_images, data_params,
+                                 add_noise=True, draw_poisson=True):
+
+        # prepare background.
+        background_path = const.data_path.joinpath(data_params['background_file'])
+        slen = data_params['slen']
+        n_bands = data_params['n_bands']
+
+        background = np.load(background_path)
+        tbackground = torch.zeros([n_bands, slen, slen])
+        assert n_bands == background.shape[0]
+        assert background.shape[1] == background.shape[2] == data_params['galaxy_slen']
+
+        for n in range(n_bands):
+            tbackground[n, :, :] = float(background[n][0][0])
+
+        simulator_args = [
+            data_params['galaxy_slen'],
+            data_params['gal_decoder_file'],
+            data_params['slen'],
+            data_params['n_bands'],
+            tbackground,
+            data_params['max_galaxies'],
+            data_params['mean_galaxies'],
+            data_params['min_galaxies'],
+        ]
+
+        simulator_kwargs = dict(
+            add_noise=add_noise,
+            draw_poisson=draw_poisson,
+            is_star=False
+        )
+
+        return cls(n_images, simulator_args, simulator_kwargs)
 
 
 class StarSimulator(SourceSimulator):
-    def __init__(self, *args, f_min, f_max, alpha, **kwargs):
+    def __init__(self, f_min, f_max, alpha, *args, **kwargs):
         """
         :param f_min:
         :param f_max:
@@ -426,7 +471,7 @@ class StarSimulator(SourceSimulator):
         :param mean_sources: Default value 1200
         :param min_sources: Default value 0
         """
-        super().__init__(*args, **kwargs)
+        super(StarSimulator, self).__init__(*args, **kwargs)
         assert self.psf is not None
         assert self.is_star
         assert len(self.psf.shape) == 3
@@ -453,11 +498,13 @@ class StarSimulator(SourceSimulator):
         if self.transpose_psf:
             self.psf = self.psf.transpose(1, 2)
 
-    def get_source_params(self, batchsize, is_on_array):
+    def get_source_params(self, n_stars, is_on_array=None, batchsize=1):
         """
 
         :return: fluxes, a shape (batchsize x max_sources x nbands) tensor
         """
+        assert is_on_array is not None
+        assert n_stars.shape[0] == batchsize
         base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha=self.alpha,
                                          shape=(batchsize, self.max_sources))
 
@@ -481,37 +528,33 @@ class StarsDataset(SourceDataset):
 
         """
         simulator_kwargs.update(dict(is_star=True))
-        super().__init__(n_images, simulator_args, simulator_kwargs,
-                         is_star=True)
+        super(StarsDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
+                                           is_star=True)
 
     @classmethod
-    def load_dataset_from_params(cls, psf, data_params,
-                                 n_images,
+    def load_dataset_from_params(cls, n_images, data_params,
+                                 psf,
                                  background,
                                  transpose_psf=False,
-                                 add_noise=True):
-        # data parameters
-        slen = data_params['slen']
+                                 add_noise=True, draw_poisson=True):
+        simulator_args = [
+            data_params['f_min'],
+            data_params['f_max'],
+            data_params['alpha'],
+            data_params['slen'],
+            data_params['n_bands'],
+            background,
+            data_params['max_stars'],
+            data_params['mean_stars'],
+            data_params['min_stars'],
+        ]
 
-        f_min = data_params['f_min']
-        f_max = data_params['f_max']
-        alpha = data_params['alpha']
+        simulator_kwargs = dict(
+            psf=psf,
+            transpose_psf=transpose_psf,
+            add_noise=add_noise,
+            draw_poisson=draw_poisson,
+            is_star=True
+        )
 
-        max_stars = data_params['max_stars']
-        mean_stars = data_params['mean_stars']
-        min_stars = data_params['min_stars']
-
-        # draw data
-        return cls(psf,
-                   n_images,
-                   slen=slen,
-                   f_min=f_min,
-                   f_max=f_max,
-                   max_stars=max_stars,
-                   mean_stars=mean_stars,
-                   min_stars=min_stars,
-                   alpha=alpha,
-                   background=background,
-                   transpose_psf=transpose_psf,
-                   add_noise=add_noise)
-
+        return cls(n_images, simulator_args, simulator_kwargs)
