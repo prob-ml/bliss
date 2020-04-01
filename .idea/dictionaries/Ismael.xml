@@ -2,6 +2,7 @@
   <dictionary name="Ismael">
     <words>
       <w>batchsize</w>
+      <w>cuda</w>
       <w>deblending</w>
       <w>indx</w>
       <w>locs</w>

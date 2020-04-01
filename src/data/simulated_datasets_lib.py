@@ -4,31 +4,23 @@ import torch.nn.functional as F
 from gmodel.data.galaxy_datasets import DecoderSamples
 
 from ..utils import const
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-# ToDo: Fix the import on the top forevoer?
-# ToDo: why is gmodel unrecognized and how to fix it?
-# ToDo: Make sure sampling from gmodel decoder returns what I expect and rerun (data got deleted)
-# ToDo: Double check images produced, galaxies varied enough?
-# ToDo: double check our galaxy population has a wide variety of representative fluxes, etc.
+from ..utils.const import device
 
 
-def _draw_pareto(f_min, alpha, shape):
-    uniform_samples = torch.rand(shape).to(device)
-
+def _draw_pareto(f_min, alpha, shape, cuda=torch.device("cpu")):
+    uniform_samples = torch.rand(shape, device=cuda)
     return f_min / (1 - uniform_samples) ** (1 / alpha)
 
 
-def _draw_pareto_maxed(f_min, f_max, alpha, shape):
+def _draw_pareto_maxed(f_min, f_max, alpha, shape, cuda=torch.device("cpu")):
     # draw pareto conditioned on being less than f_max
 
-    pareto_samples = _draw_pareto(f_min, alpha, shape)
+    pareto_samples = _draw_pareto(f_min, alpha, shape, cuda)
 
     while torch.any(pareto_samples > f_max):
         indx = pareto_samples > f_max
         pareto_samples[indx] = \
-            _draw_pareto(f_min, alpha, torch.sum(indx))
+            _draw_pareto(f_min, alpha, torch.sum(indx), cuda)
 
     return pareto_samples
 
@@ -118,7 +110,6 @@ def _sample_locs(max_sources, is_on_array, batchsize=1):
     return locs
 
 
-# ToDo: is the PSF different across bands in the star case?: yes
 def _plot_one_source(slen, locs, source, cached_grid=None, is_star=True):
     """
     :param slen:
@@ -155,7 +146,7 @@ def _plot_one_source(slen, locs, source, cached_grid=None, is_star=True):
     else:  # plotting a galaxy.
         assert source.shape[0] == batchsize
         galaxy = source
-        source_plotted = F.grid_sample(galaxy, grid_loc, align_corners=True)
+        source_plotted = F.grid_sample(galaxy.cuda(device), grid_loc, align_corners=True)
 
     return source_plotted
 
@@ -230,10 +221,11 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
         return galaxies
 
 
-def get_mgrid(slen):
+def get_mgrid(slen, cuda=torch.device("cpu")):
+
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
-    return (torch.Tensor(np.dstack((y, x))) / offset).to(device)
+    return torch.Tensor(np.dstack((y, x)), device=cuda) / offset
 
 
 class SourceSimulator:
@@ -241,7 +233,7 @@ class SourceSimulator:
     def __init__(self, slen, n_bands, background,
                  max_sources, mean_sources, min_sources,
                  psf=None, transpose_psf=False, add_noise=True, draw_poisson=True,
-                 is_star=True):
+                 is_star=True, cuda=None):
         """
         :param slen: side length of the image.
         :param n_bands: number of bands of each image.
@@ -253,16 +245,17 @@ class SourceSimulator:
         :param add_noise:
         :param draw_poisson:
         """
+        assert cuda is not None, "Should be gpu or cpu."
 
         self.slen = slen  # side length of the image
         self.n_bands = n_bands
-        self.background = background  # sh
+        self.background = background.cuda()
+        self.cuda = cuda
 
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
         assert background.shape[1] == background.shape[2] == self.slen
 
-        self.cached_grid = get_mgrid(self.slen).to(device)
         self.is_star = is_star
 
         self.max_sources = max_sources
@@ -274,7 +267,7 @@ class SourceSimulator:
 
         self.draw_poisson = draw_poisson
         self.add_noise = add_noise
-        self.cached_grid = get_mgrid(self.slen).to(device)
+        self.cached_grid = get_mgrid(self.slen, cuda=self.cuda)
 
     def draw_image_from_params(self, locs, n_sources, sources=None, fluxes=None):
         """
@@ -339,16 +332,20 @@ class SourceDataset:
     simulator_cls = SourceSimulator
 
     def __init__(self, n_images, simulator_args, simulator_kwargs,
-                 is_star=True):
+                 is_star=True, use_cuda=True):
         """
         :param n_images: same as batchsize.
         """
+        assert torch.cuda.is_available() or not use_cuda, "No GPU is available"
+        self.cuda = torch.device("cuda") if use_cuda else torch.device("cpu")  # use context manager to specify device.
 
         self.n_images = n_images  # = batchsize.
         self.is_star = is_star
 
         self.simulator_args = simulator_args
+
         self.simulator_kwargs = simulator_kwargs
+        self.simulator_kwargs.update(dict(cuda=self.cuda))
         assert 'is_star' in simulator_kwargs and simulator_kwargs['is_star'] == self.is_star
 
         self.simulator = self.simulator_cls(*simulator_args, **simulator_kwargs)
@@ -356,7 +353,7 @@ class SourceDataset:
         # image parameters
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
-        self.background = self.simulator.background
+        self.background = self.simulator.background  # in cuda.
 
     def __len__(self):
         return self.n_images
@@ -416,7 +413,6 @@ class GalaxySimulator(SourceSimulator):
         return galaxy_params, single_galaxies
 
 
-# ToDo: Decide if galaxies should be aligned across bands or not? (locs would change shape)
 class GalaxyDataset(SourceDataset):
     simulator_cls = GalaxySimulator
 
