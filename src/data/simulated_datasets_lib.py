@@ -6,6 +6,10 @@ from gmodel.data.galaxy_datasets import DecoderSamples
 from ..utils import const
 from ..utils.const import device
 
+# ToDo: Identify which things need to be in cuda and which don't (usually only the images/sample parameters)
+# ToDo: Get rid of `device`  on top of files,
+# ToDo: push decoder to cuda so that images returned are produced in cuda and already in cuda.
+
 
 def _draw_pareto(f_min, alpha, shape, cuda=torch.device("cpu")):
     uniform_samples = torch.rand(shape, device=cuda)
