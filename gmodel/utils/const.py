@@ -4,7 +4,6 @@ from os.path import dirname
 src_path = Path(dirname(dirname(__file__)))
 root_path = Path(dirname(dirname(dirname(__file__))))
 
-packages_path = root_path.joinpath("packages")
 reports_path = root_path.joinpath("reports")
 data_path = root_path.joinpath("data")
 

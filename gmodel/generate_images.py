@@ -5,6 +5,7 @@ Should be executed from galaxy-net folder.
 
 import argparse
 import h5py
+import numpy as np
 
 from .data import generate
 from .utils import const
@@ -16,13 +17,15 @@ parser.add_argument('--dir', type=str, required=True)
 parser.add_argument('--filename', type=str, default=None)
 parser.add_argument('--num-images', type=int, default=None)
 parser.add_argument('--overwrite', action='store_true')
-parser.add_argument('--generate', action='store_true')
 parser.add_argument('--slen', type=int, default=50)
+parser.add_argument('--generate', action='store_true')
 parser.add_argument('--merge', action='store_true', help="Merge all files from directory with .hdf5 extension.")
+parser.add_argument('--background', action='store_true', help="Save background from .h5py merged file into a .npy"
+                                                              "which is separate.")
 
 pargs = parser.parse_args()
 
-assert pargs.generate or pargs.merge, "At least one of generate/merge is required."
+assert pargs.generate or pargs.merge or pargs.background, "At least one of generate/merge/background is required."
 
 # files and directories needed
 output_path = const.data_path.joinpath(f"processed/{pargs.dir}")
@@ -64,3 +67,11 @@ if pargs.merge:
                 fds[images_copied:images_copied + num_images, :, :, :] = ds[:, :, :, :]
                 fds.attrs[const.background_h5_name] = ds.attrs[const.background_h5_name]
                 images_copied += num_images
+
+if pargs.background:
+    new_file_path = output_path.joinpath("images.hdf5")
+    background_path = output_path.joinpath("background.npy")
+    with h5py.File(new_file_path, 'r') as currfile:
+        ds = currfile[const.image_h5_name]
+        background = ds.attrs[const.background_h5_name]
+        np.save(background_path, background)
