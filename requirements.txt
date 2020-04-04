@@ -1,8 +1,7 @@
 # This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
-_libgcc_mutex=0.1=main
-_pytorch_select=0.1=cpu_0
+
 asteval=0.9.16=pypi_0
 astropy=4.0=py37h7b6447c_0
 attrs=19.3.0=py_0

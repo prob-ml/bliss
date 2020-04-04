@@ -7,8 +7,11 @@
       <excludeFolder url="file://$MODULE_DIR$/gmodel.egg-info" />
       <excludeFolder url="file://$MODULE_DIR$/packages" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="Deblending" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+  <component name="PackageRequirementsSettings">
+    <option name="requirementsPath" value="$MODULE_DIR$/requirements.txt" />
   </component>
   <component name="PyDocumentationSettings">
     <option name="format" value="GOOGLE" />
