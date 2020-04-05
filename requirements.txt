@@ -2,8 +2,8 @@
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
 
-asteval=0.9.16=pypi_0
-astropy=4.0=py37h7b6447c_0
+asteval
+astropy
 attrs=19.3.0=py_0
 backcall=0.1.0=py37_0
 blas=1.0=mkl
@@ -37,7 +37,7 @@ gmodel=0.1.dev0=dev_0
 gmp=6.1.2=h6c8ec71_1
 gst-plugins-base=1.14.0=hbbd80ab_1
 gstreamer=1.14.0=hb453b48_1
-h5py=2.10.0=py37h7918eee_0
+h5py=2.10.0
 hdf5=1.10.4=hb1b8bf9_0
 hypothesis=5.5.4=py_0
 icu=58.2=h9c2bf20_1
