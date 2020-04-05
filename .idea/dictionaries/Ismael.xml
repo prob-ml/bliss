@@ -3,8 +3,10 @@
     <words>
       <w>argparse</w>
       <w>catsim</w>
+      <w>cuda</w>
       <w>currfile</w>
       <w>datasets</w>
+      <w>deconv</w>
       <w>dtype</w>
       <w>figsize</w>
       <w>galcatsim</w>

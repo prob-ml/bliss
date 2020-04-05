@@ -53,7 +53,9 @@ class DecoderSamples(Dataset):
         :param decoder_file: The file from which to load the `state_dict` of the decoder.
         :type decoder_file: Path object.
         """
-        self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands)
+        assert torch.cuda.is_available(), "Need GPU. "
+
+        self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands).cuda()
         self.dec.load_state_dict(torch.load(decoder_file.as_posix()))
         self.num_bands = num_bands
         self.slen = slen
@@ -69,8 +71,7 @@ class DecoderSamples(Dataset):
         :param idx:
         :return: shape = (n_bands, slen, slen)
         """
-
-        return self.dec.get_sample(1, return_latent=False).view(-1, self.slen, self.slen).detach().numpy()
+        return self.dec.get_sample(1, return_latent=False).view(-1, self.slen, self.slen)
 
     def sample(self, n_samples):
         # returns = (z, images) where z.shape = (n_samples, latent_dim) and images.shape =

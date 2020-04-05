@@ -2,9 +2,9 @@
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
 
-asteval
-astropy
-attrs=19.3.0=py_0
+asteval>=0.9.18
+astropy>=4.0.1post1
+attrs==19.3.0
 backcall=0.1.0=py37_0
 blas=1.0=mkl
 bleach=3.1.0=py37_0

@@ -70,7 +70,6 @@ class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
 
 class CenteredGalaxyDecoder(nn.Module):  # generator
 
-    # ToDo: Maybe add its own zeros and one? although messes up previous state dicts.
     def __init__(self, slen, latent_dim, num_bands, hidden=256):
         super(CenteredGalaxyDecoder, self).__init__()
 
@@ -124,7 +123,7 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         return recon_mean, recon_var
 
     def get_sample(self, num_samples, return_latent=False):
-        p_z = Normal(torch.zeros(1), torch.ones(1))
+        p_z = Normal(torch.cuda.FloatTensor(1).zero_(), torch.cuda.FloatTensor(1).fill_(1))
         z = p_z.rsample(torch.tensor([num_samples, self.latent_dim])).view(num_samples, -1)  # shape = (8,)
         samples, _ = self.forward(z)
 
@@ -132,7 +131,7 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
             return z, samples.detach()
 
         else:
-            return samples  # shape = (num_samples, num_bands, slen, slen)
+            return samples.detach()  # shape = (num_samples, num_bands, slen, slen)
 
 
 class OneCenteredGalaxy(nn.Module):
