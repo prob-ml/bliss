@@ -19,7 +19,7 @@ def _draw_pareto_maxed(f_min, f_max, alpha, shape):
     while torch.any(pareto_samples > f_max):
         indx = pareto_samples > f_max
         pareto_samples[indx] = \
-            _draw_pareto(f_min, alpha, torch.sum(indx))
+            _draw_pareto(f_min, alpha, [torch.sum(indx).item()])
 
     return pareto_samples
 
@@ -183,7 +183,7 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
     if is_star:
         psf = sources
         n_bands = psf.shape[0]
-        stars = torch.zeros(batchsize, n_bands, slen, slen, device=device)
+        stars = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
 
         assert fluxes is not None
         assert fluxes.shape[0] == locs.shape[0]
@@ -207,7 +207,7 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
 
         n_bands = sources.shape[2]
 
-        galaxies = torch.zeros(batchsize, n_bands, slen, slen, device=device)
+        galaxies = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
         for n in range(max(n_sources)):
             is_on_n = (n < n_sources).float()
             locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
@@ -223,7 +223,7 @@ def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
-    return mgrid.cuda()
+    return mgrid.type(torch.FloatTensor).cuda()
 
 
 class SourceSimulator:
@@ -247,7 +247,7 @@ class SourceSimulator:
 
         self.slen = slen  # side length of the image
         self.n_bands = n_bands
-        self.background = background.to(self.device)
+        self.background = background.cuda()
 
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
@@ -341,7 +341,6 @@ class SourceDataset:
         self.simulator_args = simulator_args
 
         self.simulator_kwargs = simulator_kwargs
-        self.simulator_kwargs.update(dict(cuda=self.device))
         assert 'is_star' in simulator_kwargs and simulator_kwargs['is_star'] == self.is_star
 
         self.simulator = self.simulator_cls(*simulator_args, **simulator_kwargs)
