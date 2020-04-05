@@ -5,8 +5,6 @@ from os.path import dirname
 
 from torch.distributions import normal, categorical
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-
 
 src_path = Path(dirname(dirname(__file__)))
 root_path = Path(dirname(dirname(dirname(__file__))))
@@ -21,25 +19,28 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     whether there are more than l stars on the kth batch.
     :param n_sources:
     :param max_sources:
+    :param device:
     :return:
     """
     assert len(n_sources.shape) == 1
 
     batchsize = len(n_sources)
-    is_on_array = torch.zeros((batchsize, max_sources), dtype=torch.long).to(device)
+    is_on_array = (torch.cuda.LongTensor(batchsize, max_sources).zero_() if torch.cuda.is_available() else
+                   torch.zeros((batchsize, max_sources), dtype=torch.long))
     for i in range(max_sources):
         is_on_array[:, i] = (n_sources > i)
 
     return is_on_array
 
 
-def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources):
+def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources, device=torch.device("cuda")):
     """
 
     :param patch_n_sources: A tensor of shape (n_samples x n_patches), indicating the number of sources
                             at sample i, batch j. (n_samples = batchsize)
     :type patch_n_sources: class: `torch.Tensor`
     :param max_sources:
+    :param device:
     :type max_sources: int
     :return:
     """
@@ -51,7 +52,7 @@ def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources):
     n_samples = patch_n_sources.shape[0]
     batchsize = patch_n_sources.shape[1]
 
-    is_on_array = torch.zeros((n_samples, batchsize, max_sources), dtype=torch.long).to(device)
+    is_on_array = torch.zeros((n_samples, batchsize, max_sources), dtype=torch.long, device=device)
     for i in range(max_sources):
         is_on_array[:, :, i] = (patch_n_sources > i)
 

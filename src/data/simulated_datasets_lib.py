@@ -4,27 +4,22 @@ import torch.nn.functional as F
 from gmodel.data.galaxy_datasets import DecoderSamples
 
 from ..utils import const
-from ..utils.const import device
 
 
-# ToDo: Get rid of `device`  on top of files,
-# ToDo: push decoder to cuda so that images returned are produced in cuda and already in cuda.
+def _draw_pareto(f_min, alpha, shape):
+    uniform_samples = torch.cuda.FloatTensor(*shape).uniform_()
+    return f_min / (1. - uniform_samples) ** (1 / alpha)
 
 
-def _draw_pareto(f_min, alpha, shape, cuda=torch.device("cpu")):
-    uniform_samples = torch.rand(shape, device=cuda)
-    return f_min / (1 - uniform_samples) ** (1 / alpha)
-
-
-def _draw_pareto_maxed(f_min, f_max, alpha, shape, cuda=torch.device("cpu")):
+def _draw_pareto_maxed(f_min, f_max, alpha, shape):
     # draw pareto conditioned on being less than f_max
 
-    pareto_samples = _draw_pareto(f_min, alpha, shape, cuda)
+    pareto_samples = _draw_pareto(f_min, alpha, shape)
 
     while torch.any(pareto_samples > f_max):
         indx = pareto_samples > f_max
         pareto_samples[indx] = \
-            _draw_pareto(f_min, alpha, torch.sum(indx), cuda)
+            _draw_pareto(f_min, alpha, torch.sum(indx))
 
     return pareto_samples
 
@@ -78,7 +73,7 @@ def _expand_psf(psf, slen):
 
     assert psf_slen <= slen
 
-    psf_expanded = torch.zeros((n_bands, slen, slen))
+    psf_expanded = torch.cuda.FloatTensor(n_bands, slen, slen).zero_()
 
     offset = int((slen - psf_slen) / 2)
 
@@ -87,7 +82,7 @@ def _expand_psf(psf, slen):
     return psf_expanded
 
 
-def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize=1, draw_poisson=True, cuda=torch.device("cpu")):
+def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize=1, draw_poisson=True):
     """
     Return tensor of size batchsize.
     :param mean_sources:
@@ -103,14 +98,14 @@ def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize=1, draw_
         n_sources = np.random.choice(np.arange(min_sources, max_sources + 1),
                                      batchsize)
 
-    return torch.Tensor(n_sources, device=cuda).clamp(max=max_sources,
-                                                      min=min_sources).type(torch.LongTensor)
+    return torch.tensor(n_sources).clamp(max=max_sources,
+                                         min=min_sources).type(torch.LongTensor).cuda()
 
 
-def _sample_locs(max_sources, is_on_array, batchsize=1, cuda=torch.device("cpu")):
+def _sample_locs(max_sources, is_on_array, batchsize=1):
     # 2 = (x,y)
     # torch.rand returns numbers between (0,1)
-    locs = torch.rand((batchsize, max_sources, 2), device=cuda) * is_on_array.unsqueeze(2).float()
+    locs = torch.cuda.FloatTensor(batchsize, max_sources, 2).uniform_() * is_on_array.unsqueeze(2).float()
     return locs
 
 
@@ -155,15 +150,14 @@ def _plot_one_source(slen, locs, source, cached_grid=None, is_star=True):
     return source_plotted
 
 
-def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_grid=None, is_star=True,
-                           cuda=torch.device("cpu")):
+def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_grid=None, is_star=True):
     """
 
     :param slen:
     :param locs: is (batchsize x max_num_sources x len(x_loc, y_loc))
     :param n_sources: has shape: (batchsize)
     :param sources: either a psf(star) with shape (n_bands x slen x slen) tensor, or a galaxy in which case it has
-                   shape (batchsize x max_galaxies x n_bands x slen x slen)
+                   shape (batchsize x max_galaxies x n_bands x slen x slen). Both already in cuda.
     :param fluxes: is (batchsize x n_bands x max_stars)
     :param cached_grid: Grid where the stars should be plotted with shape (slen x slen)
     :param is_star: Whether we are plotting a galaxy or a star (default: star)
@@ -187,9 +181,9 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
         grid = cached_grid
 
     if is_star:
-        stars = 0.
         psf = sources
         n_bands = psf.shape[0]
+        stars = torch.zeros(batchsize, n_bands, slen, slen, device=device)
 
         assert fluxes is not None
         assert fluxes.shape[0] == locs.shape[0]
@@ -213,7 +207,7 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
 
         n_bands = sources.shape[2]
 
-        galaxies = torch.zeros(batchsize, n_bands, slen, slen, device=cuda)
+        galaxies = torch.zeros(batchsize, n_bands, slen, slen, device=device)
         for n in range(max(n_sources)):
             is_on_n = (n < n_sources).float()
             locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
@@ -221,15 +215,15 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
 
             # shape=(batchsize, n_bands, slen, slen)
             one_galaxy = _plot_one_source(slen, locs_n, source, cached_grid=grid, is_star=False)
-            # galaxies += one_galaxy * is_on_n.unsqueeze(1).view(batchsize, n_bands, 1, 1)
             galaxies += one_galaxy
         return galaxies
 
 
-def get_mgrid(slen, cuda=torch.device("cpu")):
+def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
-    return torch.Tensor(np.dstack((y, x)), device=cuda) / offset
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    return mgrid.cuda()
 
 
 class SourceSimulator:
@@ -237,7 +231,7 @@ class SourceSimulator:
     def __init__(self, slen, n_bands, background,
                  max_sources, mean_sources, min_sources,
                  psf=None, transpose_psf=False, add_noise=True, draw_poisson=True,
-                 is_star=True, cuda=None):
+                 is_star=True):
         """
         :param slen: side length of the image.
         :param n_bands: number of bands of each image.
@@ -249,12 +243,11 @@ class SourceSimulator:
         :param add_noise:
         :param draw_poisson:
         """
-        assert cuda is not None, "Should be gpu or cpu."
+        assert torch.cuda.is_available(), "GPU is required."
 
         self.slen = slen  # side length of the image
         self.n_bands = n_bands
-        self.background = background.cuda()
-        self.cuda = cuda
+        self.background = background.to(self.device)
 
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
@@ -271,7 +264,7 @@ class SourceSimulator:
 
         self.draw_poisson = draw_poisson
         self.add_noise = add_noise
-        self.cached_grid = get_mgrid(self.slen, cuda=self.cuda)
+        self.cached_grid = get_mgrid(self.slen)
 
     def draw_image_from_params(self, locs, n_sources, sources=None, fluxes=None):
         """
@@ -294,7 +287,7 @@ class SourceSimulator:
         images_mean = \
             _plot_multiple_sources(self.slen, locs, n_sources, sources,
                                    fluxes=fluxes, cached_grid=self.cached_grid, is_star=self.is_star) + \
-            self.background.unsqueeze(0).to(device)
+            self.background.unsqueeze(0)
 
         # ToDo: Change so that it uses galsim (Poisson Noise?) for now.
         if self.add_noise:
@@ -302,7 +295,7 @@ class SourceSimulator:
                 print('warning: image mean less than 0')
                 images_mean = images_mean.clamp(min=1.0)
 
-            images = (torch.sqrt(images_mean) * torch.randn(images_mean.shape).to(device)
+            images = (torch.sqrt(images_mean) * torch.cuda.FloatTensor(*images_mean.shape).uniform_()
                       + images_mean)
         else:
             images = images_mean
@@ -336,12 +329,11 @@ class SourceDataset:
     simulator_cls = SourceSimulator
 
     def __init__(self, n_images, simulator_args, simulator_kwargs,
-                 is_star=True, use_cuda=True):
+                 is_star=True):
         """
         :param n_images: same as batchsize.
         """
-        assert torch.cuda.is_available() or not use_cuda, "No GPU is available"
-        self.cuda = torch.device("cuda") if use_cuda else torch.device("cpu")  # use context manager to specify device.
+        assert torch.cuda.is_available(), "No GPU is available, which we assume is required."
 
         self.n_images = n_images  # = batchsize.
         self.is_star = is_star
@@ -349,7 +341,7 @@ class SourceDataset:
         self.simulator_args = simulator_args
 
         self.simulator_kwargs = simulator_kwargs
-        self.simulator_kwargs.update(dict(cuda=self.cuda))
+        self.simulator_kwargs.update(dict(cuda=self.device))
         assert 'is_star' in simulator_kwargs and simulator_kwargs['is_star'] == self.is_star
 
         self.simulator = self.simulator_cls(*simulator_args, **simulator_kwargs)
@@ -400,8 +392,9 @@ class GalaxySimulator(SourceSimulator):
         assert len(n_galaxy.shape) == 1
         assert n_galaxy.shape[0] == batchsize
 
-        galaxy_params = torch.zeros(batchsize, self.max_sources, self.latent_dim)
-        single_galaxies = torch.zeros(batchsize, self.max_sources, self.n_bands, self.galaxy_slen, self.galaxy_slen)
+        galaxy_params = torch.cuda.FloatTensor(batchsize, self.max_sources, self.latent_dim).zero_()
+        single_galaxies = torch.cuda.FloatTensor(batchsize, self.max_sources, self.n_bands, self.galaxy_slen,
+                                                 self.galaxy_slen).zero_()
 
         # z, shape = (num_samples, latent_dim)
         # galaxies, shape = (num_samples, n_bands, slen, slen)
@@ -425,7 +418,7 @@ class GalaxyDataset(SourceDataset):
         """
         simulator_kwargs.update(dict(is_star=False))
         super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
-                                            is_star=False, use_cuda=True)
+                                            is_star=False)
 
     @classmethod
     def load_dataset_from_params(cls, n_images, data_params,
@@ -482,20 +475,22 @@ class StarSimulator(SourceSimulator):
         assert self.background.shape[1] == self.slen
         assert self.background.shape[2] == self.slen
 
+        self.psf = self.psf.cuda()
+
         # prior parameters
         self.f_min = f_min
         self.f_max = f_max
         self.alpha = alpha  # pareto parameter.
 
-        self.psf_og = self.psf.clone()  # .detach() ?
+        self.psf_og = self.psf.clone()
         # get psf shape to match image shape
         # if slen is even, we still make psf dimension odd.
         # otherwise, the psf won't have a peak in the center pixel.
         _slen = self.slen + ((self.slen % 2) == 0) * 1
         if self.slen >= self.psf_og.shape[-1]:
-            self.psf = _expand_psf(self.psf_og, _slen).to(device)
+            self.psf = _expand_psf(self.psf_og, _slen)
         else:
-            self.psf = _trim_psf(self.psf_og, _slen).to(device)
+            self.psf = _trim_psf(self.psf_og, _slen)
 
         if self.transpose_psf:
             self.psf = self.psf.transpose(1, 2)
@@ -511,8 +506,7 @@ class StarSimulator(SourceSimulator):
                                          shape=(batchsize, self.max_sources))
 
         if self.n_bands > 1:
-            colors = torch.randn(batchsize, self.max_sources, self.n_bands - 1).to(device) * 0.15 + 0.3
-
+            colors = torch.cuda.FloatTensor(batchsize, self.max_sources, self.n_bands-1).uniform_() * 0.15 + 0.3
             _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(2)
 
             fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim=2) * is_on_array.unsqueeze(2).float()
@@ -531,7 +525,7 @@ class StarsDataset(SourceDataset):
         """
         simulator_kwargs.update(dict(is_star=True))
         super(StarsDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
-                                           is_star=True, use_cuda=True)
+                                           is_star=True)
 
     @classmethod
     def load_dataset_from_params(cls, n_images, data_params,

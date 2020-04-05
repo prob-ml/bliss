@@ -4,6 +4,7 @@
       <w>batchsize</w>
       <w>cuda</w>
       <w>deblending</w>
+      <w>galsim</w>
       <w>indx</w>
       <w>locs</w>
       <w>mgrid</w>

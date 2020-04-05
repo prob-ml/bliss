@@ -28,7 +28,7 @@ eigen=3.3.7=hfd86e86_0
 entrypoints=0.3=py37_0
 expat=2.2.6=he6710b0_0
 fftw=3.3.8=h7b6447c_3
-fitsio=1.0.5=py37h0c87ef4_0
+fitsio==1.0.5
 fontconfig=2.13.0=h9420a91_0
 freetype=2.9.1=h8a8886c_1
 future=0.18.2=py37_0
@@ -103,7 +103,7 @@ ncurses=6.2=he6710b0_0
 networkx=2.4=py_0
 ninja=1.9.0=py37hfd86e86_0
 notebook=6.0.3=py37_0
-numpy=1.18.1=py37h4f9e942_0
+numpy>=1.18.1
 numpy-base=1.18.1=py37hde5b4d6_1
 olefile=0.46=py37_0
 openssl=1.1.1e=h7b6447c_0
