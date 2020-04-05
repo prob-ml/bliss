@@ -6,7 +6,7 @@ from gmodel.data.galaxy_datasets import DecoderSamples
 from ..utils import const
 from ..utils.const import device
 
-# ToDo: Identify which things need to be in cuda and which don't (usually only the images/sample parameters)
+
 # ToDo: Get rid of `device`  on top of files,
 # ToDo: push decoder to cuda so that images returned are produced in cuda and already in cuda.
 
@@ -87,7 +87,7 @@ def _expand_psf(psf, slen):
     return psf_expanded
 
 
-def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize=1, draw_poisson=True):
+def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize=1, draw_poisson=True, cuda=torch.device("cpu")):
     """
     Return tensor of size batchsize.
     :param mean_sources:
@@ -103,14 +103,14 @@ def _sample_n_sources(mean_sources, min_sources, max_sources, batchsize=1, draw_
         n_sources = np.random.choice(np.arange(min_sources, max_sources + 1),
                                      batchsize)
 
-    return torch.Tensor(n_sources).clamp(max=max_sources,
-                                         min=min_sources).type(torch.LongTensor).to(device)
+    return torch.Tensor(n_sources, device=cuda).clamp(max=max_sources,
+                                                      min=min_sources).type(torch.LongTensor)
 
 
-def _sample_locs(max_sources, is_on_array, batchsize=1):
+def _sample_locs(max_sources, is_on_array, batchsize=1, cuda=torch.device("cpu")):
     # 2 = (x,y)
     # torch.rand returns numbers between (0,1)
-    locs = torch.rand((batchsize, max_sources, 2)).to(device) * is_on_array.unsqueeze(2).float()
+    locs = torch.rand((batchsize, max_sources, 2), device=cuda) * is_on_array.unsqueeze(2).float()
     return locs
 
 
@@ -150,12 +150,13 @@ def _plot_one_source(slen, locs, source, cached_grid=None, is_star=True):
     else:  # plotting a galaxy.
         assert source.shape[0] == batchsize
         galaxy = source
-        source_plotted = F.grid_sample(galaxy.cuda(device), grid_loc, align_corners=True)
+        source_plotted = F.grid_sample(galaxy, grid_loc, align_corners=True)
 
     return source_plotted
 
 
-def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_grid=None, is_star=True):
+def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_grid=None, is_star=True,
+                           cuda=torch.device("cpu")):
     """
 
     :param slen:
@@ -212,7 +213,7 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
 
         n_bands = sources.shape[2]
 
-        galaxies = torch.zeros(batchsize, n_bands, slen, slen).cuda(device)
+        galaxies = torch.zeros(batchsize, n_bands, slen, slen, device=cuda)
         for n in range(max(n_sources)):
             is_on_n = (n < n_sources).float()
             locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
@@ -226,7 +227,6 @@ def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_g
 
 
 def get_mgrid(slen, cuda=torch.device("cpu")):
-
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
     return torch.Tensor(np.dstack((y, x)), device=cuda) / offset
@@ -425,12 +425,11 @@ class GalaxyDataset(SourceDataset):
         """
         simulator_kwargs.update(dict(is_star=False))
         super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
-                                            is_star=False)
+                                            is_star=False, use_cuda=True)
 
     @classmethod
     def load_dataset_from_params(cls, n_images, data_params,
                                  add_noise=True, draw_poisson=True):
-
         # prepare background.
         background_path = const.data_path.joinpath(data_params['background_file'])
         slen = data_params['slen']
@@ -532,7 +531,7 @@ class StarsDataset(SourceDataset):
         """
         simulator_kwargs.update(dict(is_star=True))
         super(StarsDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
-                                           is_star=True)
+                                           is_star=True, use_cuda=True)
 
     @classmethod
     def load_dataset_from_params(cls, n_images, data_params,
