@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from utils import const
-from utils import image_utils
+from .utils import const
+from .utils import image_utils
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -38,12 +38,12 @@ class SourceEncoder(nn.Module):
         :param edge_padding: length of padding (in pixels).
         :param n_bands : number of bands
         :param max_detections:
-        :param n_source_params:
+        :param n_source_params: The dimension of 'source parameters', fluxes in the case of stars and latent variable
+        dimension in the case of galaxy.
         """
-        # TODO: Clarify what n_source_params is.
-
         super(SourceEncoder, self).__init__()
 
+        # TODO: How to choose step size?
         # image parameters
         self.slen = slen
         self.patch_slen = patch_slen
@@ -107,24 +107,25 @@ class SourceEncoder(nn.Module):
             nn.ReLU(),
         )
 
+        # TODO: Clarify this counting.
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
         #    seven parameters (the means, three variances, for two locs and one
         #    flux; and one probability)
-        if n_source_params is None:
+        if n_source_params is None:  # fluxes
             self.n_source_params = self.n_bands
             # we will take exp for fluxes
             self.constrain_source_params = True
-        else:
+        else:  # something else like latent parameters in galaxy model.
             self.n_source_params = n_source_params
 
             # these can be anywhere in the reals
             self.constrain_source_params = False
 
-        self.n_params_per_star = (4 + 2 * self.n_source_params)
+        self.n_params_per_source = (4 + 2 * self.n_source_params)
 
         self.dim_out_all = \
-            int(0.5 * self.max_detections * (self.max_detections + 1) * self.n_params_per_star + \
+            int(0.5 * self.max_detections * (self.max_detections + 1) * self.n_params_per_source +
                 1 + self.max_detections)
         self._get_hidden_indices()
 
@@ -135,7 +136,7 @@ class SourceEncoder(nn.Module):
     # The layers of our neural network
     ############################
     def _forward_to_pooled_hidden(self, image):
-        # forward to the layer that is shared by all n_stars
+        # forward to the layer that is shared by all n_sources
 
         log_img = torch.log(image - image.min() + 1.)
 
@@ -144,14 +145,14 @@ class SourceEncoder(nn.Module):
         return self.enc_fc(h)
 
     def get_var_params_all(self, image_patches):
-        # concatenate all output parameters for all possible n_stars
+        # concatenate all output parameters for all possible n_sources
         h = self._forward_to_pooled_hidden(image_patches)
         return self.enc_final(h)
 
     ######################
     # Forward modules
     ######################
-    def forward(self, image_patches, n_stars=None):
+    def forward(self, image_patches, n_sources=None):
         # pass through neural network, h is the array fo variational distribution parameters.
         # h has shape:
         h = self.get_var_params_all(image_patches)
@@ -159,44 +160,42 @@ class SourceEncoder(nn.Module):
         # get probability of n_stars
         log_probs_n = self.get_logprob_n_from_var_params(h)
 
-        if n_stars is None:
-            n_stars = torch.argmax(log_probs_n, dim=1)
+        if n_sources is None:
+            n_sources = torch.argmax(log_probs_n, dim=1)
 
         # extract parameters
-        loc_mean, loc_logvar, \
-        log_flux_mean, log_flux_logvar = \
-            self.get_var_params_for_n_stars(h, n_stars)
+        loc_mean, loc_logvar, log_flux_mean, log_flux_logvar = \
+            self.get_var_params_for_n_stars(h, n_sources)
 
-        return loc_mean, loc_logvar, \
-               log_flux_mean, log_flux_logvar, log_probs_n
+        return loc_mean, loc_logvar, log_flux_mean, log_flux_logvar, log_probs_n
 
     def get_logprob_n_from_var_params(self, h):
         free_probs = h[:, self.prob_indx]
 
         return self.log_softmax(free_probs)
 
-    def get_var_params_for_n_stars(self, h, n_stars):
+    def get_var_params_for_n_stars(self, h, n_sources):
 
-        if len(n_stars.shape) == 1:
-            n_stars = n_stars.unsqueeze(0)
+        if len(n_sources.shape) == 1:
+            n_sources = n_sources.unsqueeze(0)
             squeeze_output = True
         else:
             squeeze_output = False
 
         # this class takes in an array of n_stars, n_samples x batchsize
         assert h.shape[1] == self.dim_out_all
-        assert h.shape[0] == n_stars.shape[1]
+        assert h.shape[0] == n_sources.shape[1]
 
-        n_samples = n_stars.shape[0]
+        n_samples = n_sources.shape[0]
 
         batchsize = h.size(0)
         _h = torch.cat((h, torch.zeros(batchsize, 1).to(device)), dim=1)
 
-        loc_logit_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
-        loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
+        loc_logit_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
+        loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
 
-        log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
-        log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_stars.transpose(0, 1)].reshape(batchsize, -1))
+        log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
+        log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
 
         # reshape
         loc_logit_mean = loc_logit_mean.reshape(batchsize, n_samples, self.max_detections, 2).transpose(0, 1)
@@ -239,7 +238,7 @@ class SourceEncoder(nn.Module):
         self.prob_indx = torch.zeros(self.max_detections + 1).type(torch.LongTensor).to(device)
 
         for n_detections in range(1, self.max_detections + 1):
-            indx0 = int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_star) + \
+            indx0 = int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_source) + \
                     (n_detections - 1) + 1
 
             indx1 = (2 * n_detections) + indx0
@@ -262,13 +261,13 @@ class SourceEncoder(nn.Module):
     ######################
     # Modules for patching images and parameters
     ######################
-    def get_image_patches(self, images, locs=None, fluxes=None,
+    def get_image_patches(self, images, locs=None, source_params=None,
                           clip_max_sources=False):
         """
 
         :param images: torch.Tensor of shape (batchsize x num_bands x slen x slen)
         :param locs:
-        :param fluxes:
+        :param source_params:
         :param clip_max_sources:
         :return:
         """
@@ -277,30 +276,28 @@ class SourceEncoder(nn.Module):
 
         slen = images.shape[-1]
 
+        # TODO: Why would you use this?
         if not (images.shape[-1] == self.slen):
             # get the coordinates
-            tile_coords = image_utils.get_tile_coords(slen, slen,
-                                                      self.patch_slen,
-                                                      self.step)
+            raise RuntimeError("Why is the image slen not the same as the encoder slen?")
+            # tile_coords = image_utils.get_tile_coords(slen, slen, self.patch_slen, self.step)
         else:
             # else, use the cached coordinates
             tile_coords = self.tile_coords
-
-        batchsize = images.shape[0]
 
         image_patches = \
             image_utils.tile_images(images,
                                     self.patch_slen,
                                     self.step)
 
-        if (locs is not None) and (fluxes is not None):
-            assert fluxes.shape[2] == self.n_source_params
+        if (locs is not None) and (source_params is not None):
+            assert source_params.shape[2] == self.n_source_params
 
             # get parameters in patch as well
             patch_locs, patch_fluxes, patch_n_sources, patch_is_on_array = \
                 image_utils.get_params_in_patches(tile_coords,
                                                   locs,
-                                                  fluxes,
+                                                  source_params,
                                                   slen,
                                                   self.patch_slen,
                                                   self.edge_padding)
@@ -341,7 +338,7 @@ class SourceEncoder(nn.Module):
 
         assert (n_image_patches % tile_coords.shape[0]) == 0
 
-        locs, fluxes, n_stars = \
+        locs, fluxes, n_sources = \
             image_utils.get_full_params_from_patch_params(
                 patch_locs_sampled.reshape(n_samples * n_image_patches, -1, 2),
                 patch_fluxes_sampled.reshape(n_samples * n_image_patches, -1, self.n_source_params),
@@ -350,7 +347,7 @@ class SourceEncoder(nn.Module):
                 self.patch_slen,
                 self.edge_padding)
 
-        return locs, fluxes, n_stars
+        return locs, fluxes, n_sources
 
     def sample_star_encoder(self, image,
                             n_samples=1,

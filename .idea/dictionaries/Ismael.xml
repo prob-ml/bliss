@@ -2,15 +2,28 @@
   <dictionary name="Ismael">
     <words>
       <w>batchsize</w>
+      <w>conv</w>
+      <w>convolutional</w>
       <w>cuda</w>
       <w>deblending</w>
+      <w>fullimage</w>
       <w>galsim</w>
       <w>indx</w>
       <w>locs</w>
+      <w>logprob</w>
+      <w>logvar</w>
       <w>mgrid</w>
       <w>nbands</w>
+      <w>nstar</w>
+      <w>probs</w>
+      <w>randn</w>
+      <w>reals</w>
       <w>slen</w>
+      <w>softmax</w>
+      <w>subimage</w>
       <w>tbackground</w>
+      <w>xlen</w>
+      <w>ylen</w>
     </words>
   </dictionary>
 </component>

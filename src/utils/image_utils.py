@@ -1,8 +1,6 @@
 import torch
 from torch import nn
-from GalaxyModel.src import utils
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from . import const
 
 
 def _extract_patches_2d(img, patch_shape, step=None, batch_first=False):
@@ -77,6 +75,7 @@ def tile_images(images, subimage_slen, step):
     assert (image_ylen - subimage_slen) % step == 0
 
     n_bands = images.shape[1]
+    image_patches = None
     for b in range(n_bands):
         image_patches_b = _extract_patches_2d(images[:, b:(b + 1), :, :],
                                               patch_shape=[subimage_slen, subimage_slen],
@@ -93,7 +92,7 @@ def tile_images(images, subimage_slen, step):
 
 def get_tile_coords(image_xlen, image_ylen, subimage_slen, step):
     """
-    This function is used in conjuction with tile_images above. This records (x0, x1) indices
+    This function is used in conjunction with tile_images above. This records (x0, x1) indices
     each image patch comes from.
     :param image_xlen: The x side length of the image in pixels.
     :param image_ylen: The y side length of the image in pixels.
@@ -101,6 +100,7 @@ def get_tile_coords(image_xlen, image_ylen, subimage_slen, step):
     :param step: separation between each patch/subimage.
     :return: tile_coords, a torch.LongTensor
     """
+    assert torch.cuda.is_available(), "requires use of cuda. "
 
     nx_patches = ((image_xlen - subimage_slen) // step) + 1
     ny_patches = ((image_ylen - subimage_slen) // step) + 1
@@ -110,23 +110,39 @@ def get_tile_coords(image_xlen, image_ylen, subimage_slen, step):
         return [(i // ny_patches) * step,
                 (i % ny_patches) * step]
 
-    tile_coords = torch.LongTensor([return_coords(i) for i in range(n_patches)]).to(device)
+    tile_coords = torch.LongTensor([return_coords(i) for i in range(n_patches)]).cuda()
 
     return tile_coords
 
 
-def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
+def bring_to_front(n_source_params, n_sources, is_on_array, source_params, locs):
+    # puts all the on sources in front
+    is_on_array_full = const.get_is_on_from_n_sources(n_sources, n_sources.max())
+    indx = is_on_array_full.clone()
+    indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
+
+    new_fluxes = (torch.gather(source_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_source_params)) *
+                  is_on_array_full.float().unsqueeze(2))
+    new_locs = (torch.gather(locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)) *
+                is_on_array_full.float().unsqueeze(2))
+
+    return new_fluxes, new_locs, is_on_array_full
+
+
+def get_params_in_patches(tile_coords, locs, source_params, slen, subimage_slen,
                           edge_padding=0):
     """
     Pass in the tile coordinates, the
     :param tile_coords:
     :param locs:
-    :param fluxes:
+    :param source_params:
     :param slen:
     :param subimage_slen:
     :param edge_padding:
     :return:
     """
+    # only used in running network so need cuda
+    assert torch.cuda.is_available()
     # locs are the coordinates in the full image, in coordinates between 0-1
     assert torch.all(locs <= 1.)
     assert torch.all(locs >= 0.)
@@ -136,7 +152,7 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
 
     subimage_batchsize = n_patches * fullimage_batchsize  # total number of patches
 
-    max_stars = locs.shape[1]
+    max_sources = locs.shape[1]
 
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
@@ -147,36 +163,29 @@ def get_params_in_patches(tile_coords, locs, fluxes, slen, subimage_slen,
 
     patch_locs = \
         (which_locs_array.unsqueeze(3) * locs.unsqueeze(1) -
-         (tile_coords + edge_padding - 0.5)).view(subimage_batchsize, max_stars, 2) / \
+         (tile_coords + edge_padding - 0.5)).view(subimage_batchsize, max_sources, 2) / \
         (subimage_slen - 2 * edge_padding)
     patch_locs = torch.relu(patch_locs)  # by subtracting off, some are negative now; just set these to 0
-    if fluxes is not None:
-        assert fullimage_batchsize == fluxes.shape[0]
-        assert max_stars == fluxes.shape[1]
-        n_bands = fluxes.shape[2]
+    if source_params is not None:
+        assert fullimage_batchsize == source_params.shape[0]
+        assert max_sources == source_params.shape[1]
+        n_source_params = source_params.shape[2]
         patch_fluxes = \
-            (which_locs_array.unsqueeze(3) * fluxes.unsqueeze(1)).view(subimage_batchsize, max_stars, n_bands)
+            (which_locs_array.unsqueeze(3) * source_params.unsqueeze(1)).view(subimage_batchsize, max_sources,
+                                                                              n_source_params)
     else:
-        patch_fluxes = torch.zeros(patch_locs.shape[0], patch_locs.shape[1], 1)
-        n_bands = 1
+        raise RuntimeError("Why didn't you provide source_params")
+        # patch_fluxes = torch.zeros(patch_locs.shape[0], patch_locs.shape[1], 1)
+        # n_source_params = 1
 
     # sort locs so all the zeros are at the end
-    is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool).to(device)
-    n_stars_per_patch = is_on_array.float().sum(dim=1).type(torch.LongTensor).to(device)
+    is_on_array = which_locs_array.view(subimage_batchsize, max_sources).type(torch.bool).cuda()
+    n_sources_per_patch = is_on_array.float().sum(dim=1).type(torch.LongTensor).cuda()
 
-    is_on_array_sorted = utils.get_is_on_from_n_stars(n_stars_per_patch, n_stars_per_patch.max())
+    patch_fluxes, patch_locs, patch_is_on_array = bring_to_front(n_source_params, n_sources_per_patch, is_on_array,
+                                                                 patch_fluxes, patch_locs)
 
-    indx = is_on_array_sorted.clone()
-    indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
-
-    patch_fluxes = torch.gather(patch_fluxes, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_bands)) * \
-                   is_on_array_sorted.float().unsqueeze(2)
-    patch_locs = torch.gather(patch_locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)) * \
-                 is_on_array_sorted.float().unsqueeze(2)
-
-    patch_is_on_array = is_on_array_sorted
-
-    return patch_locs, patch_fluxes, n_stars_per_patch, patch_is_on_array
+    return patch_locs, patch_fluxes, n_sources_per_patch, patch_is_on_array
 
 
 def get_full_params_from_patch_params(patch_locs, patch_fluxes,
@@ -184,7 +193,7 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
                                       full_slen,
                                       stamp_slen,
                                       edge_padding):
-    # off stars should have patch_locs == 0 and patch_fluxes == 0
+    # off sources should have patch_locs == 0 and patch_fluxes == 0
 
     assert (patch_fluxes.shape[0] % tile_coords.shape[0]) == 0
     batchsize = int(patch_fluxes.shape[0] / tile_coords.shape[0])
@@ -205,15 +214,11 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
     n_stars = torch.sum(patch_is_on_bool > 0, dim=1)
 
     # puts all the on stars in front
-    is_on_array_full = utils.get_is_on_from_n_stars(n_stars, n_stars.max())
+    is_on_array_full = const.get_is_on_from_n_sources(n_stars, n_stars.max())
     indx = is_on_array_full.clone()
     indx[indx == 1] = torch.nonzero(patch_is_on_bool)[:, 1]
 
-    fluxes = torch.gather(fluxes, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_bands)) * \
-             is_on_array_full.float().unsqueeze(2)
-    locs = torch.gather(locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)) * \
-           is_on_array_full.float().unsqueeze(2)
-
+    fluxes, locs, _ = bring_to_front(n_bands, n_stars, patch_is_on_bool, fluxes, locs)
     return locs, fluxes, n_stars
 
 

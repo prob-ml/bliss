@@ -320,9 +320,9 @@ class SourceSimulator:
         locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
 
         # either fluxes or galaxy parameters.
-        params = self.get_source_params(n_sources, is_on_array=is_on_array, batchsize=batchsize)
+        source_params = self.get_source_params(n_sources, is_on_array=is_on_array, batchsize=batchsize)
 
-        return n_sources, locs, params
+        return n_sources, locs, source_params
 
 
 class SourceDataset:
@@ -354,22 +354,22 @@ class SourceDataset:
         return self.n_images
 
     def __getitem__(self, idx):
-        n_sources, locs, params = self.simulator.sample_parameters(batchsize=1)
+        n_sources, locs, source_params = self.simulator.sample_parameters(batchsize=1)
 
         if self.is_star:
-            fluxes = params
+            fluxes = source_params
             gal_params, single_galaxies = None, None
         else:
             fluxes = None
-            gal_params, single_galaxies = params
+            gal_params, single_galaxies = source_params
 
         images = self.simulator.draw_image_from_params(locs, n_sources, sources=single_galaxies,
                                                        fluxes=fluxes)
 
-        return {'image': images.squeeze(),
+        return {'images': images.squeeze(),
                 'background': self.background,
                 'locs': locs.squeeze(),
-                'params': fluxes.squeeze() if self.is_star else gal_params.squeeze(),
+                'source_params': fluxes.squeeze() if self.is_star else gal_params.squeeze(),
                 'n_stars': n_sources.squeeze()
                 }
 
@@ -381,8 +381,9 @@ class GalaxySimulator(SourceSimulator):
         """
         super(GalaxySimulator, self).__init__(*args, **kwargs)
         self.gal_decoder_path = const.models_path.joinpath(gal_decoder_file)
-        self.ds = DecoderSamples(galaxy_slen, self.gal_decoder_path, num_bands=self.n_bands)
         self.galaxy_slen = galaxy_slen
+
+        self.ds = DecoderSamples(galaxy_slen, self.gal_decoder_path, num_bands=self.n_bands)
         self.latent_dim = self.ds.latent_dim
 
         assert self.ds.num_bands == self.n_bands == self.background.shape[0]
@@ -399,6 +400,7 @@ class GalaxySimulator(SourceSimulator):
         # galaxies, shape = (num_samples, n_bands, slen, slen)
         num_samples = int(n_galaxy.sum().item())
         z, galaxies = self.ds.sample(num_samples)
+
         count = 0
         for batch_i, n_gal in enumerate(n_galaxy):
             n_gal = int(n_gal)
