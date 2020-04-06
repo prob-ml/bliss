@@ -10,6 +10,7 @@
       <w>galsim</w>
       <w>indx</w>
       <w>locs</w>
+      <w>logit</w>
       <w>logprob</w>
       <w>logvar</w>
       <w>mgrid</w>

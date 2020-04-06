@@ -122,6 +122,7 @@ class ModelParams(nn.Module):
 
         self.cached_grid = get_mgrid(observed_image.shape[-1]).to(device)
 
+    # TODO: Change to correct usage (plot multiple sources)
     def _plot_stars(self, locs, fluxes, n_stars, psf):
         self.stars = plot_multiple_stars(self.slen, locs, n_stars,
                                          fluxes, psf, self.cached_grid)

@@ -38,7 +38,7 @@ class SourceEncoder(nn.Module):
         :param edge_padding: length of padding (in pixels).
         :param n_bands : number of bands
         :param max_detections:
-        :param n_source_params: The dimension of 'source parameters', fluxes in the case of stars and latent variable
+        :param n_source_params: The dimension of 'source parameters' which are fluxes in the case of stars and latent variable
         dimension in the case of galaxy.
         """
         super(SourceEncoder, self).__init__()
@@ -136,15 +136,29 @@ class SourceEncoder(nn.Module):
     # The layers of our neural network
     ############################
     def _forward_to_pooled_hidden(self, image):
-        # forward to the layer that is shared by all n_sources
+        """
+        Forward to the layer that is shared by all n_sources
+
+        Args:
+            image:
+
+        Returns:
+        """
 
         log_img = torch.log(image - image.min() + 1.)
-
         h = self.enc_conv(log_img)
 
         return self.enc_fc(h)
 
     def get_var_params_all(self, image_patches):
+        """
+
+        Args:
+            image_patches: A tensor of shape (n_patches, n_bands, patch_slen, patch_slen)
+
+        Returns:
+
+        """
         # concatenate all output parameters for all possible n_sources
         h = self._forward_to_pooled_hidden(image_patches)
         return self.enc_final(h)
@@ -170,11 +184,36 @@ class SourceEncoder(nn.Module):
         return loc_mean, loc_logvar, log_flux_mean, log_flux_logvar, log_probs_n
 
     def get_logprob_n_from_var_params(self, h):
+        """
+        Obtain log probability of number of n_sources.
+
+        * Example: If max_detections = 3, then Tensor will be (num_patches x 3) since will return probability of
+        having 0,1,2 stars.
+
+        Args:
+            h:
+
+        Returns:
+
+        """
+        #
+        # If max_dect =3
+
         free_probs = h[:, self.prob_indx]
 
         return self.log_softmax(free_probs)
 
     def get_var_params_for_n_stars(self, h, n_sources):
+        """
+        Index into all possible combinations of variational parameters (h) to obtain actually variational parameters
+        for n_sources.
+        Args:
+            h: Huge triangular array with variational parameters.
+            n_sources:
+
+        Returns:
+
+        """
 
         if len(n_sources.shape) == 1:
             n_sources = n_sources.unsqueeze(0)
@@ -195,7 +234,8 @@ class SourceEncoder(nn.Module):
         loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
 
         log_flux_mean = torch.gather(_h, 1, self.fluxes_mean_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
-        log_flux_logvar = torch.gather(_h, 1, self.fluxes_var_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
+        log_flux_logvar = torch.gather(_h, 1,
+                                       self.fluxes_var_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
 
         # reshape
         loc_logit_mean = loc_logit_mean.reshape(batchsize, n_samples, self.max_detections, 2).transpose(0, 1)
@@ -219,6 +259,11 @@ class SourceEncoder(nn.Module):
                    log_flux_mean, log_flux_logvar
 
     def _get_hidden_indices(self):
+        """
+        Get indices necessary to maintain the huge triangular matrix array.
+        Returns:
+
+        """
 
         self.locs_mean_indx_mat = \
             torch.full((self.max_detections + 1, 2 * self.max_detections),
@@ -332,7 +377,7 @@ class SourceEncoder(nn.Module):
         if not (slen == self.slen):
             tile_coords = image_utils.get_tile_coords(slen, slen,
                                                       self.patch_slen,
-                                                      self.step);
+                                                      self.step)
         else:
             tile_coords = self.tile_coords
 
@@ -370,7 +415,7 @@ class SourceEncoder(nn.Module):
         h = self.get_var_params_all(image_patches)
 
         # get log probs for number of stars
-        log_probs_nstar_patch = self.get_logprob_n_from_var_params(h);
+        log_probs_nstar_patch = self.get_logprob_n_from_var_params(h)
 
         if not training:
             h = h.detach()
