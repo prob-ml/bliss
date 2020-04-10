@@ -313,7 +313,7 @@ class SourceSimulator:
         n_sources = _sample_n_sources(self.mean_sources, self.min_sources, self.max_sources, batchsize,
                                       draw_poisson=self.draw_poisson)
 
-        # multiply by zero where they are no stars (recall parameters have entry for up to max_stars)
+        # multiply by zero where they are no sources (recall parameters have entry for up to max_sources)
         is_on_array = const.get_is_on_from_n_sources(n_sources, self.max_sources)
 
         # sample locations
@@ -370,7 +370,7 @@ class SourceDataset:
                 'background': self.background,
                 'locs': locs.squeeze(),
                 'source_params': fluxes.squeeze() if self.is_star else gal_params.squeeze(),
-                'n_stars': n_sources.squeeze()
+                'n_sources': n_sources.squeeze()
                 }
 
 
