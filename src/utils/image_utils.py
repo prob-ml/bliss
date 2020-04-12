@@ -121,12 +121,12 @@ def bring_to_front(n_source_params, n_sources, is_on_array, source_params, locs)
     indx = is_on_array_full.clone()
     indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
 
-    new_fluxes = (torch.gather(source_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_source_params)) *
-                  is_on_array_full.float().unsqueeze(2))
+    new_source_params = (torch.gather(source_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_source_params)) *
+                         is_on_array_full.float().unsqueeze(2))
     new_locs = (torch.gather(locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)) *
                 is_on_array_full.float().unsqueeze(2))
 
-    return new_fluxes, new_locs, is_on_array_full
+    return new_source_params, new_locs, is_on_array_full
 
 
 def get_params_in_patches(tile_coords, locs, source_params, slen, subimage_slen,
@@ -170,56 +170,57 @@ def get_params_in_patches(tile_coords, locs, source_params, slen, subimage_slen,
         assert fullimage_batchsize == source_params.shape[0]
         assert max_sources == source_params.shape[1]
         n_source_params = source_params.shape[2]
-        patch_fluxes = \
+        patch_source_params = \
             (which_locs_array.unsqueeze(3) * source_params.unsqueeze(1)).view(subimage_batchsize, max_sources,
                                                                               n_source_params)
     else:
-        raise RuntimeError("Why didn't you provide source_params")
-        # patch_fluxes = torch.zeros(patch_locs.shape[0], patch_locs.shape[1], 1)
-        # n_source_params = 1
+        patch_source_params = torch.zeros(patch_locs.shape[0], patch_locs.shape[1], 1)
+        n_source_params = 1
 
     # sort locs so all the zeros are at the end
     is_on_array = which_locs_array.view(subimage_batchsize, max_sources).type(torch.bool).cuda()
     n_sources_per_patch = is_on_array.float().sum(dim=1).type(torch.LongTensor).cuda()
 
-    patch_fluxes, patch_locs, patch_is_on_array = bring_to_front(n_source_params, n_sources_per_patch, is_on_array,
-                                                                 patch_fluxes, patch_locs)
+    patch_source_params, patch_locs, patch_is_on_array = bring_to_front(n_source_params, n_sources_per_patch,
+                                                                        is_on_array,
+                                                                        patch_source_params, patch_locs)
 
-    return patch_locs, patch_fluxes, n_sources_per_patch, patch_is_on_array
+    return patch_locs, patch_source_params, n_sources_per_patch, patch_is_on_array
 
 
-def get_full_params_from_patch_params(patch_locs, patch_fluxes,
+def get_full_params_from_patch_params(patch_locs, patch_source_params,
                                       tile_coords,
                                       full_slen,
                                       stamp_slen,
                                       edge_padding):
-    # NOTE: off sources should have patch_locs == 0 and patch_fluxes == 0
+    # NOTE: off sources should have patch_locs == 0 and patch_source_params == 0
 
-    assert (patch_fluxes.shape[0] % tile_coords.shape[0]) == 0
-    batchsize = int(patch_fluxes.shape[0] / tile_coords.shape[0])
+    # reshaped before passing in into shape (batchsize * n_image_patches, -1, self.n_source_params)
+    assert (patch_source_params.shape[0] % tile_coords.shape[0]) == 0
+    batchsize = int(patch_source_params.shape[0] / tile_coords.shape[0])
 
-    assert (patch_fluxes.shape[0] % batchsize) == 0
-    n_stars_in_batch = int(patch_fluxes.shape[0] * patch_fluxes.shape[1] / batchsize)
+    assert (patch_source_params.shape[0] % batchsize) == 0
+    n_sources_in_batch = int(patch_source_params.shape[0] * patch_source_params.shape[1] / batchsize)
 
-    n_bands = patch_fluxes.shape[2]
-    fluxes = patch_fluxes.view(batchsize, n_stars_in_batch, n_bands)
+    latent_dim = patch_source_params.shape[2]  # = n_bands in the case of fluxes.
+    source_params = patch_source_params.view(batchsize, n_sources_in_batch, latent_dim)
 
     scale = (stamp_slen - 2 * edge_padding)
     bias = tile_coords.repeat(batchsize, 1).unsqueeze(1).float() + edge_padding - 0.5
     locs = (patch_locs * scale + bias) / (full_slen - 1)
 
-    locs = locs.view(batchsize, n_stars_in_batch, 2)
+    locs = locs.view(batchsize, n_sources_in_batch, 2)
 
-    patch_is_on_bool = (fluxes > 0).any(2).float()  # if flux in any band is nonzero
-    n_stars = torch.sum(patch_is_on_bool > 0, dim=1)
+    patch_is_on_bool = (source_params > 0).any(2).float()  # if source_param in any latent_dim is nonzero
+    n_sources = torch.sum(patch_is_on_bool > 0, dim=1)
 
-    # puts all the on stars in front
-    is_on_array_full = const.get_is_on_from_n_sources(n_stars, n_stars.max())
+    # puts all the on stars in front (of each patch subarray)
+    is_on_array_full = const.get_is_on_from_n_sources(n_sources, n_sources.max())
     indx = is_on_array_full.clone()
     indx[indx == 1] = torch.nonzero(patch_is_on_bool)[:, 1]
 
-    fluxes, locs, _ = bring_to_front(n_bands, n_stars, patch_is_on_bool, fluxes, locs)
-    return locs, fluxes, n_stars
+    source_params, locs, _ = bring_to_front(latent_dim, n_sources, patch_is_on_bool, source_params, locs)
+    return locs, source_params, n_sources
 
 
 def trim_images(images, edge_padding):

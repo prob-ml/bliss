@@ -428,7 +428,7 @@ class SourceEncoder(nn.Module):
         else:
             patch_n_stars_sampled = patch_n_stars.repeat(n_samples).view(n_samples, -1)
 
-        # TODO: Check that shape makes sense.
+        # TODO: Check that shape returned here still makes sense for galaxies.
         is_on_array = const.get_is_on_from_patch_n_sources_2d(patch_n_stars_sampled,
                                                               self.max_detections)
         is_on_array = is_on_array.unsqueeze(3).float()
