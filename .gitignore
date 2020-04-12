@@ -3,4 +3,5 @@ __pycache__/*
 fits/*
 *.pyc
 sdss_stage_dir/*
-*deleteme*
+daophot_results
+*.idea
