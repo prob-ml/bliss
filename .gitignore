@@ -5,3 +5,4 @@ fits/*
 sdss_stage_dir/*
 daophot_results
 *.idea
+*models
