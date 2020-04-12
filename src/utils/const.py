@@ -15,11 +15,10 @@ models_path = root_path.joinpath("models")
 
 def get_is_on_from_n_sources(n_sources, max_sources):
     """
-    Return a boolean array of shape=(batchsize, max_stars) whose (k,l)th entry indicates
-    whether there are more than l stars on the kth batch.
+    Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
+    whether there are more than l sources on the kth batch.
     :param n_sources:
     :param max_sources:
-    :param device:
     :return:
     """
     assert len(n_sources.shape) == 1
@@ -64,7 +63,7 @@ def get_one_hot_encoding_from_int(z, n_classes):
 
     assert len(torch.unique(z)) <= n_classes
 
-    z_one_hot = torch.zeros(len(z), n_classes).to(device)
+    z_one_hot = torch.zeros(len(z), n_classes).cuda()
     z_one_hot.scatter_(1, z.view(-1, 1), 1)
     z_one_hot = z_one_hot.view(len(z), n_classes)
 
@@ -88,7 +87,7 @@ def sample_class_weights(class_weights, n_samples=1):
 
 
 def sample_normal(mean, logvar):
-    return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).to(device)
+    return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).cuda()
 
 
 #############################

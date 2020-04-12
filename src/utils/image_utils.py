@@ -193,7 +193,7 @@ def get_full_params_from_patch_params(patch_locs, patch_fluxes,
                                       full_slen,
                                       stamp_slen,
                                       edge_padding):
-    # off sources should have patch_locs == 0 and patch_fluxes == 0
+    # NOTE: off sources should have patch_locs == 0 and patch_fluxes == 0
 
     assert (patch_fluxes.shape[0] % tile_coords.shape[0]) == 0
     batchsize = int(patch_fluxes.shape[0] / tile_coords.shape[0])
