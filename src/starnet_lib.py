@@ -435,7 +435,7 @@ class SourceEncoder(nn.Module):
 
         # get variational parameters: these are on image patches
         loc_mean, loc_logvar, log_source_param_mean, log_source_param_logvar = \
-            self.get_var_params_for_n_stars(h, patch_n_stars_sampled)
+            self.get_var_params_for_n_sources(h, patch_n_stars_sampled)
 
         if return_map_star_params:
             loc_sd = torch.cuda.FloatTensor(*loc_logvar.shape).zero_()
@@ -452,6 +452,7 @@ class SourceEncoder(nn.Module):
         _source_params_randn = torch.cuda.FloatTensor(*log_source_param_mean.shape).normal_()
         patch_log_source_param_sampled = log_source_param_mean + _source_params_randn * log_source_params_sd
 
+        # TODO: Why would you not constrain?
         if self.constrain_source_params:
             patch_source_param_sampled = \
                 torch.exp(patch_log_source_param_sampled) * is_on_array
