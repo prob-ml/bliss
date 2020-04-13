@@ -21,7 +21,7 @@ class Normalize2d(nn.Module):
 
 class SourceEncoder(nn.Module):
     def __init__(self, slen, patch_slen, step, edge_padding,
-                 n_bands, max_detections,
+                 n_bands, max_detections, is_star=True,
                  n_source_params=None):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of size slen * slen
@@ -42,12 +42,15 @@ class SourceEncoder(nn.Module):
         super(SourceEncoder, self).__init__()
         assert torch.cuda.is_available(), "requires use of cuda."
 
-        # TODO: How to choose step size?
+        # TODO: Experiment to see what works best as a step size.
+        #       revisit for the case of wake phase need to be more careful.
+
         # image parameters
         self.slen = slen
         self.patch_slen = patch_slen
         self.step = step
         self.n_bands = n_bands
+        self.is_star = is_star
 
         self.edge_padding = edge_padding
 
@@ -112,13 +115,16 @@ class SourceEncoder(nn.Module):
         #    (flux per band or otherwise)
         if n_source_params is None:  # fluxes
             self.n_source_params = self.n_bands
-            # we will take exp for fluxes
+            # we will take exp for fluxes so that they are always positive.
             self.constrain_source_params = True
+            assert self.is_star, "You are not specifying the number of source parameters, so you want to run a star."
+
         else:  # something else like latent parameters in galaxy model.
             self.n_source_params = n_source_params
 
             # these can be anywhere in the reals
             self.constrain_source_params = False
+            assert not self.is_star
 
         self.n_params_per_source = (4 + 2 * self.n_source_params)
 
@@ -389,12 +395,12 @@ class SourceEncoder(nn.Module):
 
         return locs, source_params, n_sources
 
+    # TODO: Still need to make sure this works with galaxies as well.
     def sample_star_encoder(self, image,
                             n_samples=1,
                             return_map_n_stars=False,
                             return_map_star_params=False,
                             patch_n_stars=None,
-                            return_log_q=False,
                             training=False):
 
         # our sampling only works for one image at a time at the moment ...
@@ -450,10 +456,12 @@ class SourceEncoder(nn.Module):
 
         # sample source params
         _source_params_randn = torch.cuda.FloatTensor(*log_source_param_mean.shape).normal_()
+
+        # TODO: For this to be correct wouldn't the mean and the sd have to be not logged?
+        #       thinking about X ~ N(mu, sigma), E ~ N(0,1), then X = mu + sd * E ?
         patch_log_source_param_sampled = log_source_param_mean + _source_params_randn * log_source_params_sd
 
-        # TODO: Why would you not constrain?
-        if self.constrain_source_params:
+        if self.constrain_source_params:  # turn log_fluxes into fluxes so they are now all positive.
             patch_source_param_sampled = \
                 torch.exp(patch_log_source_param_sampled) * is_on_array
         else:
@@ -466,20 +474,4 @@ class SourceEncoder(nn.Module):
                                                       patch_source_param_sampled,
                                                       slen)
 
-        # if return_log_q:
-        #     log_q_locs = (const.eval_normal_logprob(patch_locs_sampled, loc_mean,
-        #                                             loc_logvar) *
-        #                   is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
-        #     log_q_fluxes = (const.eval_normal_logprob(log_flux_sampled, log_flux_mean,
-        #                                               log_flux_logvar) *
-        #                     is_on_array.float().unsqueeze(3)).view(n_samples, -1).sum(1)
-        #     log_q_n_stars = torch.gather(log_probs_nstar_patch, 1, n_stars_sampled.transpose(0, 1))
-        #     .transpose(0, 1).sum(1)
-
-        # else:
-        log_q_locs = None
-        log_q_fluxes = None
-        log_q_n_stars = None
-
-        return (locs, source_params, n_stars,
-                log_q_locs, log_q_fluxes, log_q_n_stars)
+        return locs, source_params, n_stars

@@ -3,9 +3,6 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from GalaxyModel.src import sleep_lib, starnet_lib, simulated_datasets_lib, sdss_dataset_lib, psf_transform_lib, \
-    wake_lib
-from GalaxyModel.src import run_sleep
 
 import time
 

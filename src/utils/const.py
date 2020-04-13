@@ -10,6 +10,7 @@ src_path = Path(dirname(dirname(__file__)))
 root_path = Path(dirname(dirname(dirname(__file__))))
 
 data_path = root_path.joinpath("data")
+reports_path = root_path.joinpath("reports")
 models_path = root_path.joinpath("models")
 
 
