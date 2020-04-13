@@ -1,3 +1,10 @@
-{"slen": 100, "n_bands": 6, "min_galaxies": 0, "max_galaxies": 30, "mean_galaxies":10, "galaxy_slen":50,
-  "gal_decoder_file": "decoder_params_170.dat",
-"background_file":"background_galaxy.npy"}
+{
+  "slen": 100,
+  "n_bands": 1,
+  "min_galaxies": 0,
+  "max_galaxies": 30,
+  "mean_galaxies": 10,
+  "galaxy_slen": 51,
+  "gal_decoder_file": "decoder_params_100_single_band_i.dat",
+  "background_file": "background_galaxy_single_band_i.npy"
+}

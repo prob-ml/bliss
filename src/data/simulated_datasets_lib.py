@@ -366,11 +366,11 @@ class SourceDataset:
         images = self.simulator.draw_image_from_params(locs, n_sources, sources=single_galaxies,
                                                        fluxes=fluxes)
 
-        return {'images': images.squeeze(),
+        return {'images': images,
                 'background': self.background,
-                'locs': locs.squeeze(),
-                'source_params': fluxes.squeeze() if self.is_star else gal_params.squeeze(),
-                'n_sources': n_sources.squeeze()
+                'locs': locs,
+                'source_params': fluxes if self.is_star else gal_params,
+                'n_sources': n_sources
                 }
 
 
