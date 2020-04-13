@@ -150,7 +150,7 @@ def _plot_one_source(slen, locs, source, cached_grid=None, is_star=True):
     return source_plotted
 
 
-def _plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_grid=None, is_star=True):
+def plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_grid=None, is_star=True):
     """
 
     :param slen:
@@ -285,8 +285,8 @@ class SourceSimulator:
             assert fluxes is None and sources is not None
 
         images_mean = \
-            _plot_multiple_sources(self.slen, locs, n_sources, sources,
-                                   fluxes=fluxes, cached_grid=self.cached_grid, is_star=self.is_star) + \
+            plot_multiple_sources(self.slen, locs, n_sources, sources,
+                                  fluxes=fluxes, cached_grid=self.cached_grid, is_star=self.is_star) + \
             self.background.unsqueeze(0)
 
         # ToDo: Change so that it uses galsim (Poisson Noise?) for now.

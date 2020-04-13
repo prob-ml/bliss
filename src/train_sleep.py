@@ -8,8 +8,7 @@ import torch.optim as optim
 from . import sleep_lib, starnet_lib, wake_lib, psf_transform_lib
 from .data import simulated_datasets_lib
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print('device: ', device)
+assert torch.cuda.is_available()
 
 print('torch version: ', torch.__version__)
 
@@ -37,18 +36,18 @@ psfield_file = './../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136
 init_psf_params = psf_transform_lib.get_psf_params(
     psfield_file,
     bands=bands)
-# init_psf_params = torch.Tensor(np.load('./data/fitted_powerlaw_psf_params.npy'))
-power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.to(device))
+
+power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.cuda())
 psf_og = power_law_psf.forward().detach()
 
 ###############
 # sky intensity: for the r and i band
 ###############
-init_background_params = torch.zeros(len(bands), 3).to(device)
+init_background_params = torch.zeros(len(bands), 3).cuda()
 init_background_params[:, 0] = torch.Tensor([686., 1123.])
 # init_background_params = torch.Tensor(np.load('./data/fitted_planar_backgrounds.npy'))
 planar_background = wake_lib.PlanarBackground(image_slen=data_params['slen'],
-                                              init_background_params=init_background_params.to(device))
+                                              init_background_params=init_background_params.cuda())
 background = planar_background.forward().detach()
 
 ###############
@@ -77,14 +76,14 @@ loader = torch.utils.data.DataLoader(
 ###############
 # define VAE
 ###############
-star_encoder = starnet_lib.StarEncoder(slen=data_params['slen'],
-                                       patch_slen=8,
-                                       step=2,
-                                       edge_padding=3,
-                                       n_bands=psf_og.shape[0],
-                                       max_detections=2)
+star_encoder = starnet_lib.SourceEncoder(slen=data_params['slen'],
+                                         patch_slen=8,
+                                         step=2,
+                                         edge_padding=3,
+                                         n_bands=psf_og.shape[0],
+                                         max_detections=2)
 
-star_encoder.to(device)
+star_encoder.cuda()
 
 ###############
 # define optimizer

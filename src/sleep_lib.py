@@ -5,7 +5,7 @@ from itertools import permutations
 import numpy as np
 import torch
 
-from GalaxyModel.src import utils
+from .utils import const
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -45,28 +45,28 @@ def get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
     _loc_log_var = loc_log_var.view(batchsize, 1, loc_mean.shape[1], 2)
     _true_locs = true_locs.view(batchsize, true_locs.shape[1], 1, 2)
 
-    # this is to return a large error if star is off
+    # this will return a large error if star is off
     _true_locs = _true_locs + (_true_locs == 0).float() * 1e16
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    locs_log_probs_all = utils.eval_normal_logprob(_true_locs,
+    locs_log_probs_all = const.eval_normal_logprob(_true_locs,
                                                    _loc_mean, _loc_log_var).sum(dim=3)
 
     return locs_log_probs_all
 
 
-def get_fluxes_logprob_all_combs(true_fluxes, log_flux_mean, log_flux_log_var):
-    batchsize = true_fluxes.shape[0]
-    n_bands = true_fluxes.shape[2]
+def get_source_params_logprob_all_combs(true_source_params, log_flux_mean, log_flux_log_var, is_star=True):
+    batchsize = true_source_params.shape[0]
+    n_source_params = true_source_params.shape[2]
 
-    _log_flux_mean = log_flux_mean.view(batchsize, 1, log_flux_mean.shape[1], n_bands)
-    _log_flux_log_var = log_flux_log_var.view(batchsize, 1, log_flux_mean.shape[1], n_bands)
-    _true_fluxes = true_fluxes.view(batchsize, true_fluxes.shape[1], 1, n_bands)
+    _log_flux_mean = log_flux_mean.view(batchsize, 1, log_flux_mean.shape[1], n_source_params)
+    _log_flux_log_var = log_flux_log_var.view(batchsize, 1, log_flux_mean.shape[1], n_source_params)
+    _true_source_params = true_source_params.view(batchsize, true_source_params.shape[1], 1, n_source_params)
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    flux_log_probs_all = utils.eval_lognormal_logprob(_true_fluxes,
+    flux_log_probs_all = const.eval_lognormal_logprob(_true_source_params,
                                                       _log_flux_mean, _log_flux_log_var).sum(dim=3)
 
     return flux_log_probs_all
@@ -124,7 +124,7 @@ def get_params_loss(loc_mean, loc_log_var, \
         get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, true_is_on_array)
 
     true_n_stars = true_is_on_array.sum(1)
-    one_hot_encoding = utils.get_one_hot_encoding_from_int(true_n_stars, log_probs.shape[1])
+    one_hot_encoding = const.get_one_hot_encoding_from_int(true_n_stars, log_probs.shape[1])
     counter_loss = get_categorical_loss(log_probs, one_hot_encoding)
 
     loss_vec = (locs_loss * (locs_loss.detach() < 1e6).float() + fluxes_loss + counter_loss)
@@ -136,7 +136,6 @@ def get_params_loss(loc_mean, loc_log_var, \
 
 def get_inv_kl_loss(star_encoder,
                     images,
-                    backgrounds,
                     true_locs,
                     true_fluxes, use_l2_loss=False):
     # extract image patches
@@ -151,8 +150,8 @@ def get_inv_kl_loss(star_encoder,
         star_encoder(image_patches, true_patch_n_stars)
 
     if use_l2_loss:
-        loc_log_var = torch.zeros((loc_log_var.shape))
-        log_flux_log_var = torch.zeros((log_flux_log_var.shape))
+        loc_log_var = torch.zeros(loc_log_var.shape)
+        log_flux_log_var = torch.zeros(log_flux_log_var.shape)
 
     loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
         get_params_loss(loc_mean, loc_log_var, \
@@ -185,7 +184,7 @@ def eval_sleep(star_encoder, train_loader,
 
         # evaluate log q
         loss, counter_loss, locs_loss, fluxes_loss = \
-            get_inv_kl_loss(star_encoder, images, backgrounds,
+            get_inv_kl_loss(star_encoder, images,
                             true_locs, true_fluxes)[0:4]
 
         if train:

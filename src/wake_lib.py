@@ -4,8 +4,8 @@ from torch import optim
 
 import numpy as np
 
-from GalaxyModel.src import get_mgrid, plot_multiple_stars
-from GalaxyModel.src import PowerLawPSF
+from .data.simulated_datasets_lib import get_mgrid, plot_multiple_sources
+from .psf_transform_lib import PowerLawPSF
 
 import time
 
@@ -69,7 +69,7 @@ class PlanarBackground(nn.Module):
 
         # get grid
         _mgrid = get_mgrid(image_slen).to(device)
-        self.mgrid = torch.stack([_mgrid for i in range(self.n_bands)], dim=0)
+        self.mgrid = torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
 
         # initial weights
         self.params = nn.Parameter(init_background_params.clone())
@@ -122,10 +122,9 @@ class ModelParams(nn.Module):
 
         self.cached_grid = get_mgrid(observed_image.shape[-1]).to(device)
 
-    # TODO: Change to correct usage (plot multiple sources)
     def _plot_stars(self, locs, fluxes, n_stars, psf):
-        self.stars = plot_multiple_stars(self.slen, locs, n_stars,
-                                         fluxes, psf, self.cached_grid)
+        self.stars = plot_multiple_sources(self.slen, locs, n_stars,
+                                           fluxes, psf, self.cached_grid)
 
     def _get_init_background(self, sample_every=25):
         sampled_background = _sample_image(self.observed_image, sample_every)
