@@ -153,12 +153,12 @@ class OneCenteredGalaxy(nn.Module):
         z_mean, z_var = self.enc.forward(image - background)  # shape = [nsamples, latent_dim]
 
         q_z = Normal(z_mean, z_var.sqrt())
-        z = q_z.rsample()
+        z = q_z.rsample()  # using stochastic optimization by sampling only one z from prior.
 
         log_q_z = q_z.log_prob(z).sum(1)
-        p_z = Normal(self.zero, self.one)
-        log_p_z = p_z.log_prob(z).sum(1)  # using stochastic optimization by sampling only one z from prior.
-        kl_z = (log_q_z - log_p_z)
+        p_z = Normal(self.zero, self.one)  # prior on z.
+        log_p_z = p_z.log_prob(z).sum(1)
+        kl_z = (log_q_z - log_p_z)  # log q(z | x) - log p(z)
 
         recon_mean, recon_var = self.dec.forward(z)  # this reconstructed mean/variances images (per pixel quantities)
 
@@ -167,19 +167,17 @@ class OneCenteredGalaxy(nn.Module):
 
         return recon_mean, recon_var, kl_z
 
-    def loss(self, image, background, k=1):
+    def loss(self, image, background):
         """
 
         :param image: The complete image that includes the background.
         :param background:
-        :param k:
         :return:
         """
-        # TODO LATER: use k
         # sampling images from the real distribution
         recon_mean, recon_var, kl_z = self.forward(image, background)  # z | x ~ decoder
 
-        # -log p(x | a, z), dimensions: torch.Size([ nsamples, num_bands, slen, slen])
+        # -log p(x | z), dimensions: torch.Size([ nsamples, num_bands, slen, slen])
         # assuming covariance is diagonal.
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 

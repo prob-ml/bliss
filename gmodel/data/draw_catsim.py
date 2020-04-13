@@ -6,12 +6,23 @@ import galsim
 from ..utils import const
 
 
-def get_default_params():
-    params = dict(
-        survey_name='LSST',
-        catalog_file_path=const.data_path.joinpath("raw/OneDegSq.fits"),
-        bands=['y', 'z', 'i', 'r', 'g', 'u'],
-    )
+def get_default_params(num_bands):
+    if num_bands == 6:
+        params = dict(
+            survey_name='LSST',
+            catalog_file_path=const.data_path.joinpath("raw/OneDegSq.fits"),
+            bands=['y', 'z', 'i', 'r', 'g', 'u'],
+        )
+
+    elif num_bands == 1:
+        params = dict(
+            survey_name='LSST',
+            catalog_file_path=const.data_path.joinpath("raw/OneDegSq.fits"),
+            bands=['i'],
+        )
+
+    else:
+        raise ValueError("Only num_bands = 1 or 6 is supported.")
 
     return params
 
@@ -45,7 +56,6 @@ class Render(object):
         self.obs = self.get_obs()
         self.background = self.get_background()
 
-    # @profile
     def get_obs(self):
         """
         Returns a list of :class:`Survey` objects, each of them has an image attribute which is
@@ -104,6 +114,12 @@ class Render(object):
         size = np.sqrt(r_sec ** 2 + psf_r_sec ** 2) / self.pixel_scale  # size is in pixels.
         return Column(size, name='size')
 
+    def center_deviation(self, entry):
+        # random deviation from exactly in center of center pixel, in arcsecs.
+        entry['ra'] = (np.random.rand() - 0.5) * self.pixel_scale  # arcsecs
+        entry['dec'] = (np.random.rand() - 0.5) * self.pixel_scale
+        return entry
+
     def draw(self, entry):
         """
         Return a multi-band image corresponding to the entry from the catalog given.
@@ -114,6 +130,7 @@ class Render(object):
         image = np.zeros((self.num_bands, self.image_size, self.image_size), dtype=self.dtype)
 
         for i, band in enumerate(self.bands):
+            entry = self.center_deviation(entry)  # different for each band.
             image_no_background = self.single_band(entry, self.obs[i], band)
             image[i, :, :] = image_no_background + self.background[i]
 

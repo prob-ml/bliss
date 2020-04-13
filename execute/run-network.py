@@ -12,8 +12,8 @@ from __init__ import root_path
 def main(extra):
     cmd = (f"cd {root_path};"
            f"python -m gmodel.train_model --model centered_galaxy --dataset h5_catalog "
-           f"--num-bands 6 --h5-file test1/images.hdf5 --epochs 200 --num-workers 0 --overwrite --evaluate 10 "
-           f"--dir-name test1 --slen 50 "
+           f"--num-bands 1 --h5-file test2/images.hdf5 --epochs 200 --num-workers 0 --overwrite --evaluate 10 "
+           f"--dir-name test2 --slen 51 "
            f"{extra}"  # optionally add one argument like -h
            )
 

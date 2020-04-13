@@ -19,6 +19,7 @@ parser.add_argument('--num-images', type=int, default=None)
 parser.add_argument('--overwrite', action='store_true')
 parser.add_argument('--slen', type=int, default=50)
 parser.add_argument('--generate', action='store_true')
+parser.add_argument('--num-bands', type=int)
 parser.add_argument('--merge', action='store_true', help="Merge all files from directory with .hdf5 extension.")
 parser.add_argument('--background', action='store_true', help="Save background from .h5py merged file into a .npy"
                                                               "which is separate.")
@@ -26,6 +27,7 @@ parser.add_argument('--background', action='store_true', help="Save background f
 pargs = parser.parse_args()
 
 assert pargs.generate or pargs.merge or pargs.background, "At least one of generate/merge/background is required."
+assert pargs.num_bands in [1, 6] or not pargs.generate, "Only 1 or 6 bands supported."
 
 # files and directories needed
 output_path = const.data_path.joinpath(f"processed/{pargs.dir}")
@@ -39,7 +41,7 @@ if pargs.generate:
     assert not out_path.exists() or pargs.overwrite, "Trying to overwrite file."
 
     generate.generate_images("galcatsim", out_path, prop_file_path=prop_file_path, num_images=pargs.num_images,
-                             slen=pargs.slen, num_bands=6, fixed_size=False)
+                             slen=pargs.slen, num_bands=pargs.num_bands, fixed_size=False)
 
 if pargs.merge:
     new_file_path = output_path.joinpath("images.hdf5")

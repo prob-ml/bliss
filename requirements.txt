@@ -5,6 +5,11 @@
 asteval>=0.9.18
 astropy>=4.0.1post1
 attrs==19.3.0
+galsim>=2.2.2
+h5py>=2.10.0
+numpy>=1.18.1
+scipy>=1.4.1
+
 backcall=0.1.0=py37_0
 blas=1.0=mkl
 bleach=3.1.0=py37_0
@@ -31,13 +36,12 @@ fitsio=1.0.5=py37h0c87ef4_0
 fontconfig=2.13.0=h9420a91_0
 freetype=2.9.1=h8a8886c_1
 future=0.18.2=py37_0
-galsim=2.2.2=py37hb745460_1
+
 glib=2.63.1=h5a9c865_0
 gmodel=0.1.dev0=dev_0
 gmp=6.1.2=h6c8ec71_1
 gst-plugins-base=1.14.0=hbbd80ab_1
 gstreamer=1.14.0=hb453b48_1
-h5py=2.10.0
 hdf5=1.10.4=hb1b8bf9_0
 hypothesis=5.5.4=py_0
 icu=58.2=h9c2bf20_1
@@ -102,7 +106,6 @@ ncurses=6.2=he6710b0_0
 networkx=2.4=py_0
 ninja=1.9.0=py37hfd86e86_0
 notebook=6.0.3=py37_0
-numpy=1.18.1=py37h4f9e942_0
 numpy-base=1.18.1=py37hde5b4d6_1
 olefile=0.46=py37_0
 openssl=1.1.1e=h7b6447c_0
@@ -146,7 +149,6 @@ qtconsole=4.7.2=py_0
 qtpy=1.9.0=py_0
 readline=8.0=h7b6447c_0
 scikit-image=0.16.2=py37h0573a6f_0
-scipy=1.4.1=py37h0b6359f_0
 send2trash=1.5.0=py37_0
 sep=1.0.3=pypi_0
 setuptools=46.1.1=py37_0

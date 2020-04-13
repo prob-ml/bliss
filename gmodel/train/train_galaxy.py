@@ -14,7 +14,7 @@ from ..models import galaxy_net
 
 class TrainGalaxy(object):
 
-    def __init__(self, slen: int = 40, num_bands: int = 1, num_workers: int = 2, h5_file: str = '',
+    def __init__(self, slen: int = 41, num_bands: int = 1, num_workers: int = 2, h5_file: str = '',
                  fixed_size: const.str_bool = False, reconstruct_one: const.str_bool = True, epochs=None,
                  batch_size=None, evaluate=None, dir_name=None, dataset=None):
         """

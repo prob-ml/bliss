@@ -15,7 +15,6 @@ from . import draw_catsim
 
 def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None):
     # TODO: LATER The other two datasets non catsim should also be updated. (save props+clear defaults)
-    # TODO: check consistency
     if dataset_name == 'synthetic':
         ds = Synthetic(slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1,
                        centered=True, num_bands=num_bands, num_images=1000)
@@ -26,14 +25,13 @@ def decide_dataset(dataset_name, slen, num_bands, fixed_size=False, h5_file=None
         ds = GalBasic(slen, num_images=10000, sky=700)
 
     elif dataset_name == 'galcatsim':
-        assert num_bands == 6, 'Can only use 6 bands with catsim'
+        assert num_bands in [1, 6], 'Can only use 1 or 6 bands with catsim'
 
-        ds = CatsimGalaxies(image_size=slen, fixed_size=fixed_size)
+        ds = CatsimGalaxies(slen=slen, fixed_size=fixed_size, num_bands=num_bands)
 
     elif dataset_name == 'h5_catalog':
-        assert num_bands == 6, 'Can only use 6 bands with catsim images'
         assert h5_file is not '', "Forgot to specify h5 file to use."
-        ds = H5Catalog(h5_file=h5_file)
+        ds = H5Catalog(h5_file, slen, num_bands)
 
     else:
         raise NotImplementedError("Not implemented that galaxy dataset yet.")
@@ -81,15 +79,19 @@ class DecoderSamples(Dataset):
 
 
 class H5Catalog(Dataset):
-    def __init__(self, h5_file):
+    def __init__(self, h5_file, slen, num_bands):
         h5_file_path = const.data_path.joinpath(f"processed/{h5_file}")
 
         self.file = h5py.File(h5_file_path, 'r')
         assert const.image_h5_name in self.file, "The dataset is not in this file"
 
         self.dset = self.file[const.image_h5_name]
-        assert const.background_h5_name in self.dset.attrs, "Background is not in file"
+        self.num_bands = self.dset.shape[1]
+        self.slen = self.dset.shape[2]
+        assert self.slen == slen == self.dset.shape[3], "slen does not match expected values."
+        assert self.num_bands == num_bands, "Number of bands in training and in dataset do not match."
 
+        assert const.background_h5_name in self.dset.attrs, "Background is not in file"
         self.background = self.dset.attrs[const.background_h5_name]
 
     def __len__(self):
@@ -113,7 +115,7 @@ class H5Catalog(Dataset):
 
 class CatsimGalaxies(Dataset):
 
-    def __init__(self, survey_name=None, image_size=40, filter_dict=None, fixed_size=False, snr=200, bands=None,
+    def __init__(self, survey_name=None, slen=41, filter_dict=None, fixed_size=False, snr=200, num_bands=6,
                  dtype=np.float32, preserve_flux=False, **render_kwargs):
         """
         This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog) and returns a
@@ -123,25 +125,27 @@ class CatsimGalaxies(Dataset):
 
         :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST survey.
         :param render_kwargs: Additional keyword arguments that will go into the renderer.
-        :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is to exclude >=25.3 i_ab.
+        :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is to exclude >=25.3 i_ab
         :param stamp_size: In arcsecs.
         """
 
         assert survey_name is None, "Only using default survey name for now = LSST"
-        assert image_size >= 40, "Does not seem to work well if the number of pixels is too low."
+        assert slen >= 41, "Does not seem to work well if the number of pixels is too low."
+        assert slen % 2 == 1, "Odd number of pixels is preferred."
         assert filter_dict is None, "Not supporting different dict yet, need to change argparse + save_props below."
-        assert bands is None, "Only using default number of bands = 6 for now."
         assert dtype is np.float32, "Only float32 is supported for now."
         assert preserve_flux is False, "Otherwise variance of the noise will change which is not desirable."
-
         # ToDo: Create a test or assertion to check that mean == variance approx.
-        params = draw_catsim.get_default_params()
+
+        params = draw_catsim.get_default_params(num_bands)
         self.survey_name = params['survey_name'] if not survey_name else survey_name
-        self.bands = params['bands'] if not bands else bands
-        self.num_bands = len(self.bands)
-        self.image_size = image_size
+        self.bands = params['bands']
+        self.num_bands = num_bands
+        assert num_bands == len(self.bands)
+
+        self.slen = slen
         self.pixel_scale = descwl.survey.Survey.get_defaults(self.survey_name, '*')['pixel_scale']
-        self.stamp_size = self.pixel_scale * self.image_size  # arcsecs.
+        self.stamp_size = self.pixel_scale * self.slen  # arcsecs.
         self.snr = snr
         self.dtype = dtype
         self.preserve_flux = preserve_flux
@@ -153,11 +157,11 @@ class CatsimGalaxies(Dataset):
                                            **render_kwargs)
         self.background = self.renderer.background
 
+        # prepare catalog table.
         self.table = Table.read(params['catalog_file_path'])
         self.table = self.table[np.random.permutation(len(self.table))]  # shuffle in case that order matters.
         self.filtered_dict = CatsimGalaxies.get_default_filters() if filter_dict is None else filter_dict
         self.cat = self.get_filtered_table()
-
         self.prepare_cat()
 
     def __len__(self):
@@ -180,7 +184,7 @@ class CatsimGalaxies(Dataset):
                 'num_galaxies': 1}
 
     def print_props(self, output=sys.stdout):
-        print(f"image_size: {self.image_size} \n"
+        print(f"slen: {self.slen} \n"
               f"snr: {self.snr} \n"
               f"fixed size: {self.fixed_size} \n"
               f"survey name: {self.survey_name} \n"
@@ -198,13 +202,10 @@ class CatsimGalaxies(Dataset):
         """
         Prepare catalog so that we can draw individual centered galaxies from it using `draw_catsim` module.
 
-        * This will make it so that that not all galaxies are exactly centered, but each individual multiband image is.
+        * This will make it so that that galaxies are not all exactly centered with respect to each other, but
+         bands are centered relative to the same galaxy.
         :return:
         """
-
-        # random deviation from exactly in center of center pixel, in arcsecs.
-        self.cat['ra'] = (np.random.rand(len(self.cat)) - 0.5) * self.pixel_scale  # arcsecs
-        self.cat['dec'] = (np.random.rand(len(self.cat)) - 0.5) * self.pixel_scale
 
         if self.fixed_size:
             for i, _ in enumerate(self.cat):
@@ -217,6 +218,7 @@ class CatsimGalaxies(Dataset):
         return cat
 
     def fix_size(self, entry):
+        # TODO: What happens if hlr_d_old is not defined?
         hlr_d = None
         if entry['a_d'] != 0.0 and entry['b_d'] != 0.0:
             hlr_d_old = np.sqrt(entry['b_d'] * entry['a_d'])
@@ -245,7 +247,7 @@ class CatsimGalaxies(Dataset):
         # ToDo: Make a cut on the size? Something like:
         # sizes = self.renderer.get_size(self.cat); cat = cat[sizes < 30] (size in pixels)
         filters = dict(
-            i_ab=lambda param, x: x[param] <= 23  # cut on magnitude same as BTK does.
+            i_ab=lambda param, x: x[param] <= 25.3  # cut on magnitude same as BTK does (gold sample)
         )
         return filters
 
@@ -405,4 +407,3 @@ class Synthetic(Dataset):
 
     def print_props(self, prop_file):
         pass
-
