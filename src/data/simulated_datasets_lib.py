@@ -202,7 +202,7 @@ def plot_multiple_galaxies(slen, locs, n_sources, galaxies, cached_grid=None):
     assert galaxies.shape[0] == batchsize
     assert galaxies.shape[1] == locs.shape[1]  # max_galaxies
 
-    grid = _sanity_plot(slen, locs, n_galaxies, batchsize, cached_grid)
+    grid = _sanity_plot(slen, locs, n_sources, batchsize, cached_grid)
 
     galaxies = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
     for n in range(max(n_sources)):
@@ -263,39 +263,26 @@ class SourceSimulator:
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
-    def draw_image_from_params(self, locs, n_sources, sources=None, fluxes=None):
-        """
+    # ToDo: Change so that it uses galsim (Poisson Noise?), ok for now.
+    @staticmethod
+    def _apply_noise(images_mean):
+        # add noise to images.
 
-        :param locs:
-        :param fluxes:
-        :param sources: can either be `self.psf` or the galaxies to be plotted in locs.
-        :param n_sources:
-        :return: `images`, torch.Tensor of shape (n_images x n_bands x slen x slen)
+        if torch.any(images_mean <= 0):
+            print('warning: image mean less than 0')
+            images_mean = images_mean.clamp(min=1.0)
 
-        NOTE: The different sources in `images` are already aligned between bands.
-        """
+        images = (torch.sqrt(images_mean) * torch.cuda.FloatTensor(*images_mean.shape).uniform_()
+                  + images_mean)
 
-        if self.is_star:
-            assert fluxes is not None
-            sources = self.psf
-        else:  # galaxies
-            assert fluxes is None and sources is not None
+        return images
 
-        images_mean = \
-            plot_multiple_sources(self.slen, locs, n_sources, sources,
-                                  fluxes=fluxes, cached_grid=self.cached_grid, is_star=self.is_star) + \
-            self.background.unsqueeze(0)
+    def _prepare_images(self, images):
 
-        # ToDo: Change so that it uses galsim (Poisson Noise?), ok for now.
+        images = images + self.background.unsqueeze(0)
+
         if self.add_noise:
-            if torch.any(images_mean <= 0):
-                print('warning: image mean less than 0')
-                images_mean = images_mean.clamp(min=1.0)
-
-            images = (torch.sqrt(images_mean) * torch.cuda.FloatTensor(*images_mean.shape).uniform_()
-                      + images_mean)
-        else:
-            images = images_mean
+            images = self._apply_noise(images)
 
         return images
 
@@ -351,24 +338,10 @@ class SourceDataset:
         return self.n_images
 
     def __getitem__(self, idx):
-        n_sources, locs, source_params = self.simulator.sample_parameters(batchsize=1)
+        pass
 
-        if self.is_star:
-            fluxes = source_params
-            gal_params, single_galaxies = None, None
-        else:
-            fluxes = None
-            gal_params, single_galaxies = source_params
-
-        images = self.simulator.draw_image_from_params(locs, n_sources, sources=single_galaxies,
-                                                       fluxes=fluxes)
-
-        return {'images': images,
-                'background': self.background,
-                'locs': locs,
-                'source_params': fluxes if self.is_star else gal_params,
-                'n_sources': n_sources
-                }
+    def get_batch(self, batchsize=64):
+        pass
 
 
 class GalaxySimulator(SourceSimulator):
@@ -407,6 +380,26 @@ class GalaxySimulator(SourceSimulator):
 
         return galaxy_params, single_galaxies
 
+    # TODO: What to do for non-aligned multi-band images in the case of galaxies.
+    def _draw_image_from_params(self, locs, n_sources, galaxies):
+        """
+        Returns images with no background or noise applied.
+
+        :param locs:
+        :param galaxies: galaxies to be plotted in locs.
+        :param n_sources:
+        :return: `images`, torch.Tensor of shape (n_images x n_bands x slen x slen)
+
+        NOTE: The different sources in `images` are assumed to already aligned between bands.
+        """
+
+        images = plot_multiple_galaxies(self.slen, locs, n_sources, galaxies, cached_grid=self.cached_grid)
+        return images
+
+    def generate_image(self, locs, n_sources, galaxies):
+        images = self._draw_image_from_params(locs, n_sources, galaxies)
+        return self._prepare_images(images)
+
 
 class GalaxyDataset(SourceDataset):
     simulator_cls = GalaxySimulator
@@ -417,6 +410,19 @@ class GalaxyDataset(SourceDataset):
         simulator_kwargs.update(dict(is_star=False))
         super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
                                             is_star=False)
+
+    def get_batch(self, batchsize=32):
+        n_sources, locs, source_params = self.simulator.sample_parameters(batchsize=batchsize)
+        gal_params, single_galaxies = source_params
+
+        images = self.simulator.generate_images(locs, n_sources, single_galaxies)
+
+        return {'images': images,
+                'background': self.background,
+                'locs': locs,
+                'source_params': gal_params,
+                'n_sources': n_sources
+                }
 
     @classmethod
     def load_dataset_from_params(cls, n_images, data_params,
@@ -493,6 +499,14 @@ class StarSimulator(SourceSimulator):
         if self.transpose_psf:
             self.psf = self.psf.transpose(1, 2)
 
+    def _draw_image_from_params(self, locs, n_sources, fluxes):
+        images = plot_multiple_stars(self.slen, locs, n_sources, self.psf, fluxes, cached_grid=self.cached_grid)
+        return images
+
+    def generate_image(self, locs, n_sources, fluxes):
+        images = self._draw_image_from_params(locs, n_sources, fluxes)
+        return self._prepare_images(images)
+
     def get_source_params(self, n_stars, is_on_array=None, batchsize=1):
         """
 
@@ -524,6 +538,17 @@ class StarsDataset(SourceDataset):
         simulator_kwargs.update(dict(is_star=True))
         super(StarsDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
                                            is_star=True)
+
+    def get_batch(self, batchsize=32):
+        n_sources, locs, fluxes = self.simulator.sample_parameters(batchsize=batchsize)
+        images = self.simulator.generate_images(locs, n_sources, fluxes)
+
+        return {'images': images,
+                'background': self.background,
+                'locs': locs,
+                'source_params': fluxes,
+                'n_sources': n_sources
+                }
 
     @classmethod
     def load_dataset_from_params(cls, n_images, data_params,
