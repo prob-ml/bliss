@@ -180,10 +180,11 @@ class SourceEncoder(nn.Module):
             n_sources = torch.argmax(log_probs_n, dim=1)
 
         # extract parameters
-        loc_mean, loc_logvar, log_source_param_mean, log_source_param_logvar = \
-            self.get_var_params_for_n_sources(h, n_sources)
+        loc_mean, loc_logvar, source_param_mean, source_param_logvar = \
+            self.get_var_params_for_n_sources(h, n_sources=n_sources.clamp(
+                max=self.max_detections))
 
-        return loc_mean, loc_logvar, log_source_param_mean, log_source_param_logvar, log_probs_n
+        return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
 
     def get_logprob_n_from_var_params(self, h):
         """
@@ -233,28 +234,28 @@ class SourceEncoder(nn.Module):
         loc_logit_mean = torch.gather(_h, 1, self.locs_mean_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
         loc_logvar = torch.gather(_h, 1, self.locs_var_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1))
 
-        log_source_param_mean = torch.gather(_h, 1, self.source_params_mean_indx_mat[n_sources.transpose(0, 1)].reshape(
+        source_param_mean = torch.gather(_h, 1, self.source_params_mean_indx_mat[n_sources.transpose(0, 1)].reshape(
             batchsize, -1))
-        log_source_param_logvar = torch.gather(_h, 1,
-                                               self.source_params_var_indx_mat[n_sources.transpose(0, 1)].reshape(
-                                                   batchsize, -1))
+        source_param_logvar = torch.gather(_h, 1,
+                                           self.source_params_var_indx_mat[n_sources.transpose(0, 1)].reshape(
+                                               batchsize, -1))
 
         # reshape
         loc_logit_mean = loc_logit_mean.reshape(batchsize, n_samples, self.max_detections, 2).transpose(0, 1)
         loc_logvar = loc_logvar.reshape(batchsize, n_samples, self.max_detections, 2).transpose(0, 1)
-        log_source_param_mean = log_source_param_mean.reshape(batchsize, n_samples, self.max_detections,
-                                                              self.n_source_params).transpose(0, 1)
-        log_source_param_logvar = log_source_param_logvar.reshape(batchsize, n_samples, self.max_detections,
-                                                                  self.n_source_params).transpose(0, 1)
+        source_param_mean = source_param_mean.reshape(batchsize, n_samples, self.max_detections,
+                                                      self.n_source_params).transpose(0, 1)
+        source_param_logvar = source_param_logvar.reshape(batchsize, n_samples, self.max_detections,
+                                                          self.n_source_params).transpose(0, 1)
 
         loc_mean = torch.sigmoid(loc_logit_mean) * (loc_logit_mean != 0).float()
 
         if squeeze_output:
             return loc_mean.squeeze(0), loc_logvar.squeeze(0), \
-                   log_source_param_mean.squeeze(0), log_source_param_logvar.squeeze(0)
+                   source_param_mean.squeeze(0), source_param_logvar.squeeze(0)
         else:
             return loc_mean, loc_logvar, \
-                   log_source_param_mean, log_source_param_logvar
+                   source_param_mean, source_param_logvar
 
     def _get_hidden_indices(self):
         """
@@ -440,33 +441,31 @@ class SourceEncoder(nn.Module):
         is_on_array = is_on_array.unsqueeze(3).float()
 
         # get variational parameters: these are on image patches
-        loc_mean, loc_logvar, log_source_param_mean, log_source_param_logvar = \
+        loc_mean, loc_logvar, source_param_mean, source_param_logvar = \
             self.get_var_params_for_n_sources(h, patch_n_stars_sampled)
 
         if return_map_star_params:
             loc_sd = torch.cuda.FloatTensor(*loc_logvar.shape).zero_()
-            log_source_params_sd = torch.cuda.FloatTensor(*log_source_param_logvar.shape).zero_()
+            source_params_sd = torch.cuda.FloatTensor(*source_param_logvar.shape).zero_()
         else:
             loc_sd = torch.exp(0.5 * loc_logvar)
-            log_source_params_sd = torch.exp(0.5 * log_source_param_logvar).clamp(max=0.5)
+            source_params_sd = torch.exp(0.5 * source_param_logvar).clamp(max=0.5)
 
         # sample locations
         _locs_randn = torch.cuda.FloatTensor(*loc_mean.shape).normal_()
         patch_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
 
         # sample source params
-        _source_params_randn = torch.cuda.FloatTensor(*log_source_param_mean.shape).normal_()
+        _source_params_randn = torch.cuda.FloatTensor(*source_param_mean.shape).normal_()
 
-        # TODO: For this to be correct wouldn't the mean and the sd have to be not logged?
-        #       thinking about X ~ N(mu, sigma), E ~ N(0,1), then X = mu + sd * E ?
-        patch_log_source_param_sampled = log_source_param_mean + _source_params_randn * log_source_params_sd
+        patch_source_param_sampled = source_param_mean + _source_params_randn * source_params_sd
 
         if self.constrain_source_params:  # turn log_fluxes into fluxes so they are now all positive.
             patch_source_param_sampled = \
-                torch.exp(patch_log_source_param_sampled) * is_on_array
+                torch.exp(patch_source_param_sampled) * is_on_array
         else:
             patch_source_param_sampled = \
-                patch_log_source_param_sampled * is_on_array
+                patch_source_param_sampled * is_on_array
 
         # get parameters on full image
         locs, source_params, n_stars = \

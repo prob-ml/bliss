@@ -1,7 +1,6 @@
 import math
 import time
 from itertools import permutations
-
 import numpy as np
 import torch
 
@@ -54,7 +53,7 @@ def get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
     return locs_log_probs_all
 
 
-def get_source_params_logprob_all_combs(true_source_params, log_source_param_mean, log_source_param_log_var,
+def get_source_params_logprob_all_combs(true_source_params, source_param_mean, source_param_log_var,
                                         is_star=True):
     batchsize = true_source_params.shape[0]
     n_source_params = true_source_params.shape[2]
@@ -82,14 +81,15 @@ def get_source_params_logprob_all_combs(true_source_params, log_source_param_mea
         return source_param_log_probs_all
 
 
+# TODO: other than changing, no need to do anything for fluxes.
 def _get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array):
     max_detections = flux_log_probs_all.shape[-1]
     batchsize = flux_log_probs_all.shape[0]
 
     locs_loss_all_perm = torch.zeros(batchsize,
-                                     math.factorial(max_detections)).to(device)
+                                     math.factorial(max_detections)).cuda()
     fluxes_loss_all_perm = torch.zeros(batchsize,
-                                       math.factorial(max_detections)).to(device)
+                                       math.factorial(max_detections)).cuda()
     i = 0
     for perm in permutations(range(max_detections)):
         locs_loss_all_perm[:, i] = \
@@ -104,6 +104,7 @@ def _get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array
     return locs_loss_all_perm, fluxes_loss_all_perm
 
 
+# TODO: other than changing, no need to do anything for fluxes.
 def get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, is_on_array):
     locs_log_probs_all_perm, fluxes_log_probs_all_perm = \
         _get_log_probs_all_perms(locs_log_probs_all, flux_log_probs_all, is_on_array)
@@ -116,7 +117,7 @@ def get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, is_on_array):
 
 def get_params_loss(loc_mean, loc_log_var,
                     log_flux_mean, log_flux_log_var, log_probs,
-                    true_locs, true_fluxes, true_is_on_array):
+                    true_locs, true_fluxes, true_is_on_array, is_star=True):
     max_detections = log_flux_mean.shape[1]
 
     # this is batchsize x (max_stars x max_detections)
@@ -128,7 +129,7 @@ def get_params_loss(loc_mean, loc_log_var,
 
     flux_log_probs_all = \
         get_source_params_logprob_all_combs(true_fluxes,
-                                            log_flux_mean, log_flux_log_var)
+                                            log_flux_mean, log_flux_log_var, is_star=is_star)
 
     locs_loss, fluxes_loss, perm_indx = \
         get_min_perm_loss(locs_log_probs_all, flux_log_probs_all, true_is_on_array)
@@ -144,41 +145,30 @@ def get_params_loss(loc_mean, loc_log_var,
     return loss, counter_loss, locs_loss, fluxes_loss, perm_indx
 
 
-# TODO: need to fix names.
 def get_inv_kl_loss(source_encoder,
                     images,
                     true_locs,
                     true_fluxes, use_l2_loss=False):
     # extract image patches
-    image_patches, true_patch_locs, true_patch_fluxes, true_patch_n_stars, true_patch_is_on_array = \
+    image_patches, true_patch_locs, true_patch_source_params, true_patch_n_sources, true_patch_is_on_array = \
         source_encoder.get_image_patches(images, true_locs, true_fluxes,
                                          clip_max_sources=True)
 
-    # get variational parameters on each patch
-    var_params_all = source_encoder.get_var_params_all(image_patches)
-
-    log_probs_n_sources_patch = source_encoder.get_logprob_n_from_var_params(var_params_all)
-
-    loc_mean, loc_logvar, source_param_mean, source_param_log_var = \
-        source_encoder.get_var_params_for_n_sources(var_params_all,
-                                                    # we clip at max detections
-                                                    n_sources=true_patch_n_stars.clamp(
-                                                        max=source_encoder.max_detections))
-
-    # loc_mean, loc_log_var, log_flux_mean, log_flux_log_var, log_probs = \
-    #     star_encoder(image_patches, true_patch_n_stars)
+    loc_mean, loc_logvar, log_source_param_mean, log_source_param_logvar, log_probs_n_sources_patch = (
+        source_encoder.forward(image_patches, n_sources=true_patch_n_sources)
+    )
 
     if use_l2_loss:
-        loc_log_var = torch.zeros(loc_logvar.shape)
-        log_flux_log_var = torch.zeros(log_flux_log_var.shape)
+        loc_logvar = torch.zeros(loc_logvar.shape)
+        log_source_param_logvar = torch.zeros(log_source_param_logvar.shape)
 
-    loss, counter_loss, locs_loss, fluxes_loss, perm_indx = \
-        get_params_loss(loc_mean, loc_log_var,
-                        log_flux_mean, log_flux_log_var, log_probs,
-                        true_patch_locs, true_patch_fluxes,
-                        true_patch_is_on_array.float())
+    loss, counter_loss, locs_loss, source_params_loss, perm_indx = \
+        get_params_loss(loc_mean, loc_logvar,
+                        log_source_param_mean, log_source_param_logvar, log_probs_n_sources_patch,
+                        true_patch_locs, true_patch_source_params,
+                        true_patch_is_on_array.float(), is_star=source_encoder.is_star)
 
-    return loss, counter_loss, locs_loss, fluxes_loss, perm_indx, log_probs
+    return loss, counter_loss, locs_loss, source_params_loss, perm_indx, log_probs_n_sources_patch
 
 
 # TODO: Other than changing names, nothing to do for fluxes.

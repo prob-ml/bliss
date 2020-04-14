@@ -109,13 +109,13 @@ def _sample_locs(max_sources, is_on_array, batchsize=1):
     return locs
 
 
-def _plot_one_source(slen, locs, source, cached_grid=None, is_star=True):
+def _plot_one_source(slen, locs, source, cached_grid=None):
     """
     :param slen:
     :param locs: is batchsize x len((x,y))
-    :param source: is a (n_bands x slen x slen) tensor in the case of a star, and a
-                   (batchsize, n_bands, slen, slen) tensor in the case of a galaxy.
-    :param is_star:
+    :param source: is a (batchsize, n_bands, slen, slen) tensor, which could either be a `expanded_psf`
+                    (psf repeated multiple times) for the case of of stars. Or multiple galaxies in the case of
+                    galaxies.
     :param cached_grid:
     :return: shape = (batchsize x n_bands x slen x slen)
     """
@@ -137,7 +137,7 @@ def _plot_one_source(slen, locs, source, cached_grid=None, is_star=True):
     if is_star:  # psf is the star!
 
         psf = source
-        assert len(psf.shape) == 3
+        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
         n_bands = psf.shape[0]
         expanded_psf = psf.expand(batchsize, n_bands, -1, -1)  # all stars are just the PSF so we copy it.
         source_plotted = F.grid_sample(expanded_psf, grid_loc, align_corners=True)
@@ -289,7 +289,7 @@ class SourceSimulator:
                                   fluxes=fluxes, cached_grid=self.cached_grid, is_star=self.is_star) + \
             self.background.unsqueeze(0)
 
-        # ToDo: Change so that it uses galsim (Poisson Noise?) for now.
+        # ToDo: Change so that it uses galsim (Poisson Noise?), ok for now.
         if self.add_noise:
             if torch.any(images_mean <= 0):
                 print('warning: image mean less than 0')
