@@ -139,23 +139,7 @@ def _plot_one_source(slen, locs, source, cached_grid=None):
     return source_plotted
 
 
-def plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_grid=None, is_star=True):
-    """
-
-    :param slen:
-    :param locs: is (batchsize x max_num_sources x len(x_loc, y_loc))
-    :param n_sources: has shape: (batchsize)
-    :param sources: either a psf(star) with shape (n_bands x slen x slen) tensor, or a galaxy in which case it has
-                   shape (batchsize x max_galaxies x n_bands x slen x slen). Both already in cuda.
-    :param fluxes: is (batchsize x n_bands x max_stars)
-    :param cached_grid: Grid where the stars should be plotted with shape (slen x slen)
-    :param is_star: Whether we are plotting a galaxy or a star (default: star)
-    :return:
-    """
-
-    batchsize = locs.shape[0]
-    max_galaxies = locs.shape[1]
-
+def _sanity_plot(slen, locs, n_sources, batchsize, cached_grid):
     assert len(locs.shape) == 3, "Using batchsize as the first dimension."
     assert locs.shape[2] == 2
     assert len(n_sources) == batchsize
@@ -169,46 +153,67 @@ def plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_gr
         assert cached_grid.shape[1] == slen
         grid = cached_grid
 
-    if is_star:
-        psf = sources
-        n_bands = psf.shape[0]
-        stars = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    return grid
 
-        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
-        assert fluxes is not None
-        assert fluxes.shape[0] == locs.shape[0]
-        assert fluxes.shape[1] == locs.shape[1]
-        assert fluxes.shape[2] == n_bands
 
-        expanded_psf = psf.expand(batchsize, n_bands, -1, -1)  # all stars are just the PSF so we copy it.
+def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
+    """
 
-        # this loop plots each of the ith star in each of the (batchsize) images.
-        for n in range(max(n_sources)):
-            is_on_n = (n < n_sources).float()
-            locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-            fluxes_n = fluxes[:, n, :]  # shape = (batchsize x n_bands)
-            one_star = _plot_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
-            stars += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(batchsize, n_bands, 1, 1)
+    Args:
+        slen:
+        locs: is (batchsize x max_num_stars x len(x_loc, y_loc))
+        n_sources: has shape = (batchsize)
+        psf: A psf/star with shape (n_bands x slen x slen) tensor
+        fluxes: Is (batchsize x n_bands x max_stars)
+        cached_grid: Grid where the stars should be plotted with shape (slen x slen)
 
-        return stars
+    Returns:
+    """
 
-    else:  # is a galaxy.
-        assert fluxes is None
-        assert sources.shape[0] == locs.shape[0]  # batchsize
-        assert sources.shape[1] == locs.shape[1]  # max_galaxies
+    batchsize = locs.shape[0]
+    grid = _sanity_plot(slen, locs, n_sources, batchsize, cached_grid)
 
-        n_bands = sources.shape[2]
+    n_bands = psf.shape[0]
+    stars = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
 
-        galaxies = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
-        for n in range(max(n_sources)):
-            is_on_n = (n < n_sources).float()
-            locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-            source = sources[:, n, :, :, :]  # shape = (batchsize x n_bands x slen x slen)
+    assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
+    assert fluxes is not None
+    assert fluxes.shape[0] == locs.shape[0]
+    assert fluxes.shape[1] == locs.shape[1]
+    assert fluxes.shape[2] == n_bands
 
-            # shape=(batchsize, n_bands, slen, slen)
-            one_galaxy = _plot_one_source(slen, locs_n, source, cached_grid=grid)
-            galaxies += one_galaxy
-        return galaxies
+    expanded_psf = psf.expand(batchsize, n_bands, -1, -1)  # all stars are just the PSF so we copy it.
+
+    # this loop plots each of the ith star in each of the (batchsize) images.
+    for n in range(max(n_sources)):
+        is_on_n = (n < n_sources).float()
+        locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
+        fluxes_n = fluxes[:, n, :]  # shape = (batchsize x n_bands)
+        one_star = _plot_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
+        stars += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(batchsize, n_bands, 1, 1)
+
+    return stars
+
+
+def plot_multiple_galaxies(slen, locs, n_sources, galaxies, cached_grid=None):
+    batchsize = locs.shape[0]
+    n_bands = galaxies.shape[2]
+
+    assert galaxies.shape[0] == batchsize
+    assert galaxies.shape[1] == locs.shape[1]  # max_galaxies
+
+    grid = _sanity_plot(slen, locs, n_galaxies, batchsize, cached_grid)
+
+    galaxies = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    for n in range(max(n_sources)):
+        is_on_n = (n < n_sources).float()
+        locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
+        galaxy = galaxies[:, n, :, :, :]  # shape = (batchsize x n_bands x slen x slen)
+
+        # shape= (batchsize, n_bands, slen, slen)
+        one_galaxy = _plot_one_source(slen, locs_n, galaxy, cached_grid=grid)
+        galaxies += one_galaxy
+    return galaxies
 
 
 def get_mgrid(slen):
