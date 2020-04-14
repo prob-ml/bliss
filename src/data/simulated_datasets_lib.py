@@ -134,19 +134,8 @@ def _plot_one_source(slen, locs, source, cached_grid=None):
     locs = (locs - 0.5) * 2
     grid_loc = grid.view(1, slen, slen, 2) - locs[:, [1, 0]].view(batchsize, 1, 1, 2)
 
-    if is_star:  # psf is the star!
-
-        psf = source
-        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
-        n_bands = psf.shape[0]
-        expanded_psf = psf.expand(batchsize, n_bands, -1, -1)  # all stars are just the PSF so we copy it.
-        source_plotted = F.grid_sample(expanded_psf, grid_loc, align_corners=True)
-
-    else:  # plotting a galaxy.
-        assert source.shape[0] == batchsize
-        galaxy = source
-        source_plotted = F.grid_sample(galaxy, grid_loc, align_corners=True)
-
+    assert source.shape[0] == batchsize, "PSF should be expanded, check if shape is correct."
+    source_plotted = F.grid_sample(source, grid_loc, align_corners=True)
     return source_plotted
 
 
@@ -185,17 +174,20 @@ def plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_gr
         n_bands = psf.shape[0]
         stars = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
 
+        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
         assert fluxes is not None
         assert fluxes.shape[0] == locs.shape[0]
         assert fluxes.shape[1] == locs.shape[1]
         assert fluxes.shape[2] == n_bands
+
+        expanded_psf = psf.expand(batchsize, n_bands, -1, -1)  # all stars are just the PSF so we copy it.
 
         # this loop plots each of the ith star in each of the (batchsize) images.
         for n in range(max(n_sources)):
             is_on_n = (n < n_sources).float()
             locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
             fluxes_n = fluxes[:, n, :]  # shape = (batchsize x n_bands)
-            one_star = _plot_one_source(slen, locs_n, psf, cached_grid=grid, is_star=True)
+            one_star = _plot_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
             stars += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(batchsize, n_bands, 1, 1)
 
         return stars
@@ -214,7 +206,7 @@ def plot_multiple_sources(slen, locs, n_sources, sources, fluxes=None, cached_gr
             source = sources[:, n, :, :, :]  # shape = (batchsize x n_bands x slen x slen)
 
             # shape=(batchsize, n_bands, slen, slen)
-            one_galaxy = _plot_one_source(slen, locs_n, source, cached_grid=grid, is_star=False)
+            one_galaxy = _plot_one_source(slen, locs_n, source, cached_grid=grid)
             galaxies += one_galaxy
         return galaxies
 
