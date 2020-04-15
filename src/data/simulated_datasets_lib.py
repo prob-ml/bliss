@@ -294,7 +294,7 @@ class SourceSimulator:
         # sample locations
         locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
 
-        # either fluxes or galaxy parameters.
+        # either fluxes or (galaxy parameter, galaxy images) pair.
         source_params = self.get_source_params(n_sources, is_on_array=is_on_array, batchsize=batchsize)
 
         return n_sources, locs, source_params  # in cuda.
@@ -341,6 +341,7 @@ class GalaxySimulator(SourceSimulator):
         assert self.ds.num_bands == self.n_bands == self.background.shape[0]
 
     # TODO: Is there a better way than returning both? It is a bit of a misnomer.
+    #       'source_param' should consistently be fluxes or galaxy_params in the code.
     def get_source_params(self, n_galaxy, is_on_array=None, batchsize=1):
         assert len(n_galaxy.shape) == 1
         assert n_galaxy.shape[0] == batchsize
@@ -400,7 +401,7 @@ class GalaxyDataset(SourceDataset):
         return {'images': images,
                 'background': self.simulator.background,
                 'locs': locs,
-                'source_params': gal_params,
+                'gal_params': gal_params,
                 'n_sources': n_sources
                 }
 
@@ -519,7 +520,7 @@ class StarsDataset(SourceDataset):
         return {'images': images,
                 'background': self.simulator.background,
                 'locs': locs,
-                'source_params': fluxes,
+                'fluxes': fluxes,
                 'n_sources': n_sources
                 }
 

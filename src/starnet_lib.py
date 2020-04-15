@@ -113,17 +113,12 @@ class SourceEncoder(nn.Module):
         #    total possible detections, and each detection has
         #    4 + 2*n parameters (2 means and 2 variances for each loc and for n source_param's
         #    (flux per band or otherwise)
-        if n_source_params is None:  # fluxes
+        if n_source_params is None:  # fluxes.
             self.n_source_params = self.n_bands
-            # we will take exp for fluxes so that they are always positive.
-            self.constrain_source_params = True
             assert self.is_star, "You are not specifying the number of source parameters, so you want to run a star."
 
         else:  # something else like latent parameters in galaxy model.
             self.n_source_params = n_source_params
-
-            # these can be anywhere in the reals
-            self.constrain_source_params = False
             assert not self.is_star
 
         self.n_params_per_source = (4 + 2 * self.n_source_params)
@@ -197,13 +192,18 @@ class SourceEncoder(nn.Module):
             h:
 
         Returns:
-
         """
 
         free_probs = h[:, self.prob_indx]
-
         return self.log_softmax(free_probs)
 
+    # TODO: There is a deeper issue when trying to combine the encoder for both galaxies and stars,
+    #  it's not really a bug but makes it using it REALLY confusing. For the case of both stars and galaxies this
+    #  function returns the mean and log_var of a NORMAL variable. In the case of galaxies, the source_params being the
+    #  gal_params (or latent variables) this is ok because the gal_params are normal variables.
+    #  However, for stars this is confusing because then it's the mean and log_var of the LOG_FLUX, so what I been
+    #  calling `source_params` to try to combine fluxes/gal_params changes in this function and I don't see an easy
+    #  way to resolve it. Because e.g. can't return `source_param_mean` and `log_source_param_mean` at the same time.
     def get_var_params_for_n_sources(self, h, n_sources):
         """
         Index into all possible combinations of variational parameters (h) to obtain actually variational parameters
@@ -254,8 +254,8 @@ class SourceEncoder(nn.Module):
             return loc_mean.squeeze(0), loc_logvar.squeeze(0), \
                    source_param_mean.squeeze(0), source_param_logvar.squeeze(0)
         else:
-            return loc_mean, loc_logvar, \
-                   source_param_mean, source_param_logvar
+            return (loc_mean, loc_logvar,
+                    source_param_mean, source_param_logvar)
 
     def _get_hidden_indices(self):
         """
@@ -435,7 +435,6 @@ class SourceEncoder(nn.Module):
         else:
             patch_n_stars_sampled = patch_n_stars.repeat(n_samples).view(n_samples, -1)
 
-        # TODO: Check that shape returned here still makes sense for galaxies.
         is_on_array = const.get_is_on_from_patch_n_sources_2d(patch_n_stars_sampled,
                                                               self.max_detections)
         is_on_array = is_on_array.unsqueeze(3).float()
@@ -460,10 +459,11 @@ class SourceEncoder(nn.Module):
 
         patch_source_param_sampled = source_param_mean + _source_params_randn * source_params_sd
 
-        if self.constrain_source_params:  # turn log_fluxes into fluxes so they are now all positive.
+        if self.is_star:  # turn log_fluxes into fluxes so they are now all positive.
             patch_source_param_sampled = \
                 torch.exp(patch_source_param_sampled) * is_on_array
-        else:
+
+        else:  # these are normal distributed so leave alone.
             patch_source_param_sampled = \
                 patch_source_param_sampled * is_on_array
 

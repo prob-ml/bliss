@@ -66,6 +66,8 @@ def get_source_params_logprob_all_combs(true_source_params, source_param_mean, s
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
 
+    # TODO: The reason we need to make this fork is that 'fluxes' are returned from the dataset, but `log_flux_mean` and
+    #       `log_flux_logvar` are returned by the `source_encoder.forward` function below.
     if is_star:
         # these are fluxes.
         flux_log_probs_all = const.eval_lognormal_logprob(_true_source_param,

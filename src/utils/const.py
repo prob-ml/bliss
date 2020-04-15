@@ -100,13 +100,13 @@ def _logit(x, tol=1e-8):
     return torch.log(x + tol) - torch.log(1 - x + tol)
 
 
-def eval_normal_logprob(x, mu, log_var):
-    return - 0.5 * log_var - 0.5 * (x - mu) ** 2 / (torch.exp(log_var) + 1e-5) - 0.5 * np.log(2 * np.pi)
-
-
-def eval_logitnormal_logprob(x, mu, log_var):
+def eval_logitnormal_logprob(x, mu, logvar):
     logit_x = _logit(x)
-    return eval_normal_logprob(logit_x, mu, log_var)
+    return eval_normal_logprob(logit_x, mu, logvar)
+
+
+def eval_normal_logprob(x, mu, logvar):
+    return - 0.5 * logvar - 0.5 * (x - mu) ** 2 / (torch.exp(logvar) + 1e-5) - 0.5 * np.log(2 * np.pi)
 
 
 def eval_lognormal_logprob(x, mu, log_var, tol=1e-8):
