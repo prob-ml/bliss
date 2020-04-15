@@ -139,7 +139,7 @@ def _plot_one_source(slen, locs, source, cached_grid=None):
     return source_plotted
 
 
-def _sanity_plot(slen, locs, n_sources, batchsize, cached_grid):
+def _get_grid(slen, locs, n_sources, batchsize, cached_grid):
     assert len(locs.shape) == 3, "Using batchsize as the first dimension."
     assert locs.shape[2] == 2
     assert len(n_sources) == batchsize
@@ -171,7 +171,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     """
 
     batchsize = locs.shape[0]
-    grid = _sanity_plot(slen, locs, n_sources, batchsize, cached_grid)
+    grid = _get_grid(slen, locs, n_sources, batchsize, cached_grid)
 
     n_bands = psf.shape[0]
     stars = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
@@ -202,7 +202,7 @@ def plot_multiple_galaxies(slen, locs, n_sources, galaxies, cached_grid=None):
     assert galaxies.shape[0] == batchsize
     assert galaxies.shape[1] == locs.shape[1]  # max_galaxies
 
-    grid = _sanity_plot(slen, locs, n_sources, batchsize, cached_grid)
+    grid = _get_grid(slen, locs, n_sources, batchsize, cached_grid)
 
     galaxies = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
     for n in range(max(n_sources)):
@@ -227,8 +227,7 @@ class SourceSimulator:
 
     def __init__(self, slen, n_bands, background,
                  max_sources, mean_sources, min_sources,
-                 psf=None, transpose_psf=False, add_noise=True, draw_poisson=True,
-                 is_star=True):
+                 psf=None, transpose_psf=False, add_noise=True, draw_poisson=True):
         """
         :param slen: side length of the image.
         :param n_bands: number of bands of each image.
@@ -249,8 +248,6 @@ class SourceSimulator:
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
         assert background.shape[1] == background.shape[2] == self.slen
-
-        self.is_star = is_star
 
         self.max_sources = max_sources
         self.mean_sources = mean_sources
@@ -286,12 +283,6 @@ class SourceSimulator:
 
         return images
 
-    def get_source_params(self, n_sources, is_on_array=None, batchsize=1):
-        """
-        Return either fluxes or the (galaxy latent representation, images)
-        """
-        return torch.empty()
-
     def sample_parameters(self, batchsize=1):
         # sample number of sources
         n_sources = _sample_n_sources(self.mean_sources, self.min_sources, self.max_sources, batchsize,
@@ -306,39 +297,30 @@ class SourceSimulator:
         # either fluxes or galaxy parameters.
         source_params = self.get_source_params(n_sources, is_on_array=is_on_array, batchsize=batchsize)
 
-        return n_sources, locs, source_params
+        return n_sources, locs, source_params  # in cuda.
+
+    def get_source_params(self, n_sources, is_on_array=None, batchsize=1):
+        """
+        Return either fluxes in the case of stars or the (galaxy latent representation, images) in the case of galaxies.
+        """
+        return torch.empty()
 
 
 class SourceDataset:
     simulator_cls = SourceSimulator
 
-    def __init__(self, n_images, simulator_args, simulator_kwargs,
-                 is_star=True):
+    def __init__(self, n_images, simulator_args, simulator_kwargs):
         """
         :param n_images: same as batchsize.
         """
         assert torch.cuda.is_available(), "No GPU is available, which we assume is required."
 
         self.n_images = n_images  # = batchsize.
-        self.is_star = is_star
-
         self.simulator_args = simulator_args
-
         self.simulator_kwargs = simulator_kwargs
-        assert 'is_star' in simulator_kwargs and simulator_kwargs['is_star'] == self.is_star
-
-        self.simulator = self.simulator_cls(*simulator_args, **simulator_kwargs)
-
-        # image parameters
-        self.slen = self.simulator.slen
-        self.n_bands = self.simulator.n_bands
-        self.background = self.simulator.background  # in cuda.
 
     def __len__(self):
         return self.n_images
-
-    def __getitem__(self, idx):
-        pass
 
     def get_batch(self, batchsize=64):
         pass
@@ -358,6 +340,7 @@ class GalaxySimulator(SourceSimulator):
 
         assert self.ds.num_bands == self.n_bands == self.background.shape[0]
 
+    # TODO: Is there a better way than returning both? It is a bit of a misnomer.
     def get_source_params(self, n_galaxy, is_on_array=None, batchsize=1):
         assert len(n_galaxy.shape) == 1
         assert n_galaxy.shape[0] == batchsize
@@ -396,29 +379,26 @@ class GalaxySimulator(SourceSimulator):
         images = plot_multiple_galaxies(self.slen, locs, n_sources, galaxies, cached_grid=self.cached_grid)
         return images
 
-    def generate_image(self, locs, n_sources, galaxies):
+    def generate_images(self, locs, n_sources, galaxies):
         images = self._draw_image_from_params(locs, n_sources, galaxies)
         return self._prepare_images(images)
 
 
 class GalaxyDataset(SourceDataset):
-    simulator_cls = GalaxySimulator
 
     def __init__(self, n_images, simulator_args, simulator_kwargs):
         """
         """
-        simulator_kwargs.update(dict(is_star=False))
-        super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
-                                            is_star=False)
+        super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs)
+        self.simulator = GalaxySimulator(*self.simulator_args, **self.simulator_kwargs)
 
     def get_batch(self, batchsize=32):
-        n_sources, locs, source_params = self.simulator.sample_parameters(batchsize=batchsize)
-        gal_params, single_galaxies = source_params
+        n_sources, locs, (gal_params, single_galaxies) = self.simulator.sample_parameters(batchsize=batchsize)
 
         images = self.simulator.generate_images(locs, n_sources, single_galaxies)
 
         return {'images': images,
-                'background': self.background,
+                'background': self.simulator.background,
                 'locs': locs,
                 'source_params': gal_params,
                 'n_sources': n_sources
@@ -454,7 +434,6 @@ class GalaxyDataset(SourceDataset):
         simulator_kwargs = dict(
             add_noise=add_noise,
             draw_poisson=draw_poisson,
-            is_star=False
         )
 
         return cls(n_images, simulator_args, simulator_kwargs)
@@ -472,7 +451,6 @@ class StarSimulator(SourceSimulator):
         """
         super(StarSimulator, self).__init__(*args, **kwargs)
         assert self.psf is not None
-        assert self.is_star
         assert len(self.psf.shape) == 3
         assert len(self.background.shape) == 3
         assert self.background.shape[0] == self.psf.shape[0]
@@ -503,7 +481,7 @@ class StarSimulator(SourceSimulator):
         images = plot_multiple_stars(self.slen, locs, n_sources, self.psf, fluxes, cached_grid=self.cached_grid)
         return images
 
-    def generate_image(self, locs, n_sources, fluxes):
+    def generate_images(self, locs, n_sources, fluxes):
         images = self._draw_image_from_params(locs, n_sources, fluxes)
         return self._prepare_images(images)
 
@@ -529,22 +507,17 @@ class StarSimulator(SourceSimulator):
 
 
 class StarsDataset(SourceDataset):
-    simulator_cls = StarSimulator
 
     def __init__(self, n_images, simulator_args, simulator_kwargs):
-        """
-
-        """
-        simulator_kwargs.update(dict(is_star=True))
-        super(StarsDataset, self).__init__(n_images, simulator_args, simulator_kwargs,
-                                           is_star=True)
+        super(StarsDataset, self).__init__(n_images, simulator_args, simulator_kwargs)
+        self.simulator = StarSimulator(*self.simulator_args, **self.simulator_kwargs)
 
     def get_batch(self, batchsize=32):
         n_sources, locs, fluxes = self.simulator.sample_parameters(batchsize=batchsize)
         images = self.simulator.generate_images(locs, n_sources, fluxes)
 
         return {'images': images,
-                'background': self.background,
+                'background': self.simulator.background,
                 'locs': locs,
                 'source_params': fluxes,
                 'n_sources': n_sources
@@ -573,7 +546,6 @@ class StarsDataset(SourceDataset):
             transpose_psf=transpose_psf,
             add_noise=add_noise,
             draw_poisson=draw_poisson,
-            is_star=True
         )
 
         return cls(n_images, simulator_args, simulator_kwargs)
