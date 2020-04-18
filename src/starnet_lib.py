@@ -21,11 +21,12 @@ class Normalize2d(nn.Module):
 
 class SourceEncoder(nn.Module):
     def __init__(self, slen, patch_slen, step, edge_padding,
-                 n_bands, max_detections, is_star=True,
-                 n_source_params=None):
+                 n_bands, max_detections, n_source_params):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of size slen * slen
         and returns a NN latent variable representation of this image.
+
+        * NOTE: Assumes that source_params are normally distributed, in particular, only returns log_fluxes.
 
         * EXAMPLE on padding: If the patch_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
 
@@ -36,21 +37,20 @@ class SourceEncoder(nn.Module):
         :param edge_padding: length of padding (in pixels).
         :param n_bands : number of bands
         :param max_detections:
-        :param n_source_params: The dimension of 'source parameters' which are fluxes in the case of stars and latent variable
-        dimension in the case of galaxy.
+        :param n_source_params:
+        * The dimension of 'source parameters' which are log fluxes in the case of stars and
+        latent variable dimension in the case of galaxy. Assumed to be normally distributed.
+        * For fluxes this should equal number of bands, for galaxies it will be the number of latent dimensions in the
+        network.
         """
         super(SourceEncoder, self).__init__()
         assert torch.cuda.is_available(), "requires use of cuda."
-
-        # TODO: Experiment to see what works best as a step size.
-        #       revisit for the case of wake phase need to be more careful.
 
         # image parameters
         self.slen = slen
         self.patch_slen = patch_slen
         self.step = step
         self.n_bands = n_bands
-        self.is_star = is_star
 
         self.edge_padding = edge_padding
 
@@ -113,14 +113,7 @@ class SourceEncoder(nn.Module):
         #    total possible detections, and each detection has
         #    4 + 2*n parameters (2 means and 2 variances for each loc and for n source_param's
         #    (flux per band or otherwise)
-        if n_source_params is None:  # fluxes.
-            self.n_source_params = self.n_bands
-            assert self.is_star, "You are not specifying the number of source parameters, so you want to run a star."
-
-        else:  # something else like latent parameters in galaxy model.
-            self.n_source_params = n_source_params
-            assert not self.is_star
-
+        self.n_source_params = n_source_params
         self.n_params_per_source = (4 + 2 * self.n_source_params)
 
         self.dim_out_all = \
@@ -376,6 +369,7 @@ class SourceEncoder(nn.Module):
 
         assert self.n_source_params == patch_source_params_sampled.shape[-1]
 
+        # if the image given is not the same as the original encoder training images.
         if not (slen == self.slen):
             tile_coords = image_utils.get_tile_coords(slen, slen,
                                                       self.patch_slen,
@@ -396,20 +390,28 @@ class SourceEncoder(nn.Module):
 
         return locs, source_params, n_sources
 
-    # TODO: Still need to make sure this works with galaxies as well.
-    def sample_star_encoder(self, image,
-                            n_samples=1,
-                            return_map_n_stars=False,
-                            return_map_star_params=False,
-                            patch_n_stars=None,
-                            training=False):
+    def sample_patch(self, image, n_samples,
+                     return_map_n_sources, return_map_source_params,
+                     patch_n_sources,
+                     training):
+        """
+        NOTE: In the case of stars this will return LOG_FLUXES!
+
+        Args:
+            image:
+            n_samples:
+            return_map_n_sources:
+            return_map_sources_params:
+            patch_n_sources:
+            training:
+
+        Returns:
+
+        """
 
         # our sampling only works for one image at a time at the moment ...
         assert image.shape[0] == 1
 
-        slen = image.shape[-1]
-
-        # the image patches
         image_patches = self.get_image_patches(image,
                                                locs=None, source_params=None)[0]
 
@@ -417,23 +419,24 @@ class SourceEncoder(nn.Module):
         h = self.get_var_params_all(image_patches)
 
         # get log probs for number of stars
-        log_probs_nstar_patch = self.get_logprob_n_from_var_params(h)
+        log_probs_nsource_patch = self.get_logprob_n_from_var_params(h)
 
         if not training:
             h = h.detach()
-            log_probs_nstar_patch = log_probs_nstar_patch.detach()
+            log_probs_nstar_patch = log_probs_nsource_patch.detach()
 
         # sample number of stars
-        if patch_n_stars is None:
-            if return_map_n_stars:
+        if patch_n_sources is None:
+            if return_map_n_sources:
                 patch_n_stars_sampled = \
-                    torch.argmax(log_probs_nstar_patch.detach(), dim=1).repeat(n_samples).view(n_samples, -1)
+                    torch.argmax(log_probs_nsource_patch.detach(), dim=1).repeat(n_samples).view(n_samples, -1)
 
             else:
                 patch_n_stars_sampled = \
-                    const.sample_class_weights(torch.exp(log_probs_nstar_patch.detach()), n_samples).view(n_samples, -1)
+                    const.sample_class_weights(torch.exp(log_probs_nsource_patch.detach()), n_samples).view(n_samples,
+                                                                                                            -1)
         else:
-            patch_n_stars_sampled = patch_n_stars.repeat(n_samples).view(n_samples, -1)
+            patch_n_stars_sampled = patch_n_sources.repeat(n_samples).view(n_samples, -1)
 
         is_on_array = const.get_is_on_from_patch_n_sources_2d(patch_n_stars_sampled,
                                                               self.max_detections)
@@ -443,7 +446,7 @@ class SourceEncoder(nn.Module):
         loc_mean, loc_logvar, source_param_mean, source_param_logvar = \
             self.get_var_params_for_n_sources(h, patch_n_stars_sampled)
 
-        if return_map_star_params:
+        if return_map_source_params:
             loc_sd = torch.cuda.FloatTensor(*loc_logvar.shape).zero_()
             source_params_sd = torch.cuda.FloatTensor(*source_param_logvar.shape).zero_()
         else:
@@ -454,10 +457,31 @@ class SourceEncoder(nn.Module):
         _locs_randn = torch.cuda.FloatTensor(*loc_mean.shape).normal_()
         patch_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
 
-        # sample source params
+        # sample source params, these are log_fluxes or latent galaxy params (normal variables)
         _source_params_randn = torch.cuda.FloatTensor(*source_param_mean.shape).normal_()
 
         patch_source_param_sampled = source_param_mean + _source_params_randn * source_params_sd
+
+        return patch_locs_sampled, patch_source_param_sampled
+
+
+class StarEncoder(SourceEncoder):
+    def __init__(self, *args):
+        super(StarEncoder, self).__init__(*args)
+        assert self.n_bands == self.n_source_params
+
+    # TODO: Still need to make sure this works with galaxies as well.
+    def sample_star_encoder(self, image,
+                            n_samples=1,
+                            return_map_n_stars=False,
+                            return_map_star_params=False,
+                            patch_n_stars=None,
+                            training=False):
+
+        slen = image.shape[-1]
+        patch_locs_sampled, patch_source_param_sampled = self.sample_patch(image, n_samples, return_map_n_stars,
+                                                                           return_map_star_params, patch_n_stars,
+                                                                           training)
 
         if self.is_star:  # turn log_fluxes into fluxes so they are now all positive.
             patch_source_param_sampled = \

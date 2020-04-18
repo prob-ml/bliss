@@ -283,7 +283,7 @@ class SourceSimulator:
 
         return images
 
-    def sample_parameters(self, batchsize=1):
+    def _sample_n_sources_and_locs(self, batchsize):
         # sample number of sources
         n_sources = _sample_n_sources(self.mean_sources, self.min_sources, self.max_sources, batchsize,
                                       draw_poisson=self.draw_poisson)
@@ -294,16 +294,10 @@ class SourceSimulator:
         # sample locations
         locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
 
-        # either fluxes or (galaxy parameter, galaxy images) pair.
-        source_params = self.get_source_params(n_sources, is_on_array=is_on_array, batchsize=batchsize)
+        return n_sources, locs, is_on_array
 
-        return n_sources, locs, source_params  # in cuda.
-
-    def get_source_params(self, n_sources, is_on_array=None, batchsize=1):
-        """
-        Return either fluxes in the case of stars or the (galaxy latent representation, images) in the case of galaxies.
-        """
-        return torch.empty()
+    def sample_parameters(self, batchsize=1):
+        pass
 
 
 class SourceDataset:
@@ -340,9 +334,7 @@ class GalaxySimulator(SourceSimulator):
 
         assert self.ds.num_bands == self.n_bands == self.background.shape[0]
 
-    # TODO: Is there a better way than returning both? It is a bit of a misnomer.
-    #       'source_param' should consistently be fluxes or galaxy_params in the code.
-    def get_source_params(self, n_galaxy, is_on_array=None, batchsize=1):
+    def _sample_gal_params_and_single_images(self, n_galaxy, batchsize):
         assert len(n_galaxy.shape) == 1
         assert n_galaxy.shape[0] == batchsize
 
@@ -350,8 +342,8 @@ class GalaxySimulator(SourceSimulator):
         single_galaxies = torch.cuda.FloatTensor(batchsize, self.max_sources, self.n_bands, self.galaxy_slen,
                                                  self.galaxy_slen).zero_()
 
-        # z, shape = (num_samples, latent_dim)
-        # galaxies, shape = (num_samples, n_bands, slen, slen)
+        # z has shape = (num_samples, latent_dim)
+        # galaxies has shape = (num_samples, n_bands, slen, slen)
         num_samples = int(n_galaxy.sum().item())
         z, galaxies = self.ds.sample(num_samples)
 
@@ -384,6 +376,12 @@ class GalaxySimulator(SourceSimulator):
         images = self._draw_image_from_params(locs, n_sources, galaxies)
         return self._prepare_images(images)
 
+    def sample_parameters(self, batchsize=1):
+        n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
+        gal_params, single_galaxies = self._sample_gal_params_and_single_images(n_sources, batchsize)
+
+        return n_sources, locs, gal_params, single_galaxies
+
 
 class GalaxyDataset(SourceDataset):
 
@@ -394,7 +392,7 @@ class GalaxyDataset(SourceDataset):
         self.simulator = GalaxySimulator(*self.simulator_args, **self.simulator_kwargs)
 
     def get_batch(self, batchsize=32):
-        n_sources, locs, (gal_params, single_galaxies) = self.simulator.sample_parameters(batchsize=batchsize)
+        n_sources, locs, gal_params, single_galaxies = self.simulator.sample_parameters(batchsize=batchsize)
 
         images = self.simulator.generate_images(locs, n_sources, single_galaxies)
 
@@ -486,18 +484,17 @@ class StarSimulator(SourceSimulator):
         images = self._draw_image_from_params(locs, n_sources, fluxes)
         return self._prepare_images(images)
 
-    def get_source_params(self, n_stars, is_on_array=None, batchsize=1):
+    def _sample_fluxes(self, n_stars, is_on_array, batchsize=1):
         """
 
         :return: fluxes, a shape (batchsize x max_sources x nbands) tensor
         """
-        assert is_on_array is not None
         assert n_stars.shape[0] == batchsize
         base_fluxes = _draw_pareto_maxed(self.f_min, self.f_max, alpha=self.alpha,
                                          shape=(batchsize, self.max_sources))
 
         if self.n_bands > 1:
-            colors = torch.cuda.FloatTensor(batchsize, self.max_sources, self.n_bands-1).uniform_() * 0.15 + 0.3
+            colors = torch.cuda.FloatTensor(batchsize, self.max_sources, self.n_bands - 1).uniform_() * 0.15 + 0.3
             _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(2)
 
             fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim=2) * is_on_array.unsqueeze(2).float()
@@ -505,6 +502,12 @@ class StarSimulator(SourceSimulator):
             fluxes = (base_fluxes * is_on_array.float()).unsqueeze(2)
 
         return fluxes
+
+    def sample_parameters(self, batchsize=1):
+        n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
+        fluxes = self._sample_fluxes(n_sources, is_on_array, batchsize)
+
+        return n_sources, locs, fluxes
 
 
 class StarsDataset(SourceDataset):

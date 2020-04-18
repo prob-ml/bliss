@@ -202,8 +202,8 @@ def get_full_params_from_patch_params(patch_locs, patch_source_params,
     assert (patch_source_params.shape[0] % batchsize) == 0
     n_sources_in_batch = int(patch_source_params.shape[0] * patch_source_params.shape[1] / batchsize)
 
-    latent_dim = patch_source_params.shape[2]  # = n_bands in the case of fluxes.
-    source_params = patch_source_params.view(batchsize, n_sources_in_batch, latent_dim)
+    n_source_params = patch_source_params.shape[2]  # = n_bands in the case of fluxes.
+    source_params = patch_source_params.view(batchsize, n_sources_in_batch, n_source_params)
 
     scale = (stamp_slen - 2 * edge_padding)
     bias = tile_coords.repeat(batchsize, 1).unsqueeze(1).float() + edge_padding - 0.5
@@ -211,15 +211,15 @@ def get_full_params_from_patch_params(patch_locs, patch_source_params,
 
     locs = locs.view(batchsize, n_sources_in_batch, 2)
 
-    patch_is_on_bool = (source_params > 0).any(2).float()  # if source_param in any latent_dim is nonzero
+    patch_is_on_bool = (source_params > 0).any(2).float()  # if source_param in any n_source_params is nonzero
     n_sources = torch.sum(patch_is_on_bool > 0, dim=1)
 
-    # puts all the on stars in front (of each patch subarray)
+    # puts all the on sources in front (of each patch subarray)
     is_on_array_full = const.get_is_on_from_n_sources(n_sources, n_sources.max())
     indx = is_on_array_full.clone()
     indx[indx == 1] = torch.nonzero(patch_is_on_bool)[:, 1]
 
-    source_params, locs, _ = bring_to_front(latent_dim, n_sources, patch_is_on_bool, source_params, locs)
+    source_params, locs, _ = bring_to_front(n_source_params, n_sources, patch_is_on_bool, source_params, locs)
     return locs, source_params, n_sources
 
 
