@@ -401,7 +401,7 @@ class SourceEncoder(nn.Module):
             image:
             n_samples:
             return_map_n_sources:
-            return_map_sources_params:
+            return_map_source_params:
             patch_n_sources:
             training:
 
@@ -418,23 +418,23 @@ class SourceEncoder(nn.Module):
         # pass through NN
         h = self.get_var_params_all(image_patches)
 
-        # get log probs for number of stars
-        log_probs_nsource_patch = self.get_logprob_n_from_var_params(h)
+        # get log probs for number of sources
+        log_probs_n_source_patch = self.get_logprob_n_from_var_params(h)
 
         if not training:
             h = h.detach()
-            log_probs_nstar_patch = log_probs_nsource_patch.detach()
+            log_probs_nstar_patch = log_probs_n_source_patch.detach()
 
         # sample number of stars
         if patch_n_sources is None:
             if return_map_n_sources:
                 patch_n_stars_sampled = \
-                    torch.argmax(log_probs_nsource_patch.detach(), dim=1).repeat(n_samples).view(n_samples, -1)
+                    torch.argmax(log_probs_n_source_patch.detach(), dim=1).repeat(n_samples).view(n_samples, -1)
 
             else:
                 patch_n_stars_sampled = \
-                    const.sample_class_weights(torch.exp(log_probs_nsource_patch.detach()), n_samples).view(n_samples,
-                                                                                                            -1)
+                    const.sample_class_weights(torch.exp(log_probs_n_source_patch.detach()), n_samples).view(n_samples,
+                                                                                                             -1)
         else:
             patch_n_stars_sampled = patch_n_sources.repeat(n_samples).view(n_samples, -1)
 
@@ -462,7 +462,7 @@ class SourceEncoder(nn.Module):
 
         patch_source_param_sampled = source_param_mean + _source_params_randn * source_params_sd
 
-        return patch_locs_sampled, patch_source_param_sampled
+        return patch_locs_sampled, patch_source_param_sampled, is_on_array
 
 
 class StarEncoder(SourceEncoder):
@@ -470,31 +470,46 @@ class StarEncoder(SourceEncoder):
         super(StarEncoder, self).__init__(*args)
         assert self.n_bands == self.n_source_params
 
-    # TODO: Still need to make sure this works with galaxies as well.
-    def sample_star_encoder(self, image,
-                            n_samples=1,
-                            return_map_n_stars=False,
-                            return_map_star_params=False,
-                            patch_n_stars=None,
-                            training=False):
-
+    def sample_encoder(self, image, n_samples=1,
+                       return_map_n_stars=False,
+                       return_map_star_params=False,
+                       patch_n_stars=None,
+                       training=False):
         slen = image.shape[-1]
-        patch_locs_sampled, patch_source_param_sampled = self.sample_patch(image, n_samples, return_map_n_stars,
-                                                                           return_map_star_params, patch_n_stars,
-                                                                           training)
-
-        if self.is_star:  # turn log_fluxes into fluxes so they are now all positive.
-            patch_source_param_sampled = \
-                torch.exp(patch_source_param_sampled) * is_on_array
-
-        else:  # these are normal distributed so leave alone.
-            patch_source_param_sampled = \
-                patch_source_param_sampled * is_on_array
+        patch_locs_sampled, patch_log_fluxes_sampled, is_on_array = self.sample_patch(image, n_samples,
+                                                                                      return_map_n_stars,
+                                                                                      return_map_star_params,
+                                                                                      patch_n_stars,
+                                                                                      training)
+        # we exponentiate the log_fluxes to obtain fluxes.
+        patch_fluxes_sampled = torch.exp(patch_log_fluxes_sampled) * is_on_array
 
         # get parameters on full image
-        locs, source_params, n_stars = \
+        locs, fluxes, n_stars = self._get_full_params_from_sampled_params(patch_locs_sampled,
+                                                                          patch_fluxes_sampled,
+                                                                          slen)
+
+        return locs, fluxes, n_stars
+
+
+class GalaxyEncoder(SourceEncoder):
+    def sample_encoder(self, image, n_samples=1,
+                       return_map_n_galaxies=False,
+                       return_map_gal_params=False,
+                       patch_n_galaxies=None,
+                       training=False):
+        slen = image.shape[-1]
+        patch_locs_sampled, patch_gal_params_sampled, is_on_array = self.sample_patch(image, n_samples,
+                                                                                      return_map_n_galaxies,
+                                                                                      return_map_gal_params,
+                                                                                      patch_n_galaxies,
+                                                                                      training)
+        patch_gal_params_sampled = patch_gal_params_sampled * is_on_array
+
+        # get parameters on full image
+        locs, gal_params, n_stars = \
             self._get_full_params_from_sampled_params(patch_locs_sampled,
-                                                      patch_source_param_sampled,
+                                                      patch_gal_params_sampled,
                                                       slen)
 
-        return locs, source_params, n_stars
+        return locs, gal_params, n_stars
