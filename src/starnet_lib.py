@@ -190,13 +190,6 @@ class SourceEncoder(nn.Module):
         free_probs = h[:, self.prob_indx]
         return self.log_softmax(free_probs)
 
-    # TODO: There is a deeper issue when trying to combine the encoder for both galaxies and stars,
-    #  it's not really a bug but makes it using it REALLY confusing. For the case of both stars and galaxies this
-    #  function returns the mean and log_var of a NORMAL variable. In the case of galaxies, the source_params being the
-    #  gal_params (or latent variables) this is ok because the gal_params are normal variables.
-    #  However, for stars this is confusing because then it's the mean and log_var of the LOG_FLUX, so what I been
-    #  calling `source_params` to try to combine fluxes/gal_params changes in this function and I don't see an easy
-    #  way to resolve it. Because e.g. can't return `source_param_mean` and `log_source_param_mean` at the same time.
     def get_var_params_for_n_sources(self, h, n_sources):
         """
         Index into all possible combinations of variational parameters (h) to obtain actually variational parameters
@@ -307,7 +300,7 @@ class SourceEncoder(nn.Module):
 
         :param images: torch.Tensor of shape (batchsize x num_bands x slen x slen)
         :param locs:
-        :param source_params:
+        :param source_params: fluxes/log_fluxes/gal_params.
         :param clip_max_sources:
         :return:
         """
