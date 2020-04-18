@@ -26,7 +26,8 @@ class SourceEncoder(nn.Module):
         This class implements the source encoder, which is supposed to take in a synthetic image of size slen * slen
         and returns a NN latent variable representation of this image.
 
-        * NOTE: Assumes that source_params are normally distributed, in particular, only returns log_fluxes.
+        * NOTE: Assumes that source_params are always log_fluxes throughout the code. Except in get_image_patches, but
+        that depends on the user anyways.
 
         * EXAMPLE on padding: If the patch_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
 
@@ -172,6 +173,7 @@ class SourceEncoder(nn.Module):
             self.get_var_params_for_n_sources(h, n_sources=n_sources.clamp(
                 max=self.max_detections))
 
+        # in the case of stars these are log_flux_mean, and log_flux_log_var.
         return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
 
     def get_logprob_n_from_var_params(self, h):
