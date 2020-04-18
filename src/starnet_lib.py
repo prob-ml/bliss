@@ -294,6 +294,8 @@ class SourceEncoder(nn.Module):
     ######################
     # Modules for patching images and parameters
     ######################
+    # TODO: in this function the user usually passes in source_param as potentially fluxes. Breaking the log_fluxes
+    #  consistency in the rest of the code.
     def get_image_patches(self, images, locs=None, source_params=None,
                           clip_max_sources=False):
         """
@@ -383,10 +385,10 @@ class SourceEncoder(nn.Module):
 
         return locs, source_params, n_sources
 
-    def sample_patch(self, image, n_samples,
-                     return_map_n_sources, return_map_source_params,
-                     patch_n_sources,
-                     training):
+    def _sample_patch_params(self, image, n_samples,
+                             return_map_n_sources, return_map_source_params,
+                             patch_n_sources,
+                             training):
         """
         NOTE: In the case of stars this will return LOG_FLUXES!
 
@@ -453,9 +455,9 @@ class SourceEncoder(nn.Module):
         # sample source params, these are log_fluxes or latent galaxy params (normal variables)
         _source_params_randn = torch.cuda.FloatTensor(*source_param_mean.shape).normal_()
 
-        patch_source_param_sampled = source_param_mean + _source_params_randn * source_params_sd
+        patch_source_params_sampled = source_param_mean + _source_params_randn * source_params_sd
 
-        return patch_locs_sampled, patch_source_param_sampled, is_on_array
+        return patch_locs_sampled, patch_source_params_sampled, is_on_array
 
 
 class StarEncoder(SourceEncoder):
@@ -469,11 +471,11 @@ class StarEncoder(SourceEncoder):
                        patch_n_stars=None,
                        training=False):
         slen = image.shape[-1]
-        patch_locs_sampled, patch_log_fluxes_sampled, is_on_array = self.sample_patch(image, n_samples,
-                                                                                      return_map_n_stars,
-                                                                                      return_map_star_params,
-                                                                                      patch_n_stars,
-                                                                                      training)
+        patch_locs_sampled, patch_log_fluxes_sampled, is_on_array = self._sample_patch_params(image, n_samples,
+                                                                                              return_map_n_stars,
+                                                                                              return_map_star_params,
+                                                                                              patch_n_stars,
+                                                                                              training)
         # we exponentiate the log_fluxes to obtain fluxes.
         patch_fluxes_sampled = torch.exp(patch_log_fluxes_sampled) * is_on_array
 
@@ -492,11 +494,11 @@ class GalaxyEncoder(SourceEncoder):
                        patch_n_galaxies=None,
                        training=False):
         slen = image.shape[-1]
-        patch_locs_sampled, patch_gal_params_sampled, is_on_array = self.sample_patch(image, n_samples,
-                                                                                      return_map_n_galaxies,
-                                                                                      return_map_gal_params,
-                                                                                      patch_n_galaxies,
-                                                                                      training)
+        patch_locs_sampled, patch_gal_params_sampled, is_on_array = self._sample_patch_params(image, n_samples,
+                                                                                              return_map_n_galaxies,
+                                                                                              return_map_gal_params,
+                                                                                              patch_n_galaxies,
+                                                                                              training)
         patch_gal_params_sampled = patch_gal_params_sampled * is_on_array
 
         # get parameters on full image
