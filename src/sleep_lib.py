@@ -86,7 +86,7 @@ def get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_arr
 
 
 class SourceSleep(object):
-    def __init__(self, encoder, dataset, n_epochs, n_source_params, out_filename,
+    def __init__(self, encoder, dataset, n_epochs, n_source_params, state_dict_file=None, output_file=None,
                  optimizer=None, batchsize=32, print_every=10):
         """
         In this case, source_params means either flux or galaxy latent params.
@@ -95,49 +95,60 @@ class SourceSleep(object):
             dataset:
             optimizer:
             n_epochs:
-            out_filename:
             batchsize:
             print_every:
         """
 
         self.optimizer = optimizer
-
         self.n_epochs = n_epochs
-        self.out_filename = out_filename
+
         self.print_every = print_every
+        self.state_dict_file = state_dict_file
+        self.output_file = output_file
+        self.train_losses_file = output_file.parent.joinpath("train_losses.txt")
 
         self.encoder = encoder
         self.dataset = dataset
         self.batchsize = batchsize
         self.n_source_params = n_source_params
 
+    def log_train(self, epoch, avg_loss, counter_loss, locs_loss, source_param_loss, train_losses, t0):
+
+        # print and save test results.
+        elapsed = time.time() - t0
+        out_text = f'{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f};' \
+                   f'source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]'
+        print(out_text)
+        if self.output_file:
+            print(out_text, file=self.output_file)
+
+        train_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, source_param_loss])
+        np.savetxt(self.train_losses_file, train_losses)
+
+    def log_eval(self, test_loss, test_counter_loss, test_locs_loss, test_source_param_loss):
+
+        out_text = f'**** test loss: {test_loss:.3f}; counter loss: {test_counter_loss:.3f}; ' \
+                   f'locs loss: {test_locs_loss:.3f}; fluxes loss: {test_source_param_loss:.3f} ****'
+        print(out_text)
+        if self.output_file:
+            print(out_text, file=self.output_file)
+
+        print("writing the encoder parameters to " + self.state_dict_file.as_posix())
+        torch.save(self.encoder.state_dict(), self.state_dict_file)
+
     def run_sleep(self):
+        assert self.optimizer is not None and self.state_dict_file is not None
+
         train_losses = np.zeros((4, self.n_epochs))
 
         for epoch in range(self.n_epochs):
             t0 = time.time()
-
-            avg_loss, counter_loss, locs_loss, fluxes_loss = self.eval_sleep(train=True)
-
-            elapsed = time.time() - t0
-            print(
-                f'{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f};'
-                f' fluxes loss: {fluxes_loss:.4f} \t [{elapsed:.1f} seconds]'
-            )
-
-            train_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, fluxes_loss])
-            np.savetxt(f"{self.out_filename}-train_losses", train_losses)
+            avg_loss, counter_loss, locs_loss, source_param_loss = self.eval_sleep(train=True)
+            self.log_train(epoch, avg_loss, counter_loss, locs_loss, source_param_loss, train_losses, t0)
 
             if (epoch % self.print_every) == 0:
-                test_loss, test_counter_loss, test_locs_loss, test_fluxes_loss = self.eval_sleep(train=False)
-
-                print(
-                    f'**** test loss: {test_loss:.3f}; counter loss: {test_counter_loss:.3f}; '
-                    f'locs loss: {test_locs_loss:.3f}; fluxes loss: {test_fluxes_loss:.3f} ****'
-                )
-
-                print("writing the encoder parameters to " + self.out_filename.as_posix())
-                torch.save(self.encoder.state_dict(), self.out_filename)
+                test_loss, test_counter_loss, test_locs_loss, test_source_param_loss = self.eval_sleep(train=False)
+                self.log_eval(test_loss, test_counter_loss, test_locs_loss, test_source_param_loss)
 
     def eval_sleep(self, train=False):
         assert not train or self.optimizer, "For training you need an optimizer. "

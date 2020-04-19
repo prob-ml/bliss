@@ -44,15 +44,18 @@ def train(galaxy_encoder, dataset, optimizer):
     batchsize = 32
     print('training')
 
-    out_path = const.reports_path.joinpath("results_galaxy_2020-04-19")
-    out_path.mkdir(exist_ok=True, parents=True)
+    out_dir = const.reports_path.joinpath("results_galaxy_2020-04-19")
+    out_dir.mkdir(exist_ok=True, parents=True)
 
-    out_filename = out_path.joinpath("galaxy_i.dat")
-    print(f"output file: {out_filename.as_posix()}")
+    state_dict_file = out_dir.joinpath("galaxy_i.dat")
+    print(f"state dict file: {state_dict_file.as_posix()}")
+
+    output_file = out_dir.joinpath("output.txt")  # save the output that is being printed.
+    print(f"output file: {output_file.as_posix()}")
 
     sleep_phase = sleep_lib.GalaxySleep(galaxy_encoder, dataset, n_epochs, galaxy_encoder.n_source_params,
-                                        out_filename, optimizer=optimizer, batchsize=batchsize,
-                                        print_every=print_every)
+                                        state_dict_file=state_dict_file, output_file=output_file,
+                                        optimizer=optimizer, batchsize=batchsize, print_every=print_every)
 
     print(f"running sleep phase for n_epochs = {n_epochs}, batchsize={batchsize}")
     sleep_phase.run_sleep()
