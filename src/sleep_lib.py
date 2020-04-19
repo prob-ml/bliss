@@ -86,8 +86,8 @@ def get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_arr
 
 
 class SourceSleep(object):
-    def __init__(self, encoder, dataset, n_epochs, n_source_params,
-                 optimizer=None, out_filename=None, batchsize=32, print_every=10):
+    def __init__(self, encoder, dataset, n_epochs, n_source_params, out_filename,
+                 optimizer=None, batchsize=32, print_every=10):
         """
         In this case, source_params means either flux or galaxy latent params.
         Args:
