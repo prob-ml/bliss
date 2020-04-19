@@ -223,7 +223,7 @@ def get_mgrid(slen):
     mgrid = torch.tensor(np.dstack((y, x))) / offset
     return mgrid.type(torch.FloatTensor).cuda()
 
-
+# TODO: Make this an abstract class, same with the dataset.
 class SourceSimulator:
 
     def __init__(self, slen, n_bands, background,
