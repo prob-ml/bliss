@@ -174,7 +174,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     grid = _get_grid(slen, locs, n_sources, batchsize, cached_grid)
 
     n_bands = psf.shape[0]
-    stars = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    scene = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
 
     assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
     assert fluxes is not None
@@ -190,30 +190,31 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
         fluxes_n = fluxes[:, n, :]  # shape = (batchsize x n_bands)
         one_star = _plot_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
-        stars += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(batchsize, n_bands, 1, 1)
+        scene += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(batchsize, n_bands, 1, 1)
 
-    return stars
+    return scene
 
 
-def plot_multiple_galaxies(slen, locs, n_sources, galaxies, cached_grid=None):
+def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=None):
     batchsize = locs.shape[0]
-    n_bands = galaxies.shape[2]
+    n_bands = single_galaxies.shape[2]
 
-    assert galaxies.shape[0] == batchsize
-    assert galaxies.shape[1] == locs.shape[1]  # max_galaxies
+    assert single_galaxies.shape[0] == batchsize
+    assert single_galaxies.shape[1] == locs.shape[1]  # max_galaxies
 
     grid = _get_grid(slen, locs, n_sources, batchsize, cached_grid)
 
-    galaxies = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    scene = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
     for n in range(max(n_sources)):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-        galaxy = galaxies[:, n, :, :, :]  # shape = (batchsize x n_bands x slen x slen)
+        galaxy = single_galaxies[:, n, :, :, :]  # shape = (batchsize x n_bands x slen x slen)
 
         # shape= (batchsize, n_bands, slen, slen)
         one_galaxy = _plot_one_source(slen, locs_n, galaxy, cached_grid=grid)
-        galaxies += one_galaxy
-    return galaxies
+        scene += one_galaxy
+
+    return scene
 
 
 def get_mgrid(slen):

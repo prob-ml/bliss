@@ -178,7 +178,7 @@ class SourceSleep(object):
 
         return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
 
-    # TODO: Fix misnomer variables without redundant code?
+    # TODO: Fix misnomer variables without redundant code (see docstring)?
     def _get_inv_kl_loss(self, images, true_locs, true_source_params):
         """
         In the case of stars, this function has some misnomer variables:
