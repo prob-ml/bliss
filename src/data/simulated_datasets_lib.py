@@ -301,7 +301,6 @@ class SourceSimulator:
 
 
 class SourceDataset:
-    simulator_cls = SourceSimulator
 
     def __init__(self, n_images, simulator_args, simulator_kwargs):
         """
@@ -390,6 +389,8 @@ class GalaxyDataset(SourceDataset):
         """
         super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs)
         self.simulator = GalaxySimulator(*self.simulator_args, **self.simulator_kwargs)
+        self.slen = self.simulator.slen
+        self.n_bands = self.simulator.n_bands
 
     def get_batch(self, batchsize=32):
         n_sources, locs, gal_params, single_galaxies = self.simulator.sample_parameters(batchsize=batchsize)
@@ -515,6 +516,9 @@ class StarsDataset(SourceDataset):
     def __init__(self, n_images, simulator_args, simulator_kwargs):
         super(StarsDataset, self).__init__(n_images, simulator_args, simulator_kwargs)
         self.simulator = StarSimulator(*self.simulator_args, **self.simulator_kwargs)
+
+        self.slen = self.simulator.slen
+        self.n_bands = self.simulator.n_bands
 
     def get_batch(self, batchsize=32):
         n_sources, locs, fluxes = self.simulator.sample_parameters(batchsize=batchsize)
