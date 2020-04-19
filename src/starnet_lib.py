@@ -174,6 +174,7 @@ class SourceEncoder(nn.Module):
                 max=self.max_detections))
 
         # in the case of stars these are log_flux_mean, and log_flux_log_var.
+        # loc_mean has shape = (n_patches x max_detections x len(x,y))
         return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
 
     def get_logprob_n_from_var_params(self, h):

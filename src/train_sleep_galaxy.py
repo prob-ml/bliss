@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from . import sleep_lib, starnet_lib, wake_lib, psf_transform_lib
+from . import sleep_lib, starnet_lib
 from .data import simulated_datasets_lib
 from .utils import const
 
@@ -41,17 +41,20 @@ def get_optimizer(galaxy_encoder):
 def train(galaxy_encoder, dataset, optimizer):
     n_epochs = 101
     print_every = 20
+    batchsize = 32
     print('training')
 
     out_path = const.reports_path.joinpath("results_galaxy_2020-04-19")
     out_path.mkdir(exist_ok=True, parents=True)
 
     out_filename = out_path.joinpath("galaxy_i.dat")
+    print(f"output file: {out_filename.as_posix()}")
 
     sleep_phase = sleep_lib.GalaxySleep(galaxy_encoder, dataset, n_epochs, galaxy_encoder.n_source_params,
-                                        out_filename, optimizer=optimizer, batchsize=32,
+                                        out_filename, optimizer=optimizer, batchsize=batchsize,
                                         print_every=print_every)
 
+    print(f"running sleep phase for n_epochs = {n_epochs}, batchsize={batchsize}")
     sleep_phase.run_sleep()
 
 
@@ -63,9 +66,8 @@ def main():
         # setup dataset.
         n_images = 128
         galaxy_dataset = simulated_datasets_lib.GalaxyDataset.load_dataset_from_params(
-            128, data_params
+            n_images, data_params
         )
-        galaxy_dataset.cuda()
 
         galaxy_encoder = starnet_lib.GalaxyEncoder(slen=data_params['slen'],
                                                    n_bands=1,

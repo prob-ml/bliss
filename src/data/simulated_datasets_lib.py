@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch.utils.data import Dataset
 import torch.nn.functional as F
 from gmodel.data.galaxy_datasets import DecoderSamples
 
@@ -223,6 +224,7 @@ def get_mgrid(slen):
     mgrid = torch.tensor(np.dstack((y, x))) / offset
     return mgrid.type(torch.FloatTensor).cuda()
 
+
 # TODO: Make this an abstract class, same with the dataset.
 class SourceSimulator:
 
@@ -301,7 +303,7 @@ class SourceSimulator:
         pass
 
 
-class SourceDataset:
+class SourceDataset(Dataset):
 
     def __init__(self, n_images, simulator_args, simulator_kwargs):
         """
@@ -321,6 +323,8 @@ class SourceDataset:
 
 
 class GalaxySimulator(SourceSimulator):
+
+    # TODO: Double check decoder returns things in cuda() that are not attached.
     def __init__(self, galaxy_slen, gal_decoder_file, *args, **kwargs):
         """
         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
@@ -354,7 +358,7 @@ class GalaxySimulator(SourceSimulator):
             single_galaxies[batch_i, 0:n_gal, :, :, :] = galaxies[count:count + n_gal, :, :, :]
             count += n_gal
 
-        return galaxy_params, single_galaxies
+        return galaxy_params, single_galaxies  # in cuda.
 
     # TODO: What to do for non-aligned multi-band images in the case of galaxies.
     def _draw_image_from_params(self, locs, n_sources, galaxies):

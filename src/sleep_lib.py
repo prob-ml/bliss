@@ -153,6 +153,7 @@ class SourceSleep(object):
             data = self.dataset.get_batch(batchsize=self.batchsize)
 
             # fluxes or gal_params are returned as true_source_params.
+            # already in cuda.
             true_source_params, true_locs, images = self._get_params_from_data(data)
 
             if train:
@@ -214,6 +215,8 @@ class SourceSleep(object):
                          source_param_mean, source_param_logvar, log_probs,
                          true_locs, true_source_params, true_is_on_array):
         """
+        NOTE: All the quantities are per-patch quantities on first dimension, for simplicity not added to names.
+
         In the case of stars, this function has some misnomer variables:
         * true_source_params = true_fluxes
         * source_param_mean, source_param_logvar = log_flux_mean, log_flux_logvar.
@@ -254,14 +257,16 @@ class SourceSleep(object):
         return loss, counter_loss, locs_loss, source_param_loss, perm_indx
 
     def _get_transformed_source_params(self, true_source_params, source_param_mean, source_param_logvar):
-        _true_source_params = true_source_params.view(self.batchsize, true_source_params.shape[1], 1,
-                                                      self.n_source_params)
-        _log_source_param_mean = source_param_mean.view(self.batchsize, 1, source_param_mean.shape[1],
-                                                        self.n_source_params)
-        _log_source_param_log_var = source_param_logvar.view(self.batchsize, 1, source_param_mean.shape[1],
-                                                             self.n_source_params)
+        num_patches = true_source_params.shape[0]
 
-        return _true_source_params, _log_source_param_mean, _log_source_param_log_var
+        _true_source_params = true_source_params.view(num_patches, true_source_params.shape[1], 1,
+                                                      self.n_source_params)
+        _source_param_mean = source_param_mean.view(num_patches, 1, source_param_mean.shape[1],
+                                                    self.n_source_params)
+        _source_param_logvar = source_param_logvar.view(num_patches, 1, source_param_mean.shape[1],
+                                                        self.n_source_params)
+
+        return _true_source_params, _source_param_mean, _source_param_logvar
 
     def _get_source_params_logprob_all_combs(self, true_gal_params, gal_param_mean, gal_param_logvar):
         return torch.zeros(0)
