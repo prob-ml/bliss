@@ -87,7 +87,7 @@ def get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_arr
 
 class SourceSleep(object):
     def __init__(self, encoder, dataset, n_epochs, n_source_params, state_dict_file=None, output_file=None,
-                 optimizer=None, batchsize=32, print_every=10):
+                 optimizer=None, batchsize=32, print_every=20):
         """
         In this case, source_params means either flux or galaxy latent params.
         Args:
@@ -102,36 +102,40 @@ class SourceSleep(object):
         self.optimizer = optimizer
         self.n_epochs = n_epochs
 
-        self.print_every = print_every
-        self.state_dict_file = state_dict_file
-        self.output_file = output_file
-        self.train_losses_file = output_file.parent.joinpath("train_losses.txt")
-
         self.encoder = encoder
         self.dataset = dataset
         self.batchsize = batchsize
         self.n_source_params = n_source_params
 
+        # logging.
+        self.print_every = print_every
+        self.state_dict_file = state_dict_file  # paths.
+        self.output_file = output_file
+        self.train_losses_file = output_file.parent.joinpath("train_losses.txt")
+
+        assert len(self.dataset) % self.batchsize == 0, "For simplicity, make length of dataset divisible by batchsize."
+
     def log_train(self, epoch, avg_loss, counter_loss, locs_loss, source_param_loss, train_losses, t0):
 
         # print and save test results.
         elapsed = time.time() - t0
-        out_text = f'{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f};' \
+        out_text = f'{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f}; ' \
                    f'source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]'
         print(out_text)
         if self.output_file:
-            print(out_text, file=self.output_file)
+            with open(self.output_file, 'a') as out:
+                print(out_text, file=out)
 
-        train_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, source_param_loss])
         np.savetxt(self.train_losses_file, train_losses)
 
     def log_eval(self, test_loss, test_counter_loss, test_locs_loss, test_source_param_loss):
 
         out_text = f'**** test loss: {test_loss:.3f}; counter loss: {test_counter_loss:.3f}; ' \
-                   f'locs loss: {test_locs_loss:.3f}; fluxes loss: {test_source_param_loss:.3f} ****'
+                   f'locs loss: {test_locs_loss:.3f}; source param loss: {test_source_param_loss:.3f} ****'
         print(out_text)
         if self.output_file:
-            print(out_text, file=self.output_file)
+            with open(self.output_file, 'a') as out:
+                print(out_text, file=out)
 
         print("writing the encoder parameters to " + self.state_dict_file.as_posix())
         torch.save(self.encoder.state_dict(), self.state_dict_file)
@@ -144,6 +148,7 @@ class SourceSleep(object):
         for epoch in range(self.n_epochs):
             t0 = time.time()
             avg_loss, counter_loss, locs_loss, source_param_loss = self.eval_sleep(train=True)
+            train_losses[:, epoch] = np.array([avg_loss, counter_loss, locs_loss, source_param_loss])
             self.log_train(epoch, avg_loss, counter_loss, locs_loss, source_param_loss, train_losses, t0)
 
             if (epoch % self.print_every) == 0:

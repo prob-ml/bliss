@@ -226,7 +226,7 @@ def get_mgrid(slen):
 
 
 # TODO: Make this an abstract class, same with the dataset.
-class SourceSimulator:
+class SourceSimulator(object):
 
     def __init__(self, slen, n_bands, background,
                  max_sources, mean_sources, min_sources,

@@ -299,6 +299,8 @@ class SourceEncoder(nn.Module):
     ######################
     # TODO: in this function the user usually passes in source_param as potentially fluxes. Breaking the log_fluxes
     #  consistency in the rest of the code.
+    # TODO: This function doesn't really depend on encoder, just on attributes like step, slen, n_bands, max_detection,
+    #       should probably move it to image utils. This would fix the above issue for this file at least.
     def get_image_patches(self, images, locs=None, source_params=None,
                           clip_max_sources=False):
         """

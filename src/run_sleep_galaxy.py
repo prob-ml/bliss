@@ -11,7 +11,7 @@ from . import sleep_lib, starnet_lib
 from .data import simulated_datasets_lib
 from .utils import const
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 
 
 def set_seed():
@@ -38,13 +38,8 @@ def get_optimizer(galaxy_encoder):
     return optimizer
 
 
-def train(galaxy_encoder, dataset, optimizer):
-    n_epochs = 101
-    print_every = 20
-    batchsize = 32
-    print('training')
-
-    out_dir = const.reports_path.joinpath("results_galaxy_2020-04-19")
+def prepare_filepaths():
+    out_dir = const.reports_path.joinpath("results_galaxy_2020-04-20")
     out_dir.mkdir(exist_ok=True, parents=True)
 
     state_dict_file = out_dir.joinpath("galaxy_i.dat")
@@ -52,6 +47,15 @@ def train(galaxy_encoder, dataset, optimizer):
 
     output_file = out_dir.joinpath("output.txt")  # save the output that is being printed.
     print(f"output file: {output_file.as_posix()}")
+
+    return state_dict_file, output_file
+
+
+def train(galaxy_encoder, dataset, optimizer, state_dict_file, output_file):
+    n_epochs = 201
+    print_every = 20
+    batchsize = 32
+    print('training')
 
     sleep_phase = sleep_lib.GalaxySleep(galaxy_encoder, dataset, n_epochs, galaxy_encoder.n_source_params,
                                         state_dict_file=state_dict_file, output_file=output_file,
@@ -66,8 +70,10 @@ def main():
         set_seed()
         data_params = load_data_params()
 
+        state_dict_file, output_file = prepare_filepaths()
+
         # setup dataset.
-        n_images = 128
+        n_images = 320
         galaxy_dataset = simulated_datasets_lib.GalaxyDataset.load_dataset_from_params(
             n_images, data_params
         )
@@ -83,7 +89,7 @@ def main():
         galaxy_encoder.cuda()
         optimizer = get_optimizer(galaxy_encoder)
 
-        train(galaxy_encoder, galaxy_dataset, optimizer)
+        train(galaxy_encoder, galaxy_dataset, optimizer, state_dict_file, output_file)
 
 
 if __name__ == '__main__':
