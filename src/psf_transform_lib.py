@@ -14,10 +14,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class PsfLocalTransform(nn.Module):
-    def __init__(self, psf,
-                 image_slen=101,
-                 kernel_size=3,
-                 init_bias=5):
+    def __init__(self, psf, image_slen=101, kernel_size=3, init_bias=5):
         super(PsfLocalTransform, self).__init__()
 
         assert len(psf.shape) == 3
@@ -41,24 +38,29 @@ class PsfLocalTransform(nn.Module):
         self.normalization = psf.view(self.n_bands, -1).sum(1)
 
         # initializtion
-        init_weight = torch.zeros(self.psf_slen ** 2, self.n_bands, \
-                                  kernel_size ** 2)
+        init_weight = torch.zeros(self.psf_slen ** 2, self.n_bands, kernel_size ** 2)
         init_weight[:, :, 4] = init_bias
         self.weight = nn.Parameter(init_weight)
 
     def tile_psf(self):
-        psf_unfolded = unfold(self.psf,
-                              kernel_size=self.kernel_size,
-                              padding=(self.kernel_size - 1) // 2).squeeze(0).transpose(0, 1)
+        psf_unfolded = (
+            unfold(
+                self.psf,
+                kernel_size=self.kernel_size,
+                padding=(self.kernel_size - 1) // 2,
+            )
+            .squeeze(0)
+            .transpose(0, 1)
+        )
 
-        self.psf_tiled = psf_unfolded.view(psf_unfolded.shape[0], self.n_bands,
-                                           self.kernel_size ** 2)
+        self.psf_tiled = psf_unfolded.view(
+            psf_unfolded.shape[0], self.n_bands, self.kernel_size ** 2
+        )
 
     def apply_weights(self, w):
         tile_psf_transformed = torch.sum(w * self.psf_tiled, dim=2).transpose(0, 1)
 
-        return tile_psf_transformed.view(self.n_bands, self.psf_slen,
-                                         self.psf_slen)
+        return tile_psf_transformed.view(self.n_bands, self.psf_slen, self.psf_slen)
 
     def forward(self):
         weights_constrained = torch.nn.functional.softmax(self.weight, dim=2)
@@ -76,7 +78,9 @@ class PsfLocalTransform(nn.Module):
 
         psf_image_normalization = psf_image.view(self.n_bands, -1).sum(1)
 
-        return psf_image * (self.normalization / psf_image_normalization).unsqueeze(-1).unsqueeze(-1)
+        return psf_image * (self.normalization / psf_image_normalization).unsqueeze(
+            -1
+        ).unsqueeze(-1)
 
 
 ########################
@@ -90,25 +94,24 @@ def get_psf_params(psfield_fit_file, bands):
     for i in range(len(bands)):
         band = bands[i]
 
-        sigma1 = psfield[6]['psf_sigma1'][0][band] ** 2
-        sigma2 = psfield[6]['psf_sigma2'][0][band] ** 2
-        sigmap = psfield[6]['psf_sigmap'][0][band] ** 2
+        sigma1 = psfield[6]["psf_sigma1"][0][band] ** 2
+        sigma2 = psfield[6]["psf_sigma2"][0][band] ** 2
+        sigmap = psfield[6]["psf_sigmap"][0][band] ** 2
 
-        beta = psfield[6]['psf_beta'][0][band]
-        b = psfield[6]['psf_b'][0][band]
-        p0 = psfield[6]['psf_p0'][0][band]
+        beta = psfield[6]["psf_beta"][0][band]
+        b = psfield[6]["psf_b"][0][band]
+        p0 = psfield[6]["psf_p0"][0][band]
 
         # I think these parameters are constrained to be positive
         # take log; we will take exp later
-        psf_params[i] = torch.log(torch.Tensor([sigma1, sigma2, sigmap,
-                                                beta, b, p0]))
+        psf_params[i] = torch.log(torch.Tensor([sigma1, sigma2, sigmap, beta, b, p0]))
 
     return psf_params
 
 
 def psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
-    term1 = torch.exp(-r ** 2 / (2 * sigma1))
-    term2 = b * torch.exp(-r ** 2 / (2 * sigma2))
+    term1 = torch.exp(-(r ** 2) / (2 * sigma1))
+    term2 = b * torch.exp(-(r ** 2) / (2 * sigma2))
     term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
 
     return (term1 + term2 + term3) / (1 + b + p0)
@@ -124,19 +127,24 @@ def get_psf(slen, psf_params, cached_radii_grid=None):
         radii_grid = cached_radii_grid
 
     _psf_params = torch.exp(psf_params)
-    return psf_fun(radii_grid, _psf_params[0], _psf_params[1], _psf_params[2],
-                   _psf_params[3], _psf_params[4], _psf_params[5])
+    return psf_fun(
+        radii_grid,
+        _psf_params[0],
+        _psf_params[1],
+        _psf_params[2],
+        _psf_params[3],
+        _psf_params[4],
+        _psf_params[5],
+    )
 
 
 class PowerLawPSF(nn.Module):
-    def __init__(self, init_psf_params,
-                 psf_slen=25,
-                 image_slen=101):
+    def __init__(self, init_psf_params, psf_slen=25, image_slen=101):
 
         super(PowerLawPSF, self).__init__()
 
         assert len(init_psf_params.shape) == 2
-        assert image_slen % 2 == 1, 'image_slen must be odd'
+        assert image_slen % 2 == 1, "image_slen must be odd"
 
         self.n_bands = init_psf_params.shape[0]
 
@@ -154,10 +162,12 @@ class PowerLawPSF(nn.Module):
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            self.normalization_constant[i] = \
-                1 / get_psf(self.psf_slen,
-                            self.init_psf_params[i],
-                            self.cached_radii_grid).sum()
+            self.normalization_constant[i] = (
+                1
+                / get_psf(
+                    self.psf_slen, self.init_psf_params[i], self.cached_radii_grid
+                ).sum()
+            )
 
         # initial psf
         self.init_psf = self.get_psf()
@@ -166,8 +176,10 @@ class PowerLawPSF(nn.Module):
     def get_psf(self):
         # TODO make the psf function vectorized ...
         for i in range(self.n_bands):
-            _psf = get_psf(self.psf_slen, self.params[i], self.cached_radii_grid) * \
-                   self.normalization_constant[i]
+            _psf = (
+                get_psf(self.psf_slen, self.params[i], self.cached_radii_grid)
+                * self.normalization_constant[i]
+            )
 
             if i == 0:
                 psf = _psf.unsqueeze(0)
@@ -180,7 +192,9 @@ class PowerLawPSF(nn.Module):
 
     def forward(self):
         psf = self.get_psf()
-        psf = psf * (self.init_psf_sum / psf.sum(-1).sum(-1)).unsqueeze(-1).unsqueeze(-1)
+        psf = psf * (self.init_psf_sum / psf.sum(-1).sum(-1)).unsqueeze(-1).unsqueeze(
+            -1
+        )
 
         l_pad = (self.image_slen - self.psf_slen) // 2
 
