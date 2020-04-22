@@ -23,7 +23,7 @@ def set_seed():
 
 def load_data_params():
     parameters_path = const.data_path.joinpath("default_galaxy_parameters.json")
-    with open(parameters_path, 'r') as fp:
+    with open(parameters_path, "r") as fp:
         data_params = json.load(fp)
     return data_params
 
@@ -31,10 +31,10 @@ def load_data_params():
 def get_optimizer(galaxy_encoder):
     learning_rate = 1e-3
     weight_decay = 1e-5
-    optimizer = optim.Adam([
-        {'params': galaxy_encoder.parameters(),
-         'lr': learning_rate}],
-        weight_decay=weight_decay)
+    optimizer = optim.Adam(
+        [{"params": galaxy_encoder.parameters(), "lr": learning_rate}],
+        weight_decay=weight_decay,
+    )
     return optimizer
 
 
@@ -45,7 +45,9 @@ def prepare_filepaths():
     state_dict_file = out_dir.joinpath("galaxy_i.dat")
     print(f"state dict file: {state_dict_file.as_posix()}")
 
-    output_file = out_dir.joinpath("output.txt")  # save the output that is being printed.
+    output_file = out_dir.joinpath(
+        "output.txt"
+    )  # save the output that is being printed.
     print(f"output file: {output_file.as_posix()}")
 
     return state_dict_file, output_file
@@ -55,11 +57,19 @@ def train(galaxy_encoder, dataset, optimizer, state_dict_file, output_file):
     n_epochs = 201
     print_every = 20
     batchsize = 32
-    print('training')
+    print("training")
 
-    sleep_phase = sleep_lib.GalaxySleep(galaxy_encoder, dataset, n_epochs, galaxy_encoder.n_source_params,
-                                        state_dict_file=state_dict_file, output_file=output_file,
-                                        optimizer=optimizer, batchsize=batchsize, print_every=print_every)
+    sleep_phase = sleep_lib.GalaxySleep(
+        galaxy_encoder,
+        dataset,
+        n_epochs,
+        galaxy_encoder.n_source_params,
+        state_dict_file=state_dict_file,
+        output_file=output_file,
+        optimizer=optimizer,
+        batchsize=batchsize,
+        print_every=print_every,
+    )
 
     print(f"running sleep phase for n_epochs = {n_epochs}, batchsize={batchsize}")
     sleep_phase.run_sleep()
@@ -78,19 +88,20 @@ def main():
             n_images, data_params
         )
 
-        galaxy_encoder = starnet_lib.GalaxyEncoder(slen=data_params['slen'],
-                                                   n_bands=1,
-                                                   patch_slen=20,
-                                                   step=5,
-                                                   edge_padding=5,
-                                                   max_detections=2,
-                                                   n_source_params=galaxy_dataset.simulator.latent_dim
-                                                   )
+        galaxy_encoder = starnet_lib.GalaxyEncoder(
+            slen=data_params["slen"],
+            n_bands=1,
+            patch_slen=20,
+            step=5,
+            edge_padding=5,
+            max_detections=2,
+            n_source_params=galaxy_dataset.simulator.latent_dim,
+        )
         galaxy_encoder.cuda()
         optimizer = get_optimizer(galaxy_encoder)
 
         train(galaxy_encoder, galaxy_dataset, optimizer, state_dict_file, output_file)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

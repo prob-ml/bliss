@@ -25,15 +25,20 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert len(n_sources.shape) == 1
 
     batchsize = len(n_sources)
-    is_on_array = (torch.cuda.LongTensor(batchsize, max_sources).zero_() if torch.cuda.is_available() else
-                   torch.zeros((batchsize, max_sources), dtype=torch.long))
+    is_on_array = (
+        torch.cuda.LongTensor(batchsize, max_sources).zero_()
+        if torch.cuda.is_available()
+        else torch.zeros((batchsize, max_sources), dtype=torch.long)
+    )
     for i in range(max_sources):
-        is_on_array[:, i] = (n_sources > i)
+        is_on_array[:, i] = n_sources > i
 
     return is_on_array
 
 
-def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources, device=torch.device("cuda")):
+def get_is_on_from_patch_n_sources_2d(
+    patch_n_sources, max_sources, device=torch.device("cuda")
+):
     """
 
     :param patch_n_sources: A tensor of shape (n_samples x n_patches), indicating the number of sources
@@ -52,9 +57,11 @@ def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources, device=torch
     n_samples = patch_n_sources.shape[0]
     batchsize = patch_n_sources.shape[1]
 
-    is_on_array = torch.zeros((n_samples, batchsize, max_sources), dtype=torch.long, device=device)
+    is_on_array = torch.zeros(
+        (n_samples, batchsize, max_sources), dtype=torch.long, device=device
+    )
     for i in range(max_sources):
-        is_on_array[:, :, i] = (patch_n_sources > i)
+        is_on_array[:, :, i] = patch_n_sources > i
 
     return is_on_array
 
@@ -82,7 +89,7 @@ def sample_class_weights(class_weights, n_samples=1):
     probabilities class_weights.
     """
 
-    assert not torch.any(torch.isnan(class_weights));
+    assert not torch.any(torch.isnan(class_weights))
     cat_rv = categorical.Categorical(probs=class_weights)
     return cat_rv.sample((n_samples,)).detach().squeeze()
 
@@ -106,7 +113,11 @@ def eval_logitnormal_logprob(x, mu, logvar):
 
 
 def eval_normal_logprob(x, mu, logvar):
-    return - 0.5 * logvar - 0.5 * (x - mu) ** 2 / (torch.exp(logvar) + 1e-5) - 0.5 * np.log(2 * np.pi)
+    return (
+        -0.5 * logvar
+        - 0.5 * (x - mu) ** 2 / (torch.exp(logvar) + 1e-5)
+        - 0.5 * np.log(2 * np.pi)
+    )
 
 
 def eval_lognormal_logprob(x, mu, log_var, tol=1e-8):

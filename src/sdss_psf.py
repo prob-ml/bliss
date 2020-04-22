@@ -7,9 +7,9 @@ import fitsio
 # Reconstruct the SDSS model PSF from KL basis functions.
 #   hdu: the psField hdu for the band you are looking at.
 #      eg, for r-band:
-#	     psfield = pyfits.open('psField-%06i-%i-%04i.fit' % (run,camcol,field))
+# 	     psfield = pyfits.open('psField-%06i-%i-%04i.fit' % (run,camcol,field))
 #        bandnum = 'ugriz'.index('r')
-#	     hdu = psfield[bandnum+1]
+# 	     hdu = psfield[bandnum+1]
 #
 #   x,y can be scalars or 1-d numpy arrays.
 # Return value:
@@ -17,7 +17,7 @@ import fitsio
 #    if x,y are arrays:  a list of PSF images
 def psf_at_points(x, y, psf_fit_file):
     # psfield = fitsio.FITS('sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit')
-     # 'sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
+    # 'sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
     psfield = fitsio.FITS(psf_fit_file)
     hdu = psfield[3]
 
