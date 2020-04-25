@@ -15,6 +15,7 @@ jobs:
       - run:
           name: Run Tests
           command: |
+            black --check .
             # pytest and pytest-cov must be in requirements.txt
             pytest --cov=./src/ --cov-report=xml
       - codecov/upload:

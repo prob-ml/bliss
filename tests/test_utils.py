@@ -7,8 +7,8 @@ import torch
 
 import sys
 
-sys.path.insert(0, './')
-sys.path.insert(0, './../')
+sys.path.insert(0, "./")
+sys.path.insert(0, "./../")
 
 from GalaxyModel.src import utils
 
@@ -34,19 +34,24 @@ class TestUtils(unittest.TestCase):
         is_on = utils.get_is_on_from_n_stars(n_stars, max_stars)
 
         assert torch.all(is_on.sum(1) == n_stars)
-        assert torch.all(is_on == is_on.sort(1, descending = True)[0])
+        assert torch.all(is_on == is_on.sort(1, descending=True)[0])
 
     def test_is_on_from_n_stars2d(self):
         n_samples = 5
         batchsize = 3
         max_stars = 10
 
-        n_stars = torch.Tensor(np.random.choice(max_stars, (n_samples, batchsize))).type(torch.LongTensor)
+        n_stars = torch.Tensor(
+            np.random.choice(max_stars, (n_samples, batchsize))
+        ).type(torch.LongTensor)
 
         is_on = utils.get_is_on_from_n_stars_2d(n_stars, max_stars)
 
         for i in range(n_samples):
-            assert torch.all(utils.get_is_on_from_n_stars(n_stars[i], max_stars) == is_on[i])
+            assert torch.all(
+                utils.get_is_on_from_n_stars(n_stars[i], max_stars) == is_on[i]
+            )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
