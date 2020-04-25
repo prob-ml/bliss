@@ -12,3 +12,5 @@ daophot_results
 *.gz
 .coverage
 htmlcov/
+build/
+celeste.egg-info/

@@ -1,15 +1,8 @@
-#!/usr/bin/env python3
-
 import unittest
-
 import torch
 import numpy as np
 
-import sys
-
-sys.path.insert(0, "./")
-sys.path.insert(0, "../")
-from GalaxyModel.src import starnet_lib, utils, image_utils
+from celeste import starnet_lib, utils, image_utils
 
 
 class TestStarEncoder(unittest.TestCase):
@@ -266,7 +259,3 @@ class TestStarEncoder(unittest.TestCase):
 
             assert torch.all(locs_full_image_i == locs_full_image[i, 0:n_stars_i])
             assert torch.all(fluxes_full_image_i == fluxes_full_image[i, 0:n_stars_i])
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -1,16 +1,8 @@
-#!/usr/bin/env python3
-
 import numpy as np
 import unittest
-
 import torch
 
-import sys
-
-sys.path.insert(0, "./")
-sys.path.insert(0, "./../")
-
-from GalaxyModel.src import utils
+from celeste import utils
 
 
 class TestUtils(unittest.TestCase):
@@ -51,7 +43,3 @@ class TestUtils(unittest.TestCase):
             assert torch.all(
                 utils.get_is_on_from_n_stars(n_stars[i], max_stars) == is_on[i]
             )
-
-
-if __name__ == "__main__":
-    unittest.main()
