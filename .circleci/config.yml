@@ -12,7 +12,7 @@ jobs:
       - python/install-deps
       - python/save-cache
       - run:
-          name: Run Tests
+          name: Run Tests with Coverage
           command: |
             # pytest and coverage must be in requirements.txt
             coverage run -m pytest
