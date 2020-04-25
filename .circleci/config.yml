@@ -2,6 +2,7 @@ version: 2.1
 
 orbs:
   python: circleci/python@0.2.1
+  codecov: codecov/codecov@1.0.5
 
 jobs:
   build-and-test:
@@ -20,6 +21,10 @@ jobs:
             coverage html  # open htmlcov/index.html in a browser
       - store_artifacts:
           path: htmlcov
+      - codecov/upload:
+          file: .coverage
+          token: 13e054fe-9c61-4846-9d70-374df19c99e0
+
 workflows:
   main:
     jobs:
