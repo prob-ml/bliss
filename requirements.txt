@@ -4,4 +4,3 @@ astropy
 torch
 pytest
 coverage
-
