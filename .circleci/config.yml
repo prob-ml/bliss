@@ -23,6 +23,7 @@ jobs:
           path: htmlcov
       - codecov/upload:
           file: .coverage
+
 workflows:
   main:
     jobs:
