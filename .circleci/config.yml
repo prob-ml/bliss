@@ -16,9 +16,8 @@ jobs:
           name: Run Tests
           command: |
             # pytest and coverage must be in requirements.txt
-            coverage run -m pytest
-            coverage report
-            coverage html  # open htmlcov/index.html in a browser
+            $HOME/.local/bin/coverage run -m pytest
+            $HOME/.local/bin/coverage report
       - store_artifacts:
           path: htmlcov
       - codecov/upload:
