@@ -18,7 +18,7 @@ jobs:
           name: Run Tests
           command: |
             # pytest and pytest-cov must be in requirements.txt
-            pytest --cov=./ --cov-report=xml
+            pytest --cov=./src/ --cov-report=xml
       - codecov/upload:
           file: ./coverage.xml
 
