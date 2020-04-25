@@ -3,4 +3,4 @@ scipy
 astropy
 torch
 pytest
-coverage
+pytest-cov
