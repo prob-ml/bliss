@@ -12,14 +12,9 @@ jobs:
       - python/install-deps
       - python/save-cache
       - run:
-          name: Run Tests with Coverage
-          command: |
-            # pytest and coverage must be in requirements.txt
-            coverage run -m pytest
-            coverage report
-            coverage html  # open htmlcov/index.html in a browser
-      - store_artifacts:
-          path: htmlcov
+          command: ./manage.py test
+          name: Test
+
 workflows:
   main:
     jobs:
