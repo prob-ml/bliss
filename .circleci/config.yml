@@ -9,13 +9,12 @@ jobs:
     executor: python/default
     steps:
       - checkout
-      - python/load-cache
+        #- python/load-cache
       - python/install-deps
-      - python/save-cache
+        #- python/save-cache
       - run:
           name: Run Tests
           command: |
-            sudo pip install black
             black --check .
             # pytest and pytest-cov must be in requirements.txt
             pytest --cov=./src/ --cov-report=xml
