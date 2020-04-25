@@ -1,18 +1,10 @@
-#!/usr/bin/env python3
-
 import unittest
-
 import torch
 import numpy as np
 
-import sys
-
-sys.path.insert(0, "../")
-sys.path.insert(0, "./")
-from GalaxyModel.src import image_utils
-
-from GalaxyModel.src import get_is_on_from_n_stars
-from GalaxyModel.src import _draw_pareto_maxed
+from celeste import image_utils
+from celeste import get_is_on_from_n_stars
+from celeste import _draw_pareto_maxed
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -366,7 +358,3 @@ class TestImageBatching(unittest.TestCase):
             - 0.5
         ) / (full_slen - 1)
         assert (test_loc == locs_full_image.squeeze()).all()
-
-
-if __name__ == "__main__":
-    unittest.main()
