@@ -23,7 +23,6 @@ jobs:
           path: htmlcov
       - codecov/upload:
           file: .coverage
-          token: 13e054fe-9c61-4846-9d70-374df19c99e0
 
 workflows:
   main:
