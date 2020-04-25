@@ -12,6 +12,7 @@ jobs:
       - python/load-cache
       - python/install-deps
       - python/save-cache
+      - sudo pip install black
       - run:
           name: Run Tests
           command: |
