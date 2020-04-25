@@ -4,6 +4,11 @@ fits/*
 *.pyc
 sdss_stage_dir/*
 daophot_results
-*.idea
+.idea
 *models
 *.npy
+*.fit
+*.fits
+*.gz
+.coverage
+htmlcov/
