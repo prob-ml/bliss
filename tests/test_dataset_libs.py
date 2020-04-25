@@ -7,49 +7,51 @@ import numpy as np
 import torch
 
 import sys
-sys.path.insert(0, './')
-sys.path.insert(0, '../')
+
+sys.path.insert(0, "./")
+sys.path.insert(0, "../")
 from GalaxyModel.src import simulated_datasets_lib
 
 import json
 
 import fitsio
 
-psf_dir = './data/'
-psf_r = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-r.fits')[0].read()
-psf_i = fitsio.FITS(psf_dir + 'sdss-002583-2-0136-psf-i.fits')[0].read()
+psf_dir = "./data/"
+psf_r = fitsio.FITS(psf_dir + "sdss-002583-2-0136-psf-r.fits")[0].read()
+psf_i = fitsio.FITS(psf_dir + "sdss-002583-2-0136-psf-i.fits")[0].read()
 psf_og = torch.Tensor(np.array([psf_r, psf_i]))
 
-with open('./data/default_star_parameters.json', 'r') as fp:
+with open("./data/default_star_parameters.json", "r") as fp:
     data_params = json.load(fp)
 
-data_params['slen'] = 31
-data_params['mean_stars'] = 10
+data_params["slen"] = 31
+data_params["mean_stars"] = 10
+
 
 class TestSDSSDataset(unittest.TestCase):
-
     def test_fresh_data(self):
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)
 
         n_images = 32
         # get dataset
-        background = torch.ones(psf_og.shape[0], data_params['slen'],
-                                                data_params['slen']) * 686.
-        star_dataset = \
-            simulated_datasets_lib.load_dataset_from_params(psf_og,
-                                                            data_params,
-                                                            n_images=n_images,
-                                                            background=background,
-                                                            add_noise=True,
-                                                            transpose_psf=False)
+        background = (
+            torch.ones(psf_og.shape[0], data_params["slen"], data_params["slen"])
+            * 686.0
+        )
+        star_dataset = simulated_datasets_lib.load_dataset_from_params(
+            psf_og,
+            data_params,
+            n_images=n_images,
+            background=background,
+            add_noise=True,
+            transpose_psf=False,
+        )
 
         # get loader
         batchsize = 8
 
-        loader = torch.utils.data.DataLoader(
-                         dataset=star_dataset,
-                         batch_size=batchsize)
+        loader = torch.utils.data.DataLoader(dataset=star_dataset, batch_size=batchsize)
 
         #############################################
         # First check: all data should be the same
@@ -65,10 +67,10 @@ class TestSDSSDataset(unittest.TestCase):
             true_n_stars_mean = 0
 
             for _, data in enumerate(loader):
-                true_fluxes = data['fluxes']
-                true_locs = data['locs']
-                true_n_stars = data['n_stars']
-                images = data['image']
+                true_fluxes = data["fluxes"]
+                true_locs = data["locs"]
+                true_n_stars = data["n_stars"]
+                images = data["image"]
 
                 images_mean += images.mean()
                 true_locs_mean += true_locs.mean()
@@ -100,10 +102,10 @@ class TestSDSSDataset(unittest.TestCase):
             true_n_stars_mean = 0
 
             for _, data in enumerate(loader):
-                true_fluxes = data['fluxes']
-                true_locs = data['locs']
-                true_n_stars = data['n_stars']
-                images = data['image']
+                true_fluxes = data["fluxes"]
+                true_locs = data["locs"]
+                true_n_stars = data["n_stars"]
+                images = data["image"]
 
                 images_mean += images.mean()
                 true_locs_mean += true_locs.mean()
@@ -176,7 +178,5 @@ class TestSDSSDataset(unittest.TestCase):
         # assert len(n_stars_vec.unique()) == 5
 
 
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
