@@ -9,17 +9,17 @@ jobs:
     executor: python/default
     steps:
       - checkout
-      - python/load-cache
-      - python/install-deps
-      - python/save-cache
+        #- python/load-cache
+        #- python/install-deps
+        #- python/save-cache
+      - run: sudo python -m pip install --upgrade pip
+      - run: sudo pip install -r requirements.txt
       - run:
           name: Run Tests
           command: |
             # pytest and coverage must be in requirements.txt
-            $HOME/.local/bin/coverage run -m pytest
-            $HOME/.local/bin/coverage report
-      - store_artifacts:
-          path: htmlcov
+            coverage run -m pytest
+            coverage report
       - codecov/upload:
           file: .coverage
 
