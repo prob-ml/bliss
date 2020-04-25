@@ -19,9 +19,9 @@ jobs:
           command: |
             # pytest and coverage must be in requirements.txt
             coverage run -m pytest
-            coverage report
+            coverage json
       - codecov/upload:
-          file: .coverage
+          file: coverage.json
 
 workflows:
   main:
