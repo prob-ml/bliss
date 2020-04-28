@@ -4,7 +4,7 @@ import torch
 import json
 import fitsio
 
-from celeste import simulated_datasets_lib
+from celeste.data import simulated_datasets_lib
 
 psf_dir = "./data/"
 psf_r = fitsio.FITS(psf_dir + "sdss-002583-2-0136-psf-r.fits")[0].read()

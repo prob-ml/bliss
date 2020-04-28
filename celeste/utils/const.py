@@ -83,6 +83,23 @@ def get_one_hot_encoding_from_int(z, n_classes):
 ############################
 
 
+def draw_pareto(f_min, alpha, shape):
+    uniform_samples = torch.cuda.FloatTensor(*shape).uniform_()
+    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
+
+
+def draw_pareto_maxed(f_min, f_max, alpha, shape):
+    # draw pareto conditioned on being less than f_max
+
+    pareto_samples = draw_pareto(f_min, alpha, shape)
+
+    while torch.any(pareto_samples > f_max):
+        indx = pareto_samples > f_max
+        pareto_samples[indx] = draw_pareto(f_min, alpha, [torch.sum(indx).item()])
+
+    return pareto_samples
+
+
 def sample_class_weights(class_weights, n_samples=1):
     """
     Draw a sample from Categorical variable with

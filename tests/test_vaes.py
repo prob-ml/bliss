@@ -2,7 +2,8 @@ import unittest
 import torch
 import numpy as np
 
-from celeste import starnet_lib, utils, image_utils
+from celeste import starnet_lib
+from celeste.utils import const, image_utils
 
 
 class TestStarEncoder(unittest.TestCase):
@@ -59,7 +60,7 @@ class TestStarEncoder(unittest.TestCase):
             assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_patches).all()
 
         # check pattern of zeros
-        is_on_array = utils.get_is_on_from_n_stars(
+        is_on_array = const.get_is_on_from_n_stars(
             n_star_patches, star_encoder.max_detections
         )
         assert torch.all((loc_mean * is_on_array.unsqueeze(2).float()) == loc_mean)
@@ -223,7 +224,7 @@ class TestStarEncoder(unittest.TestCase):
         n_stars_sampled = torch.Tensor(
             np.random.choice(max_detections, (n_samples, n_image_patches))
         ).type(torch.long)
-        is_on_array = utils.get_is_on_from_n_stars_2d(
+        is_on_array = const.get_is_on_from_n_stars_2d(
             n_stars_sampled, max_detections
         ).float()
 
