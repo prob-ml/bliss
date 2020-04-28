@@ -2,7 +2,7 @@ import numpy as np
 import unittest
 import torch
 
-from celeste import utils
+from celeste.utils import const
 
 
 class TestUtils(unittest.TestCase):
@@ -13,7 +13,7 @@ class TestUtils(unittest.TestCase):
         n_classes = 10
         z = torch.randint(0, 10, (100,))
 
-        z_one_hot = utils.get_one_hot_encoding_from_int(z, n_classes)
+        z_one_hot = const.get_one_hot_encoding_from_int(z, n_classes)
 
         assert all(z_one_hot.sum(1) == 1)
         assert all(z_one_hot.float().max(1)[0] == 1)
@@ -23,7 +23,7 @@ class TestUtils(unittest.TestCase):
         max_stars = 10
         n_stars = torch.Tensor(np.random.choice(max_stars, 5)).type(torch.LongTensor)
 
-        is_on = utils.get_is_on_from_n_stars(n_stars, max_stars)
+        is_on = const.get_is_on_from_n_stars(n_stars, max_stars)
 
         assert torch.all(is_on.sum(1) == n_stars)
         assert torch.all(is_on == is_on.sort(1, descending=True)[0])
@@ -37,9 +37,9 @@ class TestUtils(unittest.TestCase):
             np.random.choice(max_stars, (n_samples, batchsize))
         ).type(torch.LongTensor)
 
-        is_on = utils.get_is_on_from_n_stars_2d(n_stars, max_stars)
+        is_on = const.get_is_on_from_n_stars_2d(n_stars, max_stars)
 
         for i in range(n_samples):
             assert torch.all(
-                utils.get_is_on_from_n_stars(n_stars[i], max_stars) == is_on[i]
+                const.get_is_on_from_n_stars(n_stars[i], max_stars) == is_on[i]
             )
