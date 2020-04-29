@@ -2,7 +2,7 @@ import unittest
 import torch
 import numpy as np
 
-from celeste import starnet_lib
+from celeste import sourcenet_lib
 from celeste.utils import const, image_utils
 
 
@@ -18,7 +18,7 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_lib.StarEncoder(
+        star_encoder = sourcenet_lib.StarEncoder(
             slen=101,
             patch_slen=patch_slen,
             step=2,
@@ -157,7 +157,7 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_lib.StarEncoder(
+        star_encoder = sourcenet_lib.StarEncoder(
             slen=101,
             patch_slen=patch_slen,
             step=2,
@@ -209,7 +209,7 @@ class TestStarEncoder(unittest.TestCase):
         n_bands = 2
 
         # get encoder
-        star_encoder = starnet_lib.StarEncoder(
+        star_encoder = sourcenet_lib.StarEncoder(
             slen=101,
             patch_slen=patch_slen,
             step=2,

@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from . import sleep_lib, starnet_lib, wake_lib, psf_transform_lib
+from . import sleep_lib, sourcenet_lib, wake_lib, psf_transform_lib
 from .data import simulated_datasets_lib
 from .utils import const
 
@@ -116,7 +116,7 @@ def main():
         star_dataset = get_dataset(n_images, psf_og, data_params, background)
         star_dataset.cuda()
 
-        star_encoder = starnet_lib.SourceEncoder(
+        star_encoder = sourcenet_lib.SourceEncoder(
             slen=data_params["slen"],
             patch_slen=8,
             step=2,
