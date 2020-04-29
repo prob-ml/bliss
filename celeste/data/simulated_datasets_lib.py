@@ -132,12 +132,15 @@ def _plot_one_source(slen, locs, source, cached_grid=None):
     return source_plotted
 
 
-def _get_grid(slen, locs, n_sources, batchsize, cached_grid):
+def _check_sources_and_locs(locs, n_sources, batchsize):
     assert len(locs.shape) == 3, "Using batchsize as the first dimension."
     assert locs.shape[2] == 2
     assert len(n_sources) == batchsize
     assert len(n_sources.shape) == 1
     assert max(n_sources) <= locs.shape[1]
+
+
+def _get_grid(slen, cached_grid=None):
 
     if cached_grid is None:
         grid = get_mgrid(slen)
@@ -164,7 +167,8 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     """
 
     batchsize = locs.shape[0]
-    grid = _get_grid(slen, locs, n_sources, batchsize, cached_grid)
+    _check_sources_and_locs(locs, n_sources, batchsize)
+    grid = _get_grid(slen, cached_grid)
 
     n_bands = psf.shape[0]
     scene = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
@@ -199,7 +203,8 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     assert single_galaxies.shape[0] == batchsize
     assert single_galaxies.shape[1] == locs.shape[1]  # max_galaxies
 
-    grid = _get_grid(slen, locs, n_sources, batchsize, cached_grid)
+    _check_sources_and_locs(locs, n_sources, batchsize)
+    grid = _get_grid(slen, cached_grid)
 
     scene = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
     for n in range(max(n_sources)):
