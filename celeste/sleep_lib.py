@@ -16,12 +16,12 @@ def isnan(x):
 ############################
 
 
-def _get_categorical_loss(log_probs, one_hot_encoding):
-    assert torch.all(log_probs <= 0)
-    assert log_probs.shape[0] == one_hot_encoding.shape[0]
-    assert log_probs.shape[1] == one_hot_encoding.shape[1]
+def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
+    assert torch.all(n_source_log_probs <= 0)
+    assert n_source_log_probs.shape[0] == one_hot_encoding.shape[0]
+    assert n_source_log_probs.shape[1] == one_hot_encoding.shape[1]
 
-    return torch.sum(-log_probs * one_hot_encoding, dim=1)
+    return torch.sum(-n_source_log_probs * one_hot_encoding, dim=1)
 
 
 def _permute_losses_mat(losses_mat, perm):
@@ -318,7 +318,7 @@ class SourceSleep(object):
         loc_logvar,
         source_param_mean,
         source_param_logvar,
-        log_probs,
+        n_source_log_probs,
         true_locs,
         true_source_params,
         true_is_on_array,
@@ -335,7 +335,7 @@ class SourceSleep(object):
             loc_logvar:
             source_param_mean:
             source_param_logvar:
-            log_probs:
+            n_source_log_probs:
             true_locs:
             true_source_params:
             true_is_on_array:
@@ -360,9 +360,9 @@ class SourceSleep(object):
 
         true_n_stars = true_is_on_array.sum(1)
         one_hot_encoding = const.get_one_hot_encoding_from_int(
-            true_n_stars, log_probs.shape[1]
+            true_n_stars, n_source_log_probs.shape[1]
         )
-        counter_loss = _get_categorical_loss(log_probs, one_hot_encoding)
+        counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
         loss_vec = (
             locs_loss * (locs_loss.detach() < 1e6).float()
