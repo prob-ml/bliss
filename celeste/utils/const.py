@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 from os.path import dirname
 
-from torch.distributions import normal, categorical
+from torch.distributions import categorical
 
 
 src_path = Path(dirname(dirname(__file__)))
