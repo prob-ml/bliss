@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 from torch.distributions import Poisson, Categorical
 import torch.nn.functional as F
 from gmodel.data.galaxy_datasets import DecoderSamples
+from abc import ABC, abstractmethod
 
 from ..utils import const
 
@@ -232,7 +233,7 @@ def get_mgrid(slen):
 
 
 # TODO: Make this an abstract class, same with the dataset.
-class SourceSimulator(object):
+class SourceSimulator(ABC):
     def __init__(
         self,
         slen,
@@ -322,11 +323,12 @@ class SourceSimulator(object):
 
         return n_sources, locs, is_on_array
 
+    @abstractmethod
     def sample_parameters(self, batchsize=1):
         pass
 
 
-class SourceDataset(Dataset):
+class SourceDataset(ABC):
     def __init__(self, n_images, simulator_args, simulator_kwargs):
         """
         :param n_images: same as batchsize.
@@ -342,6 +344,7 @@ class SourceDataset(Dataset):
     def __len__(self):
         return self.n_images
 
+    @abstractmethod
     def get_batch(self, batchsize=64):
         pass
 

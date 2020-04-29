@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from abc import ABC, abstractmethod
 
 from .utils import const
 from .utils import image_utils
@@ -27,7 +28,7 @@ class Normalize2d(nn.Module):
         return (tensor - mean) / torch.sqrt(var + 1e-5)
 
 
-class SourceEncoder(nn.Module):
+class SourceEncoder(nn.Module, ABC):
     def __init__(
         self,
         slen,
@@ -42,8 +43,8 @@ class SourceEncoder(nn.Module):
         This class implements the source encoder, which is supposed to take in a synthetic image of size slen * slen
         and returns a NN latent variable representation of this image.
 
-        * NOTE: Assumes that source_params are always log_fluxes throughout the code. Except in get_image_patches, but
-        that depends on the user anyways.
+        * NOTE: Assumes that `source_params` are always `log_fluxes` throughout the code.
+        Except in get_image_patches, but that depends on the user anyways.
 
         * EXAMPLE on padding: If the patch_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
 
@@ -571,6 +572,18 @@ class SourceEncoder(nn.Module):
         )
 
         return patch_locs_sampled, patch_source_params_sampled, is_on_array
+
+    @abstractmethod
+    def sample_encoder(
+        self,
+        image,
+        n_samples=1,
+        return_map_n_sources=False,
+        return_map_source_params=False,
+        patch_n_sources=None,
+        training=False,
+    ):
+        pass
 
 
 class StarEncoder(SourceEncoder):

@@ -3,6 +3,7 @@ import time
 from itertools import permutations
 import numpy as np
 import torch
+from abc import ABC, abstractmethod
 
 from .utils import const
 
@@ -94,7 +95,7 @@ def get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_arr
     return locs_loss, source_params_loss, indx
 
 
-class SourceSleep(object):
+class SourceSleep(ABC):
     def __init__(
         self,
         encoder,
@@ -292,7 +293,13 @@ class SourceSleep(object):
             log_probs_n_sources_patch,
         ) = self.encoder.forward(image_patches, n_sources=true_patch_n_sources)
 
-        loss, counter_loss, locs_loss, fluxes_loss, perm_indx = self._get_params_loss(
+        (
+            loss,
+            counter_loss,
+            locs_loss,
+            source_param_loss,
+            perm_indx,
+        ) = self._get_params_loss(
             loc_mean,
             loc_logvar,
             source_param_mean,
@@ -307,7 +314,7 @@ class SourceSleep(object):
             loss,
             counter_loss,
             locs_loss,
-            fluxes_loss,
+            source_param_loss,
             perm_indx,
             log_probs_n_sources_patch,
         )
@@ -391,14 +398,16 @@ class SourceSleep(object):
 
         return _true_source_params, _source_param_mean, _source_param_logvar
 
+    @abstractmethod
     def _get_source_params_logprob_all_combs(
-        self, true_gal_params, gal_param_mean, gal_param_logvar
+        self, true_source_params, source_param_mean, source_param_logvar
     ):
-        return torch.zeros(0)
+        pass
 
     @staticmethod
+    @abstractmethod
     def _get_params_from_data(data):
-        return torch.zeros(0)
+        pass
 
 
 class StarSleep(SourceSleep):
