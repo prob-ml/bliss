@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from . import sleep_lib, starnet_lib
+from . import sleep_lib, sourcenet_lib
 from .data import simulated_datasets_lib
 from .utils import const
 
@@ -88,7 +88,7 @@ def main():
             n_images, data_params
         )
 
-        galaxy_encoder = starnet_lib.GalaxyEncoder(
+        galaxy_encoder = sourcenet_lib.GalaxyEncoder(
             slen=data_params["slen"],
             n_bands=1,
             patch_slen=20,

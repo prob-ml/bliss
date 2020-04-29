@@ -289,7 +289,7 @@ class SourceEncoder(nn.Module):
                 source_param_logvar.squeeze(0),
             )
         else:
-            return (loc_mean, loc_logvar, source_param_mean, source_param_logvar)
+            return loc_mean, loc_logvar, source_param_mean, source_param_logvar
 
     def _get_hidden_indices(self):
         """
@@ -515,7 +515,7 @@ class SourceEncoder(nn.Module):
 
         if not training:
             h = h.detach()
-            log_probs_nstar_patch = log_probs_n_source_patch.detach()
+            log_probs_n_source_patch = log_probs_n_source_patch.detach()
 
         # sample number of stars
         if patch_n_sources is None:
