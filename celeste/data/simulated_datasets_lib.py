@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torch.distributions import Poisson, Categorical
 import torch.nn.functional as F
 from gmodel.data.galaxy_datasets import DecoderSamples
 
@@ -78,9 +79,11 @@ def _sample_n_sources(
     :return:
     """
     if draw_poisson:
-        n_sources = np.random.poisson(mean_sources, batchsize)
+        m = Poisson(mean_sources)
+        n_sources = m.sample(batchsize)
     else:
-        n_sources = np.random.choice(np.arange(min_sources, max_sources + 1), batchsize)
+        m = Categorical(max_sources - min_sources)
+        n_sources = m.sample(batchsize) + min_sources
 
     return (
         torch.tensor(n_sources)
