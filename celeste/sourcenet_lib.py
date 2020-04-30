@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from abc import ABC, abstractmethod
 
 from .utils import const
 from .utils import image_utils
@@ -28,7 +27,7 @@ class Normalize2d(nn.Module):
         return (tensor - mean) / torch.sqrt(var + 1e-5)
 
 
-class SourceEncoder(nn.Module, ABC):
+class SourceEncoder(nn.Module):
     def __init__(
         self,
         slen,
@@ -44,7 +43,8 @@ class SourceEncoder(nn.Module, ABC):
         and returns a NN latent variable representation of this image.
 
         * NOTE: Assumes that `source_params` are always `log_fluxes` throughout the code.
-        Except in get_image_patches, but that depends on the user anyways.
+
+        * NOTE: Should have (n_bands == n_source_params) in the case of stars.
 
         * EXAMPLE on padding: If the patch_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
 
@@ -569,7 +569,6 @@ class SourceEncoder(nn.Module, ABC):
 
         return patch_locs_sampled, patch_source_params_sampled, is_on_array
 
-    @abstractmethod
     def sample_encoder(
         self,
         image,
@@ -579,94 +578,24 @@ class SourceEncoder(nn.Module, ABC):
         patch_n_sources=None,
         training=False,
     ):
-        pass
-
-
-class StarEncoder(SourceEncoder):
-    def __init__(
-        self,
-        slen,
-        patch_slen,
-        step,
-        edge_padding,
-        n_bands,
-        max_detections,
-        n_source_params,
-    ):
-        super(StarEncoder, self).__init__(
-            slen,
-            patch_slen,
-            step,
-            edge_padding,
-            n_bands,
-            max_detections,
-            n_source_params,
-        )
-        assert (
-            self.n_bands == self.n_source_params
-        ), "Number of bands is number of n_source_params in the case of stars."
-
-    def sample_encoder(
-        self,
-        image,
-        n_samples=1,
-        return_map_n_stars=False,
-        return_map_star_params=False,
-        patch_n_stars=None,
-        training=False,
-    ):
         slen = image.shape[-1]
         (
             patch_locs_sampled,
-            patch_log_fluxes_sampled,
+            patch_source_params_sampled,
             is_on_array,
         ) = self._sample_patch_params(
             image,
             n_samples,
-            return_map_n_stars,
-            return_map_star_params,
-            patch_n_stars,
+            return_map_n_sources,
+            return_map_source_params,
+            patch_n_sources,
             training,
         )
-        # we exponentiate the log_fluxes to obtain fluxes.
-        patch_fluxes_sampled = torch.exp(patch_log_fluxes_sampled) * is_on_array
+        patch_source_params_sampled = patch_source_params_sampled * is_on_array
 
         # get parameters on full image
-        locs, fluxes, n_stars = self._get_full_params_from_sampled_params(
-            patch_locs_sampled, patch_fluxes_sampled, slen
+        locs, source_params, n_sources = self._get_full_params_from_sampled_params(
+            patch_locs_sampled, patch_source_params_sampled, slen
         )
 
-        return locs, fluxes, n_stars
-
-
-class GalaxyEncoder(SourceEncoder):
-    def sample_encoder(
-        self,
-        image,
-        n_samples=1,
-        return_map_n_galaxies=False,
-        return_map_gal_params=False,
-        patch_n_galaxies=None,
-        training=False,
-    ):
-        slen = image.shape[-1]
-        (
-            patch_locs_sampled,
-            patch_gal_params_sampled,
-            is_on_array,
-        ) = self._sample_patch_params(
-            image,
-            n_samples,
-            return_map_n_galaxies,
-            return_map_gal_params,
-            patch_n_galaxies,
-            training,
-        )
-        patch_gal_params_sampled = patch_gal_params_sampled * is_on_array
-
-        # get parameters on full image
-        locs, gal_params, n_stars = self._get_full_params_from_sampled_params(
-            patch_locs_sampled, patch_gal_params_sampled, slen
-        )
-
-        return locs, gal_params, n_stars
+        return locs, source_params, n_sources
