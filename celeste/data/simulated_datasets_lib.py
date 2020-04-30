@@ -540,7 +540,7 @@ class StarSimulator(SourceSimulator):
         :return: fluxes, a shape (batchsize x max_sources x nbands) tensor
         """
         assert n_stars.shape[0] == batchsize
-        base_fluxes = _draw_pareto_maxed(
+        base_fluxes = const.draw_pareto_maxed(
             self.f_min,
             self.f_max,
             alpha=self.alpha,
@@ -566,6 +566,15 @@ class StarSimulator(SourceSimulator):
 
         return fluxes
 
+    @staticmethod
+    def get_log_fluxes(fluxes):
+        log_fluxes = torch.where(
+            fluxes > 0, fluxes, torch.ones(*fluxes)
+        )  # prevent log(0) errors.
+        log_fluxes = torch.log(log_fluxes)
+
+        return log_fluxes
+
     def sample_parameters(self, batchsize=1):
         n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
         fluxes = self._sample_fluxes(n_sources, is_on_array, batchsize)
@@ -583,6 +592,8 @@ class StarsDataset(SourceDataset):
 
     def get_batch(self, batchsize=32):
         n_sources, locs, fluxes = self.simulator.sample_parameters(batchsize=batchsize)
+        log_fluxes = self.simulator.get_log_fluxes(fluxes)
+
         images = self.simulator.generate_images(locs, n_sources, fluxes)
 
         return {
@@ -590,6 +601,7 @@ class StarsDataset(SourceDataset):
             "background": self.simulator.background,
             "locs": locs,
             "fluxes": fluxes,
+            "log_fluxes": log_fluxes,
             "n_sources": n_sources,
         }
 
