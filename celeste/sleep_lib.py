@@ -256,14 +256,10 @@ class SourceSleep(ABC):
 
         return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
 
-    # TODO: Fix misnomer variables without redundant code (see docstring)?
     def _get_inv_kl_loss(self, images, true_locs, true_source_params):
         """
-        In the case of stars, this function has some misnomer variables:
-        * true_source_params = true_fluxes
-        * source_param_mean, source_param_logvar = log_flux_mean, log_flux_logvar.
-
-        Be careful!
+        NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
+        normal variables).
 
         Args:
             images:
@@ -273,7 +269,6 @@ class SourceSleep(ABC):
         Returns:
 
         """
-        # true_source_params are either fluxes or galaxy_params.
         # extract image patches
         (
             image_patches,
@@ -331,11 +326,8 @@ class SourceSleep(ABC):
         true_is_on_array,
     ):
         """
-        NOTE: All the quantities are per-patch quantities on first dimension, for simplicity not added to names.
-
-        In the case of stars, this function has some misnomer variables:
-        * true_source_params = true_fluxes
-        * source_param_mean, source_param_logvar = log_flux_mean, log_flux_logvar.
+        NOTE: All the quantities are per-patch quantities on first dimension, for simplicity not added
+        to names.
 
         Args:
             loc_mean:
@@ -398,11 +390,20 @@ class SourceSleep(ABC):
 
         return _true_source_params, _source_param_mean, _source_param_logvar
 
-    @abstractmethod
     def _get_source_params_logprob_all_combs(
         self, true_source_params, source_param_mean, source_param_logvar
     ):
-        pass
+        (
+            _true_source_params,
+            _source_param_mean,
+            _source_param_logvar,
+        ) = self._get_transformed_source_params(
+            true_source_params, source_param_mean, source_param_logvar
+        )
+        gal_param_log_probs_all = const.eval_normal_logprob(
+            _true_source_params, _source_param_mean, _source_param_logvar
+        ).sum(dim=3)
+        return gal_param_log_probs_all
 
     @staticmethod
     @abstractmethod
@@ -413,43 +414,10 @@ class SourceSleep(ABC):
 class StarSleep(SourceSleep):
     @staticmethod
     def _get_params_from_data(data):
-        return data["fluxes"], data["locs"], data["images"]
-
-    def _get_source_params_logprob_all_combs(
-        self, true_fluxes, log_flux_mean, log_flux_logvar
-    ):
-        (
-            _true_fluxes,
-            _log_flux_mean,
-            _log_flux_logvar,
-        ) = self._get_transformed_source_params(
-            true_fluxes, log_flux_mean, log_flux_logvar
-        )
-
-        # this is batchsize x (max_stars x max_detections)
-        # the log prob for each observed location x mean
-        flux_log_probs_all = const.eval_lognormal_logprob(
-            _true_fluxes, _log_flux_mean, _log_flux_logvar
-        ).sum(dim=3)
-        return flux_log_probs_all
+        return data["log_fluxes"], data["locs"], data["images"]
 
 
 class GalaxySleep(SourceSleep):
     @staticmethod
     def _get_params_from_data(data):
         return data["gal_params"], data["locs"], data["images"]
-
-    def _get_source_params_logprob_all_combs(
-        self, true_gal_params, gal_param_mean, gal_param_logvar
-    ):
-        (
-            _true_gal_params,
-            _gal_param_mean,
-            _gal_param_logvar,
-        ) = self._get_transformed_source_params(
-            true_gal_params, gal_param_mean, gal_param_logvar
-        )
-        gal_param_log_probs_all = const.eval_normal_logprob(
-            _true_gal_params, _gal_param_mean, _gal_param_logvar
-        ).sum(dim=3)
-        return gal_param_log_probs_all

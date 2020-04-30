@@ -49,7 +49,6 @@ def get_is_on_from_patch_n_sources_2d(
     :type max_sources: int
     :return:
     """
-    #
     assert not torch.any(torch.isnan(patch_n_sources))
     assert torch.all(patch_n_sources >= 0)
     assert torch.all(patch_n_sources <= max_sources)

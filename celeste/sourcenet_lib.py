@@ -602,9 +602,9 @@ class StarEncoder(SourceEncoder):
             max_detections,
             n_source_params,
         )
-        assert self.n_bands == self.n_source_params, (
-            "Number of bands is number of n_source_params in the " "case of stars."
-        )
+        assert (
+            self.n_bands == self.n_source_params
+        ), "Number of bands is number of n_source_params in the case of stars."
 
     def sample_encoder(
         self,
