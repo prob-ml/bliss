@@ -400,10 +400,10 @@ class SourceSleep(ABC):
         ) = self._get_transformed_source_params(
             true_source_params, source_param_mean, source_param_logvar
         )
-        gal_param_log_probs_all = const.eval_normal_logprob(
+        source_param_log_probs_all = const.eval_normal_logprob(
             _true_source_params, _source_param_mean, _source_param_logvar
         ).sum(dim=3)
-        return gal_param_log_probs_all
+        return source_param_log_probs_all
 
     @staticmethod
     @abstractmethod
