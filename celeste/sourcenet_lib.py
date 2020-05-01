@@ -485,7 +485,7 @@ class SourceEncoder(nn.Module):
         training,
     ):
         """
-        NOTE: In the case of stars this will return LOG_FLUXES!
+        NOTE: In the case of stars this will return log_fluxes!
 
         Args:
             image:
@@ -598,4 +598,5 @@ class SourceEncoder(nn.Module):
             patch_locs_sampled, patch_source_params_sampled, slen
         )
 
+        # returns either galaxy_params or log_fluxes.
         return locs, source_params, n_sources
