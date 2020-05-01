@@ -1,6 +1,6 @@
-import unittest
 import numpy as np
 import torch
+import pytorch_lightning as pl
 import json
 import fitsio
 
@@ -18,7 +18,7 @@ data_params["slen"] = 31
 data_params["mean_stars"] = 10
 
 
-class TestSDSSDataset(unittest.TestCase):
+class TestSDSSDataset(pl.LightningModule):
     def test_fresh_data(self):
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)
