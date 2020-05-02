@@ -225,7 +225,7 @@ def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
-    return mgrid.type(torch.FloatTensor).cuda()
+    return mgrid.type(torch.FloatTensor).to(const.device)
 
 
 # TODO: Make this an abstract class, same with the dataset.
@@ -257,9 +257,7 @@ class SourceSimulator(ABC):
 
         self.slen = slen  # side length of the image
         self.n_bands = n_bands
-        self.background = background.to(
-            const.device
-        )  # make sure it is in cuda if available.
+        self.background = background.to(const.device)
 
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
@@ -286,8 +284,7 @@ class SourceSimulator(ABC):
             images_mean = images_mean.clamp(min=1.0)
 
         images = (
-            torch.sqrt(images_mean)
-            * torch.cuda.FloatTensor(*images_mean.shape).uniform_()
+            torch.sqrt(images_mean) * const.FloatTensor(*images_mean.shape).uniform_()
             + images_mean
         )
 
@@ -343,8 +340,6 @@ class SourceDataset(ABC):
 
 
 class GalaxySimulator(SourceSimulator):
-
-    # TODO: Double check decoder returns things in cuda() that are not attached.
     def __init__(self, galaxy_slen, gal_decoder_file, *args, **kwargs):
         """
         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
@@ -456,9 +451,7 @@ class GalaxyDataset(SourceDataset):
         n_bands = data_params["n_bands"]
 
         background = np.load(background_path)
-        background = (
-            torch.from_numpy(background).float().to(const.device)
-        )  # in cuda, if possible.
+        background = torch.from_numpy(background).float()
 
         assert n_bands == background.shape[0]
         assert background.shape[1] == background.shape[2] == data_params["galaxy_slen"]
