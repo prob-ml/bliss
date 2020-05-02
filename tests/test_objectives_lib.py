@@ -1,4 +1,3 @@
-import unittest
 import torch
 import numpy as np
 from itertools import permutations
@@ -7,7 +6,7 @@ from celeste import sleep_lib
 from celeste.utils import const
 
 
-class TestStarEncoderObjective(unittest.TestCase):
+class TestStarEncoderObjective:
     def test_get_all_comb_losses(self):
         # this checks that our function to return all combination of losses
         # is correct

@@ -22,6 +22,7 @@ if use_cuda:
 
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
+# torch.set_default_tensor_type(FloatTensor)
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
