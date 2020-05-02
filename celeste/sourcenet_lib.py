@@ -62,7 +62,6 @@ class SourceEncoder(nn.Module):
         network.
         """
         super(SourceEncoder, self).__init__()
-        assert torch.cuda.is_available(), "requires use of cuda."
 
         # image parameters
         self.slen = slen
@@ -238,7 +237,7 @@ class SourceEncoder(nn.Module):
         n_samples = n_sources.shape[0]
 
         batchsize = h.size(0)
-        _h = torch.cat((h, torch.zeros(batchsize, 1).cuda()), dim=1)
+        _h = torch.cat((h, torch.zeros(batchsize, 1).to(const.device)), dim=1)
 
         loc_logit_mean = torch.gather(
             _h,
@@ -304,7 +303,7 @@ class SourceEncoder(nn.Module):
                 (self.max_detections + 1, 2 * self.max_detections), self.dim_out_all
             )
             .type(torch.LongTensor)
-            .cuda()
+            .to(const.device)
         )
 
         self.locs_var_indx_mat = (
@@ -312,7 +311,7 @@ class SourceEncoder(nn.Module):
                 (self.max_detections + 1, 2 * self.max_detections), self.dim_out_all
             )
             .type(torch.LongTensor)
-            .cuda()
+            .to(const.device)
         )
 
         self.source_params_mean_indx_mat = (
@@ -321,7 +320,7 @@ class SourceEncoder(nn.Module):
                 self.dim_out_all,
             )
             .type(torch.LongTensor)
-            .cuda()
+            .to(const.device)
         )
         self.source_params_var_indx_mat = (
             torch.full(
@@ -329,11 +328,11 @@ class SourceEncoder(nn.Module):
                 self.dim_out_all,
             )
             .type(torch.LongTensor)
-            .cuda()
+            .to(const.device)
         )
 
         self.prob_indx = (
-            torch.zeros(self.max_detections + 1).type(torch.LongTensor).cuda()
+            torch.zeros(self.max_detections + 1).type(torch.LongTensor).to(const.device)
         )
 
         for n_detections in range(1, self.max_detections + 1):
@@ -546,22 +545,18 @@ class SourceEncoder(nn.Module):
         ) = self.get_var_params_for_n_sources(h, patch_n_stars_sampled)
 
         if return_map_source_params:
-            loc_sd = torch.cuda.FloatTensor(*loc_logvar.shape).zero_()
-            source_params_sd = torch.cuda.FloatTensor(
-                *source_param_logvar.shape
-            ).zero_()
+            loc_sd = const.FloatTensor(*loc_logvar.shape).zero_()
+            source_params_sd = const.FloatTensor(*source_param_logvar.shape).zero_()
         else:
             loc_sd = torch.exp(0.5 * loc_logvar)
             source_params_sd = torch.exp(0.5 * source_param_logvar).clamp(max=0.5)
 
         # sample locations
-        _locs_randn = torch.cuda.FloatTensor(*loc_mean.shape).normal_()
+        _locs_randn = const.FloatTensor(*loc_mean.shape).normal_()
         patch_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
 
         # sample source params, these are log_fluxes or latent galaxy params (normal variables)
-        _source_params_randn = torch.cuda.FloatTensor(
-            *source_param_mean.shape
-        ).normal_()
+        _source_params_randn = const.FloatTensor(*source_param_mean.shape).normal_()
 
         patch_source_params_sampled = (
             source_param_mean + _source_params_randn * source_params_sd

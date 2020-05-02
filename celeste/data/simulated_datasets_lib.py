@@ -426,6 +426,7 @@ class GalaxyDataset(SourceDataset):
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
 
+    # TODO: Improve iterating over batches in each epoch, maybe return an iterator? Right now a bit clunky.
     def get_batch(self, batchsize=32):
         n_sources, locs, gal_params, single_galaxies = self.simulator.sample_parameters(
             batchsize=batchsize

@@ -28,7 +28,7 @@ class TestStarEncoderObjective:
         log_flux_log_var = torch.randn(batchsize, max_detections, n_bands)
 
         # get loss for locations
-        locs_log_probs_all = sleep_lib.get_locs_logprob_all_combs(
+        locs_log_probs_all = sleep_lib.SourceSleep._get_locs_logprob_all_combs(
             true_locs, loc_mean, loc_log_var
         )
 
@@ -57,6 +57,9 @@ class TestStarEncoderObjective:
                     assert locs_loss_ij == locs_log_probs_all[i, j, k]
 
     def test_get_min_perm_loss(self):
+        """
+        Same as previous function but checks that we can get the permutation with the minimum loss.
+        """
 
         batchsize = 100
         max_detections = 4
@@ -65,7 +68,7 @@ class TestStarEncoderObjective:
 
         # true parameters
         n_stars = torch.Tensor(np.random.choice(max_detections + 1, batchsize))
-        is_on_array = const.get_is_on_from_n_stars(n_stars, max_detections).float()
+        is_on_array = const.get_is_on_from_n_sources(n_stars, max_detections).float()
 
         true_locs = torch.rand(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
         true_fluxes = torch.exp(
