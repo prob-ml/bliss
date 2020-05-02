@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import Dataset
 from torch.distributions import Poisson, Categorical
 import torch.nn.functional as F
+from torch.distributions import Poisson, Categorical
 from gmodel.data.galaxy_datasets import DecoderSamples
 from abc import ABC, abstractmethod
 
@@ -58,7 +59,7 @@ def _expand_psf(psf, slen):
 
     assert psf_slen <= slen
 
-    psf_expanded = torch.cuda.FloatTensor(n_bands, slen, slen).zero_()
+    psf_expanded = const.FloatTensor(n_bands, slen, slen).zero_()
 
     offset = int((slen - psf_slen) / 2)
 
@@ -80,25 +81,20 @@ def _sample_n_sources(
     :return:
     """
     if draw_poisson:
-        m = Poisson(mean_sources)
+        m = Poisson(const.LongTensor(1).fill_(mean_sources))
         n_sources = m.sample(batchsize)
     else:
-        m = Categorical(max_sources - min_sources)
+        m = Categorical(const.LongTensor(1).fill_(max_sources - min_sources))
         n_sources = m.sample(batchsize) + min_sources
 
-    return (
-        torch.tensor(n_sources)
-        .clamp(max=max_sources, min=min_sources)
-        .type(torch.LongTensor)
-        .cuda()
-    )
+    return torch.tensor(n_sources).clamp(max=max_sources, min=min_sources)
 
 
 def _sample_locs(max_sources, is_on_array, batchsize=1):
     # 2 = (x,y)
     # torch.rand returns numbers between (0,1)
     locs = (
-        torch.cuda.FloatTensor(batchsize, max_sources, 2).uniform_()
+        const.FloatTensor(batchsize, max_sources, 2).uniform_()
         * is_on_array.unsqueeze(2).float()
     )
     return locs
@@ -175,7 +171,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     grid = _get_grid(slen, cached_grid)
 
     n_bands = psf.shape[0]
-    scene = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    scene = const.FloatTensor(batchsize, n_bands, slen, slen).zero_()
 
     assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
     assert fluxes is not None
@@ -210,7 +206,7 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     _check_sources_and_locs(locs, n_sources, batchsize)
     grid = _get_grid(slen, cached_grid)
 
-    scene = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    scene = const.FloatTensor(batchsize, n_bands, slen, slen).zero_()
     for n in range(max(n_sources)):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
@@ -258,11 +254,12 @@ class SourceSimulator(ABC):
         :param add_noise:
         :param draw_poisson:
         """
-        assert torch.cuda.is_available(), "GPU is required."
 
         self.slen = slen  # side length of the image
         self.n_bands = n_bands
-        self.background = background.cuda()
+        self.background = background.to(
+            const.device
+        )  # make sure it is in cuda if available.
 
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
@@ -333,10 +330,6 @@ class SourceDataset(ABC):
         """
         :param n_images: same as batchsize.
         """
-        assert (
-            torch.cuda.is_available()
-        ), "No GPU is available, which we assume is required."
-
         self.n_images = n_images  # = batchsize.
         self.simulator_args = simulator_args
         self.simulator_kwargs = simulator_kwargs
@@ -371,10 +364,10 @@ class GalaxySimulator(SourceSimulator):
         assert len(n_galaxy.shape) == 1
         assert n_galaxy.shape[0] == batchsize
 
-        galaxy_params = torch.cuda.FloatTensor(
+        galaxy_params = const.FloatTensor(
             batchsize, self.max_sources, self.latent_dim
         ).zero_()
-        single_galaxies = torch.cuda.FloatTensor(
+        single_galaxies = const.FloatTensor(
             batchsize,
             self.max_sources,
             self.n_bands,
@@ -396,7 +389,7 @@ class GalaxySimulator(SourceSimulator):
             ]
             count += n_gal
 
-        return galaxy_params, single_galaxies  # in cuda.
+        return galaxy_params, single_galaxies
 
     # TODO: What to do for non-aligned multi-band images in the case of galaxies.
     def _draw_image_from_params(self, locs, n_sources, galaxies):
@@ -463,19 +456,19 @@ class GalaxyDataset(SourceDataset):
         n_bands = data_params["n_bands"]
 
         background = np.load(background_path)
-        tbackground = torch.zeros([n_bands, slen, slen])
+        background = (
+            torch.from_numpy(background).float().to(const.device)
+        )  # in cuda, if possible.
+
         assert n_bands == background.shape[0]
         assert background.shape[1] == background.shape[2] == data_params["galaxy_slen"]
-
-        for n in range(n_bands):
-            tbackground[n, :, :] = float(background[n][0][0])
 
         simulator_args = [
             data_params["galaxy_slen"],
             data_params["gal_decoder_file"],
             data_params["slen"],
             data_params["n_bands"],
-            tbackground,
+            background,
             data_params["max_galaxies"],
             data_params["mean_galaxies"],
             data_params["min_galaxies"],
@@ -504,7 +497,7 @@ class StarSimulator(SourceSimulator):
         assert self.background.shape[1] == self.slen
         assert self.background.shape[2] == self.slen
 
-        self.psf = self.psf.cuda()
+        self.psf = self.psf.to(const.device)
 
         # prior parameters
         self.f_min = f_min
@@ -537,7 +530,7 @@ class StarSimulator(SourceSimulator):
     def _sample_fluxes(self, n_stars, is_on_array, batchsize=1):
         """
 
-        :return: fluxes, a shape (batchsize x max_sources x nbands) tensor
+        :return: fluxes, a shape (batchsize x max_sources x n_bands) tensor
         """
         assert n_stars.shape[0] == batchsize
         base_fluxes = const.draw_pareto_maxed(
@@ -549,7 +542,7 @@ class StarSimulator(SourceSimulator):
 
         if self.n_bands > 1:
             colors = (
-                torch.cuda.FloatTensor(
+                const.FloatTensor(
                     batchsize, self.max_sources, self.n_bands - 1
                 ).uniform_()
                 * 0.15
@@ -616,6 +609,12 @@ class StarsDataset(SourceDataset):
         add_noise=True,
         draw_poisson=True,
     ):
+        assert (
+            type(background) is np.ndarray
+        ), "background inputted must be in numpy format."
+
+        # convert to tensor in corresponding device
+        background = torch.from_numpy(background).float().to(const.device)
         simulator_args = [
             data_params["f_min"],
             data_params["f_max"],

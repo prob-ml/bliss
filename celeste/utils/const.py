@@ -14,9 +14,11 @@ models_path = root_path.joinpath("models")
 
 # make codebase device agnostic, but also create tensors directly in the gpu.
 use_cuda = torch.cuda.is_available()
+device = torch.device("cpu")
 if use_cuda:
     default_device = 1
     torch.cuda.set_device(default_device)
+    device = torch.device(default_device)
 
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
