@@ -78,16 +78,16 @@ def _sample_n_sources(
     :param max_sources:
     :param batchsize:
     :param draw_poisson:
-    :return:
+    :return: A tensor with shape = (batchsize)
     """
     if draw_poisson:
-        m = Poisson(const.LongTensor(1).fill_(mean_sources))
-        n_sources = m.sample(batchsize)
+        m = Poisson(const.FloatTensor(1).fill_(mean_sources))
+        n_sources = m.sample([batchsize])
     else:
-        m = Categorical(const.LongTensor(1).fill_(max_sources - min_sources))
-        n_sources = m.sample(batchsize) + min_sources
+        m = Categorical(const.FloatTensor(1).fill_(max_sources - min_sources))
+        n_sources = m.sample([batchsize]) + min_sources
 
-    return torch.tensor(n_sources).clamp(max=max_sources, min=min_sources)
+    return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze()
 
 
 def _sample_locs(max_sources, is_on_array, batchsize=1):
@@ -604,11 +604,9 @@ class StarsDataset(SourceDataset):
         draw_poisson=True,
     ):
         assert (
-            type(background) is np.ndarray
-        ), "background inputted must be in numpy format."
+            type(background) is torch.Tensor
+        ), "background inputted should be a torch.tensor"
 
-        # convert to tensor in corresponding device
-        background = torch.from_numpy(background).float().to(const.device)
         simulator_args = [
             data_params["f_min"],
             data_params["f_max"],

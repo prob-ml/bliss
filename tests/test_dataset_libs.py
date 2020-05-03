@@ -15,8 +15,8 @@ psf_og = torch.Tensor(np.array([psf_r, psf_i])).to(const.device)  # waiting for 
 with open("../data/default_star_parameters.json", "r") as fp:
     data_params = json.load(fp)
 
-data_params["slen"] = 31
-data_params["mean_stars"] = 10
+data_params["slen"] = 50
+data_params["mean_stars"] = 40
 
 
 class TestSDSSDataset(unittest.TestCase):
@@ -24,7 +24,7 @@ class TestSDSSDataset(unittest.TestCase):
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)
 
-        n_images = 32
+        n_images = 80
         # get dataset
         background = (
             torch.ones(psf_og.shape[0], data_params["slen"], data_params["slen"])
@@ -39,9 +39,6 @@ class TestSDSSDataset(unittest.TestCase):
             add_noise=True,
         )
 
-        # get batch
-        batchsize = 8
-
         #############################################
         # Check: by creating new batches fresh data
         # should be drawn
@@ -52,13 +49,20 @@ class TestSDSSDataset(unittest.TestCase):
         fluxes_vec = torch.zeros(num_epoch)
         n_sources_vec = torch.zeros(num_epoch)
 
+        # get batch
+        batchsize = 8
+        num_batches = int(len(star_dataset) / batchsize)
+
+        assert len(star_dataset) == n_images
+        assert (
+            len(star_dataset) >= num_epoch * batchsize * 2
+        ), "Dataset repeats after n_images "
+
         for i in range(num_epoch):
             images_mean = 0
             true_locs_mean = 0
             true_fluxes_mean = 0
             true_n_sources_mean = 0
-
-            num_batches = int(len(star_dataset) / batchsize)
 
             for j in range(num_batches):
                 batch = star_dataset.get_batch(batchsize)
@@ -66,7 +70,7 @@ class TestSDSSDataset(unittest.TestCase):
                 true_fluxes = batch["fluxes"]
                 true_locs = batch["locs"]
                 true_n_sources = batch["n_sources"]
-                images = batch["image"]
+                images = batch["images"]
 
                 images_mean += images.mean()
                 true_locs_mean += true_locs.mean()

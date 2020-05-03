@@ -33,13 +33,13 @@ class TestUtils(unittest.TestCase):
         batchsize = 3
         max_stars = 10
 
-        n_stars = torch.Tensor(
+        n_stars = torch.from_numpy(
             np.random.choice(max_stars, (n_samples, batchsize))
-        ).type(torch.LongTensor)
+        ).to(const.device)
+        is_on = const.get_is_on_from_patch_n_sources_2d(n_stars, max_stars)
 
-        is_on = const.get_is_on_from_n_stars_2d(n_stars, max_stars)
-
-        for i in range(n_samples):
-            assert torch.all(
-                const.get_is_on_from_n_stars(n_stars[i], max_stars) == is_on[i]
-            )
+        assert 1 == 0, "make this test more useful"
+        # for i in range(n_samples):
+        #     assert torch.all(
+        #         const.get_is_on_from_n_sources(n_stars[i], max_stars) == is_on[i]
+        #     )
