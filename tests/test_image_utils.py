@@ -2,9 +2,8 @@ import unittest
 import torch
 import numpy as np
 
-from celeste import image_utils
-from celeste import get_is_on_from_n_stars
-from celeste import _draw_pareto_maxed
+from celeste.utils import image_utils
+from celeste.utils.const import draw_pareto_maxed, get_is_on_from_n_sources
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -70,7 +69,7 @@ class TestImageBatching(unittest.TestCase):
             .clamp(max=max_stars, min=min_stars)
             .type(torch.LongTensor)
         )
-        is_on_array = get_is_on_from_n_stars(n_stars, max_stars)
+        is_on_array = get_is_on_from_n_sources(n_stars, max_stars)
 
         # draw locations
         locs = (
@@ -82,9 +81,7 @@ class TestImageBatching(unittest.TestCase):
         # fudge factor because sometimes there are ties in the fluxes; this messes up my unnittest
         fudge_factor = torch.randn((n_images, max_stars, n_bands)) * 1e-3
         fluxes = (
-            _draw_pareto_maxed(
-                100, 1e6, alpha=0.5, shape=(n_images, max_stars, n_bands)
-            )
+            draw_pareto_maxed(100, 1e6, alpha=0.5, shape=(n_images, max_stars, n_bands))
             + fudge_factor
         ) * is_on_array.unsqueeze(2).float()
 
@@ -173,7 +170,7 @@ class TestImageBatching(unittest.TestCase):
             max_stars = 10
 
             n_stars = torch.ones(n_images).type(torch.LongTensor)
-            is_on_array = get_is_on_from_n_stars(n_stars, max_stars)
+            is_on_array = get_is_on_from_n_sources(n_stars, max_stars)
 
             # draw locations
             locs = (

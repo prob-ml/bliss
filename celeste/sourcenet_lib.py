@@ -42,8 +42,9 @@ class SourceEncoder(nn.Module):
         This class implements the source encoder, which is supposed to take in a synthetic image of size slen * slen
         and returns a NN latent variable representation of this image.
 
-        * NOTE: Assumes that source_params are always log_fluxes throughout the code. Except in get_image_patches, but
-        that depends on the user anyways.
+        * NOTE: Assumes that `source_params` are always `log_fluxes` throughout the code.
+
+        * NOTE: Should have (n_bands == n_source_params) in the case of stars.
 
         * EXAMPLE on padding: If the patch_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
 
@@ -289,7 +290,7 @@ class SourceEncoder(nn.Module):
                 source_param_logvar.squeeze(0),
             )
         else:
-            return (loc_mean, loc_logvar, source_param_mean, source_param_logvar)
+            return loc_mean, loc_logvar, source_param_mean, source_param_logvar
 
     def _get_hidden_indices(self):
         """
@@ -370,10 +371,6 @@ class SourceEncoder(nn.Module):
     ######################
     # Modules for patching images and parameters
     ######################
-    # TODO: in this function the user usually passes in source_param as potentially fluxes. Breaking the log_fluxes
-    #  consistency in the rest of the code.
-    # TODO: This function doesn't really depend on encoder, just on attributes like step, slen, n_bands, max_detection,
-    #       should probably move it to image utils. This would fix the above issue for this file at least.
     def get_image_patches(
         self, images, locs=None, source_params=None, clip_max_sources=False
     ):
@@ -488,7 +485,7 @@ class SourceEncoder(nn.Module):
         training,
     ):
         """
-        NOTE: In the case of stars this will return LOG_FLUXES!
+        NOTE: In the case of stars this will return log_fluxes!
 
         Args:
             image:
@@ -515,7 +512,7 @@ class SourceEncoder(nn.Module):
 
         if not training:
             h = h.detach()
-            log_probs_nstar_patch = log_probs_n_source_patch.detach()
+            log_probs_n_source_patch = log_probs_n_source_patch.detach()
 
         # sample number of stars
         if patch_n_sources is None:
@@ -572,92 +569,55 @@ class SourceEncoder(nn.Module):
 
         return patch_locs_sampled, patch_source_params_sampled, is_on_array
 
-
-class StarEncoder(SourceEncoder):
-    def __init__(
-        self,
-        slen,
-        patch_slen,
-        step,
-        edge_padding,
-        n_bands,
-        max_detections,
-        n_source_params,
-    ):
-        super(StarEncoder, self).__init__(
-            slen,
-            patch_slen,
-            step,
-            edge_padding,
-            n_bands,
-            max_detections,
-            n_source_params,
-        )
-        assert self.n_bands == self.n_source_params, (
-            "Number of bands is number of n_source_params in the " "case of stars."
-        )
-
     def sample_encoder(
         self,
         image,
         n_samples=1,
-        return_map_n_stars=False,
-        return_map_star_params=False,
-        patch_n_stars=None,
+        return_map_n_sources=False,
+        return_map_source_params=False,
+        patch_n_sources=None,
         training=False,
     ):
+        """
+        In the case of stars, this function will return log_fluxes as source_params. Can then obtain fluxes with the
+        following procedure:
+
+        >> is_on_array = const.get_is_on_from_n_stars(n_stars, max_stars)
+        >> fluxes = np.exp(log_fluxes) * is_on_array
+
+        where `max_stars` will correspond to the maximum number of stars that was used when simulating the `image`
+        passed in to this function.
+
+        Args:
+            image:
+            n_samples:
+            return_map_n_sources:
+            return_map_source_params:
+            patch_n_sources:
+            training:
+
+        Returns:
+
+        """
         slen = image.shape[-1]
         (
             patch_locs_sampled,
-            patch_log_fluxes_sampled,
+            patch_source_params_sampled,
             is_on_array,
         ) = self._sample_patch_params(
             image,
             n_samples,
-            return_map_n_stars,
-            return_map_star_params,
-            patch_n_stars,
+            return_map_n_sources,
+            return_map_source_params,
+            patch_n_sources,
             training,
         )
-        # we exponentiate the log_fluxes to obtain fluxes.
-        patch_fluxes_sampled = torch.exp(patch_log_fluxes_sampled) * is_on_array
+        patch_source_params_sampled = patch_source_params_sampled * is_on_array
 
         # get parameters on full image
-        locs, fluxes, n_stars = self._get_full_params_from_sampled_params(
-            patch_locs_sampled, patch_fluxes_sampled, slen
+        locs, source_params, n_sources = self._get_full_params_from_sampled_params(
+            patch_locs_sampled, patch_source_params_sampled, slen
         )
 
-        return locs, fluxes, n_stars
-
-
-class GalaxyEncoder(SourceEncoder):
-    def sample_encoder(
-        self,
-        image,
-        n_samples=1,
-        return_map_n_galaxies=False,
-        return_map_gal_params=False,
-        patch_n_galaxies=None,
-        training=False,
-    ):
-        slen = image.shape[-1]
-        (
-            patch_locs_sampled,
-            patch_gal_params_sampled,
-            is_on_array,
-        ) = self._sample_patch_params(
-            image,
-            n_samples,
-            return_map_n_galaxies,
-            return_map_gal_params,
-            patch_n_galaxies,
-            training,
-        )
-        patch_gal_params_sampled = patch_gal_params_sampled * is_on_array
-
-        # get parameters on full image
-        locs, gal_params, n_stars = self._get_full_params_from_sampled_params(
-            patch_locs_sampled, patch_gal_params_sampled, slen
-        )
-
-        return locs, gal_params, n_stars
+        # returns either galaxy_params or log_fluxes.
+        return locs, source_params, n_sources

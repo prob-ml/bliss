@@ -3,7 +3,8 @@ import torch
 import numpy as np
 from itertools import permutations
 
-from celeste import sleep_lib, utils
+from celeste import sleep_lib
+from celeste.utils import const
 
 
 class TestStarEncoderObjective(unittest.TestCase):
@@ -44,13 +45,13 @@ class TestStarEncoderObjective(unittest.TestCase):
         for i in range(batchsize):
             for j in range(max_stars):
                 for k in range(max_detections):
-                    flux_loss_ij = utils.eval_lognormal_logprob(
+                    flux_loss_ij = const.eval_lognormal_logprob(
                         true_fluxes[i, j], log_flux_mean[i, k], log_flux_log_var[i, k]
                     ).sum()
 
                     assert flux_loss_ij == flux_log_probs_all[i, j, k]
 
-                    locs_loss_ij = utils.eval_normal_logprob(
+                    locs_loss_ij = const.eval_normal_logprob(
                         true_locs[i, j], loc_mean[i, k], loc_log_var[i, k]
                     ).sum()
 
@@ -65,7 +66,7 @@ class TestStarEncoderObjective(unittest.TestCase):
 
         # true parameters
         n_stars = torch.Tensor(np.random.choice(max_detections + 1, batchsize))
-        is_on_array = utils.get_is_on_from_n_stars(n_stars, max_detections).float()
+        is_on_array = const.get_is_on_from_n_stars(n_stars, max_detections).float()
 
         true_locs = torch.rand(batchsize, max_detections, 2) * is_on_array.unsqueeze(2)
         true_fluxes = torch.exp(
@@ -126,13 +127,13 @@ class TestStarEncoderObjective(unittest.TestCase):
 
             min_locs_loss = 1e16
             for perm in permutations(range(_n_stars)):
-                locs_loss_perm = -utils.eval_normal_logprob(
+                locs_loss_perm = -const.eval_normal_logprob(
                     _true_locs, _loc_mean[perm, :], _loc_log_var[perm, :]
                 )
 
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_locs_loss = locs_loss_perm.sum()
-                    min_fluxes_loss = -utils.eval_lognormal_logprob(
+                    min_fluxes_loss = -const.eval_lognormal_logprob(
                         _true_fluxes,
                         _log_flux_mean[perm, :],
                         _log_flux_log_var[perm, :],

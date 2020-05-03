@@ -1,27 +1,12 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torch.distributions import Poisson, Categorical
 import torch.nn.functional as F
 from gmodel.data.galaxy_datasets import DecoderSamples
+from abc import ABC, abstractmethod
 
 from ..utils import const
-
-
-def _draw_pareto(f_min, alpha, shape):
-    uniform_samples = torch.cuda.FloatTensor(*shape).uniform_()
-    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
-
-
-def _draw_pareto_maxed(f_min, f_max, alpha, shape):
-    # draw pareto conditioned on being less than f_max
-
-    pareto_samples = _draw_pareto(f_min, alpha, shape)
-
-    while torch.any(pareto_samples > f_max):
-        indx = pareto_samples > f_max
-        pareto_samples[indx] = _draw_pareto(f_min, alpha, [torch.sum(indx).item()])
-
-    return pareto_samples
 
 
 def _check_psf(psf, slen):
@@ -95,9 +80,11 @@ def _sample_n_sources(
     :return:
     """
     if draw_poisson:
-        n_sources = np.random.poisson(mean_sources, batchsize)
+        m = Poisson(mean_sources)
+        n_sources = m.sample(batchsize)
     else:
-        n_sources = np.random.choice(np.arange(min_sources, max_sources + 1), batchsize)
+        m = Categorical(max_sources - min_sources)
+        n_sources = m.sample(batchsize) + min_sources
 
     return (
         torch.tensor(n_sources)
@@ -149,12 +136,15 @@ def _plot_one_source(slen, locs, source, cached_grid=None):
     return source_plotted
 
 
-def _get_grid(slen, locs, n_sources, batchsize, cached_grid):
+def _check_sources_and_locs(locs, n_sources, batchsize):
     assert len(locs.shape) == 3, "Using batchsize as the first dimension."
     assert locs.shape[2] == 2
     assert len(n_sources) == batchsize
     assert len(n_sources.shape) == 1
     assert max(n_sources) <= locs.shape[1]
+
+
+def _get_grid(slen, cached_grid=None):
 
     if cached_grid is None:
         grid = get_mgrid(slen)
@@ -181,7 +171,8 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     """
 
     batchsize = locs.shape[0]
-    grid = _get_grid(slen, locs, n_sources, batchsize, cached_grid)
+    _check_sources_and_locs(locs, n_sources, batchsize)
+    grid = _get_grid(slen, cached_grid)
 
     n_bands = psf.shape[0]
     scene = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
@@ -216,7 +207,8 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     assert single_galaxies.shape[0] == batchsize
     assert single_galaxies.shape[1] == locs.shape[1]  # max_galaxies
 
-    grid = _get_grid(slen, locs, n_sources, batchsize, cached_grid)
+    _check_sources_and_locs(locs, n_sources, batchsize)
+    grid = _get_grid(slen, cached_grid)
 
     scene = torch.cuda.FloatTensor(batchsize, n_bands, slen, slen).zero_()
     for n in range(max(n_sources)):
@@ -241,7 +233,7 @@ def get_mgrid(slen):
 
 
 # TODO: Make this an abstract class, same with the dataset.
-class SourceSimulator(object):
+class SourceSimulator(ABC):
     def __init__(
         self,
         slen,
@@ -331,11 +323,12 @@ class SourceSimulator(object):
 
         return n_sources, locs, is_on_array
 
+    @abstractmethod
     def sample_parameters(self, batchsize=1):
         pass
 
 
-class SourceDataset(Dataset):
+class SourceDataset(ABC):
     def __init__(self, n_images, simulator_args, simulator_kwargs):
         """
         :param n_images: same as batchsize.
@@ -351,6 +344,7 @@ class SourceDataset(Dataset):
     def __len__(self):
         return self.n_images
 
+    @abstractmethod
     def get_batch(self, batchsize=64):
         pass
 
@@ -546,7 +540,7 @@ class StarSimulator(SourceSimulator):
         :return: fluxes, a shape (batchsize x max_sources x nbands) tensor
         """
         assert n_stars.shape[0] == batchsize
-        base_fluxes = _draw_pareto_maxed(
+        base_fluxes = const.draw_pareto_maxed(
             self.f_min,
             self.f_max,
             alpha=self.alpha,
@@ -572,6 +566,15 @@ class StarSimulator(SourceSimulator):
 
         return fluxes
 
+    @staticmethod
+    def get_log_fluxes(fluxes):
+        log_fluxes = torch.where(
+            fluxes > 0, fluxes, torch.ones(*fluxes)
+        )  # prevent log(0) errors.
+        log_fluxes = torch.log(log_fluxes)
+
+        return log_fluxes
+
     def sample_parameters(self, batchsize=1):
         n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
         fluxes = self._sample_fluxes(n_sources, is_on_array, batchsize)
@@ -589,6 +592,8 @@ class StarsDataset(SourceDataset):
 
     def get_batch(self, batchsize=32):
         n_sources, locs, fluxes = self.simulator.sample_parameters(batchsize=batchsize)
+        log_fluxes = self.simulator.get_log_fluxes(fluxes)
+
         images = self.simulator.generate_images(locs, n_sources, fluxes)
 
         return {
@@ -596,6 +601,7 @@ class StarsDataset(SourceDataset):
             "background": self.simulator.background,
             "locs": locs,
             "fluxes": fluxes,
+            "log_fluxes": log_fluxes,
             "n_sources": n_sources,
         }
 

@@ -3,6 +3,7 @@ import time
 from itertools import permutations
 import numpy as np
 import torch
+from abc import ABC, abstractmethod
 
 from .utils import const
 
@@ -16,12 +17,12 @@ def isnan(x):
 ############################
 
 
-def _get_categorical_loss(log_probs, one_hot_encoding):
-    assert torch.all(log_probs <= 0)
-    assert log_probs.shape[0] == one_hot_encoding.shape[0]
-    assert log_probs.shape[1] == one_hot_encoding.shape[1]
+def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
+    assert torch.all(n_source_log_probs <= 0)
+    assert n_source_log_probs.shape[0] == one_hot_encoding.shape[0]
+    assert n_source_log_probs.shape[1] == one_hot_encoding.shape[1]
 
-    return torch.sum(-log_probs * one_hot_encoding, dim=1)
+    return torch.sum(-n_source_log_probs * one_hot_encoding, dim=1)
 
 
 def _permute_losses_mat(losses_mat, perm):
@@ -94,7 +95,7 @@ def get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_arr
     return locs_loss, source_params_loss, indx
 
 
-class SourceSleep(object):
+class SourceSleep(ABC):
     def __init__(
         self,
         encoder,
@@ -255,14 +256,10 @@ class SourceSleep(object):
 
         return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
 
-    # TODO: Fix misnomer variables without redundant code (see docstring)?
     def _get_inv_kl_loss(self, images, true_locs, true_source_params):
         """
-        In the case of stars, this function has some misnomer variables:
-        * true_source_params = true_fluxes
-        * source_param_mean, source_param_logvar = log_flux_mean, log_flux_logvar.
-
-        Be careful!
+        NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
+        normal variables).
 
         Args:
             images:
@@ -272,7 +269,6 @@ class SourceSleep(object):
         Returns:
 
         """
-        # true_source_params are either fluxes or galaxy_params.
         # extract image patches
         (
             image_patches,
@@ -292,7 +288,13 @@ class SourceSleep(object):
             log_probs_n_sources_patch,
         ) = self.encoder.forward(image_patches, n_sources=true_patch_n_sources)
 
-        loss, counter_loss, locs_loss, fluxes_loss, perm_indx = self._get_params_loss(
+        (
+            loss,
+            counter_loss,
+            locs_loss,
+            source_param_loss,
+            perm_indx,
+        ) = self._get_params_loss(
             loc_mean,
             loc_logvar,
             source_param_mean,
@@ -307,7 +309,7 @@ class SourceSleep(object):
             loss,
             counter_loss,
             locs_loss,
-            fluxes_loss,
+            source_param_loss,
             perm_indx,
             log_probs_n_sources_patch,
         )
@@ -318,24 +320,21 @@ class SourceSleep(object):
         loc_logvar,
         source_param_mean,
         source_param_logvar,
-        log_probs,
+        n_source_log_probs,
         true_locs,
         true_source_params,
         true_is_on_array,
     ):
         """
-        NOTE: All the quantities are per-patch quantities on first dimension, for simplicity not added to names.
-
-        In the case of stars, this function has some misnomer variables:
-        * true_source_params = true_fluxes
-        * source_param_mean, source_param_logvar = log_flux_mean, log_flux_logvar.
+        NOTE: All the quantities are per-patch quantities on first dimension, for simplicity not added
+        to names.
 
         Args:
             loc_mean:
             loc_logvar:
             source_param_mean:
             source_param_logvar:
-            log_probs:
+            n_source_log_probs:
             true_locs:
             true_source_params:
             true_is_on_array:
@@ -360,9 +359,9 @@ class SourceSleep(object):
 
         true_n_stars = true_is_on_array.sum(1)
         one_hot_encoding = const.get_one_hot_encoding_from_int(
-            true_n_stars, log_probs.shape[1]
+            true_n_stars, n_source_log_probs.shape[1]
         )
-        counter_loss = _get_categorical_loss(log_probs, one_hot_encoding)
+        counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
         loss_vec = (
             locs_loss * (locs_loss.detach() < 1e6).float()
@@ -392,55 +391,33 @@ class SourceSleep(object):
         return _true_source_params, _source_param_mean, _source_param_logvar
 
     def _get_source_params_logprob_all_combs(
-        self, true_gal_params, gal_param_mean, gal_param_logvar
+        self, true_source_params, source_param_mean, source_param_logvar
     ):
-        return torch.zeros(0)
+        (
+            _true_source_params,
+            _source_param_mean,
+            _source_param_logvar,
+        ) = self._get_transformed_source_params(
+            true_source_params, source_param_mean, source_param_logvar
+        )
+        source_param_log_probs_all = const.eval_normal_logprob(
+            _true_source_params, _source_param_mean, _source_param_logvar
+        ).sum(dim=3)
+        return source_param_log_probs_all
 
     @staticmethod
+    @abstractmethod
     def _get_params_from_data(data):
-        return torch.zeros(0)
+        pass
 
 
 class StarSleep(SourceSleep):
     @staticmethod
     def _get_params_from_data(data):
-        return data["fluxes"], data["locs"], data["images"]
-
-    def _get_source_params_logprob_all_combs(
-        self, true_fluxes, log_flux_mean, log_flux_logvar
-    ):
-        (
-            _true_fluxes,
-            _log_flux_mean,
-            _log_flux_logvar,
-        ) = self._get_transformed_source_params(
-            true_fluxes, log_flux_mean, log_flux_logvar
-        )
-
-        # this is batchsize x (max_stars x max_detections)
-        # the log prob for each observed location x mean
-        flux_log_probs_all = const.eval_lognormal_logprob(
-            _true_fluxes, _log_flux_mean, _log_flux_logvar
-        ).sum(dim=3)
-        return flux_log_probs_all
+        return data["log_fluxes"], data["locs"], data["images"]
 
 
 class GalaxySleep(SourceSleep):
     @staticmethod
     def _get_params_from_data(data):
         return data["gal_params"], data["locs"], data["images"]
-
-    def _get_source_params_logprob_all_combs(
-        self, true_gal_params, gal_param_mean, gal_param_logvar
-    ):
-        (
-            _true_gal_params,
-            _gal_param_mean,
-            _gal_param_logvar,
-        ) = self._get_transformed_source_params(
-            true_gal_params, gal_param_mean, gal_param_logvar
-        )
-        gal_param_log_probs_all = const.eval_normal_logprob(
-            _true_gal_params, _gal_param_mean, _gal_param_logvar
-        ).sum(dim=3)
-        return gal_param_log_probs_all
