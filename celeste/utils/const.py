@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 from os.path import dirname
 
-from torch.distributions import normal, categorical
+from torch.distributions import categorical
 
 
 src_path = Path(dirname(dirname(__file__)))
@@ -49,7 +49,6 @@ def get_is_on_from_patch_n_sources_2d(
     :type max_sources: int
     :return:
     """
-    #
     assert not torch.any(torch.isnan(patch_n_sources))
     assert torch.all(patch_n_sources >= 0)
     assert torch.all(patch_n_sources <= max_sources)
@@ -81,6 +80,23 @@ def get_one_hot_encoding_from_int(z, n_classes):
 #############################
 # Sampling functions
 ############################
+
+
+def draw_pareto(f_min, alpha, shape):
+    uniform_samples = torch.cuda.FloatTensor(*shape).uniform_()
+    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
+
+
+def draw_pareto_maxed(f_min, f_max, alpha, shape):
+    # draw pareto conditioned on being less than f_max
+
+    pareto_samples = draw_pareto(f_min, alpha, shape)
+
+    while torch.any(pareto_samples > f_max):
+        indx = pareto_samples > f_max
+        pareto_samples[indx] = draw_pareto(f_min, alpha, [torch.sum(indx).item()])
+
+    return pareto_samples
 
 
 def sample_class_weights(class_weights, n_samples=1):
