@@ -578,6 +578,27 @@ class SourceEncoder(nn.Module):
         patch_n_sources=None,
         training=False,
     ):
+        """
+        In the case of stars, this function will return log_fluxes as source_params. Can then obtain fluxes with the
+        following procedure:
+
+        >> is_on_array = const.get_is_on_from_n_stars(n_stars, max_stars)
+        >> fluxes = np.exp(log_fluxes) * is_on_array
+
+        where `max_stars` will correspond to the maximum number of stars that was used when simulating the `image`
+        passed in to this function.
+
+        Args:
+            image:
+            n_samples:
+            return_map_n_sources:
+            return_map_source_params:
+            patch_n_sources:
+            training:
+
+        Returns:
+
+        """
         slen = image.shape[-1]
         (
             patch_locs_sampled,
