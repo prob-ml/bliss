@@ -10,7 +10,7 @@ class TestUtils:
         # function. We check that it returns a valid one-hot encoding
 
         n_classes = 10
-        z = torch.randint(0, 10, (100,))
+        z = torch.randint(0, 10, (100,)).to(const.device)
 
         z_one_hot = const.get_one_hot_encoding_from_int(z, n_classes)
 
@@ -20,9 +20,9 @@ class TestUtils:
 
     def test_is_on_from_n_stars(self):
         max_stars = 10
-        n_stars = torch.Tensor(np.random.choice(max_stars, 5)).type(torch.LongTensor)
+        n_stars = torch.Tensor(np.random.choice(max_stars, 5)).to(const.device)
 
-        is_on = const.get_is_on_from_n_stars(n_stars, max_stars)
+        is_on = const.get_is_on_from_n_sources(n_stars, max_stars)
 
         assert torch.all(is_on.sum(1) == n_stars)
         assert torch.all(is_on == is_on.sort(1, descending=True)[0])
@@ -37,8 +37,7 @@ class TestUtils:
         ).to(const.device)
         is_on = const.get_is_on_from_patch_n_sources_2d(n_stars, max_stars)
 
-        assert 1 == 0, "make this test more useful"
-        # for i in range(n_samples):
-        #     assert torch.all(
-        #         const.get_is_on_from_n_sources(n_stars[i], max_stars) == is_on[i]
-        #     )
+        for i in range(n_samples):
+            assert torch.all(
+                const.get_is_on_from_n_sources(n_stars[i], max_stars) == is_on[i]
+            )

@@ -5,7 +5,7 @@ from celeste import sourcenet_lib
 from celeste.utils import const, image_utils
 
 
-class TestStarEncoder:
+class TestSourceEncoder:
     def test_hidden_indx(self):
         # TODO: test the hidden indices
         assert 1 == 1
@@ -22,7 +22,7 @@ class TestStarEncoder:
         n_bands = 2
 
         # get encoder
-        star_encoder = sourcenet_lib.StarEncoder(
+        star_encoder = sourcenet_lib.SourceEncoder(
             slen=101,
             patch_slen=patch_slen,
             step=2,
@@ -168,7 +168,7 @@ class TestStarEncoder:
         n_bands = 2
 
         # get encoder
-        star_encoder = sourcenet_lib.StarEncoder(
+        star_encoder = sourcenet_lib.SourceEncoder(
             slen=101,
             patch_slen=patch_slen,
             step=2,
@@ -227,7 +227,7 @@ class TestStarEncoder:
         n_bands = 2
 
         # get encoder
-        star_encoder = sourcenet_lib.StarEncoder(
+        star_encoder = sourcenet_lib.SourceEncoder(
             slen=101,
             patch_slen=patch_slen,
             step=2,

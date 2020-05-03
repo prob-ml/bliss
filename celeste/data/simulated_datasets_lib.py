@@ -556,7 +556,7 @@ class StarSimulator(SourceSimulator):
     @staticmethod
     def get_log_fluxes(fluxes):
         log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones(*fluxes)
+            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(const.device)
         )  # prevent log(0) errors.
         log_fluxes = torch.log(log_fluxes)
 
