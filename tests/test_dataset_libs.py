@@ -1,4 +1,3 @@
-import unittest
 import numpy as np
 import torch
 import json
@@ -19,7 +18,7 @@ data_params["slen"] = 50
 data_params["mean_stars"] = 40
 
 
-class TestSDSSDataset(unittest.TestCase):
+class TestSDSSDataset:
     def test_fresh_data(self):
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)

@@ -1,4 +1,3 @@
-import unittest
 import torch
 import numpy as np
 
@@ -6,7 +5,7 @@ from celeste import sourcenet_lib
 from celeste.utils import const, image_utils
 
 
-class TestStarEncoder(unittest.TestCase):
+class TestStarEncoder:
     def test_hidden_indx(self):
         # TODO: test the hidden indices
         assert 1 == 1

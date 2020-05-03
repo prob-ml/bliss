@@ -1,11 +1,10 @@
 import numpy as np
-import unittest
 import torch
 
 from celeste.utils import const
 
 
-class TestUtils(unittest.TestCase):
+class TestUtils:
     def test_get_one_hot(self):
         # This tests the "get_one_hot_encoding_from_int"
         # function. We check that it returns a valid one-hot encoding
