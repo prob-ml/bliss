@@ -87,7 +87,7 @@ class TestSourceEncoder:
 
         # we check the variational parameters against the hidden parameters
         # one by one
-        h_out = star_encoder.get_var_params_all(image_patches)
+        h_out = star_encoder._get_var_params_all(image_patches)
 
         for i in range(n_image_patches):
             if n_star_patches[i] == 0:
@@ -191,13 +191,13 @@ class TestSourceEncoder:
             .to(const.device)
         )
 
-        h = star_encoder.get_var_params_all(image_patches).detach()
+        h = star_encoder._get_var_params_all(image_patches).detach()
         (
             loc_mean,
             loc_logvar,
             log_flux_mean,
             log_flux_logvar,
-        ) = star_encoder.get_var_params_for_n_sources(h, n_star_patches_sampled)
+        ) = star_encoder._get_var_params_for_n_sources(h, n_star_patches_sampled)
 
         # CHECK THAT THIS MATCHES MY OLD PARAMETERS
         for i in range(n_samples):

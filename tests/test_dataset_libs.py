@@ -43,10 +43,10 @@ class TestSDSSDataset:
         # should be drawn
         #############################################
         num_epoch = 5
-        images_vec = torch.zeros(num_epoch)
-        locs_vec = torch.zeros(num_epoch)
-        fluxes_vec = torch.zeros(num_epoch)
-        n_sources_vec = torch.zeros(num_epoch)
+        images_vec = torch.zeros(num_epoch).to(const.device)
+        locs_vec = torch.zeros(num_epoch).to(const.device)
+        fluxes_vec = torch.zeros(num_epoch).to(const.device)
+        n_sources_vec = torch.zeros(num_epoch).to(const.device)
 
         # get batch
         batchsize = 8

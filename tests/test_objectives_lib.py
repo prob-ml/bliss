@@ -101,7 +101,7 @@ class TestStarEncoderObjective:
     #         true_fluxes, log_flux_mean, log_flux_log_var
     #     )
     #
-    #     locs_loss, fluxes_loss, _ = sleep_lib.get_min_perm_loss(
+    #     locs_loss, fluxes_loss, _ = sleep_lib._get_min_perm_loss(
     #         locs_log_probs_all, flux_log_probs_all, is_on_array
     #     )
     #

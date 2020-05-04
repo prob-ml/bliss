@@ -16,7 +16,7 @@ models_path = root_path.joinpath("models")
 use_cuda = torch.cuda.is_available()
 device = torch.device("cpu")
 if use_cuda:
-    default_device = 1
+    default_device = 0
     torch.cuda.set_device(default_device)
     device = torch.device(default_device)
 

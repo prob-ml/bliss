@@ -157,7 +157,7 @@ class SourceEncoder(nn.Module):
 
         return self.enc_fc(h)
 
-    def get_var_params_all(self, image_patches):
+    def _get_var_params_all(self, image_patches):
         """
         Concatenate all output parameters for all possible n_sources
         Args:
@@ -174,10 +174,10 @@ class SourceEncoder(nn.Module):
     def forward(self, image_patches, n_sources=None):
         # pass through neural network, h is the array fo variational distribution parameters.
         # h has shape:
-        h = self.get_var_params_all(image_patches)
+        h = self._get_var_params_all(image_patches)
 
         # get probability of n_sources
-        log_probs_n = self.get_logprob_n_from_var_params(h)
+        log_probs_n = self._get_logprob_n_from_var_params(h)
 
         if n_sources is None:
             n_sources = torch.argmax(log_probs_n, dim=1)
@@ -188,7 +188,7 @@ class SourceEncoder(nn.Module):
             loc_logvar,
             source_param_mean,
             source_param_logvar,
-        ) = self.get_var_params_for_n_sources(
+        ) = self._get_var_params_for_n_sources(
             h, n_sources=n_sources.clamp(max=self.max_detections)
         )
 
@@ -196,7 +196,7 @@ class SourceEncoder(nn.Module):
         # loc_mean has shape = (n_patches x max_detections x len(x,y))
         return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
 
-    def get_logprob_n_from_var_params(self, h):
+    def _get_logprob_n_from_var_params(self, h):
         """
         Obtain log probability of number of n_sources.
 
@@ -212,7 +212,7 @@ class SourceEncoder(nn.Module):
         free_probs = h[:, self.prob_indx]
         return self.log_softmax(free_probs)
 
-    def get_var_params_for_n_sources(self, h, n_sources):
+    def _get_var_params_for_n_sources(self, h, n_sources):
         """
         Index into all possible combinations of variational parameters (h) to obtain actually variational parameters
         for n_sources.
@@ -504,10 +504,10 @@ class SourceEncoder(nn.Module):
         image_patches = self.get_image_patches(image, locs=None, source_params=None)[0]
 
         # pass through NN
-        h = self.get_var_params_all(image_patches)
+        h = self._get_var_params_all(image_patches)
 
         # get log probs for number of sources
-        log_probs_n_source_patch = self.get_logprob_n_from_var_params(h)
+        log_probs_n_source_patch = self._get_logprob_n_from_var_params(h)
 
         if not training:
             h = h.detach()
@@ -542,7 +542,7 @@ class SourceEncoder(nn.Module):
             loc_logvar,
             source_param_mean,
             source_param_logvar,
-        ) = self.get_var_params_for_n_sources(h, patch_n_stars_sampled)
+        ) = self._get_var_params_for_n_sources(h, patch_n_stars_sampled)
 
         if return_map_source_params:
             loc_sd = const.FloatTensor(*loc_logvar.shape).zero_()
