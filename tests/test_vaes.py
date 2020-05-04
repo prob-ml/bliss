@@ -2,7 +2,7 @@ import unittest
 import torch
 import numpy as np
 
-from celeste import sourcenet_lib
+from celeste.models import sourcenet_lib
 from celeste.utils import const, image_utils
 
 

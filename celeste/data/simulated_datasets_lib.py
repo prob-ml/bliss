@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import Dataset
 from torch.distributions import Poisson, Categorical
 import torch.nn.functional as F
-from gmodel.data.galaxy_datasets import DecoderSamples
+from .galaxy_datasets_lib import DecoderSamples
 from abc import ABC, abstractmethod
 
 from ..utils import const
