@@ -13,3 +13,5 @@ htmlcov/
 build/
 celeste.egg-info/
 .DS_Store
+.eggs
+.tox
