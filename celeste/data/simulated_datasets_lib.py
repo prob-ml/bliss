@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from torch.distributions import Poisson, Categorical
 import torch.nn.functional as F
+from torch.distributions import Poisson, Categorical
 from .galaxy_datasets_lib import DecoderSamples
 from abc import ABC, abstractmethod
 
@@ -328,7 +328,7 @@ class SourceSimulator(ABC):
         pass
 
 
-class SourceDataset(ABC):
+class SourceDataset(ABC, Dataset):
     def __init__(self, n_images, simulator_args, simulator_kwargs):
         """
         :param n_images: same as batchsize.
