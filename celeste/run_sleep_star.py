@@ -1,11 +1,11 @@
 import json
-import time
 
 import numpy as np
 import torch
 import torch.optim as optim
 
-from . import sleep_lib, sourcenet_lib, wake_lib, psf_transform_lib
+from . import sleep_lib, wake_lib, psf_transform_lib
+from .models import sourcenet_lib
 from .data import simulated_datasets_lib
 from .utils import const
 
