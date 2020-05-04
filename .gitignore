@@ -13,3 +13,4 @@ daophot_results
 htmlcov/
 build/
 celeste.egg-info/
+.DS_Store
