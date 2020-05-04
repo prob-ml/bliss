@@ -96,8 +96,8 @@ def main():
             edge_padding=5,
             max_detections=2,
             n_source_params=galaxy_dataset.simulator.latent_dim,
-        )
-        galaxy_encoder.cuda()
+        ).cuda()
+
         optimizer = get_optimizer(galaxy_encoder)
 
         train(galaxy_encoder, galaxy_dataset, optimizer, state_dict_file, output_file)

@@ -62,7 +62,6 @@ class SourceEncoder(nn.Module):
         network.
         """
         super(SourceEncoder, self).__init__()
-        assert torch.cuda.is_available(), "requires use of cuda."
 
         # image parameters
         self.slen = slen
@@ -158,7 +157,7 @@ class SourceEncoder(nn.Module):
 
         return self.enc_fc(h)
 
-    def get_var_params_all(self, image_patches):
+    def _get_var_params_all(self, image_patches):
         """
         Concatenate all output parameters for all possible n_sources
         Args:
@@ -175,10 +174,10 @@ class SourceEncoder(nn.Module):
     def forward(self, image_patches, n_sources=None):
         # pass through neural network, h is the array fo variational distribution parameters.
         # h has shape:
-        h = self.get_var_params_all(image_patches)
+        h = self._get_var_params_all(image_patches)
 
         # get probability of n_sources
-        log_probs_n = self.get_logprob_n_from_var_params(h)
+        log_probs_n = self._get_logprob_n_from_var_params(h)
 
         if n_sources is None:
             n_sources = torch.argmax(log_probs_n, dim=1)
@@ -189,7 +188,7 @@ class SourceEncoder(nn.Module):
             loc_logvar,
             source_param_mean,
             source_param_logvar,
-        ) = self.get_var_params_for_n_sources(
+        ) = self._get_var_params_for_n_sources(
             h, n_sources=n_sources.clamp(max=self.max_detections)
         )
 
@@ -197,7 +196,7 @@ class SourceEncoder(nn.Module):
         # loc_mean has shape = (n_patches x max_detections x len(x,y))
         return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
 
-    def get_logprob_n_from_var_params(self, h):
+    def _get_logprob_n_from_var_params(self, h):
         """
         Obtain log probability of number of n_sources.
 
@@ -213,7 +212,7 @@ class SourceEncoder(nn.Module):
         free_probs = h[:, self.prob_indx]
         return self.log_softmax(free_probs)
 
-    def get_var_params_for_n_sources(self, h, n_sources):
+    def _get_var_params_for_n_sources(self, h, n_sources):
         """
         Index into all possible combinations of variational parameters (h) to obtain actually variational parameters
         for n_sources.
@@ -238,7 +237,7 @@ class SourceEncoder(nn.Module):
         n_samples = n_sources.shape[0]
 
         batchsize = h.size(0)
-        _h = torch.cat((h, torch.zeros(batchsize, 1).cuda()), dim=1)
+        _h = torch.cat((h, torch.zeros(batchsize, 1).to(const.device)), dim=1)
 
         loc_logit_mean = torch.gather(
             _h,
@@ -304,7 +303,7 @@ class SourceEncoder(nn.Module):
                 (self.max_detections + 1, 2 * self.max_detections), self.dim_out_all
             )
             .type(torch.LongTensor)
-            .cuda()
+            .to(const.device)
         )
 
         self.locs_var_indx_mat = (
@@ -312,7 +311,7 @@ class SourceEncoder(nn.Module):
                 (self.max_detections + 1, 2 * self.max_detections), self.dim_out_all
             )
             .type(torch.LongTensor)
-            .cuda()
+            .to(const.device)
         )
 
         self.source_params_mean_indx_mat = (
@@ -321,7 +320,7 @@ class SourceEncoder(nn.Module):
                 self.dim_out_all,
             )
             .type(torch.LongTensor)
-            .cuda()
+            .to(const.device)
         )
         self.source_params_var_indx_mat = (
             torch.full(
@@ -329,11 +328,11 @@ class SourceEncoder(nn.Module):
                 self.dim_out_all,
             )
             .type(torch.LongTensor)
-            .cuda()
+            .to(const.device)
         )
 
         self.prob_indx = (
-            torch.zeros(self.max_detections + 1).type(torch.LongTensor).cuda()
+            torch.zeros(self.max_detections + 1).type(torch.LongTensor).to(const.device)
         )
 
         for n_detections in range(1, self.max_detections + 1):
@@ -505,10 +504,10 @@ class SourceEncoder(nn.Module):
         image_patches = self.get_image_patches(image, locs=None, source_params=None)[0]
 
         # pass through NN
-        h = self.get_var_params_all(image_patches)
+        h = self._get_var_params_all(image_patches)
 
         # get log probs for number of sources
-        log_probs_n_source_patch = self.get_logprob_n_from_var_params(h)
+        log_probs_n_source_patch = self._get_logprob_n_from_var_params(h)
 
         if not training:
             h = h.detach()
@@ -543,25 +542,21 @@ class SourceEncoder(nn.Module):
             loc_logvar,
             source_param_mean,
             source_param_logvar,
-        ) = self.get_var_params_for_n_sources(h, patch_n_stars_sampled)
+        ) = self._get_var_params_for_n_sources(h, patch_n_stars_sampled)
 
         if return_map_source_params:
-            loc_sd = torch.cuda.FloatTensor(*loc_logvar.shape).zero_()
-            source_params_sd = torch.cuda.FloatTensor(
-                *source_param_logvar.shape
-            ).zero_()
+            loc_sd = const.FloatTensor(*loc_logvar.shape).zero_()
+            source_params_sd = const.FloatTensor(*source_param_logvar.shape).zero_()
         else:
             loc_sd = torch.exp(0.5 * loc_logvar)
             source_params_sd = torch.exp(0.5 * source_param_logvar).clamp(max=0.5)
 
         # sample locations
-        _locs_randn = torch.cuda.FloatTensor(*loc_mean.shape).normal_()
+        _locs_randn = const.FloatTensor(*loc_mean.shape).normal_()
         patch_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
 
         # sample source params, these are log_fluxes or latent galaxy params (normal variables)
-        _source_params_randn = torch.cuda.FloatTensor(
-            *source_param_mean.shape
-        ).normal_()
+        _source_params_randn = const.FloatTensor(*source_param_mean.shape).normal_()
 
         patch_source_params_sampled = (
             source_param_mean + _source_params_randn * source_params_sd

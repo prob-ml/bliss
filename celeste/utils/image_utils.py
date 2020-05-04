@@ -112,7 +112,6 @@ def get_tile_coords(image_xlen, image_ylen, subimage_slen, step):
     :param step: separation between each patch/subimage.
     :return: tile_coords, a torch.LongTensor
     """
-    assert torch.cuda.is_available(), "requires use of cuda. "
 
     nx_patches = ((image_xlen - subimage_slen) // step) + 1
     ny_patches = ((image_ylen - subimage_slen) // step) + 1
@@ -121,7 +120,9 @@ def get_tile_coords(image_xlen, image_ylen, subimage_slen, step):
     def return_coords(i):
         return [(i // ny_patches) * step, (i % ny_patches) * step]
 
-    tile_coords = torch.LongTensor([return_coords(i) for i in range(n_patches)]).cuda()
+    tile_coords = torch.LongTensor([return_coords(i) for i in range(n_patches)]).to(
+        const.device
+    )
 
     return tile_coords
 
@@ -155,8 +156,6 @@ def get_params_in_patches(
     :param edge_padding:
     :return:
     """
-    # only used in running network so need cuda
-    assert torch.cuda.is_available()
     # locs are the coordinates in the full image, in coordinates between 0-1
     assert torch.all(locs <= 1.0)
     assert torch.all(locs >= 0.0)
@@ -199,9 +198,13 @@ def get_params_in_patches(
 
     # sort locs so all the zeros are at the end
     is_on_array = (
-        which_locs_array.view(subimage_batchsize, max_sources).type(torch.bool).cuda()
+        which_locs_array.view(subimage_batchsize, max_sources)
+        .type(torch.bool)
+        .to(const.device)
     )
-    n_sources_per_patch = is_on_array.float().sum(dim=1).type(torch.LongTensor).cuda()
+    n_sources_per_patch = (
+        is_on_array.float().sum(dim=1).type(torch.LongTensor).to(const.device)
+    )
 
     patch_source_params, patch_locs, patch_is_on_array = bring_to_front(
         n_source_params,

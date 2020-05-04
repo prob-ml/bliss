@@ -8,10 +8,6 @@ from abc import ABC, abstractmethod
 from .utils import const
 
 
-def isnan(x):
-    return x != x
-
-
 #############################
 # functions to get loss for training the counter
 ############################
@@ -79,7 +75,7 @@ def _get_log_probs_all_perms(
     return locs_loss_all_perm, source_param_loss_all_perm
 
 
-def get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_array):
+def _get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_array):
     (
         locs_log_probs_all_perm,
         source_params_log_probs_all_perm,
@@ -137,7 +133,7 @@ class SourceSleep(ABC):
             len(self.dataset) % self.batchsize == 0
         ), "For simplicity, make length of dataset divisible by batchsize."
 
-    def log_train(
+    def _log_train(
         self,
         epoch,
         avg_loss,
@@ -161,7 +157,7 @@ class SourceSleep(ABC):
 
         np.savetxt(self.train_losses_file, train_losses)
 
-    def log_eval(
+    def _log_eval(
         self, test_loss, test_counter_loss, test_locs_loss, test_source_param_loss
     ):
 
@@ -353,7 +349,7 @@ class SourceSleep(ABC):
             true_source_params, source_param_mean, source_param_logvar
         )
 
-        locs_loss, source_param_loss, perm_indx = get_min_perm_loss(
+        locs_loss, source_param_loss, perm_indx = _get_min_perm_loss(
             locs_log_probs_all, source_param_log_probs_all, true_is_on_array
         )
 

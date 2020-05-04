@@ -5,13 +5,24 @@ from os.path import dirname
 
 from torch.distributions import categorical
 
-
 src_path = Path(dirname(dirname(__file__)))
 root_path = Path(dirname(dirname(dirname(__file__))))
 
 data_path = root_path.joinpath("data")
 reports_path = root_path.joinpath("reports")
 models_path = root_path.joinpath("models")
+
+# make codebase device agnostic, but also create tensors directly in the gpu.
+use_cuda = torch.cuda.is_available()
+device = torch.device("cpu")
+if use_cuda:
+    default_device = 0
+    torch.cuda.set_device(default_device)
+    device = torch.device(default_device)
+
+FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
+# torch.set_default_tensor_type(FloatTensor)
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -25,27 +36,21 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert len(n_sources.shape) == 1
 
     batchsize = len(n_sources)
-    is_on_array = (
-        torch.cuda.LongTensor(batchsize, max_sources).zero_()
-        if torch.cuda.is_available()
-        else torch.zeros((batchsize, max_sources), dtype=torch.long)
-    )
+    is_on_array = LongTensor(batchsize, max_sources).zero_()
+
     for i in range(max_sources):
         is_on_array[:, i] = n_sources > i
 
     return is_on_array
 
 
-def get_is_on_from_patch_n_sources_2d(
-    patch_n_sources, max_sources, device=torch.device("cuda")
-):
+def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources):
     """
 
     :param patch_n_sources: A tensor of shape (n_samples x n_patches), indicating the number of sources
                             at sample i, batch j. (n_samples = batchsize)
     :type patch_n_sources: class: `torch.Tensor`
     :param max_sources:
-    :param device:
     :type max_sources: int
     :return:
     """
@@ -56,9 +61,8 @@ def get_is_on_from_patch_n_sources_2d(
     n_samples = patch_n_sources.shape[0]
     batchsize = patch_n_sources.shape[1]
 
-    is_on_array = torch.zeros(
-        (n_samples, batchsize, max_sources), dtype=torch.long, device=device
-    )
+    is_on_array = LongTensor(n_samples, batchsize, max_sources).zero_()
+
     for i in range(max_sources):
         is_on_array[:, :, i] = patch_n_sources > i
 
@@ -70,7 +74,7 @@ def get_one_hot_encoding_from_int(z, n_classes):
 
     assert len(torch.unique(z)) <= n_classes
 
-    z_one_hot = torch.zeros(len(z), n_classes).cuda()
+    z_one_hot = FloatTensor(len(z), n_classes).zero_()
     z_one_hot.scatter_(1, z.view(-1, 1), 1)
     z_one_hot = z_one_hot.view(len(z), n_classes)
 
@@ -83,7 +87,7 @@ def get_one_hot_encoding_from_int(z, n_classes):
 
 
 def draw_pareto(f_min, alpha, shape):
-    uniform_samples = torch.cuda.FloatTensor(*shape).uniform_()
+    uniform_samples = FloatTensor(*shape).uniform_()
     return f_min / (1.0 - uniform_samples) ** (1 / alpha)
 
 
@@ -111,7 +115,7 @@ def sample_class_weights(class_weights, n_samples=1):
 
 
 def sample_normal(mean, logvar):
-    return mean + torch.exp(0.5 * logvar) * torch.randn(mean.shape).cuda()
+    return mean + torch.exp(0.5 * logvar) * FloatTensor(*mean.shape).normal_()
 
 
 #############################
