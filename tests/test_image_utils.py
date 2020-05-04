@@ -1,18 +1,19 @@
-import unittest
 import torch
 import numpy as np
 
 from celeste.utils import image_utils
-from celeste.utils.const import draw_pareto_maxed, get_is_on_from_n_sources
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from celeste.utils import const
 
 np.random.seed(43534)
 _ = torch.manual_seed(24534)
 
 
-class TestImageBatching(unittest.TestCase):
+class TestImageBatching:
     def test_tile_coords(self):
+        """
+        Check that tiled images returned from `image_utils.tile_images` actually corresponds
+        to tiles of the full image.
+        """
 
         # define parameters in full image
         full_slen = 100
@@ -45,7 +46,7 @@ class TestImageBatching(unittest.TestCase):
                 b, :, x0 : (x0 + subimage_slen), x1 : (x1 + subimage_slen)
             ]
 
-            assert np.all(images_batched[i].squeeze() == foo)
+            assert torch.all(images_batched[i].squeeze() == foo)
 
     def test_full_to_patch_to_full(self):
         # we convert full parameters to patch parameters to full parameters
@@ -69,19 +70,23 @@ class TestImageBatching(unittest.TestCase):
             .clamp(max=max_stars, min=min_stars)
             .type(torch.LongTensor)
         )
-        is_on_array = get_is_on_from_n_sources(n_stars, max_stars)
+        is_on_array = const.get_is_on_from_n_sources(n_stars, max_stars)
 
         # draw locations
         locs = (
-            torch.rand((n_images, max_stars, 2)).to(device)
+            torch.rand((n_images, max_stars, 2)).to(const.device)
             * is_on_array.unsqueeze(2).float()
         )
 
         # draw fluxes
-        # fudge factor because sometimes there are ties in the fluxes; this messes up my unnittest
-        fudge_factor = torch.randn((n_images, max_stars, n_bands)) * 1e-3
+        # fudge factor because sometimes there are ties in the fluxes; this messes up unnittest
+        fudge_factor = (torch.randn((n_images, max_stars, n_bands)) * 1e-3).to(
+            const.device
+        )
         fluxes = (
-            draw_pareto_maxed(100, 1e6, alpha=0.5, shape=(n_images, max_stars, n_bands))
+            const.draw_pareto_maxed(
+                100, 1e6, alpha=0.5, shape=(n_images, max_stars, n_bands)
+            )
             + fudge_factor
         ) * is_on_array.unsqueeze(2).float()
 
@@ -169,17 +174,17 @@ class TestImageBatching(unittest.TestCase):
             n_images = 100
             max_stars = 10
 
-            n_stars = torch.ones(n_images).type(torch.LongTensor)
-            is_on_array = get_is_on_from_n_sources(n_stars, max_stars)
+            n_stars = torch.ones(n_images).type(torch.LongTensor).to(const.device)
+            is_on_array = const.get_is_on_from_n_sources(n_stars, max_stars)
 
             # draw locations
             locs = (
-                torch.rand((n_images, max_stars, 2)).to(device)
+                torch.rand((n_images, max_stars, 2)).to(const.device)
                 * is_on_array.unsqueeze(2).float()
             )
 
             # fluxes
-            fluxes = torch.rand((n_images, max_stars, n_bands))
+            fluxes = torch.rand((n_images, max_stars, n_bands)).to(const.device)
 
             # tile coordinates
             tile_coords = image_utils.get_tile_coords(
@@ -277,9 +282,11 @@ class TestImageBatching(unittest.TestCase):
         )
 
         # get subimage parameters
-        patch_locs = torch.zeros(tile_coords.shape[0], max_stars, 2)
-        patch_fluxes = torch.zeros(tile_coords.shape[0], max_stars, n_bands)
-        patch_n_stars = torch.zeros(tile_coords.shape[0])
+        patch_locs = torch.zeros(tile_coords.shape[0], max_stars, 2).to(const.device)
+        patch_fluxes = torch.zeros(tile_coords.shape[0], max_stars, n_bands).to(
+            const.device
+        )
+        patch_n_stars = torch.zeros(tile_coords.shape[0]).to(const.device)
 
         # we add a star in one random subimage
         indx = np.random.choice(tile_coords.shape[0])
