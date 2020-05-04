@@ -5,10 +5,11 @@ fits/*
 sdss_stage_dir/*
 daophot_results
 .idea
-*models
+/models
 *.fit
 *.gz
 .coverage
 htmlcov/
 build/
 celeste.egg-info/
+.DS_Store
