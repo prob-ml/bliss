@@ -6,12 +6,13 @@ import fitsio
 from celeste.data import simulated_datasets_lib
 from celeste.utils import const
 
-psf_dir = "../data/"
-psf_r = fitsio.FITS(psf_dir + "sdss-002583-2-0136-psf-r.fits")[0].read()
-psf_i = fitsio.FITS(psf_dir + "sdss-002583-2-0136-psf-i.fits")[0].read()
+
+psf_r = fitsio.FITS(const.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))[0].read()
+psf_i = fitsio.FITS(const.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))[0].read()
 psf_og = torch.Tensor(np.array([psf_r, psf_i])).to(const.device)  # waiting for new push
 
-with open("../data/default_star_parameters.json", "r") as fp:
+param_file = const.data_path.joinpath("default_star_parameters.json")
+with open(param_file, "r") as fp:
     data_params = json.load(fp)
 
 data_params["slen"] = 50

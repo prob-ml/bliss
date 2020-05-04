@@ -7,7 +7,8 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from . import sleep_lib, sourcenet_lib
+from . import sleep_lib
+from .models import sourcenet_lib
 from .data import simulated_datasets_lib
 from .utils import const
 
