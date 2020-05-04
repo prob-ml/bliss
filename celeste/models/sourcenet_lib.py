@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from celeste.utils import const
-from celeste.utils import image_utils
+from ..utils import const
+from ..utils import image_utils
 
 
 class Flatten(nn.Module):
