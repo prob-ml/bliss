@@ -16,15 +16,15 @@ class TestSourceEncoder:
         * Test that variational parameters inside h agree with those returned from forward.
         * Test everything works with n_stars=None in forward.
         """
-        n_image_patches = 30
+        n_image_tiles = 30
         max_detections = 4
-        patch_slen = 9
+        ptile_slen = 9
         n_bands = 2
 
         # get encoder
         star_encoder = sourcenet_lib.SourceEncoder(
             slen=101,
-            patch_slen=patch_slen,
+            ptile_slen=ptile_slen,
             step=2,
             edge_padding=3,
             n_bands=n_bands,
@@ -34,13 +34,13 @@ class TestSourceEncoder:
 
         star_encoder.eval()
 
-        # simulate image patches
-        image_patches = (
-            torch.randn(n_image_patches, n_bands, patch_slen, patch_slen) + 10.0
+        # simulate image padded tiles
+        image_ptiles = (
+            torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0
         ).to(const.device)
 
-        n_star_patches = (
-            torch.Tensor(np.random.choice(max_detections, n_image_patches))
+        n_star_per_tile = (
+            torch.Tensor(np.random.choice(max_detections, n_image_tiles))
             .type(torch.LongTensor)
             .to(const.device)
         )
@@ -52,28 +52,28 @@ class TestSourceEncoder:
             log_flux_mean,
             log_flux_logvar,
             log_probs,
-        ) = star_encoder.forward(image_patches, n_star_patches)
+        ) = star_encoder.forward(image_ptiles, n_star_per_tile)
 
         assert torch.all(loc_mean <= 1.0)
         assert torch.all(loc_mean >= 0.0)
 
         # test we have the correct pattern of zeros
-        assert ((loc_mean != 0).sum(1)[:, 0] == n_star_patches).all()
-        assert ((loc_mean != 0).sum(1)[:, 1] == n_star_patches).all()
+        assert ((loc_mean != 0).sum(1)[:, 0] == n_star_per_tile).all()
+        assert ((loc_mean != 0).sum(1)[:, 1] == n_star_per_tile).all()
 
-        assert ((loc_logvar != 0).sum(1)[:, 0] == n_star_patches).all()
-        assert ((loc_logvar != 0).sum(1)[:, 1] == n_star_patches).all()
+        assert ((loc_logvar != 0).sum(1)[:, 0] == n_star_per_tile).all()
+        assert ((loc_logvar != 0).sum(1)[:, 1] == n_star_per_tile).all()
 
         for n in range(n_bands):
-            assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_patches).all()
-            assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_patches).all()
+            assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_per_tile).all()
+            assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_per_tile).all()
 
-            assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_patches).all()
-            assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_patches).all()
+            assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_per_tile).all()
+            assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_per_tile).all()
 
         # check pattern of zeros
         is_on_array = const.get_is_on_from_n_sources(
-            n_star_patches, star_encoder.max_detections
+            n_star_per_tile, star_encoder.max_detections
         )
         assert torch.all((loc_mean * is_on_array.unsqueeze(2).float()) == loc_mean)
         assert torch.all((loc_logvar * is_on_array.unsqueeze(2).float()) == loc_logvar)
@@ -87,16 +87,16 @@ class TestSourceEncoder:
 
         # we check the variational parameters against the hidden parameters
         # one by one
-        h_out = star_encoder._get_var_params_all(image_patches)
+        h_out = star_encoder._get_var_params_all(image_ptiles)
 
-        for i in range(n_image_patches):
-            if n_star_patches[i] == 0:
+        for i in range(n_image_tiles):
+            if n_star_per_tile[i] == 0:
                 assert torch.all(loc_mean[i] == 0)
                 assert torch.all(loc_logvar[i] == 0)
                 assert torch.all(log_flux_mean[i] == 0)
                 assert torch.all(log_flux_logvar[i] == 0)
             else:
-                n_stars_i = int(n_star_patches[i])
+                n_stars_i = int(n_star_per_tile[i])
 
                 assert torch.all(
                     loc_mean[i, 0:n_stars_i, :].flatten()
@@ -139,7 +139,7 @@ class TestSourceEncoder:
             log_flux_mean,
             log_flux_logvar,
             log_probs,
-        ) = star_encoder.forward(image_patches, n_sources=None)
+        ) = star_encoder.forward(image_ptiles, n_sources=None)
 
         map_n_stars = torch.argmax(log_probs, dim=1)
 
@@ -149,7 +149,7 @@ class TestSourceEncoder:
             _log_flux_mean,
             _log_flux_logvar,
             _log_probs,
-        ) = star_encoder.forward(image_patches, n_sources=map_n_stars)
+        ) = star_encoder.forward(image_ptiles, n_sources=map_n_stars)
 
         assert torch.all(loc_mean == _loc_mean)
         assert torch.all(loc_logvar == _loc_logvar)
@@ -162,15 +162,15 @@ class TestSourceEncoder:
         * Consistency check of using forward vs get_var_params
         """
 
-        n_image_patches = 30
+        n_image_tiles = 30
         max_detections = 4
-        patch_slen = 9
+        ptile_slen = 9
         n_bands = 2
 
         # get encoder
         star_encoder = sourcenet_lib.SourceEncoder(
             slen=101,
-            patch_slen=patch_slen,
+            ptile_slen=ptile_slen,
             step=2,
             edge_padding=3,
             n_bands=n_bands,
@@ -180,24 +180,24 @@ class TestSourceEncoder:
 
         star_encoder.eval()
 
-        # simulate image patches
+        # simulate image padded tiles
         n_samples = 10
-        image_patches = (
-            torch.randn(n_image_patches, n_bands, patch_slen, patch_slen) + 10.0
+        image_ptiles = (
+            torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0
         ).to(const.device)
-        n_star_patches_sampled = (
-            torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_patches)))
+        n_star_per_tile_sampled = (
+            torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_tiles)))
             .type(torch.LongTensor)
             .to(const.device)
         )
 
-        h = star_encoder._get_var_params_all(image_patches).detach()
+        h = star_encoder._get_var_params_all(image_ptiles).detach()
         (
             loc_mean,
             loc_logvar,
             log_flux_mean,
             log_flux_logvar,
-        ) = star_encoder._get_var_params_for_n_sources(h, n_star_patches_sampled)
+        ) = star_encoder._get_var_params_for_n_sources(h, n_star_per_tile_sampled)
 
         # CHECK THAT THIS MATCHES MY OLD PARAMETERS
         for i in range(n_samples):
@@ -207,7 +207,7 @@ class TestSourceEncoder:
                 log_flux_mean_i,
                 log_flux_logvar_i,
                 _,
-            ) = star_encoder.forward(image_patches, n_star_patches_sampled[i])
+            ) = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 
             assert (loc_mean_i - loc_mean[i]).abs().max() < 1e-6, (
                 (loc_mean_i - loc_mean[i]).abs().max()
@@ -219,17 +219,17 @@ class TestSourceEncoder:
     def test_full_params_from_sampled(self):
         """
         * Check that we can recover full params from sampled params, and that they agree with the
-        ones recovered from the patches.
+        ones recovered from the tiles.
         """
         n_samples = 10
-        patch_slen = 9
+        ptile_slen = 9
         max_detections = 4
         n_bands = 2
 
         # get encoder
         star_encoder = sourcenet_lib.SourceEncoder(
             slen=101,
-            patch_slen=patch_slen,
+            ptile_slen=ptile_slen,
             step=2,
             edge_padding=3,
             n_bands=n_bands,
@@ -237,27 +237,27 @@ class TestSourceEncoder:
             n_source_params=n_bands,
         ).to(const.device)
 
-        n_image_patches = star_encoder.tile_coords.shape[0]
+        n_image_tiles = star_encoder.tile_coords.shape[0]
 
         # draw sampled subimage parameters
         n_stars_sampled = (
-            torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_patches)))
+            torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_tiles)))
             .type(torch.long)
             .to(const.device)
         )
 
         is_on_array = (
-            const.get_is_on_from_patch_n_sources_2d(n_stars_sampled, max_detections)
+            const.get_is_on_from_tile_n_sources_2d(n_stars_sampled, max_detections)
             .float()
             .to(const.device)
         )
 
         subimage_locs_sampled = torch.rand(
-            (n_samples, n_image_patches, max_detections, 2)
+            (n_samples, n_image_tiles, max_detections, 2)
         ).to(const.device) * is_on_array.unsqueeze(3)
 
         subimage_fluxes_sampled = (
-            torch.rand((n_samples, n_image_patches, max_detections, n_bands)).to(
+            torch.rand((n_samples, n_image_tiles, max_detections, n_bands)).to(
                 const.device
             )
             * is_on_array.unsqueeze(3)
@@ -271,18 +271,18 @@ class TestSourceEncoder:
             subimage_locs_sampled, subimage_fluxes_sampled, star_encoder.slen
         )
 
-        # test against individually un-patched parameters
+        # test against individually un-utiled parameters
         for i in range(n_samples):
             (
                 locs_full_image_i,
                 fluxes_full_image_i,
                 n_stars_i,
-            ) = image_utils.get_full_params_from_patch_params(
+            ) = image_utils.get_full_params_from_tile_params(
                 subimage_locs_sampled[i],
                 subimage_fluxes_sampled[i],
                 star_encoder.tile_coords,
                 star_encoder.slen,
-                star_encoder.patch_slen,
+                star_encoder.ptile_slen,
                 star_encoder.edge_padding,
             )
 

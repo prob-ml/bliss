@@ -44,27 +44,27 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_is_on_from_patch_n_sources_2d(patch_n_sources, max_sources):
+def get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):
     """
 
-    :param patch_n_sources: A tensor of shape (n_samples x n_patches), indicating the number of sources
+    :param tile_n_sources: A tensor of shape (n_samples x n_tiles), indicating the number of sources
                             at sample i, batch j. (n_samples = batchsize)
-    :type patch_n_sources: class: `torch.Tensor`
+    :type tile_n_sources: class: `torch.Tensor`
     :param max_sources:
     :type max_sources: int
     :return:
     """
-    assert not torch.any(torch.isnan(patch_n_sources))
-    assert torch.all(patch_n_sources >= 0)
-    assert torch.all(patch_n_sources <= max_sources)
+    assert not torch.any(torch.isnan(tile_n_sources))
+    assert torch.all(tile_n_sources >= 0)
+    assert torch.all(tile_n_sources <= max_sources)
 
-    n_samples = patch_n_sources.shape[0]
-    batchsize = patch_n_sources.shape[1]
+    n_samples = tile_n_sources.shape[0]
+    batchsize = tile_n_sources.shape[1]
 
     is_on_array = LongTensor(n_samples, batchsize, max_sources).zero_()
 
     for i in range(max_sources):
-        is_on_array[:, :, i] = patch_n_sources > i
+        is_on_array[:, :, i] = tile_n_sources > i
 
     return is_on_array
 

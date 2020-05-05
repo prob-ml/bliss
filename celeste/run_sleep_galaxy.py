@@ -92,7 +92,7 @@ def main():
         galaxy_encoder = sourcenet_lib.GalaxyEncoder(
             slen=data_params["slen"],
             n_bands=1,
-            patch_slen=20,
+            ptile_slen=20,
             step=5,
             edge_padding=5,
             max_detections=2,

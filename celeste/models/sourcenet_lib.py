@@ -31,7 +31,7 @@ class SourceEncoder(nn.Module):
     def __init__(
         self,
         slen,
-        patch_slen,
+        ptile_slen,
         step,
         edge_padding,
         n_bands,
@@ -46,12 +46,12 @@ class SourceEncoder(nn.Module):
 
         * NOTE: Should have (n_bands == n_source_params) in the case of stars.
 
-        * EXAMPLE on padding: If the patch_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
+        * EXAMPLE on padding: If the ptile_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
 
         :param slen: dimension of full image, we assume its square for now
-        :param patch_slen: dimension (in pixels) of the individual
-                           image patches (usually 8 for stars, and _ for galaxies).
-        :param step: number of pixels to shift every subimage/patch.
+        :param ptile_slen: dimension (in pixels) of the individual
+                           image padded tiles (usually 8 for stars, and _ for galaxies).
+        :param step: number of pixels to shift every padded tile.
         :param edge_padding: length of padding (in pixels).
         :param n_bands : number of bands
         :param max_detections:
@@ -65,16 +65,16 @@ class SourceEncoder(nn.Module):
 
         # image parameters
         self.slen = slen
-        self.patch_slen = patch_slen
+        self.ptile_slen = ptile_slen
         self.step = step
         self.n_bands = n_bands
 
         self.edge_padding = edge_padding
 
-        self.tile_coords = image_utils.get_tile_coords(
-            self.slen, self.slen, self.patch_slen, self.step
+        self.tile_coords = image_utils.get_ptile_coords(
+            self.slen, self.slen, self.ptile_slen, self.step
         )
-        self.n_patches = self.tile_coords.shape[0]
+        self.n_tiles = self.tile_coords.shape[0]
 
         # max number of detections
         self.max_detections = max_detections
@@ -103,7 +103,7 @@ class SourceEncoder(nn.Module):
 
         # output dimension of convolutions
         conv_out_dim = self.enc_conv(
-            torch.zeros(1, n_bands, patch_slen, patch_slen)
+            torch.zeros(1, n_bands, ptile_slen, ptile_slen)
         ).size(1)
 
         # fully connected layers
@@ -157,24 +157,24 @@ class SourceEncoder(nn.Module):
 
         return self.enc_fc(h)
 
-    def _get_var_params_all(self, image_patches):
+    def _get_var_params_all(self, image_ptiles):
         """
         Concatenate all output parameters for all possible n_sources
         Args:
-            image_patches: A tensor of shape (n_patches, n_bands, patch_slen, patch_slen)
+            image_ptiles: A tensor of shape (n_ptiles, n_bands, ptile_slen, ptile_slen)
 
         Returns:
         """
-        h = self._forward_to_pooled_hidden(image_patches)
+        h = self._forward_to_pooled_hidden(image_ptiles)
         return self.enc_final(h)
 
     ######################
     # Forward modules
     ######################
-    def forward(self, image_patches, n_sources=None):
+    def forward(self, image_ptiles, n_sources=None):
         # pass through neural network, h is the array fo variational distribution parameters.
         # h has shape:
-        h = self._get_var_params_all(image_patches)
+        h = self._get_var_params_all(image_ptiles)
 
         # get probability of n_sources
         log_probs_n = self._get_logprob_n_from_var_params(h)
@@ -193,14 +193,14 @@ class SourceEncoder(nn.Module):
         )
 
         # in the case of stars these are log_flux_mean, and log_flux_log_var.
-        # loc_mean has shape = (n_patches x max_detections x len(x,y))
+        # loc_mean has shape = (n_ptiles x max_detections x len(x,y))
         return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
 
     def _get_logprob_n_from_var_params(self, h):
         """
         Obtain log probability of number of n_sources.
 
-        * Example: If max_detections = 3, then Tensor will be (num_patches x 3) since will return probability of
+        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return probability of
         having 0,1,2 stars.
 
         Args:
@@ -368,9 +368,9 @@ class SourceEncoder(nn.Module):
             self.prob_indx[n_detections] = indx4
 
     ######################
-    # Modules for patching images and parameters
+    # Modules for tiling images and parameters
     ######################
-    def get_image_patches(
+    def get_image_ptiles(
         self, images, locs=None, source_params=None, clip_max_sources=False
     ):
         """
@@ -390,97 +390,97 @@ class SourceEncoder(nn.Module):
         # encoder should be able to handle these cases to.
         if not (images.shape[-1] == self.slen):
             # get the coordinates
-            tile_coords = image_utils.get_tile_coords(
-                slen, slen, self.patch_slen, self.step
+            tile_coords = image_utils.get_ptile_coords(
+                slen, slen, self.ptile_slen, self.step
             )
         else:
             # else, use the cached coordinates
             tile_coords = self.tile_coords
 
-        image_patches = image_utils.tile_images(images, self.patch_slen, self.step)
+        image_ptiles = image_utils.tile_images(images, self.ptile_slen, self.step)
 
         if (locs is not None) and (source_params is not None):
             assert source_params.shape[2] == self.n_source_params
 
-            # get parameters in patch as well
+            # get parameters in tiles as well
             (
-                patch_locs,
-                patch_source_params,
-                patch_n_sources,
-                patch_is_on_array,
-            ) = image_utils.get_params_in_patches(
+                tile_locs,
+                tile_source_params,
+                tile_n_sources,
+                tile_is_on_array,
+            ) = image_utils.get_params_in_tiles(
                 tile_coords,
                 locs,
                 source_params,
                 slen,
-                self.patch_slen,
+                self.ptile_slen,
                 self.edge_padding,
             )
 
             if clip_max_sources:
-                patch_n_sources = patch_n_sources.clamp(max=self.max_detections)
-                patch_locs = patch_locs[:, 0 : self.max_detections, :]
-                patch_source_params = patch_source_params[:, 0 : self.max_detections, :]
-                patch_is_on_array = patch_is_on_array[:, 0 : self.max_detections]
+                tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
+                tile_locs = tile_locs[:, 0 : self.max_detections, :]
+                tile_source_params = tile_source_params[:, 0 : self.max_detections, :]
+                tile_is_on_array = tile_is_on_array[:, 0 : self.max_detections]
 
         else:
-            patch_locs = None
-            patch_source_params = None
-            patch_n_sources = None
-            patch_is_on_array = None
+            tile_locs = None
+            tile_source_params = None
+            tile_n_sources = None
+            tile_is_on_array = None
 
         return (
-            image_patches,
-            patch_locs,
-            patch_source_params,
-            patch_n_sources,
-            patch_is_on_array,
+            image_ptiles,
+            tile_locs,
+            tile_source_params,
+            tile_n_sources,
+            tile_is_on_array,
         )
 
     ######################
     # Modules to sample our variational distribution and get parameters on the full image
     ######################
     def _get_full_params_from_sampled_params(
-        self, patch_locs_sampled, patch_source_params_sampled, slen
+        self, tile_locs_sampled, tile_source_params_sampled, slen
     ):
 
-        n_samples = patch_locs_sampled.shape[0]
-        n_image_patches = patch_locs_sampled.shape[1]
+        n_samples = tile_locs_sampled.shape[0]
+        n_image_ptiles = tile_locs_sampled.shape[1]
 
-        assert self.n_source_params == patch_source_params_sampled.shape[-1]
+        assert self.n_source_params == tile_source_params_sampled.shape[-1]
 
         # if the image given is not the same as the original encoder training images.
         if not (slen == self.slen):
-            tile_coords = image_utils.get_tile_coords(
-                slen, slen, self.patch_slen, self.step
+            tile_coords = image_utils.get_ptile_coords(
+                slen, slen, self.ptile_slen, self.step
             )
         else:
             tile_coords = self.tile_coords
 
-        assert (n_image_patches % tile_coords.shape[0]) == 0
+        assert (n_image_ptiles % tile_coords.shape[0]) == 0
 
-        locs, source_params, n_sources = image_utils.get_full_params_from_patch_params(
-            patch_locs_sampled.reshape(
-                n_samples * n_image_patches, -1, 2
+        locs, source_params, n_sources = image_utils.get_full_params_from_tile_params(
+            tile_locs_sampled.reshape(
+                n_samples * n_image_ptiles, -1, 2
             ),  # 2 = len((x,y))
-            patch_source_params_sampled.reshape(
-                n_samples * n_image_patches, -1, self.n_source_params
+            tile_source_params_sampled.reshape(
+                n_samples * n_image_ptiles, -1, self.n_source_params
             ),
             tile_coords,
             slen,
-            self.patch_slen,
+            self.ptile_slen,
             self.edge_padding,
         )
 
         return locs, source_params, n_sources
 
-    def _sample_patch_params(
+    def _sample_tile_params(
         self,
         image,
         n_samples,
         return_map_n_sources,
         return_map_source_params,
-        patch_n_sources,
+        tile_n_sources,
         training,
     ):
         """
@@ -491,7 +491,7 @@ class SourceEncoder(nn.Module):
             n_samples:
             return_map_n_sources:
             return_map_source_params:
-            patch_n_sources:
+            tile_n_sources:
             training:
 
         Returns:
@@ -501,48 +501,46 @@ class SourceEncoder(nn.Module):
         # our sampling only works for one image at a time at the moment ...
         assert image.shape[0] == 1
 
-        image_patches = self.get_image_patches(image, locs=None, source_params=None)[0]
+        image_ptiles = self.get_image_ptiles(image, locs=None, source_params=None)[0]
 
         # pass through NN
-        h = self._get_var_params_all(image_patches)
+        h = self._get_var_params_all(image_ptiles)
 
         # get log probs for number of sources
-        log_probs_n_source_patch = self._get_logprob_n_from_var_params(h)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
         if not training:
             h = h.detach()
-            log_probs_n_source_patch = log_probs_n_source_patch.detach()
+            log_probs_n_sources_per_tile = log_probs_n_sources_per_tile.detach()
 
         # sample number of stars
-        if patch_n_sources is None:
+        if tile_n_sources is None:
             if return_map_n_sources:
-                patch_n_stars_sampled = (
-                    torch.argmax(log_probs_n_source_patch.detach(), dim=1)
+                tile_n_stars_sampled = (
+                    torch.argmax(log_probs_n_sources_per_tile.detach(), dim=1)
                     .repeat(n_samples)
                     .view(n_samples, -1)
                 )
 
             else:
-                patch_n_stars_sampled = const.sample_class_weights(
-                    torch.exp(log_probs_n_source_patch.detach()), n_samples
+                tile_n_stars_sampled = const.sample_class_weights(
+                    torch.exp(log_probs_n_sources_per_tile.detach()), n_samples
                 ).view(n_samples, -1)
         else:
-            patch_n_stars_sampled = patch_n_sources.repeat(n_samples).view(
-                n_samples, -1
-            )
+            tile_n_stars_sampled = tile_n_sources.repeat(n_samples).view(n_samples, -1)
 
-        is_on_array = const.get_is_on_from_patch_n_sources_2d(
-            patch_n_stars_sampled, self.max_detections
+        is_on_array = const.get_is_on_from_tile_n_sources_2d(
+            tile_n_stars_sampled, self.max_detections
         )
         is_on_array = is_on_array.unsqueeze(3).float()
 
-        # get variational parameters: these are on image patches
+        # get variational parameters: these are on image tiles
         (
             loc_mean,
             loc_logvar,
             source_param_mean,
             source_param_logvar,
-        ) = self._get_var_params_for_n_sources(h, patch_n_stars_sampled)
+        ) = self._get_var_params_for_n_sources(h, tile_n_stars_sampled)
 
         if return_map_source_params:
             loc_sd = const.FloatTensor(*loc_logvar.shape).zero_()
@@ -553,16 +551,16 @@ class SourceEncoder(nn.Module):
 
         # sample locations
         _locs_randn = const.FloatTensor(*loc_mean.shape).normal_()
-        patch_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
+        tile_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
 
         # sample source params, these are log_fluxes or latent galaxy params (normal variables)
         _source_params_randn = const.FloatTensor(*source_param_mean.shape).normal_()
 
-        patch_source_params_sampled = (
+        tile_source_params_sampled = (
             source_param_mean + _source_params_randn * source_params_sd
         )
 
-        return patch_locs_sampled, patch_source_params_sampled, is_on_array
+        return tile_locs_sampled, tile_source_params_sampled, is_on_array
 
     def sample_encoder(
         self,
@@ -570,7 +568,7 @@ class SourceEncoder(nn.Module):
         n_samples=1,
         return_map_n_sources=False,
         return_map_source_params=False,
-        patch_n_sources=None,
+        tile_n_sources=None,
         training=False,
     ):
         """
@@ -588,7 +586,7 @@ class SourceEncoder(nn.Module):
             n_samples:
             return_map_n_sources:
             return_map_source_params:
-            patch_n_sources:
+            tile_n_sources:
             training:
 
         Returns:
@@ -596,22 +594,22 @@ class SourceEncoder(nn.Module):
         """
         slen = image.shape[-1]
         (
-            patch_locs_sampled,
-            patch_source_params_sampled,
+            tile_locs_sampled,
+            tile_source_params_sampled,
             is_on_array,
-        ) = self._sample_patch_params(
+        ) = self._sample_tile_params(
             image,
             n_samples,
             return_map_n_sources,
             return_map_source_params,
-            patch_n_sources,
+            tile_n_sources,
             training,
         )
-        patch_source_params_sampled = patch_source_params_sampled * is_on_array
+        tile_source_params_sampled = tile_source_params_sampled * is_on_array
 
         # get parameters on full image
         locs, source_params, n_sources = self._get_full_params_from_sampled_params(
-            patch_locs_sampled, patch_source_params_sampled, slen
+            tile_locs_sampled, tile_source_params_sampled, slen
         )
 
         # returns either galaxy_params or log_fluxes.
