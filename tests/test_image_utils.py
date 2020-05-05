@@ -125,12 +125,7 @@ class TestImageBatching:
 
         # now convert to full parameters
         locs2, fluxes2, n_stars2 = image_utils.get_full_params_from_tile_params(
-            tile_locs,
-            tile_fluxes,
-            tile_coords,
-            full_slen,
-            subimage_slen,
-            edge_padding,
+            tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         for i in range(n_images):
             for b in range(n_bands):
@@ -299,12 +294,7 @@ class TestImageBatching:
             fluxes_full_image,
             n_stars,
         ) = image_utils.get_full_params_from_tile_params(
-            tile_locs,
-            tile_fluxes,
-            tile_coords,
-            full_slen,
-            subimage_slen,
-            edge_padding,
+            tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
 
         assert (fluxes_full_image.squeeze() == tile_fluxes[indx, 0, :]).all()
@@ -326,12 +316,7 @@ class TestImageBatching:
             fluxes_full_image,
             n_stars,
         ) = image_utils.get_full_params_from_tile_params(
-            tile_locs,
-            tile_fluxes,
-            tile_coords,
-            full_slen,
-            subimage_slen,
-            edge_padding,
+            tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         test_loc = (
             tile_locs[indx, 0, :] * (subimage_slen - 2 * edge_padding)
@@ -348,12 +333,7 @@ class TestImageBatching:
             fluxes_full_image,
             n_stars,
         ) = image_utils.get_full_params_from_tile_params(
-            tile_locs,
-            tile_fluxes,
-            tile_coords,
-            full_slen,
-            subimage_slen,
-            edge_padding,
+            tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         test_loc = (
             tile_locs[indx, 0, :] * (subimage_slen - 2 * edge_padding)

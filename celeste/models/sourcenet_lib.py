@@ -527,9 +527,7 @@ class SourceEncoder(nn.Module):
                     torch.exp(log_probs_n_sources_per_tile.detach()), n_samples
                 ).view(n_samples, -1)
         else:
-            tile_n_stars_sampled = tile_n_sources.repeat(n_samples).view(
-                n_samples, -1
-            )
+            tile_n_stars_sampled = tile_n_sources.repeat(n_samples).view(n_samples, -1)
 
         is_on_array = const.get_is_on_from_tile_n_sources_2d(
             tile_n_stars_sampled, self.max_detections
