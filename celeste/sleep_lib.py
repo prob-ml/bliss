@@ -74,7 +74,6 @@ def _get_log_probs_all_perms(
 
     return locs_loss_all_perm, source_param_loss_all_perm
 
-
 def _get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_array):
     (
         locs_log_probs_all_perm,
@@ -241,13 +240,13 @@ class SourceSleep(ABC):
 
             avg_loss += loss.item() * images.shape[0] / len(self.dataset)
             avg_counter_loss += counter_loss.sum().item() / (
-                len(self.dataset) * self.encoder.n_patches
+                len(self.dataset) * self.encoder.n_tiles
             )
             avg_source_params_loss += source_params_loss.sum().item() / (
-                len(self.dataset) * self.encoder.n_patches
+                len(self.dataset) * self.encoder.n_tiles
             )
             avg_locs_loss += locs_loss.sum().item() / (
-                len(self.dataset) * self.encoder.n_patches
+                len(self.dataset) * self.encoder.n_tiles
             )
 
         return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
@@ -265,14 +264,14 @@ class SourceSleep(ABC):
         Returns:
 
         """
-        # extract image patches
+        # extract image tiles
         (
-            image_patches,
-            true_patch_locs,
-            true_patch_source_params,
-            true_patch_n_sources,
-            true_patch_is_on_array,
-        ) = self.encoder.get_image_patches(
+            image_ptiles,
+            true_tile_locs,
+            true_tile_source_params,
+            true_tile_n_sources,
+            true_tile_is_on_array,
+        ) = self.encoder.get_image_ptiles(
             images, true_locs, true_source_params, clip_max_sources=True
         )
 
@@ -281,8 +280,8 @@ class SourceSleep(ABC):
             loc_logvar,
             source_param_mean,
             source_param_logvar,
-            log_probs_n_sources_patch,
-        ) = self.encoder.forward(image_patches, n_sources=true_patch_n_sources)
+            log_probs_n_sources_per_tile,
+        ) = self.encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
 
         (
             loss,
@@ -295,10 +294,10 @@ class SourceSleep(ABC):
             loc_logvar,
             source_param_mean,
             source_param_logvar,
-            log_probs_n_sources_patch,
-            true_patch_locs,
-            true_patch_source_params,
-            true_patch_is_on_array.float(),
+            log_probs_n_sources_per_tile,
+            true_tile_locs,
+            true_tile_source_params,
+            true_tile_is_on_array.float(),
         )
 
         return (
@@ -307,7 +306,7 @@ class SourceSleep(ABC):
             locs_loss,
             source_param_loss,
             perm_indx,
-            log_probs_n_sources_patch,
+            log_probs_n_sources_per_tile,
         )
 
     def _get_params_loss(
@@ -322,7 +321,7 @@ class SourceSleep(ABC):
         true_is_on_array,
     ):
         """
-        NOTE: All the quantities are per-patch quantities on first dimension, for simplicity not added
+        NOTE: All the quantities are per-tile quantities on first dimension, for simplicity not added
         to names.
 
         Args:
@@ -372,16 +371,16 @@ class SourceSleep(ABC):
     def _get_transformed_source_params(
         self, true_source_params, source_param_mean, source_param_logvar
     ):
-        num_patches = true_source_params.shape[0]
+        n_tiles = true_source_params.shape[0]
 
         _true_source_params = true_source_params.view(
-            num_patches, true_source_params.shape[1], 1, self.n_source_params
+            n_tiles, true_source_params.shape[1], 1, self.n_source_params
         )
         _source_param_mean = source_param_mean.view(
-            num_patches, 1, source_param_mean.shape[1], self.n_source_params
+            n_tiles, 1, source_param_mean.shape[1], self.n_source_params
         )
         _source_param_logvar = source_param_logvar.view(
-            num_patches, 1, source_param_mean.shape[1], self.n_source_params
+            n_tiles, 1, source_param_mean.shape[1], self.n_source_params
         )
 
         return _true_source_params, _source_param_mean, _source_param_logvar
