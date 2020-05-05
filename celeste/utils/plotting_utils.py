@@ -78,7 +78,7 @@ def plot_subimage(
     full_true_locs,
     x0,
     x1,
-    patch_slen,
+    subimage_slen,
     vmin=None,
     vmax=None,
     add_colorbar=False,
@@ -95,7 +95,7 @@ def plot_subimage(
     # full image, in pixel units, scaled between 0 and 1
 
     # trim image to subimage
-    image_patch = full_image[x0 : (x0 + patch_slen), x1 : (x1 + patch_slen)]
+    subimage = full_image[x0 : (x0 + subimage_slen), x1 : (x1 + subimage_slen)]
 
     # get locations in the subimage
     if full_est_locs is not None:
@@ -106,13 +106,13 @@ def plot_subimage(
 
         which_est_locs = (
             (_full_est_locs[:, 0] > x0)
-            & (_full_est_locs[:, 0] < (x0 + patch_slen - 1))
+            & (_full_est_locs[:, 0] < (x0 + subimage_slen - 1))
             & (_full_est_locs[:, 1] > x1)
-            & (_full_est_locs[:, 1] < (x1 + patch_slen - 1))
+            & (_full_est_locs[:, 1] < (x1 + subimage_slen - 1))
         )
 
         est_locs = (_full_est_locs[which_est_locs, :] - torch.Tensor([[x0, x1]])) / (
-            patch_slen - 1
+            subimage_slen - 1
         )
     else:
         est_locs = None
@@ -126,13 +126,13 @@ def plot_subimage(
 
         which_true_locs = (
             (_full_true_locs[:, 0] > x0)
-            & (_full_true_locs[:, 0] < (x0 + patch_slen - 1))
+            & (_full_true_locs[:, 0] < (x0 + subimage_slen - 1))
             & (_full_true_locs[:, 1] > x1)
-            & (_full_true_locs[:, 1] < (x1 + patch_slen - 1))
+            & (_full_true_locs[:, 1] < (x1 + subimage_slen - 1))
         )
 
         true_locs = (_full_true_locs[which_true_locs, :] - torch.Tensor([[x0, x1]])) / (
-            patch_slen - 1
+            subimage_slen - 1
         )
     else:
         true_locs = None
@@ -140,7 +140,7 @@ def plot_subimage(
 
     plot_image(
         fig,
-        image_patch,
+        subimage,
         true_locs=true_locs,
         estimated_locs=est_locs,
         vmin=vmin,
