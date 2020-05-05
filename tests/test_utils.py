@@ -35,7 +35,7 @@ class TestUtils:
         n_stars = torch.from_numpy(
             np.random.choice(max_stars, (n_samples, batchsize))
         ).to(const.device)
-        is_on = const.get_is_on_from_patch_n_sources_2d(n_stars, max_stars)
+        is_on = const.get_is_on_from_tile_n_sources_2d(n_stars, max_stars)
 
         for i in range(n_samples):
             assert torch.all(
