@@ -118,7 +118,7 @@ def main():
 
         star_encoder = sourcenet_lib.SourceEncoder(
             slen=data_params["slen"],
-            patch_slen=8,
+            ptile_slen=8,
             step=2,
             edge_padding=3,
             n_bands=psf_og.shape[0],

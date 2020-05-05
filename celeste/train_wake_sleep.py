@@ -82,7 +82,7 @@ loader = torch.utils.data.DataLoader(
 ###############
 star_encoder = starnet_lib.StarEncoder(
     slen=data_params["slen"],
-    patch_slen=8,
+    ptile_slen=8,
     step=2,
     edge_padding=3,
     n_bands=len(bands),
