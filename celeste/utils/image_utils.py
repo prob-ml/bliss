@@ -47,9 +47,7 @@ def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
         ptiles_fold_HW = torch.cat(
             (
                 ptiles_fold_HW,
-                ptiles_fold_H[:, :, :, -tile_W:, :]
-                .permute(0, 1, 2, 4, 3)
-                .unsqueeze(3),
+                ptiles_fold_H[:, :, :, -tile_W:, :].permute(0, 1, 2, 4, 3).unsqueeze(3),
             ),
             dim=3,
         )
@@ -209,11 +207,7 @@ def get_params_in_tiles(
     )
 
     tile_source_params, tile_locs, tile_is_on_array = bring_to_front(
-        n_source_params,
-        n_sources_per_tile,
-        is_on_array,
-        tile_source_params,
-        tile_locs,
+        n_source_params, n_sources_per_tile, is_on_array, tile_source_params, tile_locs,
     )
 
     return tile_locs, tile_source_params, n_sources_per_tile, tile_is_on_array

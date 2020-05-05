@@ -74,6 +74,7 @@ def _get_log_probs_all_perms(
 
     return locs_loss_all_perm, source_param_loss_all_perm
 
+
 def _get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_array):
     (
         locs_log_probs_all_perm,
