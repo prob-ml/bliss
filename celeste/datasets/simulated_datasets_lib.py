@@ -345,7 +345,7 @@ class GalaxySimulator(SourceSimulator):
         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
         """
         super(GalaxySimulator, self).__init__(*args, **kwargs)
-        self.gal_decoder_path = const.models_path.joinpath(gal_decoder_file)
+        self.gal_decoder_path = const.data_path.joinpath(gal_decoder_file)
         self.galaxy_slen = galaxy_slen
 
         self.ds = DecoderSamples(
