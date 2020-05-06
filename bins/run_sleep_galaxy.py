@@ -7,10 +7,10 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from . import sleep_lib
-from .models import sourcenet_lib
-from .data import simulated_datasets_lib
-from .utils import const
+from celeste import sleep_lib
+from celeste.models import sourcenet_lib
+from celeste.datasets import simulated_datasets_lib
+from celeste.utils import const
 
 device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 

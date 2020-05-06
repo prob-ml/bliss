@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import unfold, pad
 
-from .data import simulated_datasets_lib
+from .datasets import simulated_datasets_lib
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

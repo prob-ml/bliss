@@ -3,7 +3,7 @@ import torch
 import json
 import fitsio
 
-from celeste.data import simulated_datasets_lib
+from celeste.datasets import simulated_datasets_lib
 from celeste.utils import const
 
 
