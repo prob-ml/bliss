@@ -457,6 +457,13 @@ class GalaxyDataset(SourceDataset):
         assert n_bands == background.shape[0]
         assert background.shape[1] == background.shape[2] == data_params["galaxy_slen"]
 
+        # TODO: easier way of doing this?
+        # now convert background to size of scenes
+        values = background.mean((1, 2))  # shape = (n_bands)
+        background = torch.zeros(n_bands, slen, slen)
+        for i, value in enumerate(values):
+            background[i, ...] = value
+
         simulator_args = [
             data_params["galaxy_slen"],
             data_params["gal_decoder_file"],
