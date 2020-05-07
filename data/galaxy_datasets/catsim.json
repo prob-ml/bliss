@@ -1,0 +1,13 @@
+{
+  "survey_name": "LSST",
+  "slen": 51,
+  "filter_dict": null,
+  "snr": 200,
+  "num_bands": 6,
+  "preserve_flux": false,
+  "render_kwargs": {
+    "min_snr": 0.05,
+    "truncate_radius": 30,
+    "verbose": false
+  }
+}

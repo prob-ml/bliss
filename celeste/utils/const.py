@@ -5,6 +5,7 @@ from os.path import dirname
 
 from torch.distributions import categorical
 
+# global paths
 src_path = Path(dirname(dirname(__file__)))
 root_path = Path(dirname(dirname(dirname(__file__))))
 
@@ -12,7 +13,11 @@ data_path = root_path.joinpath("data")
 reports_path = root_path.joinpath("reports")
 results_path = root_path.joinpath("results")
 
-# make codebase device agnostic, but also create tensors directly in the gpu.
+# global variables
+image_h5_name = "images"
+background_h5_name = "background"
+
+# make codebase device agnostic, but also create all tensors directly in the gpu when possible.
 use_cuda = torch.cuda.is_available()
 device = torch.device("cpu")
 if use_cuda:
