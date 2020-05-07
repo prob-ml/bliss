@@ -1,19 +1,43 @@
 import numpy as np
 import sys
 import random
+from abc import ABC, abstractmethod
 
 from astropy.table import Table
 import h5py
 import torch
 from torch.utils.data import Dataset
 import descwl
+import json
 
 from ..models import galaxy_net
 from ..utils import const
 from . import draw_catsim
 
+params_path = const.data_path.joinpath("params_galaxy_datasets")
 
-class DecoderSamples(Dataset):
+
+class GalaxyDataset(Dataset, ABC):
+    _params_file = None
+
+    @abstractmethod
+    def __init__(self, **kwargs):
+        pass
+
+    @classmethod
+    def load_dataset_from_params(cls, params_file=None):
+        assert (
+            params_file is not None
+        ), "Forgot to specify _params_file as class attribute"
+
+        with open(params_file, "r") as fp:
+            data_params = json.load(fp)
+        return cls(**data_params)
+
+
+class DecoderSamples(GalaxyDataset):
+    _params_file = params_path.joinpath("decoder_samples.json")
+
     def __init__(self, slen, decoder_file, num_bands=6, latent_dim=8, num_images=1000):
         """
         Load and sample from the specified decoder in `decoder_file`.
@@ -25,6 +49,7 @@ class DecoderSamples(Dataset):
         :param decoder_file: The file from which to load the `state_dict` of the decoder.
         :type decoder_file: Path object.
         """
+        assert latent_dim == 8, "Not implemented any other decoder galaxy network"
 
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands).to(
             const.device
@@ -55,7 +80,9 @@ class DecoderSamples(Dataset):
         return self.dec.get_sample(n_samples, return_latent=True)
 
 
-class H5Catalog(Dataset):
+class H5Catalog(GalaxyDataset):
+    _params_file = params_path.joinpath("h5_cat.json")
+
     def __init__(self, h5_file, slen, num_bands):
         """
         A dataset created from single galaxy images in a h5py file.
@@ -64,7 +91,6 @@ class H5Catalog(Dataset):
             slen:
             num_bands:
         """
-
         h5_file_path = const.data_path.joinpath(h5_file)
 
         self.file = h5py.File(h5_file_path, "r")
@@ -100,11 +126,17 @@ class H5Catalog(Dataset):
     def print_props(self, prop_file):
         pass
 
+    @classmethod
+    def load_dataset_from_params(cls, params_file=None):
+        raise NotImplementedError("Need to make params_file for this class.")
+
     def __exit__(self):
         self.file.close()
 
 
-class CatsimGalaxies(Dataset):
+class CatsimGalaxies(GalaxyDataset):
+    _params_file = params_path.joinpath("catsim.json")
+
     def __init__(
         self,
         survey_name=None,

@@ -78,7 +78,36 @@ def train(galaxy_encoder, dataset, optimizer, state_dict_file, output_file):
     sleep_phase.run_sleep()
 
 
-def main():
+def main(pargs):
+
+    const.set_device(pargs.device)  # set global device to use.
+
+    set_seed(pargs.seed)
+    data_params = load_data_params(pargs)
+
+    state_dict_file, output_file = prepare_filepaths(pargs.results_dir)
+
+    # setup dataset.
+    galaxy_dataset = simulated_datasets_lib.GalaxyDataset.load_dataset_from_params(
+        pargs.n_images, data_params
+    )
+
+    galaxy_encoder = sourcenet_lib.SourceEncoder(
+        slen=data_params["slen"],
+        n_bands=data_params["n_bands"],
+        ptile_slen=pargs.ptile_slen,
+        step=pargs.step,
+        edge_padding=pargs.edge_padding,
+        max_detections=pargs.max_detections,
+        n_source_params=galaxy_dataset.simulator.latent_dim,
+    ).to(const.device)
+
+    optimizer = get_optimizer(galaxy_encoder)
+
+    train(galaxy_encoder, galaxy_dataset, optimizer, state_dict_file, output_file)
+
+
+if __name__ == "__main__":
 
     # Setup arguments.
     parser = argparse.ArgumentParser(
@@ -125,33 +154,5 @@ def main():
     parser.add_argument("--edge-padding", type=int, default=5)
     parser.add_argument("--max-detections", type=int, default=2)
 
-    pargs = parser.parse_args()
-    const.set_device(pargs.device)  # set global device to use.
-
-    set_seed(pargs.seed)
-    data_params = load_data_params(pargs)
-
-    state_dict_file, output_file = prepare_filepaths(pargs.results_dir)
-
-    # setup dataset.
-    galaxy_dataset = simulated_datasets_lib.GalaxyDataset.load_dataset_from_params(
-        pargs.n_images, data_params
-    )
-
-    galaxy_encoder = sourcenet_lib.SourceEncoder(
-        slen=data_params["slen"],
-        n_bands=data_params["n_bands"],
-        ptile_slen=pargs.ptile_slen,
-        step=pargs.step,
-        edge_padding=pargs.edge_padding,
-        max_detections=pargs.max_detections,
-        n_source_params=galaxy_dataset.simulator.latent_dim,
-    ).to(const.device)
-
-    optimizer = get_optimizer(galaxy_encoder)
-
-    train(galaxy_encoder, galaxy_dataset, optimizer, state_dict_file, output_file)
-
-
-if __name__ == "__main__":
-    main()
+    args = parser.parse_args()
+    main(args)
