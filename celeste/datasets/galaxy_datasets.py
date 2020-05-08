@@ -157,7 +157,7 @@ class CatsimGalaxies(GalaxyDataset):
         dtype=np.float32,
         preserve_flux=False,
         add_noise=True,
-        **render_kwargs,
+        render_kwargs=None,
     ):
         """
         This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog) and returns a
@@ -168,10 +168,9 @@ class CatsimGalaxies(GalaxyDataset):
         :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST survey.
         :param render_kwargs: Additional keyword arguments that will go into the renderer.
         :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is to exclude >=25.3 i_ab
-        :param stamp_size: In arcsecs.
         """
         super().__init__()
-        assert survey_name is None, "Only using default survey name for now = LSST"
+        assert survey_name == "LSST", "Only using default survey name for now is LSST."
         assert (
             slen >= 41
         ), "Does not seem to work well if the number of pixels is too low."
