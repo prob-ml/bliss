@@ -3,6 +3,7 @@ import numpy as np
 from astropy.table import Column
 import galsim
 
+
 # ToDo: LATER More flexibility than drawing randomly centered in central pixel.
 class CatsimRenderer(object):
     def __init__(

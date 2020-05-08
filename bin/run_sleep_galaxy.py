@@ -56,11 +56,17 @@ def prepare_filepaths(results_dir):
     return state_dict_file, output_file
 
 
-def train(galaxy_encoder, dataset, optimizer, state_dict_file, output_file):
-    n_epochs = 201
-    print_every = 20
-    batchsize = 32
-    print("training")
+def train(
+    galaxy_encoder,
+    dataset,
+    optimizer,
+    n_epochs,
+    batchsize,
+    print_every,
+    state_dict_file,
+    output_file,
+):
+    print("training...")
 
     sleep_phase = sleep_lib.GalaxySleep(
         galaxy_encoder,
@@ -74,7 +80,7 @@ def train(galaxy_encoder, dataset, optimizer, state_dict_file, output_file):
         print_every=print_every,
     )
 
-    print(f"running sleep phase for n_epochs = {n_epochs}, batchsize={batchsize}")
+    print(f"running sleep phase for n_epochs={n_epochs}, batchsize={batchsize}")
     sleep_phase.run_sleep()
 
 
@@ -104,7 +110,16 @@ def main(pargs):
 
     optimizer = get_optimizer(galaxy_encoder)
 
-    train(galaxy_encoder, galaxy_dataset, optimizer, state_dict_file, output_file)
+    train(
+        galaxy_encoder,
+        galaxy_dataset,
+        optimizer,
+        pargs.n_epochs,
+        pargs.batchsize,
+        pargs.print_every,
+        state_dict_file,
+        output_file,
+    )
 
 
 if __name__ == "__main__":
@@ -149,6 +164,10 @@ if __name__ == "__main__":
 
     # training params
     parser.add_argument("--n-images", type=int, default=320)
+    parser.add_argument("--n-epochs", type=int, default=201)
+    parser.add_argument("--batchsize", type=int, default=32)
+    parser.add_argument("--print-every", type=int, default=20)
+
     parser.add_argument("--ptile-slen", type=int, default=20)
     parser.add_argument("--step", type=int, default=5)
     parser.add_argument("--edge-padding", type=int, default=5)

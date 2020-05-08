@@ -6,8 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from .utils import const
-from .models import galaxy_net
+from ..utils import const
+from ..models import galaxy_net
 
 
 class TrainGalaxy(object):
