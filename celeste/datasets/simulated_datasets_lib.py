@@ -1,5 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
+import warnings
 
 import torch
 from torch.utils.data import Dataset
@@ -87,7 +88,7 @@ def _sample_n_sources(
         m = Categorical(const.FloatTensor(1).fill_(max_sources - min_sources))
         n_sources = m.sample([batchsize]) + min_sources
 
-    return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze()
+    return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze(1)
 
 
 def _sample_locs(max_sources, is_on_array, batchsize=1):
@@ -280,7 +281,7 @@ class SourceSimulator(ABC):
         # add noise to images.
 
         if torch.any(images_mean <= 0):
-            print("warning: image mean less than 0")
+            warnings.warn("image mean less than 0")
             images_mean = images_mean.clamp(min=1.0)
 
         images = (
@@ -308,6 +309,8 @@ class SourceSimulator(ABC):
             batchsize,
             draw_poisson=self.draw_poisson,
         )
+        print(n_sources)
+        print(n_sources.shape)
 
         # multiply by zero where they are no sources (recall parameters have entry for up to max_sources)
         is_on_array = const.get_is_on_from_n_sources(n_sources, self.max_sources)
