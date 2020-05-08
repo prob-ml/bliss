@@ -7,6 +7,4 @@ pytest
 pytest-cov
 black
 h5py
-eigency
 matplotlib
-galsim
