@@ -14,7 +14,6 @@ from .utils import const
 # specify all the models (as a class) that can be trained.
 all_models = {
     "centered_galaxy": train_galaxy.TrainGalaxy,
-    # 'catalog': train_catalog.TrainCatalog
 }
 
 all_datasets = ["synthetic", "galbasic", "galcatsim", "h5_catalog"]
