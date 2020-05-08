@@ -4,9 +4,9 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from celeste import sleep_lib, wake_lib, psf_transform_lib
+from celeste import sleep, wake, psf_transform
 from celeste.models import sourcenet_lib
-from celeste.datasets import simulated_datasets_lib
+from celeste.datasets import simulated_datasets
 from celeste.utils import const
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -33,8 +33,8 @@ def load_psf():
     psfield_file = (
         "./../celeste_net/sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit"
     )
-    init_psf_params = psf_transform_lib.get_psf_params(psfield_file, bands=bands)
-    power_law_psf = psf_transform_lib.PowerLawPSF(init_psf_params.cuda())
+    init_psf_params = psf_transform.get_psf_params(psfield_file, bands=bands)
+    power_law_psf = psf_transform.PowerLawPSF(init_psf_params.cuda())
     psf_og = power_law_psf.forward().detach()
 
     return bands, psf_og
@@ -45,7 +45,7 @@ def load_background(bands, data_params):
 
     init_background_params = torch.zeros(len(bands), 3).cuda()
     init_background_params[:, 0] = torch.Tensor([686.0, 1123.0])
-    planar_background = wake_lib.PlanarBackground(
+    planar_background = wake.PlanarBackground(
         image_slen=data_params["slen"],
         init_background_params=init_background_params.cuda(),
     )
@@ -62,7 +62,7 @@ def get_dataset(
     add_noise=True,
     draw_poisson=True,
 ):
-    star_dataset = simulated_datasets_lib.StarsDataset.load_dataset_from_params(
+    star_dataset = simulated_datasets.StarsDataset.load_dataset_from_params(
         n_images,
         data_params,
         psf_og,
@@ -94,7 +94,7 @@ def train(star_encoder, dataset, optimizer):
     out_path.mkdir(exist_ok=True, parents=True)
     out_filename = out_path.joinpath("starnet_ri.dat")
 
-    sleep_lib.run_sleep(
+    sleep.run_sleep(
         star_encoder,
         dataset,
         optimizer,

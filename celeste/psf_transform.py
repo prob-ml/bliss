@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import unfold, pad
 
-from .datasets import simulated_datasets_lib
+from .datasets import simulated_datasets
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -121,7 +121,7 @@ def get_psf(slen, psf_params, cached_radii_grid=None):
     assert (slen % 2) == 1
 
     if cached_radii_grid is None:
-        grid = simulated_datasets_lib.get_mgrid(slen) * (slen - 1) / 2
+        grid = simulated_datasets.get_mgrid(slen) * (slen - 1) / 2
         radii_grid = (grid ** 2).sum(2).sqrt()
     else:
         radii_grid = cached_radii_grid
@@ -153,7 +153,7 @@ class PowerLawPSF(nn.Module):
         self.psf_slen = psf_slen
         self.image_slen = image_slen
 
-        grid = simulated_datasets_lib.get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+        grid = simulated_datasets.get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
         self.cached_radii_grid = (grid ** 2).sum(2).sqrt().to(device)
 
         # initial weights

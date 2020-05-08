@@ -4,8 +4,8 @@ from torch import optim
 
 import numpy as np
 
-from .datasets.simulated_datasets_lib import get_mgrid, plot_multiple_stars
-from .psf_transform_lib import PowerLawPSF
+from .datasets.simulated_datasets import get_mgrid, plot_multiple_stars
+from .psf_transform import PowerLawPSF
 
 import time
 

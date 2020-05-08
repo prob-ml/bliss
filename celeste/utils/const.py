@@ -29,7 +29,6 @@ FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
 
 
-# TODO: Better way of doing this?
 # let the user change device defined in this module.
 def set_device(device_id):
     torch.cuda.set_device(device_id)

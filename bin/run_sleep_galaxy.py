@@ -6,9 +6,9 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from celeste import sleep_lib
+from celeste import sleep
 from celeste.models import sourcenet_lib
-from celeste.datasets import simulated_datasets_lib
+from celeste.datasets import simulated_datasets
 from celeste.utils import const
 
 
@@ -68,7 +68,7 @@ def train(
 ):
     print("training...")
 
-    sleep_phase = sleep_lib.GalaxySleep(
+    sleep_phase = sleep.GalaxySleep(
         galaxy_encoder,
         dataset,
         n_epochs,
@@ -94,7 +94,7 @@ def main(pargs):
     state_dict_file, output_file = prepare_filepaths(pargs.results_dir)
 
     # setup dataset.
-    galaxy_dataset = simulated_datasets_lib.GalaxyDataset.load_dataset_from_params(
+    galaxy_dataset = simulated_datasets.GalaxyDataset.load_dataset_from_params(
         pargs.n_images, data_params
     )
 
