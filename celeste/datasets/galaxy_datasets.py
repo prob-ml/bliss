@@ -42,6 +42,11 @@ class GalaxyDataset(Dataset, ABC):
             data_params = json.load(fp)
         return cls(**data_params)
 
+    @abstractmethod
+    def print_props(self, output=sys.stdout):
+        # print relevant properties of the dataset, into given output stream.
+        pass
+
 
 class DecoderSamples(GalaxyDataset):
     _params_file = params_path.joinpath("decoder_samples.json")
@@ -88,6 +93,9 @@ class DecoderSamples(GalaxyDataset):
 
         return self.dec.get_sample(batchsize, return_latent=True)
 
+    def print_props(self, output=sys.stdout):
+        pass
+
 
 class H5Catalog(GalaxyDataset):
     _params_file = params_path.joinpath("h5_cat.json")
@@ -133,7 +141,7 @@ class H5Catalog(GalaxyDataset):
             "num_galaxies": 1,
         }
 
-    def print_props(self, prop_file):
+    def print_props(self, prop_file=sys.stdout):
         pass
 
     @classmethod
@@ -278,26 +286,26 @@ class CatsimGalaxies(GalaxyDataset):
 
 
 def generate_images(
-    dataset_cls, dataset_kwargs, out_path, prop_file_path=None, num_images=1,
+    dataset, file_path, prop_file_path=None, n_images=1,
 ):
     """
     Generate images from dataset cls and save num_images into h5py file.
     """
 
-    ds = dataset_cls(**dataset_kwargs)
-
     if prop_file_path:
         with open(prop_file_path, "w") as prop_file:
-            ds.print_props(prop_file)
+            dataset.print_props(prop_file)
 
-    with h5py.File(out_path, "w") as images_file:
-        hds_shape = (num_images, ds.num_bands, ds.slen, ds.slen)
-        hds = images_file.create_dataset(const.image_h5_name, hds_shape, dtype=ds.dtype)
-        for i in range(num_images):
-            random_idx = random.randrange(len(ds))
-            output = ds[random_idx]
+    with h5py.File(file_path, "w") as images_file:
+        hds_shape = (n_images, dataset.num_bands, dataset.slen, dataset.slen)
+        hds = images_file.create_dataset(
+            const.image_h5_name, hds_shape, dtype=dataset.dtype
+        )
+        for i in range(n_images):
+            random_idx = random.randrange(len(dataset))
+            output = dataset[random_idx]
             image = output["image"]
             hds[i, :, :, :] = image
             hds.flush()
-        hds.attrs[const.background_h5_name] = ds.background
+        hds.attrs[const.background_h5_name] = dataset.background
         hds.flush()

@@ -8,15 +8,12 @@ from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
 
-from .train import train_galaxy
-from .utils import const
+from celeste.train import train_single_galaxy
+from celeste.utils import const
+from celeste.datasets import galaxy_datasets
 
-# specify all the models (as a class) that can be trained.
-all_models = {
-    "centered_galaxy": train_galaxy.TrainGalaxy,
-}
+all_datasets = [cls.__name__ for cls in galaxy_datasets.GalaxyDataset.__subclasses__()]
 
-all_datasets = ["synthetic", "galbasic", "galcatsim", "h5_catalog"]
 
 # torch and plt setup.
 torch.backends.cudnn.benchmark = True
