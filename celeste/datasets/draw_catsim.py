@@ -3,30 +3,6 @@ import numpy as np
 from astropy.table import Column
 import galsim
 
-from ..utils import const
-
-
-def get_default_params(num_bands):
-    if num_bands == 6:
-        params = dict(
-            survey_name="LSST",
-            catalog_file_path=const.data_path.joinpath("OneDegSq.fits"),
-            bands=["y", "z", "i", "r", "g", "u"],
-        )
-
-    elif num_bands == 1:
-        params = dict(
-            survey_name="LSST",
-            catalog_file_path=const.data_path.joinpath("OneDegSq.fits"),
-            bands=["i"],
-        )
-
-    else:
-        raise ValueError("Only num_bands = 1 or 6 is supported.")
-
-    return params
-
-
 # ToDo: LATER More flexibility than drawing randomly centered in central pixel.
 class CatsimRenderer(object):
     def __init__(

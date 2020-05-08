@@ -63,7 +63,7 @@ class DecoderSamples(GalaxyDataset):
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands).to(
             const.device
         )
-        self.dec.load_state_dict(torch.load(decoder_file.as_posix()))
+        self.dec.load_state_dict(torch.load(const.data_path.joinpath(decoder_file)))
         self.num_bands = num_bands
         self.slen = slen
         self.num_images = num_images
@@ -82,11 +82,11 @@ class DecoderSamples(GalaxyDataset):
             -1, self.slen, self.slen
         )
 
-    def sample(self, n_samples):
+    def get_batch(self, batchsize):
         # returns = (z, images) where z.shape = (n_samples, latent_dim) and images.shape =
         # (n_samples, n_bands, slen, slen)
 
-        return self.dec.get_sample(n_samples, return_latent=True)
+        return self.dec.get_sample(batchsize, return_latent=True)
 
 
 class H5Catalog(GalaxyDataset):
@@ -145,7 +145,7 @@ class H5Catalog(GalaxyDataset):
 
 
 class CatsimGalaxies(GalaxyDataset):
-    _params_file = params_path.joinpath("catsim.json")
+    _params_file = params_path.joinpath("catsim_single_band.json")
 
     def __init__(
         self,
@@ -153,8 +153,10 @@ class CatsimGalaxies(GalaxyDataset):
         slen=41,
         filter_dict=None,
         snr=200,
-        num_bands=6,
+        num_bands=1,
+        bands=None,
         dtype=np.float32,
+        catalog_file="OneDegSq.fits",
         preserve_flux=False,
         add_noise=True,
         render_kwargs=None,
@@ -171,6 +173,7 @@ class CatsimGalaxies(GalaxyDataset):
         """
         super().__init__()
         assert survey_name == "LSST", "Only using default survey name for now is LSST."
+        assert num_bands in [1, 6], "Only 1 or 6 bands are supported."
         assert (
             slen >= 41
         ), "Does not seem to work well if the number of pixels is too low."
@@ -183,12 +186,11 @@ class CatsimGalaxies(GalaxyDataset):
             preserve_flux is False
         ), "Otherwise variance of the noise will change which is not desirable."
         # ToDo: Create a test or assertion to check that mean == variance approx.
+        assert num_bands == len(bands)
 
-        params = draw_catsim.get_default_params(num_bands)
-        self.survey_name = params["survey_name"] if not survey_name else survey_name
-        self.bands = params["bands"]
+        self.survey_name = survey_name
+        self.bands = bands
         self.num_bands = num_bands
-        assert num_bands == len(self.bands)
 
         self.slen = slen
         self.pixel_scale = descwl.survey.Survey.get_defaults(self.survey_name, "*")[
@@ -214,7 +216,7 @@ class CatsimGalaxies(GalaxyDataset):
         self.background = self.renderer.background
 
         # prepare catalog table.
-        self.table = Table.read(params["catalog_file_path"])
+        self.table = Table.read(const.data_path.joinpath(catalog_file))
         self.table = self.table[
             np.random.permutation(len(self.table))
         ]  # shuffle in case that order matters.

@@ -373,7 +373,7 @@ class GalaxySimulator(SourceSimulator):
         # z has shape = (num_samples, latent_dim)
         # galaxies has shape = (num_samples, n_bands, slen, slen)
         num_samples = int(n_galaxy.sum().item())
-        z, galaxies = self.ds.sample(num_samples)
+        z, galaxies = self.ds.get_batch(num_samples)
 
         count = 0
         for batch_i, n_gal in enumerate(n_galaxy):
