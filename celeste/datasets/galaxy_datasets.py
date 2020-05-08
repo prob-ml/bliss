@@ -20,12 +20,20 @@ params_path = const.data_path.joinpath("params_galaxy_datasets")
 class GalaxyDataset(Dataset, ABC):
     _params_file = None
 
-    @abstractmethod
     def __init__(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def __getitem__(self, idx):
         pass
 
     @classmethod
     def load_dataset_from_params(cls, params_file=None):
+        """
+        If not specified return the dataset from the default data_params file specified as a class attribute.
+        """
+        if params_file is None:
+            params_file = cls._params_file
         assert (
             params_file is not None
         ), "Forgot to specify _params_file as class attribute"
@@ -49,6 +57,7 @@ class DecoderSamples(GalaxyDataset):
         :param decoder_file: The file from which to load the `state_dict` of the decoder.
         :type decoder_file: Path object.
         """
+        super().__init__()
         assert latent_dim == 8, "Not implemented any other decoder galaxy network"
 
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands).to(
@@ -91,6 +100,7 @@ class H5Catalog(GalaxyDataset):
             slen:
             num_bands:
         """
+        super().__init__()
         h5_file_path = const.data_path.joinpath(h5_file)
 
         self.file = h5py.File(h5_file_path, "r")
@@ -160,7 +170,7 @@ class CatsimGalaxies(GalaxyDataset):
         :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is to exclude >=25.3 i_ab
         :param stamp_size: In arcsecs.
         """
-
+        super().__init__()
         assert survey_name is None, "Only using default survey name for now = LSST"
         assert (
             slen >= 41
@@ -237,7 +247,6 @@ class CatsimGalaxies(GalaxyDataset):
         print(
             f"slen: {self.slen} \n"
             f"snr: {self.snr} \n"
-            f"fixed size: {self.fixed_size} \n"
             f"survey name: {self.survey_name} \n"
             f"bands: {self.bands}\n"
             f"pixel scale: {self.pixel_scale}\n"
