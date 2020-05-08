@@ -309,8 +309,6 @@ class SourceSimulator(ABC):
             batchsize,
             draw_poisson=self.draw_poisson,
         )
-        print(n_sources)
-        print(n_sources.shape)
 
         # multiply by zero where they are no sources (recall parameters have entry for up to max_sources)
         is_on_array = const.get_is_on_from_n_sources(n_sources, self.max_sources)

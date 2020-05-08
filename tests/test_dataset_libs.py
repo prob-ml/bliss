@@ -19,6 +19,7 @@ data_params["slen"] = 50
 data_params["mean_stars"] = 40
 
 
+# TODO: Test galaxy dataset and batchsize=1 separately.
 class TestSDSSDataset:
     def test_fresh_data(self):
         # this checks that we are actually drawing fresh data
