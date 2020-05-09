@@ -51,7 +51,7 @@ class TestStarSleepEncoder:
     def test_galaxy_sleep(self):
         # setup train dataset
         # load star parameters
-        param_file = const.data_path.joinpath("/data/default_star_parameters.json")
+        param_file = const.data_path.joinpath("default_star_parameters.json")
         with open(param_file, "r") as fp:
             data_params = json.load(fp)
 
@@ -61,7 +61,7 @@ class TestStarSleepEncoder:
         data_params["slen"] = 50
 
         # load psf
-        psf_file = const.data_path.joinpath("/data/fitted_powerlaw_psf_params.npy")
+        psf_file = const.data_path.joinpath("fitted_powerlaw_psf_params.npy")
         psf_params = torch.tensor(np.load(psf_file), device=device)
         power_law_psf = psf_transform.PowerLawPSF(psf_params)
         psf = power_law_psf.forward().detach()
