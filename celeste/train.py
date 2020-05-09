@@ -1,26 +1,27 @@
+from pathlib import Path
+from abc import ABC, abstractmethod
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
+from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
-from torch.optim import Adam
-import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
 
-from .. import utils
-from ..models import galaxy_net
+from .models import galaxy_net
+from . import utils
 
 
 class TrainGalaxy(object):
     def __init__(
         self,
-        dataset_cls,
-        dataset_kwargs,
+        dataset,
         slen,
         num_bands,
-        num_workers: int = 2,
+        num_workers=None,
         epochs=None,
         batch_size=None,
-        evaluate=None,
+        eval_every=None,
         dir_name=None,
     ):
         """
@@ -37,31 +38,31 @@ class TrainGalaxy(object):
         self.num_bands = num_bands
         self.epochs = epochs
         self.batch_size = batch_size
-        self.evaluate = evaluate
+        self.eval_every = eval_every
         self.num_workers = num_workers
 
-        self.ds = dataset_cls(**dataset_kwargs)
-        assert len(self.ds) >= 1000, "Dataset is too small."
+        self.dataset = dataset
+        assert len(self.dataset) >= 1000, "Dataset is too small."
 
         self.vae = galaxy_net.OneCenteredGalaxy(
             slen, num_bands=num_bands, latent_dim=self.latent_dim
         )
 
         split = 0.1
-        self.size_test = int(split * len(self.ds))
-        self.size_train = len(self.ds) - self.size_test
+        self.size_test = int(split * len(self.dataset))
+        self.size_train = len(self.dataset) - self.size_test
 
-        tt_split = int(split * len(self.ds))
+        tt_split = int(split * len(self.dataset))
         test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
-        train_indices = np.mgrid[tt_split : len(self.ds)]
+        train_indices = np.mgrid[tt_split : len(self.dataset)]
 
         self.optimizer = Adam(
             self.vae.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
 
-        if self.evaluate:
+        if self.eval_every:
             self.test_loader = DataLoader(
-                self.ds,
+                self.dataset,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 pin_memory=True,
@@ -69,7 +70,7 @@ class TrainGalaxy(object):
             )
 
         self.train_loader = DataLoader(
-            self.ds,
+            self.dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
@@ -82,11 +83,11 @@ class TrainGalaxy(object):
     def save_props(self):
         prop_file = open(f"{self.dir_name}/props.txt", "w")
         print(
-            f"dataset: {self.ds.__class__.__name__}\n"
-            f"dataset size: {len(self.ds)}\n"
+            f"dataset: {self.dataset.__class__.__name__}\n"
+            f"dataset size: {len(self.dataset)}\n"
             f"epochs: {self.epochs}\n"
             f"batch_size: {self.batch_size}\n"
-            f"evaluate: {self.evaluate}\n"
+            f"eval_every: {self.eval_every}\n"
             f"learning rate: {self.lr}\n"
             f"slen: {self.slen}\n"
             f"latent dim: {self.vae.latent_dim}\n",
@@ -94,7 +95,7 @@ class TrainGalaxy(object):
             f"num workers: {self.num_workers}\n",
             file=prop_file,
         )
-        self.ds.print_props(prop_file)
+        self.dataset.print_props(prop_file)
         prop_file.close()
 
     # @profile
@@ -103,7 +104,6 @@ class TrainGalaxy(object):
         avg_loss = 0.0
 
         for batch_idx, data in enumerate(self.train_loader):
-
             image = data["image"].to(
                 utils.device
             )  # shape: [nsamples, num_bands, slen, slen]

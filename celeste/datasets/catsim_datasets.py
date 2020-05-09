@@ -7,7 +7,7 @@ import h5py
 from astropy.table import Column, Table
 import galsim
 
-from .galaxy_datasets import GalaxyDataset, params_path
+from .galaxy_datasets import SingleGalaxyDataset, params_path
 from .. import utils
 
 
@@ -15,7 +15,7 @@ def get_pixel_scale(survey_name):
     return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
 
 
-class CatsimGalaxies(GalaxyDataset):
+class CatsimGalaxies(SingleGalaxyDataset):
     _params_file = params_path.joinpath("catsim_single_band.json")
 
     def __init__(

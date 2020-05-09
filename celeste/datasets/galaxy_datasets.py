@@ -12,7 +12,7 @@ from .. import utils
 params_path = utils.data_path.joinpath("params_galaxy_datasets")
 
 
-class GalaxyDataset(Dataset, ABC):
+class SingleGalaxyDataset(Dataset, ABC):
     _params_file = None
 
     def __init__(self, **kwargs):
@@ -43,7 +43,7 @@ class GalaxyDataset(Dataset, ABC):
         pass
 
 
-class DecoderSamples(GalaxyDataset):
+class DecoderSamples(SingleGalaxyDataset):
     _params_file = params_path.joinpath("decoder_samples.json")
 
     def __init__(self, slen, decoder_file, num_bands=6, latent_dim=8, num_images=1000):
@@ -92,7 +92,7 @@ class DecoderSamples(GalaxyDataset):
         pass
 
 
-class H5Catalog(GalaxyDataset):
+class H5Catalog(Dataset):
     _params_file = params_path.joinpath("h5_cat.json")
 
     def __init__(self, h5_file, slen, num_bands):
@@ -138,10 +138,6 @@ class H5Catalog(GalaxyDataset):
 
     def print_props(self, prop_file=sys.stdout):
         pass
-
-    @classmethod
-    def load_dataset_from_params(cls, params_file=None):
-        raise NotImplementedError("Need to make params_file for this class.")
 
     def __exit__(self):
         self.file.close()
