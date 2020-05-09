@@ -3,7 +3,7 @@ import torch
 import json
 import fitsio
 
-from celeste.data import simulated_datasets_lib
+from celeste.datasets import simulated_datasets
 from celeste.utils import const
 
 
@@ -19,6 +19,7 @@ data_params["slen"] = 50
 data_params["mean_stars"] = 40
 
 
+# TODO: Test galaxy dataset and batchsize=1 separately.
 class TestSDSSDataset:
     def test_fresh_data(self):
         # this checks that we are actually drawing fresh data
@@ -30,7 +31,7 @@ class TestSDSSDataset:
             torch.ones(psf_og.shape[0], data_params["slen"], data_params["slen"])
             * 686.0
         )
-        star_dataset = simulated_datasets_lib.StarsDataset.load_dataset_from_params(
+        star_dataset = simulated_datasets.StarsDataset.load_dataset_from_params(
             n_images=n_images,
             data_params=data_params,
             psf=psf_og,

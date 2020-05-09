@@ -6,3 +6,5 @@ fitsio
 pytest
 pytest-cov
 black
+h5py
+matplotlib

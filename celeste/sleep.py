@@ -186,7 +186,7 @@ class SourceSleep(ABC):
             train_losses[:, epoch] = np.array(
                 [avg_loss, counter_loss, locs_loss, source_param_loss]
             )
-            self.log_train(
+            self._log_train(
                 epoch,
                 avg_loss,
                 counter_loss,
@@ -203,7 +203,7 @@ class SourceSleep(ABC):
                     test_locs_loss,
                     test_source_param_loss,
                 ) = self.eval_sleep(train=False)
-                self.log_eval(
+                self._log_eval(
                     test_loss, test_counter_loss, test_locs_loss, test_source_param_loss
                 )
 

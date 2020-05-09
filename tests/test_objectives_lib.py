@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from itertools import permutations
 
-from celeste import sleep_lib
+from celeste import sleep
 from celeste.utils import const
 
 

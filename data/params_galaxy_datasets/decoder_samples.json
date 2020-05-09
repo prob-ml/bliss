@@ -1,0 +1,7 @@
+{
+  "decoder_file": "decoder_params_100_single_band_i.dat",
+  "slen": 51,
+  "num_bands": 1,
+  "latent_dim": 8,
+  "num_images": 1000
+}
