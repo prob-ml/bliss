@@ -45,10 +45,10 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class TestStarSleepEncoder:
+    pytestmark = pytest.mark.slow
     # TODO: train the star encoder in sleep-face
 
-    @pytest.mark.slow
-    def test_galaxy_sleep(self):
+    def test_star_sleep(self):
         # setup train dataset
         # load star parameters
         param_file = const.data_path.joinpath("default_star_parameters.json")
@@ -91,8 +91,7 @@ class TestStarSleepEncoder:
         # save images and star parameters to data folder
         batches = star_dataset.get_batch()
 
-        with open(const.data_path.joinpath("star_sleep_test_data.json"), "w") as sf:
-            sf.write(json.dumps(batches))
+        torch.save(batches, const.data_path.joinpath("star_params_img.pt"))
 
         # setup encoder
         # train encoder on 100*100 images
