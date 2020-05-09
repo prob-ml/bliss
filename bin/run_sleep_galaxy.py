@@ -19,12 +19,12 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-def load_data_params(args):
+def load_data_params(pargs):
     parameters_path = const.data_path.joinpath("default_galaxy_parameters.json")
     with open(parameters_path, "r") as fp:
         data_params = json.load(fp)
 
-    args_dict = vars(args)
+    args_dict = vars(pargs)
     for k in data_params:
         if k in args_dict and args_dict[k] is not None:
             data_params[k] = args_dict[k]
