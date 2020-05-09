@@ -30,10 +30,13 @@ LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
 
 
 # let the user change device defined in this module.
-def set_device(device_id):
-    torch.cuda.set_device(device_id)
+def set_device(device_id=None, no_cuda=False):
+
+    if not no_cuda:
+        torch.cuda.set_device(device_id)
+
     global device
-    device = torch.device(device_id)
+    device = torch.device(device_id) if not no_cuda else torch.device("cpu")
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):

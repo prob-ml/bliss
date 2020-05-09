@@ -86,7 +86,7 @@ def train(
 
 def main(pargs):
 
-    const.set_device(pargs.device)  # set global device to use.
+    const.set_device(pargs.device, pargs.no_cuda)  # set global device to use.
 
     set_seed(pargs.seed)
     data_params = load_data_params(pargs)
@@ -126,7 +126,8 @@ if __name__ == "__main__":
 
     # Setup arguments.
     parser = argparse.ArgumentParser(
-        description="Sleep phase galaxy training [argument parser]"
+        description="Sleep phase galaxy training [argument parser]",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument(
@@ -163,15 +164,43 @@ if __name__ == "__main__":
     parser.add_argument("--mean-galaxies", type=int, default=None)
 
     # training params
-    parser.add_argument("--n-images", type=int, default=320)
-    parser.add_argument("--n-epochs", type=int, default=201)
-    parser.add_argument("--batchsize", type=int, default=32)
-    parser.add_argument("--print-every", type=int, default=20)
+    parser.add_argument(
+        "--n-images", type=int, default=320, help="Number of images in epoch"
+    )
+    parser.add_argument(
+        "--n-epochs", type=int, default=201, help="Number of epochs to run for."
+    )
+    parser.add_argument(
+        "--batchsize", type=int, default=32, help="Number of batches in each epoch."
+    )
+    parser.add_argument(
+        "--print-every",
+        type=int,
+        default=20,
+        help="Log every {print_every} number of times",
+    )
 
-    parser.add_argument("--ptile-slen", type=int, default=20)
-    parser.add_argument("--step", type=int, default=5)
-    parser.add_argument("--edge-padding", type=int, default=5)
-    parser.add_argument("--max-detections", type=int, default=2)
+    parser.add_argument(
+        "--ptile-slen",
+        type=int,
+        default=20,
+        help="Side length of the padded tile in pixels.",
+    )
+    parser.add_argument(
+        "--step", type=int, default=5, help="Distance between tile centers in pixels."
+    )
+    parser.add_argument(
+        "--edge-padding",
+        type=int,
+        default=5,
+        help="Padding around each tile in pixels.",
+    )
+    parser.add_argument(
+        "--max-detections",
+        type=int,
+        default=2,
+        help="Number of max detections in each tile. ",
+    )
 
     args = parser.parse_args()
     main(args)
