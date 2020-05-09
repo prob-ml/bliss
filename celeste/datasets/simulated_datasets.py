@@ -1,5 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
+import warnings
 
 import torch
 from torch.utils.data import Dataset
@@ -87,7 +88,7 @@ def _sample_n_sources(
         m = Categorical(const.FloatTensor(1).fill_(max_sources - min_sources))
         n_sources = m.sample([batchsize]) + min_sources
 
-    return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze()
+    return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze(1)
 
 
 def _sample_locs(max_sources, is_on_array, batchsize=1):
@@ -280,7 +281,7 @@ class SourceSimulator(ABC):
         # add noise to images.
 
         if torch.any(images_mean <= 0):
-            print("warning: image mean less than 0")
+            warnings.warn("image mean less than 0")
             images_mean = images_mean.clamp(min=1.0)
 
         images = (
@@ -345,7 +346,7 @@ class GalaxySimulator(SourceSimulator):
         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
         """
         super(GalaxySimulator, self).__init__(*args, **kwargs)
-        self.gal_decoder_path = const.models_path.joinpath(gal_decoder_file)
+        self.gal_decoder_path = const.data_path.joinpath(gal_decoder_file)
         self.galaxy_slen = galaxy_slen
 
         self.ds = DecoderSamples(
@@ -373,7 +374,7 @@ class GalaxySimulator(SourceSimulator):
         # z has shape = (num_samples, latent_dim)
         # galaxies has shape = (num_samples, n_bands, slen, slen)
         num_samples = int(n_galaxy.sum().item())
-        z, galaxies = self.ds.sample(num_samples)
+        z, galaxies = self.ds.get_batch(num_samples)
 
         count = 0
         for batch_i, n_gal in enumerate(n_galaxy):
@@ -456,6 +457,13 @@ class GalaxyDataset(SourceDataset):
 
         assert n_bands == background.shape[0]
         assert background.shape[1] == background.shape[2] == data_params["galaxy_slen"]
+
+        # TODO: easier way of doing this?
+        # now convert background to size of scenes
+        values = background.mean((1, 2))  # shape = (n_bands)
+        background = torch.zeros(n_bands, slen, slen)
+        for i, value in enumerate(values):
+            background[i, ...] = value
 
         simulator_args = [
             data_params["galaxy_slen"],
