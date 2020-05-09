@@ -5,14 +5,19 @@ from os.path import dirname
 
 from torch.distributions import categorical
 
+# global paths
 src_path = Path(dirname(dirname(__file__)))
 root_path = Path(dirname(dirname(dirname(__file__))))
 
 data_path = root_path.joinpath("data")
 reports_path = root_path.joinpath("reports")
-models_path = root_path.joinpath("models")
+results_path = root_path.joinpath("results")
 
-# make codebase device agnostic, but also create tensors directly in the gpu.
+# global variables
+image_h5_name = "images"
+background_h5_name = "background"
+
+# make codebase device agnostic, but also create all tensors directly in the gpu when possible.
 use_cuda = torch.cuda.is_available()
 device = torch.device("cpu")
 if use_cuda:
@@ -22,7 +27,16 @@ if use_cuda:
 
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
-# torch.set_default_tensor_type(FloatTensor)
+
+
+# let the user change device defined in this module.
+def set_device(device_id=None, no_cuda=False):
+
+    if not no_cuda:
+        torch.cuda.set_device(device_id)
+
+    global device
+    device = torch.device(device_id) if not no_cuda else torch.device("cpu")
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):

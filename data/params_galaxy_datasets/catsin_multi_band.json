@@ -1,0 +1,15 @@
+{
+  "survey_name": "LSST",
+  "slen": 51,
+  "filter_dict": null,
+  "snr": 200,
+  "num_bands": 6,
+  "bands": ["y", "z", "i", "r", "g", "u"],
+  "catalog_file": "OneDegSq.fits",
+  "preserve_flux": false,
+  "render_kwargs": {
+    "min_snr": 0.05,
+    "truncate_radius": 30,
+    "verbose": false
+  }
+}
