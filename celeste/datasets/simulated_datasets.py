@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.distributions import Poisson, Categorical
 
 from .galaxy_datasets import DecoderSamples
-from ..utils import const
+from .. import utils
 
 
 def _check_psf(psf, slen):
@@ -60,7 +60,7 @@ def _expand_psf(psf, slen):
 
     assert psf_slen <= slen
 
-    psf_expanded = const.FloatTensor(n_bands, slen, slen).zero_()
+    psf_expanded = utils.FloatTensor(n_bands, slen, slen).zero_()
 
     offset = int((slen - psf_slen) / 2)
 
@@ -82,10 +82,10 @@ def _sample_n_sources(
     :return: A tensor with shape = (batchsize)
     """
     if draw_poisson:
-        m = Poisson(const.FloatTensor(1).fill_(mean_sources))
+        m = Poisson(utils.FloatTensor(1).fill_(mean_sources))
         n_sources = m.sample([batchsize])
     else:
-        m = Categorical(const.FloatTensor(1).fill_(max_sources - min_sources))
+        m = Categorical(utils.FloatTensor(1).fill_(max_sources - min_sources))
         n_sources = m.sample([batchsize]) + min_sources
 
     return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze(1)
@@ -95,7 +95,7 @@ def _sample_locs(max_sources, is_on_array, batchsize=1):
     # 2 = (x,y)
     # torch.rand returns numbers between (0,1)
     locs = (
-        const.FloatTensor(batchsize, max_sources, 2).uniform_()
+        utils.FloatTensor(batchsize, max_sources, 2).uniform_()
         * is_on_array.unsqueeze(2).float()
     )
     return locs
@@ -172,7 +172,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     grid = _get_grid(slen, cached_grid)
 
     n_bands = psf.shape[0]
-    scene = const.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    scene = utils.FloatTensor(batchsize, n_bands, slen, slen).zero_()
 
     assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
     assert fluxes is not None
@@ -207,7 +207,7 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     _check_sources_and_locs(locs, n_sources, batchsize)
     grid = _get_grid(slen, cached_grid)
 
-    scene = const.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    scene = utils.FloatTensor(batchsize, n_bands, slen, slen).zero_()
     for n in range(max(n_sources)):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
@@ -226,7 +226,7 @@ def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
-    return mgrid.type(torch.FloatTensor).to(const.device)
+    return mgrid.type(torch.FloatTensor).to(utils.device)
 
 
 # TODO: Make this an abstract class, same with the dataset.
@@ -258,7 +258,7 @@ class SourceSimulator(ABC):
 
         self.slen = slen  # side length of the image
         self.n_bands = n_bands
-        self.background = background.to(const.device)
+        self.background = background.to(utils.device)
 
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
@@ -285,7 +285,7 @@ class SourceSimulator(ABC):
             images_mean = images_mean.clamp(min=1.0)
 
         images = (
-            torch.sqrt(images_mean) * const.FloatTensor(*images_mean.shape).uniform_()
+            torch.sqrt(images_mean) * utils.FloatTensor(*images_mean.shape).uniform_()
             + images_mean
         )
 
@@ -311,7 +311,7 @@ class SourceSimulator(ABC):
         )
 
         # multiply by zero where they are no sources (recall parameters have entry for up to max_sources)
-        is_on_array = const.get_is_on_from_n_sources(n_sources, self.max_sources)
+        is_on_array = utils.get_is_on_from_n_sources(n_sources, self.max_sources)
 
         # sample locations
         locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
@@ -346,7 +346,7 @@ class GalaxySimulator(SourceSimulator):
         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
         """
         super(GalaxySimulator, self).__init__(*args, **kwargs)
-        self.gal_decoder_path = const.data_path.joinpath(gal_decoder_file)
+        self.gal_decoder_path = utils.data_path.joinpath(gal_decoder_file)
         self.galaxy_slen = galaxy_slen
 
         self.ds = DecoderSamples(
@@ -360,10 +360,10 @@ class GalaxySimulator(SourceSimulator):
         assert len(n_galaxy.shape) == 1
         assert n_galaxy.shape[0] == batchsize
 
-        galaxy_params = const.FloatTensor(
+        galaxy_params = utils.FloatTensor(
             batchsize, self.max_sources, self.latent_dim
         ).zero_()
-        single_galaxies = const.FloatTensor(
+        single_galaxies = utils.FloatTensor(
             batchsize,
             self.max_sources,
             self.n_bands,
@@ -448,7 +448,7 @@ class GalaxyDataset(SourceDataset):
         cls, n_images, data_params, add_noise=True, draw_poisson=True
     ):
         # prepare background.
-        background_path = const.data_path.joinpath(data_params["background_file"])
+        background_path = utils.data_path.joinpath(data_params["background_file"])
         slen = data_params["slen"]
         n_bands = data_params["n_bands"]
 
@@ -499,7 +499,7 @@ class StarSimulator(SourceSimulator):
         assert self.background.shape[1] == self.slen
         assert self.background.shape[2] == self.slen
 
-        self.psf = self.psf.to(const.device)
+        self.psf = self.psf.to(utils.device)
 
         # prior parameters
         self.f_min = f_min
@@ -535,7 +535,7 @@ class StarSimulator(SourceSimulator):
         :return: fluxes, a shape (batchsize x max_sources x n_bands) tensor
         """
         assert n_stars.shape[0] == batchsize
-        base_fluxes = const.draw_pareto_maxed(
+        base_fluxes = utils.draw_pareto_maxed(
             self.f_min,
             self.f_max,
             alpha=self.alpha,
@@ -544,7 +544,7 @@ class StarSimulator(SourceSimulator):
 
         if self.n_bands > 1:
             colors = (
-                const.FloatTensor(
+                utils.FloatTensor(
                     batchsize, self.max_sources, self.n_bands - 1
                 ).uniform_()
                 * 0.15
@@ -564,7 +564,7 @@ class StarSimulator(SourceSimulator):
     @staticmethod
     def get_log_fluxes(fluxes):
         log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(const.device)
+            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(utils.device)
         )  # prevent log(0) errors.
         log_fluxes = torch.log(log_fluxes)
 

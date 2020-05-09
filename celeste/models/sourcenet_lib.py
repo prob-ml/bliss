@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 
-from ..utils import const
-from ..utils import image_utils
+from .. import utils
 
 
 class Flatten(nn.Module):
@@ -71,7 +70,7 @@ class SourceEncoder(nn.Module):
 
         self.edge_padding = edge_padding
 
-        self.tile_coords = image_utils.get_ptile_coords(
+        self.tile_coords = utils.get_ptile_coords(
             self.slen, self.slen, self.ptile_slen, self.step
         )
         self.n_tiles = self.tile_coords.shape[0]
@@ -237,7 +236,7 @@ class SourceEncoder(nn.Module):
         n_samples = n_sources.shape[0]
 
         batchsize = h.size(0)
-        _h = torch.cat((h, torch.zeros(batchsize, 1).to(const.device)), dim=1)
+        _h = torch.cat((h, torch.zeros(batchsize, 1).to(utils.device)), dim=1)
 
         loc_logit_mean = torch.gather(
             _h,
@@ -303,7 +302,7 @@ class SourceEncoder(nn.Module):
                 (self.max_detections + 1, 2 * self.max_detections), self.dim_out_all
             )
             .type(torch.LongTensor)
-            .to(const.device)
+            .to(utils.device)
         )
 
         self.locs_var_indx_mat = (
@@ -311,7 +310,7 @@ class SourceEncoder(nn.Module):
                 (self.max_detections + 1, 2 * self.max_detections), self.dim_out_all
             )
             .type(torch.LongTensor)
-            .to(const.device)
+            .to(utils.device)
         )
 
         self.source_params_mean_indx_mat = (
@@ -320,7 +319,7 @@ class SourceEncoder(nn.Module):
                 self.dim_out_all,
             )
             .type(torch.LongTensor)
-            .to(const.device)
+            .to(utils.device)
         )
         self.source_params_var_indx_mat = (
             torch.full(
@@ -328,11 +327,11 @@ class SourceEncoder(nn.Module):
                 self.dim_out_all,
             )
             .type(torch.LongTensor)
-            .to(const.device)
+            .to(utils.device)
         )
 
         self.prob_indx = (
-            torch.zeros(self.max_detections + 1).type(torch.LongTensor).to(const.device)
+            torch.zeros(self.max_detections + 1).type(torch.LongTensor).to(utils.device)
         )
 
         for n_detections in range(1, self.max_detections + 1):
@@ -390,14 +389,12 @@ class SourceEncoder(nn.Module):
         # encoder should be able to handle these cases to.
         if not (images.shape[-1] == self.slen):
             # get the coordinates
-            tile_coords = image_utils.get_ptile_coords(
-                slen, slen, self.ptile_slen, self.step
-            )
+            tile_coords = utils.get_ptile_coords(slen, slen, self.ptile_slen, self.step)
         else:
             # else, use the cached coordinates
             tile_coords = self.tile_coords
 
-        image_ptiles = image_utils.tile_images(images, self.ptile_slen, self.step)
+        image_ptiles = utils.tile_images(images, self.ptile_slen, self.step)
 
         if (locs is not None) and (source_params is not None):
             assert source_params.shape[2] == self.n_source_params
@@ -408,7 +405,7 @@ class SourceEncoder(nn.Module):
                 tile_source_params,
                 tile_n_sources,
                 tile_is_on_array,
-            ) = image_utils.get_params_in_tiles(
+            ) = utils.get_params_in_tiles(
                 tile_coords,
                 locs,
                 source_params,
@@ -451,15 +448,13 @@ class SourceEncoder(nn.Module):
 
         # if the image given is not the same as the original encoder training images.
         if not (slen == self.slen):
-            tile_coords = image_utils.get_ptile_coords(
-                slen, slen, self.ptile_slen, self.step
-            )
+            tile_coords = utils.get_ptile_coords(slen, slen, self.ptile_slen, self.step)
         else:
             tile_coords = self.tile_coords
 
         assert (n_image_ptiles % tile_coords.shape[0]) == 0
 
-        locs, source_params, n_sources = image_utils.get_full_params_from_tile_params(
+        (locs, source_params, n_sources,) = utils.get_full_params_from_tile_params(
             tile_locs_sampled.reshape(
                 n_samples * n_image_ptiles, -1, 2
             ),  # 2 = len((x,y))
@@ -523,13 +518,13 @@ class SourceEncoder(nn.Module):
                 )
 
             else:
-                tile_n_stars_sampled = const.sample_class_weights(
+                tile_n_stars_sampled = utils.sample_class_weights(
                     torch.exp(log_probs_n_sources_per_tile.detach()), n_samples
                 ).view(n_samples, -1)
         else:
             tile_n_stars_sampled = tile_n_sources.repeat(n_samples).view(n_samples, -1)
 
-        is_on_array = const.get_is_on_from_tile_n_sources_2d(
+        is_on_array = utils.get_is_on_from_tile_n_sources_2d(
             tile_n_stars_sampled, self.max_detections
         )
         is_on_array = is_on_array.unsqueeze(3).float()
@@ -543,18 +538,18 @@ class SourceEncoder(nn.Module):
         ) = self._get_var_params_for_n_sources(h, tile_n_stars_sampled)
 
         if return_map_source_params:
-            loc_sd = const.FloatTensor(*loc_logvar.shape).zero_()
-            source_params_sd = const.FloatTensor(*source_param_logvar.shape).zero_()
+            loc_sd = utils.FloatTensor(*loc_logvar.shape).zero_()
+            source_params_sd = utils.FloatTensor(*source_param_logvar.shape).zero_()
         else:
             loc_sd = torch.exp(0.5 * loc_logvar)
             source_params_sd = torch.exp(0.5 * source_param_logvar).clamp(max=0.5)
 
         # sample locations
-        _locs_randn = const.FloatTensor(*loc_mean.shape).normal_()
+        _locs_randn = utils.FloatTensor(*loc_mean.shape).normal_()
         tile_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
 
         # sample source params, these are log_fluxes or latent galaxy params (normal variables)
-        _source_params_randn = const.FloatTensor(*source_param_mean.shape).normal_()
+        _source_params_randn = utils.FloatTensor(*source_param_mean.shape).normal_()
 
         tile_source_params_sampled = (
             source_param_mean + _source_params_randn * source_params_sd
@@ -575,7 +570,7 @@ class SourceEncoder(nn.Module):
         In the case of stars, this function will return log_fluxes as source_params. Can then obtain fluxes with the
         following procedure:
 
-        >> is_on_array = const.get_is_on_from_n_stars(n_stars, max_stars)
+        >> is_on_array = utils.get_is_on_from_n_stars(n_stars, max_stars)
         >> fluxes = np.exp(log_fluxes) * is_on_array
 
         where `max_stars` will correspond to the maximum number of stars that was used when simulating the `image`

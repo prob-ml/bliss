@@ -4,14 +4,13 @@ import json
 import fitsio
 
 from celeste.datasets import simulated_datasets
-from celeste.utils import const
+from celeste import utils
 
+psf_r = fitsio.FITS(utils.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))[0].read()
+psf_i = fitsio.FITS(utils.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))[0].read()
+psf_og = torch.Tensor(np.array([psf_r, psf_i])).to(utils.device)  # waiting for new push
 
-psf_r = fitsio.FITS(const.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))[0].read()
-psf_i = fitsio.FITS(const.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))[0].read()
-psf_og = torch.Tensor(np.array([psf_r, psf_i])).to(const.device)  # waiting for new push
-
-param_file = const.data_path.joinpath("default_star_parameters.json")
+param_file = utils.data_path.joinpath("default_star_parameters.json")
 with open(param_file, "r") as fp:
     data_params = json.load(fp)
 
@@ -45,10 +44,10 @@ class TestSDSSDataset:
         # should be drawn
         #############################################
         num_epoch = 5
-        images_vec = torch.zeros(num_epoch).to(const.device)
-        locs_vec = torch.zeros(num_epoch).to(const.device)
-        fluxes_vec = torch.zeros(num_epoch).to(const.device)
-        n_sources_vec = torch.zeros(num_epoch).to(const.device)
+        images_vec = torch.zeros(num_epoch).to(utils.device)
+        locs_vec = torch.zeros(num_epoch).to(utils.device)
+        fluxes_vec = torch.zeros(num_epoch).to(utils.device)
+        n_sources_vec = torch.zeros(num_epoch).to(utils.device)
 
         # get batch
         batchsize = 8

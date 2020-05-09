@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from ..utils import const
+from .. import utils
 from ..models import galaxy_net
 
 
@@ -105,9 +105,9 @@ class TrainGalaxy(object):
         for batch_idx, data in enumerate(self.train_loader):
 
             image = data["image"].to(
-                const.device
+                utils.device
             )  # shape: [nsamples, num_bands, slen, slen]
-            background = data["background"].to(const.device)
+            background = data["background"].to(utils.device)
 
             loss = self.vae.loss(image, background)
             avg_loss += loss.item()

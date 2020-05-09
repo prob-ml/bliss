@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from abc import ABC, abstractmethod
 
-from .utils import const
+from . import utils
 
 
 #############################
@@ -44,7 +44,7 @@ def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    locs_log_probs_all = const.eval_normal_logprob(
+    locs_log_probs_all = utils.eval_normal_logprob(
         _true_locs, _loc_mean, _loc_log_var
     ).sum(dim=3)
 
@@ -354,7 +354,7 @@ class SourceSleep(ABC):
         )
 
         true_n_stars = true_is_on_array.sum(1)
-        one_hot_encoding = const.get_one_hot_encoding_from_int(
+        one_hot_encoding = utils.get_one_hot_encoding_from_int(
             true_n_stars, n_source_log_probs.shape[1]
         )
         counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
@@ -396,7 +396,7 @@ class SourceSleep(ABC):
         ) = self._get_transformed_source_params(
             true_source_params, source_param_mean, source_param_logvar
         )
-        source_param_log_probs_all = const.eval_normal_logprob(
+        source_param_log_probs_all = utils.eval_normal_logprob(
             _true_source_params, _source_param_mean, _source_param_logvar
         ).sum(dim=3)
         return source_param_log_probs_all

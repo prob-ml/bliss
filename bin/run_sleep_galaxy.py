@@ -6,10 +6,9 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from celeste import sleep
+from celeste import sleep, utils
 from celeste.models import sourcenet_lib
 from celeste.datasets import simulated_datasets
-from celeste.utils import const
 
 
 def set_seed(seed):
@@ -20,7 +19,7 @@ def set_seed(seed):
 
 
 def load_data_params(pargs):
-    parameters_path = const.data_path.joinpath("default_galaxy_parameters.json")
+    parameters_path = utils.data_path.joinpath("default_galaxy_parameters.json")
     with open(parameters_path, "r") as fp:
         data_params = json.load(fp)
 
@@ -42,7 +41,7 @@ def get_optimizer(galaxy_encoder):
 
 
 def prepare_filepaths(results_dir):
-    out_dir = const.results_path.joinpath(results_dir)
+    out_dir = utils.results_path.joinpath(results_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
 
     state_dict_file = out_dir.joinpath("galaxy_i.dat")
@@ -86,7 +85,7 @@ def train(
 
 def main(pargs):
 
-    const.set_device(pargs.device, pargs.no_cuda)  # set global device to use.
+    utils.set_device(pargs.device, pargs.no_cuda)  # set global device to use.
 
     set_seed(pargs.seed)
     data_params = load_data_params(pargs)
@@ -106,7 +105,7 @@ def main(pargs):
         edge_padding=pargs.edge_padding,
         max_detections=pargs.max_detections,
         n_source_params=galaxy_dataset.simulator.latent_dim,
-    ).to(const.device)
+    ).to(utils.device)
 
     optimizer = get_optimizer(galaxy_encoder)
 
