@@ -8,8 +8,7 @@ from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
 
-from celeste.train import train_single_galaxy
-from celeste.utils import const
+from celeste import utils
 from celeste.datasets import galaxy_datasets
 
 all_datasets = [cls.__name__ for cls in galaxy_datasets.GalaxyDataset.__subclasses__()]
@@ -25,7 +24,7 @@ def setup():
     Make sure that the testing directory exists among other things.
     """
     testing_name = "testing1"
-    test_path = const.reports_path.joinpath(testing_name)
+    test_path = utils.reports_path.joinpath(testing_name)
     test_path.mkdir(parents=True, exist_ok=True)
     return test_path
 

@@ -7,15 +7,15 @@ import h5py
 from astropy.table import Column, Table
 import galsim
 
-from .galaxy_datasets import GalaxyDataset, params_path
-from ..utils import const
+from .galaxy_datasets import SingleGalaxyDataset, params_path
+from .. import utils
 
 
 def get_pixel_scale(survey_name):
     return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
 
 
-class CatsimGalaxies(GalaxyDataset):
+class CatsimGalaxies(SingleGalaxyDataset):
     _params_file = params_path.joinpath("catsim_single_band.json")
 
     def __init__(
@@ -85,7 +85,7 @@ class CatsimGalaxies(GalaxyDataset):
         self.background = self.renderer.background
 
         # prepare catalog table.
-        self.table = Table.read(const.data_path.joinpath(catalog_file))
+        self.table = Table.read(utils.data_path.joinpath(catalog_file))
         self.table = self.table[
             np.random.permutation(len(self.table))
         ]  # shuffle in case that order matters.
@@ -160,7 +160,7 @@ def generate_images(
     with h5py.File(file_path, "w") as images_file:
         hds_shape = (n_images, dataset.num_bands, dataset.slen, dataset.slen)
         hds = images_file.create_dataset(
-            const.image_h5_name, hds_shape, dtype=dataset.dtype
+            utils.image_h5_name, hds_shape, dtype=dataset.dtype
         )
         for i in range(n_images):
             random_idx = random.randrange(len(dataset))
@@ -168,7 +168,7 @@ def generate_images(
             image = output["image"]
             hds[i, :, :, :] = image
             hds.flush()
-        hds.attrs[const.background_h5_name] = dataset.background
+        hds.attrs[utils.background_h5_name] = dataset.background
         hds.flush()
 
 
