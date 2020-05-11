@@ -15,7 +15,10 @@ def main(args):
 
     utils.set_device(args.device, args.no_cuda)  # set global device to use.
 
-    data_params = utils.load_data_params_from_args(args)
+    data_params = utils.load_data_params_from_args(
+        "dataset_params/default_galaxy_parameters.json", args
+    )
+
     galaxy_dataset = simulated_datasets.GalaxyDataset.load_dataset_from_params(
         args.n_images, data_params
     )
@@ -30,17 +33,20 @@ def main(args):
         n_source_params=galaxy_dataset.simulator.latent_dim,
     ).to(utils.device)
 
-    train.SleepTraining(
+    train_sleep = train.SleepTraining(
         galaxy_encoder,
         galaxy_dataset,
-        args.slen,
+        data_params["slen"],
         num_bands=1,
         n_source_params=galaxy_dataset.simulator.latent_dim,
         batchsize=args.batchsize,
         eval_every=args.print_every,
-        out_name="test_train_encoder1",
+        out_name=pargs.results_dir,
         seed=pargs.seed,
     )
+
+    print("training starting...")
+    train_sleep.run(args.n_epochs)
 
 
 if __name__ == "__main__":

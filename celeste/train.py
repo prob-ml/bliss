@@ -2,6 +2,7 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 import warnings
 import time
+import shutil
 
 import numpy as np
 import torch
@@ -113,9 +114,11 @@ class TrainModel(ABC):
         out_dir = utils.results_path.joinpath(self.out_name)
         if out_dir.exists():
             warnings.warn(
-                "The output directory already exists, overwriting previous results."
+                "The output directory already exists, deleting it, and overwriting previous results."
             )
-        out_dir.mkdir(exist_ok=True, parents=True)
+            shutil.rmtree(out_dir)
+
+        out_dir.mkdir(exist_ok=False, parents=True)
 
         state_file_template = out_dir.joinpath(
             "state_{}.dat"
@@ -148,7 +151,7 @@ class TrainModel(ABC):
 
         t0 = time.time()
         batch_generator = self.get_batch_generator()
-        avg_results = None
+        avg_results = None  # average results for this epoch
 
         for batch in batch_generator:
             results = self.get_results(batch)
@@ -240,8 +243,22 @@ class SleepTraining(TrainModel):
         return loss, counter_loss, locs_loss, source_params_loss
 
     def update_avg(self, avg_results, results):
+        if avg_results is None:
+            avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss = (
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            )
+        else:
+            (
+                avg_loss,
+                avg_counter_loss,
+                avg_locs_loss,
+                avg_source_params_loss,
+            ) = avg_results
+
         loss, counter_loss, locs_loss, source_params_loss = results
-        avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss = avg_results
 
         avg_loss += loss.item() * self.batchsize / len(self.dataset)
         avg_counter_loss += counter_loss.sum().item() / (
