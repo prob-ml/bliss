@@ -133,7 +133,6 @@ class TrainModel(ABC):
 
     def run(self, n_epochs):
         for epoch in range(n_epochs):
-            t0 = time.time()
             self.step(train=True)
 
             if epoch % self.eval_every == 0:
@@ -147,18 +146,23 @@ class TrainModel(ABC):
         else:
             self.model.eval()
 
+        t0 = time.time()
         batch_generator = self.get_batch_generator()
+        avg_results = None
 
         for batch in batch_generator:
             results = self.get_results(batch)
             loss = self.get_loss(results)
+            avg_results = self.update_avg(avg_results, results)
 
             if train:
                 loss.backward()
                 self.optimizer.step()
-                self.log_train(results)
-            else:
-                self.log_eval(results)
+
+        if train:
+            self.log_train(avg_results, t0)
+        else:
+            self.log_eval(avg_results, t0)
 
     @abstractmethod
     def get_batch_generator(self):
@@ -177,13 +181,87 @@ class TrainModel(ABC):
         pass
 
     @abstractmethod
-    def log_train(self, results):
+    def log_train(self, epoch, avg_results, t0):
         pass
 
     @abstractmethod
-    def log_eval(self, results):
+    def log_eval(self, avg_results):
         # usually save state dict here.
         pass
+
+
+class SleepTraining(TrainModel):
+    def __init__(self, *args, n_source_params, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.encoder = self.model
+        self.n_source_params = n_source_params
+
+    def get_batch_generator(self):
+        assert (
+            len(self.dataset) % self.batchsize == 0
+        ), "It's easier if they are multiples of each other"
+
+        num_batches = int(len(self.dataset) / self.batchsize)
+        for i in range(num_batches):
+            yield self.dataset.get_batch(batchsize=self.batchsize)
+
+    def get_results(self, batch):
+        pass
+
+    def update_avg(self, avg_results, results):
+        loss, counter_loss, locs_loss, source_params_loss = results
+        avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss = avg_results
+
+        avg_loss += loss.item() * self.batchsize / len(self.dataset)
+        avg_counter_loss += counter_loss.sum().item() / (
+            len(self.dataset) * self.encoder.n_tiles
+        )
+        avg_source_params_loss += source_params_loss.sum().item() / (
+            len(self.dataset) * self.encoder.n_tiles
+        )
+        avg_locs_loss += locs_loss.sum().item() / (
+            len(self.dataset) * self.encoder.n_tiles
+        )
+
+        return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
+
+    def _log_train(
+        self, epoch, avg_results, t0,
+    ):
+        avg_loss, counter_loss, locs_loss, source_param_loss = avg_results
+        # print and save test results.
+        elapsed = time.time() - t0
+        out_text = (
+            f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f}; "
+            f"source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]"
+        )
+        print(out_text)
+        if self.output_file:
+            with open(self.output_file, "a") as out:
+                print(out_text, file=out)
+
+        np.savetxt(self.train_losses_file, train_losses)
+
+    def _log_eval(self, epoch, avg_results):
+        (
+            test_loss,
+            test_counter_loss,
+            test_locs_loss,
+            test_source_param_loss,
+        ) = avg_results
+        out_text = (
+            f"**** test loss: {test_loss:.3f}; counter loss: {test_counter_loss:.3f}; "
+            f"locs loss: {test_locs_loss:.3f}; source param loss: {test_source_param_loss:.3f} ****"
+        )
+        print(out_text)
+        with open(self.output_file, "a") as out:
+            print(out_text, file=out)
+
+        print(
+            "writing the encoder parameters to "
+            + self.state_file.as_posix().format(epoch)
+        )
+        torch.save(self.encoder.state_dict(), self.state_dict_file)
 
 
 # class TrainSingleGalaxy(TrainModel):

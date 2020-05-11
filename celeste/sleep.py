@@ -133,46 +133,6 @@ class SourceSleep(ABC):
             len(self.dataset) % self.batchsize == 0
         ), "For simplicity, make length of dataset divisible by batchsize."
 
-    def _log_train(
-        self,
-        epoch,
-        avg_loss,
-        counter_loss,
-        locs_loss,
-        source_param_loss,
-        train_losses,
-        t0,
-    ):
-
-        # print and save test results.
-        elapsed = time.time() - t0
-        out_text = (
-            f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f}; "
-            f"source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]"
-        )
-        print(out_text)
-        if self.output_file:
-            with open(self.output_file, "a") as out:
-                print(out_text, file=out)
-
-        np.savetxt(self.train_losses_file, train_losses)
-
-    def _log_eval(
-        self, test_loss, test_counter_loss, test_locs_loss, test_source_param_loss
-    ):
-
-        out_text = (
-            f"**** test loss: {test_loss:.3f}; counter loss: {test_counter_loss:.3f}; "
-            f"locs loss: {test_locs_loss:.3f}; source param loss: {test_source_param_loss:.3f} ****"
-        )
-        print(out_text)
-        if self.output_file:
-            with open(self.output_file, "a") as out:
-                print(out_text, file=out)
-
-        print("writing the encoder parameters to " + self.state_dict_file.as_posix())
-        torch.save(self.encoder.state_dict(), self.state_dict_file)
-
     def run_sleep(self):
         assert self.optimizer is not None and self.state_dict_file is not None
 
@@ -238,17 +198,6 @@ class SourceSleep(ABC):
             if train:
                 loss.backward()
                 self.optimizer.step()
-
-            avg_loss += loss.item() * images.shape[0] / len(self.dataset)
-            avg_counter_loss += counter_loss.sum().item() / (
-                len(self.dataset) * self.encoder.n_tiles
-            )
-            avg_source_params_loss += source_params_loss.sum().item() / (
-                len(self.dataset) * self.encoder.n_tiles
-            )
-            avg_locs_loss += locs_loss.sum().item() / (
-                len(self.dataset) * self.encoder.n_tiles
-            )
 
         return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
 
