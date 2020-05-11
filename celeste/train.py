@@ -55,7 +55,7 @@ class TrainModel(ABC):
         self.verbose = verbose
         self.eval_every = eval_every
         self.out_name = out_name
-        self.output_file, self.state_file = self.prepare_filepaths()
+        self.output_file, self.state_file_template = self.prepare_filepaths()
 
         self.model = model
         self.optimizer = self.get_optimizer()
@@ -120,25 +120,28 @@ class TrainModel(ABC):
             )
         out_dir.mkdir(exist_ok=True, parents=True)
 
-        state_dict_file = out_dir.joinpath("state_{}.dat")  # insert epoch later.
+        state_file_template = out_dir.joinpath(
+            "state_{}.dat"
+        ).as_posix()  # insert epoch later.
+
         output_file = out_dir.joinpath(
             "output.txt"
         )  # save the output that is being printed.
 
         if self.verbose:
             print(f"output file: {output_file.as_posix()}")
-            print(f"state file format: {state_dict_file.as_posix()}")
+            print(f"state file format: {state_file_template}")
 
-        return output_file, state_dict_file
+        return output_file, state_file_template
 
     def run(self, n_epochs):
         for epoch in range(n_epochs):
-            self.step(train=True)
+            self.step(epoch, train=True)
 
             if epoch % self.eval_every == 0:
-                self.step(train=False)
+                self.step(epoch, train=False)
 
-    def step(self, train=True):
+    def step(self, epoch, train=True):
         # train or evaluate in the next epoch
         if train:
             self.model.train()
@@ -160,9 +163,9 @@ class TrainModel(ABC):
                 self.optimizer.step()
 
         if train:
-            self.log_train(avg_results, t0)
+            self.log_train(epoch, avg_results, t0)
         else:
-            self.log_eval(avg_results, t0)
+            self.log_eval(epoch, avg_results)
 
     @abstractmethod
     def get_batch_generator(self):
@@ -176,6 +179,10 @@ class TrainModel(ABC):
         pass
 
     @abstractmethod
+    def update_avg(self, avg_results, results):
+        pass
+
+    @abstractmethod
     def get_loss(self, results):
         # get loss from results to pass propagate, etc.
         pass
@@ -185,7 +192,7 @@ class TrainModel(ABC):
         pass
 
     @abstractmethod
-    def log_eval(self, avg_results):
+    def log_eval(self, epoch, avg_results):
         # usually save state dict here.
         pass
 
@@ -206,7 +213,14 @@ class SleepTraining(TrainModel):
             yield self.dataset.get_batch(batchsize=self.batchsize)
 
     def get_results(self, batch):
-        pass
+        # log_fluxes or gal_params are returned as true_source_params.
+        # already in cuda.
+        true_source_params, true_locs, images = self._get_params_from_batch(batch)
+
+        # evaluate log q
+        loss, counter_loss, locs_loss, source_params_loss = self._get_inv_kl_loss(
+            images, true_locs, true_source_params
+        )[0:4]
 
     def update_avg(self, avg_results, results):
         loss, counter_loss, locs_loss, source_params_loss = results
@@ -225,7 +239,7 @@ class SleepTraining(TrainModel):
 
         return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
 
-    def _log_train(
+    def log_train(
         self, epoch, avg_results, t0,
     ):
         avg_loss, counter_loss, locs_loss, source_param_loss = avg_results
@@ -235,14 +249,11 @@ class SleepTraining(TrainModel):
             f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f}; "
             f"source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]"
         )
-        print(out_text)
-        if self.output_file:
-            with open(self.output_file, "a") as out:
-                print(out_text, file=out)
 
-        np.savetxt(self.train_losses_file, train_losses)
+        with open(self.output_file, "a") as out:
+            print(out_text, file=out)
 
-    def _log_eval(self, epoch, avg_results):
+    def log_eval(self, epoch, avg_results):
         (
             test_loss,
             test_counter_loss,
@@ -257,11 +268,9 @@ class SleepTraining(TrainModel):
         with open(self.output_file, "a") as out:
             print(out_text, file=out)
 
-        print(
-            "writing the encoder parameters to "
-            + self.state_file.as_posix().format(epoch)
-        )
-        torch.save(self.encoder.state_dict(), self.state_dict_file)
+        state_file = Path(self.state_file_template.format(epoch))
+        print("writing the encoder parameters to " + state_file.as_posix())
+        torch.save(self.encoder.state_dict(), state_file)
 
 
 # class TrainSingleGalaxy(TrainModel):
