@@ -155,10 +155,13 @@ def _get_log_probs_all_perms(
     max_detections = source_param_log_probs_all.shape[-1]
     batchsize = source_param_log_probs_all.shape[0]
 
-    locs_loss_all_perm = torch.zeros(batchsize, math.factorial(max_detections)).cuda()
+    locs_loss_all_perm = torch.zeros(batchsize, math.factorial(max_detections)).to(
+        utils.device
+    )
     source_param_loss_all_perm = torch.zeros(
         batchsize, math.factorial(max_detections)
-    ).cuda()
+    ).to(utils.device)
+
     i = 0
     for perm in permutations(range(max_detections)):
         locs_loss_all_perm[:, i] = (
