@@ -135,6 +135,7 @@ class TrainModel(ABC):
         return output_file, state_file_template
 
     def run(self, n_epochs):
+
         for epoch in range(n_epochs):
             self.step(epoch, train=True)
 
@@ -145,7 +146,6 @@ class TrainModel(ABC):
         # train or evaluate in the next epoch
         if train:
             self.model.train()
-            self.optimizer.zero_grad()
         else:
             self.model.eval()
 
@@ -154,11 +154,13 @@ class TrainModel(ABC):
         avg_results = None  # average results for this epoch
 
         for batch in batch_generator:
+
             results = self.get_results(batch)
             loss = self.get_loss(results)
             avg_results = self.update_avg(avg_results, results)
 
             if train:
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
