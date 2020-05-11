@@ -1,5 +1,7 @@
 from pathlib import Path
 from abc import ABC, abstractmethod
+import warnings
+import time
 import json
 
 
@@ -22,34 +24,24 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-def prepare_filepaths(results_dir):
-    out_dir = utils.results_path.joinpath(results_dir)
-    out_dir.mkdir(exist_ok=True, parents=True)
-
-    state_dict_file = out_dir.joinpath("galaxy_i.dat")
-    print(f"state dict file: {state_dict_file.as_posix()}")
-
-    output_file = out_dir.joinpath(
-        "output.txt"
-    )  # save the output that is being printed.
-    print(f"output file: {output_file.as_posix()}")
-
-    return state_dict_file, output_file
-
-
 class TrainModel(ABC):
     def __init__(
         self,
+        model,
         dataset,
         slen,
         num_bands,
         lr=1e-4,
         weight_decay=1e-6,
-        dloader_params=None,
         batchsize=64,
         eval_every=10,
-        out_path=None,
+        out_name=None,
+        dloader_params=None,
+        seed=42,
+        verbose=False,
     ):
+        set_seed(seed)  # seed for training.
+
         self.dataset = dataset
         self.slen = slen
         self.num_bands = num_bands
@@ -60,10 +52,12 @@ class TrainModel(ABC):
         self.weight_decay = weight_decay
 
         # evaluation and results
+        self.verbose = verbose
         self.eval_every = eval_every
-        self.out_path = None
+        self.out_name = out_name
+        self.output_file, self.state_file = self.prepare_filepaths()
 
-        self.model = self.get_model()
+        self.model = model
         self.optimizer = self.get_optimizer()
 
         # data loader
@@ -118,12 +112,81 @@ class TrainModel(ABC):
         )
         return optimizer
 
+    def prepare_filepaths(self):
+        out_dir = utils.results_path.joinpath(self.out_name)
+        if out_dir.exists():
+            warnings.warn(
+                "The output directory already exists, overwriting previous results."
+            )
+        out_dir.mkdir(exist_ok=True, parents=True)
+
+        state_dict_file = out_dir.joinpath("state_{}.dat")  # insert epoch later.
+        output_file = out_dir.joinpath(
+            "output.txt"
+        )  # save the output that is being printed.
+
+        if self.verbose:
+            print(f"output file: {output_file.as_posix()}")
+            print(f"state file format: {state_dict_file.as_posix()}")
+
+        return output_file, state_dict_file
+
+    def run(self, n_epochs):
+        for epoch in range(n_epochs):
+            t0 = time.time()
+            self.step(train=True)
+
+            if epoch % self.eval_every == 0:
+                self.step(train=False)
+
+    def step(self, train=True):
+        # train or evaluate in the next epoch
+        if train:
+            self.model.train()
+            self.optimizer.zero_grad()
+        else:
+            self.model.eval()
+
+        batch_generator = self.get_batch_generator()
+
+        for batch in batch_generator:
+            results = self.get_results(batch)
+            loss = self.get_loss(results)
+
+            if train:
+                loss.backward()
+                self.optimizer.step()
+                self.log_train(results)
+            else:
+                self.log_eval(results)
+
     @abstractmethod
-    def get_model(self):
+    def get_batch_generator(self):
+        # return an iterator over all batches in a single epoch (if using data loader, then
+        # this would be the dloader)
+        pass
+
+    @abstractmethod
+    def get_results(self, batch):
+        # get all training/evaluation results from a batch, this includes loss and maybe other useful things to log.
+        pass
+
+    @abstractmethod
+    def get_loss(self, results):
+        # get loss from results to pass propagate, etc.
+        pass
+
+    @abstractmethod
+    def log_train(self, results):
+        pass
+
+    @abstractmethod
+    def log_eval(self, results):
+        # usually save state dict here.
         pass
 
 
-class TrainSingleGalaxy(object):
+class TrainSingleGalaxy(TrainModel):
     def __init__(
         self,
         dataset,
