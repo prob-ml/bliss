@@ -41,8 +41,8 @@ def set_device(device_id=None, no_cuda=False):
     device = torch.device(device_id) if not no_cuda else torch.device("cpu")
 
 
-def load_data_params_from_args(args):
-    params_path = data_path.joinpath("default_galaxy_parameters.json")
+def load_data_params_from_args(params_file_name, args):
+    params_path = data_path.joinpath(params_file_name)
     with open(params_path, "r") as fp:
         data_params = json.load(fp)
 

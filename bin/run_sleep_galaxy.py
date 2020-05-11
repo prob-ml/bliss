@@ -2,75 +2,44 @@
 
 import argparse
 
-
-from celeste import sleep, utils
+from celeste import utils
+from celeste import train
 from celeste.models import sourcenet_lib
 from celeste.datasets import simulated_datasets
 
 
-def train(
-    galaxy_encoder,
-    dataset,
-    optimizer,
-    n_epochs,
-    batchsize,
-    print_every,
-    state_dict_file,
-    output_file,
-):
-    print("training...")
-
-    sleep_phase = sleep.GalaxySleep(
-        galaxy_encoder,
-        dataset,
-        n_epochs,
-        galaxy_encoder.n_source_params,
-        state_dict_file=state_dict_file,
-        output_file=output_file,
-        optimizer=optimizer,
-        batchsize=batchsize,
-        print_every=print_every,
+def main(args):
+    print(
+        f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}"
     )
 
-    print(f"running sleep phase for n_epochs={n_epochs}, batchsize={batchsize}")
-    sleep_phase.run_sleep()
+    utils.set_device(args.device, args.no_cuda)  # set global device to use.
 
-
-def main(pargs):
-
-    utils.set_device(pargs.device, pargs.no_cuda)  # set global device to use.
-
-    set_seed(pargs.seed)
-    data_params = load_data_params(pargs)
-
-    state_dict_file, output_file = prepare_filepaths(pargs.results_dir)
-
-    # setup dataset.
+    data_params = utils.load_data_params_from_args(args)
     galaxy_dataset = simulated_datasets.GalaxyDataset.load_dataset_from_params(
-        pargs.n_images, data_params
+        args.n_images, data_params
     )
 
     galaxy_encoder = sourcenet_lib.SourceEncoder(
         slen=data_params["slen"],
         n_bands=data_params["n_bands"],
-        ptile_slen=pargs.ptile_slen,
-        step=pargs.step,
-        edge_padding=pargs.edge_padding,
-        max_detections=pargs.max_detections,
+        ptile_slen=args.ptile_slen,
+        step=args.step,
+        edge_padding=args.edge_padding,
+        max_detections=args.max_detections,
         n_source_params=galaxy_dataset.simulator.latent_dim,
     ).to(utils.device)
 
-    optimizer = get_optimizer(galaxy_encoder)
-
-    train(
+    train.SleepTraining(
         galaxy_encoder,
         galaxy_dataset,
-        optimizer,
-        pargs.n_epochs,
-        pargs.batchsize,
-        pargs.print_every,
-        state_dict_file,
-        output_file,
+        args.slen,
+        num_bands=1,
+        n_source_params=galaxy_dataset.simulator.latent_dim,
+        batchsize=args.batchsize,
+        eval_every=args.print_every,
+        out_name="test_train_encoder1",
+        seed=pargs.seed,
     )
 
 
@@ -92,11 +61,7 @@ if __name__ == "__main__":
         metavar="DIR",
         help="Directory in results path, where output will be saved.",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Whether to overwrite --results-dir if directory already exists or throw an error",
-    )
+
     parser.add_argument(
         "--seed",
         type=int,
@@ -107,7 +72,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-cuda",
         action="store_true",
-        help="whether to using a discrete graphics card or the gpu.",
+        help="whether to using a discrete graphics card or not.",
     )
 
     # data params that can be changed, default==None means use ones in .json file.
@@ -154,5 +119,5 @@ if __name__ == "__main__":
         help="Number of max detections in each tile. ",
     )
 
-    args = parser.parse_args()
-    main(args)
+    pargs = parser.parse_args()
+    main(pargs)

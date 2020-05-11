@@ -27,8 +27,8 @@ class TrainModel(ABC):
         dataset,
         slen,
         num_bands,
-        lr=1e-4,
-        weight_decay=1e-6,
+        lr=1e-3,
+        weight_decay=1e-5,
         batchsize=64,
         eval_every=10,
         out_name=None,
@@ -36,6 +36,7 @@ class TrainModel(ABC):
         seed=42,
         verbose=False,
     ):
+        assert out_name is not None
         set_seed(seed)  # seed for training.
 
         self.dataset = dataset
@@ -195,10 +196,11 @@ class TrainModel(ABC):
 
 
 class SleepTraining(TrainModel):
-    def __init__(self, *args, n_source_params, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, n_source_params, lr=1e-3, weight_decay=1e-5, **kwargs):
+        super().__init__(*args, lr=lr, weight_decay=weight_decay, **kwargs)
         self.encoder = self.model
         self.n_source_params = n_source_params
+        assert self.n_source_params == self.encoder.n_source_params
 
     # TODO: A bit hacky, but ok for now since we will move to a combined dataset soon.
     #  also avoids adding annoying flag of galaxy or star.
@@ -258,7 +260,7 @@ class SleepTraining(TrainModel):
         self, epoch, avg_results, t0,
     ):
         avg_loss, counter_loss, locs_loss, source_param_loss = avg_results
-        # print and save test results.
+        # print and save train results.
         elapsed = time.time() - t0
         out_text = (
             f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f}; "
@@ -267,6 +269,9 @@ class SleepTraining(TrainModel):
 
         with open(self.output_file, "a") as out:
             print(out_text, file=out)
+
+        if self.verbose:
+            print(out_text)
 
     def log_eval(self, epoch, avg_results):
         (
@@ -279,15 +284,19 @@ class SleepTraining(TrainModel):
             f"**** test loss: {test_loss:.3f}; counter loss: {test_counter_loss:.3f}; "
             f"locs loss: {test_locs_loss:.3f}; source param loss: {test_source_param_loss:.3f} ****"
         )
-        print(out_text)
-        with open(self.output_file, "a") as out:
-            print(out_text, file=out)
 
         state_file = Path(self.state_file_template.format(epoch))
-        print("writing the encoder parameters to " + state_file.as_posix())
+        if self.verbose:
+            print(out_text)
+            print("writing the encoder parameters to " + state_file.as_posix())
+
+        with open(self.output_file, "a") as out:
+            print(out_text, file=out)
         torch.save(self.encoder.state_dict(), state_file)
 
 
+# lr=1e-4,
+# weight_decay=1e-6,
 # import matplotlib.pyplot as plt
 # from .models import galaxy_net
 # class TrainSingleGalaxy(TrainModel):
