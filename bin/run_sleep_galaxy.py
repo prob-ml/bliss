@@ -10,7 +10,7 @@ from celeste.datasets import simulated_datasets
 
 def main(args):
     print(
-        f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}"
+        f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}, n_images={args.n_images}"
     )
 
     utils.set_device(args.device, args.no_cuda)  # set global device to use.
@@ -88,7 +88,7 @@ if __name__ == "__main__":
 
     # training params
     parser.add_argument(
-        "--n-images", type=int, default=320, help="Number of images in epoch"
+        "--n-images", type=int, default=640, help="Number of images in epoch"
     )
     parser.add_argument(
         "--n-epochs", type=int, default=201, help="Number of epochs to run for."

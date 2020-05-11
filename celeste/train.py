@@ -35,7 +35,7 @@ class TrainModel(ABC):
         out_name=None,
         dloader_params=None,
         seed=42,
-        verbose=False,
+        verbose=True,
     ):
         assert out_name is not None
         set_seed(seed)  # seed for training.
