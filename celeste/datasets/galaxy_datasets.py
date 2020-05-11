@@ -7,12 +7,12 @@ import torch
 from torch.utils.data import Dataset
 
 from ..models import galaxy_net
-from ..utils import const
+from .. import utils
 
-params_path = const.data_path.joinpath("params_galaxy_datasets")
+params_path = utils.data_path.joinpath("params_galaxy_datasets")
 
 
-class GalaxyDataset(Dataset, ABC):
+class SingleGalaxyDataset(Dataset, ABC):
     _params_file = None
 
     def __init__(self, **kwargs):
@@ -43,7 +43,7 @@ class GalaxyDataset(Dataset, ABC):
         pass
 
 
-class DecoderSamples(GalaxyDataset):
+class DecoderSamples(SingleGalaxyDataset):
     _params_file = params_path.joinpath("decoder_samples.json")
 
     def __init__(self, slen, decoder_file, num_bands=6, latent_dim=8, num_images=1000):
@@ -61,9 +61,9 @@ class DecoderSamples(GalaxyDataset):
         assert latent_dim == 8, "Not implemented any other decoder galaxy network"
 
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands).to(
-            const.device
+            utils.device
         )
-        self.dec.load_state_dict(torch.load(const.data_path.joinpath(decoder_file)))
+        self.dec.load_state_dict(torch.load(utils.data_path.joinpath(decoder_file)))
         self.num_bands = num_bands
         self.slen = slen
         self.num_images = num_images
@@ -92,7 +92,7 @@ class DecoderSamples(GalaxyDataset):
         pass
 
 
-class H5Catalog(GalaxyDataset):
+class H5Catalog(Dataset):
     _params_file = params_path.joinpath("h5_cat.json")
 
     def __init__(self, h5_file, slen, num_bands):
@@ -104,12 +104,12 @@ class H5Catalog(GalaxyDataset):
             num_bands:
         """
         super().__init__()
-        h5_file_path = const.data_path.joinpath(h5_file)
+        h5_file_path = utils.data_path.joinpath(h5_file)
 
         self.file = h5py.File(h5_file_path, "r")
-        assert const.image_h5_name in self.file, "The dataset is not in this file"
+        assert utils.image_h5_name in self.file, "The dataset is not in this file"
 
-        self.dset = self.file[const.image_h5_name]
+        self.dset = self.file[utils.image_h5_name]
         self.num_bands = self.dset.shape[1]
         self.slen = self.dset.shape[2]
         assert (
@@ -119,8 +119,8 @@ class H5Catalog(GalaxyDataset):
             self.num_bands == num_bands
         ), "Number of bands in training and in dataset do not match."
 
-        assert const.background_h5_name in self.dset.attrs, "Background is not in file"
-        self.background = self.dset.attrs[const.background_h5_name]
+        assert utils.background_h5_name in self.dset.attrs, "Background is not in file"
+        self.background = self.dset.attrs[utils.background_h5_name]
 
     def __len__(self):
         """
@@ -138,10 +138,6 @@ class H5Catalog(GalaxyDataset):
 
     def print_props(self, prop_file=sys.stdout):
         pass
-
-    @classmethod
-    def load_dataset_from_params(cls, params_file=None):
-        raise NotImplementedError("Need to make params_file for this class.")
 
     def __exit__(self):
         self.file.close()

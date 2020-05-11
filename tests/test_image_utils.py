@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-from celeste.utils import image_utils
-from celeste.utils import const
+import celeste.utils
+from celeste import utils
 
 np.random.seed(43534)
 _ = torch.manual_seed(24534)
@@ -26,10 +26,10 @@ class TestImageBatching:
         full_images = torch.randn(5, n_bands, full_slen, full_slen)
 
         # batch image
-        images_batched = image_utils.tile_images(full_images, subimage_slen, step)
+        images_batched = celeste.utils.tile_images(full_images, subimage_slen, step)
 
         # get tile coordinates
-        tile_coords = image_utils.get_ptile_coords(
+        tile_coords = celeste.utils.get_ptile_coords(
             full_slen, full_slen, subimage_slen, step
         )
 
@@ -70,28 +70,28 @@ class TestImageBatching:
             .clamp(max=max_stars, min=min_stars)
             .type(torch.LongTensor)
         )
-        is_on_array = const.get_is_on_from_n_sources(n_stars, max_stars)
+        is_on_array = utils.get_is_on_from_n_sources(n_stars, max_stars)
 
         # draw locations
         locs = (
-            torch.rand((n_images, max_stars, 2)).to(const.device)
+            torch.rand((n_images, max_stars, 2)).to(utils.device)
             * is_on_array.unsqueeze(2).float()
         )
 
         # draw fluxes
         # fudge factor because sometimes there are ties in the fluxes; this messes up unnittest
         fudge_factor = (torch.randn((n_images, max_stars, n_bands)) * 1e-3).to(
-            const.device
+            utils.device
         )
         fluxes = (
-            const.draw_pareto_maxed(
+            utils.draw_pareto_maxed(
                 100, 1e6, alpha=0.5, shape=(n_images, max_stars, n_bands)
             )
             + fudge_factor
         ) * is_on_array.unsqueeze(2).float()
 
         # tile coordinates
-        tile_coords = image_utils.get_ptile_coords(
+        tile_coords = celeste.utils.get_ptile_coords(
             full_slen, full_slen, subimage_slen, step
         )
 
@@ -101,7 +101,7 @@ class TestImageBatching:
             tile_fluxes,
             tile_n_stars,
             tile_is_on_array,
-        ) = image_utils.get_params_in_tiles(
+        ) = celeste.utils.get_params_in_tiles(
             tile_coords, locs, fluxes, full_slen, subimage_slen
         )
 
@@ -124,7 +124,7 @@ class TestImageBatching:
         )
 
         # now convert to full parameters
-        locs2, fluxes2, n_stars2 = image_utils.get_full_params_from_tile_params(
+        locs2, fluxes2, n_stars2 = celeste.utils.get_full_params_from_tile_params(
             tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         for i in range(n_images):
@@ -169,20 +169,20 @@ class TestImageBatching:
             n_images = 100
             max_stars = 10
 
-            n_stars = torch.ones(n_images).type(torch.LongTensor).to(const.device)
-            is_on_array = const.get_is_on_from_n_sources(n_stars, max_stars)
+            n_stars = torch.ones(n_images).type(torch.LongTensor).to(utils.device)
+            is_on_array = utils.get_is_on_from_n_sources(n_stars, max_stars)
 
             # draw locations
             locs = (
-                torch.rand((n_images, max_stars, 2)).to(const.device)
+                torch.rand((n_images, max_stars, 2)).to(utils.device)
                 * is_on_array.unsqueeze(2).float()
             )
 
             # fluxes
-            fluxes = torch.rand((n_images, max_stars, n_bands)).to(const.device)
+            fluxes = torch.rand((n_images, max_stars, n_bands)).to(utils.device)
 
             # tile coordinates
-            tile_coords = image_utils.get_ptile_coords(
+            tile_coords = celeste.utils.get_ptile_coords(
                 full_slen, full_slen, subimage_slen, step
             )
 
@@ -192,7 +192,7 @@ class TestImageBatching:
                 tile_fluxes,
                 tile_n_stars,
                 tile_is_on_array,
-            ) = image_utils.get_params_in_tiles(
+            ) = celeste.utils.get_params_in_tiles(
                 tile_coords, locs, fluxes, full_slen, subimage_slen, edge_padding
             )
 
@@ -272,16 +272,16 @@ class TestImageBatching:
         max_stars = 4
 
         # tile coordinates
-        tile_coords = image_utils.get_ptile_coords(
+        tile_coords = celeste.utils.get_ptile_coords(
             full_slen, full_slen, subimage_slen, step
         )
 
         # get subimage parameters
-        tile_locs = torch.zeros(tile_coords.shape[0], max_stars, 2).to(const.device)
+        tile_locs = torch.zeros(tile_coords.shape[0], max_stars, 2).to(utils.device)
         tile_fluxes = torch.zeros(tile_coords.shape[0], max_stars, n_bands).to(
-            const.device
+            utils.device
         )
-        tile_n_stars = torch.zeros(tile_coords.shape[0]).to(const.device)
+        tile_n_stars = torch.zeros(tile_coords.shape[0]).to(utils.device)
 
         # we add a star in one random subimage
         indx = np.random.choice(tile_coords.shape[0])
@@ -293,7 +293,7 @@ class TestImageBatching:
             locs_full_image,
             fluxes_full_image,
             n_stars,
-        ) = image_utils.get_full_params_from_tile_params(
+        ) = celeste.utils.get_full_params_from_tile_params(
             tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
 
@@ -315,7 +315,7 @@ class TestImageBatching:
             locs_full_image,
             fluxes_full_image,
             n_stars,
-        ) = image_utils.get_full_params_from_tile_params(
+        ) = celeste.utils.get_full_params_from_tile_params(
             tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         test_loc = (
@@ -332,7 +332,7 @@ class TestImageBatching:
             locs_full_image,
             fluxes_full_image,
             n_stars,
-        ) = image_utils.get_full_params_from_tile_params(
+        ) = celeste.utils.get_full_params_from_tile_params(
             tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         test_loc = (

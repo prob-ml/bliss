@@ -5,7 +5,7 @@ import h5py
 import numpy as np
 import multiprocessing
 
-from celeste.utils import const
+from celeste import utils
 from celeste.datasets import galaxy_datasets
 from celeste.datasets.galaxy_datasets import generate_images
 
@@ -45,7 +45,7 @@ def merge_files(output_path):
     total_images = 0.0
     for pth in h5_files:
         with h5py.File(pth, "r") as curr_file:
-            ds = curr_file[const.image_h5_name]
+            ds = curr_file[utils.image_h5_name]
             total_images += ds.shape[0]
             shape = ds.shape
             dtype = ds.dtype
@@ -53,17 +53,17 @@ def merge_files(output_path):
     # then we copy them.
     with h5py.File(new_file_path, "w") as new_file:
         fds = new_file.create_dataset(
-            const.image_h5_name, shape=(total_images, *shape[1:]), dtype=dtype
+            utils.image_h5_name, shape=(total_images, *shape[1:]), dtype=dtype
         )
         images_copied = 0
         for pth in h5_files:
             with h5py.File(pth, "r") as curr_file:
-                ds = curr_file[const.image_h5_name]
+                ds = curr_file[utils.image_h5_name]
                 num_images = ds.shape[0]
                 fds[images_copied : images_copied + num_images, :, :, :] = ds[
                     :, :, :, :
                 ]
-                fds.attrs[const.background_h5_name] = ds.attrs[const.background_h5_name]
+                fds.attrs[utils.background_h5_name] = ds.attrs[utils.background_h5_name]
                 images_copied += num_images
 
 
@@ -71,8 +71,8 @@ def save_background(output_path):
     new_file_path = output_path.joinpath(final_image_name)
     background_path = output_path.joinpath(background_name)
     with h5py.File(new_file_path, "r") as curr_file:
-        ds = curr_file[const.image_h5_name]
-        background = ds.attrs[const.background_h5_name]
+        ds = curr_file[utils.image_h5_name]
+        background = ds.attrs[utils.background_h5_name]
         np.save(background_path, background)
 
 
@@ -81,7 +81,7 @@ def main(args):
     assert (
         args.n_processes <= multiprocessing.cpu_count()
     ), "Requesting more cpus than available."
-    output_path = const.data_path.joinpath(f"{args.out_dir}")
+    output_path = utils.data_path.joinpath(f"{args.out_dir}")
     output_path.mkdir(exist_ok=True)
 
     # load dataset only once.
