@@ -2,19 +2,15 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 import warnings
 import time
-import json
 
-
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
-
-from .models import galaxy_net
 from . import utils
+from . import sleep
 
 
 def set_seed(seed):
@@ -178,6 +174,7 @@ class TrainModel(ABC):
         # get all training/evaluation results from a batch, this includes loss and maybe other useful things to log.
         pass
 
+    # TODO: A bit clunky in my opinion, open to suggestions.
     @abstractmethod
     def update_avg(self, avg_results, results):
         pass
@@ -203,6 +200,19 @@ class SleepTraining(TrainModel):
         self.encoder = self.model
         self.n_source_params = n_source_params
 
+    # TODO: A bit hacky, but ok for now since we will move to a combined dataset soon.
+    #  also avoids adding annoying flag of galaxy or star.
+    def _get_params_from_batch(self, batch):
+        class_name = self.dataset.__class__.__name__
+        if class_name == "GalaxyDataset":
+            return batch["gal_params"], batch["locs"], batch["images"]
+
+        elif class_name == "StarDataset":
+            return batch["log_fluxes"], batch["locs"], batch["images"]
+
+        else:
+            raise ValueError("Added an incompatible dataset.")
+
     def get_batch_generator(self):
         assert (
             len(self.dataset) % self.batchsize == 0
@@ -212,15 +222,20 @@ class SleepTraining(TrainModel):
         for i in range(num_batches):
             yield self.dataset.get_batch(batchsize=self.batchsize)
 
+    def get_loss(self, results):
+        return results[0]
+
     def get_results(self, batch):
         # log_fluxes or gal_params are returned as true_source_params.
         # already in cuda.
         true_source_params, true_locs, images = self._get_params_from_batch(batch)
 
         # evaluate log q
-        loss, counter_loss, locs_loss, source_params_loss = self._get_inv_kl_loss(
-            images, true_locs, true_source_params
+        loss, counter_loss, locs_loss, source_params_loss = sleep.get_inv_kl_loss(
+            self.encoder, images, true_locs, true_source_params
         )[0:4]
+
+        return loss, counter_loss, locs_loss, source_params_loss
 
     def update_avg(self, avg_results, results):
         loss, counter_loss, locs_loss, source_params_loss = results
@@ -273,6 +288,8 @@ class SleepTraining(TrainModel):
         torch.save(self.encoder.state_dict(), state_file)
 
 
+# import matplotlib.pyplot as plt
+# from .models import galaxy_net
 # class TrainSingleGalaxy(TrainModel):
 #     def __init__(
 #         self,
