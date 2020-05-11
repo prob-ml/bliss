@@ -4,10 +4,9 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from celeste import sleep, wake, psf_transform
+from celeste import sleep, wake, psf_transform, utils
 from celeste.models import sourcenet_lib
 from celeste.datasets import simulated_datasets
-from celeste.utils import const
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -22,7 +21,7 @@ def set_seed():
 
 
 def load_data_params():
-    with open("../data/default_star_parameters.json", "r") as fp:
+    with open("../data/dataset_params/default_star_parameters.json", "r") as fp:
         data_params = json.load(fp)
     print(data_params)
     return data_params
@@ -90,7 +89,7 @@ def train(star_encoder, dataset, optimizer):
     print_every = 20
     print("training")
 
-    out_path = const.reports_path.joinpath("results_2020-04-13")
+    out_path = utils.reports_path.joinpath("results_2020-04-13")
     out_path.mkdir(exist_ok=True, parents=True)
     out_filename = out_path.joinpath("starnet_ri.dat")
 
