@@ -19,6 +19,8 @@ def main(args):
         "dataset_params/default_galaxy_parameters.json", args
     )
 
+    print("data params to be used:", data_params)
+
     galaxy_dataset = simulated_datasets.GalaxyDataset.load_dataset_from_params(
         args.n_images, data_params
     )

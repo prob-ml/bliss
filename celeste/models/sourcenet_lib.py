@@ -414,6 +414,30 @@ class SourceEncoder(nn.Module):
                 self.edge_padding,
             )
 
+            # In the loss function, it assumes that the true max number of stars on each tile equals the max number
+            # of stars specified in the init of the encoder.
+            # Sometimes the true max stars on tiles is less than the user-specified max stars,
+            # and this would throw the error in the loss function.
+            # Padding solves this issue.
+            if tile_locs.shape[1] < self.max_detections:
+                # tile_locs.shape[1] == max number of stars seen in the each tile.
+                n_pad = self.max_detections - tile_locs.shape[1]
+                pad_zeros = utils.FloatTensor(
+                    tile_locs.shape[0], n_pad, tile_locs.shape[-1]
+                ).zero_()
+                tile_locs = torch.cat((tile_locs, pad_zeros), dim=1)
+
+                pad_zeros2 = utils.FloatTensor(
+                    tile_source_params.shape[0], n_pad, tile_source_params.shape[-1]
+                ).zero_()
+                tile_source_params = torch.cat((tile_source_params, pad_zeros2), dim=1)
+
+                # tile_source_params.shape[0] == number of tiles
+                pad_zeros3 = utils.LongTensor(
+                    tile_source_params.shape[0], n_pad
+                ).zero_()
+                tile_is_on_array = torch.cat((tile_is_on_array, pad_zeros3), dim=1)
+
             if clip_max_sources:
                 tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
                 tile_locs = tile_locs[:, 0 : self.max_detections, :]
