@@ -1,58 +1,11 @@
 #!/usr/bin/env python
 
-import json
 import argparse
-import numpy as np
-import torch
-import torch.optim as optim
+
 
 from celeste import sleep, utils
 from celeste.models import sourcenet_lib
 from celeste.datasets import simulated_datasets
-
-
-def set_seed(seed):
-    np.random.seed(65765)
-    _ = torch.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
-def load_data_params(pargs):
-    parameters_path = utils.data_path.joinpath("default_galaxy_parameters.json")
-    with open(parameters_path, "r") as fp:
-        data_params = json.load(fp)
-
-    args_dict = vars(pargs)
-    for k in data_params:
-        if k in args_dict and args_dict[k] is not None:
-            data_params[k] = args_dict[k]
-    return data_params
-
-
-def get_optimizer(galaxy_encoder):
-    learning_rate = 1e-3
-    weight_decay = 1e-5
-    optimizer = optim.Adam(
-        [{"params": galaxy_encoder.parameters(), "lr": learning_rate}],
-        weight_decay=weight_decay,
-    )
-    return optimizer
-
-
-def prepare_filepaths(results_dir):
-    out_dir = utils.results_path.joinpath(results_dir)
-    out_dir.mkdir(exist_ok=True, parents=True)
-
-    state_dict_file = out_dir.joinpath("galaxy_i.dat")
-    print(f"state dict file: {state_dict_file.as_posix()}")
-
-    output_file = out_dir.joinpath(
-        "output.txt"
-    )  # save the output that is being printed.
-    print(f"output file: {output_file.as_posix()}")
-
-    return state_dict_file, output_file
 
 
 def train(

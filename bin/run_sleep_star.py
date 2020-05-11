@@ -21,7 +21,7 @@ def set_seed():
 
 
 def load_data_params():
-    with open("../data/default_star_parameters.json", "r") as fp:
+    with open("../data/dataset_params/default_star_parameters.json", "r") as fp:
         data_params = json.load(fp)
     print(data_params)
     return data_params

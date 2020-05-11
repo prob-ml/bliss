@@ -1,5 +1,7 @@
 from pathlib import Path
 from abc import ABC, abstractmethod
+import json
+
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,11 +10,120 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
+
 from .models import galaxy_net
 from . import utils
 
 
-class TrainGalaxy(object):
+def set_seed(seed):
+    np.random.seed(99999)
+    _ = torch.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def prepare_filepaths(results_dir):
+    out_dir = utils.results_path.joinpath(results_dir)
+    out_dir.mkdir(exist_ok=True, parents=True)
+
+    state_dict_file = out_dir.joinpath("galaxy_i.dat")
+    print(f"state dict file: {state_dict_file.as_posix()}")
+
+    output_file = out_dir.joinpath(
+        "output.txt"
+    )  # save the output that is being printed.
+    print(f"output file: {output_file.as_posix()}")
+
+    return state_dict_file, output_file
+
+
+class TrainModel(ABC):
+    def __init__(
+        self,
+        dataset,
+        slen,
+        num_bands,
+        lr=1e-4,
+        weight_decay=1e-6,
+        dloader_params=None,
+        batchsize=64,
+        eval_every=10,
+        out_path=None,
+    ):
+        self.dataset = dataset
+        self.slen = slen
+        self.num_bands = num_bands
+        self.batchsize = batchsize
+
+        # optimizer
+        self.lr = lr
+        self.weight_decay = weight_decay
+
+        # evaluation and results
+        self.eval_every = eval_every
+        self.out_path = None
+
+        self.model = self.get_model()
+        self.optimizer = self.get_optimizer()
+
+        # data loader
+        (
+            self.train_loader,
+            self.test_loader,
+            self.size_train,
+            self.size_test,
+        ) = self.get_dloader(dloader_params)
+
+    def get_dloader(self, dloader_params):
+        if dloader_params is not None:
+            assert "split" in dloader_params and "num_workers" in dloader_params
+
+            split = dloader_params["split"]
+            num_workers = dloader_params["num_workers"]
+            assert (
+                split > 0 or self.eval_every is None
+            ), "Split is 0 then eval_every must be None."
+
+            size_test = int(dloader_params["split"] * len(self.dataset))
+            size_train = len(self.dataset) - self.size_test
+            tt_split = int(split * len(self.dataset))
+            test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
+            train_indices = np.mgrid[tt_split : len(self.dataset)]
+
+            train_loader = DataLoader(
+                self.dataset,
+                batch_size=self.batchsize,
+                num_workers=num_workers,
+                pin_memory=True,
+                sampler=SubsetRandomSampler(train_indices),
+            )
+
+            test_loader = DataLoader(
+                self.dataset,
+                batch_size=self.batchsize,
+                num_workers=num_workers,
+                pin_memory=True,
+                sampler=SubsetRandomSampler(test_indices),
+            )
+
+            return train_loader, test_loader, size_train, size_test
+
+        else:
+            return None, None, None, None
+
+    def get_optimizer(self):
+        optimizer = Adam(
+            [{"params": self.model.parameters(), "lr": self.lr}],
+            weight_decay=self.weight_decay,
+        )
+        return optimizer
+
+    @abstractmethod
+    def get_model(self):
+        pass
+
+
+class TrainSingleGalaxy(object):
     def __init__(
         self,
         dataset,
@@ -31,50 +142,11 @@ class TrainGalaxy(object):
 
         # constants for optimization and network.
         self.latent_dim = 8
-        self.lr = 1e-4
-        self.weight_decay = 1e-6
-
-        self.slen = slen
-        self.num_bands = num_bands
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.eval_every = eval_every
-        self.num_workers = num_workers
 
         self.dataset = dataset
-        assert len(self.dataset) >= 1000, "Dataset is too small."
 
         self.vae = galaxy_net.OneCenteredGalaxy(
             slen, num_bands=num_bands, latent_dim=self.latent_dim
-        )
-
-        split = 0.1
-        self.size_test = int(split * len(self.dataset))
-        self.size_train = len(self.dataset) - self.size_test
-
-        tt_split = int(split * len(self.dataset))
-        test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
-        train_indices = np.mgrid[tt_split : len(self.dataset)]
-
-        self.optimizer = Adam(
-            self.vae.parameters(), lr=self.lr, weight_decay=self.weight_decay
-        )
-
-        if self.eval_every:
-            self.test_loader = DataLoader(
-                self.dataset,
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                pin_memory=True,
-                sampler=SubsetRandomSampler(test_indices),
-            )
-
-        self.train_loader = DataLoader(
-            self.dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            sampler=SubsetRandomSampler(train_indices),
         )
 
         self.dir_name = dir_name  # where to save results.

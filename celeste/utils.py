@@ -1,8 +1,9 @@
-import torch
-import numpy as np
+import json
 from pathlib import Path
 from os.path import dirname
 
+import numpy as np
+import torch
 from torch.distributions import categorical
 from torch import nn
 
@@ -38,6 +39,23 @@ def set_device(device_id=None, no_cuda=False):
 
     global device
     device = torch.device(device_id) if not no_cuda else torch.device("cpu")
+
+
+def load_data_params_from_args(args):
+    params_path = data_path.joinpath("default_galaxy_parameters.json")
+    with open(params_path, "r") as fp:
+        data_params = json.load(fp)
+
+    args_dict = vars(args)
+    for k in data_params:
+        if k in args_dict and args_dict[k] is not None:
+            data_params[k] = args_dict[k]
+    return data_params
+
+
+#############################
+# Tensor functions
+############################
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
