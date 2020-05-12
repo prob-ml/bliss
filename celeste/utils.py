@@ -147,10 +147,6 @@ def sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).detach().squeeze()
 
 
-def sample_normal(mean, logvar):
-    return mean + torch.exp(0.5 * logvar) * FloatTensor(*mean.shape).normal_()
-
-
 #############################
 # Log probabilities
 ############################
@@ -171,11 +167,6 @@ def eval_normal_logprob(x, mu, logvar):
         - 0.5 * (x - mu) ** 2 / (torch.exp(logvar) + 1e-5)
         - 0.5 * np.log(2 * np.pi)
     )
-
-
-def eval_lognormal_logprob(x, mu, log_var, tol=1e-8):
-    log_x = torch.log(x + tol)
-    return eval_normal_logprob(log_x, mu, log_var)
 
 
 #############################

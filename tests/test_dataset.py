@@ -1,13 +1,13 @@
 import numpy as np
 import torch
 import json
-import fitsio
+from astropy.io import fits
 
 from celeste.datasets import simulated_datasets
 from celeste import utils
 
-psf_r = fitsio.FITS(utils.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))[0].read()
-psf_i = fitsio.FITS(utils.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))[0].read()
+psf_r = fits.getdata(utils.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))
+psf_i = fits.getdata(utils.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))
 psf_og = torch.Tensor(np.array([psf_r, psf_i])).to(utils.device)  # waiting for new push
 
 param_file = utils.config_path.joinpath("dataset_params/default_star_parameters.json")
