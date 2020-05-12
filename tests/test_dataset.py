@@ -10,7 +10,7 @@ psf_r = fitsio.FITS(utils.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))[0
 psf_i = fitsio.FITS(utils.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))[0].read()
 psf_og = torch.Tensor(np.array([psf_r, psf_i])).to(utils.device)  # waiting for new push
 
-param_file = utils.data_path.joinpath("dataset_params/default_star_parameters.json")
+param_file = utils.config_path.joinpath("dataset_params/default_star_parameters.json")
 with open(param_file, "r") as fp:
     data_params = json.load(fp)
 

@@ -8,10 +8,10 @@ from torch.distributions import categorical
 from torch import nn
 
 # global paths
-src_path = Path(dirname(__file__))
 root_path = Path(dirname(dirname(__file__)))
 
 data_path = root_path.joinpath("data")
+config_path = root_path.joinpath("config")
 reports_path = root_path.joinpath("reports")
 results_path = root_path.joinpath("results")
 
@@ -42,7 +42,7 @@ def set_device(device_id=None, no_cuda=False):
 
 
 def load_data_params_from_args(params_file_name, args):
-    params_path = data_path.joinpath(params_file_name)
+    params_path = config_path.joinpath(params_file_name)
     with open(params_path, "r") as fp:
         data_params = json.load(fp)
 
