@@ -61,7 +61,7 @@ def get_dataset(
     add_noise=True,
     draw_poisson=True,
 ):
-    star_dataset = simulated_datasets.StarsDataset.load_dataset_from_params(
+    star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
         n_images,
         data_params,
         psf_og,

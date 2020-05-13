@@ -30,7 +30,7 @@ class TestSDSSDataset:
             torch.ones(psf_og.shape[0], data_params["slen"], data_params["slen"])
             * 686.0
         )
-        star_dataset = simulated_datasets.StarsDataset.load_dataset_from_params(
+        star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
             n_images=n_images,
             data_params=data_params,
             psf=psf_og,
