@@ -1,6 +1,8 @@
-import torch
 import numpy as np
 from itertools import permutations
+import torch
+from torch.distributions import Normal
+
 
 from celeste import sleep, utils
 
@@ -45,17 +47,21 @@ class TestStarEncoderObjective:
         for i in range(batchsize):
             for j in range(max_stars):
                 for k in range(max_detections):
-                    flux_loss_ij = utils.eval_normal_logprob(
-                        true_log_fluxes[i, j],
-                        log_flux_mean[i, k],
-                        log_flux_log_var[i, k],
-                    ).sum()
+                    flux_loss_ij = (
+                        Normal(
+                            log_flux_mean[i, k], log_flux_log_var[i, k].sqrt() + 1e-5
+                        )
+                        .log_prob(true_log_fluxes[i, j])
+                        .sum()
+                    )
 
                     assert flux_loss_ij == flux_log_probs_all[i, j, k]
 
-                    locs_loss_ij = utils.eval_normal_logprob(
-                        true_locs[i, j], loc_mean[i, k], loc_log_var[i, k]
-                    ).sum()
+                    locs_loss_ij = (
+                        Normal(loc_mean[i, k], loc_log_var[i, k].sqrt() + 1e-5)
+                        .log_prob(true_locs[i, j])
+                        .sum()
+                    )
 
                     assert locs_loss_ij == locs_log_probs_all[i, j, k]
 
@@ -139,17 +145,19 @@ class TestStarEncoderObjective:
             min_locs_loss = 1e16
             # min_log_fluxes_loss = 1e16
             for perm in permutations(range(_n_stars)):
-                locs_loss_perm = -utils.eval_normal_logprob(
-                    _true_locs, _loc_mean[perm, :], _loc_log_var[perm, :]
-                )
+                locs_loss_perm = -Normal(
+                    _loc_mean[perm, :], _loc_log_var[perm, :].sqrt() + 1e-5
+                ).log_prob(_true_locs)
 
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_locs_loss = locs_loss_perm.sum()
-                    min_log_fluxes_loss = -utils.eval_normal_logprob(
-                        _true_log_fluxes,
-                        _log_flux_mean[perm, :],
-                        _log_flux_log_var[perm, :],
-                    ).sum()
+                    min_log_fluxes_loss = (
+                        -Normal(
+                            _log_flux_mean[perm, :], _log_flux_log_var[perm, :] + 1e-5
+                        )
+                        .log_prob(_true_log_fluxes)
+                        .sum()
+                    )
 
             assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5, torch.abs(
                 locs_loss[i] - min_locs_loss

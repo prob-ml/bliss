@@ -147,16 +147,6 @@ def sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).detach().squeeze()
 
 
-# eval_normal_logprob
-#
-# def eval_normal_logprob(x, mu, logvar):
-#     return (
-#         -0.5 * logvar
-#         - 0.5 * (x - mu) ** 2 / (torch.exp(logvar) + 1e-5)
-#         - 0.5 * np.log(2 * np.pi)
-#     )
-
-
 #############################
 # Image utility
 ############################
