@@ -1,7 +1,5 @@
 from numpy import *
-
-# needs fitsio version 0.9.12
-import fitsio
+from astropy.io import fits
 
 
 # Reconstruct the SDSS model PSF from KL basis functions.
@@ -16,16 +14,13 @@ import fitsio
 #    if x,y are scalars: a PSF image
 #    if x,y are arrays:  a list of PSF images
 def psf_at_points(x, y, psf_fit_file):
-    # psfield = fitsio.FITS('sdss_stage_dir/2583/2/136/psField-002583-2-0136.fit')
-    # 'sdss_stage_dir/3900/6/269/psField-003900-6-0269.fit'
-    psfield = fitsio.FITS(psf_fit_file)
+    psfield = fits.open(psf_fit_file)
     hdu = psfield[3]
+    psf = hdu.data
 
     rtnscalar = isscalar(x) and isscalar(y)
     x = atleast_1d(x)
     y = atleast_1d(y)
-
-    psf = hdu.read()
 
     psfimgs = None
     (outh, outw) = (None, None)

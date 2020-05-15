@@ -1,7 +1,7 @@
-import fitsio
 import torch
 import torch.nn as nn
 from torch.nn.functional import unfold, pad
+from astropy.io import fits
 
 from .datasets import simulated_datasets
 
@@ -37,7 +37,7 @@ class PsfLocalTransform(nn.Module):
         # for renormalizing the PSF
         self.normalization = psf.view(self.n_bands, -1).sum(1)
 
-        # initializtion
+        # initialization
         init_weight = torch.zeros(self.psf_slen ** 2, self.n_bands, kernel_size ** 2)
         init_weight[:, :, 4] = init_bias
         self.weight = nn.Parameter(init_weight)
@@ -87,7 +87,7 @@ class PsfLocalTransform(nn.Module):
 # function for Power law PSF
 ########################
 def get_psf_params(psfield_fit_file, bands):
-    psfield = fitsio.FITS(psfield_fit_file)
+    psfield = fits.open(psfield_fit_file)
 
     psf_params = torch.zeros(len(bands), 6)
 

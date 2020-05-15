@@ -37,7 +37,7 @@ full_image = sdss_hubble_data.sdss_image.unsqueeze(0).to(device)
 #######################
 # simulated data parameters
 #######################
-with open("../data/dataset_params/default_star_parameters.json", "r") as fp:
+with open("../config/dataset_params/default_star_parameters.json", "r") as fp:
     data_params = json.load(fp)
 print(data_params)
 

@@ -21,7 +21,7 @@ def set_seed():
 
 
 def load_data_params():
-    with open("../data/dataset_params/default_star_parameters.json", "r") as fp:
+    with open("../config/dataset_params/default_star_parameters.json", "r") as fp:
         data_params = json.load(fp)
     print(data_params)
     return data_params
@@ -61,7 +61,7 @@ def get_dataset(
     add_noise=True,
     draw_poisson=True,
 ):
-    star_dataset = simulated_datasets.StarsDataset.load_dataset_from_params(
+    star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
         n_images,
         data_params,
         psf_og,
