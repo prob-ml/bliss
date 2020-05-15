@@ -1,6 +1,7 @@
 import math
 from itertools import permutations
 import torch
+from torch.distributions import Normal
 
 from . import utils
 

@@ -4,7 +4,7 @@ from os.path import dirname
 
 import numpy as np
 import torch
-from torch.distributions import categorical
+from torch.distributions import categorical, Normal
 from torch import nn
 
 # global paths
@@ -147,26 +147,14 @@ def sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).detach().squeeze()
 
 
-#############################
-# Log probabilities
-############################
-
-
-def _logit(x, tol=1e-8):
-    return torch.log(x + tol) - torch.log(1 - x + tol)
-
-
-def eval_logitnormal_logprob(x, mu, logvar):
-    logit_x = _logit(x)
-    return eval_normal_logprob(logit_x, mu, logvar)
-
-
-def eval_normal_logprob(x, mu, logvar):
-    return (
-        -0.5 * logvar
-        - 0.5 * (x - mu) ** 2 / (torch.exp(logvar) + 1e-5)
-        - 0.5 * np.log(2 * np.pi)
-    )
+# eval_normal_logprob
+#
+# def eval_normal_logprob(x, mu, logvar):
+#     return (
+#         -0.5 * logvar
+#         - 0.5 * (x - mu) ** 2 / (torch.exp(logvar) + 1e-5)
+#         - 0.5 * np.log(2 * np.pi)
+#     )
 
 
 #############################
