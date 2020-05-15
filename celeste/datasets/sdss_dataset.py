@@ -6,7 +6,6 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 import torch
 from torch.utils.data import Dataset
-import fitsio
 
 from astropy.io import fits
 from astropy.wcs import WCS
@@ -41,8 +40,7 @@ class SloanDigitalSkySurvey(Dataset):
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
         camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
         pf_path = camcol_path.joinpath(pf_file)
-
-        pf_fits = fitsio.read(pf_path)
+        pf_fits = fits.getdata(pf_path)
 
         fieldnums = pf_fits["FIELD"]
         fieldgains = pf_fits["GAIN"]
@@ -77,9 +75,6 @@ class SloanDigitalSkySurvey(Dataset):
         gain_list = []
 
         cache_path = field_dir.joinpath("cache.pkl")
-        # if cache_path.exists():
-        #     print('loading cached sdss image from ', cache_path)
-        #     return pickle.load(cache_path.open("rb"))
 
         for b, bl in enumerate("ugriz"):
             if not (b in self.bands):
@@ -90,7 +85,7 @@ class SloanDigitalSkySurvey(Dataset):
             )
             frame_path = str(field_dir.joinpath(frame_name))
             print("loading sdss image from", frame_path)
-            frame = fitsio.FITS(frame_path)
+            frame = fits.open(frame_path)
 
             calibration = frame[1].read()
             nelec_per_nmgy = gain[b] / calibration

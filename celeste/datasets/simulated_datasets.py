@@ -577,9 +577,9 @@ class StarSimulator(SourceSimulator):
         return n_sources, locs, fluxes
 
 
-class StarsDataset(SourceDataset):
+class StarDataset(SourceDataset):
     def __init__(self, n_images, simulator_args, simulator_kwargs):
-        super(StarsDataset, self).__init__(n_images, simulator_args, simulator_kwargs)
+        super(StarDataset, self).__init__(n_images, simulator_args, simulator_kwargs)
         self.simulator = StarSimulator(*self.simulator_args, **self.simulator_kwargs)
 
         self.slen = self.simulator.slen
