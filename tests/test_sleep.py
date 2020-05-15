@@ -50,7 +50,7 @@ class TestStarEncoderObjective:
                     flux_loss_ij = (
                         Normal(
                             log_flux_mean[i, k],
-                            torch.exp(log_flux_log_var[i, k]).sqrt() + 1e-5,
+                            (torch.exp(log_flux_log_var[i, k]) + 1e-5).sqrt(),
                         )
                         .log_prob(true_log_fluxes[i, j])
                         .sum()
@@ -60,7 +60,7 @@ class TestStarEncoderObjective:
 
                     locs_loss_ij = (
                         Normal(
-                            loc_mean[i, k], torch.exp(loc_log_var[i, k]).sqrt() + 1e-5
+                            loc_mean[i, k], (torch.exp(loc_log_var[i, k]) + 1e-5).sqrt()
                         )
                         .log_prob(true_locs[i, j])
                         .sum()
@@ -149,7 +149,7 @@ class TestStarEncoderObjective:
             # min_log_fluxes_loss = 1e16
             for perm in permutations(range(_n_stars)):
                 locs_loss_perm = -Normal(
-                    _loc_mean[perm, :], torch.exp(_loc_log_var[perm, :]).sqrt() + 1e-5
+                    _loc_mean[perm, :], (torch.exp(_loc_log_var[perm, :]) + 1e-5).sqrt()
                 ).log_prob(_true_locs)
 
                 if locs_loss_perm.sum() < min_locs_loss:
@@ -157,7 +157,7 @@ class TestStarEncoderObjective:
                     min_log_fluxes_loss = (
                         -Normal(
                             _log_flux_mean[perm, :],
-                            torch.exp(_log_flux_log_var[perm, :]).sqrt() + 1e-5,
+                            (torch.exp(_log_flux_log_var[perm, :]) + 1e-5).sqrt(),
                         )
                         .log_prob(_true_log_fluxes)
                         .sum()
