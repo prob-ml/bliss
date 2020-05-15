@@ -117,8 +117,8 @@ def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    locs_log_probs_all = Normal(_loc_mean, _loc_log_var.sqrt() + 1e-5).log_prob(
-        _true_locs
+    locs_log_probs_all = (
+        Normal(_loc_mean, _loc_log_var.sqrt() + 1e-5).log_prob(_true_locs).sum(dim=3)
     )
     return locs_log_probs_all
 
@@ -134,9 +134,11 @@ def _get_source_params_logprob_all_combs(
         true_source_params, source_param_mean, source_param_logvar
     )
 
-    source_param_log_probs_all = Normal(
-        _source_param_mean, _source_param_logvar.sqrt() + 1e-5
-    ).log_prob(_true_source_params)
+    source_param_log_probs_all = (
+        Normal(_source_param_mean, _source_param_logvar.sqrt() + 1e-5)
+        .log_prob(_true_source_params)
+        .sum(dim=3)
+    )
     return source_param_log_probs_all
 
 
