@@ -4,7 +4,7 @@ from os.path import dirname
 
 import numpy as np
 import torch
-from torch.distributions import categorical, Normal
+from torch.distributions import categorical
 from torch import nn
 
 # global paths
