@@ -77,7 +77,7 @@ class TrainModel(ABC):
             ), "Split is 0 then eval_every must be None."
 
             size_test = int(dloader_params["split"] * len(self.dataset))
-            size_train = len(self.dataset) - self.size_test
+            size_train = len(self.dataset) - size_test
             tt_split = int(split * len(self.dataset))
             test_indices = np.mgrid[:tt_split]  # 10% of data only is for test.
             train_indices = np.mgrid[tt_split : len(self.dataset)]

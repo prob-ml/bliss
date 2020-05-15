@@ -1,6 +1,7 @@
 import math
 from itertools import permutations
 import torch
+from torch.distributions import Normal
 
 from . import utils
 
@@ -116,10 +117,11 @@ def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
 
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
-    locs_log_probs_all = utils.eval_normal_logprob(
-        _true_locs, _loc_mean, _loc_log_var
-    ).sum(dim=3)
-
+    locs_log_probs_all = (
+        Normal(_loc_mean, (torch.exp(_loc_log_var) + 1e-5).sqrt())
+        .log_prob(_true_locs)
+        .sum(dim=3)
+    )
     return locs_log_probs_all
 
 
@@ -133,9 +135,12 @@ def _get_source_params_logprob_all_combs(
     ) = _get_transformed_source_params(
         true_source_params, source_param_mean, source_param_logvar
     )
-    source_param_log_probs_all = utils.eval_normal_logprob(
-        _true_source_params, _source_param_mean, _source_param_logvar
-    ).sum(dim=3)
+
+    source_param_log_probs_all = (
+        Normal(_source_param_mean, (torch.exp(_source_param_logvar) + 1e-5).sqrt())
+        .log_prob(_true_source_params)
+        .sum(dim=3)
+    )
     return source_param_log_probs_all
 
 

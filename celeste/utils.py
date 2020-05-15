@@ -8,10 +8,10 @@ from torch.distributions import categorical
 from torch import nn
 
 # global paths
-src_path = Path(dirname(__file__))
 root_path = Path(dirname(dirname(__file__)))
 
 data_path = root_path.joinpath("data")
+config_path = root_path.joinpath("config")
 reports_path = root_path.joinpath("reports")
 results_path = root_path.joinpath("results")
 
@@ -42,7 +42,7 @@ def set_device(device_id=None, no_cuda=False):
 
 
 def load_data_params_from_args(params_file_name, args):
-    params_path = data_path.joinpath(params_file_name)
+    params_path = config_path.joinpath(params_file_name)
     with open(params_path, "r") as fp:
         data_params = json.load(fp)
 
@@ -145,37 +145,6 @@ def sample_class_weights(class_weights, n_samples=1):
     assert not torch.any(torch.isnan(class_weights))
     cat_rv = categorical.Categorical(probs=class_weights)
     return cat_rv.sample((n_samples,)).detach().squeeze()
-
-
-def sample_normal(mean, logvar):
-    return mean + torch.exp(0.5 * logvar) * FloatTensor(*mean.shape).normal_()
-
-
-#############################
-# Log probabilities
-############################
-
-
-def _logit(x, tol=1e-8):
-    return torch.log(x + tol) - torch.log(1 - x + tol)
-
-
-def eval_logitnormal_logprob(x, mu, logvar):
-    logit_x = _logit(x)
-    return eval_normal_logprob(logit_x, mu, logvar)
-
-
-def eval_normal_logprob(x, mu, logvar):
-    return (
-        -0.5 * logvar
-        - 0.5 * (x - mu) ** 2 / (torch.exp(logvar) + 1e-5)
-        - 0.5 * np.log(2 * np.pi)
-    )
-
-
-def eval_lognormal_logprob(x, mu, log_var, tol=1e-8):
-    log_x = torch.log(x + tol)
-    return eval_normal_logprob(log_x, mu, log_var)
 
 
 #############################

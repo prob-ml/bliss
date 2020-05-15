@@ -1,16 +1,16 @@
 import numpy as np
 import torch
 import json
-import fitsio
+from astropy.io import fits
 
 from celeste.datasets import simulated_datasets
 from celeste import utils
 
-psf_r = fitsio.FITS(utils.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))[0].read()
-psf_i = fitsio.FITS(utils.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))[0].read()
+psf_r = fits.getdata(utils.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))
+psf_i = fits.getdata(utils.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))
 psf_og = torch.Tensor(np.array([psf_r, psf_i])).to(utils.device)  # waiting for new push
 
-param_file = utils.data_path.joinpath("dataset_params/default_star_parameters.json")
+param_file = utils.config_path.joinpath("dataset_params/default_star_parameters.json")
 with open(param_file, "r") as fp:
     data_params = json.load(fp)
 
@@ -30,7 +30,7 @@ class TestSDSSDataset:
             torch.ones(psf_og.shape[0], data_params["slen"], data_params["slen"])
             * 686.0
         )
-        star_dataset = simulated_datasets.StarsDataset.load_dataset_from_params(
+        star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
             n_images=n_images,
             data_params=data_params,
             psf=psf_og,
