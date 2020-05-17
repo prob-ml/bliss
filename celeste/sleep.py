@@ -138,17 +138,17 @@ def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_logvar):
 def _get_transformed_source_params(
     true_source_params, source_param_mean, source_param_logvar
 ):
-    n_tiles = true_source_params.shape[0]
+    batchsize = true_source_params.shape[0]
 
     # -1 in each view = n_source_params
     _true_source_params = true_source_params.view(
-        n_tiles, true_source_params.shape[1], 1, -1
+        batchsize, true_source_params.shape[1], 1, -1
     )
     _source_param_mean = source_param_mean.view(
-        n_tiles, 1, source_param_mean.shape[1], -1
+        batchsize, 1, source_param_mean.shape[1], -1
     )
     _source_param_logvar = source_param_logvar.view(
-        n_tiles, 1, source_param_mean.shape[1], -1
+        batchsize, 1, source_param_mean.shape[1], -1
     )
 
     return _true_source_params, _source_param_mean, _source_param_logvar
