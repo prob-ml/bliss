@@ -437,8 +437,13 @@ class SourceEncoder(nn.Module):
         )
         self._get_hidden_indices()
 
+<<<<<<< HEAD
         self.enc_final = nn.Linear(self.enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim=1)
+=======
+        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+        self.log_softmax = nn.LogSoftmax(dim=1)  # for categorical log probabilities.
+>>>>>>> small clarifications
 
     ############################
     # The layers of our neural network
@@ -629,16 +634,18 @@ class SourceEncoder(nn.Module):
         )
 
         for n_detections in range(1, self.max_detections + 1):
+
+            # index corresponding to the one we left off from the last iteration.
             indx0 = (
                 int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_source)
                 + (n_detections - 1)
                 + 1
             )
 
+            # start and end indices for locations
             indx1 = (2 * n_detections) + indx0
             indx2 = (2 * n_detections) * 2 + indx0
 
-            # indices for locations
             self.locs_mean_indx_mat[
                 n_detections, 0 : (2 * n_detections)
             ] = torch.arange(indx0, indx1)
@@ -646,10 +653,10 @@ class SourceEncoder(nn.Module):
                 indx1, indx2
             )
 
+            # indices for source params.
             indx3 = indx2 + (n_detections * self.n_source_params)
             indx4 = indx3 + (n_detections * self.n_source_params)
 
-            # indices for source params.
             self.source_params_mean_indx_mat[
                 n_detections, 0 : (n_detections * self.n_source_params)
             ] = torch.arange(indx2, indx3)
@@ -658,6 +665,7 @@ class SourceEncoder(nn.Module):
                 n_detections, 0 : (n_detections * self.n_source_params)
             ] = torch.arange(indx3, indx4)
 
+            # the categorical prob for this n_detection will go after the rest.
             self.prob_indx[n_detections] = indx4
 
     ######################
