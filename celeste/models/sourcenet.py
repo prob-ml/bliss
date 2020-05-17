@@ -590,9 +590,8 @@ class SourceEncoder(nn.Module):
 
     def _get_hidden_indices(self):
         """
-        Get indices necessary to maintain the huge triangular matrix array.
+        Get indices necessary to maintain huge matrix h.
         Returns:
-
         """
 
         self.locs_mean_indx_mat = torch.full(
