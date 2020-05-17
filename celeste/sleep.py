@@ -109,12 +109,12 @@ def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
     return torch.sum(-n_source_log_probs * one_hot_encoding, dim=1)
 
 
-def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
+def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_logvar):
     batchsize = true_locs.shape[0]
 
     # get losses for locations
     _loc_mean = loc_mean.view(batchsize, 1, loc_mean.shape[1], 2)
-    _loc_log_var = loc_log_var.view(batchsize, 1, loc_mean.shape[1], 2)
+    _loc_logvar = loc_logvar.view(batchsize, 1, loc_mean.shape[1], 2)
     _true_locs = true_locs.view(batchsize, true_locs.shape[1], 1, 2)
 
     # this will return a large error if star is off
@@ -123,7 +123,7 @@ def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
     # this is batchsize x (max_stars x max_detections)
     # the log prob for each observed location x mean
     locs_log_probs_all = (
-        Normal(_loc_mean, (torch.exp(_loc_log_var) + 1e-5).sqrt())
+        Normal(_loc_mean, (torch.exp(_loc_logvar) + 1e-5).sqrt())
         .log_prob(_true_locs)
         .sum(dim=3)
     )

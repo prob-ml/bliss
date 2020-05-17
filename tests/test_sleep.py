@@ -33,12 +33,12 @@ class TestStarEncoderObjective:
 
         # get loss for locations
         locs_log_probs_all = sleep._get_locs_logprob_all_combs(
-            true_locs, loc_mean, loc_log_var
+            true_locs, loc_mean, loc_logvar
         )
 
         # get loss for fluxes
         flux_log_probs_all = sleep._get_source_params_logprob_all_combs(
-            true_log_fluxes, log_flux_mean, log_flux_log_var
+            true_log_fluxes, log_flux_mean, log_flux_logvar
         )
 
         # for my sanity
@@ -51,7 +51,7 @@ class TestStarEncoderObjective:
                     flux_loss_ij = (
                         Normal(
                             log_flux_mean[i, k],
-                            (torch.exp(log_flux_log_var[i, k]) + 1e-5).sqrt(),
+                            (torch.exp(log_flux_logvar[i, k]) + 1e-5).sqrt(),
                         )
                         .log_prob(true_log_fluxes[i, j])
                         .sum()
@@ -61,7 +61,7 @@ class TestStarEncoderObjective:
 
                     locs_loss_ij = (
                         Normal(
-                            loc_mean[i, k], (torch.exp(loc_log_var[i, k]) + 1e-5).sqrt()
+                            loc_mean[i, k], (torch.exp(loc_logvar[i, k]) + 1e-5).sqrt()
                         )
                         .log_prob(true_locs[i, j])
                         .sum()
@@ -111,12 +111,12 @@ class TestStarEncoderObjective:
 
         # get loss for locations
         locs_log_probs_all = sleep._get_locs_logprob_all_combs(
-            true_locs, loc_mean, loc_log_var
+            true_locs, loc_mean, loc_logvar
         )
 
         # get loss for fluxes
         flux_log_probs_all = sleep._get_source_params_logprob_all_combs(
-            true_log_fluxes, log_flux_mean, log_flux_log_var
+            true_log_fluxes, log_flux_mean, log_flux_logvar
         )
 
         locs_loss, fluxes_loss, _ = sleep._get_min_perm_loss(
@@ -142,17 +142,17 @@ class TestStarEncoderObjective:
 
             _true_locs = true_locs[i, 0:_n_stars, :]
             _loc_mean = loc_mean[i, 0:_n_stars, :]
-            _loc_log_var = loc_log_var[i, 0:_n_stars, :]
+            _loc_logvar = loc_logvar[i, 0:_n_stars, :]
 
             _true_log_fluxes = true_log_fluxes[i, 0:_n_stars, :]
             _log_flux_mean = log_flux_mean[i, 0:_n_stars, :]
-            _log_flux_log_var = log_flux_log_var[i, 0:_n_stars, :]
+            _log_flux_logvar = log_flux_logvar[i, 0:_n_stars, :]
 
             min_locs_loss = 1e16
             # min_log_fluxes_loss = 1e16
             for perm in permutations(range(_n_stars)):
                 locs_loss_perm = -Normal(
-                    _loc_mean[perm, :], (torch.exp(_loc_log_var[perm, :]) + 1e-5).sqrt()
+                    _loc_mean[perm, :], (torch.exp(_loc_logvar[perm, :]) + 1e-5).sqrt()
                 ).log_prob(_true_locs)
 
                 if locs_loss_perm.sum() < min_locs_loss:
@@ -160,7 +160,7 @@ class TestStarEncoderObjective:
                     min_log_fluxes_loss = (
                         -Normal(
                             _log_flux_mean[perm, :],
-                            (torch.exp(_log_flux_log_var[perm, :]) + 1e-5).sqrt(),
+                            (torch.exp(_log_flux_logvar[perm, :]) + 1e-5).sqrt(),
                         )
                         .log_prob(_true_log_fluxes)
                         .sum()

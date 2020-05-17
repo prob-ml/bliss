@@ -493,7 +493,7 @@ class SourceEncoder(nn.Module):
             h, n_sources=n_sources.clamp(max=self.max_detections)
         )
 
-        # in the case of stars these are log_flux_mean, and log_flux_log_var.
+        # in the case of stars these are log_flux_mean, and log_flux_logvar.
         # loc_mean has shape = (n_ptiles x max_detections x len(x,y))
         return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
 
