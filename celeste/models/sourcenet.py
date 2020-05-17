@@ -418,11 +418,15 @@ class SourceEncoder(nn.Module):
 
         # there are self.max_detections * (self.max_detections + 1)
         #    total possible detections, and each detection has
-        #    4 + 2*n parameters (2 means and 2 variances for each loc and for n source_param's
-        #    (flux per band or otherwise)
+        #    4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for n source_param's
+        #    (flux per band or galaxy params.) + 1 for the Bernoulli variable of whether the source is a star or galaxy.
         self.n_source_params = n_source_params
         self.n_params_per_source = 4 + 2 * self.n_source_params
 
+        # The first term correspond to: for each param, for each possible number of detection d,
+        # there are d ways of assigning that param.
+        # The second and third term accounts for categorical probability over # of objects.
+        # These dimensions correspond to the probabilities in ONE tile.
         self.dim_out_all = int(
             0.5
             * self.max_detections
@@ -532,7 +536,6 @@ class SourceEncoder(nn.Module):
         assert h.shape[0] == n_sources.shape[1]
 
         n_samples = n_sources.shape[0]
-
         batchsize = h.size(0)
         _h = torch.cat((h, torch.zeros(batchsize, 1, device=device)), dim=1)
 
