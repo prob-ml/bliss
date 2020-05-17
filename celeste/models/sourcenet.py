@@ -503,15 +503,37 @@ class SourceEncoder(nn.Module):
 
         * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return probability of
         having 0,1,2 stars.
-
-        Args:
-            h:
-
-        Returns:
         """
-
         free_probs = h[:, self.prob_indx]
         return self.log_softmax(free_probs)
+
+    def _get_bernoulli_param_for_n_sources(self, h, n_sources):
+        if len(n_sources.shape) == 1:
+            n_sources = n_sources.unsqueeze(0)
+            squeeze_output = True
+        else:
+            squeeze_output = False
+
+        n_samples = n_sources.shape[0]  # batchsize.
+        batchsize = h.size(0)  # total number of ptiles.
+
+        # append null column
+        _h = torch.cat((h, torch.zeros(batchsize, 1).to(utils.device)), dim=1)
+
+        bernoulli_logprob = torch.gather(
+            _h,
+            1,
+            self.star_or_galaxy_indx[n_sources.transpose(0, 1)].reshape(batchsize, -1),
+        )
+
+        bernoulli_logprob = bernoulli_logprob.reshape(
+            batchsize, n_samples, self.max_detections, 1
+        ).transpose(0, 1)
+
+        if squeeze_output:
+            return torch.sigmoid(bernoulli_logprob).squeeze(0)
+        else:
+            return torch.sigmoid(bernoulli_logprob)
 
     def _get_var_params_for_n_sources(self, h, n_sources):
         """
@@ -519,7 +541,7 @@ class SourceEncoder(nn.Module):
         for n_sources.
         Args:
             h: Huge triangular array with variational parameters.
-            n_sources:
+            n_sources: batchsize x n_tiles
 
         Returns:
 
@@ -532,8 +554,8 @@ class SourceEncoder(nn.Module):
             squeeze_output = False
 
         # this class takes in an array of n_stars, n_samples x batchsize
-        assert h.shape[1] == self.dim_out_all
         assert h.shape[0] == n_sources.shape[1]
+        assert h.shape[1] == self.dim_out_all
 
         n_samples = n_sources.shape[0]
         batchsize = h.size(0)
@@ -822,8 +844,9 @@ class SourceEncoder(nn.Module):
 
         """
 
-        # our sampling only works for one image at a time at the moment ...
-        assert image.shape[0] == 1
+        assert (
+            image.shape[0] == 1
+        ), "Sampling only works for one image at a time for now..."
 
         image_ptiles = self.get_image_ptiles(image, locs=None, source_params=None)[0]
 
