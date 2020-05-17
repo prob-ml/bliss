@@ -421,7 +421,7 @@ class SourceEncoder(nn.Module):
         #    4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for n source_param's
         #    (flux per band or galaxy params.) + 1 for the Bernoulli variable of whether the source is a star or galaxy.
         self.n_source_params = n_source_params
-        self.n_params_per_source = 4 + 2 * self.n_source_params
+        self.n_params_per_source = 4 + 2 * self.n_source_params + 1
 
         # The first term correspond to: for each param, for each possible number of detection d,
         # there are d ways of assigning that param.
@@ -437,13 +437,8 @@ class SourceEncoder(nn.Module):
         )
         self._get_hidden_indices()
 
-<<<<<<< HEAD
         self.enc_final = nn.Linear(self.enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim=1)
-=======
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
-        self.log_softmax = nn.LogSoftmax(dim=1)  # for categorical log probabilities.
->>>>>>> small clarifications
 
     ############################
     # The layers of our neural network
@@ -665,8 +660,14 @@ class SourceEncoder(nn.Module):
                 n_detections, 0 : (n_detections * self.n_source_params)
             ] = torch.arange(indx3, indx4)
 
+            # indices for Bernoulli deciding star or galaxy.
+            indx5 = indx4 + (n_detections * 1)
+            self.star_or_galaxy_indx[
+                n_detections, 0 : (n_detections * 1)
+            ] = torch.arange(indx4, indx5)
+
             # the categorical prob for this n_detection will go after the rest.
-            self.prob_indx[n_detections] = indx4
+            self.prob_indx[n_detections] = indx5
 
     ######################
     # Modules for tiling images and parameters
