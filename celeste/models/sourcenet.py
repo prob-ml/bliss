@@ -578,24 +578,28 @@ class SourceEncoder(nn.Module):
         else:
             squeeze_output = False
 
+        # this class takes in an array of n_stars, n_samples x batchsize
+        assert h.shape[1] == self.dim_out_all
+        assert h.shape[0] == n_sources.shape[1]
+
         batchsize = n_sources.shape[0]
         n_ptiles = h.size(0)
 
         # append null column
-        _h = torch.cat((h, torch.zeros(batchsize, 1).to(utils.device)), dim=1)
+        _h = torch.cat((h, torch.zeros(n_ptiles, 1).to(utils.device)), dim=1)
 
-        param_logprob = torch.gather(
+        var_param = torch.gather(
             _h, 1, indx_matrix[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
         )
 
-        param_logprob = param_logprob.reshape(
+        var_param = var_param.reshape(
             n_ptiles, batchsize, self.max_detections, dim_per_source
         ).transpose(0, 1)
 
         if squeeze_output:
-            return param_logprob.squeeze(0)
+            return var_param.squeeze(0)
         else:
-            return param_logprob
+            return var_param
 
     def _get_bernoulli_param_for_n_sources(self, h, n_sources):
         return torch.sigmoid(
@@ -639,6 +643,7 @@ class SourceEncoder(nn.Module):
 >>>>>>> finished refactoring that part that indices into h to obtain all the var_params and log probs
         )
         loc_logvar = self._indx_h_for_n_sources(h, n_sources, self.locs_var_indx_mat, 2)
+
         source_param_mean = self._indx_h_for_n_sources(
             h, n_sources, self.source_params_mean_indx_mat, self.n_source_params
         )
