@@ -440,6 +440,88 @@ class SourceEncoder(nn.Module):
         self.enc_final = nn.Linear(self.enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim=1)
 
+    def _get_hidden_indices(self):
+        """
+        Setup the indices corresponding to entries in h, these are just cached since they are the same for all h.
+        Returns:
+        """
+
+        self.locs_mean_indx_mat = torch.full(
+            (self.max_detections + 1, 2 * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+        ).to(utils.device)
+
+        self.locs_var_indx_mat = torch.full(
+            (self.max_detections + 1, 2 * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+        ).to(utils.device)
+
+        self.source_params_mean_indx_mat = torch.full(
+            (self.max_detections + 1, self.n_source_params * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+        ).to(utils.device)
+
+        self.source_params_var_indx_mat = torch.full(
+            (self.max_detections + 1, self.n_source_params * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+        ).to(utils.device)
+
+        # the unnecessary `1` corresponds to there being only 1 parameter for the Bernoulli.
+        self.star_or_galaxy_indx = torch.full(
+            (self.max_detections + 1, 1 * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+        ).to(utils.device)
+
+        self.prob_indx = torch.zeros(self.max_detections + 1, dtype=torch.long).to(
+            utils.device
+        )
+
+        for n_detections in range(1, self.max_detections + 1):
+
+            # index corresponding to the one we left off from the last iteration.
+            indx0 = (
+                int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_source)
+                + (n_detections - 1)
+                + 1
+            )
+
+            # start and end indices for locations
+            indx1 = (2 * n_detections) + indx0
+            indx2 = (2 * n_detections) * 2 + indx0
+
+            self.locs_mean_indx_mat[
+                n_detections, 0 : (2 * n_detections)
+            ] = torch.arange(indx0, indx1)
+            self.locs_var_indx_mat[n_detections, 0 : (2 * n_detections)] = torch.arange(
+                indx1, indx2
+            )
+
+            # indices for source params.
+            indx3 = indx2 + (n_detections * self.n_source_params)
+            indx4 = indx3 + (n_detections * self.n_source_params)
+
+            self.source_params_mean_indx_mat[
+                n_detections, 0 : (n_detections * self.n_source_params)
+            ] = torch.arange(indx2, indx3)
+
+            self.source_params_var_indx_mat[
+                n_detections, 0 : (n_detections * self.n_source_params)
+            ] = torch.arange(indx3, indx4)
+
+            # indices for Bernoulli deciding star or galaxy.
+            indx5 = indx4 + (n_detections * 1)
+            self.star_or_galaxy_indx[
+                n_detections, 0 : (n_detections * 1)
+            ] = torch.arange(indx4, indx5)
+
+            # the categorical prob for this n_detection will go after the rest.
+            self.prob_indx[n_detections] = indx5
+
     ############################
     # The layers of our neural network
     ############################
@@ -472,31 +554,6 @@ class SourceEncoder(nn.Module):
     ######################
     # Forward modules
     ######################
-    def forward(self, image_ptiles, n_sources=None):
-        # pass through neural network, h is the array fo variational distribution parameters.
-        # h has shape:
-        h = self._get_var_params_all(image_ptiles)
-
-        # get probability of n_sources
-        log_probs_n = self._get_logprob_n_from_var_params(h)
-
-        if n_sources is None:
-            n_sources = torch.argmax(log_probs_n, dim=1)
-
-        # extract parameters
-        (
-            loc_mean,
-            loc_logvar,
-            source_param_mean,
-            source_param_logvar,
-        ) = self._get_var_params_for_n_sources(
-            h, n_sources=n_sources.clamp(max=self.max_detections)
-        )
-
-        # in the case of stars these are log_flux_mean, and log_flux_logvar.
-        # loc_mean has shape = (n_ptiles x max_detections x len(x,y))
-        return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
-
     def _get_logprob_n_from_var_params(self, h):
         """
         Obtain log probability of number of n_sources.
@@ -507,33 +564,43 @@ class SourceEncoder(nn.Module):
         free_probs = h[:, self.prob_indx]
         return self.log_softmax(free_probs)
 
-    def _get_bernoulli_param_for_n_sources(self, h, n_sources):
+    def _indx_h_for_n_sources(self, h, n_sources, indx_matrix, dim_per_source):
+        # dim_per_source is the dimension of the parameter you are indexing h for.
+        # e.g. for locs, dim_per_source = 2, for galaxy params we usually have dim_per_source = 8.
+
+        assert (
+            dim_per_source == indx_matrix.size(1) / self.max_detections
+        ), "Inconsistent dim_per_source was passed in."
+
         if len(n_sources.shape) == 1:
             n_sources = n_sources.unsqueeze(0)
             squeeze_output = True
         else:
             squeeze_output = False
 
-        n_samples = n_sources.shape[0]  # batchsize.
-        batchsize = h.size(0)  # total number of ptiles.
+        batchsize = n_sources.shape[0]
+        n_ptiles = h.size(0)
 
         # append null column
         _h = torch.cat((h, torch.zeros(batchsize, 1).to(utils.device)), dim=1)
 
-        bernoulli_logprob = torch.gather(
-            _h,
-            1,
-            self.star_or_galaxy_indx[n_sources.transpose(0, 1)].reshape(batchsize, -1),
+        param_logprob = torch.gather(
+            _h, 1, indx_matrix[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
         )
 
-        bernoulli_logprob = bernoulli_logprob.reshape(
-            batchsize, n_samples, self.max_detections, 1
+        param_logprob = param_logprob.reshape(
+            n_ptiles, batchsize, self.max_detections, dim_per_source
         ).transpose(0, 1)
 
         if squeeze_output:
-            return torch.sigmoid(bernoulli_logprob).squeeze(0)
+            return param_logprob.squeeze(0)
         else:
-            return torch.sigmoid(bernoulli_logprob)
+            return param_logprob
+
+    def _get_bernoulli_param_for_n_sources(self, h, n_sources):
+        return torch.sigmoid(
+            self._indx_h_for_n_sources(h, n_sources, self.star_or_galaxy_indx, 1)
+        )
 
     def _get_var_params_for_n_sources(self, h, n_sources):
         """
@@ -546,6 +613,7 @@ class SourceEncoder(nn.Module):
         Returns:
 
         """
+<<<<<<< HEAD
 
         if len(n_sources.shape) == 1:
             n_sources = n_sources.unsqueeze(0)
@@ -565,44 +633,21 @@ class SourceEncoder(nn.Module):
             _h,
             1,
             self.locs_mean_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1),
+=======
+        loc_logit_mean = self._indx_h_for_n_sources(
+            h, n_sources, self.locs_mean_indx_mat, 2
+>>>>>>> finished refactoring that part that indices into h to obtain all the var_params and log probs
         )
-        loc_logvar = torch.gather(
-            _h,
-            1,
-            self.locs_var_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1),
+        loc_logvar = self._indx_h_for_n_sources(h, n_sources, self.locs_var_indx_mat, 2)
+        source_param_mean = self._indx_h_for_n_sources(
+            h, n_sources, self.source_params_mean_indx_mat, self.n_source_params
         )
-
-        source_param_mean = torch.gather(
-            _h,
-            1,
-            self.source_params_mean_indx_mat[n_sources.transpose(0, 1)].reshape(
-                batchsize, -1
-            ),
+        source_param_logvar = self._indx_h_for_n_sources(
+            h, n_sources, self.source_params_var_indx_mat, self.n_source_params
         )
-        source_param_logvar = torch.gather(
-            _h,
-            1,
-            self.source_params_var_indx_mat[n_sources.transpose(0, 1)].reshape(
-                batchsize, -1
-            ),
-        )
-
-        # reshape
-        loc_logit_mean = loc_logit_mean.reshape(
-            batchsize, n_samples, self.max_detections, 2
-        ).transpose(0, 1)
-        loc_logvar = loc_logvar.reshape(
-            batchsize, n_samples, self.max_detections, 2
-        ).transpose(0, 1)
-        source_param_mean = source_param_mean.reshape(
-            batchsize, n_samples, self.max_detections, self.n_source_params
-        ).transpose(0, 1)
-        source_param_logvar = source_param_logvar.reshape(
-            batchsize, n_samples, self.max_detections, self.n_source_params
-        ).transpose(0, 1)
-
         loc_mean = torch.sigmoid(loc_logit_mean) * (loc_logit_mean != 0).float()
 
+<<<<<<< HEAD
         if squeeze_output:
             return (
                 loc_mean.squeeze(0),
@@ -648,48 +693,34 @@ class SourceEncoder(nn.Module):
 
         self.prob_indx = torch.zeros(
             self.max_detections + 1, dtype=torch.long, device=device
+=======
+        return loc_mean, loc_logvar, source_param_mean, source_param_logvar
+
+    def forward(self, image_ptiles, n_sources=None):
+        # pass through neural network, h is the array fo variational distribution parameters.
+        # h has shape:
+        h = self._get_var_params_all(image_ptiles)
+
+        # get probability of n_sources
+        log_probs_n = self._get_logprob_n_from_var_params(h)
+
+        if n_sources is None:
+            n_sources = torch.argmax(log_probs_n, dim=1)
+
+        # extract parameters
+        (
+            loc_mean,
+            loc_logvar,
+            source_param_mean,
+            source_param_logvar,
+        ) = self._get_var_params_for_n_sources(
+            h, n_sources=n_sources.clamp(max=self.max_detections)
+>>>>>>> finished refactoring that part that indices into h to obtain all the var_params and log probs
         )
 
-        for n_detections in range(1, self.max_detections + 1):
-
-            # index corresponding to the one we left off from the last iteration.
-            indx0 = (
-                int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_source)
-                + (n_detections - 1)
-                + 1
-            )
-
-            # start and end indices for locations
-            indx1 = (2 * n_detections) + indx0
-            indx2 = (2 * n_detections) * 2 + indx0
-
-            self.locs_mean_indx_mat[
-                n_detections, 0 : (2 * n_detections)
-            ] = torch.arange(indx0, indx1)
-            self.locs_var_indx_mat[n_detections, 0 : (2 * n_detections)] = torch.arange(
-                indx1, indx2
-            )
-
-            # indices for source params.
-            indx3 = indx2 + (n_detections * self.n_source_params)
-            indx4 = indx3 + (n_detections * self.n_source_params)
-
-            self.source_params_mean_indx_mat[
-                n_detections, 0 : (n_detections * self.n_source_params)
-            ] = torch.arange(indx2, indx3)
-
-            self.source_params_var_indx_mat[
-                n_detections, 0 : (n_detections * self.n_source_params)
-            ] = torch.arange(indx3, indx4)
-
-            # indices for Bernoulli deciding star or galaxy.
-            indx5 = indx4 + (n_detections * 1)
-            self.star_or_galaxy_indx[
-                n_detections, 0 : (n_detections * 1)
-            ] = torch.arange(indx4, indx5)
-
-            # the categorical prob for this n_detection will go after the rest.
-            self.prob_indx[n_detections] = indx5
+        # in the case of stars these are log_flux_mean, and log_flux_logvar.
+        # loc_mean has shape = (n_ptiles x max_detections x len(x,y))
+        return loc_mean, loc_logvar, source_param_mean, source_param_logvar, log_probs_n
 
     ######################
     # Modules for tiling images and parameters
