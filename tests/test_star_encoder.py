@@ -1,4 +1,3 @@
-import pytest
 import json
 import torch
 import numpy as np
@@ -14,16 +13,6 @@ class TestStarSleepEncoder:
     # TODO: train the star encoder in sleep-face
 
     def test_star_sleep(self):
-        # setup Star Encoder
-        star_encoder = sourcenet_lib.SourceEncoder(
-            slen=50,
-            ptile_slen=8,
-            step=2,
-            edge_padding=3,
-            n_bands=2,
-            max_detections=2,
-            n_source_params=2,
-        ).to(utils.device)
 
         # create training dataset
         param_file = utils.data_path.joinpath("default_star_parameters.json")
@@ -64,12 +53,23 @@ class TestStarSleepEncoder:
             draw_poisson=True,
         )
 
+        # setup Star Encoder
+        star_encoder = sourcenet_lib.SourceEncoder(
+            slen=data_params["slen"],
+            ptile_slen=8,
+            step=2,
+            edge_padding=3,
+            n_bands=2,
+            max_detections=2,
+            n_source_params=2,
+        ).to(utils.device)
+
         # train encoder
         # training wrapper
         StarSleepTrain = train.SleepTraining(
             model=star_encoder,
             dataset=star_dataset,
-            slen=50,
+            slen=data_params["slen"],
             num_bands=2,
             n_source_params=2,
             out_name="star_encoder_sleepTrain",
@@ -77,3 +77,24 @@ class TestStarSleepEncoder:
         )
 
         StarSleepTrain.run(n_epochs=30)
+
+        # load test image
+        test_star = torch.load(utils.data_path.joinpath("1star_test_params"))
+        test_image = test_star["images"]
+
+        # get the estimated params
+        locs, source_params, n_sources = star_encoder.sample_encoder(
+            test_image.to(utils.device),
+            n_samples=1,
+            return_map_n_sources=True,
+            return_map_source_params=True,
+        )
+
+        # assertion
+        assert n_sources == test_image["n_sources"].to(utils.device)
+        assert (
+            abs(
+                (test_image["locs"].to(utils.device) - locs) * test_image.shape[-1]
+            ).max()
+            <= 0.5
+        )
