@@ -15,3 +15,5 @@ celeste.egg-info/
 .DS_Store
 .eggs
 .tox
+/jupyter/testing
+results
