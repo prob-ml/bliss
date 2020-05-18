@@ -268,7 +268,6 @@ def get_mgrid(slen):
     return mgrid.type(torch.FloatTensor).to(device)
 
 
-# TODO: Make this an abstract class, same with the dataset.
 class SourceSimulator(ABC):
     def __init__(
         self,
