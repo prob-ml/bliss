@@ -94,7 +94,7 @@ def _expand_psf(psf, slen):
     n_bands = psf.shape[0]
     psf_slen = psf.shape[2]
 
-    assert psf_slen <= slen
+    assert psf_slen <= slen, "Should be using trim psf."
 
     psf_expanded = torch.zeros(n_bands, slen, slen, device=device)
 
