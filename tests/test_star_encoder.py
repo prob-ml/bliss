@@ -45,7 +45,7 @@ class TestStarSleepEncoder:
         background[1] = 1123.0
 
         # simulate dataset
-        n_images = 128
+        n_images = 64
         star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
             n_images,
             data_params,
@@ -80,7 +80,7 @@ class TestStarSleepEncoder:
             batchsize=64,
         )
 
-        StarSleepTrain.run(n_epochs=30)
+        StarSleepTrain.run(n_epochs=20)
 
         # load test image
         test_star = torch.load(utils.data_path.joinpath("1star_test_params"))
