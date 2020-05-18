@@ -4,8 +4,7 @@ from torch.nn.functional import unfold, pad
 from astropy.io import fits
 
 from .datasets import simulated_datasets
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from . import utils
 
 
 #######################
@@ -154,7 +153,7 @@ class PowerLawPSF(nn.Module):
         self.image_slen = image_slen
 
         grid = simulated_datasets.get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        self.cached_radii_grid = (grid ** 2).sum(2).sqrt().to(device)
+        self.cached_radii_grid = (grid ** 2).sum(2).sqrt().to(utils.device)
 
         # initial weights
         self.params = nn.Parameter(init_psf_params.clone())

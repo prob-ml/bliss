@@ -15,7 +15,9 @@ class TestStarSleepEncoder:
     def test_star_sleep(self):
 
         # create training dataset
-        param_file = utils.data_path.joinpath("default_star_parameters.json")
+        param_file = utils.config_path.joinpath(
+            "dataset_params/default_star_parameters.json"
+        )
         with open(param_file, "r") as fp:
             data_params = json.load(fp)
 
@@ -93,10 +95,10 @@ class TestStarSleepEncoder:
         )
 
         # assertion
-        assert n_sources == test_image["n_sources"].to(utils.device)
+        assert n_sources == test_star["n_sources"].to(utils.device)
         assert (
             abs(
-                (test_image["locs"].to(utils.device) - locs) * test_image.shape[-1]
+                (test_star["locs"].to(utils.device) - locs) * test_image.shape[-1]
             ).max()
             <= 0.5
         )
