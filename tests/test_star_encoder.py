@@ -20,9 +20,10 @@ class TestStarSleepEncoder:
             data_params = json.load(fp)
 
         # make a smaller image
-        data_params["max_stars"] = 15
-        data_params["mean_stars"] = 8
-        data_params["min_stars"] = 0
+        data_params["max_stars"] = 20
+        data_params["mean_stars"] = 15
+        data_params["min_stars"] = 5
+        data_params["f_min"] = 10000
         data_params["slen"] = 50
 
         # load psf
@@ -42,7 +43,7 @@ class TestStarSleepEncoder:
         background[1] = 1123.0
 
         # simulate dataset
-        n_images = 192
+        n_images = 128
         star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
             n_images,
             data_params,
@@ -74,6 +75,7 @@ class TestStarSleepEncoder:
             n_source_params=2,
             out_name="star_encoder_sleepTrain",
             verbose=True,
+            batchsize=64,
         )
 
         StarSleepTrain.run(n_epochs=30)
