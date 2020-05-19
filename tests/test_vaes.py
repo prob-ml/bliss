@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 import celeste.utils
-from celeste.models import sourcenet_lib
+from celeste.models import sourcenet
 from celeste import utils
 
 
@@ -23,7 +23,7 @@ class TestSourceEncoder:
         n_bands = 2
 
         # get encoder
-        star_encoder = sourcenet_lib.SourceEncoder(
+        star_encoder = sourcenet.SourceEncoder(
             slen=101,
             ptile_slen=ptile_slen,
             step=2,
@@ -169,7 +169,7 @@ class TestSourceEncoder:
         n_bands = 2
 
         # get encoder
-        star_encoder = sourcenet_lib.SourceEncoder(
+        star_encoder = sourcenet.SourceEncoder(
             slen=101,
             ptile_slen=ptile_slen,
             step=2,
@@ -228,7 +228,7 @@ class TestSourceEncoder:
         n_bands = 2
 
         # get encoder
-        star_encoder = sourcenet_lib.SourceEncoder(
+        star_encoder = sourcenet.SourceEncoder(
             slen=101,
             ptile_slen=ptile_slen,
             step=2,

@@ -5,7 +5,7 @@ import torch
 import torch.optim as optim
 
 from celeste import sleep, wake, psf_transform, utils
-from celeste.models import sourcenet_lib
+from celeste.models import sourcenet
 from celeste.datasets import simulated_datasets
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -115,7 +115,7 @@ def main():
         star_dataset = get_dataset(n_images, psf_og, data_params, background)
         star_dataset.cuda()
 
-        star_encoder = sourcenet_lib.SourceEncoder(
+        star_encoder = sourcenet.SourceEncoder(
             slen=data_params["slen"],
             ptile_slen=8,
             step=2,
