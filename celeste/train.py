@@ -130,14 +130,18 @@ class TrainModel(ABC):
                 "output.txt"
             )  # save the output that is being printed.
 
-            if self.verbose:
-                print(f"output file: {output_file.as_posix()}")
-                print(f"state file format: {state_file_template}")
-
             return output_file, state_file_template
 
         else:
             return None, None
+
+    def write_to_output(self, text):
+        if self.verbose:
+            print(text)
+
+        if self.output_file:
+            with open(self.output_file, "a") as out:
+                print(text, file=out)
 
     def run(self, n_epochs):
 
@@ -297,12 +301,7 @@ class SleepTraining(TrainModel):
             f"source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]"
         )
 
-        if self.verbose:
-            print(out_text)
-
-        if self.output_file:
-            with open(self.output_file, "a") as out:
-                print(out_text, file=out)
+        self.write_to_output(out_text)
 
     def log_eval(self, epoch, avg_results):
         assert self.verbose or self.out_name, "Not doing anything"
@@ -318,15 +317,15 @@ class SleepTraining(TrainModel):
             f"locs loss: {test_locs_loss:.3f}; source param loss: {test_source_param_loss:.3f} ****"
         )
 
-        if self.verbose:
-            print(out_text)
+        self.write_to_output(out_text)
 
         if self.state_file_template and self.output_file:
             state_file = Path(self.state_file_template.format(epoch))
-            with open(self.output_file, "a") as out:
-                print(out_text, file=out)
+            state_text = (
+                "**** writing the encoder parameters to " + state_file.as_posix()
+            )
 
-            print("writing the encoder parameters to " + state_file.as_posix())
+            self.write_to_output(state_text)
 
             torch.save(self.encoder.state_dict(), state_file)
 
