@@ -19,10 +19,11 @@ class TestStarSleepEncoder:
         with open(param_file, "r") as fp:
             data_params = json.load(fp)
 
-        data_params["max_stars"] = 20
+        data_params["max_stars"] = 25
         data_params["mean_stars"] = 15
         data_params["min_stars"] = 5
-        data_params["f_min"] = 10000
+        data_params["f_min"] = 1e3
+        data_params["f_max"] = 1e6
         data_params["slen"] = 50
 
         # load psf
@@ -76,7 +77,7 @@ class TestStarSleepEncoder:
             batchsize=64,
         )
 
-        StarSleepTrain.run(n_epochs=50)
+        StarSleepTrain.run(n_epochs=60)
 
         # load test image
         test_star = torch.load(utils.data_path.joinpath("1star_test_params"))
@@ -96,7 +97,8 @@ class TestStarSleepEncoder:
         assert n_sources == test_star["n_sources"].to(utils.device)
         assert (
             abs(
-                (test_star["locs"].sort(1)[0].to(utils.device) - locs.sort(1)[0]) * 30
+                (test_star["locs"].sort(1)[0].to(utils.device) - locs.sort(1)[0])
+                * test_image.size(-1)
             ).max()
             <= 0.5
         )
