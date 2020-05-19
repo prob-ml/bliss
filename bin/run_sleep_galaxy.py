@@ -4,7 +4,7 @@ import argparse
 
 from celeste import utils
 from celeste import train
-from celeste.models import sourcenet_lib
+from celeste.models import sourcenet
 from celeste.datasets import simulated_datasets
 
 
@@ -25,7 +25,7 @@ def main(args):
         args.n_images, data_params
     )
 
-    galaxy_encoder = sourcenet_lib.SourceEncoder(
+    galaxy_encoder = sourcenet.SourceEncoder(
         slen=data_params["slen"],
         n_bands=data_params["n_bands"],
         ptile_slen=args.ptile_slen,
