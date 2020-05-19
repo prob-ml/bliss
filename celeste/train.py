@@ -31,13 +31,12 @@ class TrainModel(ABC):
         lr=1e-3,
         weight_decay=1e-5,
         batchsize=64,
-        eval_every=10,
+        eval_every: int = None,
         out_name=None,
         dloader_params=None,
         seed=42,
-        verbose=True,
+        verbose=False,
     ):
-        assert out_name is not None
         set_seed(seed)  # seed for training.
 
         self.dataset = dataset
@@ -52,6 +51,7 @@ class TrainModel(ABC):
         # evaluation and results
         self.verbose = verbose
         self.eval_every = eval_every
+
         self.out_name = out_name
         self.output_file, self.state_file_template = self.prepare_filepaths()
 
@@ -111,35 +111,44 @@ class TrainModel(ABC):
         return optimizer
 
     def prepare_filepaths(self):
-        out_dir = utils.results_path.joinpath(self.out_name)
-        if out_dir.exists():
-            warnings.warn(
-                "The output directory already exists, deleting it, and overwriting previous results."
-            )
-            shutil.rmtree(out_dir)
+        # need to provide out_name directory for logging and state_dict saving to be available.
+        if self.out_name:
+            out_dir = utils.results_path.joinpath(self.out_name)
+            if out_dir.exists():
+                warnings.warn(
+                    "The output directory already exists, deleting it, and overwriting previous results."
+                )
+                shutil.rmtree(out_dir)
 
-        out_dir.mkdir(exist_ok=False, parents=True)
+            out_dir.mkdir(exist_ok=False)
 
-        state_file_template = out_dir.joinpath(
-            "state_{}.dat"
-        ).as_posix()  # insert epoch later.
+            state_file_template = out_dir.joinpath(
+                "state_{}.dat"
+            ).as_posix()  # insert epoch later.
 
-        output_file = out_dir.joinpath(
-            "output.txt"
-        )  # save the output that is being printed.
+            output_file = out_dir.joinpath(
+                "output.txt"
+            )  # save the output that is being printed.
 
-        if self.verbose:
-            print(f"output file: {output_file.as_posix()}")
-            print(f"state file format: {state_file_template}")
+            if self.verbose:
+                print(f"output file: {output_file.as_posix()}")
+                print(f"state file format: {state_file_template}")
 
-        return output_file, state_file_template
+            return output_file, state_file_template
+
+        else:
+            return None, None
 
     def run(self, n_epochs):
 
         for epoch in range(n_epochs):
             self.step(epoch, train=True)
 
-            if epoch % self.eval_every == 0:
+            if (
+                self.eval_every
+                and (self.verbose or self.state_file_template)
+                and epoch % self.eval_every == 0
+            ):
                 self.step(epoch, train=False)
 
     def step(self, epoch, train=True):
@@ -164,9 +173,9 @@ class TrainModel(ABC):
                 loss.backward()
                 self.optimizer.step()
 
-        if train:
+        if train and (self.output_file or self.verbose):
             self.log_train(epoch, avg_results, t0)
-        else:
+        elif not train:
             self.log_eval(epoch, avg_results)
 
     @abstractmethod
@@ -278,6 +287,8 @@ class SleepTraining(TrainModel):
     def log_train(
         self, epoch, avg_results, t0,
     ):
+        assert self.verbose or self.out_name, "Not doing anything."
+
         avg_loss, counter_loss, locs_loss, source_param_loss = avg_results
         # print and save train results.
         elapsed = time.time() - t0
@@ -286,13 +297,16 @@ class SleepTraining(TrainModel):
             f"source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]"
         )
 
-        with open(self.output_file, "a") as out:
-            print(out_text, file=out)
-
         if self.verbose:
             print(out_text)
 
+        if self.output_file:
+            with open(self.output_file, "a") as out:
+                print(out_text, file=out)
+
     def log_eval(self, epoch, avg_results):
+        assert self.verbose or self.out_name, "Not doing anything"
+
         (
             test_loss,
             test_counter_loss,
@@ -304,14 +318,17 @@ class SleepTraining(TrainModel):
             f"locs loss: {test_locs_loss:.3f}; source param loss: {test_source_param_loss:.3f} ****"
         )
 
-        state_file = Path(self.state_file_template.format(epoch))
         if self.verbose:
             print(out_text)
+
+        if self.state_file_template and self.output_file:
+            state_file = Path(self.state_file_template.format(epoch))
+            with open(self.output_file, "a") as out:
+                print(out_text, file=out)
+
             print("writing the encoder parameters to " + state_file.as_posix())
 
-        with open(self.output_file, "a") as out:
-            print(out_text, file=out)
-        torch.save(self.encoder.state_dict(), state_file)
+            torch.save(self.encoder.state_dict(), state_file)
 
 
 # lr=1e-4,

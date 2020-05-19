@@ -6,12 +6,10 @@ from celeste import utils
 from celeste import train
 from celeste import psf_transform
 from celeste.datasets import simulated_datasets
-from celeste.models import sourcenet_lib
+from celeste.models import sourcenet
 
 
 class TestStarSleepEncoder:
-    # TODO: train the star encoder in sleep-face
-
     def test_star_sleep(self):
 
         # create training dataset
@@ -57,7 +55,7 @@ class TestStarSleepEncoder:
         )
 
         # setup Star Encoder
-        star_encoder = sourcenet_lib.SourceEncoder(
+        star_encoder = sourcenet.SourceEncoder(
             slen=data_params["slen"],
             ptile_slen=8,
             step=2,
@@ -75,12 +73,11 @@ class TestStarSleepEncoder:
             slen=data_params["slen"],
             num_bands=2,
             n_source_params=2,
-            out_name="star_encoder_sleepTrain",
-            verbose=True,
+            verbose=False,
             batchsize=64,
         )
 
-        StarSleepTrain.run(n_epochs=20)
+        StarSleepTrain.run(n_epochs=30)
 
         # load test image
         test_star = torch.load(utils.data_path.joinpath("1star_test_params"))
@@ -94,7 +91,7 @@ class TestStarSleepEncoder:
             return_map_source_params=True,
         )
 
-        # assertion
+        # test that parameters match.
         assert n_sources == test_star["n_sources"].to(utils.device)
         assert (
             abs(
