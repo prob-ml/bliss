@@ -83,6 +83,8 @@ class TestStarSleepEncoder:
         test_star = torch.load(utils.data_path.joinpath("1star_test_params"))
         test_image = test_star["images"]
 
+        assert test_star["fluxes"].min() > 0
+
         # get the estimated params
         locs, source_params, n_sources = star_encoder.sample_encoder(
             test_image.to(utils.device),
@@ -95,7 +97,7 @@ class TestStarSleepEncoder:
         assert n_sources == test_star["n_sources"].to(utils.device)
         assert (
             abs(
-                (test_star["locs"].to(utils.device) - locs) * test_image.shape[-1]
+                (test_star["locs"].sort(1)[0].to(utils.device) - locs.sort(1)[0]) * 30
             ).max()
             <= 0.5
         )
