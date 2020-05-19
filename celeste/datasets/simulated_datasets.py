@@ -482,7 +482,7 @@ class GalaxyDataset(SourceDataset):
 
 
 class StarSimulator(SourceSimulator):
-    def __init__(self, f_min, f_max, alpha, *args, **kwargs):
+    def __init__(self, f_min, f_max, alpha, *args, use_pareto=True, **kwargs):
         """
         :param f_min:
         :param f_max:
@@ -505,6 +505,7 @@ class StarSimulator(SourceSimulator):
         self.f_min = f_min
         self.f_max = f_max
         self.alpha = alpha  # pareto parameter.
+        self.use_pareto = use_pareto
 
         self.psf_og = self.psf.clone()
         # get psf shape to match image shape
@@ -535,12 +536,20 @@ class StarSimulator(SourceSimulator):
         :return: fluxes, a shape (batchsize x max_sources x n_bands) tensor
         """
         assert n_stars.shape[0] == batchsize
-        base_fluxes = utils.draw_pareto_maxed(
-            self.f_min,
-            self.f_max,
-            alpha=self.alpha,
-            shape=(batchsize, self.max_sources),
-        )
+
+        if self.use_pareto:
+            base_fluxes = utils.draw_pareto_maxed(
+                self.f_min,
+                self.f_max,
+                alpha=self.alpha,
+                shape=(batchsize, self.max_sources),
+            )
+        else:  # use uniform in range (f_min, f_max)
+            base_fluxes = (
+                torch.rand(batchsize, self.max_sources, device=utils.device)
+                * (self.f_max - self.f_min)
+                + self.f_min
+            )
 
         if self.n_bands > 1:
             colors = (
@@ -610,6 +619,7 @@ class StarDataset(SourceDataset):
         transpose_psf=False,
         add_noise=True,
         draw_poisson=True,
+        use_pareto=True,
     ):
         assert (
             type(background) is torch.Tensor
@@ -632,6 +642,7 @@ class StarDataset(SourceDataset):
             transpose_psf=transpose_psf,
             add_noise=add_noise,
             draw_poisson=draw_poisson,
+            use_pareto=use_pareto,
         )
 
         return cls(n_images, simulator_args, simulator_kwargs)
