@@ -191,7 +191,8 @@ class TrainModel(ABC):
 
     @abstractmethod
     def get_results(self, batch):
-        # get all training/evaluation results from a batch, this includes loss and maybe other useful things to log.
+        # get all training/evaluation results from a batch, this includes loss and maybe other
+        # useful things to log.
         pass
 
     # TODO: A bit clunky in my opinion, open to suggestions.
