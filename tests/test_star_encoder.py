@@ -1,4 +1,3 @@
-import pytest
 import json
 import torch
 import numpy as np
@@ -11,10 +10,7 @@ from celeste.models import sourcenet
 
 
 class TestStarSleepEncoder:
-    @pytest.mark.parametrize(
-        "n_star", [1, 3],
-    )
-    def test_star_sleep(self, n_star):
+    def test_star_sleep(self):
 
         # create training dataset
         param_file = utils.config_path.joinpath(
@@ -23,10 +19,10 @@ class TestStarSleepEncoder:
         with open(param_file, "r") as fp:
             data_params = json.load(fp)
 
-        data_params["max_stars"] = 50
-        data_params["mean_stars"] = 40
-        data_params["min_stars"] = 30
-        data_params["f_min"] = 1e3
+        data_params["max_stars"] = 20
+        data_params["mean_stars"] = 15
+        data_params["min_stars"] = 5
+        data_params["f_min"] = 1e4
         data_params["slen"] = 50
 
         # load psf
@@ -77,42 +73,43 @@ class TestStarSleepEncoder:
             num_bands=2,
             n_source_params=2,
             verbose=False,
-            batchsize=32,
+            batchsize=64,
         )
 
-        StarSleepTrain.run(n_epochs=50)
+        StarSleepTrain.run(n_epochs=60)
 
         # load test image
-        test_star = torch.load(
-            utils.data_path.joinpath(str(n_star) + "star_test_params")
-        )
-        test_image = test_star["images"]
+        for n_star in [1, 3]:
+            test_star = torch.load(
+                utils.data_path.joinpath(str(n_star) + "star_test_params")
+            )
+            test_image = test_star["images"]
 
-        assert test_star["fluxes"].min() > 0
+            assert test_star["fluxes"].min() > 0
 
-        # get the estimated params
-        locs, source_params, n_sources = star_encoder.sample_encoder(
-            test_image.to(utils.device),
-            n_samples=1,
-            return_map_n_sources=True,
-            return_map_source_params=True,
-        )
+            # get the estimated params
+            locs, source_params, n_sources = star_encoder.sample_encoder(
+                test_image.to(utils.device),
+                n_samples=1,
+                return_map_n_sources=True,
+                return_map_source_params=True,
+            )
 
-        # test that parameters match.
-        assert n_sources == test_star["n_sources"].to(utils.device)
-        assert (
-            abs(
-                (test_star["locs"].sort(1)[0].to(utils.device) - locs.sort(1)[0])
-                * test_image.size(-1)
-            ).max()
-            <= 0.5
-        )
+            # test that parameters match.
+            assert n_sources == test_star["n_sources"].to(utils.device)
+            assert (
+                abs(
+                    (test_star["locs"].sort(1)[0].to(utils.device) - locs.sort(1)[0])
+                    * test_image.size(-1)
+                ).max()
+                <= 0.5
+            )
 
         # fluxes
         diff = abs(
             test_star["log_fluxes"].sort(1)[0].to(utils.device)
             - source_params.sort(1)[0]
         )
-        assert torch.all(diff <= source_params.min() * 0.10) and torch.all(
-            diff <= test_star["log_fluxes"].min() * 0.10
+        assert torch.all(diff <= source_params.sort(1)[0] * 0.10) and torch.all(
+            diff <= test_star["log_fluxes"].sort(1)[0].to(utils.device) * 0.10
         )
