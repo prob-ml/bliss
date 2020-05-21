@@ -1,3 +1,4 @@
+import pytest
 import json
 import torch
 import numpy as np
@@ -10,7 +11,10 @@ from celeste.models import sourcenet
 
 
 class TestStarSleepEncoder:
-    def test_star_sleep(self):
+    @pytest.mark.parametrize(
+        "n_star", [1, 3],
+    )
+    def test_star_sleep(self, n_star):
 
         # create training dataset
         param_file = utils.config_path.joinpath(
@@ -19,11 +23,10 @@ class TestStarSleepEncoder:
         with open(param_file, "r") as fp:
             data_params = json.load(fp)
 
-        data_params["max_stars"] = 25
-        data_params["mean_stars"] = 15
-        data_params["min_stars"] = 5
+        data_params["max_stars"] = 50
+        data_params["mean_stars"] = 40
+        data_params["min_stars"] = 30
         data_params["f_min"] = 1e3
-        data_params["f_max"] = 1e6
         data_params["slen"] = 50
 
         # load psf
@@ -43,7 +46,7 @@ class TestStarSleepEncoder:
         background[1] = 1123.0
 
         # simulate dataset
-        n_images = 64
+        n_images = 128
         star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
             n_images,
             data_params,
@@ -74,13 +77,15 @@ class TestStarSleepEncoder:
             num_bands=2,
             n_source_params=2,
             verbose=False,
-            batchsize=64,
+            batchsize=32,
         )
 
-        StarSleepTrain.run(n_epochs=60)
+        StarSleepTrain.run(n_epochs=50)
 
         # load test image
-        test_star = torch.load(utils.data_path.joinpath("1star_test_params"))
+        test_star = torch.load(
+            utils.data_path.joinpath(str(n_star) + "star_test_params")
+        )
         test_image = test_star["images"]
 
         assert test_star["fluxes"].min() > 0
