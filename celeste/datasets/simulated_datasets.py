@@ -8,10 +8,10 @@ import torch.nn.functional as F
 from torch.distributions import Poisson, Categorical
 
 from .galaxy_datasets import DecoderSamples
-from .. import utils
+from .. import device
 
 
-def _get_is_on_from_n_sources(n_sources, max_sources):
+def get_is_on_from_n_sources(n_sources, max_sources):
     """
     Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
     whether there are more than l sources on the kth batch.
@@ -22,12 +22,29 @@ def _get_is_on_from_n_sources(n_sources, max_sources):
     assert len(n_sources.shape) == 1
 
     batchsize = len(n_sources)
-    is_on_array = LongTensor(batchsize, max_sources).zero_()
+    is_on_array = torch.zeros(batchsize, max_sources, device=device)
 
     for i in range(max_sources):
         is_on_array[:, i] = n_sources > i
 
     return is_on_array
+
+
+def _draw_pareto(f_min, alpha, shape):
+    uniform_samples = torch.rand(*shape, device=device)
+    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
+
+
+def _draw_pareto_maxed(f_min, f_max, alpha, shape):
+    # draw pareto conditioned on being less than f_max
+
+    pareto_samples = _draw_pareto(f_min, alpha, shape)
+
+    while torch.any(pareto_samples > f_max):
+        indx = pareto_samples > f_max
+        pareto_samples[indx] = _draw_pareto(f_min, alpha, [torch.sum(indx).item()])
+
+    return pareto_samples
 
 
 def _check_psf(psf, slen):
@@ -79,7 +96,7 @@ def _expand_psf(psf, slen):
 
     assert psf_slen <= slen
 
-    psf_expanded = utils.FloatTensor(n_bands, slen, slen).zero_()
+    psf_expanded = torch.zeros(n_bands, slen, slen, device=device)
 
     offset = int((slen - psf_slen) / 2)
 
@@ -101,10 +118,10 @@ def _sample_n_sources(
     :return: A tensor with shape = (batchsize)
     """
     if draw_poisson:
-        m = Poisson(utils.FloatTensor(1).fill_(mean_sources))
+        m = Poisson(torch.full(1, mean_sources, device=device))
         n_sources = m.sample([batchsize])
     else:
-        m = Categorical(utils.FloatTensor(1).fill_(max_sources - min_sources))
+        m = Categorical(torch.full(1, max_sources - min_sources, device=device))
         n_sources = m.sample([batchsize]) + min_sources
 
     return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze(1)
@@ -114,7 +131,7 @@ def _sample_locs(max_sources, is_on_array, batchsize=1):
     # 2 = (x,y)
     # torch.rand returns numbers between (0,1)
     locs = (
-        utils.FloatTensor(batchsize, max_sources, 2).uniform_()
+        torch.rand(batchsize, max_sources, 2, device=device)
         * is_on_array.unsqueeze(2).float()
     )
     return locs
@@ -191,7 +208,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     grid = _get_grid(slen, cached_grid)
 
     n_bands = psf.shape[0]
-    scene = utils.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    scene = torch.zeros(batchsize, n_bands, slen, slen, device=device)
 
     assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
     assert fluxes is not None
@@ -226,7 +243,7 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     _check_sources_and_locs(locs, n_sources, batchsize)
     grid = _get_grid(slen, cached_grid)
 
-    scene = utils.FloatTensor(batchsize, n_bands, slen, slen).zero_()
+    scene = torch.zeros(batchsize, n_bands, slen, slen, device=device)
     for n in range(max(n_sources)):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
@@ -331,7 +348,7 @@ class SourceSimulator(ABC):
 
         # multiply by zero where they are no sources (recall parameters have entry for up
         # to max_sources)
-        is_on_array = _get_is_on_from_n_sources(n_sources, self.max_sources)
+        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
 
         # sample locations
         locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
@@ -558,7 +575,7 @@ class StarSimulator(SourceSimulator):
         assert n_stars.shape[0] == batchsize
 
         if self.use_pareto:
-            base_fluxes = utils.draw_pareto_maxed(
+            base_fluxes = _draw_pareto_maxed(
                 self.f_min,
                 self.f_max,
                 alpha=self.alpha,
@@ -573,9 +590,7 @@ class StarSimulator(SourceSimulator):
 
         if self.n_bands > 1:
             colors = (
-                utils.FloatTensor(
-                    batchsize, self.max_sources, self.n_bands - 1
-                ).uniform_()
+                torch.rand(batchsize, self.max_sources, self.n_bands - 1, device=device)
                 * 0.15
                 + 0.3
             )

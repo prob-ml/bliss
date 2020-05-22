@@ -1,5 +1,185 @@
 import torch
 import torch.nn as nn
+from ..datasets.simulated_datasets import get_is_on_from_n_sources
+from .. import device
+
+
+def get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):
+    """
+
+    :param tile_n_sources: A tensor of shape (n_samples x n_tiles), indicating the number of sources
+                            at sample i, batch j. (n_samples = batchsize)
+    :type tile_n_sources: class: `torch.Tensor`
+    :param max_sources:
+    :type max_sources: int
+    :return:
+    """
+    assert not torch.any(torch.isnan(tile_n_sources))
+    assert torch.all(tile_n_sources >= 0)
+    assert torch.all(tile_n_sources <= max_sources)
+
+    n_samples = tile_n_sources.shape[0]
+    batchsize = tile_n_sources.shape[1]
+
+    is_on_array = torch.zeros(n_samples, batchsize, max_sources, device=device)
+
+    for i in range(max_sources):
+        is_on_array[:, :, i] = tile_n_sources > i
+
+    return is_on_array
+
+
+def sample_class_weights(class_weights, n_samples=1):
+    """
+    Draw a sample from Categorical variable with
+    probabilities class_weights.
+    """
+
+    assert not torch.any(torch.isnan(class_weights))
+    cat_rv = categorical.Categorical(probs=class_weights)
+    return cat_rv.sample((n_samples,)).detach().squeeze()
+
+
+def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
+    """
+    Take in an image (tensor) and the shape of the padded tile
+    we want to separate it into and
+    return the padded tiles also as a tensor.
+
+    Taken from: https://gist.github.com/dem123456789/23f18fd78ac8da9615c347905e64fc78
+
+    :param img:
+    :type img: class: `torch.Tensor`
+    :param tile_shape:
+    :param step:
+    :param batch_first:
+    :return: A tensor of padded tiles.
+    :rtype: class: `torch.Tensor`
+    """
+    if step is None:
+        step = [1.0, 1.0]
+
+    tile_H, tile_W = tile_shape[0], tile_shape[1]
+    if img.size(2) < tile_H:
+        num_padded_H_Top = (tile_H - img.size(2)) // 2
+        num_padded_H_Bottom = tile_H - img.size(2) - num_padded_H_Top
+        padding_H = nn.ConstantPad2d((0, 0, num_padded_H_Top, num_padded_H_Bottom), 0)
+        img = padding_H(img)
+    if img.size(3) < tile_W:
+        num_padded_W_Left = (tile_W - img.size(3)) // 2
+        num_padded_W_Right = tile_W - img.size(3) - num_padded_W_Left
+        padding_W = torch.nn.ConstantPad2d(
+            (num_padded_W_Left, num_padded_W_Right, 0, 0), 0
+        )
+        img = padding_W(img)
+    step_int = [0, 0]
+    step_int[0] = int(tile_H * step[0]) if (isinstance(step[0], float)) else step[0]
+    step_int[1] = int(tile_W * step[1]) if (isinstance(step[1], float)) else step[1]
+    ptiles_fold_H = img.unfold(2, tile_H, step_int[0])
+    if (img.size(2) - tile_H) % step_int[0] != 0:
+        ptiles_fold_H = torch.cat(
+            (ptiles_fold_H, img[:, :, -tile_H:,].permute(0, 1, 3, 2).unsqueeze(2)),
+            dim=2,
+        )
+    ptiles_fold_HW = ptiles_fold_H.unfold(3, tile_W, step_int[1])
+    if (img.size(3) - tile_W) % step_int[1] != 0:
+        ptiles_fold_HW = torch.cat(
+            (
+                ptiles_fold_HW,
+                ptiles_fold_H[:, :, :, -tile_W:, :].permute(0, 1, 2, 4, 3).unsqueeze(3),
+            ),
+            dim=3,
+        )
+    ptiles = ptiles_fold_HW.permute(2, 3, 0, 1, 4, 5)
+    ptiles = ptiles.reshape(-1, img.size(0), img.size(1), tile_H, tile_W)
+    if batch_first:
+        ptiles = ptiles.permute(1, 0, 2, 3, 4)
+    return ptiles
+
+
+def tile_images(images, ptile_slen, step):
+    """
+    Breaks up a large image into smaller padded tiles.
+    Each tile has size ptile_slen x ptile_slen, where
+    the number of padded tiles per image  is (slen - ptile_slen / step)**2.
+
+    NOTE: input and output are torch tensors, not numpy arrays.
+
+    :param images: A tensor of size (batchsize x n_bands x slen x slen)
+    :type images: class:`torch.Tensor`
+    :param ptile_slen: The side length of each padded tile.
+    :param step:
+    :return: image_ptiles, output tensor of shape:
+             (batchsize * ptiles per image) x n_bands x ptile_slen x ptile_slen
+    :rtype: class:`torch.Tensor`
+    """
+
+    assert len(images.shape) == 4
+
+    image_xlen = images.shape[2]
+    image_ylen = images.shape[3]
+
+    # My tile coords doesn't work otherwise ...
+    assert (image_xlen - ptile_slen) % step == 0
+    assert (image_ylen - ptile_slen) % step == 0
+
+    n_bands = images.shape[1]
+    image_ptiles = None
+    for b in range(n_bands):
+        image_ptiles_b = _extract_ptiles_2d(
+            images[:, b : (b + 1), :, :],
+            tile_shape=[ptile_slen, ptile_slen],
+            step=[step, step],
+            batch_first=True,
+        ).reshape(-1, 1, ptile_slen, ptile_slen)
+
+        if b == 0:
+            image_ptiles = image_ptiles_b
+        else:
+            image_ptiles = torch.cat((image_ptiles, image_ptiles_b), dim=1)
+
+    return image_ptiles
+
+
+def get_ptile_coords(image_xlen, image_ylen, ptile_slen, step):
+    """
+    This function is used in conjunction with tile_images above. This records (x0, x1) indices
+    each image padded tile comes from.
+    :param image_xlen: The x side length of the image in pixels.
+    :param image_ylen: The y side length of the image in pixels.
+    :param ptile_slen: The side length of the padded tile in pixels.
+    :param step: pixels by which to shift every padded tile.
+    :return: tile_coords, a torch.LongTensor
+    """
+
+    nx_ptiles = ((image_xlen - ptile_slen) // step) + 1
+    ny_ptiles = ((image_ylen - ptile_slen) // step) + 1
+    n_ptiles = nx_ptiles * ny_ptiles
+
+    def return_coords(i):
+        return [(i // ny_ptiles) * step, (i % ny_ptiles) * step]
+
+    tile_coords = torch.LongTensor([return_coords(i) for i in range(n_ptiles)]).to(
+        device
+    )
+
+    return tile_coords
+
+
+def bring_to_front(n_source_params, n_sources, is_on_array, source_params, locs):
+    # puts all the on sources in front
+    is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
+    indx = is_on_array_full.clone()
+    indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
+
+    new_source_params = torch.gather(
+        source_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_source_params)
+    ) * is_on_array_full.float().unsqueeze(2)
+    new_locs = torch.gather(
+        locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)
+    ) * is_on_array_full.float().unsqueeze(2)
+
+    return new_source_params, new_locs, is_on_array_full
 
 
 def get_params_in_tiles(
@@ -167,7 +347,7 @@ class SourceEncoder(nn.Module):
 
         self.edge_padding = edge_padding
 
-        self.tile_coords = utils.get_ptile_coords(
+        self.tile_coords = get_ptile_coords(
             self.slen, self.slen, self.ptile_slen, self.step
         )
         self.n_tiles = self.tile_coords.shape[0]
@@ -351,7 +531,7 @@ class SourceEncoder(nn.Module):
         n_samples = n_sources.shape[0]
 
         batchsize = h.size(0)
-        _h = torch.cat((h, torch.zeros(batchsize, 1).to(utils.device)), dim=1)
+        _h = torch.cat((h, torch.zeros(batchsize, 1, device=device)), dim=1)
 
         loc_logit_mean = torch.gather(
             _h,
@@ -412,41 +592,35 @@ class SourceEncoder(nn.Module):
 
         """
 
-        self.locs_mean_indx_mat = (
-            torch.full(
-                (self.max_detections + 1, 2 * self.max_detections), self.dim_out_all
-            )
-            .type(torch.LongTensor)
-            .to(utils.device)
+        self.locs_mean_indx_mat = torch.full(
+            (self.max_detections + 1, 2 * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+            device=device,
         )
 
-        self.locs_var_indx_mat = (
-            torch.full(
-                (self.max_detections + 1, 2 * self.max_detections), self.dim_out_all
-            )
-            .type(torch.LongTensor)
-            .to(utils.device)
+        self.locs_var_indx_mat = torch.full(
+            (self.max_detections + 1, 2 * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+            device=device,
         )
 
-        self.source_params_mean_indx_mat = (
-            torch.full(
-                (self.max_detections + 1, self.n_source_params * self.max_detections),
-                self.dim_out_all,
-            )
-            .type(torch.LongTensor)
-            .to(utils.device)
+        self.source_params_mean_indx_mat = torch.full(
+            (self.max_detections + 1, self.n_source_params * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+            device=device,
         )
-        self.source_params_var_indx_mat = (
-            torch.full(
-                (self.max_detections + 1, self.n_source_params * self.max_detections),
-                self.dim_out_all,
-            )
-            .type(torch.LongTensor)
-            .to(utils.device)
+        self.source_params_var_indx_mat = torch.full(
+            (self.max_detections + 1, self.n_source_params * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+            device=device,
         )
 
-        self.prob_indx = (
-            torch.zeros(self.max_detections + 1).type(torch.LongTensor).to(utils.device)
+        self.prob_indx = torch.zeros(
+            self.max_detections + 1, dtype=torch.long, device=device
         )
 
         for n_detections in range(1, self.max_detections + 1):
@@ -504,12 +678,12 @@ class SourceEncoder(nn.Module):
         # encoder should be able to handle these cases to.
         if not (images.shape[-1] == self.slen):
             # get the coordinates
-            tile_coords = utils.get_ptile_coords(slen, slen, self.ptile_slen, self.step)
+            tile_coords = get_ptile_coords(slen, slen, self.ptile_slen, self.step)
         else:
             # else, use the cached coordinates
             tile_coords = self.tile_coords
 
-        image_ptiles = utils.tile_images(images, self.ptile_slen, self.step)
+        image_ptiles = tile_images(images, self.ptile_slen, self.step)
 
         if (locs is not None) and (source_params is not None):
             assert source_params.shape[2] == self.n_source_params
@@ -520,7 +694,7 @@ class SourceEncoder(nn.Module):
                 tile_source_params,
                 tile_n_sources,
                 tile_is_on_array,
-            ) = utils.get_params_in_tiles(
+            ) = get_params_in_tiles(
                 tile_coords,
                 locs,
                 source_params,
@@ -529,28 +703,30 @@ class SourceEncoder(nn.Module):
                 self.edge_padding,
             )
 
-            # In the loss function, it assumes that the true max number of stars on each tile equals the max number
-            # of stars specified in the init of the encoder.
-            # Sometimes the true max stars on tiles is less than the user-specified max stars,
-            # and this would throw the error in the loss function.
-            # Padding solves this issue.
+            # In the loss function, it assumes that the true max number of stars on each tile
+            # equals the max number of stars specified in the init of the encoder. Sometimes the
+            # true max stars on tiles is less than the user-specified max stars, and this would
+            # throw the error in the loss function. Padding solves this issue.
             if tile_locs.shape[1] < self.max_detections:
                 # tile_locs.shape[1] == max number of stars seen in the each tile.
                 n_pad = self.max_detections - tile_locs.shape[1]
-                pad_zeros = utils.FloatTensor(
-                    tile_locs.shape[0], n_pad, tile_locs.shape[-1]
-                ).zero_()
+                pad_zeros = torch.zeros(
+                    tile_locs.shape[0], n_pad, tile_locs.shape[-1], device=device,
+                )
                 tile_locs = torch.cat((tile_locs, pad_zeros), dim=1)
 
-                pad_zeros2 = utils.FloatTensor(
-                    tile_source_params.shape[0], n_pad, tile_source_params.shape[-1]
-                ).zero_()
+                pad_zeros2 = torch.zeros(
+                    tile_source_params.shape[0],
+                    n_pad,
+                    tile_source_params.shape[-1],
+                    device=device,
+                )
                 tile_source_params = torch.cat((tile_source_params, pad_zeros2), dim=1)
 
                 # tile_source_params.shape[0] == number of tiles
-                pad_zeros3 = utils.LongTensor(
-                    tile_source_params.shape[0], n_pad
-                ).zero_()
+                pad_zeros3 = torch.zeros(
+                    tile_source_params.shape[0], n_pad, dtype=torch.long, device=device
+                )
                 tile_is_on_array = torch.cat((tile_is_on_array, pad_zeros3), dim=1)
 
             if clip_max_sources:
@@ -587,13 +763,13 @@ class SourceEncoder(nn.Module):
 
         # if the image given is not the same as the original encoder training images.
         if not (slen == self.slen):
-            tile_coords = utils.get_ptile_coords(slen, slen, self.ptile_slen, self.step)
+            tile_coords = get_ptile_coords(slen, slen, self.ptile_slen, self.step)
         else:
             tile_coords = self.tile_coords
 
         assert (n_image_ptiles % tile_coords.shape[0]) == 0
 
-        (locs, source_params, n_sources,) = utils.get_full_params_from_tile_params(
+        (locs, source_params, n_sources,) = get_full_params_from_tile_params(
             tile_locs_sampled.reshape(
                 n_samples * n_image_ptiles, -1, 2
             ),  # 2 = len((x,y))
@@ -657,13 +833,13 @@ class SourceEncoder(nn.Module):
                 )
 
             else:
-                tile_n_stars_sampled = utils.sample_class_weights(
+                tile_n_stars_sampled = sample_class_weights(
                     torch.exp(log_probs_n_sources_per_tile.detach()), n_samples
                 ).view(n_samples, -1)
         else:
             tile_n_stars_sampled = tile_n_sources.repeat(n_samples).view(n_samples, -1)
 
-        is_on_array = utils.get_is_on_from_tile_n_sources_2d(
+        is_on_array = get_is_on_from_tile_n_sources_2d(
             tile_n_stars_sampled, self.max_detections
         )
         is_on_array = is_on_array.unsqueeze(3).float()
@@ -677,18 +853,18 @@ class SourceEncoder(nn.Module):
         ) = self._get_var_params_for_n_sources(h, tile_n_stars_sampled)
 
         if return_map_source_params:
-            loc_sd = utils.FloatTensor(*loc_logvar.shape).zero_()
-            source_params_sd = utils.FloatTensor(*source_param_logvar.shape).zero_()
+            loc_sd = torch.zeros(*loc_logvar.shape, device=device)
+            source_params_sd = torch.zeros(*source_param_logvar.shape, device=device)
         else:
             loc_sd = torch.exp(0.5 * loc_logvar)
             source_params_sd = torch.exp(0.5 * source_param_logvar).clamp(max=0.5)
 
         # sample locations
-        _locs_randn = utils.FloatTensor(*loc_mean.shape).normal_()
+        _locs_randn = torch.normal(*loc_mean.shape, device=device)
         tile_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
 
         # sample source params, these are log_fluxes or latent galaxy params (normal variables)
-        _source_params_randn = utils.FloatTensor(*source_param_mean.shape).normal_()
+        _source_params_randn = torch.normal(*source_param_mean.shape, device=device)
 
         tile_source_params_sampled = (
             source_param_mean + _source_params_randn * source_params_sd
@@ -709,7 +885,7 @@ class SourceEncoder(nn.Module):
         In the case of stars, this function will return log_fluxes as source_params. Can then obtain
         fluxes with the following procedure:
 
-        >> is_on_array = utils.get_is_on_from_n_stars(n_stars, max_stars)
+        >> is_on_array = get_is_on_from_n_stars(n_stars, max_stars)
         >> fluxes = np.exp(log_fluxes) * is_on_array
 
         where `max_stars` corresponds to the maximum number of stars in a scene that was used when
@@ -743,7 +919,7 @@ class SourceEncoder(nn.Module):
             tile_n_sources,
             training,
         )
-        tile_source_params_sampled = tile_source_params_sampled * is_on_array
+        tile_source_params_sampled *= is_on_array
 
         # get parameters on full image
         locs, source_params, n_sources = self._get_full_params_from_sampled_params(

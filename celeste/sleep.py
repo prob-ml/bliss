@@ -5,7 +5,7 @@ import torch
 from torch.distributions import Normal
 from torch.nn import functional
 
-from . import utils
+from . import device
 
 
 # only function you will ever need to call.
@@ -35,10 +35,8 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
 
     if use_l2_loss:
         warnings.warn("using l2_loss")
-        loc_logvar = torch.zeros(loc_logvar.shape, device=utils.device)
-        source_param_logvar = torch.zeros(
-            source_param_logvar.shape, device=utils.device
-        )
+        loc_logvar = torch.zeros(loc_logvar.shape, device=device)
+        source_param_logvar = torch.zeros(source_param_logvar.shape, device=device)
 
     (loss, counter_loss, locs_loss, source_param_loss, perm_indx,) = _get_params_loss(
         loc_mean,
@@ -167,12 +165,12 @@ def _get_log_probs_all_perms(
     max_detections = source_param_log_probs_all.shape[-1]
     batchsize = source_param_log_probs_all.shape[0]
 
-    locs_loss_all_perm = torch.zeros(batchsize, math.factorial(max_detections)).to(
-        utils.device
+    locs_loss_all_perm = torch.zeros(
+        batchsize, math.factorial(max_detections), device=device
     )
     source_param_loss_all_perm = torch.zeros(
-        batchsize, math.factorial(max_detections)
-    ).to(utils.device)
+        batchsize, math.factorial(max_detections), device=device
+    )
 
     i = 0
     for perm in permutations(range(max_detections)):
