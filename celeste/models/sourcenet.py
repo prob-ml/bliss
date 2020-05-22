@@ -36,6 +36,9 @@ class SourceEncoder(nn.Module):
         n_bands,
         max_detections,
         n_source_params,
+        enc_conv_c=20,
+        enc_kern=3,
+        enc_hidden=256,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of size slen * slen
@@ -79,23 +82,35 @@ class SourceEncoder(nn.Module):
         self.max_detections = max_detections
 
         # convolutional NN parameters
-        enc_conv_c = 20
-        enc_kern = 3
-        enc_hidden = 256
+        self.enc_conv_c = enc_conv_c
+        self.enc_kern = enc_kern
+        self.enc_hidden = enc_hidden
 
         momentum = 0.5
 
         # convolutional NN
         self.enc_conv = nn.Sequential(
-            nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.Conv2d(
+                self.n_bands, self.enc_conv_c, self.enc_kern, stride=1, padding=1
+            ),
             nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
+            nn.Conv2d(
+                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
+            ),
+            nn.BatchNorm2d(
+                self.enc_conv_c, momentum=momentum, track_running_stats=True
+            ),
             nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.Conv2d(
+                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
+            ),
             nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum, track_running_stats=True),
+            nn.Conv2d(
+                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
+            ),
+            nn.BatchNorm2d(
+                self.enc_conv_c, momentum=momentum, track_running_stats=True
+            ),
             nn.ReLU(),
             Flatten(),
         )
@@ -107,14 +122,20 @@ class SourceEncoder(nn.Module):
 
         # fully connected layers
         self.enc_fc = nn.Sequential(
-            nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
+            nn.Linear(conv_out_dim, self.enc_hidden),
+            nn.BatchNorm1d(
+                self.enc_hidden, momentum=momentum, track_running_stats=True
+            ),
             nn.ReLU(),
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
+            nn.Linear(self.enc_hidden, self.enc_hidden),
+            nn.BatchNorm1d(
+                self.enc_hidden, momentum=momentum, track_running_stats=True
+            ),
             nn.ReLU(),
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum, track_running_stats=True),
+            nn.Linear(self.enc_hidden, self.enc_hidden),
+            nn.BatchNorm1d(
+                self.enc_hidden, momentum=momentum, track_running_stats=True
+            ),
             nn.ReLU(),
         )
 
@@ -135,7 +156,7 @@ class SourceEncoder(nn.Module):
         )
         self._get_hidden_indices()
 
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+        self.enc_final = nn.Linear(self.enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim=1)
 
     ############################
