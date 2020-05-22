@@ -310,15 +310,6 @@ class TestImageBatching:
             - 0.5
         ) / (full_slen - 1)
 
-        print(test_loc)
-        print(locs_full_image)
-        print(locs_full_image.squeeze())
-        print(test_loc.eq(locs_full_image.squeeze()))
-        x = test_loc[1].item()
-        y = locs_full_image.squeeze()[1].item()
-        print(f"{x:.5f}")
-        print(f"{y:.5f}")
-        assert x == y
         assert torch.all(test_loc.eq(locs_full_image.squeeze()))
 
         # check this works with negative locs

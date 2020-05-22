@@ -173,7 +173,7 @@ def bring_to_front(n_source_params, n_sources, is_on_array, source_params, locs)
     # puts all the on sources in front
     is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
     indx = is_on_array_full.clone()
-    indx[indx == 1] = torch.nonzero(is_on_array)[:, 1]
+    indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]
 
     new_source_params = torch.gather(
         source_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_source_params)
@@ -288,7 +288,7 @@ def get_full_params_from_tile_params(
     # puts all the on sources in front (of each tile subarray)
     is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
     indx = is_on_array_full.clone()
-    indx[indx == 1] = torch.nonzero(tile_is_on_bool)[:, 1]
+    indx[indx == 1] = torch.nonzero(tile_is_on_bool, as_tuple=False)[:, 1]
 
     source_params, locs, _ = bring_to_front(
         n_source_params, n_sources, tile_is_on_bool, source_params, locs
