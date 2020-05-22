@@ -1,15 +1,46 @@
 #!/usr/bin/env python
 import argparse
 import json
+import os
+from pathlib import Path
+import torch
 
 from celeste import train
 from celeste.models import sourcenet
 from celeste.datasets import simulated_datasets
 
 
-def load_data_params_from_args(params_file_name, args):
-    params_path = config_path.joinpath(params_file_name)
-    with open(params_path, "r") as fp:
+def setup_paths(args):
+    root_path = Path(args.root_dir)
+    path_dict = {
+        "root": root_path,
+        "data": root_path.joinpath("data"),
+        "config": root_path.joinpath("config"),
+        "results": root_path.joinpath("results"),
+    }
+
+    for p in path_dict.values():
+        assert p.exists(), f"path {p.as_posix()} does not exist"
+
+    return path_dict
+
+
+def setup_device(args):
+    assert (
+        args.no_cuda or torch.cuda.is_available()
+    ), "cuda is not available but --no-cuda is false"
+
+    if not args.no_cuda:
+        device = torch.device(f"cuda:{args.device}")
+        torch.cuda.set_device(device)
+    else:
+        device = torch.device("cpu")
+
+    return device
+
+
+def load_data_params_from_args(params_file, args):
+    with open(params_file, "r") as fp:
         data_params = json.load(fp)
 
     args_dict = vars(args)
@@ -20,19 +51,26 @@ def load_data_params_from_args(params_file_name, args):
 
 
 def main(args):
+
+    paths = setup_paths(args)
+    device = setup_device(args)
+
     print(
         f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}, "
         f"n_images={args.n_images}"
     )
 
-    data_params = load_data_params_from_args(
-        "dataset_params/default_galaxy_parameters.json", args
+    data_param_file = paths["data"].joinpath(
+        "dataset_params/default_galaxy_parameters.json"
     )
+    data_params = load_data_params_from_args(data_param_file, args)
+    background_file = paths["data"].joinpath(data_params["background_file"])
 
     print("data params to be used:", data_params)
+    print("background file:", background_file)
 
     galaxy_dataset = simulated_datasets.GalaxyDataset.load_dataset_from_params(
-        args.n_images, data_params
+        args.n_images, data_params, background_file
     )
 
     galaxy_encoder = sourcenet.SourceEncoder(
@@ -43,8 +81,9 @@ def main(args):
         edge_padding=args.edge_padding,
         max_detections=args.max_detections,
         n_source_params=galaxy_dataset.simulator.latent_dim,
-    ).to(utils.device)
+    ).to(device)
 
+    out_dir = paths["results"].joinpath(args.output_name)
     train_sleep = train.SleepTraining(
         galaxy_encoder,
         galaxy_dataset,
@@ -53,7 +92,7 @@ def main(args):
         n_source_params=galaxy_dataset.simulator.latent_dim,
         batchsize=args.batchsize,
         eval_every=args.print_every,
-        out_name=pargs.results_dir,
+        out_dir=out_dir,
         seed=pargs.seed,
     )
 
@@ -72,12 +111,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device", type=int, default=0, metavar="DEV", help="GPU device ID"
     )
+
     parser.add_argument(
-        "--results-dir",
+        "--root-dir",
+        help="Absolute path to directory containing bin and celeste package.",
+        type=str,
+        default=os.path.abspath(".."),
+    )
+
+    parser.add_argument(
+        "--output-name",
         type=str,
         default="test",
         metavar="DIR",
-        help="Directory in results path, where output will be saved.",
+        help="Directory name relative to root/results path, where output will be saved.",
     )
 
     parser.add_argument(
