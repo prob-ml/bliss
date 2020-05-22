@@ -3,11 +3,31 @@ import argparse
 import json
 import os
 from pathlib import Path
+import numpy as np
 import torch
 
-from celeste import train
+from celeste import train, wake, psf_transform
 from celeste.models import sourcenet
 from celeste.datasets import simulated_datasets
+
+
+def load_psf(paths, device):
+    psf_file = paths["data"].joinpath("fitted_powerlaw_psf_params.npy")
+    psf_params = torch.tensor(np.load(psf_file), device=device)
+    power_law_psf = psf_transform.PowerLawPSF(psf_params)
+    psf = power_law_psf.forward().detach()
+
+    return psf
+
+
+def load_background(bands, data_params, device):
+    # sky intensity: for the r and i band
+    background = torch.zeros(
+        data_params["n_bands"], data_params["slen"], data_params["slen"], device=device
+    )
+    background[0] = 686.0
+    background[1] = 1123.0
+    return background
 
 
 def setup_paths(args):
