@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import pytest
 
+from celeste import device
 from celeste import train
 from celeste import psf_transform
 from celeste.datasets import simulated_datasets
@@ -12,9 +13,7 @@ from celeste.models import sourcenet
 @pytest.fixture(scope="module")
 def trained_star_encoder():
     # create training dataset
-    param_file = utils.config_path.joinpath(
-        "dataset_params/default_star_parameters.json"
-    )
+    param_file = "../config/dataset_params/default_star_parameters.json"
     with open(param_file, "r") as fp:
         data_params = json.load(fp)
 
@@ -25,17 +24,14 @@ def trained_star_encoder():
     data_params["slen"] = 50
 
     # load psf
-    psf_file = utils.data_path.joinpath("fitted_powerlaw_psf_params.npy")
-    psf_params = torch.tensor(np.load(psf_file), device=utils.device)
+    psf_file = "../data/fitted_powerlaw_psf_params.npy"
+    psf_params = torch.tensor(np.load(psf_file), device=device)
     power_law_psf = psf_transform.PowerLawPSF(psf_params)
     psf = power_law_psf.forward().detach()
 
     # set background
     background = torch.zeros(
-        data_params["n_bands"],
-        data_params["slen"],
-        data_params["slen"],
-        device=utils.device,
+        data_params["n_bands"], data_params["slen"], data_params["slen"], device=device
     )
     background[0] = 686.0
     background[1] = 1123.0
@@ -61,10 +57,7 @@ def trained_star_encoder():
         n_bands=2,
         max_detections=2,
         n_source_params=2,
-        enc_conv_c=5,
-        enc_kern=3,
-        enc_hidden=64,
-    ).to(utils.device)
+    ).to(device)
 
     # train encoder
     # training wrapper
@@ -88,14 +81,14 @@ class TestStarSleepEncoder:
     def test_star_sleep(self, trained_star_encoder, n_star):
 
         # load test image
-        test_star = torch.load(utils.data_path.joinpath(f"{n_star}star_test_params"))
+        test_star = torch.load(f"../data/{n_star}star_test_params")
         test_image = test_star["images"]
 
         assert test_star["fluxes"].min() > 0
 
         # get the estimated params
         locs, source_params, n_sources = trained_star_encoder.sample_encoder(
-            test_image.to(utils.device),
+            test_image.to(device),
             n_samples=1,
             return_map_n_sources=True,
             return_map_source_params=True,
@@ -106,7 +99,7 @@ class TestStarSleepEncoder:
         assert n_sources == test_star["n_sources"].to(device)
         assert (
             abs(
-                (test_star["locs"].sort(1)[0].to(utils.device) - locs.sort(1)[0])
+                (test_star["locs"].sort(1)[0].to(device) - locs.sort(1)[0])
                 * test_image.size(-1)
             ).max()
             <= 0.5
@@ -114,9 +107,8 @@ class TestStarSleepEncoder:
 
         # fluxes
         diff = abs(
-            test_star["log_fluxes"].sort(1)[0].to(utils.device)
-            - source_params.sort(1)[0]
+            test_star["log_fluxes"].sort(1)[0].to(device) - source_params.sort(1)[0]
         )
         assert torch.all(diff <= source_params.sort(1)[0] * 0.10) and torch.all(
-            diff <= test_star["log_fluxes"].sort(1)[0].to(utils.device) * 0.10
+            diff <= test_star["log_fluxes"].sort(1)[0].to(device) * 0.10
         )

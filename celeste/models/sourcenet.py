@@ -904,7 +904,10 @@ class SourceEncoder(nn.Module):
 
         """
 
-        if not training:
+        if training:
+            self.train()
+
+        else:
             self.eval()
 
         slen = image.shape[-1]
