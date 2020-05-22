@@ -2,12 +2,13 @@ import math
 from itertools import permutations
 import torch
 from torch.distributions import Normal
+import warnings
 
 from . import utils
 
 
 # only function you will ever need to call.
-def get_inv_kl_loss(encoder, images, true_locs, true_source_params):
+def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=False):
     """
     NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
     normal variables).
@@ -30,6 +31,13 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params):
         source_param_logvar,
         log_probs_n_sources_per_tile,
     ) = encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
+
+    if use_l2_loss:
+        warnings.warn("using l2_loss")
+        loc_logvar = torch.zeros(loc_logvar.shape, device=utils.device)
+        source_param_logvar = torch.zeros(
+            source_param_logvar.shape, device=utils.device
+        )
 
     (loss, counter_loss, locs_loss, source_param_loss, perm_indx,) = _get_params_loss(
         loc_mean,
@@ -181,6 +189,7 @@ def _get_log_probs_all_perms(
     return locs_loss_all_perm, source_param_loss_all_perm
 
 
+# TODO: Can the minus signs here be moved up so that it's a bit clearer?
 def _get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_array):
     (
         locs_log_probs_all_perm,

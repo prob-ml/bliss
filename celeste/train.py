@@ -116,7 +116,8 @@ class TrainModel(ABC):
             out_dir = utils.results_path.joinpath(self.out_name)
             if out_dir.exists():
                 warnings.warn(
-                    "The output directory already exists, deleting it, and overwriting previous results."
+                    "The output directory already exists, deleting it, and overwriting previous "
+                    "results. "
                 )
                 shutil.rmtree(out_dir)
 
@@ -190,7 +191,8 @@ class TrainModel(ABC):
 
     @abstractmethod
     def get_results(self, batch):
-        # get all training/evaluation results from a batch, this includes loss and maybe other useful things to log.
+        # get all training/evaluation results from a batch, this includes loss and maybe other
+        # useful things to log.
         pass
 
     # TODO: A bit clunky in my opinion, open to suggestions.
@@ -252,7 +254,7 @@ class SleepTraining(TrainModel):
 
         # evaluate log q
         loss, counter_loss, locs_loss, source_params_loss = sleep.get_inv_kl_loss(
-            self.encoder, images, true_locs, true_source_params
+            self.encoder, images, true_locs, true_source_params, use_l2_loss=False
         )[0:4]
 
         return loss, counter_loss, locs_loss, source_params_loss

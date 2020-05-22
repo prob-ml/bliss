@@ -611,6 +611,10 @@ class SourceEncoder(nn.Module):
         Returns:
 
         """
+
+        if not training:
+            self.eval()
+
         slen = image.shape[-1]
         (
             tile_locs_sampled,
