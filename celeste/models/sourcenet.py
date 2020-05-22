@@ -612,14 +612,14 @@ class SourceEncoder(nn.Module):
         training=False,
     ):
         """
-        In the case of stars, this function will return log_fluxes as source_params. Can then obtain fluxes with the
-        following procedure:
+        In the case of stars, this function will return log_fluxes as source_params. Can then obtain
+        fluxes with the following procedure:
 
         >> is_on_array = utils.get_is_on_from_n_stars(n_stars, max_stars)
         >> fluxes = np.exp(log_fluxes) * is_on_array
 
-        where `max_stars` will correspond to the maximum number of stars that was used when simulating the `image`
-        passed in to this function.
+        where `max_stars` corresponds to the maximum number of stars in a scene that was used when
+        simulating the `image` passed in to this function.
 
         Args:
             image:
