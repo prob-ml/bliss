@@ -5,7 +5,6 @@ import h5py
 import numpy as np
 import multiprocessing
 
-from celeste import utils
 from celeste.datasets import galaxy_datasets
 from celeste.datasets.galaxy_datasets import generate_images
 
@@ -103,8 +102,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Use multiprocessing to save images from the specified dataset into .hdf5 file in the default "
-        "data directory, along with the background used for this images in background.npy"
+        description="Use multiprocessing to save images from the specified dataset into .hdf5 "
+        "file in the default data directory, along with the background used for this images "
+        "in background.npy"
     )
 
     # io stuff

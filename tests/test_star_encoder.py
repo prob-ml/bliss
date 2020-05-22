@@ -57,9 +57,6 @@ def trained_star_encoder(config_path, data_path):
         n_bands=2,
         max_detections=2,
         n_source_params=2,
-        enc_conv_c=5,
-        enc_kern=3,
-        enc_hidden=64,
     ).to(device)
 
     # train encoder
