@@ -3,13 +3,10 @@ from abc import ABC, abstractmethod
 import json
 
 import h5py
-import torch
 from torch.utils.data import Dataset
 
 from ..models import galaxy_net
-from .. import utils
-
-params_path = utils.data_path.joinpath("params_galaxy_datasets")
+from .. import device
 
 
 class SingleGalaxyDataset(Dataset, ABC):
@@ -23,15 +20,11 @@ class SingleGalaxyDataset(Dataset, ABC):
         pass
 
     @classmethod
-    def load_dataset_from_params(cls, params_file=None):
+    def load_dataset_from_params(cls, params_file):
         """
-        If not specified return the dataset from the default data_params file specified as a class attribute.
+        If not specified return the dataset from the default data_params file specified as a
+        class attribute.
         """
-        if params_file is None:
-            params_file = cls._params_file
-        assert (
-            params_file is not None
-        ), "Forgot to specify _params_file as class attribute"
 
         with open(params_file, "r") as fp:
             data_params = json.load(fp)
@@ -44,8 +37,6 @@ class SingleGalaxyDataset(Dataset, ABC):
 
 
 class DecoderSamples(SingleGalaxyDataset):
-    _params_file = params_path.joinpath("decoder_samples.json")
-
     def __init__(self, slen, decoder_file, num_bands=6, latent_dim=8, num_images=1000):
         """
         Load and sample from the specified decoder in `decoder_file`.
@@ -55,15 +46,15 @@ class DecoderSamples(SingleGalaxyDataset):
         :param num_images: Number of images to return when training in a network.
         :param num_bands:
         :param decoder_file: The file from which to load the `state_dict` of the decoder.
-        :type decoder_file: Path object.
+        :type decoder_file: Path object, full path.
         """
         super().__init__()
         assert latent_dim == 8, "Not implemented any other decoder galaxy network"
 
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands).to(
-            utils.device
+            device
         )
-        self.dec.load_state_dict(torch.load(utils.data_path.joinpath(decoder_file)))
+        self.dec.load_state_dict(decoder_file)
         self.num_bands = num_bands
         self.slen = slen
         self.num_images = num_images
@@ -93,20 +84,18 @@ class DecoderSamples(SingleGalaxyDataset):
 
 
 class H5Catalog(Dataset):
-    _params_file = params_path.joinpath("h5_cat.json")
-
     def __init__(self, h5_file, slen, num_bands):
         """
         A dataset created from single galaxy images in a h5py file.
         Args:
-            h5_file: relative to data directory. 
+            h5_file: full path.
             slen:
             num_bands:
         """
         super().__init__()
-        h5_file_path = utils.data_path.joinpath(h5_file)
 
-        self.file = h5py.File(h5_file_path, "r")
+        self.file = h5py.File(h5_file, "r")
+
         assert "images" in self.file, "The dataset is not in this file"
 
         self.dset = self.file["images"]
