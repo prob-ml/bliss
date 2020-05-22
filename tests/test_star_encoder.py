@@ -11,9 +11,9 @@ from celeste.models import sourcenet
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder():
+def trained_star_encoder(config_path, data_path):
     # create training dataset
-    param_file = "../config/dataset_params/default_star_parameters.json"
+    param_file = config_path.joinpath("dataset_params/default_star_parameters.json")
     with open(param_file, "r") as fp:
         data_params = json.load(fp)
 
@@ -24,7 +24,7 @@ def trained_star_encoder():
     data_params["slen"] = 50
 
     # load psf
-    psf_file = "../data/fitted_powerlaw_psf_params.npy"
+    psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
     psf_params = torch.tensor(np.load(psf_file), device=device)
     power_law_psf = psf_transform.PowerLawPSF(psf_params)
     psf = power_law_psf.forward().detach()
@@ -81,10 +81,10 @@ def trained_star_encoder():
 
 class TestStarSleepEncoder:
     @pytest.mark.parametrize("n_star", [1, 3])
-    def test_star_sleep(self, trained_star_encoder, n_star):
+    def test_star_sleep(self, trained_star_encoder, n_star, data_path):
 
         # load test image
-        test_star = torch.load(f"../data/{n_star}star_test_params")
+        test_star = torch.load(data_path.joinpath(f"{n_star}star_test_params"))
         test_image = test_star["images"]
 
         assert test_star["fluxes"].min() > 0

@@ -2,27 +2,37 @@ import numpy as np
 import torch
 import json
 from astropy.io import fits
+import pytest
 
 from celeste.datasets import simulated_datasets
 from celeste import device
 
 
-psf_r = fits.getdata("../data/sdss-002583-2-0136-psf-r.fits")
-psf_i = fits.getdata("../data/sdss-002583-2-0136-psf-i.fits")
-psf_og = torch.from_numpy(np.array([psf_r, psf_i])).to(device)
-
-param_file = "../config/dataset_params/default_star_parameters.json"
-
-with open(param_file, "r") as fp:
-    data_params = json.load(fp)
-
-data_params["slen"] = 50
-data_params["mean_stars"] = 40
-
-
 # TODO: Test galaxy dataset and batchsize=1 separately.
 class TestSDSSDataset:
-    def test_fresh_data(self):
+    @pytest.fixture
+    def psf_og(self, data_path):
+
+        psf_r = fits.getdata(data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))
+        psf_i = fits.getdata(data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))
+        psf_og = torch.from_numpy(np.array([psf_r, psf_i])).to(device)
+        return psf_og
+
+    @pytest.fixture
+    def data_params(self, config_path):
+        params_file = config_path.joinpath(
+            "dataset_params/default_star_parameters.json"
+        )
+
+        with open(params_file, "r") as fp:
+            data_params = json.load(fp)
+
+        data_params["slen"] = 50
+        data_params["mean_stars"] = 40
+
+        return data_params
+
+    def test_fresh_data(self, data_params, psf_og):
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)
 
