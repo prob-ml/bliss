@@ -856,22 +856,19 @@ class SourceEncoder(nn.Module):
         ) = self._get_var_params_for_n_sources(h, tile_n_stars_sampled)
 
         if return_map_source_params:
-            loc_sd = torch.zeros(*loc_logvar.shape, device=device)
-            source_params_sd = torch.zeros(*source_param_logvar.shape, device=device)
+            loc_sd = torch.zeros(loc_logvar.shape, device=device)
+            source_params_sd = torch.zeros(source_param_logvar.shape, device=device)
         else:
             loc_sd = torch.exp(0.5 * loc_logvar)
             source_params_sd = torch.exp(0.5 * source_param_logvar).clamp(max=0.5)
 
         # sample locations
-        _locs_randn = torch.normal(*loc_mean.shape, device=device)
-        tile_locs_sampled = (loc_mean + _locs_randn * loc_sd) * is_on_array
+        assert loc_mean.shape == loc_sd.shape, "Shapes need to match"
+        tile_locs_sampled = torch.normal(loc_mean, loc_sd) * is_on_array
 
         # sample source params, these are log_fluxes or latent galaxy params (normal variables)
-        _source_params_randn = torch.normal(*source_param_mean.shape, device=device)
-
-        tile_source_params_sampled = (
-            source_param_mean + _source_params_randn * source_params_sd
-        )
+        assert source_param_mean.shape == source_params_sd.shape, "Shapes need to match"
+        tile_source_params_sampled = torch.normal(source_param_mean, source_params_sd)
 
         return tile_locs_sampled, tile_source_params_sampled, is_on_array
 

@@ -46,7 +46,7 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
         log_probs_n_sources_per_tile,
         true_tile_locs,
         true_tile_source_params,
-        true_tile_is_on_array.float(),
+        true_tile_is_on_array.long(),
     )
 
     return (

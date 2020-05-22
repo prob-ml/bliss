@@ -57,6 +57,9 @@ def trained_star_encoder():
         n_bands=2,
         max_detections=2,
         n_source_params=2,
+        enc_conv_c=5,
+        enc_kern=3,
+        enc_hidden=64,
     ).to(device)
 
     # train encoder
@@ -97,18 +100,15 @@ class TestStarSleepEncoder:
 
         # test that parameters match.
         assert n_sources == test_star["n_sources"].to(device)
-        assert (
-            abs(
-                (test_star["locs"].sort(1)[0].to(device) - locs.sort(1)[0])
-                * test_image.size(-1)
-            ).max()
-            <= 0.5
-        )
+
+        diff_locs = test_star["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
+        diff_locs *= test_image.size(-1)
+        assert abs(diff_locs).max() <= 0.5
 
         # fluxes
-        diff = abs(
-            test_star["log_fluxes"].sort(1)[0].to(device) - source_params.sort(1)[0]
-        )
-        assert torch.all(diff <= source_params.sort(1)[0] * 0.10) and torch.all(
+        diff = test_star["log_fluxes"].sort(1)[0].to(device) - source_params.sort(1)[0]
+        check_true1 = torch.all(diff.abs() <= source_params.sort(1)[0] * 0.10)
+        check_true2 = torch.all(
             diff <= test_star["log_fluxes"].sort(1)[0].to(device) * 0.10
         )
+        assert check_true1 and check_true2
