@@ -1,36 +1,3 @@
-import json
-from pathlib import Path
-from os.path import dirname
-
-import numpy as np
-import torch
-from torch.distributions import categorical
-from torch import nn
-
-# global paths
-root_path = Path(dirname(dirname(__file__)))
-
-data_path = root_path.joinpath("data")
-config_path = root_path.joinpath("config")
-reports_path = root_path.joinpath("reports")
-results_path = root_path.joinpath("results")
-
-# global variables
-image_h5_name = "images"
-background_h5_name = "background"
-
-# make codebase device agnostic, but also create all tensors directly in the gpu when possible.
-use_cuda = torch.cuda.is_available()
-device = torch.device("cpu")
-if use_cuda:
-    default_device = 0
-    torch.cuda.set_device(default_device)
-    device = torch.device(default_device)
-
-FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
-LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
-
-
 # let the user change device defined in this module.
 def set_device(device_id=None, no_cuda=False):
 
@@ -41,40 +8,9 @@ def set_device(device_id=None, no_cuda=False):
     device = torch.device(device_id) if not no_cuda else torch.device("cpu")
 
 
-def load_data_params_from_args(params_file_name, args):
-    params_path = config_path.joinpath(params_file_name)
-    with open(params_path, "r") as fp:
-        data_params = json.load(fp)
-
-    args_dict = vars(args)
-    for k in data_params:
-        if k in args_dict and args_dict[k] is not None:
-            data_params[k] = args_dict[k]
-    return data_params
-
-
 #############################
 # Tensor functions
 ############################
-
-
-def get_is_on_from_n_sources(n_sources, max_sources):
-    """
-    Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
-    whether there are more than l sources on the kth batch.
-    :param n_sources:
-    :param max_sources:
-    :return:
-    """
-    assert len(n_sources.shape) == 1
-
-    batchsize = len(n_sources)
-    is_on_array = LongTensor(batchsize, max_sources).zero_()
-
-    for i in range(max_sources):
-        is_on_array[:, i] = n_sources > i
-
-    return is_on_array
 
 
 def get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):

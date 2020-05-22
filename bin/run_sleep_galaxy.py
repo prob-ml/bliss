@@ -2,20 +2,30 @@
 
 import argparse
 
-from celeste import utils
 from celeste import train
 from celeste.models import sourcenet
 from celeste.datasets import simulated_datasets
 
 
+def load_data_params_from_args(params_file_name, args):
+    params_path = config_path.joinpath(params_file_name)
+    with open(params_path, "r") as fp:
+        data_params = json.load(fp)
+
+    args_dict = vars(args)
+    for k in data_params:
+        if k in args_dict and args_dict[k] is not None:
+            data_params[k] = args_dict[k]
+    return data_params
+
+
 def main(args):
     print(
-        f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}, n_images={args.n_images}"
+        f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}, "
+        f"n_images={args.n_images}"
     )
 
-    utils.set_device(args.device, args.no_cuda)  # set global device to use.
-
-    data_params = utils.load_data_params_from_args(
+    data_params = load_data_params_from_args(
         "dataset_params/default_galaxy_parameters.json", args
     )
 

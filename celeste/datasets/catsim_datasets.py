@@ -159,16 +159,14 @@ def generate_images(
 
     with h5py.File(file_path, "w") as images_file:
         hds_shape = (n_images, dataset.num_bands, dataset.slen, dataset.slen)
-        hds = images_file.create_dataset(
-            utils.image_h5_name, hds_shape, dtype=dataset.dtype
-        )
+        hds = images_file.create_dataset("images", hds_shape, dtype=dataset.dtype)
         for i in range(n_images):
             random_idx = random.randrange(len(dataset))
             output = dataset[random_idx]
             image = output["image"]
             hds[i, :, :, :] = image
             hds.flush()
-        hds.attrs[utils.background_h5_name] = dataset.background
+        hds.attrs["background"] = dataset.background
         hds.flush()
 
 

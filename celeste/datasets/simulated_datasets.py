@@ -11,6 +11,25 @@ from .galaxy_datasets import DecoderSamples
 from .. import utils
 
 
+def _get_is_on_from_n_sources(n_sources, max_sources):
+    """
+    Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
+    whether there are more than l sources on the kth batch.
+    :param n_sources:
+    :param max_sources:
+    :return:
+    """
+    assert len(n_sources.shape) == 1
+
+    batchsize = len(n_sources)
+    is_on_array = LongTensor(batchsize, max_sources).zero_()
+
+    for i in range(max_sources):
+        is_on_array[:, i] = n_sources > i
+
+    return is_on_array
+
+
 def _check_psf(psf, slen):
     # first dimension of psf is number of bands
     assert len(psf.shape) == 3
@@ -310,8 +329,9 @@ class SourceSimulator(ABC):
             draw_poisson=self.draw_poisson,
         )
 
-        # multiply by zero where they are no sources (recall parameters have entry for up to max_sources)
-        is_on_array = utils.get_is_on_from_n_sources(n_sources, self.max_sources)
+        # multiply by zero where they are no sources (recall parameters have entry for up
+        # to max_sources)
+        is_on_array = _get_is_on_from_n_sources(n_sources, self.max_sources)
 
         # sample locations
         locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)

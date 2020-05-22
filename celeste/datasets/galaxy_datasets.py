@@ -107,9 +107,9 @@ class H5Catalog(Dataset):
         h5_file_path = utils.data_path.joinpath(h5_file)
 
         self.file = h5py.File(h5_file_path, "r")
-        assert utils.image_h5_name in self.file, "The dataset is not in this file"
+        assert "images" in self.file, "The dataset is not in this file"
 
-        self.dset = self.file[utils.image_h5_name]
+        self.dset = self.file["images"]
         self.num_bands = self.dset.shape[1]
         self.slen = self.dset.shape[2]
         assert (
@@ -119,8 +119,8 @@ class H5Catalog(Dataset):
             self.num_bands == num_bands
         ), "Number of bands in training and in dataset do not match."
 
-        assert utils.background_h5_name in self.dset.attrs, "Background is not in file"
-        self.background = self.dset.attrs[utils.background_h5_name]
+        assert "background" in self.dset.attrs, "Background is not in file"
+        self.background = self.dset.attrs["background"]
 
     def __len__(self):
         """
