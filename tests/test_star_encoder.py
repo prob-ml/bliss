@@ -62,6 +62,9 @@ class TestStarSleepEncoder:
             n_bands=2,
             max_detections=2,
             n_source_params=2,
+            enc_conv_c=5,
+            enc_kern=3,
+            enc_hidden=64,
         ).to(utils.device)
 
         # train encoder
@@ -73,7 +76,7 @@ class TestStarSleepEncoder:
             num_bands=2,
             n_source_params=2,
             verbose=False,
-            batchsize=64,
+            batchsize=32,
         )
 
         StarSleepTrain.run(n_epochs=60)
