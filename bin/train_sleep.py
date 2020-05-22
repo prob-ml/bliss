@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from celeste import train, wake, psf_transform
+from celeste import train, psf_transform
 from celeste.models import sourcenet
 from celeste.datasets import simulated_datasets
 
@@ -20,8 +20,7 @@ def load_psf(paths, device):
     return psf
 
 
-def load_background(bands, data_params, device):
-    # sky intensity: for the r and i band
+def load_background(data_params, device):
     background = torch.zeros(
         data_params["n_bands"], data_params["slen"], data_params["slen"], device=device
     )

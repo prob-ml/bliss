@@ -109,6 +109,6 @@ class TestStarSleepEncoder:
         diff = test_star["log_fluxes"].sort(1)[0].to(device) - source_params.sort(1)[0]
         check_true1 = torch.all(diff.abs() <= source_params.sort(1)[0] * 0.10)
         check_true2 = torch.all(
-            diff <= test_star["log_fluxes"].sort(1)[0].to(device) * 0.10
+            diff.abs() <= test_star["log_fluxes"].sort(1)[0].to(device) * 0.10
         )
         assert check_true1 and check_true2
