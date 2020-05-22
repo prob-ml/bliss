@@ -5,9 +5,6 @@ from celeste import device
 from celeste.models import sourcenet
 from celeste.datasets import simulated_datasets
 
-np.random.seed(43534)
-torch.manual_seed(24534)
-
 
 class TestImageBatching:
     def test_tile_coords(self):
@@ -52,6 +49,9 @@ class TestImageBatching:
     def test_full_to_tile_to_full(self):
         # we convert full parameters to tile parameters to full parameters
         # and assert that these are consistent
+
+        np.random.seed(43534)
+        torch.manual_seed(24534)
 
         # define parameters in full image
         full_slen = 100
@@ -310,7 +310,16 @@ class TestImageBatching:
             - 0.5
         ) / (full_slen - 1)
 
-        assert (test_loc == locs_full_image.squeeze()).all()
+        print(test_loc)
+        print(locs_full_image)
+        print(locs_full_image.squeeze())
+        print(test_loc.eq(locs_full_image.squeeze()))
+        x = test_loc[1].item()
+        y = locs_full_image.squeeze()[1].item()
+        print(f"{x:.5f}")
+        print(f"{y:.5f}")
+        assert x == y
+        assert torch.all(test_loc.eq(locs_full_image.squeeze()))
 
         # check this works with negative locs
         tile_locs[indx, 0, :] = torch.from_numpy(np.array([-0.1, 0.5]))
@@ -344,4 +353,5 @@ class TestImageBatching:
             + edge_padding
             - 0.5
         ) / (full_slen - 1)
+
         assert (test_loc == locs_full_image.squeeze()).all()

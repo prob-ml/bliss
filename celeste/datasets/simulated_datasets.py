@@ -118,10 +118,14 @@ def _sample_n_sources(
     :return: A tensor with shape = (batchsize)
     """
     if draw_poisson:
-        m = Poisson(torch.full(1, mean_sources, device=device))
+        m = Poisson(torch.full((1,), mean_sources, dtype=torch.float, device=device))
         n_sources = m.sample([batchsize])
     else:
-        m = Categorical(torch.full(1, max_sources - min_sources, device=device))
+        m = Categorical(
+            torch.full(
+                (1,), max_sources - min_sources, dtype=torch.float, device=device
+            )
+        )
         n_sources = m.sample([batchsize]) + min_sources
 
     return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze(1)

@@ -22,7 +22,9 @@ def get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):
     n_samples = tile_n_sources.shape[0]
     batchsize = tile_n_sources.shape[1]
 
-    is_on_array = torch.zeros(n_samples, batchsize, max_sources, device=device)
+    is_on_array = torch.zeros(
+        n_samples, batchsize, max_sources, device=device, dtype=torch.long
+    )
 
     for i in range(max_sources):
         is_on_array[:, :, i] = tile_n_sources > i
