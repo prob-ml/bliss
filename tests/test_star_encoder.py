@@ -3,7 +3,6 @@ import torch
 import numpy as np
 import pytest
 
-from celeste import utils
 from celeste import train
 from celeste import psf_transform
 from celeste.datasets import simulated_datasets

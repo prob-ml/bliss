@@ -4,13 +4,15 @@ import json
 from astropy.io import fits
 
 from celeste.datasets import simulated_datasets
-from celeste import utils
+from celeste import device
 
-psf_r = fits.getdata(utils.data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))
-psf_i = fits.getdata(utils.data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))
-psf_og = torch.Tensor(np.array([psf_r, psf_i])).to(utils.device)  # waiting for new push
 
-param_file = utils.config_path.joinpath("dataset_params/default_star_parameters.json")
+psf_r = fits.getdata("../data/sdss-002583-2-0136-psf-r.fits")
+psf_i = fits.getdata("../data/sdss-002583-2-0136-psf-i.fits")
+psf_og = torch.from_numpy(np.array([psf_r, psf_i])).to(device)
+
+param_file = "../config/dataset_params/default_star_parameters.json"
+
 with open(param_file, "r") as fp:
     data_params = json.load(fp)
 
@@ -44,10 +46,10 @@ class TestSDSSDataset:
         # should be drawn
         #############################################
         num_epoch = 5
-        images_vec = torch.zeros(num_epoch).to(utils.device)
-        locs_vec = torch.zeros(num_epoch).to(utils.device)
-        fluxes_vec = torch.zeros(num_epoch).to(utils.device)
-        n_sources_vec = torch.zeros(num_epoch).to(utils.device)
+        images_vec = torch.zeros(num_epoch, device=device)
+        locs_vec = torch.zeros(num_epoch, device=device)
+        fluxes_vec = torch.zeros(num_epoch, device=device)
+        n_sources_vec = torch.zeros(num_epoch, device=device)
 
         # get batch
         batchsize = 8
