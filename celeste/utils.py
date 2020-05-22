@@ -1,13 +1,3 @@
-# let the user change device defined in this module.
-def set_device(device_id=None, no_cuda=False):
-
-    if not no_cuda:
-        torch.cuda.set_device(device_id)
-
-    global device
-    device = torch.device(device_id) if not no_cuda else torch.device("cpu")
-
-
 #############################
 # Tensor functions
 ############################
@@ -36,18 +26,6 @@ def get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):
         is_on_array[:, :, i] = tile_n_sources > i
 
     return is_on_array
-
-
-def get_one_hot_encoding_from_int(z, n_classes):
-    z = z.long()
-
-    assert len(torch.unique(z)) <= n_classes
-
-    z_one_hot = FloatTensor(len(z), n_classes).zero_()
-    z_one_hot.scatter_(1, z.view(-1, 1), 1)
-    z_one_hot = z_one_hot.view(len(z), n_classes)
-
-    return z_one_hot
 
 
 #############################

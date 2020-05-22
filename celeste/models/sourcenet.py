@@ -1,29 +1,10 @@
 import torch
 import torch.nn as nn
 
-from .. import utils
-
 
 class Flatten(nn.Module):
     def forward(self, tensor):
         return tensor.view(tensor.size(0), -1)
-
-
-class Normalize2d(nn.Module):
-    def forward(self, tensor):
-        assert len(tensor.shape) == 4
-        mean = (
-            tensor.view(tensor.shape[0], tensor.shape[1], -1)
-            .mean(2, keepdim=True)
-            .unsqueeze(-1)
-        )
-        var = (
-            tensor.view(tensor.shape[0], tensor.shape[1], -1)
-            .var(2, keepdim=True)
-            .unsqueeze(-1)
-        )
-
-        return (tensor - mean) / torch.sqrt(var + 1e-5)
 
 
 class SourceEncoder(nn.Module):
@@ -41,14 +22,16 @@ class SourceEncoder(nn.Module):
         enc_hidden=256,
     ):
         """
-        This class implements the source encoder, which is supposed to take in a synthetic image of size slen * slen
+        This class implements the source encoder, which is supposed to take in a synthetic image of
+        size slen * slen
         and returns a NN latent variable representation of this image.
 
         * NOTE: Assumes that `source_params` are always `log_fluxes` throughout the code.
 
         * NOTE: Should have (n_bands == n_source_params) in the case of stars.
 
-        * EXAMPLE on padding: If the ptile_slen=8, edge_padding=3, then the size of a tile will be 8-2*3=2
+        * EXAMPLE on padding: If the ptile_slen=8, edge_padding=3, then the size of a tile will be
+        8-2*3=2
 
         :param slen: dimension of full image, we assume its square for now
         :param ptile_slen: dimension (in pixels) of the individual
@@ -60,8 +43,8 @@ class SourceEncoder(nn.Module):
         :param n_source_params:
         * The dimension of 'source parameters' which are log fluxes in the case of stars and
         latent variable dimension in the case of galaxy. Assumed to be normally distributed.
-        * For fluxes this should equal number of bands, for galaxies it will be the number of latent dimensions in the
-        network.
+        * For fluxes this should equal number of bands, for galaxies it will be the number of latent
+        dimensions in the network.
         """
         super(SourceEncoder, self).__init__()
 

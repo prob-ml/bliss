@@ -1,8 +1,9 @@
 import math
 from itertools import permutations
+import warnings
 import torch
 from torch.distributions import Normal
-import warnings
+from torch.nn import functional
 
 from . import utils
 
@@ -88,9 +89,7 @@ def _get_params_loss(
     )
 
     true_n_stars = true_is_on_array.sum(1)
-    one_hot_encoding = utils.get_one_hot_encoding_from_int(
-        true_n_stars, n_source_log_probs.shape[1]
-    )
+    one_hot_encoding = functional.one_hot(true_n_stars, n_source_log_probs.shape[1])
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
     loss_vec = (
