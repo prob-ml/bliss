@@ -2,6 +2,117 @@ import torch
 import torch.nn as nn
 
 
+def get_params_in_tiles(
+    tile_coords, locs, source_params, slen, ptile_slen, edge_padding=0
+):
+    """
+    Pass in the tile coordinates, the
+    :param tile_coords:
+    :param locs:
+    :param source_params:
+    :param slen:
+    :param ptile_slen:
+    :param edge_padding:
+    :return:
+    """
+    # locs are the coordinates in the full image, in coordinates between 0-1
+    assert torch.all(locs <= 1.0)
+    assert torch.all(locs >= 0.0)
+
+    n_ptiles = tile_coords.shape[0]  # number of ptiles in a full image
+    fullimage_batchsize = locs.shape[0]  # number of full images
+
+    subimage_batchsize = n_ptiles * fullimage_batchsize  # total number of ptiles
+
+    max_sources = locs.shape[1]
+
+    tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
+    locs = locs * (slen - 1)
+    which_locs_array = (
+        (locs.unsqueeze(1) > tile_coords + edge_padding - 0.5)
+        & (locs.unsqueeze(1) < tile_coords - 0.5 + ptile_slen - edge_padding)
+        & (locs.unsqueeze(1) != 0)
+    )
+    which_locs_array = (
+        which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]
+    ).float()
+
+    tile_locs = (
+        which_locs_array.unsqueeze(3) * locs.unsqueeze(1)
+        - (tile_coords + edge_padding - 0.5)
+    ).view(subimage_batchsize, max_sources, 2) / (ptile_slen - 2 * edge_padding)
+    tile_locs = torch.relu(
+        tile_locs
+    )  # by subtracting off, some are negative now; just set these to 0
+    if source_params is not None:
+        assert fullimage_batchsize == source_params.shape[0]
+        assert max_sources == source_params.shape[1]
+        n_source_params = source_params.shape[2]
+        tile_source_params = (
+            which_locs_array.unsqueeze(3) * source_params.unsqueeze(1)
+        ).view(subimage_batchsize, max_sources, n_source_params)
+    else:
+        tile_source_params = torch.zeros(tile_locs.shape[0], tile_locs.shape[1], 1)
+        n_source_params = 1
+
+    # sort locs so all the zeros are at the end
+    is_on_array = (
+        which_locs_array.view(subimage_batchsize, max_sources)
+        .type(torch.bool)
+        .to(device)
+    )
+    n_sources_per_tile = (
+        is_on_array.float().sum(dim=1).type(torch.LongTensor).to(device)
+    )
+
+    tile_source_params, tile_locs, tile_is_on_array = bring_to_front(
+        n_source_params, n_sources_per_tile, is_on_array, tile_source_params, tile_locs,
+    )
+
+    return tile_locs, tile_source_params, n_sources_per_tile, tile_is_on_array
+
+
+def get_full_params_from_tile_params(
+    tile_locs, tile_source_params, tile_coords, full_slen, stamp_slen, edge_padding
+):
+    # NOTE: off sources should have tile_locs == 0 and tile_source_params == 0
+
+    # reshaped before passing in into shape (batchsize * n_image_ptiles, -1, self.n_source_params)
+    assert (tile_source_params.shape[0] % tile_coords.shape[0]) == 0
+    batchsize = int(tile_source_params.shape[0] / tile_coords.shape[0])
+
+    assert (tile_source_params.shape[0] % batchsize) == 0
+    n_sources_in_batch = int(
+        tile_source_params.shape[0] * tile_source_params.shape[1] / batchsize
+    )
+
+    n_source_params = tile_source_params.shape[2]  # = n_bands in the case of fluxes.
+    source_params = tile_source_params.view(
+        batchsize, n_sources_in_batch, n_source_params
+    )
+
+    scale = stamp_slen - 2 * edge_padding
+    bias = tile_coords.repeat(batchsize, 1).unsqueeze(1).float() + edge_padding - 0.5
+    locs = (tile_locs * scale + bias) / (full_slen - 1)
+
+    locs = locs.view(batchsize, n_sources_in_batch, 2)
+
+    tile_is_on_bool = (
+        (source_params > 0).any(2).float()
+    )  # if source_param in any n_source_params is nonzero
+    n_sources = torch.sum(tile_is_on_bool > 0, dim=1)
+
+    # puts all the on sources in front (of each tile subarray)
+    is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
+    indx = is_on_array_full.clone()
+    indx[indx == 1] = torch.nonzero(tile_is_on_bool)[:, 1]
+
+    source_params, locs, _ = bring_to_front(
+        n_source_params, n_sources, tile_is_on_bool, source_params, locs
+    )
+    return locs, source_params, n_sources
+
+
 class Flatten(nn.Module):
     def forward(self, tensor):
         return tensor.view(tensor.size(0), -1)

@@ -104,7 +104,7 @@ class TestStarSleepEncoder:
         )
 
         # test that parameters match.
-        assert n_sources == test_star["n_sources"].to(utils.device)
+        assert n_sources == test_star["n_sources"].to(device)
         assert (
             abs(
                 (test_star["locs"].sort(1)[0].to(utils.device) - locs.sort(1)[0])
