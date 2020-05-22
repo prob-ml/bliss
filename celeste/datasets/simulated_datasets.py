@@ -262,7 +262,7 @@ def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
-    return mgrid.type(torch.FloatTensor).to(utils.device)
+    return mgrid.type(torch.FloatTensor).to(device)
 
 
 # TODO: Make this an abstract class, same with the dataset.

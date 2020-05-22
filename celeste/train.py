@@ -10,7 +10,6 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from . import utils
 from . import sleep
 
 
@@ -32,7 +31,7 @@ class TrainModel(ABC):
         weight_decay=1e-5,
         batchsize=64,
         eval_every: int = None,
-        out_name=None,
+        out_dir=None,
         dloader_params=None,
         seed=42,
         verbose=False,
@@ -52,7 +51,7 @@ class TrainModel(ABC):
         self.verbose = verbose
         self.eval_every = eval_every
 
-        self.out_name = out_name
+        self.out_dir = out_dir
         self.output_file, self.state_file_template = self.prepare_filepaths()
 
         self.model = model
@@ -111,23 +110,22 @@ class TrainModel(ABC):
         return optimizer
 
     def prepare_filepaths(self):
-        # need to provide out_name directory for logging and state_dict saving to be available.
-        if self.out_name:
-            out_dir = utils.results_path.joinpath(self.out_name)
-            if out_dir.exists():
+        # need to provide out_dir directory for logging and state_dict saving to be available.
+        if self.out_dir:
+            if self.out_dir.exists():
                 warnings.warn(
                     "The output directory already exists, deleting it, and overwriting previous "
                     "results. "
                 )
-                shutil.rmtree(out_dir)
+                shutil.rmtree(self.out_dir)
 
-            out_dir.mkdir(exist_ok=False)
+            self.out_dir.mkdir(exist_ok=False)
 
-            state_file_template = out_dir.joinpath(
+            state_file_template = self.out_dir.joinpath(
                 "state_{}.dat"
             ).as_posix()  # insert epoch later.
 
-            output_file = out_dir.joinpath(
+            output_file = self.out_dir.joinpath(
                 "output.txt"
             )  # save the output that is being printed.
 
@@ -293,20 +291,21 @@ class SleepTraining(TrainModel):
     def log_train(
         self, epoch, avg_results, t0,
     ):
-        assert self.verbose or self.out_name, "Not doing anything."
+        assert self.verbose or self.out_dir, "Not doing anything."
 
         avg_loss, counter_loss, locs_loss, source_param_loss = avg_results
         # print and save train results.
         elapsed = time.time() - t0
         out_text = (
-            f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f}; "
-            f"source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]"
+            f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: "
+            f"{locs_loss:.4f}; source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} "
+            f"seconds]"
         )
 
         self.write_to_output(out_text)
 
     def log_eval(self, epoch, avg_results):
-        assert self.verbose or self.out_name, "Not doing anything"
+        assert self.verbose or self.out_dir, "Not doing anything"
 
         (
             test_loss,
