@@ -294,7 +294,7 @@ class SourceSimulator(ABC):
 
         self.slen = slen  # side length of the image
         self.n_bands = n_bands
-        self.background = background.to(utils.device)
+        self.background = background.to(device)
 
         assert len(background.shape) == 3
         assert background.shape[0] == self.n_bands
@@ -321,7 +321,7 @@ class SourceSimulator(ABC):
             images_mean = images_mean.clamp(min=1.0)
 
         images = (
-            torch.sqrt(images_mean) * utils.FloatTensor(*images_mean.shape).uniform_()
+            torch.sqrt(images_mean) * torch.rand(*images_mean.shape, device=device)
             + images_mean
         )
 
@@ -383,11 +383,11 @@ class GalaxySimulator(SourceSimulator):
         :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
         """
         super(GalaxySimulator, self).__init__(*args, **kwargs)
-        self.gal_decoder_path = utils.data_path.joinpath(gal_decoder_file)
+        self.gal_decoder_file = gal_decoder_file  # full path
         self.galaxy_slen = galaxy_slen
 
         self.ds = DecoderSamples(
-            galaxy_slen, self.gal_decoder_path, num_bands=self.n_bands
+            galaxy_slen, self.gal_decoder_file, num_bands=self.n_bands
         )
         self.latent_dim = self.ds.latent_dim
 
@@ -397,16 +397,17 @@ class GalaxySimulator(SourceSimulator):
         assert len(n_galaxy.shape) == 1
         assert n_galaxy.shape[0] == batchsize
 
-        galaxy_params = utils.FloatTensor(
-            batchsize, self.max_sources, self.latent_dim
-        ).zero_()
-        single_galaxies = utils.FloatTensor(
+        galaxy_params = torch.zeros(
+            batchsize, self.max_sources, self.latent_dim, device=device
+        )
+        single_galaxies = torch.zeros(
             batchsize,
             self.max_sources,
             self.n_bands,
             self.galaxy_slen,
             self.galaxy_slen,
-        ).zero_()
+            device=device,
+        )
 
         # z has shape = (num_samples, latent_dim)
         # galaxies has shape = (num_samples, n_bands, slen, slen)
@@ -464,7 +465,6 @@ class GalaxyDataset(SourceDataset):
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
 
-    # TODO: Improve iterating over batches in each epoch, maybe return an iterator? Right now a bit clunky.
     def get_batch(self, batchsize=32):
         n_sources, locs, gal_params, single_galaxies = self.simulator.sample_parameters(
             batchsize=batchsize
@@ -482,14 +482,13 @@ class GalaxyDataset(SourceDataset):
 
     @classmethod
     def load_dataset_from_params(
-        cls, n_images, data_params, add_noise=True, draw_poisson=True
+        cls, n_images, data_params, background_file, add_noise=True, draw_poisson=True
     ):
         # prepare background.
-        background_path = utils.data_path.joinpath(data_params["background_file"])
         slen = data_params["slen"]
         n_bands = data_params["n_bands"]
 
-        background = np.load(background_path)
+        background = np.load(background_file)
         background = torch.from_numpy(background).float()
 
         assert n_bands == background.shape[0]
@@ -536,7 +535,7 @@ class StarSimulator(SourceSimulator):
         assert self.background.shape[1] == self.slen
         assert self.background.shape[2] == self.slen
 
-        self.psf = self.psf.to(utils.device)
+        self.psf = self.psf.to(device)
 
         # prior parameters
         self.f_min = f_min
@@ -583,7 +582,7 @@ class StarSimulator(SourceSimulator):
             )
         else:  # use uniform in range (f_min, f_max)
             base_fluxes = (
-                torch.rand(batchsize, self.max_sources, device=utils.device)
+                torch.rand(batchsize, self.max_sources, device=device)
                 * (self.f_max - self.f_min)
                 + self.f_min
             )
@@ -608,7 +607,7 @@ class StarSimulator(SourceSimulator):
     @staticmethod
     def get_log_fluxes(fluxes):
         log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(utils.device)
+            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(device)
         )  # prevent log(0) errors.
         log_fluxes = torch.log(log_fluxes)
 

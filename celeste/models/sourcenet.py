@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.distributions import categorical
 from ..datasets.simulated_datasets import get_is_on_from_n_sources
 from .. import device
 
