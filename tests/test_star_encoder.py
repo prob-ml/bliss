@@ -103,12 +103,12 @@ class TestStarSleepEncoder:
 
         diff_locs = test_star["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
         diff_locs *= test_image.size(-1)
-        assert abs(diff_locs).max() <= 0.5
+        assert diff_locs.abs().max() <= 0.5
 
         # fluxes
         diff = test_star["log_fluxes"].sort(1)[0].to(device) - source_params.sort(1)[0]
-        check_true1 = torch.all(diff.abs() <= source_params.sort(1)[0] * 0.10)
+        check_true1 = torch.all(diff.abs() <= source_params.sort(1)[0].abs() * 0.10)
         check_true2 = torch.all(
-            diff.abs() <= test_star["log_fluxes"].sort(1)[0].to(device) * 0.10
+            diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs().to(device) * 0.10
         )
         assert check_true1 and check_true2
