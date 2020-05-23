@@ -74,7 +74,7 @@ def trained_star_encoder(config_path, data_path):
         batchsize=32,
     )
 
-    SleepTraining.run(n_epochs=80)
+    SleepTraining.run(n_epochs=60)
 
     return star_encoder
 
@@ -107,8 +107,7 @@ class TestStarSleepEncoder:
 
         # fluxes
         diff = test_star["log_fluxes"].sort(1)[0].to(device) - source_params.sort(1)[0]
-        check_true1 = torch.all(diff.abs() <= source_params.sort(1)[0].abs() * 0.10)
-        check_true2 = torch.all(
+        assert torch.all(diff.abs() <= source_params.sort(1)[0].abs() * 0.10)
+        assert torch.all(
             diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs().to(device) * 0.10
         )
-        assert check_true1 and check_true2
