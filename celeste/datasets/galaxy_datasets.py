@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import json
 
 import h5py
+import torch
 from torch.utils.data import Dataset
 
 from ..models import galaxy_net
@@ -54,7 +55,7 @@ class DecoderSamples(SingleGalaxyDataset):
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands).to(
             device
         )
-        self.dec.load_state_dict(decoder_file)
+        self.dec.load_state_dict(torch.load(decoder_file))
         self.num_bands = num_bands
         self.slen = slen
         self.num_images = num_images

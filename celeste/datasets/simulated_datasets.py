@@ -486,7 +486,13 @@ class GalaxyDataset(SourceDataset):
 
     @classmethod
     def load_dataset_from_params(
-        cls, n_images, data_params, background_file, add_noise=True, draw_poisson=True
+        cls,
+        n_images,
+        data_params,
+        background_file,
+        gal_decoder_file,
+        add_noise=True,
+        draw_poisson=True,
     ):
         # prepare background.
         slen = data_params["slen"]
@@ -507,7 +513,7 @@ class GalaxyDataset(SourceDataset):
 
         simulator_args = [
             data_params["galaxy_slen"],
-            data_params["gal_decoder_file"],
+            gal_decoder_file,
             data_params["slen"],
             data_params["n_bands"],
             background,
