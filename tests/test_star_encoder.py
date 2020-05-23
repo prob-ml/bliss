@@ -74,7 +74,7 @@ def trained_star_encoder(config_path, data_path):
         batchsize=32,
     )
 
-    SleepTraining.run(n_epochs=60)
+    SleepTraining.run(n_epochs=100)
 
     return star_encoder
 
