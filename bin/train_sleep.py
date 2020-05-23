@@ -40,6 +40,7 @@ def setup_device(args):
     return device
 
 
+# TODO: Add star functionality using these two functions.
 def load_data_params_from_args(params_file, args):
     with open(params_file, "r") as fp:
         data_params = json.load(fp)
@@ -76,7 +77,7 @@ def main(args):
     data_param_file = paths["config"].joinpath(
         "dataset_params/default_galaxy_parameters.json"
     )
-    out_dir = paths["results"].joinpath(args.output_name)
+    out_dir = paths["results"].joinpath(args.output_name) if args.output_name else None
 
     data_params = load_data_params_from_args(data_param_file, args)
     background_file = paths["data"].joinpath(data_params["background_file"])
@@ -86,6 +87,7 @@ def main(args):
         f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}, "
         f"n_images={args.n_images}, device={device}"
     )
+    print(f"output dir: {out_dir}")
 
     galaxy_dataset = simulated_datasets.GalaxyDataset.load_dataset_from_params(
         args.n_images, data_params, background_file, gal_decoder_file
@@ -111,7 +113,7 @@ def main(args):
         num_bands=1,
         n_source_params=galaxy_dataset.simulator.latent_dim,
         batchsize=args.batchsize,
-        eval_every=args.print_every,
+        eval_every=args.eval_every,
         out_dir=out_dir,
         verbose=True,
     )
@@ -142,7 +144,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-name",
         type=str,
-        default="test",
+        default=None,
         metavar="DIR",
         help="Directory name relative to root/results path, where output will be saved.",
     )
@@ -150,7 +152,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--seed",
         type=int,
-        default=42,
+        default=None,
         metavar="S",
         help="Random seed for tensor flow cuda.",
     )
@@ -176,7 +178,7 @@ if __name__ == "__main__":
         "--batchsize", type=int, default=32, help="Number of batches in each epoch."
     )
     parser.add_argument(
-        "--print-every",
+        "--eval-every",
         type=int,
         default=20,
         help="Log every {print_every} number of times",

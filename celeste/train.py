@@ -13,6 +13,18 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from . import sleep
 
 
+def set_seed(seed):
+    if seed:
+        np.random.seed(99999)
+        torch.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    else:
+        torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.benchmark = True
+
+
 class TrainModel(ABC):
     def __init__(
         self,
@@ -26,8 +38,10 @@ class TrainModel(ABC):
         eval_every: int = None,
         out_dir=None,
         dloader_params=None,
+        seed=None,
         verbose=False,
     ):
+        set_seed(seed)  # seed for training.
 
         self.dataset = dataset
         self.slen = slen

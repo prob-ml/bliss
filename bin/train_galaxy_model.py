@@ -8,7 +8,6 @@ from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
 
-from celeste import utils
 from celeste.datasets import galaxy_datasets
 
 all_datasets = [cls.__name__ for cls in galaxy_datasets.GalaxyDataset.__subclasses__()]
