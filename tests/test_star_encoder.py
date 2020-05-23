@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import pytest
 
-from celeste import device
+from celeste import device, use_cuda
 from celeste import train
 from celeste import psf_transform
 from celeste.datasets import simulated_datasets
@@ -74,7 +74,8 @@ def trained_star_encoder(config_path, data_path):
         batchsize=32,
     )
 
-    SleepTraining.run(n_epochs=100)
+    n_epochs = 100 if use_cuda else 1
+    SleepTraining.run(n_epochs=n_epochs)
 
     return star_encoder
 
@@ -97,6 +98,11 @@ class TestStarSleepEncoder:
             return_map_source_params=True,
             training=False,
         )
+
+        # we only expect our assert statements to be true
+        # when the model is trained in full, which requires cuda
+        if not use_cuda:
+            return
 
         # test that parameters match.
         assert n_sources == test_star["n_sources"].to(device)
