@@ -7,8 +7,7 @@ import h5py
 from astropy.table import Column, Table
 import galsim
 
-from .galaxy_datasets import SingleGalaxyDataset, params_path
-from .. import utils
+from .galaxy_datasets import SingleGalaxyDataset
 
 
 def get_pixel_scale(survey_name):
@@ -16,10 +15,9 @@ def get_pixel_scale(survey_name):
 
 
 class CatsimGalaxies(SingleGalaxyDataset):
-    _params_file = params_path.joinpath("catsim_single_band.json")
-
     def __init__(
         self,
+        catalog_file,
         survey_name=None,
         slen=41,
         filter_dict=None,
@@ -27,20 +25,22 @@ class CatsimGalaxies(SingleGalaxyDataset):
         num_bands=1,
         bands=None,
         dtype=np.float32,
-        catalog_file="OneDegSq.fits",
         preserve_flux=False,
         add_noise=True,
         render_kwargs=None,
     ):
         """
-        This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog) and returns a
-        galaxy drawn from the catalog with realistic seeing conditions using functions from WeakLensingDeblending.
+        This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)
+         and returns a galaxy drawn from the catalog with realistic seeing conditions using
+         functions from WeakLensingDeblending.
 
         For now, only one galaxy can be returned at once.
 
-        :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST survey.
+        :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST
+                    survey.
         :param render_kwargs: Additional keyword arguments that will go into the renderer.
-        :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is to exclude >=25.3 i_ab
+        :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is
+                           to exclude >=25.3 i_ab
         """
         super().__init__()
         assert survey_name == "LSST", "Only using default survey name for now is LSST."
@@ -85,7 +85,7 @@ class CatsimGalaxies(SingleGalaxyDataset):
         self.background = self.renderer.background
 
         # prepare catalog table.
-        self.table = Table.read(utils.data_path.joinpath(catalog_file))
+        self.table = Table.read(catalog_file)  # full path
         self.table = self.table[
             np.random.permutation(len(self.table))
         ]  # shuffle in case that order matters.
@@ -159,16 +159,14 @@ def generate_images(
 
     with h5py.File(file_path, "w") as images_file:
         hds_shape = (n_images, dataset.num_bands, dataset.slen, dataset.slen)
-        hds = images_file.create_dataset(
-            utils.image_h5_name, hds_shape, dtype=dataset.dtype
-        )
+        hds = images_file.create_dataset("images", hds_shape, dtype=dataset.dtype)
         for i in range(n_images):
             random_idx = random.randrange(len(dataset))
             output = dataset[random_idx]
             image = output["image"]
             hds[i, :, :, :] = image
             hds.flush()
-        hds.attrs[utils.background_h5_name] = dataset.background
+        hds.attrs["background"] = dataset.background
         hds.flush()
 
 
@@ -191,8 +189,8 @@ class CatsimRenderer(object):
         """
         Can draw a single entry in CATSIM in the given bands.
 
-        NOTE: Background is constant given the band, survey_name, image size, and default survey_dict, so it can
-        be obtained in advance only once.
+        NOTE: Background is constant given the band, survey_name, image size, and default
+        survey_dict, so it can be obtained in advance only once.
         """
         self.survey_name = survey_name
         self.bands = bands
@@ -331,7 +329,8 @@ class CatsimRenderer(object):
         # Up to this point, single_obs has not been changed by the previous 3 statements.
 
         try:
-            # this line draws the given galaxy image onto single_obs.image, this is the only change in single_obs.
+            # this line draws the given galaxy image onto single_obs.image,
+            # this is the only change in single_obs.
             iso_render_engine.render_galaxy(
                 galaxy,
                 variations_x=None,
@@ -356,8 +355,9 @@ class CatsimRenderer(object):
                 rng=generator, sky_level=single_obs.mean_sky_level
             )  # remember PoissonNoise assumes background already subtracted off.
 
-            # Both of the adding noise methods add noise on the image consisting of the (galaxy flux + background), but
-            # then remove the background at the end so we need to add it later.
+            # Both of the adding noise methods add noise on the image consisting of the
+            # (galaxy flux + background), but then remove the background at the end so we need
+            # to add it later.
             if self.snr:
                 image_temp.addNoiseSNR(
                     noise, snr=self.snr, preserve_flux=self.preserve_flux
