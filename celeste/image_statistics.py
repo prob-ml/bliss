@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from data.sdss_dataset_lib import convert_nmgy_to_mag
+from .datasets.sdss import convert_nmgy_to_mag
 
 
 def filter_params(locs, fluxes, slen, pad=5):

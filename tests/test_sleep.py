@@ -3,8 +3,9 @@ from itertools import permutations
 import torch
 from torch.distributions import Normal
 
-
-from celeste import sleep, utils
+from celeste import device
+from celeste import sleep
+from celeste.datasets import simulated_datasets
 
 
 class TestStarEncoderObjective:
@@ -18,16 +19,16 @@ class TestStarEncoderObjective:
         n_bands = 2
 
         # true parameters
-        true_locs = torch.rand(batchsize, max_stars, 2).to(utils.device)
-        true_log_fluxes = torch.randn(batchsize, max_stars, n_bands).to(utils.device)
+        true_locs = torch.rand(batchsize, max_stars, 2, device=device)
+        true_log_fluxes = torch.randn(batchsize, max_stars, n_bands, device=device)
 
         # estimated parameters
-        loc_mean = torch.randn(batchsize, max_detections, 2).to(utils.device)
-        loc_log_var = torch.randn(batchsize, max_detections, 2).to(utils.device)
+        loc_mean = torch.randn(batchsize, max_detections, 2, device=device)
+        loc_log_var = torch.randn(batchsize, max_detections, 2, device=device)
 
-        log_flux_mean = torch.randn(batchsize, max_detections, n_bands).to(utils.device)
-        log_flux_log_var = torch.randn(batchsize, max_detections, n_bands).to(
-            utils.device
+        log_flux_mean = torch.randn(batchsize, max_detections, n_bands, device=device)
+        log_flux_log_var = torch.randn(
+            batchsize, max_detections, n_bands, device=device
         )
 
         # get loss for locations
@@ -79,31 +80,33 @@ class TestStarEncoderObjective:
         n_bands = 2
 
         # true parameters
-        n_stars = torch.Tensor(np.random.choice(max_detections + 1, batchsize)).to(
-            utils.device
+        n_stars = torch.from_numpy(np.random.choice(max_detections + 1, batchsize)).to(
+            device
         )
-        is_on_array = utils.get_is_on_from_n_sources(n_stars, max_detections).float()
+        is_on_array = simulated_datasets.get_is_on_from_n_sources(
+            n_stars, max_detections
+        ).float()
 
-        true_locs = torch.rand(batchsize, max_detections, 2).to(
-            utils.device
+        true_locs = torch.rand(
+            batchsize, max_detections, 2, device=device
         ) * is_on_array.unsqueeze(2)
-        true_log_fluxes = torch.randn(batchsize, max_detections, n_bands).to(
-            utils.device
+        true_log_fluxes = torch.randn(
+            batchsize, max_detections, n_bands, device=device
         ) * is_on_array.unsqueeze(2)
 
         # estimated parameters
-        loc_mean = torch.randn(batchsize, max_detections, 2).to(
-            utils.device
+        loc_mean = torch.randn(
+            batchsize, max_detections, 2, device=device
         ) * is_on_array.unsqueeze(2)
-        loc_log_var = torch.randn(batchsize, max_detections, 2).to(
-            utils.device
+        loc_log_var = torch.randn(
+            batchsize, max_detections, 2, device=device
         ) * is_on_array.unsqueeze(2)
 
-        log_flux_mean = torch.randn(batchsize, max_detections, n_bands).to(
-            utils.device
+        log_flux_mean = torch.randn(
+            batchsize, max_detections, n_bands, device=device
         ) * is_on_array.unsqueeze(2)
-        log_flux_log_var = torch.randn(batchsize, max_detections, n_bands).to(
-            utils.device
+        log_flux_log_var = torch.randn(
+            batchsize, max_detections, n_bands, device=device
         ) * is_on_array.unsqueeze(2)
 
         # get loss for locations

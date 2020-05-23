@@ -5,7 +5,6 @@ import h5py
 import numpy as np
 import multiprocessing
 
-from celeste import utils
 from celeste.datasets import galaxy_datasets
 from celeste.datasets.galaxy_datasets import generate_images
 
@@ -45,7 +44,7 @@ def merge_files(output_path):
     total_images = 0.0
     for pth in h5_files:
         with h5py.File(pth, "r") as curr_file:
-            ds = curr_file[utils.image_h5_name]
+            ds = curr_file["images"]
             total_images += ds.shape[0]
             shape = ds.shape
             dtype = ds.dtype
@@ -53,17 +52,17 @@ def merge_files(output_path):
     # then we copy them.
     with h5py.File(new_file_path, "w") as new_file:
         fds = new_file.create_dataset(
-            utils.image_h5_name, shape=(total_images, *shape[1:]), dtype=dtype
+            "images", shape=(total_images, *shape[1:]), dtype=dtype
         )
         images_copied = 0
         for pth in h5_files:
             with h5py.File(pth, "r") as curr_file:
-                ds = curr_file[utils.image_h5_name]
+                ds = curr_file["images"]
                 num_images = ds.shape[0]
                 fds[images_copied : images_copied + num_images, :, :, :] = ds[
                     :, :, :, :
                 ]
-                fds.attrs[utils.background_h5_name] = ds.attrs[utils.background_h5_name]
+                fds.attrs["background"] = ds.attrs["background"]
                 images_copied += num_images
 
 
@@ -71,8 +70,8 @@ def save_background(output_path):
     new_file_path = output_path.joinpath(final_image_name)
     background_path = output_path.joinpath(background_name)
     with h5py.File(new_file_path, "r") as curr_file:
-        ds = curr_file[utils.image_h5_name]
-        background = ds.attrs[utils.background_h5_name]
+        ds = curr_file["images"]
+        background = ds.attrs["background"]
         np.save(background_path, background)
 
 
@@ -103,8 +102,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Use multiprocessing to save images from the specified dataset into .hdf5 file in the default "
-        "data directory, along with the background used for this images in background.npy"
+        description="Use multiprocessing to save images from the specified dataset into .hdf5 "
+        "file in the default data directory, along with the background used for this images "
+        "in background.npy"
     )
 
     # io stuff

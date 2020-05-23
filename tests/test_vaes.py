@@ -1,9 +1,9 @@
 import torch
 import numpy as np
 
-import celeste.utils
+from celeste import device
+from celeste.datasets import simulated_datasets
 from celeste.models import sourcenet
-from celeste import utils
 
 
 class TestSourceEncoder:
@@ -31,19 +31,19 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
             n_source_params=n_bands,
-        ).to(utils.device)
+        ).to(device)
 
         star_encoder.eval()
 
         # simulate image padded tiles
         image_ptiles = (
             torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0
-        ).to(utils.device)
+        ).to(device)
 
         n_star_per_tile = (
-            torch.Tensor(np.random.choice(max_detections, n_image_tiles))
+            torch.from_numpy(np.random.choice(max_detections, n_image_tiles))
             .type(torch.LongTensor)
-            .to(utils.device)
+            .to(device)
         )
 
         # forward
@@ -73,7 +73,7 @@ class TestSourceEncoder:
             assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_per_tile).all()
 
         # check pattern of zeros
-        is_on_array = utils.get_is_on_from_n_sources(
+        is_on_array = simulated_datasets.get_is_on_from_n_sources(
             n_star_per_tile, star_encoder.max_detections
         )
         assert torch.all((loc_mean * is_on_array.unsqueeze(2).float()) == loc_mean)
@@ -177,19 +177,22 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
             n_source_params=n_bands,
-        ).to(utils.device)
+        ).to(device)
 
         star_encoder.eval()
 
         # simulate image padded tiles
         n_samples = 10
         image_ptiles = (
-            torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0
-        ).to(utils.device)
+            torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device)
+            + 10.0
+        )
         n_star_per_tile_sampled = (
-            torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_tiles)))
+            torch.from_numpy(
+                np.random.choice(max_detections, (n_samples, n_image_tiles))
+            )
             .type(torch.LongTensor)
-            .to(utils.device)
+            .to(device)
         )
 
         h = star_encoder._get_var_params_all(image_ptiles).detach()
@@ -236,33 +239,32 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
             n_source_params=n_bands,
-        ).to(utils.device)
+        ).to(device)
 
         n_image_tiles = star_encoder.tile_coords.shape[0]
 
         # draw sampled subimage parameters
         n_stars_sampled = (
-            torch.Tensor(np.random.choice(max_detections, (n_samples, n_image_tiles)))
+            torch.from_numpy(
+                np.random.choice(max_detections, (n_samples, n_image_tiles))
+            )
             .type(torch.long)
-            .to(utils.device)
+            .to(device)
         )
 
         is_on_array = (
-            utils.get_is_on_from_tile_n_sources_2d(n_stars_sampled, max_detections)
+            sourcenet.get_is_on_from_tile_n_sources_2d(n_stars_sampled, max_detections)
             .float()
-            .to(utils.device)
+            .to(device)
         )
 
         subimage_locs_sampled = torch.rand(
-            (n_samples, n_image_tiles, max_detections, 2)
-        ).to(utils.device) * is_on_array.unsqueeze(3)
+            n_samples, n_image_tiles, max_detections, 2, device=device
+        ) * is_on_array.unsqueeze(3)
 
-        subimage_fluxes_sampled = (
-            torch.rand((n_samples, n_image_tiles, max_detections, n_bands)).to(
-                utils.device
-            )
-            * is_on_array.unsqueeze(3)
-        ).to(utils.device)
+        subimage_fluxes_sampled = torch.rand(
+            n_samples, n_image_tiles, max_detections, n_bands, device=device
+        ) * is_on_array.unsqueeze(3)
 
         (
             locs_full_image,
@@ -272,13 +274,13 @@ class TestSourceEncoder:
             subimage_locs_sampled, subimage_fluxes_sampled, star_encoder.slen
         )
 
-        # test against individually un-utiled parameters
+        # test against individually un-tiled parameters
         for i in range(n_samples):
             (
                 locs_full_image_i,
                 fluxes_full_image_i,
                 n_stars_i,
-            ) = celeste.utils.get_full_params_from_tile_params(
+            ) = sourcenet.get_full_params_from_tile_params(
                 subimage_locs_sampled[i],
                 subimage_fluxes_sampled[i],
                 star_encoder.tile_coords,
