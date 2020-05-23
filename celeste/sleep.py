@@ -1,10 +1,11 @@
 import math
 from itertools import permutations
+import warnings
 import torch
 from torch.distributions import Normal
-import warnings
+from torch.nn import functional
 
-from . import utils
+from . import device
 
 
 # only function you will ever need to call.
@@ -34,10 +35,8 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
 
     if use_l2_loss:
         warnings.warn("using l2_loss")
-        loc_logvar = torch.zeros(loc_logvar.shape, device=utils.device)
-        source_param_logvar = torch.zeros(
-            source_param_logvar.shape, device=utils.device
-        )
+        loc_logvar = torch.zeros(loc_logvar.shape, device=device)
+        source_param_logvar = torch.zeros(source_param_logvar.shape, device=device)
 
     (loss, counter_loss, locs_loss, source_param_loss, perm_indx,) = _get_params_loss(
         loc_mean,
@@ -47,7 +46,7 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
         log_probs_n_sources_per_tile,
         true_tile_locs,
         true_tile_source_params,
-        true_tile_is_on_array.float(),
+        true_tile_is_on_array.long(),
     )
 
     return (
@@ -88,9 +87,7 @@ def _get_params_loss(
     )
 
     true_n_stars = true_is_on_array.sum(1)
-    one_hot_encoding = utils.get_one_hot_encoding_from_int(
-        true_n_stars, n_source_log_probs.shape[1]
-    )
+    one_hot_encoding = functional.one_hot(true_n_stars, n_source_log_probs.shape[1])
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
     loss_vec = (
@@ -168,12 +165,12 @@ def _get_log_probs_all_perms(
     max_detections = source_param_log_probs_all.shape[-1]
     batchsize = source_param_log_probs_all.shape[0]
 
-    locs_loss_all_perm = torch.zeros(batchsize, math.factorial(max_detections)).to(
-        utils.device
+    locs_loss_all_perm = torch.zeros(
+        batchsize, math.factorial(max_detections), device=device
     )
     source_param_loss_all_perm = torch.zeros(
-        batchsize, math.factorial(max_detections)
-    ).to(utils.device)
+        batchsize, math.factorial(max_detections), device=device
+    )
 
     i = 0
     for perm in permutations(range(max_detections)):

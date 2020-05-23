@@ -96,7 +96,8 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         """
         z = self.fc(z)
 
-        # view takes in -1 and automatically determines that dimension. This dimension is the number of samples.
+        # view takes in -1 and automatically determines that dimension.
+        # This dimension is the number of samples.
         z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
@@ -105,7 +106,8 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         # expected number of photons has to be positive, this is why we use f.relu here.
         recon_mean = f.relu(z[:, : self.num_bands])
 
-        # sometimes nn can get variance to be really small, if sigma gets really small then small learning
+        # sometimes nn can get variance to be really small, if sigma gets really small
+        # then small learning
         # this is what the 1e-4 is for.
         # We also want var >= mean because of the poisson noise, which is also imposed here.
         var_multiplier = 1 + 10 * torch.sigmoid(
@@ -186,10 +188,12 @@ class OneCenteredGalaxy(nn.Module):
         # assuming covariance is diagonal.
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 
-        # image.size(0) = first dimension = number of samples, .sum(1) sum over all dimensions except sample.
+        # image.size(0) = first dimension = number of samples, .sum(1) sum over
+        # all dimensions except sample.
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)  # shape = [nsamples]
 
-        # the expectation is subtle and implicit bc we are using stochastic optimization multiple times.
+        # the expectation is subtle and implicit bc we are using stochastic
+        # optimization multiple times.
         # sum here is over the samples (only remaining dimensions)
         loss = (
             recon_losses + kl_z

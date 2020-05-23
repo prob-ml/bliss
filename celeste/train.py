@@ -10,15 +10,19 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from . import utils
 from . import sleep
 
 
 def set_seed(seed):
-    np.random.seed(99999)
-    _ = torch.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    if seed:
+        np.random.seed(99999)
+        torch.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    else:
+        torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.benchmark = True
 
 
 class TrainModel(ABC):
@@ -32,9 +36,9 @@ class TrainModel(ABC):
         weight_decay=1e-5,
         batchsize=64,
         eval_every: int = None,
-        out_name=None,
+        out_dir=None,
         dloader_params=None,
-        seed=42,
+        seed=None,
         verbose=False,
     ):
         set_seed(seed)  # seed for training.
@@ -52,7 +56,7 @@ class TrainModel(ABC):
         self.verbose = verbose
         self.eval_every = eval_every
 
-        self.out_name = out_name
+        self.out_dir = out_dir
         self.output_file, self.state_file_template = self.prepare_filepaths()
 
         self.model = model
@@ -111,23 +115,22 @@ class TrainModel(ABC):
         return optimizer
 
     def prepare_filepaths(self):
-        # need to provide out_name directory for logging and state_dict saving to be available.
-        if self.out_name:
-            out_dir = utils.results_path.joinpath(self.out_name)
-            if out_dir.exists():
+        # need to provide out_dir directory for logging and state_dict saving to be available.
+        if self.out_dir:
+            if self.out_dir.exists():
                 warnings.warn(
                     "The output directory already exists, deleting it, and overwriting previous "
                     "results. "
                 )
-                shutil.rmtree(out_dir)
+                shutil.rmtree(self.out_dir)
 
-            out_dir.mkdir(exist_ok=False)
+            self.out_dir.mkdir(exist_ok=False)
 
-            state_file_template = out_dir.joinpath(
+            state_file_template = self.out_dir.joinpath(
                 "state_{}.dat"
             ).as_posix()  # insert epoch later.
 
-            output_file = out_dir.joinpath(
+            output_file = self.out_dir.joinpath(
                 "output.txt"
             )  # save the output that is being printed.
 
@@ -293,20 +296,21 @@ class SleepTraining(TrainModel):
     def log_train(
         self, epoch, avg_results, t0,
     ):
-        assert self.verbose or self.out_name, "Not doing anything."
+        assert self.verbose or self.out_dir, "Not doing anything."
 
         avg_loss, counter_loss, locs_loss, source_param_loss = avg_results
         # print and save train results.
         elapsed = time.time() - t0
         out_text = (
-            f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: {locs_loss:.4f}; "
-            f"source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} seconds]"
+            f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: "
+            f"{locs_loss:.4f}; source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} "
+            f"seconds]"
         )
 
         self.write_to_output(out_text)
 
     def log_eval(self, epoch, avg_results):
-        assert self.verbose or self.out_name, "Not doing anything"
+        assert self.verbose or self.out_dir, "Not doing anything"
 
         (
             test_loss,
@@ -330,189 +334,3 @@ class SleepTraining(TrainModel):
             self.write_to_output(state_text)
 
             torch.save(self.encoder.state_dict(), state_file)
-
-
-# lr=1e-4,
-# weight_decay=1e-6,
-# import matplotlib.pyplot as plt
-# from .models import galaxy_net
-# class TrainSingleGalaxy(TrainModel):
-#     def __init__(
-#         self,
-#         dataset,
-#         slen,
-#         num_bands,
-#         num_workers=None,
-#         epochs=None,
-#         batch_size=None,
-#         eval_every=None,
-#         dir_name=None,
-#     ):
-#         """
-#         This function now iterates through the whole dataset in each epoch, with the number of objects in each epoch
-#         depending on the __len__ attribute of the dataset.
-#         """
-#
-#         # constants for optimization and network.
-#         self.latent_dim = 8
-#
-#         self.dataset = dataset
-#
-#         self.vae = galaxy_net.OneCenteredGalaxy(
-#             slen, num_bands=num_bands, latent_dim=self.latent_dim
-#         )
-#
-#         self.dir_name = dir_name  # where to save results.
-#         self.save_props()  # save relevant properties to a file so we know how to reconstruct these results.
-#
-#     def save_props(self):
-#         prop_file = open(f"{self.dir_name}/props.txt", "w")
-#         print(
-#             f"dataset: {self.dataset.__class__.__name__}\n"
-#             f"dataset size: {len(self.dataset)}\n"
-#             f"epochs: {self.epochs}\n"
-#             f"batch_size: {self.batch_size}\n"
-#             f"eval_every: {self.eval_every}\n"
-#             f"learning rate: {self.lr}\n"
-#             f"slen: {self.slen}\n"
-#             f"latent dim: {self.vae.latent_dim}\n",
-#             f"num bands: {self.num_bands}\n",
-#             f"num workers: {self.num_workers}\n",
-#             file=prop_file,
-#         )
-#         self.dataset.print_props(prop_file)
-#         prop_file.close()
-#
-#     # @profile
-#     def train_epoch(self):
-#         self.vae.train()
-#         avg_loss = 0.0
-#
-#         for batch_idx, data in enumerate(self.train_loader):
-#             image = data["image"].to(
-#                 utils.device
-#             )  # shape: [nsamples, num_bands, slen, slen]
-#             background = data["background"].to(utils.device)
-#
-#             loss = self.vae.loss(image, background)
-#             avg_loss += loss.item()
-#
-#             self.optimizer.zero_grad()  # clears the gradients of all optimized torch.Tensors
-#             loss.backward()  # propagate this loss in the network.
-#             self.optimizer.step()  # only part where weights are changed.
-#
-#         avg_loss /= self.size_train
-#
-#         return avg_loss
-#
-#     def evaluate_and_log(self, epoch):
-#         """
-#         Plot reconstructions and evaluate test loss. Also save vae and decoder for future use.
-#         :param epoch:
-#         :return:
-#         """
-#         print("  * plotting reconstructions...")
-#         self.plot_reconstruction(epoch)
-#
-#         # paths
-#         params = Path(self.dir_name, "params")
-#         params.mkdir(parents=True, exist_ok=True)
-#         loss_file = Path(self.dir_name, "loss.txt")
-#         vae_file = params.joinpath("vae_params_{}.dat".format(epoch))
-#         decoder_file = params.joinpath("decoder_params_{}.dat".format(epoch))
-#
-#         # write into files.
-#         print("  * writing the network's parameters to disk...")
-#         torch.save(self.vae.state_dict(), vae_file.as_posix())
-#         torch.save(self.vae.dec.state_dict(), decoder_file.as_posix())
-#
-#         print("  * evaluating test loss...")
-#         test_loss, avg_rmse = self.eval_epoch()
-#         print("  * test loss: {:.0f}".format(test_loss))
-#         print(f" * avg_rmse: {avg_rmse}")
-#
-#         with open(loss_file.as_posix(), "a") as f:
-#             f.write(f"epoch {epoch}, test loss: {test_loss}, avg rmse: {avg_rmse} \n")
-#
-#     def eval_epoch(self):
-#         self.vae.eval()  # set in evaluation mode = no need to compute gradients or allocate memory for them.
-#         avg_loss = 0.0
-#         avg_rmse = 0.0
-#
-#         with torch.no_grad():  # no need to compute gradients outside training.
-#             for batch_idx, data in enumerate(self.test_loader):
-#                 image = data["image"].cuda()  # shape: [nsamples, num_bands, slen, slen]
-#                 background = data["background"].cuda()
-#
-#                 loss = self.vae.loss(image, background)
-#                 avg_loss += (
-#                     loss.item()
-#                 )  # gets number from tensor containing single value.
-#                 avg_rmse += self.vae.rmse_pp(image, background).item()
-#
-#         avg_loss /= self.size_test
-#         avg_rmse /= self.size_test
-#         return avg_loss, avg_rmse
-#
-#     def plot_reconstruction(self, epoch):
-#         """
-#         Now for each epoch to evaluate, it creates a new folder with the reconstructions that include each of the bands.
-#         :param epoch:
-#         :return:
-#         """
-#         num_examples = min(10, self.batch_size)
-#
-#         num_cols = 3  # also look at recon_var
-#
-#         plots_path = Path(self.dir_name, f"plots")
-#         bands_indices = [
-#             min(2, self.num_bands - 1)
-#         ]  # only i band if available, otherwise the highest band.
-#         plots_path.mkdir(parents=True, exist_ok=True)
-#
-#         plt.ioff()
-#         with torch.no_grad():
-#             for batch_idx, data in enumerate(self.test_loader):
-#                 image = data["image"].cuda()  # copies from cpu to gpu memory.
-#                 background = data[
-#                     "background"
-#                 ].cuda()  # not having background will be a problem.
-#                 num_galaxies = data["num_galaxies"]
-#                 self.vae.eval()
-#
-#                 recon_mean, recon_var, _ = self.vae(image, background)
-#                 for j in bands_indices:
-#                     plt.figure(figsize=(5 * 3, 2 + 4 * num_examples))
-#                     plt.tight_layout()
-#                     plt.suptitle("Epoch {:d}".format(epoch))
-#
-#                     for i in range(num_examples):
-#                         vmax1 = image[
-#                             i, j
-#                         ].max()  # we are looking at the ith sample in the jth band.
-#                         vmax2 = max(
-#                             image[i, j].max(),
-#                             recon_mean[i, j].max(),
-#                             recon_var[i, j].max(),
-#                         )
-#
-#                         plt.subplot(num_examples, num_cols, num_cols * i + 1)
-#                         plt.title("image [{} galaxies]".format(num_galaxies[i]))
-#                         plt.imshow(image[i, j].data.cpu().numpy(), vmax=vmax1)
-#                         plt.colorbar()
-#
-#                         plt.subplot(num_examples, num_cols, num_cols * i + 2)
-#                         plt.title("recon_mean")
-#                         plt.imshow(recon_mean[i, j].data.cpu().numpy(), vmax=vmax1)
-#                         plt.colorbar()
-#
-#                         plt.subplot(num_examples, num_cols, num_cols * i + 3)
-#                         plt.title("recon_var")
-#                         plt.imshow(recon_var[i, j].data.cpu().numpy(), vmax=vmax2)
-#                         plt.colorbar()
-#
-#                     plot_file = plots_path.joinpath(f"plot_{epoch}_{j}")
-#                     plt.savefig(plot_file.as_posix())
-#                     plt.close()
-#
-#                 break
