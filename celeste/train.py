@@ -14,15 +14,15 @@ from . import sleep
 
 
 def set_seed(seed):
+
+    torch.backends.cudnn.deterministic = False
+    torch.backends.cudnn.benchmark = True
+
     if seed:
         np.random.seed(99999)
         torch.manual_seed(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-
-    else:
-        torch.backends.cudnn.deterministic = False
-        torch.backends.cudnn.benchmark = True
 
 
 class TrainModel(ABC):
@@ -119,8 +119,7 @@ class TrainModel(ABC):
         if self.out_dir:
             if self.out_dir.exists():
                 warnings.warn(
-                    "The output directory already exists, deleting it, and overwriting previous "
-                    "results. "
+                    "The output directory already exists, previous results will be deleted"
                 )
                 shutil.rmtree(self.out_dir)
 
@@ -281,15 +280,11 @@ class SleepTraining(TrainModel):
         loss, counter_loss, locs_loss, source_params_loss = results
 
         avg_loss += loss.item() * self.batchsize / len(self.dataset)
-        avg_counter_loss += counter_loss.sum().item() / (
-            len(self.dataset) * self.encoder.n_tiles
-        )
-        avg_source_params_loss += source_params_loss.sum().item() / (
-            len(self.dataset) * self.encoder.n_tiles
-        )
-        avg_locs_loss += locs_loss.sum().item() / (
-            len(self.dataset) * self.encoder.n_tiles
-        )
+
+        tiles_per_epoch = len(self.dataset) * self.encoder.n_tiles
+        avg_counter_loss += counter_loss.sum().item() / tiles_per_epoch
+        avg_source_params_loss += source_params_loss.sum().item() / tiles_per_epoch
+        avg_locs_loss += locs_loss.sum().item() / tiles_per_epoch
 
         return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
 
