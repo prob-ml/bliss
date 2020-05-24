@@ -1,7 +1,5 @@
-import numpy as np
 import torch
 import json
-from astropy.io import fits
 import pytest
 
 from celeste.datasets import simulated_datasets
@@ -10,14 +8,6 @@ from celeste import device
 
 # TODO: Test galaxy dataset and batchsize=1 separately.
 class TestSDSSDataset:
-    @pytest.fixture
-    def psf_og(self, data_path):
-
-        psf_r = fits.getdata(data_path.joinpath("sdss-002583-2-0136-psf-r.fits"))
-        psf_i = fits.getdata(data_path.joinpath("sdss-002583-2-0136-psf-i.fits"))
-        psf_og = torch.from_numpy(np.array([psf_r, psf_i])).to(device)
-        return psf_og
-
     @pytest.fixture
     def data_params(self, config_path):
         params_file = config_path.joinpath(
@@ -32,20 +22,25 @@ class TestSDSSDataset:
 
         return data_params
 
-    def test_fresh_data(self, data_params, psf_og):
+    def test_fresh_data(self, data_params, fitted_powerlaw_psf):
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)
 
         n_images = 80
-        # get dataset
-        background = (
-            torch.ones(psf_og.shape[0], data_params["slen"], data_params["slen"])
-            * 686.0
+        # set background
+        background = torch.zeros(
+            data_params["n_bands"],
+            data_params["slen"],
+            data_params["slen"],
+            device=device,
         )
+        background[0] = 686.0
+        background[1] = 1123.0
+
         star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
             n_images=n_images,
             data_params=data_params,
-            psf=psf_og,
+            psf=fitted_powerlaw_psf,
             background=background,
             transpose_psf=False,
             add_noise=True,
