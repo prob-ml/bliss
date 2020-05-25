@@ -121,11 +121,10 @@ def _sample_n_sources(
         m = Poisson(torch.full((1,), mean_sources, dtype=torch.float, device=device))
         n_sources = m.sample([batchsize])
     else:
-        m = Categorical(
-            torch.full(
-                (1,), max_sources - min_sources, dtype=torch.float, device=device
-            )
+        categorical_param = torch.full(
+            (1,), max_sources - min_sources, dtype=torch.float, device=device
         )
+        m = Categorical(categorical_param)
         n_sources = m.sample([batchsize]) + min_sources
 
     return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze(1)
@@ -591,11 +590,8 @@ class StarSimulator(SourceSimulator):
                 shape=(batchsize, self.max_sources),
             )
         else:  # use uniform in range (f_min, f_max)
-            base_fluxes = (
-                torch.rand(batchsize, self.max_sources, device=device)
-                * (self.f_max - self.f_min)
-                + self.f_min
-            )
+            uniform_base = torch.rand(batchsize, self.max_sources, device=device)
+            base_fluxes = uniform_base * (self.f_max - self.f_min) + self.f_min
 
         if self.n_bands > 1:
             colors = (
