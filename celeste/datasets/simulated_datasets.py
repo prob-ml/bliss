@@ -330,6 +330,8 @@ class SourceSimulator(ABC):
         return images
 
     def _prepare_images(self, images):
+        """Apply background and noise if requested.
+        """
 
         images = images + self.background.unsqueeze(0)
 

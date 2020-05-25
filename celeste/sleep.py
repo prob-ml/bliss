@@ -36,7 +36,7 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
         loc_logvar,
         source_param_mean,
         source_param_logvar,
-        bernoulli_param,
+        logprob_bernoulli,
         log_probs_n_sources_per_tile,
     ) = encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
 

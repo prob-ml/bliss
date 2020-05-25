@@ -52,7 +52,7 @@ class TestSourceEncoder:
             loc_logvar,
             log_flux_mean,
             log_flux_logvar,
-            bernoulli_param,
+            logprob_bernoulli,
             log_probs,
         ) = star_encoder.forward(image_ptiles, n_star_per_tile)
 
@@ -140,7 +140,7 @@ class TestSourceEncoder:
             loc_logvar,
             log_flux_mean,
             log_flux_logvar,
-            bernoulli_param,
+            logprob_bernoulli,
             log_probs,
         ) = star_encoder.forward(image_ptiles, n_sources=None)
 
@@ -151,7 +151,7 @@ class TestSourceEncoder:
             _loc_logvar,
             _log_flux_mean,
             _log_flux_logvar,
-            _bernoulli_param,
+            _logprob_bernoulli,
             _log_probs,
         ) = star_encoder.forward(image_ptiles, n_sources=map_n_stars)
 
@@ -213,7 +213,7 @@ class TestSourceEncoder:
                 loc_logvar_i,
                 log_flux_mean_i,
                 log_flux_logvar_i,
-                bernoulli_param_i,
+                logprob_bernoulli_i,
                 _,
             ) = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 

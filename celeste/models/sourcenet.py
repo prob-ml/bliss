@@ -588,8 +588,8 @@ class SourceEncoder(nn.Module):
         else:
             return var_param
 
-    def _get_bernoulli_param_for_n_sources(self, h, n_sources):
-        return torch.sigmoid(
+    def _get_logprob_bernoulli_for_n_sources(self, h, n_sources):
+        return torch.nn.functional.logsigmoid(
             self._indx_h_for_n_sources(h, n_sources, self.star_or_galaxy_indx, 1)
         )
 
@@ -654,7 +654,7 @@ class SourceEncoder(nn.Module):
             n_sources = torch.argmax(log_probs_n, dim=1)
 
         # extract parameters
-        bernoulli_param = self._get_bernoulli_param_for_n_sources(h, n_sources)
+        logprob_bernoulli = self._get_logprob_bernoulli_for_n_sources(h, n_sources)
 
         (
             loc_mean,
@@ -672,7 +672,7 @@ class SourceEncoder(nn.Module):
             loc_logvar,
             source_param_mean,
             source_param_logvar,
-            bernoulli_param,
+            logprob_bernoulli,
             log_probs_n,
         )
 
