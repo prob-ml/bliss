@@ -2,8 +2,6 @@
 __pycache__/* 
 fits/*
 *.pyc
-sdss_stage_dir/*
-daophot_results
 .idea
 /models
 *.fit
@@ -15,5 +13,3 @@ celeste.egg-info/
 .DS_Store
 .eggs
 .tox
-/jupyter/testing
-results
