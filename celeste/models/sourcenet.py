@@ -555,20 +555,15 @@ class SourceEncoder(nn.Module):
         # dim_per_source is the dimension of the parameter you are indexing h for.
         # e.g. for locs, dim_per_source = 2, for galaxy params we usually have dim_per_source = 8.
 
+        assert len(n_sources.shape) == 1, "First dimension is n_ptiles always."
         assert (
             dim_per_source == indx_matrix.size(1) / self.max_detections
         ), "Inconsistent dim_per_source was passed in."
 
-        if len(n_sources.shape) == 1:
-            n_sources = n_sources.unsqueeze(0)
-            squeeze_output = True
-        else:
-            squeeze_output = False
-
-        # this class takes in an array of n_stars, n_samples x batchsize
+        assert h.size(0) == n_sources.size(0)
         assert h.size(1) == self.dim_out_all
-        assert h.size(0) == n_sources.shape[1]
 
+        n_sources = n_sources.unsqueeze(0)
         batchsize = n_sources.shape[0]
         n_ptiles = h.size(0)
 
@@ -583,10 +578,7 @@ class SourceEncoder(nn.Module):
             n_ptiles, batchsize, self.max_detections, dim_per_source
         ).transpose(0, 1)
 
-        if squeeze_output:
-            return var_param.squeeze(0)
-        else:
-            return var_param
+        return var_param.squeeze(0)
 
     def _get_logprob_bernoulli_for_n_sources(self, h, n_sources):
         return torch.nn.functional.logsigmoid(
@@ -598,26 +590,16 @@ class SourceEncoder(nn.Module):
         Index into all possible combinations of variational parameters (h) to obtain actually
         variational parameters for n_sources.
         Args:
-            h: Huge triangular array with variational parameters.
+            h: Huge triangular array with variational parameters, shape = (n_ptiles x dim_out_all)
             n_sources: batchsize x n_tiles
 
         Returns:
 
         """
 
-        if len(n_sources.shape) == 1:
-            n_sources = n_sources.unsqueeze(0)
-            squeeze_output = True
-        else:
-            squeeze_output = False
-
-        # this class takes in an array of n_stars, n_samples x batchsize
-        assert h.shape[0] == n_sources.shape[1]
+        assert len(n_sources.shape) == 1, "First dimension should be n_ptiles"
+        assert h.shape[0] == n_sources.size(0)
         assert h.shape[1] == self.dim_out_all
-
-        n_samples = n_sources.shape[0]
-        batchsize = h.size(0)
-        _h = torch.cat((h, torch.zeros(batchsize, 1, device=device)), dim=1)
 
         loc_logit_mean = self._indx_h_for_n_sources(
             h, n_sources, self.locs_mean_indx_mat, 2
@@ -632,15 +614,7 @@ class SourceEncoder(nn.Module):
         )
         loc_mean = torch.sigmoid(loc_logit_mean) * (loc_logit_mean != 0).float()
 
-        if squeeze_output:
-            return (
-                loc_mean.squeeze(0),
-                loc_logvar.squeeze(0),
-                source_param_mean.squeeze(0),
-                source_param_logvar.squeeze(0),
-            )
-        else:
-            return loc_mean, loc_logvar, source_param_mean, source_param_logvar
+        return loc_mean, loc_logvar, source_param_mean, source_param_logvar
 
     def forward(self, image_ptiles, n_sources=None):
         # pass through neural network, h is the array fo variational distribution parameters.
@@ -654,7 +628,9 @@ class SourceEncoder(nn.Module):
             n_sources = torch.argmax(log_probs_n_sources, dim=1)
 
         # extract parameters
-        logprob_bernoulli = self._get_logprob_bernoulli_for_n_sources(h, n_sources)
+        logprob_bernoulli = self._get_logprob_bernoulli_for_n_sources(
+            h, n_sources=n_sources.clamp(max=self.max_detections)
+        )
 
         (
             loc_mean,
