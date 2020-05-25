@@ -8,7 +8,7 @@ from celeste import device
 
 # TODO: Test galaxy dataset and batchsize=1 separately.
 class TestSDSSDataset:
-    @pytest.fixture
+    @pytest.fixture(scope="module")
     def data_params(self, config_path):
         params_file = config_path.joinpath(
             "dataset_params/default_star_parameters.json"
@@ -26,7 +26,7 @@ class TestSDSSDataset:
         # this checks that we are actually drawing fresh data
         # at each epoch (or not)
 
-        n_images = 80
+        n_images = 120
         # set background
         background = torch.zeros(
             data_params["n_bands"],
