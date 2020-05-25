@@ -53,7 +53,7 @@ class TestSourceEncoder:
             log_flux_mean,
             log_flux_logvar,
             logprob_bernoulli,
-            log_probs,
+            log_probs_n_sources,
         ) = star_encoder.forward(image_ptiles, n_star_per_tile)
 
         assert torch.all(loc_mean <= 1.0)
@@ -132,6 +132,14 @@ class TestSourceEncoder:
                             0 : (n_bands * n_stars_i)
                         ],
                     ]
+                )
+
+                assert torch.all(
+                    logprob_bernoulli[i] == h_out[i, star_encoder.star_or_galaxy_indx]
+                )
+
+                assert torch.all(
+                    log_probs_n_sources[i] == h_out[i, star_encoder.prob_n_source_indx],
                 )
 
         # test that everything works even when n_stars is None

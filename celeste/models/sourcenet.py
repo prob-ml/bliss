@@ -472,7 +472,7 @@ class SourceEncoder(nn.Module):
             device=device,
         )
 
-        self.prob_indx = torch.zeros(
+        self.prob_n_source_indx = torch.zeros(
             self.max_detections + 1, dtype=torch.long, device=device
         )
         for n_detections in range(1, self.max_detections + 1):
@@ -514,7 +514,7 @@ class SourceEncoder(nn.Module):
             ] = torch.arange(indx4, indx5)
 
             # the categorical prob for this n_detection will go after the rest.
-            self.prob_indx[n_detections] = indx5
+            self.prob_n_source_indx[n_detections] = indx5
 
     ############################
     # The layers of our neural network
@@ -548,7 +548,7 @@ class SourceEncoder(nn.Module):
         * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
         probability of having 0,1,2 stars.
         """
-        free_probs = h[:, self.prob_indx]
+        free_probs = h[:, self.prob_n_source_indx]
         return self.log_softmax(free_probs)
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_matrix, dim_per_source):
@@ -648,10 +648,10 @@ class SourceEncoder(nn.Module):
         h = self._get_var_params_all(image_ptiles)
 
         # get probability of n_sources
-        log_probs_n = self._get_logprob_n_from_var_params(h)
+        log_probs_n_sources = self._get_logprob_n_from_var_params(h)
 
         if n_sources is None:
-            n_sources = torch.argmax(log_probs_n, dim=1)
+            n_sources = torch.argmax(log_probs_n_sources, dim=1)
 
         # extract parameters
         logprob_bernoulli = self._get_logprob_bernoulli_for_n_sources(h, n_sources)
@@ -673,7 +673,7 @@ class SourceEncoder(nn.Module):
             source_param_mean,
             source_param_logvar,
             logprob_bernoulli,
-            log_probs_n,
+            log_probs_n_sources,
         )
 
     ######################
