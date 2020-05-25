@@ -116,6 +116,8 @@ def main(args):
         eval_every=args.eval_every,
         out_dir=out_dir,
         verbose=True,
+        torch_seed=args.torch_seed,
+        np_seed=args.np_seed,
     )
 
     print("training starting...")
@@ -150,12 +152,12 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        metavar="S",
-        help="Random seed for tensor flow cuda.",
+        "--torch-seed", type=int, default=None, help="Random seed for pytorch",
     )
+    parser.add_argument(
+        "--np-seed", type=int, default=None, help="Random seed for numpy",
+    )
+
     parser.add_argument(
         "--no-cuda",
         action="store_true",

@@ -28,7 +28,7 @@ jobs:
           command: |
             black --check .
             # pytest and pytest-cov must be in requirements.txt
-            pytest --cov=./celeste/ --cov-report=xml
+            pytest --cov=./celeste/ --cov-report=xml --durations=0
       - codecov/upload:
           file: ./coverage.xml
 
