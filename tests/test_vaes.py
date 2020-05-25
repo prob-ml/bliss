@@ -185,6 +185,8 @@ class TestSourceEncoder:
         ptile_slen = 9
         n_bands = 2
 
+        n_samples = 10
+
         # get encoder
         star_encoder = sourcenet.SourceEncoder(
             slen=101,
@@ -203,10 +205,8 @@ class TestSourceEncoder:
             torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device)
             + 10.0
         )
-        n_star_per_tile_sampled = (
-            torch.from_numpy(np.random.choice(max_detections, n_image_tiles))
-            .type(torch.LongTensor)
-            .to(device)
+        n_star_per_tile_sampled = torch.from_numpy(
+            np.random.choice(max_detections, (n_samples, n_image_tiles))
         )
 
         h = star_encoder._get_var_params_all(image_ptiles).detach()
@@ -218,7 +218,6 @@ class TestSourceEncoder:
         ) = star_encoder._get_var_params_for_n_sources(h, n_star_per_tile_sampled)
 
         #  test prediction matches tile by tile
-        n_samples = 10
         for i in range(n_samples):
             (
                 loc_mean_i,
@@ -227,25 +226,12 @@ class TestSourceEncoder:
                 log_flux_logvar_i,
                 logprob_bernoulli_i,
                 _,
-            ) = star_encoder.forward(
-                image_ptiles[None, i], n_star_per_tile_sampled[None, i]
-            )  # this syntax keeps the singleton dimension when indexing in first dimension by i.
+            ) = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 
-            if loc_mean_i.max().item() > 0:
-
-                assert (
-                    loc_mean_i - loc_mean[None, i]
-                ).abs().max() / loc_mean_i.abs().max() < 1e-1
-                assert (
-                    loc_logvar_i - loc_logvar[None, i]
-                ).abs().max() / loc_logvar_i.abs().max() < 1e-1
-
-                assert (
-                    log_flux_mean_i - log_flux_mean[None, i]
-                ).abs().max() / log_flux_mean_i.abs().max() < 1e-1
-                assert (
-                    log_flux_logvar_i - log_flux_logvar[None, i]
-                ).abs().max() / log_flux_logvar_i.abs().max() < 1e-1
+            assert (loc_mean_i - loc_mean[i]).abs().max() < 1e-6
+            assert torch.all(loc_logvar_i == loc_logvar[i])
+            assert torch.all(log_flux_mean_i == log_flux_mean[i])
+            assert torch.all(log_flux_logvar_i == log_flux_logvar[i])
 
     def test_full_params_from_sampled(self):
         """

@@ -552,20 +552,29 @@ class SourceEncoder(nn.Module):
         return self.log_softmax(free_probs)
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_matrix, dim_per_source):
-        # dim_per_source is the dimension of the parameter you are indexing h for.
-        # e.g. for locs, dim_per_source = 2, for galaxy params we usually have dim_per_source = 8.
+        """
+        Index into all possible combinations of variational parameters (h) to obtain actually
+        variational parameters for n_sources.
+        Args:
+            h: shape = (n_ptiles x dim_out_all)
+            n_sources: n_samples x n_tiles
+            dim_per_source: the dimension of the parameter you are indexing h for. e.g. for locs, 
+                            dim_per_source = 2, for galaxy params we usually have
+                            dim_per_source = 8.
+        Returns:
+            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
+        """
 
-        assert len(n_sources.shape) == 1, "First dimension is n_ptiles always."
+        assert len(n_sources.shape) == 2, "Shape: (n_samples x n_ptiles)"
         assert (
             dim_per_source == indx_matrix.size(1) / self.max_detections
         ), "Inconsistent dim_per_source was passed in."
 
-        assert h.size(0) == n_sources.size(0)
+        assert h.size(0) == n_sources.size(1)  # = n_ptiles
         assert h.size(1) == self.dim_out_all
 
-        n_sources = n_sources.unsqueeze(0)
-        batchsize = n_sources.shape[0]
         n_ptiles = h.size(0)
+        n_samples = n_sources.size(0)
 
         # append null column
         _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=device)), dim=1)
@@ -575,10 +584,11 @@ class SourceEncoder(nn.Module):
         )
 
         var_param = var_param.reshape(
-            n_ptiles, batchsize, self.max_detections, dim_per_source
+            n_ptiles, n_samples, self.max_detections, dim_per_source
         ).transpose(0, 1)
 
-        return var_param.squeeze(0)
+        # shape = (n_samples x n_ptiles x max_detections x dim_per_source)
+        return var_param
 
     def _get_logprob_bernoulli_for_n_sources(self, h, n_sources):
         return torch.nn.functional.logsigmoid(
@@ -587,19 +597,10 @@ class SourceEncoder(nn.Module):
 
     def _get_var_params_for_n_sources(self, h, n_sources):
         """
-        Index into all possible combinations of variational parameters (h) to obtain actually
-        variational parameters for n_sources.
-        Args:
-            h: Huge triangular array with variational parameters, shape = (n_ptiles x dim_out_all)
-            n_sources: batchsize x n_tiles
-
         Returns:
-
+            loc_mean.shape = (n_samples x n_ptiles x max_detections x len(x,y))
+            source_param_mean.shape = (n_samples x n_ptiles x max_detections x n_source_params)
         """
-
-        assert len(n_sources.shape) == 1, "First dimension should be n_ptiles"
-        assert h.shape[0] == n_sources.size(0)
-        assert h.shape[1] == self.dim_out_all
 
         loc_logit_mean = self._indx_h_for_n_sources(
             h, n_sources, self.locs_mean_indx_mat, 2
@@ -617,21 +618,27 @@ class SourceEncoder(nn.Module):
         return loc_mean, loc_logvar, source_param_mean, source_param_logvar
 
     def forward(self, image_ptiles, n_sources=None):
-        # pass through neural network, h is the array fo variational distribution parameters.
-        # h has shape:
+        # will unsqueeze and squeeze n_sources later.
+        assert n_sources is None or len(n_sources.shape) == 1
+
+        # h.shape = (n_ptiles x self.dim_out_all)
         h = self._get_var_params_all(image_ptiles)
 
         # get probability of n_sources
+        # shape = (n_ptiles x (max_detections+1))
         log_probs_n_sources = self._get_logprob_n_from_var_params(h)
 
         if n_sources is None:
+            # shape = (n_ptiles)
             n_sources = torch.argmax(log_probs_n_sources, dim=1)
+        n_sources = n_sources.unsqueeze(0)
 
         # extract parameters
         logprob_bernoulli = self._get_logprob_bernoulli_for_n_sources(
             h, n_sources=n_sources.clamp(max=self.max_detections)
         )
 
+        # loc_mean has shape = (1 x n_ptiles x max_detections x len(x,y))
         (
             loc_mean,
             loc_logvar,
@@ -642,14 +649,13 @@ class SourceEncoder(nn.Module):
         )
 
         # in the case of stars these are log_flux_mean, and log_flux_logvar.
-        # loc_mean has shape = (n_ptiles x max_detections x len(x,y))
         return (
-            loc_mean,
-            loc_logvar,
-            source_param_mean,
-            source_param_logvar,
-            logprob_bernoulli,
-            log_probs_n_sources,
+            loc_mean.squeeze(0),
+            loc_logvar.squeeze(0),
+            source_param_mean.squeeze(0),
+            source_param_logvar.squeeze(0),
+            logprob_bernoulli.squeeze(0),
+            log_probs_n_sources.squeeze(0),
         )
 
     ######################
@@ -792,29 +798,21 @@ class SourceEncoder(nn.Module):
     ):
         """
         NOTE: In the case of stars this will return log_fluxes!
-
-        Args:
-            image:
-            n_samples:
-            return_map_n_sources:
-            return_map_source_params:
-            tile_n_sources:
-            training:
-
-        Returns:
-
         """
 
         assert (
             image.shape[0] == 1
         ), "Sampling only works for one image at a time for now..."
 
+        # shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
         image_ptiles = self.get_image_ptiles(image, locs=None, source_params=None)[0]
 
         # pass through NN
+        # shape = (n_ptiles x dim_out_all)
         h = self._get_var_params_all(image_ptiles)
 
         # get log probs for number of sources
+        # shape = (n_ptiles x max_detections)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
         if not training:
@@ -822,6 +820,7 @@ class SourceEncoder(nn.Module):
             log_probs_n_sources_per_tile = log_probs_n_sources_per_tile.detach()
 
         # sample number of stars
+        # output shape = (n_samples x n_ptiles)
         if tile_n_sources is None:
             if return_map_n_sources:
                 tile_n_stars_sampled = (
@@ -840,9 +839,11 @@ class SourceEncoder(nn.Module):
         is_on_array = get_is_on_from_tile_n_sources_2d(
             tile_n_stars_sampled, self.max_detections
         )
+        # shape = (n_samples x n_ptiles x max_detections x 1 )
         is_on_array = is_on_array.unsqueeze(3).float()
 
         # get variational parameters: these are on image tiles
+        # loc_mean.shape = (n_samples x n_ptiles x max_detections x len(x,y))
         (
             loc_mean,
             loc_logvar,
@@ -858,6 +859,7 @@ class SourceEncoder(nn.Module):
             source_params_sd = torch.exp(0.5 * source_param_logvar).clamp(max=0.5)
 
         # sample locations
+        # shape = (n_samples x n_ptiles x max_detections x len(x,y))
         assert loc_mean.shape == loc_sd.shape, "Shapes need to match"
         tile_locs_sampled = torch.normal(loc_mean, loc_sd) * is_on_array
 
@@ -898,11 +900,9 @@ class SourceEncoder(nn.Module):
 
         """
 
+        self.eval()
         if training:
             self.train()
-
-        else:
-            self.eval()
 
         slen = image.shape[-1]
         (

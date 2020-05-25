@@ -18,6 +18,7 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
     * true_locs has shape = (batchsize x max_sources x 2)
     * true_source_params has shape = (batchsize x max_sources x n_source_params)
     """
+
     # extract image tiles
     # true_tile_locs has shape = (n_ptiles x max_detections x 2)
     # true_tile_n_sources has shape = (n_ptiles)
