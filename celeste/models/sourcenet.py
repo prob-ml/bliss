@@ -416,10 +416,11 @@ class SourceEncoder(nn.Module):
             nn.ReLU(),
         )
 
-        # there are self.max_detections * (self.max_detections + 1)
-        #    total possible detections, and each detection has
-        #    4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for n source_param's
-        #    (flux per band or galaxy params.) + 1 for the Bernoulli variable of whether the source is a star or galaxy.
+        # There are self.max_detections * (self.max_detections + 1)
+        #  total possible detections, and each detection has
+        #  4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for
+        #  n source_param's (flux per band or galaxy params.) + 1 for the Bernoulli variable
+        #  of whether the source is a star or galaxy.
         self.n_source_params = n_source_params
         self.n_params_per_source = 4 + 2 * self.n_source_params + 1
 
@@ -442,7 +443,8 @@ class SourceEncoder(nn.Module):
 
     def _get_hidden_indices(self):
         """
-        Setup the indices corresponding to entries in h, these are just cached since they are the same for all h.
+        Setup the indices corresponding to entries in h, these are just cached since they are the
+        same for all h.
         Returns:
         """
 
@@ -450,37 +452,29 @@ class SourceEncoder(nn.Module):
             (self.max_detections + 1, 2 * self.max_detections),
             self.dim_out_all,
             dtype=torch.long,
-        ).to(utils.device)
-
-        self.locs_var_indx_mat = torch.full(
-            (self.max_detections + 1, 2 * self.max_detections),
-            self.dim_out_all,
-            dtype=torch.long,
-        ).to(utils.device)
+            device=device,
+        )
+        self.locs_var_indx_mat = self.locs_mean_indx_mat.clone()
 
         self.source_params_mean_indx_mat = torch.full(
             (self.max_detections + 1, self.n_source_params * self.max_detections),
             self.dim_out_all,
             dtype=torch.long,
-        ).to(utils.device)
-
-        self.source_params_var_indx_mat = torch.full(
-            (self.max_detections + 1, self.n_source_params * self.max_detections),
-            self.dim_out_all,
-            dtype=torch.long,
-        ).to(utils.device)
+            device=device,
+        )
+        self.source_params_var_indx_mat = self.source_params_mean_indx_mat.clone()
 
         # the unnecessary `1` corresponds to there being only 1 parameter for the Bernoulli.
         self.star_or_galaxy_indx = torch.full(
             (self.max_detections + 1, 1 * self.max_detections),
             self.dim_out_all,
             dtype=torch.long,
-        ).to(utils.device)
-
-        self.prob_indx = torch.zeros(self.max_detections + 1, dtype=torch.long).to(
-            utils.device
+            device=device,
         )
 
+        self.prob_indx = torch.zeros(
+            self.max_detections + 1, dtype=torch.long, device=device
+        )
         for n_detections in range(1, self.max_detections + 1):
 
             # index corresponding to the one we left off from the last iteration.
@@ -528,11 +522,6 @@ class SourceEncoder(nn.Module):
     def _forward_to_pooled_hidden(self, image):
         """
         Forward to the layer that is shared by all n_sources.
-
-        Args:
-            image:
-
-        Returns:
         """
 
         log_img = torch.log(image - image.min() + 1.0)
@@ -545,8 +534,6 @@ class SourceEncoder(nn.Module):
         Concatenate all output parameters for all possible n_sources
         Args:
             image_ptiles: A tensor of shape (n_ptiles, n_bands, ptile_slen, ptile_slen)
-
-        Returns:
         """
         h = self._forward_to_pooled_hidden(image_ptiles)
         return self.enc_final(h)
@@ -558,8 +545,8 @@ class SourceEncoder(nn.Module):
         """
         Obtain log probability of number of n_sources.
 
-        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return probability of
-        having 0,1,2 stars.
+        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        probability of having 0,1,2 stars.
         """
         free_probs = h[:, self.prob_indx]
         return self.log_softmax(free_probs)
@@ -579,14 +566,14 @@ class SourceEncoder(nn.Module):
             squeeze_output = False
 
         # this class takes in an array of n_stars, n_samples x batchsize
-        assert h.shape[1] == self.dim_out_all
-        assert h.shape[0] == n_sources.shape[1]
+        assert h.size(1) == self.dim_out_all
+        assert h.size(0) == n_sources.shape[1]
 
         batchsize = n_sources.shape[0]
         n_ptiles = h.size(0)
 
         # append null column
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1).to(utils.device)), dim=1)
+        _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=device)), dim=1)
 
         var_param = torch.gather(
             _h, 1, indx_matrix[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
@@ -608,8 +595,8 @@ class SourceEncoder(nn.Module):
 
     def _get_var_params_for_n_sources(self, h, n_sources):
         """
-        Index into all possible combinations of variational parameters (h) to obtain actually variational parameters
-        for n_sources.
+        Index into all possible combinations of variational parameters (h) to obtain actually
+        variational parameters for n_sources.
         Args:
             h: Huge triangular array with variational parameters.
             n_sources: batchsize x n_tiles
@@ -617,7 +604,6 @@ class SourceEncoder(nn.Module):
         Returns:
 
         """
-<<<<<<< HEAD
 
         if len(n_sources.shape) == 1:
             n_sources = n_sources.unsqueeze(0)
@@ -633,14 +619,8 @@ class SourceEncoder(nn.Module):
         batchsize = h.size(0)
         _h = torch.cat((h, torch.zeros(batchsize, 1, device=device)), dim=1)
 
-        loc_logit_mean = torch.gather(
-            _h,
-            1,
-            self.locs_mean_indx_mat[n_sources.transpose(0, 1)].reshape(batchsize, -1),
-=======
         loc_logit_mean = self._indx_h_for_n_sources(
             h, n_sources, self.locs_mean_indx_mat, 2
->>>>>>> finished refactoring that part that indices into h to obtain all the var_params and log probs
         )
         loc_logvar = self._indx_h_for_n_sources(h, n_sources, self.locs_var_indx_mat, 2)
 
@@ -652,7 +632,6 @@ class SourceEncoder(nn.Module):
         )
         loc_mean = torch.sigmoid(loc_logit_mean) * (loc_logit_mean != 0).float()
 
-<<<<<<< HEAD
         if squeeze_output:
             return (
                 loc_mean.squeeze(0),
@@ -662,44 +641,6 @@ class SourceEncoder(nn.Module):
             )
         else:
             return loc_mean, loc_logvar, source_param_mean, source_param_logvar
-
-    def _get_hidden_indices(self):
-        """
-        Get indices necessary to maintain huge matrix h.
-        Returns:
-        """
-
-        self.locs_mean_indx_mat = torch.full(
-            (self.max_detections + 1, 2 * self.max_detections),
-            self.dim_out_all,
-            dtype=torch.long,
-            device=device,
-        )
-
-        self.locs_var_indx_mat = torch.full(
-            (self.max_detections + 1, 2 * self.max_detections),
-            self.dim_out_all,
-            dtype=torch.long,
-            device=device,
-        )
-
-        self.source_params_mean_indx_mat = torch.full(
-            (self.max_detections + 1, self.n_source_params * self.max_detections),
-            self.dim_out_all,
-            dtype=torch.long,
-            device=device,
-        )
-        self.source_params_var_indx_mat = torch.full(
-            (self.max_detections + 1, self.n_source_params * self.max_detections),
-            self.dim_out_all,
-            dtype=torch.long,
-            device=device,
-        )
-
-        self.prob_indx = torch.zeros(
-            self.max_detections + 1, dtype=torch.long, device=device
-=======
-        return loc_mean, loc_logvar, source_param_mean, source_param_logvar
 
     def forward(self, image_ptiles, n_sources=None):
         # pass through neural network, h is the array fo variational distribution parameters.
@@ -713,7 +654,6 @@ class SourceEncoder(nn.Module):
             n_sources = torch.argmax(log_probs_n, dim=1)
 
         # extract parameters
-
         bernoulli_param = self._get_bernoulli_param_for_n_sources(h, n_sources)
 
         (
@@ -723,7 +663,6 @@ class SourceEncoder(nn.Module):
             source_param_logvar,
         ) = self._get_var_params_for_n_sources(
             h, n_sources=n_sources.clamp(max=self.max_detections)
->>>>>>> finished refactoring that part that indices into h to obtain all the var_params and log probs
         )
 
         # in the case of stars these are log_flux_mean, and log_flux_logvar.
