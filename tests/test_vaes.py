@@ -148,33 +148,6 @@ class TestSourceEncoder:
                     ]
                 )
 
-        # test that everything works even when n_stars is None
-        (
-            loc_mean,
-            loc_logvar,
-            log_flux_mean,
-            log_flux_logvar,
-            logprob_bernoulli,
-            log_probs,
-        ) = star_encoder.forward(image_ptiles, n_sources=None)
-
-        map_n_stars = torch.argmax(log_probs, dim=1)
-
-        (
-            _loc_mean,
-            _loc_logvar,
-            _log_flux_mean,
-            _log_flux_logvar,
-            _logprob_bernoulli,
-            _log_probs,
-        ) = star_encoder.forward(image_ptiles, n_sources=map_n_stars)
-
-        assert torch.all(loc_mean == _loc_mean)
-        assert torch.all(loc_logvar == _loc_logvar)
-        assert torch.all(log_flux_mean == _log_flux_mean)
-        assert torch.all(log_flux_logvar == _log_flux_logvar)
-        assert torch.all(log_probs == _log_probs)
-
     def test_forward_to_hidden2d(self):
         """
         * Consistency check of using forward vs get_var_params

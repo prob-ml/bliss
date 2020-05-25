@@ -617,9 +617,10 @@ class SourceEncoder(nn.Module):
 
         return loc_mean, loc_logvar, source_param_mean, source_param_logvar
 
-    def forward(self, image_ptiles, n_sources=None):
+    def forward(self, image_ptiles, n_sources):
         # will unsqueeze and squeeze n_sources later.
-        assert n_sources is None or len(n_sources.shape) == 1
+        assert len(n_sources.shape) == 1
+        n_sources = n_sources.unsqueeze(0)
 
         # h.shape = (n_ptiles x self.dim_out_all)
         h = self._get_var_params_all(image_ptiles)
@@ -627,11 +628,6 @@ class SourceEncoder(nn.Module):
         # get probability of n_sources
         # shape = (n_ptiles x (max_detections+1))
         log_probs_n_sources = self._get_logprob_n_from_var_params(h)
-
-        if n_sources is None:
-            # shape = (n_ptiles)
-            n_sources = torch.argmax(log_probs_n_sources, dim=1)
-        n_sources = n_sources.unsqueeze(0)
 
         # extract parameters
         logprob_bernoulli = self._get_logprob_bernoulli_for_n_sources(
