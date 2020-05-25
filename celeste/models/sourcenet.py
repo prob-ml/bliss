@@ -465,7 +465,7 @@ class SourceEncoder(nn.Module):
         self.source_params_var_indx_mat = self.source_params_mean_indx_mat.clone()
 
         # the unnecessary `1` corresponds to there being only 1 parameter for the Bernoulli.
-        self.star_or_galaxy_indx = torch.full(
+        self.bernoulli_indx = torch.full(
             (self.max_detections + 1, 1 * self.max_detections),
             self.dim_out_all,
             dtype=torch.long,
@@ -509,9 +509,9 @@ class SourceEncoder(nn.Module):
 
             # indices for Bernoulli deciding star or galaxy.
             indx5 = indx4 + (n_detections * 1)
-            self.star_or_galaxy_indx[
-                n_detections, 0 : (n_detections * 1)
-            ] = torch.arange(indx4, indx5)
+            self.bernoulli_indx[n_detections, 0 : (n_detections * 1)] = torch.arange(
+                indx4, indx5
+            )
 
             # the categorical prob for this n_detection will go after the rest.
             self.prob_n_source_indx[n_detections] = indx5
@@ -590,7 +590,7 @@ class SourceEncoder(nn.Module):
 
     def _get_logprob_bernoulli_for_n_sources(self, h, n_sources):
         return torch.nn.functional.logsigmoid(
-            self._indx_h_for_n_sources(h, n_sources, self.star_or_galaxy_indx, 1)
+            self._indx_h_for_n_sources(h, n_sources, self.bernoulli_indx, 1)
         )
 
     def _get_var_params_for_n_sources(self, h, n_sources):

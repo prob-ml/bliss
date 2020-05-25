@@ -135,11 +135,17 @@ class TestSourceEncoder:
                 )
 
                 assert torch.all(
-                    logprob_bernoulli[i] == h_out[i, star_encoder.star_or_galaxy_indx]
+                    log_probs_n_sources[i, :].flatten()
+                    == star_encoder.log_softmax(
+                        h_out[:, star_encoder.prob_n_source_indx]
+                    )[i]
                 )
 
                 assert torch.all(
-                    log_probs_n_sources[i] == h_out[i, star_encoder.prob_n_source_indx],
+                    logprob_bernoulli[i, 0:n_stars_i, :].flatten()
+                    == torch.nn.functional.logsigmoid(h_out)[
+                        i, star_encoder.bernoulli_indx[n_stars_i][0 : (1 * n_stars_i)]
+                    ]
                 )
 
         # test that everything works even when n_stars is None
