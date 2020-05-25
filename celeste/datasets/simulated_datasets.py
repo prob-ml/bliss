@@ -277,7 +277,13 @@ class SourceSimulator(ABC):
         max_sources,
         mean_sources,
         min_sources,
-        psf=None,
+        galaxy_decoder,
+        galaxy_slen,
+        psf,
+        f_min,
+        f_max,
+        alpha,
+        use_pareto=True,
         transpose_psf=False,
         add_noise=True,
         draw_poisson=True,
@@ -286,15 +292,12 @@ class SourceSimulator(ABC):
         :param slen: side length of the image.
         :param n_bands: number of bands of each image.
         :param background: shape = (n_bands, slen, slen)
-        :param max_sources: Default value 1500
-        :param mean_sources: Default value 1200
-        :param min_sources: Default value 0
         :param transpose_psf:
         :param add_noise:
         :param draw_poisson:
         """
 
-        self.slen = slen  # side length of the image
+        self.slen = slen
         self.n_bands = n_bands
         self.background = background.to(device)
 
@@ -306,12 +309,45 @@ class SourceSimulator(ABC):
         self.mean_sources = mean_sources
         self.min_sources = min_sources
 
-        self.psf = psf
         self.transpose_psf = transpose_psf
 
         self.draw_poisson = draw_poisson
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
+
+        assert self.psf is not None
+        assert len(self.psf.shape) == 3
+        assert len(self.background.shape) == 3
+        assert self.background.shape[0] == self.psf.shape[0]
+        assert self.background.shape[1] == self.slen
+        assert self.background.shape[2] == self.slen
+
+        self.psf = psf.to(device)
+
+        # prior parameters
+        self.f_min = f_min
+        self.f_max = f_max
+        self.alpha = alpha  # pareto parameter.
+        self.use_pareto = use_pareto
+
+        self.psf_og = self.psf.clone()
+        # get psf shape to match image shape
+        # if slen is even, we still make psf dimension odd.
+        # otherwise, the psf won't have a peak in the center pixel.
+        _slen = self.slen + ((self.slen % 2) == 0) * 1
+        if self.slen >= self.psf_og.shape[-1]:
+            self.psf = _expand_psf(self.psf_og, _slen)
+        else:
+            self.psf = _trim_psf(self.psf_og, _slen)
+
+        if self.transpose_psf:
+            self.psf = self.psf.transpose(1, 2)
+
+        self.galaxy_slen = galaxy_slen
+        self.galaxy_decoder = galaxy_decoder  # full path
+        self.latent_dim = self.galaxy_decoder.latent_dim
+
+        assert self.galaxy_decoder.num_bands == self.n_bands == self.background.shape[0]
 
     # ToDo: Change so that it uses galsim (Poisson Noise?), ok for now.
     @staticmethod
@@ -359,223 +395,6 @@ class SourceSimulator(ABC):
 
         return n_sources, locs, is_on_array
 
-    @abstractmethod
-    def sample_parameters(self, batchsize=1):
-        pass
-
-
-class SourceDataset(ABC, Dataset):
-    def __init__(self, n_images, simulator_args, simulator_kwargs):
-        """
-        :param n_images: same as batchsize.
-        """
-        self.n_images = n_images  # = batchsize.
-        self.simulator_args = simulator_args
-        self.simulator_kwargs = simulator_kwargs
-
-    def __len__(self):
-        return self.n_images
-
-    @abstractmethod
-    def get_batch(self, batchsize=64):
-        pass
-
-
-class GalaxySimulator(SourceSimulator):
-    def __init__(self, galaxy_slen, gal_decoder_file, *args, **kwargs):
-        """
-        :param decoder_file: Decoder file where decoder network trained on individual galaxy images is.
-        """
-        super(GalaxySimulator, self).__init__(*args, **kwargs)
-        self.gal_decoder_file = gal_decoder_file  # full path
-        self.galaxy_slen = galaxy_slen
-
-        self.ds = DecoderSamples(
-            galaxy_slen, self.gal_decoder_file, num_bands=self.n_bands
-        )
-        self.latent_dim = self.ds.latent_dim
-
-        assert self.ds.num_bands == self.n_bands == self.background.shape[0]
-
-    def _sample_gal_params_and_single_images(self, n_galaxy, batchsize):
-        assert len(n_galaxy.shape) == 1
-        assert n_galaxy.shape[0] == batchsize
-
-        galaxy_params = torch.zeros(
-            batchsize, self.max_sources, self.latent_dim, device=device
-        )
-        single_galaxies = torch.zeros(
-            batchsize,
-            self.max_sources,
-            self.n_bands,
-            self.galaxy_slen,
-            self.galaxy_slen,
-            device=device,
-        )
-
-        # z has shape = (num_samples, latent_dim)
-        # galaxies has shape = (num_samples, n_bands, slen, slen)
-        num_samples = int(n_galaxy.sum().item())
-        z, galaxies = self.ds.get_batch(num_samples)
-
-        count = 0
-        for batch_i, n_gal in enumerate(n_galaxy):
-            n_gal = int(n_gal)
-            galaxy_params[batch_i, 0:n_gal, :] = z[count : count + n_gal, :]
-            single_galaxies[batch_i, 0:n_gal, :, :, :] = galaxies[
-                count : count + n_gal, :, :, :
-            ]
-            count += n_gal
-
-        return galaxy_params, single_galaxies
-
-    # TODO: What to do for non-aligned multi-band images in the case of galaxies.
-    def _draw_image_from_params(self, locs, n_sources, galaxies):
-        """
-        Returns images with no background or noise applied.
-
-        :param locs:
-        :param galaxies: galaxies to be plotted in locs.
-        :param n_sources:
-        :return: `images`, torch.Tensor of shape (n_images x n_bands x slen x slen)
-
-        NOTE: The different sources in `images` are assumed to already aligned between bands.
-        """
-
-        images = plot_multiple_galaxies(
-            self.slen, locs, n_sources, galaxies, cached_grid=self.cached_grid
-        )
-        return images
-
-    def generate_images(self, locs, n_sources, galaxies):
-        images = self._draw_image_from_params(locs, n_sources, galaxies)
-        return self._prepare_images(images)
-
-    def sample_parameters(self, batchsize=1):
-        n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
-        gal_params, single_galaxies = self._sample_gal_params_and_single_images(
-            n_sources, batchsize
-        )
-
-        return n_sources, locs, gal_params, single_galaxies
-
-
-class GalaxyDataset(SourceDataset):
-    def __init__(self, n_images, simulator_args, simulator_kwargs):
-        """
-        """
-        super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs)
-        self.simulator = GalaxySimulator(*self.simulator_args, **self.simulator_kwargs)
-        self.slen = self.simulator.slen
-        self.n_bands = self.simulator.n_bands
-
-    def get_batch(self, batchsize=32):
-        n_sources, locs, gal_params, single_galaxies = self.simulator.sample_parameters(
-            batchsize=batchsize
-        )
-
-        images = self.simulator.generate_images(locs, n_sources, single_galaxies)
-
-        return {
-            "images": images,
-            "background": self.simulator.background,
-            "locs": locs,
-            "gal_params": gal_params,
-            "n_sources": n_sources,
-        }
-
-    @classmethod
-    def load_dataset_from_params(
-        cls,
-        n_images,
-        data_params,
-        background_file,
-        gal_decoder_file,
-        add_noise=True,
-        draw_poisson=True,
-    ):
-        # prepare background.
-        slen = data_params["slen"]
-        n_bands = data_params["n_bands"]
-
-        background = np.load(background_file)
-        background = torch.from_numpy(background).float()
-
-        assert n_bands == background.shape[0]
-        assert background.shape[1] == background.shape[2] == data_params["galaxy_slen"]
-
-        # TODO: easier way of doing this?
-        # now convert background to size of scenes
-        values = background.mean((1, 2))  # shape = (n_bands)
-        background = torch.zeros(n_bands, slen, slen)
-        for i, value in enumerate(values):
-            background[i, ...] = value
-
-        simulator_args = [
-            data_params["galaxy_slen"],
-            gal_decoder_file,
-            data_params["slen"],
-            data_params["n_bands"],
-            background,
-            data_params["max_galaxies"],
-            data_params["mean_galaxies"],
-            data_params["min_galaxies"],
-        ]
-
-        simulator_kwargs = dict(add_noise=add_noise, draw_poisson=draw_poisson,)
-
-        return cls(n_images, simulator_args, simulator_kwargs)
-
-
-class StarSimulator(SourceSimulator):
-    def __init__(self, f_min, f_max, alpha, *args, use_pareto=True, **kwargs):
-        """
-        :param f_min:
-        :param f_max:
-        :param alpha:
-        :param max_sources: Default value 1500
-        :param mean_sources: Default value 1200
-        :param min_sources: Default value 0
-        """
-        super(StarSimulator, self).__init__(*args, **kwargs)
-        assert self.psf is not None
-        assert len(self.psf.shape) == 3
-        assert len(self.background.shape) == 3
-        assert self.background.shape[0] == self.psf.shape[0]
-        assert self.background.shape[1] == self.slen
-        assert self.background.shape[2] == self.slen
-
-        self.psf = self.psf.to(device)
-
-        # prior parameters
-        self.f_min = f_min
-        self.f_max = f_max
-        self.alpha = alpha  # pareto parameter.
-        self.use_pareto = use_pareto
-
-        self.psf_og = self.psf.clone()
-        # get psf shape to match image shape
-        # if slen is even, we still make psf dimension odd.
-        # otherwise, the psf won't have a peak in the center pixel.
-        _slen = self.slen + ((self.slen % 2) == 0) * 1
-        if self.slen >= self.psf_og.shape[-1]:
-            self.psf = _expand_psf(self.psf_og, _slen)
-        else:
-            self.psf = _trim_psf(self.psf_og, _slen)
-
-        if self.transpose_psf:
-            self.psf = self.psf.transpose(1, 2)
-
-    def _draw_image_from_params(self, locs, n_sources, fluxes):
-        images = plot_multiple_stars(
-            self.slen, locs, n_sources, self.psf, fluxes, cached_grid=self.cached_grid
-        )
-        return images
-
-    def generate_images(self, locs, n_sources, fluxes):
-        images = self._draw_image_from_params(locs, n_sources, fluxes)
-        return self._prepare_images(images)
-
     def _sample_fluxes(self, n_stars, is_on_array, batchsize=1):
         """
 
@@ -622,9 +441,165 @@ class StarSimulator(SourceSimulator):
 
     def sample_parameters(self, batchsize=1):
         n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
-        fluxes = self._sample_fluxes(n_sources, is_on_array, batchsize)
+        n_stars = self.sample_n_stars(batchsize)
+        assert torch.all(n_stars <= n_sources)
+        n_galaxies = n_sources - n_stars
 
-        return n_sources, locs, fluxes
+        fluxes = self._sample_fluxes(n_stars, is_on_array, batchsize)
+        gal_params, single_galaxies = self._sample_gal_params_and_single_images(
+            n_sources, batchsize
+        )
+
+        return n_sources, locs, gal_params, single_galaxies
+
+    # TODO make more parallel?
+    def _sample_gal_params_and_single_images(self, n_galaxies, batchsize):
+        assert len(n_galaxies.shape) == 1
+        assert n_galaxies.shape[0] == batchsize
+
+        galaxy_params = torch.zeros(
+            batchsize, self.max_sources, self.latent_dim, device=device
+        )
+        single_galaxies = torch.zeros(
+            batchsize,
+            self.max_sources,
+            self.n_bands,
+            self.galaxy_slen,
+            self.galaxy_slen,
+            device=device,
+        )
+
+        # z has shape = (num_samples, latent_dim)
+        # galaxies has shape = (num_samples, n_bands, slen, slen)
+        num_samples = int(n_galaxies.sum().item())
+        z, galaxies = self.galaxy_decoder.get_batch(num_samples)
+
+        count = 0
+        for batch_i, n_gal in enumerate(n_galaxies):
+            n_gal = int(n_gal)
+            galaxy_params[batch_i, 0:n_gal, :] = z[count : count + n_gal, :]
+            single_galaxies[batch_i, 0:n_gal, :, :, :] = galaxies[
+                count : count + n_gal, :, :, :
+            ]
+            count += n_gal
+
+        return galaxy_params, single_galaxies
+
+    # TODO: What to do for non-aligned multi-band images in the case of galaxies.
+    def _draw_image_from_params(self, n_stars, n_galaxies, locs, fluxes, galaxies):
+        """
+        Returns images with no background or noise applied.
+
+        :param locs:
+        :param galaxies: galaxies to be plotted in locs.
+        :param n_sources:
+        :return: `images`, torch.Tensor of shape (n_images x n_bands x slen x slen)
+
+        NOTE: The different sources in `images` are assumed to already aligned between bands but
+        not globally.
+        """
+        stars = plot_multiple_stars(
+            self.slen, locs, n_stars, self.psf, fluxes, cached_grid=self.cached_grid
+        )
+        galaxies = plot_multiple_galaxies(
+            self.slen, locs, n_galaxies, galaxies, cached_grid=self.cached_grid
+        )
+        return stars + galaxies
+
+    def generate_images(self, n_stars, n_galaxies, locs, fluxes, single_galaxies):
+        images = self._draw_image_from_params(locs, n_sources, fluxes)
+        return self._prepare_images(images)
+
+
+class SourceDataset(ABC, Dataset):
+    def __init__(self, n_images, simulator_args, simulator_kwargs):
+        """
+        :param n_images: same as batchsize.
+        """
+        self.n_images = n_images  # = batchsize.
+        self.simulator_args = simulator_args
+        self.simulator_kwargs = simulator_kwargs
+        self.simulator = SourceSimulator(*simulator_args, *simulator_kwargs)
+        self.slen = self.simulator.slen
+        self.n_bands = self.simulator.n_bands
+
+    def __len__(self):
+        return self.n_images
+
+    @abstractmethod
+    def get_batch(self, batchsize=32):
+        (
+            n_sources,
+            n_stars,
+            locs,
+            fluxes,
+            gal_params,
+            single_galaxies,
+        ) = self.simulator.sample_parameters(batchsize=batchsize)
+
+        log_fluxes = self.simulator.get_log_fluxes(fluxes)
+        images = self.simulator.generate_images(
+            n_sources, n_stars, locs, fluxes, gal_params, single_galaxies
+        )
+
+        return {
+            "images": images,
+            "background": self.simulator.background,
+            "locs": locs,
+            "fluxes": fluxes,
+            "log_fluxes": log_fluxes,
+            "gal_params": gal_params,
+            "n_sources": n_sources,
+            "n_stars": n_stars,
+            "n_galaxies": n_sources - n_stars,
+        }
+
+        super(GalaxyDataset, self).__init__(n_images, simulator_args, simulator_kwargs)
+        self.simulator = GalaxySimulator(*self.simulator_args, **self.simulator_kwargs)
+        self.slen = self.simulator.slen
+        self.n_bands = self.simulator.n_bands
+
+    @classmethod
+    def load_dataset_from_params(
+        cls,
+        n_images,
+        data_params,
+        background_file,
+        gal_decoder_file,
+        add_noise=True,
+        draw_poisson=True,
+    ):
+        # prepare background.
+        slen = data_params["slen"]
+        n_bands = data_params["n_bands"]
+
+        background = np.load(background_file)
+        background = torch.from_numpy(background).float()
+
+        assert n_bands == background.shape[0]
+        assert background.shape[1] == background.shape[2] == data_params["galaxy_slen"]
+
+        # TODO: easier way of doing this?
+        # now convert background to size of scenes
+        values = background.mean((1, 2))  # shape = (n_bands)
+        background = torch.zeros(n_bands, slen, slen)
+        for i, value in enumerate(values):
+            background[i, ...] = value
+
+        simulator_args = [
+            data_params["galaxy_slen"],
+            gal_decoder_file,
+            data_params["slen"],
+            data_params["n_bands"],
+            background,
+            data_params["max_galaxies"],
+            data_params["mean_galaxies"],
+            data_params["min_galaxies"],
+        ]
+
+        simulator_kwargs = dict(add_noise=add_noise, draw_poisson=draw_poisson,)
+
+        return cls(n_images, simulator_args, simulator_kwargs)
 
 
 class StarDataset(SourceDataset):
@@ -634,21 +609,6 @@ class StarDataset(SourceDataset):
 
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
-
-    def get_batch(self, batchsize=32):
-        n_sources, locs, fluxes = self.simulator.sample_parameters(batchsize=batchsize)
-        log_fluxes = self.simulator.get_log_fluxes(fluxes)
-
-        images = self.simulator.generate_images(locs, n_sources, fluxes)
-
-        return {
-            "images": images,
-            "background": self.simulator.background,
-            "locs": locs,
-            "fluxes": fluxes,
-            "log_fluxes": log_fluxes,
-            "n_sources": n_sources,
-        }
 
     @classmethod
     def load_dataset_from_params(
