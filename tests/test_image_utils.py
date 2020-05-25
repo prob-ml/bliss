@@ -9,7 +9,7 @@ from celeste.datasets import simulated_datasets
 class TestImageBatching:
     def test_tile_coords(self):
         """
-        Check that tiled images returned from `image_utils.tile_images` actually corresponds
+        Check that tiled images returned from `sourcenet.tile_images` actually corresponds
         to tiles of the full image.
         """
 

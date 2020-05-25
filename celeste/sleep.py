@@ -77,8 +77,8 @@ def _get_params_loss(
     true_is_on_array,
 ):
     """
-    NOTE: All the quantities except 'true_' are per-tile quantities on first dimension, for simplicity not added
-    to names.
+    NOTE: All the quantities except 'true_' are per-tile quantities on first dimension,
+    for simplicity not added to names.
 
     loc_mean shape = (n_ptiles x max_detections x 2)
     source_param_mean shape = (n_ptiles x max_detections x n_source_params)
@@ -87,9 +87,7 @@ def _get_params_loss(
     """
 
     true_n_stars = true_is_on_array.sum(1)
-    one_hot_encoding = utils.get_one_hot_encoding_from_int(
-        true_n_stars, n_source_log_probs.shape[1]
-    )
+    one_hot_encoding = functional.one_hot(true_n_stars, n_source_log_probs.shape[1])
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
     locs_log_probs_all = _get_locs_logprob_all_combs(true_locs, loc_mean, loc_logvar)

@@ -1,11 +1,9 @@
 import json
 import torch
-import numpy as np
 import pytest
 
 from celeste import device, use_cuda
 from celeste import train
-from celeste import psf_transform
 from celeste.datasets import simulated_datasets
 from celeste.models import sourcenet
 
