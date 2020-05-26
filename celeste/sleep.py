@@ -87,10 +87,6 @@ def _get_params_loss(
     true_is_on_array = (n_ptiles x max_detections)
     """
 
-    true_n_stars = true_is_on_array.sum(1)
-    one_hot_encoding = functional.one_hot(true_n_stars, n_source_log_probs.shape[1])
-    counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
-
     locs_log_probs_all = _get_locs_logprob_all_combs(true_locs, loc_mean, loc_logvar)
 
     source_param_log_probs_all = _get_source_params_logprob_all_combs(
