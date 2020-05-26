@@ -178,7 +178,7 @@ def get_background(background_file, n_bands, slen):
 
     assert n_bands == background.shape[0]
 
-    # TODO: easier way of doing this?
+    # TODO: way to vectorize this?
     # now convert background to size of scenes
     values = background.mean((1, 2))  # shape = (n_bands)
     background = torch.zeros(n_bands, slen, slen)
@@ -378,6 +378,7 @@ class SourceSimulator(object):
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
         return n_sources, is_on_array
 
+    # TODO: way to vectorize this?
     def _sample_n_stars_and_galaxies(self, n_sources):
         n_stars = torch.zeros_like(n_sources)
         for i, n in enumerate(n_sources):
@@ -567,9 +568,7 @@ class SourceDataset(Dataset):
         :param n_images: same as batchsize.
         """
         self.n_images = n_images  # = batchsize.
-        self.simulator_args = simulator_args
-        self.simulator_kwargs = simulator_kwargs
-        self.simulator = SourceSimulator(*simulator_args, *simulator_kwargs)
+        self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
 
@@ -594,14 +593,14 @@ class SourceDataset(Dataset):
         )
 
         return {
-            "images": images,
-            "background": self.simulator.background,
+            "n_sources": n_sources,
+            "n_stars": n_stars,
+            "n_galaxies": n_galaxies,
             "star_locs": star_locs,
             "galaxy_locs": galaxy_locs,
             "fluxes": fluxes,
             "log_fluxes": log_fluxes,
             "gal_params": gal_params,
-            "n_sources": n_sources,
-            "n_stars": n_stars,
-            "n_galaxies": n_galaxies,
+            "images": images,
+            "background": self.simulator.background,
         }
