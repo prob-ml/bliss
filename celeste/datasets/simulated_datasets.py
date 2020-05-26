@@ -172,6 +172,7 @@ def _get_grid(slen, cached_grid=None):
 
 
 def get_background(background_file, n_bands, slen):
+    # for numpy background that are not necessarily of the correct size.
     background = np.load(background_file)
     background = torch.from_numpy(background).float()
 
