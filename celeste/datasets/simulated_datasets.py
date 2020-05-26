@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.distributions import Poisson, Categorical
 
 from .. import device
+from .. import psf_transform
 
 
 def _draw_pareto(f_min, alpha, shape):
@@ -106,7 +107,7 @@ def _sample_n_sources(
         m = Categorical(categorical_param)
         n_sources = m.sample([batchsize]) + min_sources
 
-    return n_sources.clamp(max=max_sources, min=min_sources).int().squeeze(1)
+    return n_sources.clamp(max=max_sources, min=min_sources).long().squeeze(1)
 
 
 def _sample_locs(max_sources, is_on_array, batchsize=1):
@@ -123,9 +124,9 @@ def _plot_one_source(slen, locs, source, cached_grid=None):
     """
     :param slen:
     :param locs: is batchsize x len((x,y))
-    :param source: is a (batchsize, n_bands, slen, slen) tensor, which could either be a `expanded_psf`
-                    (psf repeated multiple times) for the case of of stars. Or multiple galaxies in the case of
-                    galaxies.
+    :param source: is a (batchsize, n_bands, slen, slen) tensor, which could either be a
+                    `expanded_psf` (psf repeated multiple times) for the case of of stars.
+                    Or multiple galaxies in the case of galaxies.
     :param cached_grid:
     :return: shape = (batchsize x n_bands x slen x slen)
     """
@@ -160,7 +161,6 @@ def _check_sources_and_locs(locs, n_sources, batchsize):
 
 
 def _get_grid(slen, cached_grid=None):
-
     if cached_grid is None:
         grid = get_mgrid(slen)
     else:
@@ -171,7 +171,7 @@ def _get_grid(slen, cached_grid=None):
     return grid
 
 
-def load_background(background_file, n_bands, slen):
+def get_background(background_file, n_bands, slen):
     background = np.load(background_file)
     background = torch.from_numpy(background).float()
 
@@ -185,6 +185,14 @@ def load_background(background_file, n_bands, slen):
         background[i, ...] = value
 
     return background
+
+
+def get_fitted_powerlaw_psf(psf_file):
+    psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+    power_law_psf = psf_transform.PowerLawPSF(psf_params)
+    psf = power_law_psf.forward().detach()
+    assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
+    return psf
 
 
 def get_mgrid(slen):
@@ -296,6 +304,7 @@ class SourceSimulator(object):
         f_min=1e3,
         f_max=1e6,
         alpha=0.5,
+        bernoulli_prob=0.5,
         use_pareto=True,
         transpose_psf=False,
         add_noise=True,
@@ -313,6 +322,7 @@ class SourceSimulator(object):
         self.max_sources = max_sources
         self.mean_sources = mean_sources
         self.min_sources = min_sources
+        self.bernoulli_prob = bernoulli_prob
 
         self.transpose_psf = transpose_psf
 
@@ -320,13 +330,12 @@ class SourceSimulator(object):
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
-        assert self.psf is not None
+        self.psf = psf.to(device)
+
         assert len(self.psf.shape) == 3
         assert self.background.shape[0] == self.psf.shape[0] == self.n_bands
         assert self.background.shape[1] == self.slen
         assert self.background.shape[2] == self.slen
-
-        self.psf = psf.to(device)
 
         # prior parameters
         self.f_min = f_min
@@ -367,10 +376,19 @@ class SourceSimulator(object):
         # to max_sources)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
 
-        # sample locations
+        # sample locations, shape = (batchsize x max_detections x 2 )
         locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
 
         return n_sources, locs, is_on_array
+
+    @staticmethod
+    def _sample_n_stars(n_sources):
+        n_stars = torch.zeros_like(n_sources)
+        for i, n in enumerate(n_sources):
+            n = n.item()
+            n_stars[i] = torch.bernoulli(torch.full(torch.Size([n]), 0.5)).sum()
+
+        return n_stars
 
     @staticmethod
     def _get_log_fluxes(fluxes):
@@ -381,7 +399,7 @@ class SourceSimulator(object):
 
         return log_fluxes
 
-    def _sample_fluxes(self, n_stars, is_on_array, batchsize=1):
+    def _sample_fluxes(self, n_stars, is_on_array, batchsize):
         """
 
         :return: fluxes, a shape (batchsize x max_sources x n_bands) tensor
@@ -450,18 +468,29 @@ class SourceSimulator(object):
         return galaxy_params, single_galaxies
 
     def sample_parameters(self, batchsize=1):
-        n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
+        n_sources, locs, _ = self._sample_n_sources_and_locs(batchsize)
         n_stars = self._sample_n_stars(n_sources)
         assert torch.all(n_stars <= n_sources)
         n_galaxies = n_sources - n_stars
 
-        fluxes = self._sample_fluxes(n_stars, is_on_array, batchsize)
+        star_is_on_array = get_is_on_from_n_sources(n_stars, self.max_sources)
+        fluxes = self._sample_fluxes(n_stars, star_is_on_array, batchsize)
+        log_fluxes = self._get_log_fluxes(fluxes)
+
         gal_params, single_galaxies = self._sample_gal_params_and_single_images(
-            n_sources, batchsize
+            n_galaxies, batchsize
         )
 
-        log_fluxes = self._get_log_fluxes(fluxes)
-        return n_sources, n_stars, locs, fluxes, log_fluxes, gal_params, single_galaxies
+        return (
+            n_sources,
+            n_stars,
+            n_galaxies,
+            locs,
+            fluxes,
+            log_fluxes,
+            gal_params,
+            single_galaxies,
+        )
 
     # ToDo: Change so that it uses galsim (Poisson Noise?)
     @staticmethod
@@ -494,6 +523,8 @@ class SourceSimulator(object):
     def _draw_image_from_params(
         self, n_stars, n_galaxies, locs, fluxes, single_galaxies
     ):
+        # TODO: add locs_star and locs_galaxies which are the first n_stars elements of locs and
+        #  last n_galaxies elements of locs respectively.
         stars = plot_multiple_stars(
             self.slen, locs, n_stars, self.psf, fluxes, cached_grid=self.cached_grid
         )
@@ -530,6 +561,7 @@ class SourceDataset(Dataset):
         (
             n_sources,
             n_stars,
+            n_galaxies,
             locs,
             fluxes,
             log_fluxes,
@@ -537,7 +569,6 @@ class SourceDataset(Dataset):
             single_galaxies,
         ) = self.simulator.sample_parameters(batchsize=batchsize)
 
-        n_galaxies = n_sources - n_stars
         images = self.simulator.generate_images(
             n_stars, n_galaxies, locs, fluxes, single_galaxies
         )
