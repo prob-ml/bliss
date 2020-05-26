@@ -305,7 +305,7 @@ class SourceSimulator(object):
         f_min=1e3,
         f_max=1e6,
         alpha=0.5,
-        bernoulli_prob=0.5,
+        star_prob=0.5,
         use_pareto=True,
         transpose_psf=False,
         add_noise=True,
@@ -323,7 +323,7 @@ class SourceSimulator(object):
         self.max_sources = max_sources
         self.mean_sources = mean_sources
         self.min_sources = min_sources
-        self.bernoulli_prob = bernoulli_prob
+        self.star_prob = star_prob
 
         self.transpose_psf = transpose_psf
 
@@ -378,12 +378,13 @@ class SourceSimulator(object):
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
         return n_sources, is_on_array
 
-    @staticmethod
-    def _sample_n_stars_and_galaxies(n_sources):
+    def _sample_n_stars_and_galaxies(self, n_sources):
         n_stars = torch.zeros_like(n_sources)
         for i, n in enumerate(n_sources):
             n = n.item()
-            n_stars[i] = torch.bernoulli(torch.full(torch.Size([n]), 0.5)).sum()
+            n_stars[i] = torch.bernoulli(
+                torch.full(torch.Size([n]), self.star_prob)
+            ).sum()
 
         n_galaxies = n_sources - n_stars
         return n_stars, n_galaxies
