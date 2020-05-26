@@ -52,7 +52,7 @@ class DecoderSamples(SingleGalaxyDataset):
         super().__init__()
         assert latent_dim == 8, "Not implemented any other decoder galaxy network"
 
-        self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, num_bands).to(
+        self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(
             device
         )
         self.dec.load_state_dict(torch.load(decoder_file))
