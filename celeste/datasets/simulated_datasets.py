@@ -362,7 +362,7 @@ class SourceSimulator(object):
 
         assert self.galaxy_decoder.n_bands == self.n_bands
 
-    def _sample_n_sources_and_locs(self, batchsize):
+    def _sample_n_sources(self, batchsize):
         # sample number of sources
         n_sources = _sample_n_sources(
             self.mean_sources,
@@ -375,20 +375,17 @@ class SourceSimulator(object):
         # multiply by zero where they are no sources (recall parameters have entry for up
         # to max_sources)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-
-        # sample locations, shape = (batchsize x max_detections x 2 )
-        locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
-
-        return n_sources, locs, is_on_array
+        return n_sources, is_on_array
 
     @staticmethod
-    def _sample_n_stars(n_sources):
+    def _sample_n_stars_and_galaxies(n_sources):
         n_stars = torch.zeros_like(n_sources)
         for i, n in enumerate(n_sources):
             n = n.item()
             n_stars[i] = torch.bernoulli(torch.full(torch.Size([n]), 0.5)).sum()
 
-        return n_stars
+        n_galaxies = n_sources - n_stars
+        return n_stars, n_galaxies
 
     @staticmethod
     def _get_log_fluxes(fluxes):
@@ -468,12 +465,21 @@ class SourceSimulator(object):
         return galaxy_params, single_galaxies
 
     def sample_parameters(self, batchsize=1):
-        n_sources, locs, _ = self._sample_n_sources_and_locs(batchsize)
-        n_stars = self._sample_n_stars(n_sources)
-        assert torch.all(n_stars <= n_sources)
-        n_galaxies = n_sources - n_stars
+        n_sources, is_on_array = self._sample_n_sources(batchsize)
+        n_stars, n_galaxies = self._sample_n_stars_and_galaxies(n_sources)
+        assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
         star_is_on_array = get_is_on_from_n_sources(n_stars, self.max_sources)
+        galaxy_is_on_array = get_is_on_from_n_sources(n_galaxies, self.max_sources)
+
+        # sample locations, shape = (batchsize x max_detections x 2 )
+        star_locs = _sample_locs(
+            self.max_sources, star_is_on_array, batchsize=batchsize
+        )
+        galaxy_locs = _sample_locs(
+            self.max_sources, galaxy_is_on_array, batchsize=batchsize
+        )
+
         fluxes = self._sample_fluxes(n_stars, star_is_on_array, batchsize)
         log_fluxes = self._get_log_fluxes(fluxes)
 
@@ -485,7 +491,8 @@ class SourceSimulator(object):
             n_sources,
             n_stars,
             n_galaxies,
-            locs,
+            star_locs,
+            galaxy_locs,
             fluxes,
             log_fluxes,
             gal_params,
@@ -521,23 +528,33 @@ class SourceSimulator(object):
 
     # TODO: What to do for non-aligned multi-band images in the case of galaxies.
     def _draw_image_from_params(
-        self, n_stars, n_galaxies, locs, fluxes, single_galaxies
+        self, n_stars, n_galaxies, star_locs, galaxy_locs, fluxes, single_galaxies
     ):
-        # TODO: add locs_star and locs_galaxies which are the first n_stars elements of locs and
-        #  last n_galaxies elements of locs respectively.
+
         stars = plot_multiple_stars(
-            self.slen, locs, n_stars, self.psf, fluxes, cached_grid=self.cached_grid
+            self.slen,
+            star_locs,
+            n_stars,
+            self.psf,
+            fluxes,
+            cached_grid=self.cached_grid,
         )
         galaxies = plot_multiple_galaxies(
-            self.slen, locs, n_galaxies, single_galaxies, cached_grid=self.cached_grid
+            self.slen,
+            galaxy_locs,
+            n_galaxies,
+            single_galaxies,
+            cached_grid=self.cached_grid,
         )
 
         # shape = (n_images x n_bands x slen x slen)
         return stars + galaxies
 
-    def generate_images(self, n_stars, n_galaxies, locs, fluxes, single_galaxies):
+    def generate_images(
+        self, n_stars, n_galaxies, star_locs, galaxy_locs, fluxes, single_galaxies
+    ):
         images = self._draw_image_from_params(
-            n_stars, n_galaxies, locs, fluxes, single_galaxies
+            n_stars, n_galaxies, star_locs, galaxy_locs, fluxes, single_galaxies
         )
         return self._prepare_images(images)
 
@@ -562,7 +579,8 @@ class SourceDataset(Dataset):
             n_sources,
             n_stars,
             n_galaxies,
-            locs,
+            star_locs,
+            galaxy_locs,
             fluxes,
             log_fluxes,
             gal_params,
@@ -570,13 +588,14 @@ class SourceDataset(Dataset):
         ) = self.simulator.sample_parameters(batchsize=batchsize)
 
         images = self.simulator.generate_images(
-            n_stars, n_galaxies, locs, fluxes, single_galaxies
+            n_stars, n_galaxies, star_locs, galaxy_locs, fluxes, single_galaxies
         )
 
         return {
             "images": images,
             "background": self.simulator.background,
-            "locs": locs,
+            "star_locs": star_locs,
+            "galaxy_locs": galaxy_locs,
             "fluxes": fluxes,
             "log_fluxes": log_fluxes,
             "gal_params": gal_params,
