@@ -110,7 +110,7 @@ def main(args):
         galaxy_encoder,
         galaxy_dataset,
         data_params["slen"],
-        num_bands=1,
+        n_bands=1,
         n_source_params=galaxy_dataset.simulator.latent_dim,
         batchsize=args.batchsize,
         eval_every=args.eval_every,

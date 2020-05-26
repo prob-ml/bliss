@@ -33,7 +33,7 @@ class TrainModel(ABC):
         model,
         dataset,
         slen,
-        num_bands,
+        n_bands,
         lr=1e-3,
         weight_decay=1e-5,
         batchsize=64,
@@ -48,7 +48,7 @@ class TrainModel(ABC):
 
         self.dataset = dataset
         self.slen = slen
-        self.num_bands = num_bands
+        self.n_bands = n_bands
         self.batchsize = batchsize
 
         # optimizer

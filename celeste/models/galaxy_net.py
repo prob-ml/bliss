@@ -11,7 +11,7 @@ class Flatten(nn.Module):
 
 
 class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
-    def __init__(self, slen, latent_dim, num_bands, hidden=256):
+    def __init__(self, slen, latent_dim, n_bands, hidden=256):
         """
 
         :rtype: NoneType
@@ -20,10 +20,10 @@ class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
 
         self.slen = slen
         self.latent_dim = latent_dim
-        self.num_bands = num_bands
+        self.n_bands = n_bands
 
         self.features = nn.Sequential(
-            nn.Conv2d(self.num_bands, 16, 3, padding=1),
+            nn.Conv2d(self.n_bands, 16, 3, padding=1),
             nn.ReLU(),
             nn.Conv2d(16, 16, 3, padding=1),
             nn.ReLU(),
@@ -59,12 +59,12 @@ class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
 
 
 class CenteredGalaxyDecoder(nn.Module):  # generator
-    def __init__(self, slen, latent_dim, num_bands, hidden=256):
+    def __init__(self, slen, latent_dim, n_bands, hidden=256):
         super(CenteredGalaxyDecoder, self).__init__()
 
         self.slen = slen  # side-length.
         self.latent_dim = latent_dim
-        self.num_bands = num_bands
+        self.n_bands = n_bands
 
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
@@ -84,7 +84,7 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
                 64, 64, 3, padding=0, stride=2
             ),  # this will increase size back to twice.
             nn.ConvTranspose2d(
-                64, 2 * self.num_bands, 3, padding=0
+                64, 2 * self.n_bands, 3, padding=0
             ),  # why channels=2 * num bands?
         )
 
@@ -104,15 +104,13 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
 
         # first half of the bands is now used.
         # expected number of photons has to be positive, this is why we use f.relu here.
-        recon_mean = f.relu(z[:, : self.num_bands])
+        recon_mean = f.relu(z[:, : self.n_bands])
 
         # sometimes nn can get variance to be really small, if sigma gets really small
         # then small learning
         # this is what the 1e-4 is for.
         # We also want var >= mean because of the poisson noise, which is also imposed here.
-        var_multiplier = 1 + 10 * torch.sigmoid(
-            z[:, self.num_bands : (2 * self.num_bands)]
-        )
+        var_multiplier = 1 + 10 * torch.sigmoid(z[:, self.n_bands : (2 * self.n_bands)])
         recon_var = 1e-4 + var_multiplier * recon_mean
 
         # reconstructed mean and variance, these are per pixel.
@@ -131,19 +129,19 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
             return z, samples.detach()
 
         else:
-            return samples.detach()  # shape = (num_samples, num_bands, slen, slen)
+            return samples.detach()  # shape = (num_samples, n_bands, slen, slen)
 
 
 class OneCenteredGalaxy(nn.Module):
-    def __init__(self, slen, latent_dim=8, num_bands=1):
+    def __init__(self, slen, latent_dim=8, n_bands=1):
         super(OneCenteredGalaxy, self).__init__()
 
         self.slen = slen  # The dimensions of the image slen * slen
         self.latent_dim = latent_dim
-        self.num_bands = num_bands
+        self.n_bands = n_bands
 
-        self.enc = CenteredGalaxyEncoder(slen, latent_dim, num_bands)
-        self.dec = CenteredGalaxyDecoder(slen, latent_dim, num_bands)
+        self.enc = CenteredGalaxyEncoder(slen, latent_dim, n_bands)
+        self.dec = CenteredGalaxyDecoder(slen, latent_dim, n_bands)
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
@@ -184,7 +182,7 @@ class OneCenteredGalaxy(nn.Module):
         # sampling images from the real distribution
         recon_mean, recon_var, kl_z = self.forward(image, background)  # z | x ~ decoder
 
-        # -log p(x | z), dimensions: torch.Size([ nsamples, num_bands, slen, slen])
+        # -log p(x | z), dimensions: torch.Size([ nsamples, n_bands, slen, slen])
         # assuming covariance is diagonal.
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 

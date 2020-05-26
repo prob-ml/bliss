@@ -85,13 +85,13 @@ class DecoderSamples(SingleGalaxyDataset):
 
 
 class H5Catalog(Dataset):
-    def __init__(self, h5_file, slen, num_bands):
+    def __init__(self, h5_file, slen, n_bands):
         """
         A dataset created from single galaxy images in a h5py file.
         Args:
             h5_file: full path.
             slen:
-            num_bands:
+            n_bands:
         """
         super().__init__()
 
@@ -100,13 +100,13 @@ class H5Catalog(Dataset):
         assert "images" in self.file, "The dataset is not in this file"
 
         self.dset = self.file["images"]
-        self.num_bands = self.dset.shape[1]
+        self.n_bands = self.dset.shape[1]
         self.slen = self.dset.shape[2]
         assert (
             self.slen == slen == self.dset.shape[3]
         ), "slen does not match expected values."
         assert (
-            self.num_bands == num_bands
+            self.n_bands == n_bands
         ), "Number of bands in training and in dataset do not match."
 
         assert "background" in self.dset.attrs, "Background is not in file"
@@ -121,7 +121,7 @@ class H5Catalog(Dataset):
 
     def __getitem__(self, idx):
         return {
-            "image": self.dset[idx],  # shape = (num_bands, slen, slen)
+            "image": self.dset[idx],  # shape = (n_bands, slen, slen)
             "background": self.background,
             "num_galaxies": 1,
         }

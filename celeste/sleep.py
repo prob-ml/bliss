@@ -14,7 +14,7 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
     NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
     normal variables).
 
-    * images has shape = (batchsize x num_bands x slen x slen)
+    * images has shape = (batchsize x n_bands x slen x slen)
     * true_locs has shape = (batchsize x max_sources x 2)
     * true_source_params has shape = (batchsize x max_sources x n_source_params)
     """

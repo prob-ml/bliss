@@ -662,7 +662,7 @@ class SourceEncoder(nn.Module):
     ):
         """
 
-        :param images: torch.Tensor of shape (batchsize x num_bands x slen x slen)
+        :param images: torch.Tensor of shape (batchsize x n_bands x slen x slen)
         :param locs:
         :param source_params: fluxes/log_fluxes/gal_params.
         :param clip_max_sources:

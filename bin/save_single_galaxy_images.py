@@ -147,8 +147,6 @@ if __name__ == "__main__":
 
     pargs = parser.parse_args()
 
-    assert (
-        pargs.num_bands in [1, 6] or not pargs.generate
-    ), "Only 1 or 6 bands supported."
+    assert pargs.n_bands in [1, 6] or not pargs.generate, "Only 1 or 6 bands supported."
 
     main(pargs)

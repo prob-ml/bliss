@@ -60,7 +60,7 @@ def trained_star_encoder(config_path, data_path, fitted_powerlaw_psf):
         model=star_encoder,
         dataset=star_dataset,
         slen=data_params["slen"],
-        num_bands=2,
+        n_bands=2,
         n_source_params=2,
         verbose=False,
         batchsize=32,
