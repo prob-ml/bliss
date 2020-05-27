@@ -50,12 +50,12 @@ class DecoderSamples(SingleGalaxyDataset):
         :type decoder_file: Path object, full path.
         """
         super().__init__()
-        assert latent_dim == 8, "Not implemented any other decoder galaxy network"
+        assert latent_dim == 8, "Only implemented networks with latent_dim == 8"
 
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(
             device
         )
-        self.dec.load_state_dict(torch.load(decoder_file))
+        self.dec.load_state_dict(torch.load(decoder_file, map_location=device))
         self.n_bands = n_bands
         self.slen = slen
         self.num_images = num_images

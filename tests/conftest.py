@@ -1,5 +1,6 @@
 import pytest
 import pathlib
+
 from celeste.datasets.simulated_datasets import get_fitted_powerlaw_psf
 from celeste.datasets.galaxy_datasets import DecoderSamples
 
