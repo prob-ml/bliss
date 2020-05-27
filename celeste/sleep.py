@@ -13,8 +13,15 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
     """
     NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
     normal variables).
+
+    * images has shape = (batchsize x n_bands x slen x slen)
+    * true_locs has shape = (batchsize x max_sources x 2)
+    * true_source_params has shape = (batchsize x max_sources x n_source_params)
     """
+
     # extract image tiles
+    # true_tile_locs has shape = (n_ptiles x max_detections x 2)
+    # true_tile_n_sources has shape = (n_ptiles)
     (
         image_ptiles,
         true_tile_locs,
@@ -30,6 +37,7 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
         loc_logvar,
         source_param_mean,
         source_param_logvar,
+        logprob_bernoulli,
         log_probs_n_sources_per_tile,
     ) = encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
 
@@ -70,12 +78,15 @@ def _get_params_loss(
     true_is_on_array,
 ):
     """
-    NOTE: All the quantities are per-tile quantities on first dimension, for simplicity not added
-    to names.
+    NOTE: All the quantities except 'true_' are per-tile quantities on first dimension,
+    for simplicity not added to names.
+
+    loc_mean shape = (n_ptiles x max_detections x 2)
+    source_param_mean shape = (n_ptiles x max_detections x n_source_params)
+    true_is_on_array = (n_ptiles x max_detections)
+    true_is_on_array = (n_ptiles x max_detections)
     """
-    # this is batchsize x (max_stars x max_detections)
-    # max_detections = log_flux_mean.shape[1]
-    # the log prob for each observed location x mean
+
     locs_log_probs_all = _get_locs_logprob_all_combs(true_locs, loc_mean, loc_logvar)
 
     source_param_log_probs_all = _get_source_params_logprob_all_combs(
@@ -109,21 +120,34 @@ def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
     return torch.sum(-n_source_log_probs * one_hot_encoding, dim=1)
 
 
-def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_log_var):
-    batchsize = true_locs.shape[0]
+def _get_transformed_params(true_params, param_mean, param_logvar):
+    batchsize = true_params.shape[0]
 
+    # -1 in each view = n_source_params or 2 for locs.
+    _true_params = true_params.view(batchsize, true_params.shape[1], 1, -1)
+    _source_mean = param_mean.view(batchsize, 1, param_mean.shape[1], -1)
+    _source_logvar = param_logvar.view(batchsize, 1, param_logvar.shape[1], -1)
+
+    return _true_params, _source_mean, _source_logvar
+
+
+def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_logvar):
     # get losses for locations
-    _loc_mean = loc_mean.view(batchsize, 1, loc_mean.shape[1], 2)
-    _loc_log_var = loc_log_var.view(batchsize, 1, loc_mean.shape[1], 2)
-    _true_locs = true_locs.view(batchsize, true_locs.shape[1], 1, 2)
+    # max_detections = loc_mean.shape[1]
+    # max_stars = true_locs.shape[1]
+
+    _true_locs, _loc_mean, _loc_logvar = _get_transformed_params(
+        true_locs, loc_mean, loc_logvar
+    )
 
     # this will return a large error if star is off
     _true_locs = _true_locs + (_true_locs == 0).float() * 1e16
 
     # this is batchsize x (max_stars x max_detections)
-    # the log prob for each observed location x mean
+    # the log prob for each observed location & mean.
+    # sum over len(x,y) dimension.
     locs_log_probs_all = (
-        Normal(_loc_mean, (torch.exp(_loc_log_var) + 1e-5).sqrt())
+        Normal(_loc_mean, (torch.exp(_loc_logvar) + 1e-5).sqrt())
         .log_prob(_true_locs)
         .sum(dim=3)
     )
@@ -137,7 +161,7 @@ def _get_source_params_logprob_all_combs(
         _true_source_params,
         _source_param_mean,
         _source_param_logvar,
-    ) = _get_transformed_source_params(
+    ) = _get_transformed_params(
         true_source_params, source_param_mean, source_param_logvar
     )
 
@@ -147,16 +171,6 @@ def _get_source_params_logprob_all_combs(
         .sum(dim=3)
     )
     return source_param_log_probs_all
-
-
-def _permute_losses_mat(losses_mat, perm):
-    batchsize = losses_mat.shape[0]
-    max_stars = losses_mat.shape[1]
-
-    assert perm.shape[0] == batchsize
-    assert perm.shape[1] == max_stars
-
-    return torch.gather(losses_mat, 2, perm.unsqueeze(2)).squeeze()
 
 
 def _get_log_probs_all_perms(
@@ -201,22 +215,3 @@ def _get_min_perm_loss(locs_log_probs_all, source_params_log_probs_all, is_on_ar
     ).squeeze()
 
     return locs_loss, source_params_loss, indx
-
-
-def _get_transformed_source_params(
-    true_source_params, source_param_mean, source_param_logvar
-):
-    n_tiles = true_source_params.shape[0]
-
-    # -1 in each view = n_source_params
-    _true_source_params = true_source_params.view(
-        n_tiles, true_source_params.shape[1], 1, -1
-    )
-    _source_param_mean = source_param_mean.view(
-        n_tiles, 1, source_param_mean.shape[1], -1
-    )
-    _source_param_logvar = source_param_logvar.view(
-        n_tiles, 1, source_param_mean.shape[1], -1
-    )
-
-    return _true_source_params, _source_param_mean, _source_param_logvar

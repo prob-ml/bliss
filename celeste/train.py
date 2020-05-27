@@ -33,7 +33,7 @@ class TrainModel(ABC):
         model,
         dataset,
         slen,
-        num_bands,
+        n_bands,
         lr=1e-3,
         weight_decay=1e-5,
         batchsize=64,
@@ -48,7 +48,7 @@ class TrainModel(ABC):
 
         self.dataset = dataset
         self.slen = slen
-        self.num_bands = num_bands
+        self.n_bands = n_bands
         self.batchsize = batchsize
 
         # optimizer
@@ -200,7 +200,6 @@ class TrainModel(ABC):
         # useful things to log.
         pass
 
-    # TODO: A bit clunky in my opinion, open to suggestions.
     @abstractmethod
     def update_avg(self, avg_results, results):
         pass
@@ -227,18 +226,20 @@ class SleepTraining(TrainModel):
         self.n_source_params = n_source_params
         assert self.n_source_params == self.encoder.n_source_params
 
-    # TODO: A bit hacky, but ok for now since we will move to a combined dataset soon.
-    #  also avoids adding annoying flag of galaxy or star.
+    # TODO: Get rid of 'if' statement once transition is complete.
     def _get_params_from_batch(self, batch):
         class_name = self.dataset.__class__.__name__
-        if class_name == "GalaxyDataset":
-            return batch["gal_params"], batch["locs"], batch["images"]
+        assert class_name == "SourceDataset"
+        warnings.warn(
+            "In transition to full galaxy & star implementation, so only star_prob==1 "
+            "and star_prob==0 are supported."
+        )
 
-        elif class_name == "StarDataset":
-            return batch["log_fluxes"], batch["locs"], batch["images"]
+        if self.dataset.simulator.star_prob > 0.99:
+            return batch["log_fluxes"], batch["star_locs"], batch["images"]
 
         else:
-            raise ValueError("Added an incompatible dataset.")
+            return batch["galaxy_params"], batch["galaxy_locs"], batch["images"]
 
     def get_batch_generator(self):
         assert (

@@ -1,56 +1,60 @@
-import json
 import torch
-import numpy as np
 import pytest
 
 from celeste import device, use_cuda
 from celeste import train
-from celeste import psf_transform
 from celeste.datasets import simulated_datasets
 from celeste.models import sourcenet
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder(config_path, data_path, fitted_powerlaw_psf):
+def trained_star_encoder(
+    config_path, data_path, single_band_galaxy_decoder, fitted_powerlaw_psf
+):
     # create training dataset
-    param_file = config_path.joinpath("dataset_params/default_star_parameters.json")
-    with open(param_file, "r") as fp:
-        data_params = json.load(fp)
-
-    data_params["max_stars"] = 20
-    data_params["mean_stars"] = 15
-    data_params["min_stars"] = 5
-    data_params["f_min"] = 1e4
-    data_params["slen"] = 50
+    n_bands = 2
+    max_stars = 20
+    mean_stars = 15
+    min_stars = 5
+    f_min = 1e4
+    slen = 50
 
     # set background
-    background = torch.zeros(
-        data_params["n_bands"], data_params["slen"], data_params["slen"], device=device
-    )
+    background = torch.zeros(n_bands, slen, slen, device=device)
     background[0] = 686.0
     background[1] = 1123.0
 
     # simulate dataset
     n_images = 128
-    star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
-        n_images,
-        data_params,
+    simulator_args = (
+        single_band_galaxy_decoder,
         fitted_powerlaw_psf,
         background,
-        transpose_psf=False,
-        add_noise=True,
-        draw_poisson=True,
+    )
+
+    simulator_kwargs = dict(
+        slen=slen,
+        n_bands=n_bands,
+        max_sources=max_stars,
+        mean_sources=mean_stars,
+        min_sources=min_stars,
+        f_min=f_min,
+        star_prob=1.0,  # enforce only stars are created in the training images.
+    )
+
+    dataset = simulated_datasets.SourceDataset(
+        n_images, simulator_args, simulator_kwargs
     )
 
     # setup Star Encoder
     star_encoder = sourcenet.SourceEncoder(
-        slen=data_params["slen"],
+        slen=slen,
         ptile_slen=8,
         step=2,
         edge_padding=3,
-        n_bands=2,
+        n_bands=n_bands,
         max_detections=2,
-        n_source_params=2,
+        n_source_params=n_bands,  # star has n_bands # fluxes
         enc_conv_c=5,
         enc_kern=3,
         enc_hidden=64,
@@ -60,10 +64,10 @@ def trained_star_encoder(config_path, data_path, fitted_powerlaw_psf):
     # training wrapper
     SleepTraining = train.SleepTraining(
         model=star_encoder,
-        dataset=star_dataset,
-        slen=data_params["slen"],
-        num_bands=2,
-        n_source_params=2,
+        dataset=dataset,
+        slen=slen,
+        n_bands=n_bands,
+        n_source_params=n_bands,  # star has n_bands # fluxes
         verbose=False,
         batchsize=32,
     )

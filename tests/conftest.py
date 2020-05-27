@@ -1,10 +1,8 @@
 import pytest
 import pathlib
-import torch
-import numpy as np
 
-from celeste import device
-from celeste import psf_transform
+from celeste.datasets.simulated_datasets import get_fitted_powerlaw_psf
+from celeste.datasets.galaxy_datasets import DecoderSamples
 
 
 @pytest.fixture(scope="session")
@@ -25,8 +23,12 @@ def config_path(root_path):
 @pytest.fixture(scope="session")
 def fitted_powerlaw_psf(data_path):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-    psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-    power_law_psf = psf_transform.PowerLawPSF(psf_params)
-    psf = power_law_psf.forward().detach()
-    assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
-    return psf
+    return get_fitted_powerlaw_psf(psf_file)
+
+
+@pytest.fixture(scope="session")
+def single_band_galaxy_decoder(data_path):
+    galaxy_slen = 51
+    n_bands = 1
+    galaxy_decoder_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
+    return DecoderSamples(galaxy_slen, galaxy_decoder_file, n_bands=n_bands)
