@@ -22,7 +22,7 @@ class CatsimGalaxies(SingleGalaxyDataset):
         slen=41,
         filter_dict=None,
         snr=200,
-        num_bands=1,
+        n_bands=1,
         bands=None,
         dtype=np.float32,
         preserve_flux=False,
@@ -44,7 +44,7 @@ class CatsimGalaxies(SingleGalaxyDataset):
         """
         super().__init__()
         assert survey_name == "LSST", "Only using default survey name for now is LSST."
-        assert num_bands in [1, 6], "Only 1 or 6 bands are supported."
+        assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
         assert (
             slen >= 41
         ), "Does not seem to work well if the number of pixels is too low."
@@ -57,11 +57,11 @@ class CatsimGalaxies(SingleGalaxyDataset):
             preserve_flux is False
         ), "Otherwise variance of the noise will change which is not desirable."
         # ToDo: Create a test or assertion to check that mean == variance approx.
-        assert num_bands == len(bands)
+        assert n_bands == len(bands)
 
         self.survey_name = survey_name
         self.bands = bands
-        self.num_bands = num_bands
+        self.n_bands = n_bands
 
         self.slen = slen
         self.pixel_scale = get_pixel_scale(self.survey_name)
@@ -146,7 +146,7 @@ class CatsimGalaxies(SingleGalaxyDataset):
         return filters
 
 
-def generate_images(
+def save_images(
     dataset, file_path, prop_file_path=None, n_images=1,
 ):
     """
@@ -158,7 +158,7 @@ def generate_images(
             dataset.print_props(prop_file)
 
     with h5py.File(file_path, "w") as images_file:
-        hds_shape = (n_images, dataset.num_bands, dataset.slen, dataset.slen)
+        hds_shape = (n_images, dataset.n_bands, dataset.slen, dataset.slen)
         hds = images_file.create_dataset("images", hds_shape, dtype=dataset.dtype)
         for i in range(n_images):
             random_idx = random.randrange(len(dataset))
@@ -194,7 +194,7 @@ class CatsimRenderer(object):
         """
         self.survey_name = survey_name
         self.bands = bands
-        self.num_bands = len(self.bands)
+        self.n_bands = len(self.bands)
         self.stamp_size = stamp_size  # arcsecs
         self.pixel_scale = pixel_scale
         self.image_size = int(self.stamp_size / self.pixel_scale)  # pixels.
@@ -240,7 +240,7 @@ class CatsimRenderer(object):
 
     def get_background(self):
         background = np.zeros(
-            (self.num_bands, self.image_size, self.image_size), dtype=self.dtype
+            (self.n_bands, self.image_size, self.image_size), dtype=self.dtype
         )
         for i, single_obs in enumerate(self.obs):
             background[i, :, :] = single_obs.mean_sky_level
@@ -291,7 +291,7 @@ class CatsimRenderer(object):
         * Each galaxy is aligned across the bands because `entry` is the same.
         """
         image = np.zeros(
-            (self.num_bands, self.image_size, self.image_size), dtype=self.dtype
+            (self.n_bands, self.image_size, self.image_size), dtype=self.dtype
         )
 
         for i, band in enumerate(self.bands):

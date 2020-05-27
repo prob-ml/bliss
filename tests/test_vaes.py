@@ -52,7 +52,8 @@ class TestSourceEncoder:
             loc_logvar,
             log_flux_mean,
             log_flux_logvar,
-            log_probs,
+            logprob_bernoulli,
+            log_probs_n_sources,
         ) = star_encoder.forward(image_ptiles, n_star_per_tile)
 
         assert torch.all(loc_mean <= 1.0)
@@ -133,30 +134,19 @@ class TestSourceEncoder:
                     ]
                 )
 
-        # test that everything works even when n_stars is None
-        (
-            loc_mean,
-            loc_logvar,
-            log_flux_mean,
-            log_flux_logvar,
-            log_probs,
-        ) = star_encoder.forward(image_ptiles, n_sources=None)
+                assert torch.all(
+                    log_probs_n_sources[i, :].flatten()
+                    == star_encoder.log_softmax(
+                        h_out[:, star_encoder.prob_n_source_indx]
+                    )[i]
+                )
 
-        map_n_stars = torch.argmax(log_probs, dim=1)
-
-        (
-            _loc_mean,
-            _loc_logvar,
-            _log_flux_mean,
-            _log_flux_logvar,
-            _log_probs,
-        ) = star_encoder.forward(image_ptiles, n_sources=map_n_stars)
-
-        assert torch.all(loc_mean == _loc_mean)
-        assert torch.all(loc_logvar == _loc_logvar)
-        assert torch.all(log_flux_mean == _log_flux_mean)
-        assert torch.all(log_flux_logvar == _log_flux_logvar)
-        assert torch.all(log_probs == _log_probs)
+                assert torch.all(
+                    logprob_bernoulli[i, 0:n_stars_i, :].flatten()
+                    == torch.nn.functional.logsigmoid(h_out)[
+                        i, star_encoder.bernoulli_indx[n_stars_i][0 : (1 * n_stars_i)]
+                    ]
+                )
 
     def test_forward_to_hidden2d(self):
         """
@@ -167,6 +157,8 @@ class TestSourceEncoder:
         max_detections = 4
         ptile_slen = 9
         n_bands = 2
+
+        n_samples = 10
 
         # get encoder
         star_encoder = sourcenet.SourceEncoder(
@@ -182,17 +174,12 @@ class TestSourceEncoder:
         star_encoder.eval()
 
         # simulate image padded tiles
-        n_samples = 10
         image_ptiles = (
             torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device)
             + 10.0
         )
-        n_star_per_tile_sampled = (
-            torch.from_numpy(
-                np.random.choice(max_detections, (n_samples, n_image_tiles))
-            )
-            .type(torch.LongTensor)
-            .to(device)
+        n_star_per_tile_sampled = torch.from_numpy(
+            np.random.choice(max_detections, (n_samples, n_image_tiles))
         )
 
         h = star_encoder._get_var_params_all(image_ptiles).detach()
@@ -203,19 +190,18 @@ class TestSourceEncoder:
             log_flux_logvar,
         ) = star_encoder._get_var_params_for_n_sources(h, n_star_per_tile_sampled)
 
-        # CHECK THAT THIS MATCHES MY OLD PARAMETERS
+        #  test prediction matches tile by tile
         for i in range(n_samples):
             (
                 loc_mean_i,
                 loc_logvar_i,
                 log_flux_mean_i,
                 log_flux_logvar_i,
+                logprob_bernoulli_i,
                 _,
             ) = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 
-            assert (loc_mean_i - loc_mean[i]).abs().max() < 1e-6, (
-                (loc_mean_i - loc_mean[i]).abs().max()
-            )
+            assert (loc_mean_i - loc_mean[i]).abs().max() < 1e-6
             assert torch.all(loc_logvar_i == loc_logvar[i])
             assert torch.all(log_flux_mean_i == log_flux_mean[i])
             assert torch.all(log_flux_logvar_i == log_flux_logvar[i])
