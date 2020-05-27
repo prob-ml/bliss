@@ -361,7 +361,10 @@ class SourceSimulator(object):
         self.galaxy_slen = self.galaxy_decoder.slen
         self.latent_dim = self.galaxy_decoder.latent_dim
 
-        # TODO: Remove this assertion when full implementation is done.
+        warnings.warn(
+            "Remove second part of this assertion once full star&galaxy transition is "
+            "complete."
+        )
         assert self.galaxy_decoder.n_bands == self.n_bands or self.star_prob > 0.99
 
     def _sample_n_sources(self, batchsize):
