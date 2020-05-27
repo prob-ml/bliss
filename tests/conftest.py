@@ -22,3 +22,9 @@ def config_path(root_path):
 def fitted_powerlaw_psf(data_path):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
     return get_fitted_powerlaw_psf(psf_file)
+
+
+@pytest.fixture(scope="session")
+def single_band_galaxy_decoder(data_path):
+    galaxy_decoder_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
+    return get_fitted_powerlaw_psf(psf_file)

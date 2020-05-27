@@ -1,4 +1,3 @@
-import json
 import torch
 import pytest
 
@@ -11,33 +10,36 @@ from celeste.models import sourcenet
 @pytest.fixture(scope="module")
 def trained_star_encoder(config_path, data_path, fitted_powerlaw_psf):
     # create training dataset
-    param_file = config_path.joinpath("dataset_params/default_star_parameters.json")
-    with open(param_file, "r") as fp:
-        data_params = json.load(fp)
-
-    data_params["max_stars"] = 20
-    data_params["mean_stars"] = 15
-    data_params["min_stars"] = 5
-    data_params["f_min"] = 1e4
-    data_params["slen"] = 50
+    n_bands = 2
+    max_stars = 20
+    mean_stars = 15
+    min_stars = 5
+    f_min = 1e4
+    slen = 50
 
     # set background
-    background = torch.zeros(
-        data_params["n_bands"], data_params["slen"], data_params["slen"], device=device
-    )
+    background = torch.zeros(n_bands, slen, slen, device=device)
     background[0] = 686.0
     background[1] = 1123.0
 
     # simulate dataset
     n_images = 128
-    star_dataset = simulated_datasets.StarDataset.load_dataset_from_params(
-        n_images,
-        data_params,
+    simulator_args = (
+        galaxy_decoder,
         fitted_powerlaw_psf,
         background,
-        transpose_psf=False,
-        add_noise=True,
-        draw_poisson=True,
+    )
+
+    simulator_kwargs = dict(
+        max_sources=max_stars,
+        mean_sources=mean_stars,
+        min_sources=min_stars,
+        f_min=1e4,
+        star_prob=1.0,
+    )
+
+    dataset = simulated_datasets.SourceDataset(
+        args.n_images, simulator_args, simulator_kwargs
     )
 
     # setup Star Encoder

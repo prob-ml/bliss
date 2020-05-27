@@ -38,6 +38,8 @@ def setup_device(args):
     return device
 
 
+# TODO: part of this function can probably be a more general utility function in
+#       simulated_datasets.py
 def setup_dataset(args, paths):
     decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
     background_file = paths["data"].joinpath(args.background_file)
@@ -49,7 +51,7 @@ def setup_dataset(args, paths):
     )
 
     # load decoder
-    galaxy_slen = 51
+    galaxy_slen = 51  # decoders are all created with this slen.
     galaxy_decoder = galaxy_datasets.DecoderSamples(
         galaxy_slen, decoder_file, n_bands=args.n_bands
     )
