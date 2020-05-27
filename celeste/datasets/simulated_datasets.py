@@ -323,7 +323,7 @@ class SourceSimulator(object):
         self.max_sources = max_sources
         self.mean_sources = mean_sources
         self.min_sources = min_sources
-        self.star_prob = star_prob
+        self.star_prob = float(star_prob)
 
         self.transpose_psf = transpose_psf
 
@@ -434,8 +434,8 @@ class SourceSimulator(object):
 
         return fluxes
 
-    # TODO: make parallelization better?
-    def _sample_gal_params_and_single_images(self, n_galaxies, batchsize):
+    # TODO: vectorize this function.
+    def _sample_galaxy_params_and_single_images(self, n_galaxies, batchsize):
         assert len(n_galaxies.shape) == 1
         assert n_galaxies.shape[0] == batchsize
 
@@ -451,10 +451,14 @@ class SourceSimulator(object):
             device=device,
         )
 
+        # At least 1 sample to avoid problems issues when sampling from decoder.
+        # Won't affect anything if n_galaxies = 0 as asserted below.
+        total_galaxies = n_galaxies.sum().item()
+        n_samples = max(int(total_galaxies), 1)
+
         # z has shape = (num_samples, latent_dim)
         # galaxies has shape = (num_samples, n_bands, slen, slen)
-        num_samples = int(n_galaxies.sum().item())
-        z, galaxies = self.galaxy_decoder.get_batch(num_samples)
+        z, galaxies = self.galaxy_decoder.get_batch(n_samples)
 
         count = 0
         for batch_i, n_gal in enumerate(n_galaxies):
@@ -464,6 +468,10 @@ class SourceSimulator(object):
                 count : count + n_gal, :, :, :
             ]
             count += n_gal
+
+        assert total_galaxies > 0 or (
+            torch.all(galaxy_params == 0) and torch.all(single_galaxies == 0)
+        ), "Make sure zero is returned when no galaxies are present."
 
         return galaxy_params, single_galaxies
 
@@ -486,7 +494,7 @@ class SourceSimulator(object):
         fluxes = self._sample_fluxes(n_stars, star_is_on_array, batchsize)
         log_fluxes = self._get_log_fluxes(fluxes)
 
-        gal_params, single_galaxies = self._sample_gal_params_and_single_images(
+        galaxy_params, single_galaxies = self._sample_galaxy_params_and_single_images(
             n_galaxies, batchsize
         )
 
@@ -498,7 +506,7 @@ class SourceSimulator(object):
             galaxy_locs,
             fluxes,
             log_fluxes,
-            gal_params,
+            galaxy_params,
             single_galaxies,
         )
 
@@ -584,7 +592,7 @@ class SourceDataset(Dataset):
             galaxy_locs,
             fluxes,
             log_fluxes,
-            gal_params,
+            galaxy_params,
             single_galaxies,
         ) = self.simulator.sample_parameters(batchsize=batchsize)
 
@@ -600,7 +608,7 @@ class SourceDataset(Dataset):
             "galaxy_locs": galaxy_locs,
             "fluxes": fluxes,
             "log_fluxes": log_fluxes,
-            "gal_params": gal_params,
+            "galaxy_params": galaxy_params,
             "images": images,
             "background": self.simulator.background,
         }
