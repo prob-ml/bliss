@@ -8,7 +8,9 @@ from celeste.models import sourcenet
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder(config_path, data_path, fitted_powerlaw_psf):
+def trained_star_encoder(
+    config_path, data_path, single_band_galaxy_decoder, fitted_powerlaw_psf
+):
     # create training dataset
     n_bands = 2
     max_stars = 20
@@ -25,7 +27,7 @@ def trained_star_encoder(config_path, data_path, fitted_powerlaw_psf):
     # simulate dataset
     n_images = 128
     simulator_args = (
-        galaxy_decoder,
+        single_band_galaxy_decoder,
         fitted_powerlaw_psf,
         background,
     )
@@ -34,21 +36,21 @@ def trained_star_encoder(config_path, data_path, fitted_powerlaw_psf):
         max_sources=max_stars,
         mean_sources=mean_stars,
         min_sources=min_stars,
-        f_min=1e4,
-        star_prob=1.0,
+        f_min=f_min,
+        star_prob=1.0,  # enforce only stars are created in the training images.
     )
 
     dataset = simulated_datasets.SourceDataset(
-        args.n_images, simulator_args, simulator_kwargs
+        n_images, simulator_args, simulator_kwargs
     )
 
     # setup Star Encoder
     star_encoder = sourcenet.SourceEncoder(
-        slen=data_params["slen"],
+        slen=slen,
         ptile_slen=8,
         step=2,
         edge_padding=3,
-        n_bands=2,
+        n_bands=n_bands,
         max_detections=2,
         n_source_params=2,
         enc_conv_c=5,
@@ -60,9 +62,9 @@ def trained_star_encoder(config_path, data_path, fitted_powerlaw_psf):
     # training wrapper
     SleepTraining = train.SleepTraining(
         model=star_encoder,
-        dataset=star_dataset,
-        slen=data_params["slen"],
-        n_bands=2,
+        dataset=dataset,
+        slen=slen,
+        n_bands=n_bands,
         n_source_params=2,
         verbose=False,
         batchsize=32,
