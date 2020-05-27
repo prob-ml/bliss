@@ -40,46 +40,13 @@ def setup_device(args):
     return device
 
 
-# TODO: Add star functionality using these two functions.
-def load_data_params_from_args(params_file, args):
-    with open(params_file, "r") as fp:
-        data_params = json.load(fp)
-
-    args_dict = vars(args)
-    for k in data_params:
-        if k in args_dict and args_dict[k] is not None:
-            data_params[k] = args_dict[k]
-    return data_params
-
-
-def load_psf(paths, device):
-    psf_file = paths["data"].joinpath("fitted_powerlaw_psf_params.npy")
-    psf_params = torch.tensor(np.load(psf_file), device=device)
-    power_law_psf = psf_transform.PowerLawPSF(psf_params)
-    psf = power_law_psf.forward().detach()
-
-    return psf
-
-
-def load_background(data_params, device):
-    background = torch.zeros(
-        data_params["n_bands"], data_params["slen"], data_params["slen"], device=device
-    )
-    background[0] = 686.0
-    background[1] = 1123.0
-    return background
-
-
 def main(args):
 
     paths = setup_paths(args)
     device = setup_device(args)
-    data_param_file = paths["config"].joinpath(
-        "dataset_params/default_galaxy_parameters.json"
-    )
+
     out_dir = paths["results"].joinpath(args.output_name) if args.output_name else None
 
-    data_params = load_data_params_from_args(data_param_file, args)
     background_file = paths["data"].joinpath(data_params["background_file"])
     gal_decoder_file = paths["data"].joinpath(data_params["gal_decoder_file"])
 
@@ -89,9 +56,7 @@ def main(args):
     )
     print(f"output dir: {out_dir}")
 
-    galaxy_dataset = simulated_datasets.GalaxyDataset.load_dataset_from_params(
-        args.n_images, data_params, background_file, gal_decoder_file
-    )
+    galaxy_dataset = simulated_datasets.SourceDataset
 
     print("data params to be used:", data_params)
     print("background file:", background_file)

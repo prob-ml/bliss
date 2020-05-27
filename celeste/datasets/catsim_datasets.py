@@ -146,7 +146,7 @@ class CatsimGalaxies(SingleGalaxyDataset):
         return filters
 
 
-def generate_images(
+def save_images(
     dataset, file_path, prop_file_path=None, n_images=1,
 ):
     """

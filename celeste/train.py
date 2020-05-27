@@ -226,20 +226,20 @@ class SleepTraining(TrainModel):
         self.n_source_params = n_source_params
         assert self.n_source_params == self.encoder.n_source_params
 
-    # TODO: A bit hacky, but ok for now since we will move to a combined dataset soon.
-    #  also avoids adding annoying flag of galaxy or star.
+    # TODO: Get rid of 'if' statement once transition is complete.
     def _get_params_from_batch(self, batch):
         class_name = self.dataset.__class__.__name__
         assert class_name == "SourceDataset"
+        warnings.warn(
+            "In transition to full galaxy & star implementation, so only star_prob==1 "
+            "and star_prob==0 are supported."
+        )
 
-        if self.dataset.simulator.star_prob == 1.0:
+        if self.dataset.simulator.star_prob > 0.5:
             return batch["log_fluxes"], batch["locs"], batch["images"]
 
-        elif self.dataset.simulator.star_prob == 0.0:
-            return batch["galaxy_params"], batch["locs"], batch["images"]
-
         else:
-            raise ValueError("Not yet implemented stars and galaxies both at once. ")
+            return batch["galaxy_params"], batch["locs"], batch["images"]
 
     def get_batch_generator(self):
         assert (

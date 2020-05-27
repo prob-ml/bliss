@@ -6,10 +6,10 @@ import numpy as np
 import multiprocessing
 
 from celeste.datasets import galaxy_datasets
-from celeste.datasets.galaxy_datasets import generate_images
+from celeste.datasets.catsim_datasets import save_images
 
 all_datasets = {
-    cls.__name__: cls for cls in galaxy_datasets.GalaxyDataset.__subclasses__()
+    cls.__name__: cls for cls in galaxy_datasets.SingleGalaxyDataset.__subclasses__()
 }
 
 final_image_name = "images.hd5f"
@@ -29,9 +29,7 @@ def generate(
         not file_path.exists() or overwrite
     ), "Trying to overwrite file without --overwrite"
 
-    generate_images(
-        dataset, file_path, prop_file_path=prop_file_path, n_images=n_images
-    )
+    save_images(dataset, file_path, prop_file_path=prop_file_path, n_images=n_images)
 
 
 def merge_files(output_path):
@@ -94,7 +92,7 @@ def main(args):
         for fp in file_paths
     ]
     with multiprocessing.Pool(processes=args.n_processes) as pool:
-        pool.starmap(generate_images, generate_args)
+        pool.starmap(save_images, generate_args)
 
     merge_files(output_path)
     save_background(output_path)
