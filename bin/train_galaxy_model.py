@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt
 
 from celeste.datasets import galaxy_datasets
 
-all_datasets = [cls.__name__ for cls in galaxy_datasets.GalaxyDataset.__subclasses__()]
+all_datasets = [
+    cls.__name__ for cls in galaxy_datasets.SingleGalaxyDataset.__subclasses__()
+]
 
 
 # torch and plt setup.
