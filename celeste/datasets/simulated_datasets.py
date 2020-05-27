@@ -297,8 +297,8 @@ class SourceSimulator(object):
         galaxy_decoder,
         psf,
         background,
-        slen=100,
         n_bands=1,
+        slen=100,
         max_sources=20,
         mean_sources=10,
         min_sources=0,
@@ -361,7 +361,8 @@ class SourceSimulator(object):
         self.galaxy_slen = self.galaxy_decoder.slen
         self.latent_dim = self.galaxy_decoder.latent_dim
 
-        assert self.galaxy_decoder.n_bands == self.n_bands
+        # TODO: Remove this assertion when full implementation is done.
+        assert self.galaxy_decoder.n_bands == self.n_bands or self.star_prob > 0.99
 
     def _sample_n_sources(self, batchsize):
         # sample number of sources

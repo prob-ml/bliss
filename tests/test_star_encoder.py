@@ -33,6 +33,8 @@ def trained_star_encoder(
     )
 
     simulator_kwargs = dict(
+        slen=slen,
+        n_bands=n_bands,
         max_sources=max_stars,
         mean_sources=mean_stars,
         min_sources=min_stars,
@@ -52,7 +54,7 @@ def trained_star_encoder(
         edge_padding=3,
         n_bands=n_bands,
         max_detections=2,
-        n_source_params=2,
+        n_source_params=n_bands,  # star has n_bands # fluxes
         enc_conv_c=5,
         enc_kern=3,
         enc_hidden=64,
@@ -65,7 +67,7 @@ def trained_star_encoder(
         dataset=dataset,
         slen=slen,
         n_bands=n_bands,
-        n_source_params=2,
+        n_source_params=n_bands,  # star has n_bands # fluxes
         verbose=False,
         batchsize=32,
     )

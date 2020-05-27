@@ -235,11 +235,11 @@ class SleepTraining(TrainModel):
             "and star_prob==0 are supported."
         )
 
-        if self.dataset.simulator.star_prob > 0.5:
-            return batch["log_fluxes"], batch["locs"], batch["images"]
+        if self.dataset.simulator.star_prob > 0.99:
+            return batch["log_fluxes"], batch["star_locs"], batch["images"]
 
         else:
-            return batch["galaxy_params"], batch["locs"], batch["images"]
+            return batch["galaxy_params"], batch["galaxy_locs"], batch["images"]
 
     def get_batch_generator(self):
         assert (
