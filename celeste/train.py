@@ -200,7 +200,6 @@ class TrainModel(ABC):
         # useful things to log.
         pass
 
-    # TODO: A bit clunky in my opinion, open to suggestions.
     @abstractmethod
     def update_avg(self, avg_results, results):
         pass
@@ -231,14 +230,16 @@ class SleepTraining(TrainModel):
     #  also avoids adding annoying flag of galaxy or star.
     def _get_params_from_batch(self, batch):
         class_name = self.dataset.__class__.__name__
-        if class_name == "GalaxyDataset":
-            return batch["gal_params"], batch["locs"], batch["images"]
+        assert class_name == "SourceDataset"
 
-        elif class_name == "StarDataset":
+        if self.dataset.simulator.star_prob == 1.0:
             return batch["log_fluxes"], batch["locs"], batch["images"]
 
+        elif self.dataset.simulator.star_prob == 0.0:
+            return batch["galaxy_params"], batch["locs"], batch["images"]
+
         else:
-            raise ValueError("Added an incompatible dataset.")
+            raise ValueError("Not yet implemented stars and galaxies both at once. ")
 
     def get_batch_generator(self):
         assert (
