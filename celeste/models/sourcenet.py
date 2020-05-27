@@ -678,8 +678,10 @@ class SourceEncoder(nn.Module):
         (
             loc_mean,
             loc_logvar,
-            source_param_mean,
-            source_param_logvar,
+            log_flux_mean,
+            log_flux_logvar,
+            galaxy_param_mean,
+            galaxy_param_logvar,
         ) = self._get_var_params_for_n_sources(
             h, n_sources=n_sources.clamp(max=self.max_detections)
         )
@@ -688,8 +690,10 @@ class SourceEncoder(nn.Module):
         return (
             loc_mean.squeeze(0),
             loc_logvar.squeeze(0),
-            source_param_mean.squeeze(0),
-            source_param_logvar.squeeze(0),
+            log_flux_mean.squeeze(0),
+            log_flux_logvar.squeeze(0),
+            galaxy_param_mean.squeeze(0),
+            galaxy_param_logvar.squeeze(0),
             logprob_bernoulli.squeeze(0),
             log_probs_n_sources.squeeze(0),
         )
