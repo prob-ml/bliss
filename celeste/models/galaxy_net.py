@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as f
 from torch.distributions import Normal
+from .. import device
 
 
 class Flatten(nn.Module):
@@ -118,7 +119,8 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
 
     def get_sample(self, num_samples, return_latent=False):
         p_z = Normal(
-            torch.cuda.FloatTensor(1).zero_(), torch.cuda.FloatTensor(1).fill_(1)
+            torch.zeros(1, dtype=torch.float, device=device),
+            torch.ones(1, dtype=torch.float, device=device),
         )
         z = p_z.rsample(torch.tensor([num_samples, self.latent_dim])).view(
             num_samples, -1
