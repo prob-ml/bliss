@@ -310,7 +310,8 @@ class SourceEncoder(nn.Module):
         edge_padding,
         n_bands,
         max_detections,
-        n_source_params,
+        n_star_params,
+        n_galaxy_params,
         enc_conv_c=20,
         enc_kern=3,
         enc_hidden=256,
@@ -334,9 +335,6 @@ class SourceEncoder(nn.Module):
         :param edge_padding: length of padding (in pixels).
         :param n_bands : number of bands
         :param max_detections:
-        :param n_source_params:
-        * The dimension of 'source parameters' which are log fluxes in the case of stars and
-        latent variable dimension in the case of galaxy. Assumed to be normally distributed.
         * For fluxes this should equal number of bands, for galaxies it will be the number of latent
         dimensions in the network.
         """
@@ -421,10 +419,13 @@ class SourceEncoder(nn.Module):
         #  4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for
         #  n source_param's (flux per band or galaxy params.) + 1 for the Bernoulli variable
         #  of whether the source is a star or galaxy.
-        self.n_source_params = n_source_params
-        self.n_params_per_source = 4 + 2 * self.n_source_params + 1
+        self.n_star_params = n_star_params
+        self.n_galaxy_params = n_galaxy_params
+        self.n_params_per_source = (
+            4 + 2 * (self.n_star_params + self.n_galaxy_params) + 1
+        )
 
-        # The first term correspond to: for each param, for each possible number of detection d,
+        # The first term corresponds to: for each param, for each possible number of detection d,
         # there are d ways of assigning that param.
         # The second and third term accounts for categorical probability over # of objects.
         # These dimensions correspond to the probabilities in ONE tile.
@@ -456,13 +457,23 @@ class SourceEncoder(nn.Module):
         )
         self.locs_var_indx_mat = self.locs_mean_indx_mat.clone()
 
-        self.source_params_mean_indx_mat = torch.full(
-            (self.max_detections + 1, self.n_source_params * self.max_detections),
+        # indices or obtaining star parameters.
+        self.log_fluxes_mean_indx_mat = torch.full(
+            (self.max_detections + 1, self.n_star_params * self.max_detections),
             self.dim_out_all,
             dtype=torch.long,
             device=device,
         )
-        self.source_params_var_indx_mat = self.source_params_mean_indx_mat.clone()
+        self.log_fluxes_var_indx_mat = self.log_fluxes_mean_indx_mat.clone()
+
+        # indices for obtaining galaxy params.
+        self.galaxy_params_mean_indx_mat = torch.full(
+            (self.max_detections + 1, self.n_galaxy_params * self.max_detections),
+            self.dim_out_all,
+            dtype=torch.long,
+            device=device,
+        )
+        self.galaxy_params_var_indx_mat = self.galaxy_params_mean_indx_mat.clone()
 
         # the unnecessary `1` corresponds to there being only 1 parameter for the Bernoulli.
         self.bernoulli_indx = torch.full(
@@ -475,6 +486,7 @@ class SourceEncoder(nn.Module):
         self.prob_n_source_indx = torch.zeros(
             self.max_detections + 1, dtype=torch.long, device=device
         )
+
         for n_detections in range(1, self.max_detections + 1):
 
             # index corresponding to the one we left off from the last iteration.
@@ -495,26 +507,38 @@ class SourceEncoder(nn.Module):
                 indx1, indx2
             )
 
-            # indices for source params.
-            indx3 = indx2 + (n_detections * self.n_source_params)
-            indx4 = indx3 + (n_detections * self.n_source_params)
+            # indices for log_fluxes (star params).
+            indx3 = indx2 + (n_detections * self.n_star_params)
+            indx4 = indx3 + (n_detections * self.n_star_params)
 
-            self.source_params_mean_indx_mat[
-                n_detections, 0 : (n_detections * self.n_source_params)
+            self.log_fluxes_mean_indx_mat[
+                n_detections, 0 : (n_detections * self.n_star_params)
             ] = torch.arange(indx2, indx3)
 
-            self.source_params_var_indx_mat[
-                n_detections, 0 : (n_detections * self.n_source_params)
+            self.log_fluxes_var_indx_mat[
+                n_detections, 0 : (n_detections * self.n_star_params)
+            ] = torch.arange(indx3, indx4)
+
+            # indices for galaxy params.
+            indx5 = indx4 + (n_detections * self.n_galaxy_params)
+            indx6 = indx5 + (n_detections * self.n_galaxy_params)
+
+            self.galaxy_params_mean_indx_mat[
+                n_detections, 0 : (n_detections * self.n_galaxy_params)
+            ] = torch.arange(indx2, indx3)
+
+            self.galaxy_params_var_indx_mat[
+                n_detections, 0 : (n_detections * self.n_galaxy_params)
             ] = torch.arange(indx3, indx4)
 
             # indices for Bernoulli deciding star or galaxy.
-            indx5 = indx4 + (n_detections * 1)
+            indx7 = indx6 + (n_detections * 1)
             self.bernoulli_indx[n_detections, 0 : (n_detections * 1)] = torch.arange(
                 indx4, indx5
             )
 
             # the categorical prob for this n_detection will go after the rest.
-            self.prob_n_source_indx[n_detections] = indx5
+            self.prob_n_source_indx[n_detections] = indx7
 
     ############################
     # The layers of our neural network
@@ -541,15 +565,6 @@ class SourceEncoder(nn.Module):
     ######################
     # Forward modules
     ######################
-    def _get_logprob_n_from_var_params(self, h):
-        """
-        Obtain log probability of number of n_sources.
-
-        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
-        probability of having 0,1,2 stars.
-        """
-        free_probs = h[:, self.prob_n_source_indx]
-        return self.log_softmax(free_probs)
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_matrix, dim_per_source):
         """
@@ -590,6 +605,16 @@ class SourceEncoder(nn.Module):
         # shape = (n_samples x n_ptiles x max_detections x dim_per_source)
         return var_param
 
+    def _get_logprob_n_from_var_params(self, h):
+        """
+        Obtain log probability of number of n_sources.
+
+        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        probability of having 0,1,2 stars.
+        """
+        free_probs = h[:, self.prob_n_source_indx]
+        return self.log_softmax(free_probs)
+
     def _get_logprob_bernoulli_for_n_sources(self, h, n_sources):
         return torch.nn.functional.logsigmoid(
             self._indx_h_for_n_sources(h, n_sources, self.bernoulli_indx, 1)
@@ -607,15 +632,30 @@ class SourceEncoder(nn.Module):
         )
         loc_logvar = self._indx_h_for_n_sources(h, n_sources, self.locs_var_indx_mat, 2)
 
-        source_param_mean = self._indx_h_for_n_sources(
-            h, n_sources, self.source_params_mean_indx_mat, self.n_source_params
+        log_flux_mean = self._indx_h_for_n_sources(
+            h, n_sources, self.log_fluxes_mean_indx_mat, self.n_star_params
         )
-        source_param_logvar = self._indx_h_for_n_sources(
-            h, n_sources, self.source_params_var_indx_mat, self.n_source_params
+        log_flux_logvar = self._indx_h_for_n_sources(
+            h, n_sources, self.log_fluxes_var_indx_mat, self.n_star_params
         )
+
+        galaxy_param_mean = self._indx_h_for_n_sources(
+            h, n_sources, self.galaxy_params_mean_indx_mat, self.n_galaxy_params
+        )
+        galaxy_param_logvar = self._indx_h_for_n_sources(
+            h, n_sources, self.galaxy_params_var_indx_mat, self.n_galaxy_params
+        )
+
         loc_mean = torch.sigmoid(loc_logit_mean) * (loc_logit_mean != 0).float()
 
-        return loc_mean, loc_logvar, source_param_mean, source_param_logvar
+        return (
+            loc_mean,
+            loc_logvar,
+            log_flux_mean,
+            log_flux_logvar,
+            galaxy_param_mean,
+            galaxy_param_logvar,
+        )
 
     def forward(self, image_ptiles, n_sources):
         # will unsqueeze and squeeze n_sources later.
