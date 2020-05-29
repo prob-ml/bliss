@@ -10,7 +10,13 @@ from . import device
 
 
 def get_inv_kl_loss(
-    encoder, images, true_locs, true_galaxy_params, true_log_fluxes, use_l2_loss=False
+    encoder,
+    images,
+    true_locs,
+    true_galaxy_params,
+    true_log_fluxes,
+    true_galaxy_bool,
+    use_l2_loss=False,
 ):
     """
     NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
@@ -33,7 +39,12 @@ def get_inv_kl_loss(
         true_tile_galaxy_bool,
         true_tile_is_on_array,
     ) = encoder.get_image_ptiles(
-        images, true_locs, true_log_fluxes, true_galaxy_params, clip_max_sources=True
+        images,
+        true_locs,
+        true_log_fluxes,
+        true_galaxy_params,
+        true_galaxy_bool,
+        clip_max_sources=True,
     )
 
     (
@@ -144,12 +155,12 @@ def _get_params_loss(
     true_locs = true_locs + (true_locs == 0).float() * 1e16
     locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
 
-    star_params_log_probs_all = _get_params_logprob_all_combs(
-        true_log_fluxes, log_flux_mean, log_flux_logvar
-    )
-
     galaxy_params_log_probs_all = _get_params_logprob_all_combs(
         true_galaxy_params, galaxy_params_mean, galaxy_params_logvar
+    )
+
+    star_params_log_probs_all = _get_params_logprob_all_combs(
+        true_log_fluxes, log_flux_mean, log_flux_logvar
     )
 
     # inside _get_min_perm_loss is where the matching happens:
@@ -158,8 +169,8 @@ def _get_params_loss(
         locs_log_probs_all,
         star_params_log_probs_all,
         galaxy_params_log_probs_all,
-        true_is_on_array,
         true_galaxy_bool,
+        true_is_on_array,
     )
 
     # loss for detecting galaxies
@@ -273,8 +284,8 @@ def _get_min_perm_loss(
     locs_log_probs_all,
     star_params_log_probs_all,
     galaxy_params_log_probs_all,
-    is_on_array,
     true_galaxy_bool,
+    is_on_array,
 ):
 
     # get log-probability under every possible matching of estimated star to true star
