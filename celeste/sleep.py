@@ -128,8 +128,11 @@ def _get_params_loss(
     # inside _get_min_perm_loss is where the matching happens:
     # we construct a bijective map from each estimated star to each true star
     locs_loss, star_params_loss, galaxy_params_loss, perm_indx = _get_min_perm_loss(
-        locs_log_probs_all, star_params_log_probs_all,
-        galaxy_params_log_probs_all, true_is_on_array, true_galaxy_bool
+        locs_log_probs_all,
+        star_params_log_probs_all,
+        galaxy_params_log_probs_all,
+        true_is_on_array,
+        true_galaxy_bool,
     )
 
     # the loss for estimating the true number of sources
@@ -138,8 +141,9 @@ def _get_params_loss(
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
     # loss for detecting galaxies
-    galaxy_bool_loss = true_galaxy_bool * torch.log(prob_galaxy) + \
-                        (1 - true_galaxy_bool) * torch.log1p(prob_galaxy)
+    galaxy_bool_loss = true_galaxy_bool * torch.log(prob_galaxy) + (
+        1 - true_galaxy_bool
+    ) * torch.log1p(prob_galaxy)
     galaxy_bool_loss = (galaxy_bool_loss * true_is_on_array).sum(1)
 
     loss_vec = (
@@ -152,7 +156,15 @@ def _get_params_loss(
 
     loss = loss_vec.mean()
 
-    return loss, counter_loss, galaxy_bool_loss, locs_loss, star_params_loss, galaxy_params_loss, perm_indx
+    return (
+        loss,
+        counter_loss,
+        galaxy_bool_loss,
+        locs_loss,
+        star_params_loss,
+        galaxy_params_loss,
+        perm_indx,
+    )
 
 
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
@@ -249,13 +261,17 @@ def _get_log_probs_all_perms(
         # if star, evaluate the star parameters,
         # hence the multiplication by (1 - true_galaxy_bool)
         star_params_loss_all_perm[:, i] = (
-            star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array * (1 - true_galaxy_bool)
+            star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
+            * is_on_array
+            * (1 - true_galaxy_bool)
         ).sum(1)
 
         # if galaxy, evaluate the galaxy parameters,
         # hence the multiplication by true_galaxy_bool
         galaxy_params_loss_all_perm[:, i] = (
-            galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array * true_galaxy_bool
+            galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
+            * is_on_array
+            * true_galaxy_bool
         ).sum(1)
         i += 1
 
@@ -263,11 +279,13 @@ def _get_log_probs_all_perms(
 
 
 # TODO: Can the minus signs here be moved up so that it's a bit clearer?
-def _get_min_perm_loss(locs_log_probs_all,
-                        star_params_log_probs_all,
-                        galaxy_params_log_probs_all,
-                        is_on_array,
-                        true_galaxy_bool):
+def _get_min_perm_loss(
+    locs_log_probs_all,
+    star_params_log_probs_all,
+    galaxy_params_log_probs_all,
+    is_on_array,
+    true_galaxy_bool,
+):
 
     # get log-probability under every possible matching of estimated star to true star
     (
@@ -279,7 +297,7 @@ def _get_min_perm_loss(locs_log_probs_all,
         star_params_log_probs_all,
         galaxy_params_log_probs_all,
         is_on_array,
-        true_galaxy_bool
+        true_galaxy_bool,
     )
 
     # find the permutation that minimizes the location losses
