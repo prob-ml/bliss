@@ -369,6 +369,7 @@ class SourceSimulator(object):
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
 
         locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
+        locs, _ = torch.sort(locs, dim=1, descending=True)  # consistency.
 
         return n_sources, locs, is_on_array
 
@@ -483,22 +484,18 @@ class SourceSimulator(object):
     def sample_parameters(self, batchsize=1):
         n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
         n_galaxies, n_stars, galaxy_bool = self._sample_n_galaxies_and_stars(n_sources)
-        galaxy_is_on_array = get_is_on_from_n_sources(n_galaxies, self.max_sources)
-        star_is_on_array = get_is_on_from_n_sources(n_stars, self.max_sources)
+        star_bool = (1 - galaxy_bool) * is_on_array
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
-        # sample locations, shape = (batchsize x max_detections x 2 )
-        galaxy_locs = _sample_locs(
-            self.max_sources, galaxy_is_on_array, batchsize=batchsize
-        )
-        star_locs = _sample_locs(
-            self.max_sources, star_is_on_array, batchsize=batchsize
-        )
+        # galaxy_bool has all 1s up front; star_bool doesn't, so we sort
+        galaxy_locs = locs * galaxy_bool.unsqueeze(2)
+        star_locs, _ = torch.sort(locs * star_bool.unsqueeze(2), descending=True, dim=1)
 
         galaxy_params, single_galaxies = self._sample_galaxy_params_and_single_images(
             n_galaxies, batchsize
         )
 
+        star_is_on_array = get_is_on_from_n_sources(n_stars, self.max_sources)
         fluxes = self._sample_fluxes(n_stars, star_is_on_array, batchsize)
         log_fluxes = self._get_log_fluxes(fluxes)
 

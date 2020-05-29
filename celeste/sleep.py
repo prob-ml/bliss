@@ -18,14 +18,6 @@ def get_inv_kl_loss(
     true_galaxy_bool,
     use_l2_loss=False,
 ):
-    """
-    NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
-    normal variables).
-
-    * images has shape = (batchsize x n_bands x slen x slen)
-    * true_locs has shape = (batchsize x max_sources x 2)
-    * true_source_params has shape = (batchsize x max_sources x n_source_params)
-    """
 
     # extract image tiles
     # true_tile_locs has shape = (n_ptiles x max_detections x 2)
