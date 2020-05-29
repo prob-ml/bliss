@@ -359,7 +359,7 @@ class SourceSimulator(object):
         if self.transpose_psf:
             self.psf = self.psf.transpose(1, 2)
 
-    def _sample_n_sources(self, batchsize):
+    def _sample_n_sources_and_locs(self, batchsize):
         # sample number of sources
         n_sources = _sample_n_sources(
             self.mean_sources,
@@ -372,19 +372,29 @@ class SourceSimulator(object):
         # multiply by zero where they are no sources (recall parameters have entry for up
         # to max_sources)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-        return n_sources, is_on_array
+
+        locs = _sample_locs(self.max_sources, is_on_array, batchsize=batchsize)
+
+        return n_sources, locs, is_on_array
 
     # TODO: way to vectorize this?
-    def _sample_n_galaxies_and_stars(self, n_sources):
+    def _sample_n_galaxies_and_stars(self, n_sources, batchsize):
         n_galaxies = torch.zeros_like(n_sources)
+        galaxy_bool = torch.zeros(
+            batchsize, self.max_sources, device=device, dtype=torch.long
+        )
+
+        # i enumerates over batches.
         for i, n in enumerate(n_sources):
             n = n.item()
-            n_galaxies[i] = torch.bernoulli(
+            galaxy_bool_i = torch.bernoulli(
                 torch.full(torch.Size([n]), self.prob_galaxy)
-            ).sum()
+            )
+            galaxy_bool[i] = galaxy_bool_i
+            n_galaxies[i] = galaxy_bool_i.sum()
 
         n_stars = n_sources - n_galaxies
-        return n_galaxies, n_stars
+        return n_galaxies, n_stars, galaxy_bool
 
     @staticmethod
     def _get_log_fluxes(fluxes):
@@ -472,8 +482,8 @@ class SourceSimulator(object):
         return galaxy_params, single_galaxies
 
     def sample_parameters(self, batchsize=1):
-        n_sources, is_on_array = self._sample_n_sources(batchsize)
-        n_galaxies, n_stars = self._sample_n_galaxies_and_stars(n_sources)
+        n_sources, locs, is_on_array = self._sample_n_sources_and_locs(batchsize)
+        n_galaxies, n_stars, galaxy_bool = self._sample_n_galaxies_and_stars(n_sources)
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
         galaxy_is_on_array = get_is_on_from_n_sources(n_galaxies, self.max_sources)
