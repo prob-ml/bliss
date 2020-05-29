@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.distributions import categorical
@@ -162,8 +163,10 @@ def get_ptile_coords(image_xlen, image_ylen, ptile_slen, step):
     def return_coords(i):
         return [(i // ny_ptiles) * step, (i % ny_ptiles) * step]
 
-    tile_coords = torch.LongTensor([return_coords(i) for i in range(n_ptiles)]).to(
-        device
+    tile_coords = (
+        torch.from_numpy(np.array([return_coords(i) for i in range(n_ptiles)]))
+        .long()
+        .to(device)
     )
 
     return tile_coords
