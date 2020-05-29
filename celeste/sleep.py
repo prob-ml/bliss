@@ -8,7 +8,6 @@ from torch.nn import functional
 from . import device
 
 
-# only function you will ever need to call.
 def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=False):
     """
     NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
@@ -91,9 +90,9 @@ def _get_params_loss(
     galaxy_params_mean shape = (n_ptiles x max_detections x n_galaxy_params)
 
     the *_logvar inputs should the same shape as their respective means
-    the true_* inputs, except for true_is_on_array and true_galaxy_bool,
-        should have same shape as their respective means, e.g.
-        true_locs should have the same shape as loc_mean
+    the true_* inputs, except for true_is_on_array,
+    should have same shape as their respective means, e.g.
+    true_locs should have the same shape as loc_mean
 
     In true_locs, the off sources must have parameter value = 0
 
@@ -111,17 +110,25 @@ def _get_params_loss(
 
     """
 
+    # the loss for estimating the true number of sources
+    true_n_stars = true_is_on_array.sum(1)
+    one_hot_encoding = functional.one_hot(true_n_stars, n_source_log_probs.shape[1])
+    counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
+
     # the first three functions computes the log-probability of parameters when
     # each estimated source i is matched with true source j for
     # i, j in {1, ..., max_detections}
     # *_log_probs_all have shape n_ptiles x max_detections x max_detections
-    locs_log_probs_all = _get_locs_logprob_all_combs(true_locs, loc_mean, loc_logvar)
 
-    star_params_log_probs_all = _get_source_params_logprob_all_combs(
+    # large error if source is off
+    true_locs = true_locs + (true_locs == 0).float() * 1e16
+    locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
+
+    star_params_log_probs_all = _get_params_logprob_all_combs(
         true_log_fluxes, log_flux_mean, log_flux_logvar
     )
 
-    galaxy_params_log_probs_all = _get_source_params_logprob_all_combs(
+    galaxy_params_log_probs_all = _get_params_logprob_all_combs(
         true_galaxy_params, galaxy_params_mean, galaxy_params_logvar
     )
 
@@ -135,15 +142,9 @@ def _get_params_loss(
         true_galaxy_bool,
     )
 
-    # the loss for estimating the true number of sources
-    true_n_stars = true_is_on_array.sum(1)
-    one_hot_encoding = functional.one_hot(true_n_stars, n_source_log_probs.shape[1])
-    counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
-
     # loss for detecting galaxies
-    galaxy_bool_loss = true_galaxy_bool * torch.log(prob_galaxy) + (
-        1 - true_galaxy_bool
-    ) * torch.log1p(prob_galaxy)
+    galaxy_bool_loss = true_galaxy_bool * torch.log(prob_galaxy)
+    galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log1p(prob_galaxy)
     galaxy_bool_loss = (galaxy_bool_loss * true_is_on_array).sum(1)
 
     loss_vec = (
@@ -186,46 +187,17 @@ def _get_transformed_params(true_params, param_mean, param_logvar):
     return _true_params, _source_mean, _source_logvar
 
 
-def _get_locs_logprob_all_combs(true_locs, loc_mean, loc_logvar):
-    # get losses for locations
-    # max_detections = loc_mean.shape[1]
-    # max_stars = true_locs.shape[1]
-
-    _true_locs, _loc_mean, _loc_logvar = _get_transformed_params(
-        true_locs, loc_mean, loc_logvar
+def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+    (_true_params, _param_mean, _param_logvar,) = _get_transformed_params(
+        true_params, param_mean, param_logvar
     )
 
-    # this will return a large error if star is off
-    _true_locs = _true_locs + (_true_locs == 0).float() * 1e16
-
-    # this is batchsize x (max_stars x max_detections)
-    # the log prob for each observed location & mean.
-    # sum over len(x,y) dimension.
-    locs_log_probs_all = (
-        Normal(_loc_mean, (torch.exp(_loc_logvar) + 1e-5).sqrt())
-        .log_prob(_true_locs)
+    param_log_probs_all = (
+        Normal(_param_mean, (torch.exp(_param_logvar) + 1e-5).sqrt())
+        .log_prob(_true_params)
         .sum(dim=3)
     )
-    return locs_log_probs_all
-
-
-def _get_source_params_logprob_all_combs(
-    true_source_params, source_param_mean, source_param_logvar
-):
-    (
-        _true_source_params,
-        _source_param_mean,
-        _source_param_logvar,
-    ) = _get_transformed_params(
-        true_source_params, source_param_mean, source_param_logvar
-    )
-
-    source_param_log_probs_all = (
-        Normal(_source_param_mean, (torch.exp(_source_param_logvar) + 1e-5).sqrt())
-        .log_prob(_true_source_params)
-        .sum(dim=3)
-    )
-    return source_param_log_probs_all
+    return param_log_probs_all
 
 
 def _get_log_probs_all_perms(
@@ -278,7 +250,6 @@ def _get_log_probs_all_perms(
     return locs_loss_all_perm, star_params_loss_all_perm, galaxy_params_loss_all_perm
 
 
-# TODO: Can the minus signs here be moved up so that it's a bit clearer?
 def _get_min_perm_loss(
     locs_log_probs_all,
     star_params_log_probs_all,
