@@ -1,6 +1,7 @@
 import math
 from itertools import permutations
 import warnings
+
 import torch
 from torch.distributions import Normal
 from torch.nn import functional
@@ -8,7 +9,9 @@ from torch.nn import functional
 from . import device
 
 
-def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=False):
+def get_inv_kl_loss(
+    encoder, images, true_locs, true_galaxy_params, true_log_fluxes, use_l2_loss=False
+):
     """
     NOTE: true_source_params are either log_fluxes or galaxy_params (both are normal unconstrained
     normal variables).
@@ -24,35 +27,53 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
     (
         image_ptiles,
         true_tile_locs,
-        true_tile_source_params,
+        true_tile_galaxy_params,
+        true_tile_log_fluxes,
         true_tile_n_sources,
+        true_tile_galaxy_bool,
         true_tile_is_on_array,
     ) = encoder.get_image_ptiles(
-        images, true_locs, true_source_params, clip_max_sources=True
+        images, true_locs, true_log_fluxes, true_galaxy_params, clip_max_sources=True
     )
 
     (
         loc_mean,
         loc_logvar,
-        source_param_mean,
-        source_param_logvar,
-        logprob_bernoulli,
-        log_probs_n_sources_per_tile,
+        galaxy_param_mean,
+        galaxy_param_logvar,
+        log_flux_mean,
+        log_flux_logvar,
+        prob_galaxy,
+        n_source_log_probs,
     ) = encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
 
     if use_l2_loss:
         warnings.warn("using l2_loss")
-        loc_logvar = torch.zeros(loc_logvar.shape, device=device)
-        source_param_logvar = torch.zeros(source_param_logvar.shape, device=device)
+        loc_logvar = torch.zeros_like(loc_logvar)
+        galaxy_param_logvar = torch.zeros_like(galaxy_param_logvar)
+        log_flux_logvar = torch.zeros_like(log_flux_logvar)
 
-    (loss, counter_loss, locs_loss, source_param_loss, perm_indx,) = _get_params_loss(
+    (
+        loss,
+        counter_loss,
+        galaxy_bool_loss,
+        locs_loss,
+        galaxy_params_loss,
+        star_params_loss,
+        perm_indx,
+    ) = _get_params_loss(
         loc_mean,
         loc_logvar,
-        source_param_mean,
-        source_param_logvar,
-        log_probs_n_sources_per_tile,
+        galaxy_param_mean,
+        galaxy_param_logvar,
+        log_flux_mean,
+        log_flux_logvar,
+        prob_galaxy,
+        n_source_log_probs,
         true_tile_locs,
-        true_tile_source_params,
+        true_tile_galaxy_params,
+        true_tile_log_fluxes,
+        true_tile_galaxy_bool,
         true_tile_is_on_array.long(),
     )
 
@@ -60,26 +81,25 @@ def get_inv_kl_loss(encoder, images, true_locs, true_source_params, use_l2_loss=
         loss,
         counter_loss,
         locs_loss,
-        source_param_loss,
-        perm_indx,
-        log_probs_n_sources_per_tile,
+        galaxy_params_loss,
+        star_params_loss,
     )
 
 
 def _get_params_loss(
     loc_mean,
     loc_logvar,
-    log_flux_mean,
-    log_flux_logvar,
     galaxy_params_mean,
     galaxy_params_logvar,
+    log_flux_mean,
+    log_flux_logvar,
     prob_galaxy,
     n_source_log_probs,
     true_locs,
-    true_log_fluxes,
     true_galaxy_params,
-    true_is_on_array,
+    true_log_fluxes,
     true_galaxy_bool,
+    true_is_on_array,
 ):
     """
     NOTE: All the quantities are per-tile quantities on first dimension,
@@ -111,8 +131,8 @@ def _get_params_loss(
     """
 
     # the loss for estimating the true number of sources
-    true_n_stars = true_is_on_array.sum(1)
-    one_hot_encoding = functional.one_hot(true_n_stars, n_source_log_probs.shape[1])
+    true_n_sources = true_is_on_array.sum(1)
+    one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.shape[1])
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
     # the first three functions computes the log-probability of parameters when
@@ -162,8 +182,8 @@ def _get_params_loss(
         counter_loss,
         galaxy_bool_loss,
         locs_loss,
-        star_params_loss,
         galaxy_params_loss,
+        star_params_loss,
         perm_indx,
     )
 
