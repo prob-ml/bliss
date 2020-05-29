@@ -238,8 +238,7 @@ def _get_log_probs_all_perms(
             * (1 - true_galaxy_bool)
         ).sum(1)
 
-        # if galaxy, evaluate the galaxy parameters,
-        # hence the multiplication by true_galaxy_bool
+        # similarly for galaxies
         galaxy_params_loss_all_perm[:, i] = (
             galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
             * is_on_array

@@ -478,7 +478,7 @@ class SourceEncoder(nn.Module):
             ("log_fluxes_var", self.n_star_params),
             ("galaxy_params_mean", self.n_galaxy_params),
             ("galaxy_params_var", self.n_galaxy_params),
-            ("prob_star", 1),
+            ("prob_galaxy", 1),
         ]
         variational_params = [(f"{x[0]}_indx_mat", x[1]) for x in variational_params]
 
@@ -503,28 +503,6 @@ class SourceEncoder(nn.Module):
             # the categorical prob will go at the end.
             self.prob_n_source_indx[n_detections] = curr_indx
 
-    ############################
-    # The layers of our neural network
-    ############################
-    def _forward_to_pooled_hidden(self, image):
-        """
-        Forward to the layer that is shared by all n_sources.
-        """
-
-        log_img = torch.log(image - image.min() + 1.0)
-        h = self.enc_conv(log_img)
-
-        return self.enc_fc(h)
-
-    def _get_var_params_all(self, image_ptiles):
-        """
-        Concatenate all output parameters for all possible n_sources
-        Args:
-            image_ptiles: A tensor of shape (n_ptiles, n_bands, ptile_slen, ptile_slen)
-        """
-        h = self._forward_to_pooled_hidden(image_ptiles)
-        return self.enc_final(h)
-
     ######################
     # Forward modules
     ######################
@@ -544,10 +522,6 @@ class SourceEncoder(nn.Module):
         """
 
         assert len(n_sources.shape) == 2, "Shape: (n_samples x n_ptiles)"
-        assert (
-            param_dim == indx_mat.size(1) / self.max_detections
-        ), "Inconsistent dim_per_source was passed in."
-
         assert h.size(0) == n_sources.size(1)  # = n_ptiles
         assert h.size(1) == self.dim_out_all
 
@@ -580,7 +554,7 @@ class SourceEncoder(nn.Module):
 
     def _get_prob_galaxy_for_n_sources(self, h, n_sources):
         return torch.sigmoid(
-            self._indx_h_for_n_sources(h, n_sources, self.bernoulli_indx, 1)
+            self._indx_h_for_n_sources(h, n_sources, self.prob_galaxy_indx_mat, 1)
         )
 
     def _get_var_params_for_n_sources(self, h, n_sources):
@@ -619,6 +593,28 @@ class SourceEncoder(nn.Module):
             galaxy_param_mean,
             galaxy_param_logvar,
         )
+
+    ############################
+    # The layers of our neural network
+    ############################
+    def _forward_to_pooled_hidden(self, image):
+        """
+        Forward to the layer that is shared by all n_sources.
+        """
+
+        log_img = torch.log(image - image.min() + 1.0)
+        h = self.enc_conv(log_img)
+
+        return self.enc_fc(h)
+
+    def _get_var_params_all(self, image_ptiles):
+        """
+        Concatenate all output parameters for all possible n_sources
+        Args:
+            image_ptiles: A tensor of shape (n_ptiles, n_bands, ptile_slen, ptile_slen)
+        """
+        h = self._forward_to_pooled_hidden(image_ptiles)
+        return self.enc_final(h)
 
     def forward(self, image_ptiles, n_sources):
         # will unsqueeze and squeeze n_sources later.
