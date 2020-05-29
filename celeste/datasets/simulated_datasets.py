@@ -325,18 +325,18 @@ class SourceSimulator(object):
         self.min_sources = min_sources
         self.prob_galaxy = float(prob_galaxy)
 
-        self.transpose_psf = transpose_psf
-
         self.draw_poisson = draw_poisson
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
-
-        self.psf = psf.to(device)
 
         assert len(self.psf.shape) == 3
         assert self.background.shape[0] == self.psf.shape[0] == self.n_bands
         assert self.background.shape[1] == self.slen
         assert self.background.shape[2] == self.slen
+
+        self.galaxy_decoder = galaxy_decoder  # full path
+        self.galaxy_slen = self.galaxy_decoder.slen
+        self.latent_dim = self.galaxy_decoder.latent_dim
 
         # prior parameters
         self.f_min = f_min
@@ -344,6 +344,8 @@ class SourceSimulator(object):
         self.alpha = alpha  # pareto parameter.
         self.use_pareto = use_pareto
 
+        self.transpose_psf = transpose_psf
+        self.psf = psf.to(device)
         self.psf_og = self.psf.clone()
         # get psf shape to match image shape
         # if slen is even, we still make psf dimension odd.
@@ -356,10 +358,6 @@ class SourceSimulator(object):
 
         if self.transpose_psf:
             self.psf = self.psf.transpose(1, 2)
-
-        self.galaxy_decoder = galaxy_decoder  # full path
-        self.galaxy_slen = self.galaxy_decoder.slen
-        self.latent_dim = self.galaxy_decoder.latent_dim
 
     def _sample_n_sources(self, batchsize):
         # sample number of sources
