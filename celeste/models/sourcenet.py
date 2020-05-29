@@ -578,8 +578,8 @@ class SourceEncoder(nn.Module):
         free_probs = h[:, self.prob_n_source_indx]
         return self.log_softmax(free_probs)
 
-    def _get_logprob_bernoulli_for_n_sources(self, h, n_sources):
-        return torch.nn.functional.logsigmoid(
+    def _get_prob_galaxy_for_n_sources(self, h, n_sources):
+        return torch.sigmoid(
             self._indx_h_for_n_sources(h, n_sources, self.bernoulli_indx, 1)
         )
 
@@ -633,7 +633,7 @@ class SourceEncoder(nn.Module):
         log_probs_n_sources = self._get_logprob_n_from_var_params(h)
 
         # extract parameters
-        logprob_bernoulli = self._get_logprob_bernoulli_for_n_sources(
+        prob_galaxy = self._get_prob_galaxy_for_n_sources(
             h, n_sources=n_sources.clamp(max=self.max_detections)
         )
 
@@ -657,7 +657,7 @@ class SourceEncoder(nn.Module):
             log_flux_logvar.squeeze(0),
             galaxy_param_mean.squeeze(0),
             galaxy_param_logvar.squeeze(0),
-            logprob_bernoulli.squeeze(0),
+            prob_galaxy.squeeze(0),
             log_probs_n_sources.squeeze(0),
         )
 
