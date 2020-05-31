@@ -195,7 +195,7 @@ def _get_params_in_tiles(
     # now for log_fluxes and galaxy_params
     assert fullimage_batchsize == source_params.size(0)
     assert max_sources == source_params.size(1)
-    assert source_params.size(-1) == n_source_params
+    assert n_source_params == source_params.size(-1)
     tile_source_params = (
         which_locs_array.unsqueeze(3) * source_params.unsqueeze(1)
     ).view(subimage_batchsize, max_sources, n_source_params)
@@ -209,7 +209,6 @@ def _get_params_in_tiles(
     n_sources_per_tile = (
         is_on_array.float().sum(dim=1).type(torch.LongTensor).to(device)
     )
-
     tile_source_params, tile_locs, tile_is_on_array = _bring_to_front(
         n_source_params, n_sources_per_tile, is_on_array, tile_source_params, tile_locs,
     )
@@ -689,15 +688,17 @@ class SourceEncoder(nn.Module):
                 self.edge_padding,
             )
 
+            # TODO: construct tile_* variables so we don't need to do this padding.
             # In the loss function, it assumes that the true max number of stars on each tile
             # equals the max number of stars specified in the init of the encoder. Sometimes the
             # true max stars on tiles is less than the user-specified max stars, and this would
             # throw the error in the loss function. Padding solves this issue.
-            if tile_locs.size(1) < self.max_detections:
-                # tile_locs.shape[1] == max number of stars seen in the each tile.
-                n_pad = self.max_detections - tile_locs.shape[1]
+            max_n_stars_seen = tile_locs.size(1)
+            if max_n_stars_seen < self.max_detections:
+                # tile_locs.size(1) == max number of stars seen in the each tile.
+                n_pad = self.max_detections - tile_locs.size(1)
                 pad_zeros = torch.zeros(
-                    tile_locs.shape[0], n_pad, tile_locs.shape[-1], device=device,
+                    tile_locs.size(0), n_pad, tile_locs.size(-1), device=device,
                 )
                 tile_locs = torch.cat((tile_locs, pad_zeros), dim=1)
 
