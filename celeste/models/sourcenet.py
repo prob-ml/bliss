@@ -17,6 +17,22 @@ def _sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).detach().squeeze()
 
 
+def _bring_to_front(n_source_params, n_sources, is_on_array, source_params, locs):
+    # puts all the on sources in front
+    is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
+    indx = is_on_array_full.clone()
+    indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]
+
+    new_source_params = torch.gather(
+        source_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_source_params)
+    ) * is_on_array_full.float().unsqueeze(2)
+    new_locs = torch.gather(
+        locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)
+    ) * is_on_array_full.float().unsqueeze(2)
+
+    return new_source_params, new_locs, is_on_array_full
+
+
 def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
     """
     Take in an image (tensor) and the shape of the padded tile
@@ -145,22 +161,6 @@ def _get_ptile_coords(image_xlen, image_ylen, ptile_slen, step):
     return tile_coords
 
 
-def _bring_to_front(n_source_params, n_sources, is_on_array, source_params, locs):
-    # puts all the on sources in front
-    is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
-    indx = is_on_array_full.clone()
-    indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]
-
-    new_source_params = torch.gather(
-        source_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_source_params)
-    ) * is_on_array_full.float().unsqueeze(2)
-    new_locs = torch.gather(
-        locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)
-    ) * is_on_array_full.float().unsqueeze(2)
-
-    return new_source_params, new_locs, is_on_array_full
-
-
 def _get_params_in_tiles(
     tile_coords, locs, source_params, n_source_params, slen, ptile_slen, edge_padding=0
 ):
@@ -168,7 +168,7 @@ def _get_params_in_tiles(
     assert torch.all(locs <= 1.0)
     assert torch.all(locs >= 0.0)
 
-    n_ptiles = tile_coords.size(1)  # number of ptiles in a full image
+    n_ptiles = tile_coords.size(0)  # number of ptiles in a full image
     fullimage_batchsize = locs.size(0)  # number of full images
     max_sources = locs.size(1)
     subimage_batchsize = n_ptiles * fullimage_batchsize  # total number of ptiles
@@ -693,26 +693,28 @@ class SourceEncoder(nn.Module):
             # equals the max number of stars specified in the init of the encoder. Sometimes the
             # true max stars on tiles is less than the user-specified max stars, and this would
             # throw the error in the loss function. Padding solves this issue.
+
+            # max number of stars seen in the each tile.
             max_n_stars_seen = tile_locs.size(1)
             if max_n_stars_seen < self.max_detections:
-                # tile_locs.size(1) == max number of stars seen in the each tile.
                 n_pad = self.max_detections - tile_locs.size(1)
+                n_tiles = tile_locs.size(0)
+
+                assert tile_source_params.size(0) == n_tiles
+                assert tile_is_on_array.size(0) == n_tiles
+
                 pad_zeros = torch.zeros(
-                    tile_locs.size(0), n_pad, tile_locs.size(-1), device=device,
+                    n_tiles, n_pad, tile_locs.size(-1), device=device,
                 )
                 tile_locs = torch.cat((tile_locs, pad_zeros), dim=1)
 
                 pad_zeros2 = torch.zeros(
-                    tile_source_params.shape[0],
-                    n_pad,
-                    tile_source_params.shape[-1],
-                    device=device,
+                    n_tiles, n_pad, tile_source_params.shape[-1], device=device,
                 )
                 tile_source_params = torch.cat((tile_source_params, pad_zeros2), dim=1)
 
-                # tile_source_params.shape[0] == number of tiles
                 pad_zeros3 = torch.zeros(
-                    tile_source_params.shape[0], n_pad, dtype=torch.long, device=device
+                    n_tiles, n_pad, dtype=torch.long, device=device
                 )
                 tile_is_on_array = torch.cat((tile_is_on_array, pad_zeros3), dim=1)
 
