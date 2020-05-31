@@ -138,7 +138,7 @@ def _get_params_loss(
     one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.shape[1])
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
-    # the first three functions computes the log-probability of parameters when
+    # the following three functions computes the log-probability of parameters when
     # each estimated source i is matched with true source j for
     # i, j in {1, ..., max_detections}
     # *_log_probs_all have shape n_ptiles x max_detections x max_detections
