@@ -33,8 +33,8 @@ def get_inv_kl_loss(
     ) = encoder.get_image_ptiles(
         images,
         true_locs,
-        true_log_fluxes,
         true_galaxy_params,
+        true_log_fluxes,
         true_galaxy_bool,
         clip_max_sources=True,
     )

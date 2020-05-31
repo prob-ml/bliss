@@ -24,10 +24,10 @@ class TestImageBatching:
         full_images = torch.randn(5, n_bands, full_slen, full_slen)
 
         # batch image
-        images_batched = sourcenet.tile_images(full_images, subimage_slen, step)
+        images_batched = sourcenet._tile_images(full_images, subimage_slen, step)
 
         # get tile coordinates
-        tile_coords = sourcenet.get_ptile_coords(
+        tile_coords = sourcenet._get_ptile_coords(
             full_slen, full_slen, subimage_slen, step
         )
 
@@ -92,7 +92,7 @@ class TestImageBatching:
         ) * is_on_array.unsqueeze(2).float()
 
         # tile coordinates
-        tile_coords = sourcenet.get_ptile_coords(
+        tile_coords = sourcenet._get_ptile_coords(
             full_slen, full_slen, subimage_slen, step
         )
 
@@ -102,7 +102,7 @@ class TestImageBatching:
             tile_fluxes,
             tile_n_stars,
             tile_is_on_array,
-        ) = sourcenet.get_params_in_tiles(
+        ) = sourcenet._get_params_in_tiles(
             tile_coords, locs, fluxes, full_slen, subimage_slen
         )
 
@@ -185,7 +185,7 @@ class TestImageBatching:
             fluxes = torch.rand(n_images, max_stars, n_bands, device=device)
 
             # tile coordinates
-            tile_coords = sourcenet.get_ptile_coords(
+            tile_coords = sourcenet._get_ptile_coords(
                 full_slen, full_slen, subimage_slen, step
             )
 
@@ -195,7 +195,7 @@ class TestImageBatching:
                 tile_fluxes,
                 tile_n_stars,
                 tile_is_on_array,
-            ) = sourcenet.get_params_in_tiles(
+            ) = sourcenet._get_params_in_tiles(
                 tile_coords, locs, fluxes, full_slen, subimage_slen, edge_padding
             )
 
@@ -275,7 +275,7 @@ class TestImageBatching:
         max_stars = 4
 
         # tile coordinates
-        tile_coords = sourcenet.get_ptile_coords(
+        tile_coords = sourcenet._get_ptile_coords(
             full_slen, full_slen, subimage_slen, step
         )
 
