@@ -650,22 +650,16 @@ class SourceEncoder(nn.Module):
     # Modules for tiling images and parameters
     ######################
     def get_image_ptiles(
-        self,
-        images,
-        locs=None,
-        galaxy_params=None,
-        log_fluxes=None,
-        galaxy_bool=None,
-        clip_max_sources=False,
+        self, images, locs=None, galaxy_params=None, log_fluxes=None, galaxy_bool=None,
     ):
         assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
         assert images.shape[1] == self.n_bands
 
-        slen = images.shape[-1]
+        slen = images.size(-1)
 
         # in case the image that we pass in to the encoder is of different size than the original
         # encoder should be able to handle these cases to.
-        if not (images.shape[-1] == self.slen):
+        if not (images.size(-1) == self.slen):
             # get the coordinates
             tile_coords = _get_ptile_coords(slen, slen, self.ptile_slen, self.step)
         else:
@@ -699,7 +693,7 @@ class SourceEncoder(nn.Module):
             # equals the max number of stars specified in the init of the encoder. Sometimes the
             # true max stars on tiles is less than the user-specified max stars, and this would
             # throw the error in the loss function. Padding solves this issue.
-            if tile_locs.shape[1] < self.max_detections:
+            if tile_locs.size(1) < self.max_detections:
                 # tile_locs.shape[1] == max number of stars seen in the each tile.
                 n_pad = self.max_detections - tile_locs.shape[1]
                 pad_zeros = torch.zeros(
@@ -721,11 +715,11 @@ class SourceEncoder(nn.Module):
                 )
                 tile_is_on_array = torch.cat((tile_is_on_array, pad_zeros3), dim=1)
 
-            if clip_max_sources:
-                tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
-                tile_locs = tile_locs[:, 0 : self.max_detections, :]
-                tile_source_params = tile_source_params[:, 0 : self.max_detections, :]
-                tile_is_on_array = tile_is_on_array[:, 0 : self.max_detections]
+            # always clip max sources if necessary.
+            tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
+            tile_locs = tile_locs[:, 0 : self.max_detections, :]
+            tile_source_params = tile_source_params[:, 0 : self.max_detections, :]
+            tile_is_on_array = tile_is_on_array[:, 0 : self.max_detections]
 
         else:
             tile_locs = None
