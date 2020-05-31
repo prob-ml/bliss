@@ -267,6 +267,13 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     return scene
 
 
+def bring_to_front(tensor, dim):
+    # push all zero-only dimension of tensor to the back. Maintain original order otherwise.
+    # dim is dimension along which do the ordering.
+    indx_sort = (tensor != 0).long().argsort(dim=dim, descending=True)
+    return torch.gather(tensor, dim, indx_sort)
+
+
 def get_is_on_from_n_sources(n_sources, max_sources):
     """
     Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
@@ -443,7 +450,7 @@ class SourceSimulator(object):
             batchsize, -1, self.n_bands, self.galaxy_slen, self.galaxy_slen
         )
 
-        # zero out excess
+        # zero out excess according to n_galaxies.
         galaxy_params *= galaxy_is_on_array.unsqueeze(2)
         single_galaxies *= galaxy_is_on_array.unsqueeze(2).unsqueeze(3).unsqueeze(4)
 
@@ -458,9 +465,9 @@ class SourceSimulator(object):
         )
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
-        # galaxy_bool has all 1s up front; star_bool doesn't, so we sort
+        # galaxy_bool has all 1s up front; star_bool doesn't, so push to front.
         galaxy_locs = locs * galaxy_bool.unsqueeze(2)
-        star_locs = locs * star_bool.unsqueeze(2)
+        star_locs = bring_to_front(locs * star_bool.unsqueeze(2), 1)
 
         galaxy_params, single_galaxies = self._sample_galaxy_params_and_single_images(
             n_galaxies
