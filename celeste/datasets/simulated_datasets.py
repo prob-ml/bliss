@@ -488,6 +488,8 @@ class SourceSimulator(object):
             single_galaxies,
             fluxes,
             log_fluxes,
+            galaxy_bool,
+            star_bool,
         )
 
     # ToDo: Change so that it uses galsim (Poisson Noise?)
@@ -575,6 +577,8 @@ class SourceDataset(Dataset):
             single_galaxies,
             fluxes,
             log_fluxes,
+            galaxy_bool,
+            star_bool,
         ) = self.simulator.sample_parameters(batchsize=batchsize)
 
         images = self.simulator.generate_images(
@@ -591,6 +595,8 @@ class SourceDataset(Dataset):
             "galaxy_params": galaxy_params,
             "fluxes": fluxes,
             "log_fluxes": log_fluxes,
+            "galaxy_bool": galaxy_bool,
+            "star_bool": star_bool,
             "images": images,
             "background": self.simulator.background,
         }
