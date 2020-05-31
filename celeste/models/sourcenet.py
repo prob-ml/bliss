@@ -17,6 +17,9 @@ def _sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).detach().squeeze()
 
 
+# TODO: What does this function do exactly and why is it necessary?
+#       can we get rid of it and of the padding later? and just sort each
+#       tile's elements so that all zeros are at the end?
 def _bring_to_front(n_source_params, n_sources, is_on_array, source_params, locs):
     # puts all the on sources in front
     is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
@@ -206,9 +209,7 @@ def _get_params_in_tiles(
         .type(torch.bool)
         .to(device)
     )
-    n_sources_per_tile = (
-        is_on_array.float().sum(dim=1).type(torch.LongTensor).to(device)
-    )
+    n_sources_per_tile = is_on_array.float().sum(dim=1).long().to(device)
     tile_source_params, tile_locs, tile_is_on_array = _bring_to_front(
         n_source_params, n_sources_per_tile, is_on_array, tile_source_params, tile_locs,
     )
