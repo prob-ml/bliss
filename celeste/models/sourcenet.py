@@ -151,6 +151,7 @@ def _bring_to_front(
     locs,
     galaxy_params,
     log_fluxes,
+    galaxy_bool,
     n_galaxy_params,
     n_star_params,
 ):
@@ -171,11 +172,28 @@ def _bring_to_front(
         locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)
     ) * is_on_array_full.float().unsqueeze(2)
 
-    return new_locs, new_galaxy_params, new_log_fluxes, is_on_array_full
+    new_galaxy_bool = torch.gather(
+        galaxy_bool, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 1)
+    ) * is_on_array_full.float().unsqueeze(2)
+
+    return (
+        new_locs,
+        new_galaxy_params,
+        new_log_fluxes,
+        new_galaxy_bool,
+        is_on_array_full,
+    )
 
 
 def _get_params_in_tiles(
-    tile_coords, locs, galaxy_params, log_fluxes, slen, ptile_slen, edge_padding=0,
+    tile_coords,
+    locs,
+    galaxy_params,
+    log_fluxes,
+    galaxy_bool,
+    slen,
+    ptile_slen,
+    edge_padding=0,
 ):
     # locs are the coordinates in the full image, in coordinates between 0-1
     assert torch.all(locs <= 1.0)
@@ -218,18 +236,28 @@ def _get_params_in_tiles(
     tile_galaxy_params = (
         which_locs_array.unsqueeze(3) * galaxy_params.unsqueeze(1)
     ).view(subimage_batchsize, max_sources, n_galaxy_params)
+    tile_galaxy_bool = (which_locs_array.unsqueeze(3) * galaxy_bool.unsqueeze(2)).view(
+        subimage_batchsize, max_sources, 1
+    )
 
     # sort locs so all the zeros are at the end
     is_on_array = (
         which_locs_array.view(subimage_batchsize, max_sources).long().to(device)
     )
     n_sources_per_tile = is_on_array.float().sum(dim=1).long().to(device)
-    tile_locs, tile_galaxy_params, tile_log_fluxes, tile_is_on_array = _bring_to_front(
+    (
+        tile_locs,
+        tile_galaxy_params,
+        tile_log_fluxes,
+        tile_galaxy_bool,
+        tile_is_on_array,
+    ) = _bring_to_front(
         n_sources_per_tile,
         is_on_array,
         tile_locs,
         tile_galaxy_params,
         tile_log_fluxes,
+        tile_galaxy_bool,
         n_galaxy_params,
         n_star_params,
     )
@@ -238,6 +266,7 @@ def _get_params_in_tiles(
         tile_locs,
         tile_galaxy_params,
         tile_log_fluxes,
+        tile_galaxy_bool,
         n_sources_per_tile,
         tile_is_on_array,
     )
@@ -250,6 +279,7 @@ def _apply_padding_and_clipping(
     tile_locs,
     tile_galaxy_params,
     tile_log_fluxes,
+    tile_galaxy_bool,
     tile_is_on_array,
 ):
     # In the loss function, it assumes that the true max number of stars on each tile
@@ -283,18 +313,23 @@ def _apply_padding_and_clipping(
         pad_zeros4 = torch.zeros(n_tiles, n_pad, dtype=torch.long, device=device)
         tile_is_on_array = torch.cat((tile_is_on_array, pad_zeros4), dim=1)
 
+        pad_zeros5 = torch.zeros(n_tiles, n_pad, dtype=torch.long, device=device)
+        tile_galaxy_bool = torch.cat((tile_galaxy_bool, pad_zeros5), dim=1)
+
     # always clip max sources since it doesn't hurt.
     tile_n_sources = tile_n_sources.clamp(max=max_detections)
     tile_locs = tile_locs[:, 0:max_detections, :]
     tile_galaxy_params = tile_galaxy_params[:, 0:max_detections, :]
     tile_log_fluxes = tile_log_fluxes[:, 0:max_detections, :]
     tile_is_on_array = tile_is_on_array[:, 0:max_detections]
+    tile_galaxy_bool = tile_galaxy_bool[:, 0:max_detections]
 
     return (
         tile_n_sources,
         tile_locs,
         tile_galaxy_params,
         tile_log_fluxes,
+        tile_galaxy_bool,
         tile_is_on_array,
     )
 
@@ -757,6 +792,7 @@ class SourceEncoder(nn.Module):
                 tile_locs,
                 tile_galaxy_params,
                 tile_log_fluxes,
+                tile_galaxy_bool,
                 tile_n_sources,
                 tile_is_on_array,
             ) = _get_params_in_tiles(
@@ -764,6 +800,7 @@ class SourceEncoder(nn.Module):
                 locs,
                 galaxy_params,
                 log_fluxes,
+                galaxy_bool,
                 slen,
                 self.ptile_slen,
                 self.edge_padding,
@@ -774,6 +811,7 @@ class SourceEncoder(nn.Module):
                 tile_locs,
                 tile_galaxy_params,
                 tile_log_fluxes,
+                tile_galaxy_bool,
                 tile_is_on_array,
             ) = _apply_padding_and_clipping(
                 self.max_detections,
@@ -781,6 +819,7 @@ class SourceEncoder(nn.Module):
                 tile_locs,
                 tile_galaxy_params,
                 tile_log_fluxes,
+                tile_galaxy_bool,
                 tile_is_on_array,
             )
 
@@ -789,6 +828,7 @@ class SourceEncoder(nn.Module):
             tile_galaxy_params = None
             tile_log_fluxes = None
             tile_n_sources = None
+            tile_galaxy_bool = None
             tile_is_on_array = None
 
         return (
@@ -796,6 +836,7 @@ class SourceEncoder(nn.Module):
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
+            tile_galaxy_bool,
             tile_n_sources,
             tile_is_on_array,
         )
@@ -849,7 +890,7 @@ class SourceEncoder(nn.Module):
         """
 
         assert (
-            image.shape[0] == 1
+            image.size(0) == 1
         ), "Sampling only works for one image at a time for now..."
 
         # shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
