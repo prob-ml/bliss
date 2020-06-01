@@ -138,7 +138,7 @@ def _get_params_loss(
     # i, j in {1, ..., max_detections}
     # *_log_probs_all have shape n_ptiles x max_detections x max_detections
 
-    # large error if source is off
+    # enforce large error if source is off
     true_locs = true_locs + (true_is_on_array == 0).float().unsqueeze(-1) * 1e16
     locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
 
@@ -152,7 +152,13 @@ def _get_params_loss(
 
     # inside _get_min_perm_loss is where the matching happens:
     # we construct a bijective map from each estimated star to each true star
-    locs_loss, star_params_loss, galaxy_params_loss, galaxy_bool_loss, perm_indx = _get_min_perm_loss(
+    (
+        locs_loss,
+        star_params_loss,
+        galaxy_params_loss,
+        galaxy_bool_loss,
+        perm_indx,
+    ) = _get_min_perm_loss(
         locs_log_probs_all,
         star_params_log_probs_all,
         galaxy_params_log_probs_all,
@@ -194,15 +200,15 @@ def _get_transformed_params(true_params, param_mean, param_logvar):
     batchsize = true_params.shape[0]
 
     # -1 in each view = n_source_params or 2 for locs.
-    _true_params = true_params.view(batchsize, true_params.shape[1], 1, -1)
-    _source_mean = param_mean.view(batchsize, 1, param_mean.shape[1], -1)
-    _source_logvar = param_logvar.view(batchsize, 1, param_logvar.shape[1], -1)
+    _true_params = true_params.view(batchsize, true_params.size(1), 1, -1)
+    _source_mean = param_mean.view(batchsize, 1, param_mean.size(1), -1)
+    _source_logvar = param_logvar.view(batchsize, 1, param_logvar.size(1), -1)
 
     return _true_params, _source_mean, _source_logvar
 
 
 def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
-    (_true_params, _param_mean, _param_logvar,) = _get_transformed_params(
+    _true_params, _param_mean, _param_logvar = _get_transformed_params(
         true_params, param_mean, param_logvar
     )
 
@@ -224,8 +230,8 @@ def _get_log_probs_all_perms(
 ):
 
     # get log-probability under every possible matching of estimated star to true star
-    max_detections = galaxy_params_log_probs_all.shape[-1]
-    batchsize = galaxy_params_log_probs_all.shape[0]
+    max_detections = galaxy_params_log_probs_all.size(-1)
+    batchsize = galaxy_params_log_probs_all.size(0)
 
     locs_loss_all_perm = torch.zeros(
         batchsize, math.factorial(max_detections), device=device
@@ -241,8 +247,7 @@ def _get_log_probs_all_perms(
         batchsize, math.factorial(max_detections), device=device
     )
 
-    i = 0
-    for perm in permutations(range(max_detections)):
+    for i, perm in enumerate(permutations(range(max_detections))):
         # note that we multiply is_on_array:
         # we only evaluate the loss if the star is on
         locs_loss_all_perm[:, i] = (
@@ -270,10 +275,12 @@ def _get_log_probs_all_perms(
         galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log1p(_prob_galaxy)
         galaxy_bool_loss_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
 
-        i += 1
-
-    return locs_loss_all_perm, star_params_loss_all_perm, \
-                galaxy_params_loss_all_perm, galaxy_bool_loss_all_perm
+    return (
+        locs_loss_all_perm,
+        star_params_loss_all_perm,
+        galaxy_params_loss_all_perm,
+        galaxy_bool_loss_all_perm,
+    )
 
 
 def _get_min_perm_loss(
@@ -290,7 +297,7 @@ def _get_min_perm_loss(
         locs_log_probs_all_perm,
         star_params_loss_all_perm,
         galaxy_params_loss_all_perm,
-        galaxy_bool_loss_all_perm
+        galaxy_bool_loss_all_perm,
     ) = _get_log_probs_all_perms(
         locs_log_probs_all,
         star_params_log_probs_all,
