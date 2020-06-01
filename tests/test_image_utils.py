@@ -125,7 +125,7 @@ class TestImageBatching:
         )
 
         # now convert to full parameters
-        locs2, fluxes2, n_stars2 = sourcenet.get_full_params_from_tile_params(
+        locs2, fluxes2, n_stars2 = sourcenet._get_full_params_from_tile_params(
             tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         for i in range(n_images):
@@ -296,7 +296,7 @@ class TestImageBatching:
             locs_full_image,
             fluxes_full_image,
             n_stars,
-        ) = sourcenet.get_full_params_from_tile_params(
+        ) = sourcenet._get_full_params_from_tile_params(
             tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
 
@@ -318,7 +318,7 @@ class TestImageBatching:
             locs_full_image,
             fluxes_full_image,
             n_stars,
-        ) = sourcenet.get_full_params_from_tile_params(
+        ) = sourcenet._get_full_params_from_tile_params(
             tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         test_loc = (
@@ -335,7 +335,7 @@ class TestImageBatching:
             locs_full_image,
             fluxes_full_image,
             n_stars,
-        ) = sourcenet.get_full_params_from_tile_params(
+        ) = sourcenet._get_full_params_from_tile_params(
             tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
         )
         test_loc = (

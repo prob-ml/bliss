@@ -380,7 +380,8 @@ class SourceSimulator(object):
         batchsize = n_sources.size(0)
 
         # n_galaxies shouldn't exceed n_sources.
-        galaxy_bool = torch.rand(batchsize, self.max_sources, device=device) > 0.5
+        uniform = torch.rand(batchsize, self.max_sources, device=device)
+        galaxy_bool = uniform < self.prob_galaxy
         galaxy_bool = (galaxy_bool * is_on_array).long()
         star_bool = (1 - galaxy_bool) * is_on_array
         n_galaxies = galaxy_bool.sum(1)

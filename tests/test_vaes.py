@@ -239,7 +239,7 @@ class TestSourceEncoder:
         )
 
         is_on_array = (
-            sourcenet.get_is_on_from_tile_n_sources_2d(n_stars_sampled, max_detections)
+            sourcenet._get_is_on_from_tile_n_sources_2d(n_stars_sampled, max_detections)
             .float()
             .to(device)
         )
@@ -266,7 +266,7 @@ class TestSourceEncoder:
                 locs_full_image_i,
                 fluxes_full_image_i,
                 n_stars_i,
-            ) = sourcenet.get_full_params_from_tile_params(
+            ) = sourcenet._get_full_params_from_tile_params(
                 subimage_locs_sampled[i],
                 subimage_fluxes_sampled[i],
                 star_encoder.tile_coords,
