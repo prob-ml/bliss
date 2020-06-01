@@ -17,25 +17,6 @@ def _sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).detach().squeeze()
 
 
-# TODO: What does this function do exactly and why is it necessary?
-#       can we get rid of it and of the padding later? and just sort each
-#       tile's elements so that all zeros are at the end?
-def _bring_to_front(n_source_params, n_sources, is_on_array, source_params, locs):
-    # puts all the on sources in front
-    is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
-    indx = is_on_array_full.clone()
-    indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]
-
-    new_source_params = torch.gather(
-        source_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_source_params)
-    ) * is_on_array_full.float().unsqueeze(2)
-    new_locs = torch.gather(
-        locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)
-    ) * is_on_array_full.float().unsqueeze(2)
-
-    return new_source_params, new_locs, is_on_array_full
-
-
 def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
     """
     Take in an image (tensor) and the shape of the padded tile
@@ -164,8 +145,37 @@ def _get_ptile_coords(image_xlen, image_ylen, ptile_slen, step):
     return tile_coords
 
 
+def _bring_to_front(
+    n_sources,
+    is_on_array,
+    locs,
+    galaxy_params,
+    log_fluxes,
+    n_galaxy_params,
+    n_star_params,
+):
+    # puts all the on sources in front, returned dimension is max(n_sources)
+    is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
+    indx = is_on_array_full.clone()
+    indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]
+
+    new_galaxy_params = torch.gather(
+        galaxy_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_galaxy_params)
+    ) * is_on_array_full.float().unsqueeze(2)
+
+    new_log_fluxes = torch.gather(
+        log_fluxes, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_star_params)
+    ) * is_on_array_full.float().unsqueeze(2)
+
+    new_locs = torch.gather(
+        locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)
+    ) * is_on_array_full.float().unsqueeze(2)
+
+    return new_locs, new_galaxy_params, new_log_fluxes, is_on_array_full
+
+
 def _get_params_in_tiles(
-    tile_coords, locs, source_params, n_source_params, slen, ptile_slen, edge_padding=0
+    tile_coords, locs, galaxy_params, log_fluxes, slen, ptile_slen, edge_padding=0,
 ):
     # locs are the coordinates in the full image, in coordinates between 0-1
     assert torch.all(locs <= 1.0)
@@ -198,25 +208,95 @@ def _get_params_in_tiles(
     )  # by subtracting, some are negative now; just set these to 0
 
     # now for log_fluxes and galaxy_params
-    assert fullimage_batchsize == source_params.size(0)
-    assert max_sources == source_params.size(1)
-    assert n_source_params == source_params.size(-1)
-    tile_source_params = (
-        which_locs_array.unsqueeze(3) * source_params.unsqueeze(1)
-    ).view(subimage_batchsize, max_sources, n_source_params)
+    assert fullimage_batchsize == log_fluxes.size(0) == galaxy_params.size(0)
+    assert max_sources == log_fluxes.size(1) == galaxy_params.size(1)
+    n_star_params = log_fluxes.size(-1)
+    n_galaxy_params = galaxy_params.size(-1)
+    tile_log_fluxes = (which_locs_array.unsqueeze(3) * log_fluxes.unsqueeze(1)).view(
+        subimage_batchsize, max_sources, n_star_params
+    )
+    tile_galaxy_params = (
+        which_locs_array.unsqueeze(3) * galaxy_params.unsqueeze(1)
+    ).view(subimage_batchsize, max_sources, n_galaxy_params)
 
     # sort locs so all the zeros are at the end
     is_on_array = (
-        which_locs_array.view(subimage_batchsize, max_sources)
-        .type(torch.bool)
-        .to(device)
+        which_locs_array.view(subimage_batchsize, max_sources).long().to(device)
     )
     n_sources_per_tile = is_on_array.float().sum(dim=1).long().to(device)
-    tile_source_params, tile_locs, tile_is_on_array = _bring_to_front(
-        n_source_params, n_sources_per_tile, is_on_array, tile_source_params, tile_locs,
+    tile_locs, tile_galaxy_params, tile_log_fluxes, tile_is_on_array = _bring_to_front(
+        n_sources_per_tile,
+        is_on_array,
+        tile_locs,
+        tile_galaxy_params,
+        tile_log_fluxes,
+        n_galaxy_params,
+        n_star_params,
     )
 
-    return tile_locs, tile_source_params, n_sources_per_tile, tile_is_on_array
+    return (
+        tile_locs,
+        tile_galaxy_params,
+        tile_log_fluxes,
+        n_sources_per_tile,
+        tile_is_on_array,
+    )
+
+
+# TODO: construct tile_* variables so we don't need to do this padding.
+def _apply_padding_and_clipping(
+    max_detections,
+    tile_n_sources,
+    tile_locs,
+    tile_galaxy_params,
+    tile_log_fluxes,
+    tile_is_on_array,
+):
+    # In the loss function, it assumes that the true max number of stars on each tile
+    # equals the max number of stars specified in the init of the encoder. Sometimes the
+    # true max stars on tiles is less than the user-specified max stars, and this would
+    # throw the error in the loss function. Padding solves this issue.
+
+    # max number of stars seen in the each tile.
+    max_n_stars_seen = tile_locs.size(1)
+    if max_n_stars_seen < max_detections:
+        n_pad = max_detections - tile_locs.size(1)
+        n_tiles = tile_locs.size(0)
+
+        assert tile_galaxy_params.size(0) == n_tiles
+        assert tile_log_fluxes.size(0) == n_tiles
+        assert tile_is_on_array.size(0) == n_tiles
+
+        pad_zeros = torch.zeros(n_tiles, n_pad, tile_locs.size(-1), device=device,)
+        tile_locs = torch.cat((tile_locs, pad_zeros), dim=1)
+
+        pad_zeros2 = torch.zeros(
+            n_tiles, n_pad, tile_galaxy_params.size(-1), device=device,
+        )
+        tile_galaxy_params = torch.cat((tile_galaxy_params, pad_zeros2), dim=1)
+
+        pad_zeros3 = torch.zeros(
+            n_tiles, n_pad, tile_log_fluxes.size(-1), device=device,
+        )
+        tile_log_fluxes = torch.cat((tile_log_fluxes, pad_zeros3), dim=1)
+
+        pad_zeros4 = torch.zeros(n_tiles, n_pad, dtype=torch.long, device=device)
+        tile_is_on_array = torch.cat((tile_is_on_array, pad_zeros4), dim=1)
+
+    # always clip max sources since it doesn't hurt.
+    tile_n_sources = tile_n_sources.clamp(max=max_detections)
+    tile_locs = tile_locs[:, 0:max_detections, :]
+    tile_galaxy_params = tile_galaxy_params[:, 0:max_detections, :]
+    tile_log_fluxes = tile_log_fluxes[:, 0:max_detections, :]
+    tile_is_on_array = tile_is_on_array[:, 0:max_detections]
+
+    return (
+        tile_n_sources,
+        tile_locs,
+        tile_galaxy_params,
+        tile_log_fluxes,
+        tile_is_on_array,
+    )
 
 
 def get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):
@@ -675,64 +755,47 @@ class SourceEncoder(nn.Module):
             # get parameters in tiles as well
             (
                 tile_locs,
-                tile_source_params,
+                tile_galaxy_params,
+                tile_log_fluxes,
                 tile_n_sources,
                 tile_is_on_array,
             ) = _get_params_in_tiles(
                 tile_coords,
                 locs,
-                source_params,
+                galaxy_params,
+                log_fluxes,
                 slen,
                 self.ptile_slen,
                 self.edge_padding,
             )
 
-            # TODO: construct tile_* variables so we don't need to do this padding.
-            # In the loss function, it assumes that the true max number of stars on each tile
-            # equals the max number of stars specified in the init of the encoder. Sometimes the
-            # true max stars on tiles is less than the user-specified max stars, and this would
-            # throw the error in the loss function. Padding solves this issue.
-
-            # max number of stars seen in the each tile.
-            max_n_stars_seen = tile_locs.size(1)
-            if max_n_stars_seen < self.max_detections:
-                n_pad = self.max_detections - tile_locs.size(1)
-                n_tiles = tile_locs.size(0)
-
-                assert tile_source_params.size(0) == n_tiles
-                assert tile_is_on_array.size(0) == n_tiles
-
-                pad_zeros = torch.zeros(
-                    n_tiles, n_pad, tile_locs.size(-1), device=device,
-                )
-                tile_locs = torch.cat((tile_locs, pad_zeros), dim=1)
-
-                pad_zeros2 = torch.zeros(
-                    n_tiles, n_pad, tile_source_params.shape[-1], device=device,
-                )
-                tile_source_params = torch.cat((tile_source_params, pad_zeros2), dim=1)
-
-                pad_zeros3 = torch.zeros(
-                    n_tiles, n_pad, dtype=torch.long, device=device
-                )
-                tile_is_on_array = torch.cat((tile_is_on_array, pad_zeros3), dim=1)
-
-            # always clip max sources since it doesn't hurt.
-            tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
-            tile_locs = tile_locs[:, 0 : self.max_detections, :]
-            tile_source_params = tile_source_params[:, 0 : self.max_detections, :]
-            tile_is_on_array = tile_is_on_array[:, 0 : self.max_detections]
+            (
+                tile_n_sources,
+                tile_locs,
+                tile_galaxy_params,
+                tile_log_fluxes,
+                tile_is_on_array,
+            ) = _apply_padding_and_clipping(
+                self.max_detections,
+                tile_n_sources,
+                tile_locs,
+                tile_galaxy_params,
+                tile_log_fluxes,
+                tile_is_on_array,
+            )
 
         else:
             tile_locs = None
-            tile_source_params = None
+            tile_galaxy_params = None
+            tile_log_fluxes = None
             tile_n_sources = None
             tile_is_on_array = None
 
         return (
             image_ptiles,
             tile_locs,
-            tile_source_params,
+            tile_galaxy_params,
+            tile_log_fluxes,
             tile_n_sources,
             tile_is_on_array,
         )
