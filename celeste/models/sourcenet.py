@@ -436,8 +436,8 @@ class SourceEncoder(nn.Module):
     def _create_indx_mat(self, variational_params):
         for param_name, param_dim in variational_params:
             shape = (self.max_detections + 1, param_dim * self.max_detections)
-            indx_mat = (
-                torch.full(shape, self.dim_out_all, dtype=torch.long, device=device,),
+            indx_mat = torch.full(
+                shape, self.dim_out_all, dtype=torch.long, device=device,
             )
             setattr(self, param_name, indx_mat)
 

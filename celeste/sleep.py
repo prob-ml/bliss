@@ -123,7 +123,7 @@ def _get_params_loss(
     prob_galaxy shape = (n_ptiles x max_detections)
         are probabilities for each source to be a galaxy
 
-    n_source_log_probs shape = (ptiles x (max_detections + 1))
+    n_source_log_probs shape = (n_ptiles x (max_detections + 1))
         are log-probabilities for the number of sources (0, 1, ..., max_detections)
 
     """
@@ -197,12 +197,14 @@ def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
 
 
 def _get_transformed_params(true_params, param_mean, param_logvar):
-    batchsize = true_params.shape[0]
+    assert true_params.shape == param_mean.shape
+    max_detections = true_params.size(1)
+    n_ptiles = true_params.size(0)
 
     # -1 in each view = n_source_params or 2 for locs.
-    _true_params = true_params.view(batchsize, true_params.size(1), 1, -1)
-    _source_mean = param_mean.view(batchsize, 1, param_mean.size(1), -1)
-    _source_logvar = param_logvar.view(batchsize, 1, param_logvar.size(1), -1)
+    _true_params = true_params.view(n_ptiles, max_detections, 1, -1)
+    _source_mean = param_mean.view(n_ptiles, 1, max_detections, -1)
+    _source_logvar = param_logvar.view(n_ptiles, 1, max_detections, -1)
 
     return _true_params, _source_mean, _source_logvar
 
