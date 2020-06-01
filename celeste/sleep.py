@@ -129,8 +129,8 @@ def _get_params_loss(
     """
 
     # the loss for estimating the true number of sources
-    true_n_sources = true_is_on_array.sum(1).type(torch.LongTensor)
-    one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.shape[1])
+    true_n_sources = true_is_on_array.sum(1).long()
+    one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.size(1))
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
     # the following three functions computes the log-probability of parameters when

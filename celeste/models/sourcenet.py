@@ -139,8 +139,8 @@ def _tile_images(images, ptile_slen, step):
 
 def _get_ptile_coords(image_xlen, image_ylen, ptile_slen, step):
     """
-    This function is used in conjunction with tile_images above. This records (x0, x1) indices
-    each image padded tile comes from.
+    This records (x0, x1) indices each image padded tile comes from.
+
     :param image_xlen: The x side length of the image in pixels.
     :param image_ylen: The y side length of the image in pixels.
     :param ptile_slen: The side length of the padded tile in pixels.
@@ -178,6 +178,8 @@ def _get_params_in_tiles(
 
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
+
+    # obtain indicator for each ptile, whether there is a loc there.
     which_locs_array = (
         (locs.unsqueeze(1) > tile_coords + edge_padding - 0.5)
         & (locs.unsqueeze(1) < tile_coords - 0.5 + ptile_slen - edge_padding)
@@ -340,7 +342,7 @@ class SourceEncoder(nn.Module):
         self.tile_coords = _get_ptile_coords(
             self.slen, self.slen, self.ptile_slen, self.step
         )
-        self.n_tiles = self.tile_coords.shape[0]
+        self.n_tiles = self.tile_coords.size(0)
 
         # max number of detections
         self.max_detections = max_detections
@@ -653,18 +655,14 @@ class SourceEncoder(nn.Module):
         self, images, locs=None, galaxy_params=None, log_fluxes=None, galaxy_bool=None,
     ):
         assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
-        assert images.shape[1] == self.n_bands
+        assert images.size(1) == self.n_bands
 
         slen = images.size(-1)
+        tile_coords = self.tile_coords
 
-        # in case the image that we pass in to the encoder is of different size than the original
-        # encoder should be able to handle these cases to.
-        if not (images.size(-1) == self.slen):
-            # get the coordinates
+        # handle cases where images passed in are not of original size.
+        if not (slen == self.slen):
             tile_coords = _get_ptile_coords(slen, slen, self.ptile_slen, self.step)
-        else:
-            # else, use the cached coordinates
-            tile_coords = self.tile_coords
 
         image_ptiles = _tile_images(images, self.ptile_slen, self.step)
 
@@ -719,7 +717,7 @@ class SourceEncoder(nn.Module):
                 )
                 tile_is_on_array = torch.cat((tile_is_on_array, pad_zeros3), dim=1)
 
-            # always clip max sources if necessary.
+            # always clip max sources since it doesn't hurt.
             tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
             tile_locs = tile_locs[:, 0 : self.max_detections, :]
             tile_source_params = tile_source_params[:, 0 : self.max_detections, :]
