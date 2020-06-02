@@ -10,13 +10,7 @@ from . import device
 
 
 def get_inv_kl_loss(
-    encoder,
-    images,
-    true_locs,
-    true_galaxy_params,
-    true_log_fluxes,
-    true_galaxy_bool,
-    use_l2_loss=False,
+    encoder, images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,
 ):
 
     # extract image tiles
@@ -44,12 +38,6 @@ def get_inv_kl_loss(
         prob_galaxy,
         n_source_log_probs,
     ) = encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
-
-    if use_l2_loss:
-        warnings.warn("using l2_loss")
-        loc_logvar = torch.zeros_like(loc_logvar)
-        galaxy_param_logvar = torch.zeros_like(galaxy_param_logvar)
-        log_flux_logvar = torch.zeros_like(log_flux_logvar)
 
     (
         loss,

@@ -548,10 +548,10 @@ class SourceEncoder(nn.Module):
             + self.max_detections
         )
 
-        self.variational_indx_mats = [
-            ("locs_mean_indx_mat", 2),
-            ("locs_var_indx_mat", 2),
-            ("log_fluxes_mean_indx_mat", self.n_star_params),
+        self.variational_params = [
+            ("loc_mean", 2),
+            ("loc_logvar", 2),
+            ("log_fluxes_mean", self.n_star_params),
             ("log_fluxes_var_indx_mat", self.n_star_params),
             ("galaxy_params_mean_indx_mat", self.n_galaxy_params),
             ("galaxy_params_var_indx_mat", self.n_galaxy_params),
@@ -603,9 +603,10 @@ class SourceEncoder(nn.Module):
                 + 1
             )
 
+            # add corresponding indices to the index matrices of variational params.
             curr_indx = self._update_indx_mat_for_n_detections(n_detections, curr_indx)
 
-            # the categorical prob will go at the end.
+            # the categorical prob will go at the end of the rest.
             self.prob_n_source_indx[n_detections] = curr_indx
 
     ######################
@@ -976,17 +977,14 @@ class SourceEncoder(nn.Module):
             galaxy_param_sd = torch.exp(0.5 * galaxy_param_logvar).clamp(max=0.5)
             log_flux_sd = torch.exp(0.5 * log_flux_logvar).clamp(max=0.5)
 
-        # sample locations
         # shape = (n_samples x n_ptiles x max_detections x len(x,y))
         assert loc_mean.shape == loc_sd.shape, "Shapes need to match"
         tile_locs_sampled = torch.normal(loc_mean, loc_sd) * is_on_array
 
-        # sample galaxy params
         assert galaxy_param_mean.shape == galaxy_param_sd.shape, "Shapes need to match"
         tile_galaxy_params_sampled = torch.normal(galaxy_param_mean, galaxy_param_sd)
         tile_galaxy_params_sampled *= is_on_array
 
-        # sample log-fluxes
         assert log_flux_mean.shape == log_flux_sd.shape, "Shapes need to match"
         tile_log_fluxes_sampled = torch.normal(log_flux_mean, log_flux_sd)
         tile_log_fluxes_sampled *= is_on_array
