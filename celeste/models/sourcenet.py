@@ -75,7 +75,6 @@ def _tile_images(images, ptile_slen, step):
     NOTE: input and output are torch tensors, not numpy arrays.
 
     :param images: A tensor of size (batchsize x n_bands x slen x slen)
-    :type images: class:`torch.Tensor`
     :param ptile_slen: The side length of each padded tile.
     :param step:
     :return: image_ptiles, output tensor of shape:
@@ -93,7 +92,7 @@ def _tile_images(images, ptile_slen, step):
     assert (image_ylen - ptile_slen) % step == 0
 
     n_bands = images.shape[1]
-    image_ptiles = None
+    image_ptiles = torch.Tensor()  # torch.cat() works with empty tensors.
     for b in range(n_bands):
         image_ptiles_b = _extract_ptiles_2d(
             images[:, b : (b + 1), :, :],
@@ -102,10 +101,7 @@ def _tile_images(images, ptile_slen, step):
             batch_first=True,
         ).reshape(-1, 1, ptile_slen, ptile_slen)
 
-        if b == 0:
-            image_ptiles = image_ptiles_b
-        else:
-            image_ptiles = torch.cat((image_ptiles, image_ptiles_b), dim=1)
+        image_ptiles = torch.cat((image_ptiles, image_ptiles_b), dim=1)
 
     return image_ptiles
 
@@ -128,11 +124,8 @@ def _get_ptile_coords(image_xlen, image_ylen, ptile_slen, step):
     def return_coords(i):
         return [(i // ny_ptiles) * step, (i % ny_ptiles) * step]
 
-    tile_coords = (
-        torch.from_numpy(np.array([return_coords(i) for i in range(n_ptiles)]))
-        .long()
-        .to(device)
-    )
+    tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
+    tile_coords = tile_coords.long().to(device)
 
     return tile_coords
 
