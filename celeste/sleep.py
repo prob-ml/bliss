@@ -202,11 +202,8 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
         true_params, param_mean, param_logvar
     )
 
-    param_log_probs_all = (
-        Normal(_param_mean, (torch.exp(_param_logvar) + 1e-5).sqrt())
-        .log_prob(_true_params)
-        .sum(dim=3)
-    )
+    _sd = (torch.exp(_param_logvar) + 1e-5).sqrt()
+    param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
     return param_log_probs_all
 
 
@@ -223,23 +220,15 @@ def _get_log_probs_all_perms(
     max_detections = galaxy_params_log_probs_all.size(-1)
     batchsize = galaxy_params_log_probs_all.size(0)
 
-    locs_loss_all_perm = torch.zeros(
-        batchsize, math.factorial(max_detections), device=device
-    )
-    star_params_loss_all_perm = torch.zeros(
-        batchsize, math.factorial(max_detections), device=device
-    )
-    galaxy_params_loss_all_perm = torch.zeros(
-        batchsize, math.factorial(max_detections), device=device
-    )
-
-    galaxy_bool_loss_all_perm = torch.zeros(
-        batchsize, math.factorial(max_detections), device=device
-    )
+    n_permutations = math.factorial(max_detections)
+    locs_loss_all_perm = torch.zeros(batchsize, n_permutations, device=device)
+    star_params_loss_all_perm = locs_loss_all_perm.clone()
+    galaxy_params_loss_all_perm = locs_loss_all_perm.clone()
+    galaxy_bool_loss_all_perm = locs_loss_all_perm.clone()
 
     for i, perm in enumerate(permutations(range(max_detections))):
         # note that we multiply is_on_array:
-        # we only evaluate the loss if the star is on
+        # we only evaluate the loss if the source is on
         locs_loss_all_perm[:, i] = (
             locs_log_probs_all[:, perm, :].diagonal(dim1=1, dim2=2) * is_on_array
         ).sum(1)
