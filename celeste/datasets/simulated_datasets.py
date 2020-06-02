@@ -229,7 +229,8 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     )  # all stars are just the PSF so we copy it.
 
     # this loop plots each of the ith star in each of the (batchsize) images.
-    for n in range(max(n_sources)):
+    max_n = max(n_sources).int()
+    for n in range(max_n):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
         fluxes_n = fluxes[:, n, :]  # shape = (batchsize x n_bands)
@@ -252,7 +253,8 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     grid = _get_grid(slen, cached_grid)
 
     scene = torch.zeros(batchsize, n_bands, slen, slen, device=device)
-    for n in range(max(n_sources)):
+    max_n = max(n_sources).int()
+    for n in range(max_n):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
         galaxy = single_galaxies[
@@ -267,19 +269,15 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
 
 
 def bring_to_front(tensor, dim):
-    # push all zero-only dimension of tensor to the back. Maintain original order otherwise.
+    # push all zeroes of tensor to the back. Maintain original order otherwise.
     # dim is dimension along which do the ordering.
     indx_sort = (tensor != 0).long().argsort(dim=dim, descending=True)
     return torch.gather(tensor, dim, indx_sort)
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
-    """
-    Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
+    """Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
     whether there are more than l sources on the kth batch.
-    :param n_sources:
-    :param max_sources:
-    :return:
     """
     assert not torch.any(torch.isnan(n_sources))
     assert torch.all(n_sources >= 0)

@@ -92,7 +92,7 @@ def _tile_images(images, ptile_slen, step):
     assert (image_ylen - ptile_slen) % step == 0
 
     n_bands = images.shape[1]
-    image_ptiles = torch.Tensor()  # torch.cat() works with empty tensors.
+    image_ptiles = torch.tensor([], device=device)
     for b in range(n_bands):
         image_ptiles_b = _extract_ptiles_2d(
             images[:, b : (b + 1), :, :],
@@ -101,6 +101,7 @@ def _tile_images(images, ptile_slen, step):
             batch_first=True,
         ).reshape(-1, 1, ptile_slen, ptile_slen)
 
+        # torch.cat() works with empty tensors.
         image_ptiles = torch.cat((image_ptiles, image_ptiles_b), dim=1)
 
     return image_ptiles
@@ -192,23 +193,22 @@ def _get_params_in_tiles(
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
 
-    # obtain indicator for each ptile, whether there is a loc there or not (order maintained)
+    # indicator for each ptile, whether there is a loc there or not (order maintained)
     which_locs_array = (
         (locs.unsqueeze(1) > tile_coords + edge_padding - 0.5)
         & (locs.unsqueeze(1) < tile_coords - 0.5 + ptile_slen - edge_padding)
         & (locs.unsqueeze(1) != 0)
     )
-    which_locs_array = (
-        which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]
-    ).float()
+    which_locs_array = which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]
+    which_locs_array = which_locs_array.float()
 
-    tile_locs = (
-        which_locs_array.unsqueeze(3) * locs.unsqueeze(1)
-        - (tile_coords + edge_padding - 0.5)
-    ).view(subimage_batchsize, max_sources, 2) / (ptile_slen - 2 * edge_padding)
-    tile_locs = torch.relu(
-        tile_locs
-    )  # by subtracting, some are negative now; just set these to 0
+    # for each tile returned re-normalized locs, maintaining relative ordering of locs
+    # in the case that there are multiple objects in that tile.
+    tile_locs = which_locs_array.unsqueeze(3) * locs.unsqueeze(1)
+    tile_locs -= tile_coords + edge_padding - 0.5  # centering relative to each tile
+    tile_locs = tile_locs.view(subimage_batchsize, max_sources, 2)
+    tile_locs /= ptile_slen - 2 * edge_padding  # normalization in each tile.
+    tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
 
     # now for log_fluxes and galaxy_params
     assert fullimage_batchsize == log_fluxes.size(0) == galaxy_params.size(0)
