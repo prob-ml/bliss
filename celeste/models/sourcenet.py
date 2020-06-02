@@ -6,7 +6,7 @@ from ..datasets.simulated_datasets import get_is_on_from_n_sources
 from .. import device
 
 
-def _sample_class_weights(class_weights, n_samples=1):
+def sample_class_weights(class_weights, n_samples=1):
     """
     Draw a sample from Categorical variable with
     probabilities class_weights.
@@ -199,7 +199,7 @@ def _get_params_in_tiles(
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
 
-    # obtain indicator for each ptile, whether there is a loc there.
+    # obtain indicator for each ptile, whether there is a loc there or not (order maintained)
     which_locs_array = (
         (locs.unsqueeze(1) > tile_coords + edge_padding - 0.5)
         & (locs.unsqueeze(1) < tile_coords - 0.5 + ptile_slen - edge_padding)
@@ -330,33 +330,6 @@ def _apply_padding_and_clipping(
         tile_galaxy_bool,
         tile_is_on_array,
     )
-
-
-def _get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):
-    """
-
-    :param tile_n_sources: A tensor of shape (n_samples x n_tiles), indicating the number of sources
-                            at sample i, batch j. (n_samples = batchsize)
-    :type tile_n_sources: class: `torch.Tensor`
-    :param max_sources:
-    :type max_sources: int
-    :return:
-    """
-    assert not torch.any(torch.isnan(tile_n_sources))
-    assert torch.all(tile_n_sources >= 0)
-    assert torch.all(tile_n_sources <= max_sources)
-
-    n_samples = tile_n_sources.shape[0]
-    batchsize = tile_n_sources.shape[1]
-
-    is_on_array = torch.zeros(
-        n_samples, batchsize, max_sources, device=device, dtype=torch.long
-    )
-
-    for i in range(max_sources):
-        is_on_array[:, :, i] = tile_n_sources > i
-
-    return is_on_array
 
 
 def _get_full_params_from_tile_params(
@@ -699,26 +672,15 @@ class SourceEncoder(nn.Module):
             log_flux_logvar,
         )
 
-    ############################
-    # The layers of our neural network
-    ############################
-    def _forward_to_pooled_hidden(self, image):
-        """
-        Forward to the layer that is shared by all n_sources.
-        """
-
-        log_img = torch.log(image - image.min() + 1.0)
-        h = self.enc_conv(log_img)
-
-        return self.enc_fc(h)
-
     def _get_var_params_all(self, image_ptiles):
-        """
-        Concatenate all output parameters for all possible n_sources
-        Args:
-            image_ptiles: A tensor of shape (n_ptiles, n_bands, ptile_slen, ptile_slen)
-        """
-        h = self._forward_to_pooled_hidden(image_ptiles)
+        # image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
+
+        # Forward to the layer that is shared by all n_sources.
+        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        h = self.enc_conv(log_img)
+        h = self.enc_fc(h)
+
+        # Concatenate all output parameters for all possible n_sources
         return self.enc_final(h)
 
     def forward(self, image_ptiles, n_sources):
@@ -896,13 +858,7 @@ class SourceEncoder(nn.Module):
         return locs, galaxy_params, log_fluxes, galaxy_bool, n_sources
 
     def _sample_tile_params(
-        self,
-        image,
-        n_samples,
-        return_map_n_sources,
-        return_map_source_params,
-        tile_n_sources,
-        training,
+        self, image, n_samples, return_map_n_sources, return_map_source_params,
     ):
         """
         NOTE: In the case of stars this will return log_fluxes!
@@ -922,28 +878,20 @@ class SourceEncoder(nn.Module):
         # get log probs for number of sources
         # shape = (n_ptiles x max_detections)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        if not training:
-            h = h.detach()
-            log_probs_n_sources_per_tile = log_probs_n_sources_per_tile.detach()
 
         # sample number of stars
         # output shape = (n_samples x n_ptiles)
-        if tile_n_sources is None:
-            if return_map_n_sources:
-                tile_n_sources_sampled = (
-                    torch.argmax(log_probs_n_sources_per_tile.detach(), dim=1)
-                    .repeat(n_samples)
-                    .view(n_samples, -1)
-                )
-
-            else:
-                tile_n_sources_sampled = _sample_class_weights(
-                    torch.exp(log_probs_n_sources_per_tile.detach()), n_samples
-                ).view(n_samples, -1)
-        else:
-            tile_n_sources_sampled = tile_n_sources.repeat(n_samples).view(
-                n_samples, -1
+        if return_map_n_sources:
+            tile_n_sources_sampled = (
+                torch.argmax(log_probs_n_sources_per_tile.detach(), dim=1)
+                .repeat(n_samples)
+                .view(n_samples, -1)
             )
+
+        else:
+            tile_n_sources_sampled = sample_class_weights(
+                torch.exp(log_probs_n_sources_per_tile.detach()), n_samples
+            ).view(n_samples, -1)
 
         is_on_array = _get_is_on_from_tile_n_sources_2d(
             tile_n_sources_sampled, self.max_detections
@@ -979,13 +927,14 @@ class SourceEncoder(nn.Module):
 
         # shape = (n_samples x n_ptiles x max_detections x len(x,y))
         assert loc_mean.shape == loc_sd.shape, "Shapes need to match"
+        assert galaxy_param_mean.shape == galaxy_param_sd.shape, "Shapes need to match"
+        assert log_flux_mean.shape == log_flux_sd.shape, "Shapes need to match"
+
         tile_locs_sampled = torch.normal(loc_mean, loc_sd) * is_on_array
 
-        assert galaxy_param_mean.shape == galaxy_param_sd.shape, "Shapes need to match"
         tile_galaxy_params_sampled = torch.normal(galaxy_param_mean, galaxy_param_sd)
         tile_galaxy_params_sampled *= is_on_array
 
-        assert log_flux_mean.shape == log_flux_sd.shape, "Shapes need to match"
         tile_log_fluxes_sampled = torch.normal(log_flux_mean, log_flux_sd)
         tile_log_fluxes_sampled *= is_on_array
 
@@ -1003,8 +952,6 @@ class SourceEncoder(nn.Module):
         n_samples=1,
         return_map_n_sources=False,
         return_map_source_params=False,
-        tile_n_sources=None,
-        training=False,
     ):
         """
         In the case of stars, this function will return log_fluxes as source_params. Can then obtain
@@ -1016,16 +963,6 @@ class SourceEncoder(nn.Module):
         where `max_stars` corresponds to the maximum number of stars in a scene that was used when
         simulating the `image` passed in to this function.
 
-        Args:
-            image:
-            n_samples:
-            return_map_n_sources:
-            return_map_source_params:
-            tile_n_sources:
-            training:
-
-        Returns:
-
         """
 
         slen = image.shape[-1]
@@ -1036,12 +973,7 @@ class SourceEncoder(nn.Module):
             tile_galaxy_bool_sampled,
             is_on_array,
         ) = self._sample_tile_params(
-            image,
-            n_samples,
-            return_map_n_sources,
-            return_map_source_params,
-            tile_n_sources,
-            training,
+            image, n_samples, return_map_n_sources, return_map_source_params,
         )
 
         # get parameters on full image

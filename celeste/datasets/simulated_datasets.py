@@ -293,6 +293,33 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
+def _get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):
+    """
+
+    :param tile_n_sources: A tensor of shape (n_samples x n_tiles), indicating the number of sources
+                            at sample i, batch j.
+    :type tile_n_sources: class: `torch.Tensor`
+    :param max_sources:
+    :type max_sources: int
+    :return:
+    """
+    assert not torch.any(torch.isnan(tile_n_sources))
+    assert torch.all(tile_n_sources >= 0)
+    assert torch.all(tile_n_sources <= max_sources)
+
+    n_samples = tile_n_sources.shape[0]
+    n_tiles = tile_n_sources.shape[1]
+
+    is_on_array = torch.zeros(
+        n_samples, n_tiles, max_sources, device=device, dtype=torch.long
+    )
+
+    for i in range(max_sources):
+        is_on_array[:, :, i] = tile_n_sources > i
+
+    return is_on_array
+
+
 class SourceSimulator(object):
     def __init__(
         self,

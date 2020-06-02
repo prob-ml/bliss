@@ -1,6 +1,5 @@
 import math
 from itertools import permutations
-import warnings
 
 import torch
 from torch.distributions import Normal
@@ -289,7 +288,7 @@ def _get_min_perm_loss(
     # find the permutation that minimizes the location losses
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
 
-    # get the star and galaxy losses according to the found permutation
+    # get the star & galaxy losses according to the found permutation
     star_params_loss = -torch.gather(
         star_params_loss_all_perm, 1, indx.unsqueeze(1)
     ).squeeze()

@@ -94,7 +94,6 @@ class TestStarSleepEncoder:
             n_samples=1,
             return_map_n_sources=True,
             return_map_source_params=True,
-            training=False,
         )
 
         # we only expect our assert statements to be true
