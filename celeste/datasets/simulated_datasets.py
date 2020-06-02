@@ -102,15 +102,14 @@ def _sample_n_sources(
         m = Categorical(categorical_param)
         n_sources = m.sample([batchsize]) + min_sources
 
-    return n_sources.clamp(max=max_sources, min=min_sources).long().squeeze(1)
+    return n_sources.clamp(max=max_sources, min=min_sources).float().squeeze(1)
 
 
 def _sample_locs(max_sources, is_on_array, batchsize=1):
     # 2 = (x,y)
     # torch.rand returns numbers between (0,1)
-    locs = (
-        torch.rand(batchsize, max_sources, 2, device=device)
-        * is_on_array.unsqueeze(2).float()
+    locs = torch.rand(batchsize, max_sources, 2, device=device) * is_on_array.unsqueeze(
+        2
     )
     return locs
 
@@ -282,40 +281,16 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     :param max_sources:
     :return:
     """
-    assert len(n_sources.shape) == 1
-
-    batchsize = len(n_sources)
-    is_on_array = torch.zeros(batchsize, max_sources, device=device, dtype=torch.long)
-
-    for i in range(max_sources):
-        is_on_array[:, i] = n_sources > i
-
-    return is_on_array
-
-
-def _get_is_on_from_tile_n_sources_2d(tile_n_sources, max_sources):
-    """
-
-    :param tile_n_sources: A tensor of shape (n_samples x n_tiles), indicating the number of sources
-                            at sample i, batch j.
-    :type tile_n_sources: class: `torch.Tensor`
-    :param max_sources:
-    :type max_sources: int
-    :return:
-    """
-    assert not torch.any(torch.isnan(tile_n_sources))
-    assert torch.all(tile_n_sources >= 0)
-    assert torch.all(tile_n_sources <= max_sources)
-
-    n_samples = tile_n_sources.shape[0]
-    n_tiles = tile_n_sources.shape[1]
+    assert not torch.any(torch.isnan(n_sources))
+    assert torch.all(n_sources >= 0)
+    assert torch.all(n_sources <= max_sources)
 
     is_on_array = torch.zeros(
-        n_samples, n_tiles, max_sources, device=device, dtype=torch.long
+        *n_sources.shape, max_sources, device=device, dtype=torch.float
     )
 
     for i in range(max_sources):
-        is_on_array[:, :, i] = tile_n_sources > i
+        is_on_array[..., i] = n_sources > i
 
     return is_on_array
 
@@ -409,7 +384,7 @@ class SourceSimulator(object):
         # n_galaxies shouldn't exceed n_sources.
         uniform = torch.rand(batchsize, self.max_sources, device=device)
         galaxy_bool = uniform < self.prob_galaxy
-        galaxy_bool = (galaxy_bool * is_on_array).long()
+        galaxy_bool = (galaxy_bool * is_on_array).float()
         star_bool = (1 - galaxy_bool) * is_on_array
         n_galaxies = galaxy_bool.sum(1)
         n_stars = star_bool.sum(1)
@@ -451,10 +426,9 @@ class SourceSimulator(object):
             )
             _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(2)
 
-            fluxes = (
-                torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim=2)
-                * is_on_array.unsqueeze(2).float()
-            )
+            fluxes = torch.cat(
+                (base_fluxes.unsqueeze(2), _fluxes), dim=2
+            ) * is_on_array.unsqueeze(2)
         else:
             fluxes = (base_fluxes * is_on_array.float()).unsqueeze(2)
 

@@ -142,7 +142,7 @@ def _bring_to_front(
 ):
     # puts all the on sources in front, returned dimension is max(n_sources)
     is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
-    indx = is_on_array_full.clone()
+    indx = is_on_array_full.clone().long()
     indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]
 
     new_galaxy_params = torch.gather(
@@ -230,9 +230,9 @@ def _get_params_in_tiles(
 
     # sort locs so all the zeros are at the end
     is_on_array = (
-        which_locs_array.view(subimage_batchsize, max_sources).long().to(device)
+        which_locs_array.view(subimage_batchsize, max_sources).float().to(device)
     )
-    n_sources_per_tile = is_on_array.float().sum(dim=1).long().to(device)
+    n_sources_per_tile = is_on_array.float().sum(dim=1).float().to(device)
     (
         tile_locs,
         tile_galaxy_params,
