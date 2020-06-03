@@ -3,11 +3,8 @@ import numpy as np
 import pytest
 
 from celeste import device, use_cuda
-from celeste import train
 from celeste import psf_transform
 from celeste import wake
-from celeste.datasets import simulated_datasets
-from celeste.models import sourcenet
 
 
 class TestStarWakeEncoder:
