@@ -549,7 +549,7 @@ class SourceEncoder(nn.Module):
         # indicator for each ptile, whether there is a loc there or not (loc order maintained)
         tile_is_on_array = locs.unsqueeze(1) > left_tile_edges
         tile_is_on_array &= locs.unsqueeze(1) < right_tile_edges
-        tile_is_on_array = locs.unsqueeze(1) != 0
+        tile_is_on_array &= locs.unsqueeze(1) != 0
         tile_is_on_array = tile_is_on_array[:, :, :, 0] * tile_is_on_array[:, :, :, 1]
         tile_is_on_array = tile_is_on_array.float().to(device)
         tile_is_on_array = tile_is_on_array.view(total_ptiles, max_sources)
