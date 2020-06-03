@@ -106,7 +106,7 @@ def _tile_images(images, ptile_slen, step):
     return image_ptiles
 
 
-def _get_ptile_coords(image_xlen, image_ylen, ptile_slen, step):
+def _get_tile_coords(image_xlen, image_ylen, ptile_slen, step):
     """
     This records (x0, x1) indices each image padded tile comes from.
 
@@ -334,9 +334,7 @@ class SourceEncoder(nn.Module):
 
         self.edge_padding = edge_padding
 
-        self.tile_coords = _get_ptile_coords(
-            self.slen, self.slen, self.ptile_slen, self.step
-        )
+        self.tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.step)
         self.n_tiles = self.tile_coords.size(0)
 
         # max number of detections
@@ -488,7 +486,7 @@ class SourceEncoder(nn.Module):
             )
 
             # the categorical prob will go at the end of the rest.
-            self.prob_n_source_indx[n_detections] = curr_indx
+            prob_n_source_indx[n_detections] = curr_indx
 
         return indx_mats, prob_n_source_indx
 
@@ -622,7 +620,7 @@ class SourceEncoder(nn.Module):
 
         # handle cases where images passed in are not of original size.
         if not (slen == self.slen):
-            tile_coords = _get_ptile_coords(slen, slen, self.ptile_slen, self.step)
+            tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.step)
         return tile_coords
 
     def get_image_ptiles(self, images):
@@ -825,9 +823,6 @@ class SourceEncoder(nn.Module):
     def _sample_tile_params(
         self, image, n_samples, return_map_n_sources, return_map_source_params,
     ):
-        """
-        NOTE: In the case of stars this will return log_fluxes!
-        """
 
         assert (
             image.size(0) == 1
@@ -864,8 +859,6 @@ class SourceEncoder(nn.Module):
         # shape = (n_samples x n_ptiles x max_detections x 1 )
         is_on_array = is_on_array.unsqueeze(3).float()
 
-        prob_galaxy = self._get_prob_galaxy_for_n_sources(h, tile_n_sources_sampled)
-
         # get variational parameters: these are on image tiles
         # loc_mean.shape = (n_samples x n_ptiles x max_detections x len(x,y))
         (
@@ -875,6 +868,7 @@ class SourceEncoder(nn.Module):
             galaxy_param_logvar,
             log_flux_mean,
             log_flux_logvar,
+            prob_galaxy,
         ) = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
 
         #  TODO: finish adding bernoulli prediction.
