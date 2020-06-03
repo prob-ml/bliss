@@ -268,13 +268,6 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     return scene
 
 
-def bring_to_front(tensor, dim):
-    # push all zeroes of tensor to the back. Maintain original order otherwise.
-    # dim is dimension along which do the ordering.
-    indx_sort = (tensor != 0).long().argsort(dim=dim, descending=True)
-    return torch.gather(tensor, dim, indx_sort)
-
-
 def get_is_on_from_n_sources(n_sources, max_sources):
     """Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
     whether there are more than l sources on the kth batch.
@@ -398,7 +391,7 @@ class SourceSimulator(object):
 
         return log_fluxes
 
-    def _sample_fluxes(self, n_stars, is_on_array, batchsize):
+    def _sample_fluxes(self, n_stars, star_bool, batchsize):
         """
 
         :return: fluxes, a shape (batchsize x max_sources x n_bands) tensor
@@ -424,11 +417,10 @@ class SourceSimulator(object):
             )
             _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(2)
 
-            fluxes = torch.cat(
-                (base_fluxes.unsqueeze(2), _fluxes), dim=2
-            ) * is_on_array.unsqueeze(2)
+            fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim=2)
+            fluxes *= star_bool.unsqueeze(2)
         else:
-            fluxes = (base_fluxes * is_on_array.float()).unsqueeze(2)
+            fluxes = (base_fluxes * star_bool.float()).unsqueeze(2)
 
         return fluxes
 

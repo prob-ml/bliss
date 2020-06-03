@@ -65,6 +65,15 @@ def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
     return ptiles
 
 
+def _argfront(tensor, dim):
+    # return indices that sort pushing all zeroes of tensor to the back.
+    # dim is dimension along which do the ordering.
+    # tensor is assumed to possibly have multiple non-zero entries in element of shape[-1].
+    indx_sort = (tensor != 0).long().argsort(dim=dim, descending=True)
+    indx_sort = indx_sort[..., 0]
+    return indx_sort
+
+
 def _tile_images(images, ptile_slen, step):
     """
     Breaks up a large image into smaller padded tiles.
@@ -631,14 +640,7 @@ class SourceEncoder(nn.Module):
         return image_ptiles
 
     def _get_locs_in_tiles(
-        tile_coords,
-        locs,
-        galaxy_params,
-        log_fluxes,
-        galaxy_bool,
-        slen,
-        ptile_slen,
-        edge_padding=0,
+        self, slen, tile_coords, locs,
     ):
         # locs are the coordinates in the full image, in coordinates between 0-1
         assert torch.all(locs <= 1.0)
@@ -650,25 +652,31 @@ class SourceEncoder(nn.Module):
         subimage_batchsize = n_ptiles * fullimage_batchsize  # total number of ptiles
 
         tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
+        left_tile_edges = tile_coords + self.edge_padding - 0.5
+        right_tile_edges = tile_coords - 0.5 + self.ptile_slen - self.edge_padding
         locs = locs * (slen - 1)
 
         # indicator for each ptile, whether there is a loc there or not (loc order maintained)
-        which_locs_array = (
-            (locs.unsqueeze(1) > tile_coords + edge_padding - 0.5)
-            & (locs.unsqueeze(1) < tile_coords - 0.5 + ptile_slen - edge_padding)
-            & (locs.unsqueeze(1) != 0)
-        )
+        which_locs_array = locs.unsqueeze(1) > left_tile_edges
+        which_locs_array &= locs.unsqueeze(1) < right_tile_edges
+        which_locs_array &= locs.unsqueeze(1) != 0
         which_locs_array = which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]
         which_locs_array = which_locs_array.float()
 
-        # for each tile returned re-normalized locs, maintaining relative ordering of locs
-        # (including leading/trailing zeroes) in the case that there are multiple objects
+        # for each tile returned re-normalized locs in that tile, maintaining relative ordering of
+        # locs including leading/trailing zeroes) in the case that there are multiple objects
         # in that tile.
         tile_locs = which_locs_array.unsqueeze(3) * locs.unsqueeze(1)
-        tile_locs -= tile_coords + edge_padding - 0.5  # centering relative to each tile
+        tile_locs -= tile_coords + self.edge_padding - 0.5  # recenter
         tile_locs = tile_locs.view(subimage_batchsize, max_sources, 2)
-        tile_locs /= ptile_slen - 2 * edge_padding  # normalization in each tile.
+        tile_locs /= self.ptile_slen - 2 * self.edge_padding  # re-normalize
         tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
+
+        # sort locs so all the zeros are at the end
+        tile_is_on_array = (
+            which_locs_array.view(subimage_batchsize, max_sources).float().to(device)
+        )
+        n_sources_per_tile = tile_is_on_array.sum(dim=1).float()
 
         # now for log_fluxes and galaxy_params
         assert fullimage_batchsize == log_fluxes.size(0) == galaxy_params.size(0)
@@ -688,11 +696,6 @@ class SourceEncoder(nn.Module):
             which_locs_array.unsqueeze(3) * galaxy_bool.unsqueeze(2)
         ).view(subimage_batchsize, max_sources, 1)
 
-        # sort locs so all the zeros are at the end
-        is_on_array = (
-            which_locs_array.view(subimage_batchsize, max_sources).float().to(device)
-        )
-        n_sources_per_tile = is_on_array.float().sum(dim=1).float().to(device)
         (
             tile_locs,
             tile_galaxy_params,
