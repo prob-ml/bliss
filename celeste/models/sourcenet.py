@@ -65,15 +65,6 @@ def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
     return ptiles
 
 
-def _argfront(tensor, dim):
-    # return indices that sort pushing all zeroes of tensor to the back.
-    # dim is dimension along which do the ordering.
-    # tensor is assumed to possibly have multiple non-zero entries in element of shape[-1].
-    indx_sort = (tensor != 0).long().argsort(dim=dim, descending=True)
-    indx_sort = indx_sort[..., 0]
-    return indx_sort
-
-
 def _tile_images(images, ptile_slen, step):
     """
     Breaks up a large image into smaller padded tiles.
@@ -139,44 +130,12 @@ def _get_tile_coords(image_xlen, image_ylen, ptile_slen, step):
     return tile_coords
 
 
-def _bring_to_front(
-    n_sources,
-    is_on_array,
-    locs,
-    galaxy_params,
-    log_fluxes,
-    galaxy_bool,
-    n_galaxy_params,
-    n_star_params,
-):
-    # puts all the on sources in front, returned dimension is max(n_sources)
-    is_on_array_full = get_is_on_from_n_sources(n_sources, n_sources.max())
-    indx = is_on_array_full.clone().long()
-    indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]
-
-    new_galaxy_params = torch.gather(
-        galaxy_params, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_galaxy_params)
-    ) * is_on_array_full.float().unsqueeze(2)
-
-    new_log_fluxes = torch.gather(
-        log_fluxes, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_star_params)
-    ) * is_on_array_full.float().unsqueeze(2)
-
-    new_locs = torch.gather(
-        locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)
-    ) * is_on_array_full.float().unsqueeze(2)
-
-    new_galaxy_bool = torch.gather(
-        galaxy_bool, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 1)
-    ) * is_on_array_full.float().unsqueeze(2)
-
-    return (
-        new_locs,
-        new_galaxy_params,
-        new_log_fluxes,
-        new_galaxy_bool,
-        is_on_array_full,
-    )
+def _argfront(is_on_array, dim):
+    # return indices that sort pushing all zeroes of tensor to the back.
+    # dim is dimension along which do the ordering.
+    assert len(is_on_array.shape) == 2
+    indx_sort = (is_on_array != 0).long().argsort(dim=dim, descending=True)
+    return indx_sort
 
 
 # TODO: construct tile_* variables so we don't need to use this ugly function.
@@ -657,116 +616,44 @@ class SourceEncoder(nn.Module):
         locs = locs * (slen - 1)
 
         # indicator for each ptile, whether there is a loc there or not (loc order maintained)
-        which_locs_array = locs.unsqueeze(1) > left_tile_edges
-        which_locs_array &= locs.unsqueeze(1) < right_tile_edges
-        which_locs_array &= locs.unsqueeze(1) != 0
-        which_locs_array = which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]
-        which_locs_array = which_locs_array.float()
+        tile_is_on_array = locs.unsqueeze(1) > left_tile_edges
+        tile_is_on_array &= locs.unsqueeze(1) < right_tile_edges
+        tile_is_on_array = locs.unsqueeze(1) != 0
+        tile_is_on_array = tile_is_on_array[:, :, :, 0] * tile_is_on_array[:, :, :, 1]
+        tile_is_on_array = tile_is_on_array.float().to(device)
+        tile_is_on_array = tile_is_on_array.view(subimage_batchsize, max_sources)
 
         # for each tile returned re-normalized locs in that tile, maintaining relative ordering of
         # locs including leading/trailing zeroes) in the case that there are multiple objects
         # in that tile.
-        tile_locs = which_locs_array.unsqueeze(3) * locs.unsqueeze(1)
+        # need to .unsqueeze(0) because switching from batches to just tiles.
+        tile_locs = tile_is_on_array.unsqueeze(0).unsqueeze(3) * locs.unsqueeze(1)
         tile_locs -= tile_coords + self.edge_padding - 0.5  # recenter
         tile_locs = tile_locs.view(subimage_batchsize, max_sources, 2)
         tile_locs /= self.ptile_slen - 2 * self.edge_padding  # re-normalize
         tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
 
-        # sort locs so all the zeros are at the end
-        tile_is_on_array = (
-            which_locs_array.view(subimage_batchsize, max_sources).float().to(device)
-        )
-        n_sources_per_tile = tile_is_on_array.sum(dim=1).float()
+        indx_sort = _argfront(tile_is_on_array, dim=1)
+        tile_n_sources = tile_is_on_array.sum(dim=1).float()
 
-        # now for log_fluxes and galaxy_params
-        assert fullimage_batchsize == log_fluxes.size(0) == galaxy_params.size(0)
-        assert max_sources == log_fluxes.size(1) == galaxy_params.size(1)
-        n_star_params = log_fluxes.size(-1)
-        n_galaxy_params = galaxy_params.size(-1)
+        # sort both using the indx_sort.
+        # we use .repeat(1,1,2) b/c locs has shape 2 for last dimension.
+        tile_locs = torch.gather(tile_locs, 1, indx_sort.unsqueeze(2).repeat(1, 1, 2))
+        tile_is_on_array = torch.gather(tile_is_on_array, 1, indx_sort)
+        return tile_locs, tile_is_on_array, tile_n_sources, indx_sort
 
-        tile_log_fluxes = (
-            which_locs_array.unsqueeze(3) * log_fluxes.unsqueeze(1)
-        ).view(subimage_batchsize, max_sources, n_star_params)
+    def get_tiled_params(self, tile_is_on_array, *params):
+        subimage_batchsize = tile_is_on_array.size(0)
+        max_sources = tile_is_on_array.size(1)
 
-        tile_galaxy_params = (
-            which_locs_array.unsqueeze(3) * galaxy_params.unsqueeze(1)
-        ).view(subimage_batchsize, max_sources, n_galaxy_params)
+        tile_params = []
+        for param in params:
+            param_dim = param.size(-1)
+            tile_param = tile_is_on_array.unsqueeze(0).unsqueeze(3) * param.unsqueeze(1)
+            tile_param = tile_param.view(subimage_batchsize, max_sources, -1)
+            tile_params.append(tile_param)
 
-        tile_galaxy_bool = (
-            which_locs_array.unsqueeze(3) * galaxy_bool.unsqueeze(2)
-        ).view(subimage_batchsize, max_sources, 1)
-
-        (
-            tile_locs,
-            tile_galaxy_params,
-            tile_log_fluxes,
-            tile_galaxy_bool,
-            tile_is_on_array,
-        ) = _bring_to_front(
-            n_sources_per_tile,
-            is_on_array,
-            tile_locs,
-            tile_galaxy_params,
-            tile_log_fluxes,
-            tile_galaxy_bool,
-            n_galaxy_params,
-            n_star_params,
-        )
-
-        return (
-            tile_locs,
-            tile_galaxy_params,
-            tile_log_fluxes,
-            tile_galaxy_bool,
-            n_sources_per_tile,
-            tile_is_on_array,
-        )
-
-    # def get_tiled_params(self, slen, locs, *params):
-    #     # returned params in tiles as organized by locs.
-    #     tile_coords = self._get_tile_coords(slen)
-    #
-    #     # first obtain tiled locs and is_on_array, also index for how to order rest.
-    #     tile_locs, tile_is_on_array, indx_sort = self.
-    #
-    #     # then the rest of
-    #
-    #
-    #         # get parameters in tiles as well
-    #         (
-    #             tile_locs,
-    #             tile_galaxy_params,
-    #             tile_log_fluxes,
-    #             tile_galaxy_bool,
-    #             tile_n_sources,
-    #             tile_is_on_array,
-    #         ) = _get_params_in_tiles(
-    #             tile_coords,
-    #             locs,
-    #             galaxy_params,
-    #             log_fluxes,
-    #             galaxy_bool,
-    #             slen,
-    #             self.ptile_slen,
-    #             self.edge_padding,
-    #         )
-    #
-    #         (
-    #             tile_n_sources,
-    #             tile_locs,
-    #             tile_galaxy_params,
-    #             tile_log_fluxes,
-    #             tile_galaxy_bool,
-    #             tile_is_on_array,
-    #         ) = _apply_padding_and_clipping(
-    #             self.max_detections,
-    #             tile_n_sources,
-    #             tile_locs,
-    #             tile_galaxy_params,
-    #             tile_log_fluxes,
-    #             tile_galaxy_bool,
-    #             tile_is_on_array,
-    #         )
+        return tile_params
 
     ######################
     # Modules to sample our variational distribution and get parameters on the full image
