@@ -520,6 +520,7 @@ class SourceEncoder(nn.Module):
         # append null column, return zero if indx_mat returns null index (dim_out_all)
         _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=device)), dim=1)
 
+        # select the indices from _h indicated by indx_mat.
         var_param = torch.gather(
             _h, 1, indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
         )
