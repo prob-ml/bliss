@@ -101,7 +101,7 @@ def _tile_images(images, ptile_slen, step):
             batch_first=True,
         ).reshape(-1, 1, ptile_slen, ptile_slen)
 
-        # torch.cat() works with empty tensors.
+        # torch.cat(...) works with empty tensors.
         image_ptiles = torch.cat((image_ptiles, image_ptiles_b), dim=1)
 
     return image_ptiles
@@ -193,7 +193,7 @@ def _get_params_in_tiles(
     tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
     locs = locs * (slen - 1)
 
-    # indicator for each ptile, whether there is a loc there or not (order maintained)
+    # indicator for each ptile, whether there is a loc there or not (loc order maintained)
     which_locs_array = (
         (locs.unsqueeze(1) > tile_coords + edge_padding - 0.5)
         & (locs.unsqueeze(1) < tile_coords - 0.5 + ptile_slen - edge_padding)
@@ -203,7 +203,8 @@ def _get_params_in_tiles(
     which_locs_array = which_locs_array.float()
 
     # for each tile returned re-normalized locs, maintaining relative ordering of locs
-    # in the case that there are multiple objects in that tile.
+    # (including leading/trailing zeroes) in the case that there are multiple objects
+    # in that tile.
     tile_locs = which_locs_array.unsqueeze(3) * locs.unsqueeze(1)
     tile_locs -= tile_coords + edge_padding - 0.5  # centering relative to each tile
     tile_locs = tile_locs.view(subimage_batchsize, max_sources, 2)
