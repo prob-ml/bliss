@@ -150,7 +150,6 @@ class TestStarEncoderTraining:
             init_psf_params,
             init_background_params,
             n_samples=100,
-            out_filename="wake_estimate_params",
             n_epochs=2000,
             lr=1e-1,
             print_every=100,
