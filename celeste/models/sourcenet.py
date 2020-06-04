@@ -138,60 +138,6 @@ def _tile_images(images, ptile_slen, step):
     return image_ptiles
 
 
-def _get_full_params_from_tile_params(
-    tile_coords,
-    tile_locs,
-    tile_galaxy_params,
-    tile_log_fluxes,
-    tile_galaxy_bool,
-    full_slen,
-    stamp_slen,
-    edge_padding,
-):
-    # TODO: switch to (..., locs, *params) notation as in the other direction.
-
-    # TODO: better description of what the things below are for consistency?
-    #       especially `n_sources_in_batch`
-    # NOTE: off sources should have tile_locs == 0.
-    batchsize = int(tile_galaxy_params.shape[0] / tile_coords.shape[0])
-    n_sources_in_batch = int(
-        tile_galaxy_params.shape[0] * tile_galaxy_params.shape[1] / batchsize
-    )
-
-    # TODO: remove unnecessary assertions.
-    assert tile_galaxy_params.size(0) == tile_log_fluxes.size(0)
-    assert tile_galaxy_params.size(1) == tile_log_fluxes.size(1)
-    assert (tile_galaxy_params.shape[0] % tile_coords.shape[0]) == 0
-    assert (tile_log_fluxes.shape[0] % tile_coords.shape[0]) == 0
-    assert (tile_galaxy_params.shape[0] % batchsize) == 0
-
-    galaxy_params = tile_galaxy_params.view(batchsize, n_sources_in_batch, -1)
-    log_fluxes = tile_log_fluxes.view(batchsize, n_sources_in_batch, -1)
-    galaxy_bool = tile_galaxy_bool.view(batchsize, n_sources_in_batch, -1)
-
-    scale = stamp_slen - 2 * edge_padding
-    bias = tile_coords.repeat(batchsize, 1).unsqueeze(1).float() + edge_padding - 0.5
-    locs = (tile_locs * scale + bias) / (full_slen - 1)
-    locs = locs.view(batchsize, n_sources_in_batch, 2)
-
-    # TODO: can we do this with locs instead? should work I think since shape is the same.
-    tile_is_on_bool = (galaxy_params > 0).any(2).float()
-    n_sources = torch.sum(tile_is_on_bool > 0, dim=1)
-
-    # TODO: this part should work in the same way using the sorting algorithm.
-    (locs, galaxy_params, log_fluxes, galaxy_bool, _) = _bring_to_front(
-        n_sources,
-        tile_is_on_bool,
-        locs,
-        galaxy_params,
-        log_fluxes,
-        tile_galaxy_bool,
-        galaxy_params.size(-1),
-        log_fluxes.size(-1),
-    )
-    return locs, galaxy_params, log_fluxes, galaxy_bool, n_sources
-
-
 class Flatten(nn.Module):
     def forward(self, tensor):
         return tensor.view(tensor.size(0), -1)
@@ -531,13 +477,6 @@ class SourceEncoder(nn.Module):
             tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.step)
         return tile_coords
 
-    def get_image_ptiles(self, images):
-        assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
-        assert images.size(1) == self.n_bands
-
-        image_ptiles = _tile_images(images, self.ptile_slen, self.step)
-        return image_ptiles
-
     def _get_tiled_locs(self, slen, locs):
         assert torch.all(locs <= 1.0)
         assert torch.all(locs >= 0.0)
@@ -545,8 +484,8 @@ class SourceEncoder(nn.Module):
         batchsize = locs.size(0)
         max_sources = locs.size(1)
         tile_coords = self._get_tile_coords(slen)
-        n_ptiles = tile_coords.size(0)
-        total_ptiles = n_ptiles * batchsize  # across all batches.
+        single_image_n_ptiles = tile_coords.size(0)
+        total_ptiles = single_image_n_ptiles * batchsize  # across all batches.
 
         tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
         left_tile_edges = tile_coords + self.edge_padding - 0.5
@@ -636,62 +575,74 @@ class SourceEncoder(nn.Module):
 
         return (tile_n_sources, *tiled_params)
 
-    ######################
-    # Modules to sample our variational distribution and get parameters on the full image
-    ######################
-    # TODO: just combine this with the other _full_params in ptiles using *params notation.
-    def _get_full_params_from_sampled_params(
-        self,
-        tile_locs_sampled,
-        tile_galaxy_params_sampled,
-        tile_log_fluxes_sampled,
-        tile_galaxy_bool_sampled,
-        slen,
+    def get_images_in_tiles(self, images):
+        assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
+        assert images.size(1) == self.n_bands
+
+        image_ptiles = _tile_images(images, self.ptile_slen, self.step)
+        return image_ptiles
+
+    def _get_full_params_from_tile_params(
+        self, slen, tile_coords, tile_locs, *tile_params
     ):
+        # NOTE: off sources should have tile_locs == 0.
+        single_image_n_ptiles = tile_coords.shape[0]
+        total_ptiles = tile_locs.shape[0]
+        max_sources = tile_locs.shape[1]
+        batchsize = total_ptiles / single_image_n_ptiles
+        n_sources_in_batch = total_ptiles * max_sources / batchsize
+        assert total_ptiles % single_image_n_ptiles == 0
+        assert total_ptiles * max_sources % batchsize == 0
 
-        # TODO: Is `n_image_ptiles` just `total_ptiles` ?
-        n_samples = tile_locs_sampled.shape[0]
-        n_image_ptiles = tile_locs_sampled.shape[1]
+        scale = self.ptile_slen - 2 * self.edge_padding
+        bias = (
+            tile_coords.repeat(batchsize, 1).unsqueeze(1).float()
+            + self.edge_padding
+            - 0.5
+        )
+        locs = (tile_locs * scale + bias) / (slen - 1)
+        locs = locs.view(batchsize, n_sources_in_batch, 2)
 
-        assert self.n_galaxy_params == tile_galaxy_params_sampled.shape[-1]
-        assert self.n_star_params == tile_log_fluxes_sampled.shape[-1]
+        # for the other tiling things.
+        tile_is_on_bool = (locs > 0).any(2).float()
+        n_sources = torch.sum(tile_is_on_bool > 0, dim=1)
 
+        indx_sort = _argfront(locs, dim=1)
+        locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
+
+        params = []
+        for tile_param in tile_params:
+            param_dim = tile_param.shape[-1]
+            param = tile_param.view(batchsize, n_sources_in_batch, -1)
+            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
+            params.append(param)
+
+        return (n_sources, locs, *params)
+
+    def _get_full_params_from_sampled_params(
+        self, slen, tile_locs_sampled, *tile_params
+    ):
         tile_coords = self._get_tile_coords(slen)
 
-        # TODO: What is `tile_coords.shape[0]`???
-        assert (n_image_ptiles % tile_coords.shape[0]) == 0
+        single_image_n_ptiles = tile_coords.shape[0]
+        n_samples = tile_locs_sampled.shape[0]
+        n_ptiles = tile_locs_sampled.shape[1]
+        total_ptiles = n_samples * n_ptiles
+        assert (n_ptiles % single_image_n_ptiles) == 0
 
-        # TODO: Can think of `n_samples * n_image_ptiles` as total number of ptiles?
-        _tile_locs_sampled = tile_locs_sampled.reshape(
-            n_samples * n_image_ptiles, -1, 2
-        )
-        _tile_galaxy_params_sampled = tile_galaxy_params_sampled.reshape(
-            n_samples * n_image_ptiles, -1, self.n_galaxy_params
-        )
-        _tile_log_fluxes_sampled = tile_log_fluxes_sampled.reshape(
-            n_samples * n_image_ptiles, -1, self.n_star_params
-        )
-        _tile_galaxy_bool_sampled = tile_galaxy_bool_sampled.reshape(
-            n_samples * n_image_ptiles, -1, 1
-        )
-        (
-            locs,
-            galaxy_params,
-            log_fluxes,
-            galaxy_bool,
-            n_sources,
-        ) = _get_full_params_from_tile_params(
-            tile_coords,
-            _tile_locs_sampled,
-            _tile_galaxy_params_sampled,
-            _tile_log_fluxes_sampled,
-            _tile_galaxy_bool_sampled,
-            slen,
-            self.ptile_slen,
-            self.edge_padding,
+        _tile_locs = tile_locs_sampled.reshape(total_ptiles, -1, 2)
+        _tile_params = []
+        for tile_param in tile_params:
+            param_dim = tile_param.size(-1)
+            _tile_param = tile_param.reshape(total_ptiles, -1, param_dim)
+            assert _tile_param.shape[1] == _tile_locs.shape[1]
+            _tile_params.append(_tile_params)
+
+        (n_sources, locs, *params) = self._get_full_params_from_tile_params(
+            slen, tile_coords, _tile_locs, *_tile_params
         )
 
-        return locs, galaxy_params, log_fluxes, galaxy_bool, n_sources
+        return (n_sources, locs, *params)
 
     def _sample_tile_params(
         self, image, n_samples, return_map_n_sources, return_map_source_params,
@@ -700,7 +651,7 @@ class SourceEncoder(nn.Module):
         assert image.size(0) == 1, "Sampling only works for a single image."
 
         # shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
-        image_ptiles = self.get_image_ptiles(image)
+        image_ptiles = self.get_images_in_tiles(image)
 
         # pass through NN
         # shape = (n_ptiles x dim_out_all)
@@ -754,10 +705,9 @@ class SourceEncoder(nn.Module):
             galaxy_param_sd = torch.zeros_like(galaxy_param_logvar)
             log_flux_sd = torch.zeros_like(log_flux_logvar)
         else:
-            #  TODO: why no clamping in loc_sd ???
             loc_sd = torch.exp(0.5 * loc_logvar)
-            galaxy_param_sd = torch.exp(0.5 * galaxy_param_logvar).clamp(max=0.5)
-            log_flux_sd = torch.exp(0.5 * log_flux_logvar).clamp(max=0.5)
+            galaxy_param_sd = torch.exp(0.5 * galaxy_param_logvar)
+            log_flux_sd = torch.exp(0.5 * log_flux_logvar)
 
         # shape = (n_samples x n_ptiles x max_detections x len(x,y))
         assert loc_mean.shape == loc_sd.shape, "Shapes need to match"
@@ -812,16 +762,17 @@ class SourceEncoder(nn.Module):
 
         # get parameters on full image
         (
+            n_sources,
             locs,
             galaxy_params,
             log_fluxes,
-            n_sources,
+            galaxy_bool,
         ) = self._get_full_params_from_sampled_params(
+            slen,
             tile_locs_sampled,
             tile_galaxy_params_sampled,
             tile_log_fluxes_sampled,
             tile_galaxy_bool_sampled,
-            slen,
         )
 
         # returns either galaxy_params or log_fluxes.

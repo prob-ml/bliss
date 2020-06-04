@@ -23,7 +23,7 @@ def get_inv_kl_loss(
         true_tile_n_sources,
         true_tile_galaxy_bool,
         true_tile_is_on_array,
-    ) = encoder.get_image_ptiles(
+    ) = encoder.get_images_in_tiles(
         images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,
     )
 
