@@ -182,7 +182,7 @@ def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
         image,
         n_samples=n_samples,
         return_map_n_sources=run_map,
-        return_map_sources_params=run_map,
+        return_map_source_params=run_map,
     )[0:3]
 
     loss = model_params.get_loss(
