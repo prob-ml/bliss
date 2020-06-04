@@ -165,7 +165,7 @@ class TestStarEncoderTraining:
 
         residuals = true_psf.to(device) - estimate_psf.to(device)
 
-        if use_cuda:
+        if not use_cuda:
             return
 
         assert torch.all(residuals.abs() <= true_psf.to(device).abs() * 0.1)
