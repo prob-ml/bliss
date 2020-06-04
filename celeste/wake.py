@@ -125,7 +125,7 @@ class ModelParams(nn.Module):
 
     def _plot_stars(self, locs, fluxes, n_stars, psf):
         self.stars = plot_multiple_stars(
-            self.slen, locs, n_stars, fluxes, psf, self.cached_grid
+            self.slen, locs, n_stars, psf, fluxes, self.cached_grid
         )
 
     def _get_init_background(self, sample_every=25):
