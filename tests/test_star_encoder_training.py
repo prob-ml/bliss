@@ -146,7 +146,7 @@ class TestStarEncoderTraining:
         # run the wake-phase training
         n_epochs = 2000 if use_cuda else 1
 
-        estimate_params = wake.run_wake(
+        estimate_params, map_loss = wake.run_wake(
             true_image.to(device),
             trained_star_encoder,
             init_psf_params,
