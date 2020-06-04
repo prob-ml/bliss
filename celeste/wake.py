@@ -200,7 +200,6 @@ def run_wake(
     init_psf_params,
     init_background_params,
     n_samples,
-    out_filename,
     n_epochs=100,
     lr=1e-3,
     print_every=20,
@@ -249,21 +248,9 @@ def run_wake(
             )
 
             test_losses.append(eval_loss)
-            np.savetxt(out_filename + "-wake_losses", test_losses)
 
             # reset
-            avg_loss = 0.0
-            counter = 0
             t0 = time.time()
-
-        np.save(
-            out_filename + "-powerlaw_psf_params",
-            list(model_params.power_law_psf.parameters())[0].data.cpu().numpy(),
-        )
-        np.save(
-            out_filename + "-planarback_params",
-            list(model_params.planar_background.parameters())[0].data.cpu().numpy(),
-        )
 
     map_loss = get_wake_loss(
         image, star_encoder, model_params, n_samples=1, run_map=True
