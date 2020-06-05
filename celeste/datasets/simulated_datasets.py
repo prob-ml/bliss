@@ -384,6 +384,12 @@ class SourceSimulator(object):
 
     @staticmethod
     def _get_log_fluxes(fluxes):
+        """
+        To obtain fluxes from log_fluxes.
+
+        >> is_on_array = get_is_on_from_n_stars(n_stars, max_sources)
+        >> fluxes = np.exp(log_fluxes) * is_on_array
+        """
         log_fluxes = torch.where(
             fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(device)
         )  # prevent log(0) errors.

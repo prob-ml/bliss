@@ -737,17 +737,6 @@ class SourceEncoder(nn.Module):
         return_map_n_sources=False,
         return_map_source_params=False,
     ):
-        """
-        In the case of stars, this function will return log_fluxes as source_params. Can then obtain
-        fluxes with the following procedure:
-
-        >> is_on_array = get_is_on_from_n_stars(n_stars, max_stars)
-        >> fluxes = np.exp(log_fluxes) * is_on_array
-
-        where `max_stars` corresponds to the maximum number of stars in a scene that was used when
-        simulating the `image` passed in to this function.
-
-        """
 
         slen = image.shape[-1]
         (
@@ -764,9 +753,7 @@ class SourceEncoder(nn.Module):
         (
             n_sources,
             locs,
-            galaxy_params,
-            log_fluxes,
-            galaxy_bool,
+            (galaxy_params, log_fluxes, galaxy_bool,),
         ) = self._get_full_params_from_sampled_params(
             slen,
             tile_locs_sampled,
@@ -775,5 +762,4 @@ class SourceEncoder(nn.Module):
             tile_galaxy_bool_sampled,
         )
 
-        # returns either galaxy_params or log_fluxes.
-        return locs, galaxy_params, log_fluxes, n_sources
+        return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool
