@@ -458,7 +458,9 @@ class SourceEncoder(nn.Module):
         )
 
         # in the case of stars these are log_flux_mean, and log_flux_logvar.
+        # squeeze if possible to account for non-sampling case.
         return (
+            log_probs_n_sources.squeeze(0),
             loc_mean.squeeze(0),
             loc_logvar.squeeze(0),
             log_flux_mean.squeeze(0),
@@ -466,7 +468,6 @@ class SourceEncoder(nn.Module):
             galaxy_param_mean.squeeze(0),
             galaxy_param_logvar.squeeze(0),
             prob_galaxy.squeeze(0),
-            log_probs_n_sources.squeeze(0),
         )
 
     def _get_tile_coords(self, slen):
@@ -555,6 +556,7 @@ class SourceEncoder(nn.Module):
         return (_tile_n_sources, *_tiled_params)
 
     def get_params_in_tiles(self, slen, locs, *params):
+        # TODO: Get rid of unnecessary asterisks.
 
         (
             tile_n_sources,
@@ -587,7 +589,8 @@ class SourceEncoder(nn.Module):
     def _get_full_params_from_tile_params(
         self, slen, tile_coords, tile_locs, tile_params
     ):
-        # NOTE: off sources should have tile_locs == 0.
+        # TODO: Move this declarations to the function below.
+
         single_image_n_ptiles = tile_coords.shape[0]
         total_ptiles = tile_locs.shape[0]
         max_sources = tile_locs.shape[1]
@@ -596,11 +599,15 @@ class SourceEncoder(nn.Module):
         assert total_ptiles % single_image_n_ptiles == 0
         assert total_ptiles * max_sources % batchsize == 0
 
-        # first get fundamental quantities characterizing image.
         _locs = tile_locs.view(batchsize, n_sources_in_batch, -1)
         tile_is_on_bool = (_locs > 0).any(2).float()
         n_sources = torch.sum(tile_is_on_bool > 0, dim=1)
 
+        # TODO: Look over github master branch to compare what might be missing/wrong.
+        # TODO: Need to zero out entries that were not in tile after scaling, biasing
+        # TODO: Double check that should always be using self.ptile_slen and self.edge_padding.
+
+        # recenter and renormalize locations.
         scale = self.ptile_slen - 2 * self.edge_padding
         bias = (
             tile_coords.repeat(batchsize, 1).unsqueeze(1).float()
@@ -626,6 +633,8 @@ class SourceEncoder(nn.Module):
     def _get_full_params_from_sampled_params(
         self, slen, tile_locs_sampled, *tile_params_sampled
     ):
+        # NOTE: off sources should have tile_locs == 0.
+
         tile_coords = self._get_tile_coords(slen)
 
         single_image_n_ptiles = tile_coords.shape[0]
@@ -633,6 +642,7 @@ class SourceEncoder(nn.Module):
         n_ptiles = tile_locs_sampled.shape[1]
         max_detections = tile_locs_sampled.shape[2]
 
+        # TODO: Do we need to do this reshaping if we are reshaping later anyways?
         total_ptiles = n_samples * n_ptiles
         assert (n_ptiles % single_image_n_ptiles) == 0
 
@@ -640,7 +650,7 @@ class SourceEncoder(nn.Module):
         tile_params = []
         for tile_param_sampled in tile_params_sampled:
             # make sure works for galaxy bool too.
-            tile_param = tile_param_sampled.view(
+            tile_param = tile_param_sampled.reshape(
                 n_samples, n_ptiles, max_detections, -1
             )
             param_dim = tile_param.size(-1)
@@ -756,6 +766,7 @@ class SourceEncoder(nn.Module):
             image, n_samples, return_map_n_sources, return_map_source_params,
         )
 
+        # TODO: resolve pycharm errors below.
         # get parameters on full image
         (
             n_sources,

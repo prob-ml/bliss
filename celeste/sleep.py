@@ -15,19 +15,21 @@ def get_inv_kl_loss(
     # extract image tiles
     # true_tile_locs has shape = (n_ptiles x max_detections x 2)
     # true_tile_n_sources has shape = (n_ptiles)
+    slen = images.size(-1)
+    image_ptiles = encoder.get_images_in_tiles(images)
     (
-        image_ptiles,
+        true_tile_n_sources,
         true_tile_locs,
         true_tile_galaxy_params,
         true_tile_log_fluxes,
-        true_tile_n_sources,
         true_tile_galaxy_bool,
         true_tile_is_on_array,
-    ) = encoder.get_images_in_tiles(
-        images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,
+    ) = encoder.get_params_int_tiles(
+        slen, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool
     )
 
     (
+        n_source_log_probs,
         loc_mean,
         loc_logvar,
         galaxy_param_mean,
@@ -35,18 +37,18 @@ def get_inv_kl_loss(
         log_flux_mean,
         log_flux_logvar,
         prob_galaxy,
-        n_source_log_probs,
     ) = encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
 
     (
         loss,
         counter_loss,
-        galaxy_bool_loss,
         locs_loss,
         galaxy_params_loss,
         star_params_loss,
+        galaxy_bool_loss,
         perm_indx,
     ) = _get_params_loss(
+        n_source_log_probs,
         loc_mean,
         loc_logvar,
         galaxy_param_mean,
@@ -54,7 +56,6 @@ def get_inv_kl_loss(
         log_flux_mean,
         log_flux_logvar,
         prob_galaxy,
-        n_source_log_probs,
         true_tile_locs,
         true_tile_galaxy_params,
         true_tile_log_fluxes,
@@ -68,10 +69,12 @@ def get_inv_kl_loss(
         locs_loss,
         galaxy_params_loss,
         star_params_loss,
+        galaxy_bool_loss,
     )
 
 
 def _get_params_loss(
+    n_source_log_probs,
     loc_mean,
     loc_logvar,
     galaxy_params_mean,
@@ -79,7 +82,6 @@ def _get_params_loss(
     log_flux_mean,
     log_flux_logvar,
     prob_galaxy,
-    n_source_log_probs,
     true_locs,
     true_galaxy_params,
     true_log_fluxes,
@@ -167,10 +169,10 @@ def _get_params_loss(
     return (
         loss,
         counter_loss,
-        galaxy_bool_loss,
         locs_loss,
         galaxy_params_loss,
         star_params_loss,
+        galaxy_bool_loss,
         perm_indx,
     )
 

@@ -239,7 +239,7 @@ class TestSourceEncoder:
         )
 
         is_on_array = (
-            sourcenet._get_is_on_from_tile_n_sources_2d(n_stars_sampled, max_detections)
+            simulated_datasets.get_is_on_from_n_sources(n_stars_sampled, max_detections)
             .float()
             .to(device)
         )
