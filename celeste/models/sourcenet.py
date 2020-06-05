@@ -279,10 +279,10 @@ class SourceEncoder(nn.Module):
         self.variational_params = [
             ("loc_mean", 2, lambda x: torch.sigmoid(x) * (x != 0).float()),
             ("loc_logvar", 2),
-            ("log_fluxes_mean", self.n_star_params),
-            ("log_fluxes_var", self.n_star_params),
             ("galaxy_params_mean", self.n_galaxy_params),
             ("galaxy_params_var", self.n_galaxy_params),
+            ("log_fluxes_mean", self.n_star_params),
+            ("log_fluxes_var", self.n_star_params),
             ("prob_galaxy", 1, lambda x: torch.sigmoid(x)),
         ]
         self.n_variational_params = len(self.variational_params)
@@ -691,7 +691,7 @@ class SourceEncoder(nn.Module):
             prob_galaxy,
         ) = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
 
-        #  TODO: Do some refactoring here and below.
+        #  TODO: Would refactoring some of the below be useful?
         if return_map_source_params:
             tile_galaxy_bool_sampled = prob_galaxy > 0.5
             loc_sd = torch.zeros_like(loc_logvar)
@@ -708,7 +708,8 @@ class SourceEncoder(nn.Module):
         assert galaxy_param_mean.shape == galaxy_param_sd.shape, "Shapes need to match"
         assert log_flux_mean.shape == log_flux_sd.shape, "Shapes need to match"
 
-        tile_locs_sampled = torch.normal(loc_mean, loc_sd) * is_on_array
+        tile_locs_sampled = torch.normal(loc_mean, loc_sd)
+        tile_locs_sampled *= is_on_array
 
         tile_galaxy_params_sampled = torch.normal(galaxy_param_mean, galaxy_param_sd)
         tile_galaxy_params_sampled *= is_on_array
@@ -720,8 +721,8 @@ class SourceEncoder(nn.Module):
             tile_locs_sampled,
             tile_galaxy_params_sampled,
             tile_log_fluxes_sampled,
-            tile_galaxy_bool_sampled,
-            is_on_array,
+            tile_galaxy_bool_sampled.squeeze().float(),
+            is_on_array.squeeze().float(),
         )
 
     def sample_encoder(
