@@ -583,6 +583,7 @@ class SourceEncoder(nn.Module):
         image_ptiles = _tile_images(images, self.ptile_slen, self.step)
         return image_ptiles
 
+    # TODO: finish fixing this function.
     def _get_full_params_from_tile_params(
         self, slen, tile_coords, tile_locs, tile_params
     ):
@@ -595,6 +596,11 @@ class SourceEncoder(nn.Module):
         assert total_ptiles % single_image_n_ptiles == 0
         assert total_ptiles * max_sources % batchsize == 0
 
+        # first get fundamental quantities characterizing image.
+        _locs = tile_locs.view(batchsize, n_sources_in_batch, -1)
+        tile_is_on_bool = (_locs > 0).any(2).float()
+        n_sources = torch.sum(tile_is_on_bool > 0, dim=1)
+
         scale = self.ptile_slen - 2 * self.edge_padding
         bias = (
             tile_coords.repeat(batchsize, 1).unsqueeze(1).float()
@@ -604,10 +610,6 @@ class SourceEncoder(nn.Module):
         locs = (tile_locs * scale + bias) / (slen - 1)
         locs = locs.view(batchsize, n_sources_in_batch, 2)
 
-        # for the other tiling things.
-        tile_is_on_bool = (locs > 0).any(2).float()
-        n_sources = torch.sum(tile_is_on_bool > 0, dim=1)
-
         indx_sort = _argfront(tile_is_on_bool, dim=1)
         locs = torch.gather(locs, 1, indx_sort.unsqueeze(2).repeat(1, 1, 2))
 
@@ -615,7 +617,8 @@ class SourceEncoder(nn.Module):
         for tile_param in tile_params:
             param_dim = tile_param.shape[-1]
             param = tile_param.view(batchsize, n_sources_in_batch, -1)
-            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
+            _indx_sort = indx_sort.unsqueeze(2).repeat(1, 1, param_dim)
+            param = torch.gather(param, 1, _indx_sort)
             params.append(param)
 
         return n_sources, locs, params
@@ -757,7 +760,9 @@ class SourceEncoder(nn.Module):
         (
             n_sources,
             locs,
-            (galaxy_params, log_fluxes, galaxy_bool,),
+            galaxy_params,
+            log_fluxes,
+            galaxy_bool,
         ) = self._get_full_params_from_sampled_params(
             slen,
             tile_locs_sampled,
