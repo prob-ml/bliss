@@ -674,10 +674,10 @@ class SourceEncoder(nn.Module):
         tile_n_sources_sampled = tile_n_sources_sampled.view(n_samples, -1)
 
         # shape = (n_samples x n_ptiles x max_detections)
-        is_on_array = get_is_on_from_n_sources(
+        tile_is_on_array = get_is_on_from_n_sources(
             tile_n_sources_sampled, self.max_detections
         )
-        is_on_array = is_on_array.unsqueeze(3).float()
+        tile_is_on_array = tile_is_on_array.unsqueeze(3).float()
 
         # get variational parameters: these are on image tiles
         # shape (all) = (n_samples x n_ptiles x max_detections x param_dim)
@@ -693,15 +693,16 @@ class SourceEncoder(nn.Module):
 
         #  TODO: Would refactoring some of the below be useful?
         if return_map_source_params:
-            tile_galaxy_bool_sampled = prob_galaxy > 0.5
+            tile_galaxy_bool_sampled = (prob_galaxy > 0.5).float()
             loc_sd = torch.zeros_like(loc_logvar)
             galaxy_param_sd = torch.zeros_like(galaxy_param_logvar)
             log_flux_sd = torch.zeros_like(log_flux_logvar)
         else:
-            tile_galaxy_bool_sampled = torch.bernoulli(prob_galaxy)
+            tile_galaxy_bool_sampled = torch.bernoulli(prob_galaxy).float()
             loc_sd = torch.exp(0.5 * loc_logvar)
             galaxy_param_sd = torch.exp(0.5 * galaxy_param_logvar)
             log_flux_sd = torch.exp(0.5 * log_flux_logvar)
+        tile_galaxy_bool_sampled *= tile_is_on_array
 
         # shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert loc_mean.shape == loc_sd.shape, "Shapes need to match"
@@ -709,20 +710,21 @@ class SourceEncoder(nn.Module):
         assert log_flux_mean.shape == log_flux_sd.shape, "Shapes need to match"
 
         tile_locs_sampled = torch.normal(loc_mean, loc_sd)
-        tile_locs_sampled *= is_on_array
+        tile_locs_sampled *= tile_is_on_array
 
+        # TODO: Double check that I need to do the multiplication by galaxy_bool below.
         tile_galaxy_params_sampled = torch.normal(galaxy_param_mean, galaxy_param_sd)
-        tile_galaxy_params_sampled *= is_on_array
+        tile_galaxy_params_sampled *= tile_is_on_array * tile_galaxy_bool_sampled
 
         tile_log_fluxes_sampled = torch.normal(log_flux_mean, log_flux_sd)
-        tile_log_fluxes_sampled *= is_on_array
+        tile_log_fluxes_sampled *= tile_is_on_array * (1 - tile_galaxy_bool_sampled)
 
         return (
             tile_locs_sampled,
             tile_galaxy_params_sampled,
             tile_log_fluxes_sampled,
-            tile_galaxy_bool_sampled.squeeze().float(),
-            is_on_array.squeeze().float(),
+            tile_galaxy_bool_sampled.squeeze(),
+            tile_is_on_array.squeeze(),
         )
 
     def sample_encoder(
@@ -740,7 +742,7 @@ class SourceEncoder(nn.Module):
             tile_galaxy_params_sampled,
             tile_log_fluxes_sampled,
             tile_galaxy_bool_sampled,
-            is_on_array,
+            tile_is_on_array,
         ) = self._sample_tile_params(
             image, n_samples, return_map_n_sources, return_map_source_params,
         )
