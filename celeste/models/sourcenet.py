@@ -699,7 +699,8 @@ class SourceEncoder(nn.Module):
         assert galaxy_param_mean.shape == galaxy_param_sd.shape, "Shapes need to match"
         assert log_flux_mean.shape == log_flux_sd.shape, "Shapes need to match"
 
-        tile_locs_sampled = torch.normal(loc_mean, loc_sd)
+        # TODO: For really bad initialization sometimes I get locs > 1, so clamp. Is this ok?
+        tile_locs_sampled = torch.normal(loc_mean, loc_sd).clamp(min=0, max=1)
         tile_locs_sampled *= tile_is_on_array
 
         tile_galaxy_params_sampled = torch.normal(galaxy_param_mean, galaxy_param_sd)
