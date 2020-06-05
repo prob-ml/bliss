@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import pytest
 
 from celeste import device
 from celeste.models import sourcenet
@@ -7,6 +8,23 @@ from celeste.datasets import simulated_datasets
 
 
 class TestImageBatching:
+    @pytest.fixture(scope="module")
+    def encoder(self):
+        # load encoder (need for tiling and untiling)
+        encoder = sourcenet.SourceEncoder(
+            slen,
+            ptile_slen,
+            step,
+            edge_padding,
+            1,
+            2,
+            1,
+            8,
+            enc_conv_c=20,
+            enc_kern=3,
+            enc_hidden=256,
+        )
+
     def test_tile_coords(self):
         """
         Check that tiled images returned from `sourcenet.tile_images` actually corresponds
@@ -27,7 +45,7 @@ class TestImageBatching:
         images_batched = sourcenet._tile_images(full_images, subimage_slen, step)
 
         # get tile coordinates
-        tile_coords = sourcenet._get_ptile_coords(
+        tile_coords = sourcenet._get_tile_coords(
             full_slen, full_slen, subimage_slen, step
         )
 
@@ -54,8 +72,8 @@ class TestImageBatching:
         torch.manual_seed(24534)
 
         # define parameters in full image
-        full_slen = 100
-        subimage_slen = 10
+        slen = 100
+        ptile_slen = 10
         step = 10
         edge_padding = 0
         n_bands = 2
@@ -92,19 +110,15 @@ class TestImageBatching:
         ) * is_on_array.unsqueeze(2).float()
 
         # tile coordinates
-        tile_coords = sourcenet._get_ptile_coords(
-            full_slen, full_slen, subimage_slen, step
-        )
+        tile_coords = encoder._get_tile_coords(slen)
 
         # get tiles
         (
+            tile_n_stars,
             tile_locs,
             tile_fluxes,
-            tile_n_stars,
             tile_is_on_array,
-        ) = sourcenet._get_params_in_tiles(
-            tile_coords, locs, fluxes, full_slen, subimage_slen
-        )
+        ) = encoder.get_params_in_tiles(slen, locs, fluxes)
 
         # check we have the correct number and pattern of nonzero entries
         assert torch.all(
@@ -125,9 +139,18 @@ class TestImageBatching:
         )
 
         # now convert to full parameters
-        locs2, fluxes2, n_stars2 = sourcenet._get_full_params_from_tile_params(
-            tile_locs, tile_fluxes, tile_coords, full_slen, subimage_slen, edge_padding,
+        n_ptiles = tile_is_on_array.size(0)
+        max_detections = tile_is_on_array.size(1)
+        _tile_is_on_array = tile_is_on_array.view(1, n_ptiles, max_detections, -1)
+        _tile_locs = tile_locs.view(1, n_ptiles, max_detections, -1)
+        _tile_fluxes = tile_fluxes.view(1, n_ptiles, max_detections, -1)
+        n_stars2, locs2, fluxes2 = encoder._get_full_params_from_sampled_params(
+            slen, _tile_is_on_array, _tile_locs, _tile_fluxes,
         )
+
+        locs2 = locs2.squeeze(0)
+        fluxes2 = fluxes2.squeeze(0)
+
         for i in range(n_images):
             for b in range(n_bands):
                 fluxes_i = fluxes[i, :, b]
@@ -147,7 +170,6 @@ class TestImageBatching:
                 locs_i = locs[i, which_on][indx]
                 locs2_i = locs2[i, which_on2][indx2]
 
-                # print((locs_i - locs2_i).abs().max())
                 assert len(fluxes_i) == len(torch.unique(fluxes_i))
                 assert len(fluxes2_i) == len(torch.unique(fluxes2_i))
                 assert (locs_i - locs2_i).abs().max() < 1e-6, (

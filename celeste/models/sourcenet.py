@@ -24,6 +24,187 @@ def _sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).detach().squeeze()
 
 
+def _get_tile_coords(image_xlen, image_ylen, ptile_slen, step):
+    """
+    This records (x0, x1) indices each image padded tile comes from.
+
+    :param image_xlen: The x side length of the image in pixels.
+    :param image_ylen: The y side length of the image in pixels.
+    :param ptile_slen: The side length of the padded tile in pixels.
+    :param step: pixels by which to shift every padded tile.
+    :return: tile_coords, a torch.LongTensor
+    """
+
+    nx_ptiles = ((image_xlen - ptile_slen) // step) + 1
+    ny_ptiles = ((image_ylen - ptile_slen) // step) + 1
+    n_ptiles = nx_ptiles * ny_ptiles
+
+    def return_coords(i):
+        return [(i // ny_ptiles) * step, (i % ny_ptiles) * step]
+
+    tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
+    tile_coords = tile_coords.long().to(device)
+
+    return tile_coords
+
+
+def _clip_params(max_detections, tile_n_sources, *tiled_params):
+    _tile_n_sources = tile_n_sources.clamp(max=max_detections)
+
+    _tiled_params = []
+    for tiled_param in tiled_params:
+        _tiled_param = tiled_param[:, 0:max_detections, ...]
+        _tiled_params.append(_tiled_param)
+    return (_tile_n_sources, *_tiled_params)
+
+
+def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
+    assert torch.all(locs <= 1.0)
+    assert torch.all(locs >= 0.0)
+
+    batchsize = locs.size(0)
+    max_sources = locs.size(1)
+    single_image_n_ptiles = tile_coords.size(0)
+    total_ptiles = single_image_n_ptiles * batchsize  # across all batches.
+
+    tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
+    left_tile_edges = tile_coords + edge_padding - 0.5
+    right_tile_edges = tile_coords - 0.5 + ptile_slen - edge_padding
+    locs = locs * (slen - 1)
+
+    # indicator for each ptile, whether there is a loc there or not (loc order maintained)
+    tile_is_on_array = locs.unsqueeze(1) > left_tile_edges
+    tile_is_on_array &= locs.unsqueeze(1) < right_tile_edges
+    tile_is_on_array &= locs.unsqueeze(1) != 0
+    tile_is_on_array = tile_is_on_array[:, :, :, 0] * tile_is_on_array[:, :, :, 1]
+    tile_is_on_array = tile_is_on_array.float().to(device)
+    tile_is_on_array = tile_is_on_array.view(total_ptiles, max_sources)
+
+    # total number of sources in each tile.
+    tile_n_sources = tile_is_on_array.sum(dim=1).float()
+
+    # for each tile returned re-normalized locs in that tile, maintaining relative ordering of
+    # locs including leading/trailing zeroes) in the case that there are multiple objects
+    # in that tile.
+    # need to .unsqueeze(0) because switching from batches to just tiles.
+    tile_locs = tile_is_on_array.unsqueeze(0).unsqueeze(3) * locs.unsqueeze(1)
+    tile_locs -= tile_coords + edge_padding - 0.5  # recenter
+    tile_locs = tile_locs.view(total_ptiles, max_sources, 2)
+    tile_locs /= ptile_slen - 2 * edge_padding  # re-normalize
+    tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
+
+    indx_sort = _argfront(tile_is_on_array, dim=1)
+    tile_locs = torch.gather(tile_locs, 1, indx_sort.unsqueeze(2).repeat(1, 1, 2))
+
+    return tile_n_sources, tile_locs, tile_is_on_array, indx_sort
+
+
+def _get_tile_params(tile_is_on_array, indx_sort, params):
+    # NOTE: indx_sort is an array that can order tile_is_on_array in some way with torch.gather
+
+    total_ptiles = tile_is_on_array.size(0)
+    max_sources = tile_is_on_array.size(1)
+
+    tiled_params = []
+    for param in params:
+        assert max_sources == param.size(1)
+        # this will work even for galaxy_bool
+        batchsize = param.size(0)
+        _param = param.view(batchsize, 1, max_sources, -1)
+        param_dim = _param.size(-1)
+        _tile_is_on_array = tile_is_on_array.unsqueeze(0).unsqueeze(3)
+
+        tiled_param = _tile_is_on_array * _param
+        tiled_param = tiled_param.view(total_ptiles, max_sources, -1)
+
+        # now reorder.
+        _indx_sort = indx_sort.unsqueeze(2).repeat(1, 1, param_dim)
+        tiled_param = torch.gather(tiled_param, 1, _indx_sort)
+
+        tiled_param = tiled_param.squeeze(-1)  # squeeze last one if galaxy bool.
+        tiled_params.append(tiled_param)
+
+    return tiled_params
+
+
+def _get_params_in_tiles(
+    tile_coords, max_detections, slen, edge_padding, ptile_slen, locs, *params
+):
+    (
+        tile_n_sources,
+        tile_locs,  # sorted.
+        _tile_is_on_array,  # unsorted.
+        indx_sort,
+    ) = _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs)
+
+    # now sort the rest of the parameters
+    tile_params = _get_tile_params(_tile_is_on_array, indx_sort, params)
+
+    # now that we are done we can sort this tensor too.
+    tile_is_on_array = torch.gather(_tile_is_on_array, 1, indx_sort)
+
+    # clip if necessary.
+    (tile_n_sources, *tile_params, tile_is_on_array) = _clip_params(
+        max_detections, tile_n_sources, tile_locs, *tile_params, tile_is_on_array
+    )
+
+    return (tile_n_sources, *tile_params, tile_is_on_array)
+
+
+def _get_full_params_from_sampled_params(
+    tile_coords,
+    slen,
+    ptile_slen,
+    edge_padding,
+    tile_is_on_array_sampled,
+    tile_locs_sampled,
+    *tile_params_sampled
+):
+    # NOTE: off sources should have tile_locs == 0.
+    # NOTE: assume that each param in each tile is already pushed to the front.
+
+    # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
+    assert len(tile_locs_sampled.shape) == 4
+    single_image_n_ptiles = tile_coords.shape[0]
+    n_samples = tile_locs_sampled.shape[0]
+    n_ptiles = tile_locs_sampled.shape[1]
+    max_detections = tile_locs_sampled.shape[2]
+    total_ptiles = n_samples * n_ptiles
+    assert single_image_n_ptiles == n_ptiles, "Only single image is supported."
+
+    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
+    max_sources = n_sources.max().int().item()
+
+    # recenter and renormalize locations.
+    tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
+    tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)
+    scale = ptile_slen - 2 * edge_padding
+    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float() + edge_padding - 0.5
+    _locs = (tile_locs * scale + bias) / (slen - 1) * tile_is_on_array.unsqueeze(2)
+
+    # sort locs and clip
+    locs = _locs.view(n_samples, -1, 2)
+    _indx_sort = _argfront(locs[..., 0], dim=1)
+    indx_sort = _indx_sort.unsqueeze(2)
+    locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
+    locs = locs[:, 0:max_sources, ...]
+
+    # now do the same for the rest of the parameters (without scaling or biasing ofc)
+    # for same reason no need to multiply times is_on_array
+    params = []
+    for tile_param_sampled in tile_params_sampled:
+        # make sure works for galaxy bool too.
+        _param = tile_param_sampled.reshape(n_samples, n_ptiles, max_detections, -1)
+        param_dim = _param.size(-1)
+        param = _param.view(n_samples, -1, param_dim)
+        param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
+        param = param[:, 0:max_sources, ...]
+
+        params.append(param)
+
+    return (n_sources, locs, *params)
+
+
 def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
     """
     Take in an image (tensor) and the shape of the padded tile
@@ -71,30 +252,6 @@ def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
     if batch_first:
         ptiles = ptiles.permute(1, 0, 2, 3, 4)
     return ptiles
-
-
-def _get_tile_coords(image_xlen, image_ylen, ptile_slen, step):
-    """
-    This records (x0, x1) indices each image padded tile comes from.
-
-    :param image_xlen: The x side length of the image in pixels.
-    :param image_ylen: The y side length of the image in pixels.
-    :param ptile_slen: The side length of the padded tile in pixels.
-    :param step: pixels by which to shift every padded tile.
-    :return: tile_coords, a torch.LongTensor
-    """
-
-    nx_ptiles = ((image_xlen - ptile_slen) // step) + 1
-    ny_ptiles = ((image_ylen - ptile_slen) // step) + 1
-    n_ptiles = nx_ptiles * ny_ptiles
-
-    def return_coords(i):
-        return [(i // ny_ptiles) * step, (i % ny_ptiles) * step]
-
-    tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
-    tile_coords = tile_coords.long().to(device)
-
-    return tile_coords
 
 
 def _tile_images(images, ptile_slen, step):
@@ -438,7 +595,7 @@ class SourceEncoder(nn.Module):
 
         # get probability of n_sources
         # shape = (n_ptiles x (max_detections+1))
-        log_probs_n_sources = self._get_logprob_n_from_var_params(h)
+        n_source_log_probs = self._get_logprob_n_from_var_params(h)
 
         # extract parameters
         prob_galaxy = self._get_prob_galaxy_for_n_sources(
@@ -460,7 +617,7 @@ class SourceEncoder(nn.Module):
         # in the case of stars these are log_flux_mean, and log_flux_logvar.
         # squeeze if possible to account for non-sampling case.
         return (
-            log_probs_n_sources.squeeze(0),
+            n_source_log_probs.squeeze(0),
             loc_mean.squeeze(0),
             loc_logvar.squeeze(0),
             log_flux_mean.squeeze(0),
@@ -478,104 +635,18 @@ class SourceEncoder(nn.Module):
             tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.step)
         return tile_coords
 
-    def _get_tiled_locs(self, slen, locs):
-        assert torch.all(locs <= 1.0)
-        assert torch.all(locs >= 0.0)
-
-        batchsize = locs.size(0)
-        max_sources = locs.size(1)
-        tile_coords = self._get_tile_coords(slen)
-        single_image_n_ptiles = tile_coords.size(0)
-        total_ptiles = single_image_n_ptiles * batchsize  # across all batches.
-
-        tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
-        left_tile_edges = tile_coords + self.edge_padding - 0.5
-        right_tile_edges = tile_coords - 0.5 + self.ptile_slen - self.edge_padding
-        locs = locs * (slen - 1)
-
-        # indicator for each ptile, whether there is a loc there or not (loc order maintained)
-        tile_is_on_array = locs.unsqueeze(1) > left_tile_edges
-        tile_is_on_array &= locs.unsqueeze(1) < right_tile_edges
-        tile_is_on_array &= locs.unsqueeze(1) != 0
-        tile_is_on_array = tile_is_on_array[:, :, :, 0] * tile_is_on_array[:, :, :, 1]
-        tile_is_on_array = tile_is_on_array.float().to(device)
-        tile_is_on_array = tile_is_on_array.view(total_ptiles, max_sources)
-
-        # total number of sources in each tile.
-        tile_n_sources = tile_is_on_array.sum(dim=1).float()
-
-        # for each tile returned re-normalized locs in that tile, maintaining relative ordering of
-        # locs including leading/trailing zeroes) in the case that there are multiple objects
-        # in that tile.
-        # need to .unsqueeze(0) because switching from batches to just tiles.
-        tile_locs = tile_is_on_array.unsqueeze(0).unsqueeze(3) * locs.unsqueeze(1)
-        tile_locs -= tile_coords + self.edge_padding - 0.5  # recenter
-        tile_locs = tile_locs.view(total_ptiles, max_sources, 2)
-        tile_locs /= self.ptile_slen - 2 * self.edge_padding  # re-normalize
-        tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
-
-        indx_sort = _argfront(tile_is_on_array, dim=1)
-        tile_locs = torch.gather(tile_locs, 1, indx_sort.unsqueeze(2).repeat(1, 1, 2))
-
-        return tile_n_sources, tile_locs, tile_is_on_array, indx_sort
-
-    @staticmethod
-    def _get_tiled_params(tile_is_on_array, indx_sort, params):
-
-        total_ptiles = tile_is_on_array.size(0)
-        max_sources = tile_is_on_array.size(1)
-
-        tiled_params = []
-        for param in params:
-            assert max_sources == param.size(1)
-            # this will work even for galaxy_bool
-            batchsize = param.size(0)
-            _param = param.view(batchsize, 1, max_sources, -1)
-            param_dim = _param.size(-1)
-            _tile_is_on_array = tile_is_on_array.unsqueeze(0).unsqueeze(3)
-
-            tiled_param = _tile_is_on_array * _param
-            tiled_param = tiled_param.view(total_ptiles, max_sources, -1)
-
-            # now reorder.
-            _indx_sort = indx_sort.unsqueeze(2).repeat(1, 1, param_dim)
-            tiled_param = torch.gather(tiled_param, 1, _indx_sort)
-
-            tiled_param = tiled_param.squeeze(-1)  # squeeze last one if galaxy bool.
-            tiled_params.append(tiled_param)
-
-        return tiled_params
-
-    def _clip_params(self, tile_n_sources, *tiled_params):
-        _tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
-
-        _tiled_params = []
-        for tiled_param in tiled_params:
-            _tiled_param = tiled_param[:, 0 : self.max_detections, ...]
-            _tiled_params.append(_tiled_param)
-        return (_tile_n_sources, *_tiled_params)
-
     def get_params_in_tiles(self, slen, locs, *params):
+        tile_coords = self._get_tile_coords(slen)
 
-        (
-            tile_n_sources,
-            tile_locs,  # sorted.
-            _tile_is_on_array,  # unsorted.
-            indx_sort,
-        ) = self._get_tiled_locs(slen, locs)
-
-        # now sort the rest of the parameters
-        tile_params = self._get_tiled_params(_tile_is_on_array, indx_sort, params)
-
-        # now that we are done we can sort this tensor too.
-        tile_is_on_array = torch.gather(_tile_is_on_array, 1, indx_sort)
-
-        # clip if necessary.
-        (tile_n_sources, *tile_params, tile_is_on_array) = self._clip_params(
-            tile_n_sources, tile_locs, *tile_params, tile_is_on_array
+        return _get_params_in_tiles(
+            tile_coords,
+            self.max_detections,
+            slen,
+            self.edge_padding,
+            self.ptile_slen,
+            locs,
+            *params
         )
-
-        return (tile_n_sources, *tile_params, tile_is_on_array)
 
     def get_images_in_tiles(self, images):
         assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
@@ -585,56 +656,18 @@ class SourceEncoder(nn.Module):
         return image_ptiles
 
     def _get_full_params_from_sampled_params(
-        self, slen, tile_locs_sampled, tile_is_on_array_sampled, *tile_params_sampled
+        self, slen, tile_is_on_array_sampled, tile_locs_sampled, *tile_params_sampled
     ):
-        # NOTE: off sources should have tile_locs == 0.
-        # NOTE: assume that each param in each tile is already pushed to the front.
-
         tile_coords = self._get_tile_coords(slen)
-
-        # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
-        single_image_n_ptiles = tile_coords.shape[0]
-        n_samples = tile_locs_sampled.shape[0]
-        n_ptiles = tile_locs_sampled.shape[1]
-        max_detections = tile_locs_sampled.shape[2]
-        total_ptiles = n_samples * n_ptiles
-        assert single_image_n_ptiles == n_ptiles, "Only single image is supported."
-
-        n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
-        max_sources = n_sources.max().int().item()
-
-        # recenter and renormalize locations.
-        tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
-        tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)
-        scale = self.ptile_slen - 2 * self.edge_padding
-        bias = (
-            tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
-            + self.edge_padding
-            - 0.5
+        return _get_full_params_from_sampled_params(
+            tile_coords,
+            slen,
+            self.ptile_slen,
+            self.edge_padding,
+            tile_is_on_array_sampled,
+            tile_locs_sampled,
+            *tile_params_sampled
         )
-        _locs = (tile_locs * scale + bias) / (slen - 1) * tile_is_on_array.unsqueeze(2)
-
-        # sort locs and clip
-        locs = _locs.view(n_samples, -1, 2)
-        _indx_sort = _argfront(locs[..., 0], dim=1)
-        indx_sort = _indx_sort.unsqueeze(2)
-        locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
-        locs = locs[:, 0:max_sources, ...]
-
-        # now do the same for the rest of the parameters (without scaling or biasing ofc)
-        # for same reason no need to multiply times is_on_array
-        params = []
-        for tile_param_sampled in tile_params_sampled:
-            # make sure works for galaxy bool too.
-            _param = tile_param_sampled.reshape(n_samples, n_ptiles, max_detections, -1)
-            param_dim = _param.size(-1)
-            param = _param.view(n_samples, -1, param_dim)
-            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
-            param = param[:, 0:max_sources, ...]
-
-            params.append(param)
-
-        return (n_sources, locs, *params)
 
     def _sample_tile_params(
         self, image, n_samples, return_map_n_sources, return_map_source_params,
@@ -748,8 +781,8 @@ class SourceEncoder(nn.Module):
             galaxy_bool,
         ) = self._get_full_params_from_sampled_params(
             slen,
-            tile_locs_sampled,
             tile_is_on_array_sampled,
+            tile_locs_sampled,
             tile_galaxy_params_sampled,
             tile_log_fluxes_sampled,
             tile_galaxy_bool_sampled,
