@@ -513,13 +513,10 @@ class SourceEncoder(nn.Module):
         tile_locs /= self.ptile_slen - 2 * self.edge_padding  # re-normalize
         tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
 
-        # sort both using the indx_sort.
-        # we use .repeat(1,1,2) b/c locs has shape 2 for last dimension.
         indx_sort = _argfront(tile_is_on_array, dim=1)
         tile_locs = torch.gather(tile_locs, 1, indx_sort.unsqueeze(2).repeat(1, 1, 2))
-        tile_is_on_array = torch.gather(tile_is_on_array, 1, indx_sort)
 
-        return tile_locs, tile_is_on_array, tile_n_sources, indx_sort
+        return tile_n_sources, tile_locs, tile_is_on_array, indx_sort
 
     @staticmethod
     def _get_tiled_params(tile_is_on_array, indx_sort, params):
@@ -529,16 +526,18 @@ class SourceEncoder(nn.Module):
 
         tiled_params = []
         for param in params:
+            assert max_sources == param.size(1)
             # this will work even for galaxy_bool
-            param_dim = param.size(-1)
-            _param = param.view(-1, 1, max_sources, param_dim)
+            batchsize = param.size(0)
+            _param = param.view(batchsize, 1, max_sources, -1)
+            param_dim = _param.size(-1)
             _tile_is_on_array = tile_is_on_array.unsqueeze(0).unsqueeze(3)
 
             tiled_param = _tile_is_on_array * _param
             tiled_param = tiled_param.view(total_ptiles, max_sources, -1)
 
             # now reorder.
-            _indx_sort = indx_sort.repeat(1, 1, param_dim)
+            _indx_sort = indx_sort.unsqueeze(2).repeat(1, 1, param_dim)
             tiled_param = torch.gather(tiled_param, 1, _indx_sort)
 
             tiled_param = tiled_param.squeeze(-1)  # squeeze last one if galaxy bool.
@@ -553,27 +552,29 @@ class SourceEncoder(nn.Module):
         for tiled_param in tiled_params:
             _tiled_param = tiled_param[:, 0 : self.max_detections, ...]
             _tiled_params.append(_tiled_param)
-        return _tile_n_sources, _tiled_params
+        return (_tile_n_sources, *_tiled_params)
 
     def get_params_in_tiles(self, slen, locs, *params):
 
-        # obtain tiled locations first
         (
-            tile_locs,
-            tile_is_on_array,
             tile_n_sources,
+            tile_locs,  # sorted.
+            _tile_is_on_array,  # unsorted.
             indx_sort,
         ) = self._get_tiled_locs(slen, locs)
 
-        # rest of tiled_params,
-        tiled_params = self._get_tiled_params(tile_is_on_array, indx_sort, params)
+        # now sort the rest of the parameters
+        tile_params = self._get_tiled_params(_tile_is_on_array, indx_sort, params)
 
-        # finally, clip if necessary.
-        tile_n_sources, tiled_params = self._clip_params(
-            tile_n_sources, tile_locs, tiled_params
+        # now that we are done we can sort this tensor too.
+        tile_is_on_array = torch.gather(_tile_is_on_array, 1, indx_sort)
+
+        # clip if necessary.
+        (tile_n_sources, *tile_params, tile_is_on_array) = self._clip_params(
+            tile_n_sources, tile_locs, *tile_params, tile_is_on_array
         )
 
-        return (tile_n_sources, *tiled_params)
+        return (tile_n_sources, *tile_params, tile_is_on_array)
 
     def get_images_in_tiles(self, images):
         assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
