@@ -88,8 +88,8 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     # in that tile.
     # need to .unsqueeze(0) because switching from batches to just tiles.
     tile_locs = tile_is_on_array.unsqueeze(0).unsqueeze(3) * locs.unsqueeze(1)
-    tile_locs -= tile_coords + edge_padding - 0.5  # recenter
     tile_locs = tile_locs.view(total_ptiles, max_sources, 2)
+    tile_locs -= tile_coords + edge_padding - 0.5  # recenter
     tile_locs /= ptile_slen - 2 * edge_padding  # re-normalize
     tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
 
@@ -194,6 +194,7 @@ def _get_full_params_from_sampled_params(
     params = []
     for tile_param_sampled in tile_params_sampled:
         # make sure works for galaxy bool too.
+        assert len(tile_param_sampled.shape) == 4
         _param = tile_param_sampled.reshape(n_samples, n_ptiles, max_detections, -1)
         param_dim = _param.size(-1)
         param = _param.view(n_samples, -1, param_dim)
