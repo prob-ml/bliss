@@ -584,14 +584,14 @@ class SourceEncoder(nn.Module):
         return image_ptiles
 
     def _get_full_params_from_tile_params(
-        self, slen, tile_coords, tile_locs, *tile_params
+        self, slen, tile_coords, tile_locs, tile_params
     ):
         # NOTE: off sources should have tile_locs == 0.
         single_image_n_ptiles = tile_coords.shape[0]
         total_ptiles = tile_locs.shape[0]
         max_sources = tile_locs.shape[1]
-        batchsize = total_ptiles / single_image_n_ptiles
-        n_sources_in_batch = total_ptiles * max_sources / batchsize
+        batchsize = int(total_ptiles / single_image_n_ptiles)
+        n_sources_in_batch = int(total_ptiles * max_sources / batchsize)
         assert total_ptiles % single_image_n_ptiles == 0
         assert total_ptiles * max_sources % batchsize == 0
 
@@ -608,8 +608,8 @@ class SourceEncoder(nn.Module):
         tile_is_on_bool = (locs > 0).any(2).float()
         n_sources = torch.sum(tile_is_on_bool > 0, dim=1)
 
-        indx_sort = _argfront(locs, dim=1)
-        locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
+        indx_sort = _argfront(tile_is_on_bool, dim=1)
+        locs = torch.gather(locs, 1, indx_sort.unsqueeze(2).repeat(1, 1, 2))
 
         params = []
         for tile_param in tile_params:
@@ -618,29 +618,35 @@ class SourceEncoder(nn.Module):
             param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
             params.append(param)
 
-        return (n_sources, locs, *params)
+        return n_sources, locs, params
 
     def _get_full_params_from_sampled_params(
-        self, slen, tile_locs_sampled, *tile_params
+        self, slen, tile_locs_sampled, *tile_params_sampled
     ):
         tile_coords = self._get_tile_coords(slen)
 
         single_image_n_ptiles = tile_coords.shape[0]
         n_samples = tile_locs_sampled.shape[0]
         n_ptiles = tile_locs_sampled.shape[1]
+        max_detections = tile_locs_sampled.shape[2]
+
         total_ptiles = n_samples * n_ptiles
         assert (n_ptiles % single_image_n_ptiles) == 0
 
-        _tile_locs = tile_locs_sampled.reshape(total_ptiles, -1, 2)
-        _tile_params = []
-        for tile_param in tile_params:
+        tile_locs = tile_locs_sampled.reshape(total_ptiles, -1, 2)
+        tile_params = []
+        for tile_param_sampled in tile_params_sampled:
+            # make sure works for galaxy bool too.
+            tile_param = tile_param_sampled.view(
+                n_samples, n_ptiles, max_detections, -1
+            )
             param_dim = tile_param.size(-1)
-            _tile_param = tile_param.reshape(total_ptiles, -1, param_dim)
-            assert _tile_param.shape[1] == _tile_locs.shape[1]
-            _tile_params.append(_tile_params)
+            tile_param = tile_param.reshape(total_ptiles, -1, param_dim)
+            assert tile_param.shape[1] == tile_locs.shape[1]
+            tile_params.append(tile_param)
 
-        (n_sources, locs, *params) = self._get_full_params_from_tile_params(
-            slen, tile_coords, _tile_locs, *_tile_params
+        (n_sources, locs, params) = self._get_full_params_from_tile_params(
+            slen, tile_coords, tile_locs, tile_params
         )
 
         return (n_sources, locs, *params)
@@ -723,8 +729,8 @@ class SourceEncoder(nn.Module):
             tile_locs_sampled,
             tile_galaxy_params_sampled,
             tile_log_fluxes_sampled,
-            tile_galaxy_bool_sampled.squeeze(),
-            tile_is_on_array.squeeze(),
+            tile_galaxy_bool_sampled.squeeze(-1),
+            tile_is_on_array.squeeze(-1),
         )
 
     def sample_encoder(
