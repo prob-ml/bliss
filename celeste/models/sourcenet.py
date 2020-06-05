@@ -600,14 +600,12 @@ class SourceEncoder(nn.Module):
         total_ptiles = n_samples * n_ptiles
         assert single_image_n_ptiles == n_ptiles, "Only single image is supported."
 
-        tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)  # need for tile_coords
-        tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
-        tile_is_on = (tile_is_on_array_sampled.sum(2) > 0).float()
-        indx_sort = _argfront(tile_is_on)
         n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
         max_sources = n_sources.max().int().item()
 
         # recenter and renormalize locations.
+        tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
+        tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)
         scale = self.ptile_slen - 2 * self.edge_padding
         bias = (
             tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
@@ -617,24 +615,21 @@ class SourceEncoder(nn.Module):
         _locs = (tile_locs * scale + bias) / (slen - 1) * tile_is_on_array.unsqueeze(2)
 
         # sort locs and clip
-        _indx_sort = indx_sort.unsqueeze(2).unsqueeze(3)
-        _locs = _locs.view(n_samples, -1, max_detections, 2)
-        _locs = torch.gather(_locs, 1, _indx_sort.repeat(1, 1, max_detections, 2))
         locs = _locs.view(n_samples, -1, 2)
+        _indx_sort = _argfront(locs[..., 0], dim=1)
+        indx_sort = _indx_sort.unsqueeze(2)
+        locs = torch.gather(_locs, 1, indx_sort.repeat(1, 1, 2))
         locs = locs[:, 0:max_sources, ...]
 
         # now do the same for the rest of the parameters (without scaling or biasing ofc)
         # for same reason no need to multiply times is_on_array
-
         params = []
         for tile_param_sampled in tile_params_sampled:
             # make sure works for galaxy bool too.
             _param = tile_param_sampled.reshape(n_samples, n_ptiles, max_detections, -1)
             param_dim = _param.size(-1)
-            _param = torch.gather(
-                _locs, 1, _indx_sort.repeat(1, 1, max_detections, param_dim)
-            )
             param = _param.view(n_samples, -1, param_dim)
+            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
             param = param[:, 0:max_sources, ...]
 
             params.append(param)
