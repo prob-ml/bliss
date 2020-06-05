@@ -85,7 +85,7 @@ class PlanarBackground(nn.Module):
 
 
 class ModelParams(nn.Module):
-    def __init__(self, observed_image, init_psf_params, init_background_params, pad=5):
+    def __init__(self, observed_image, init_psf_params, init_background_params, pad=0):
 
         super(ModelParams, self).__init__()
 

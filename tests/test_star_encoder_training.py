@@ -141,8 +141,8 @@ class TestStarEncoderTraining:
         true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
 
         init_psf_params = true_psf_params.clone()
-        init_psf_params[0, 1:3] += torch.tensor([4.0, 4.0]).to(device)
-        init_psf_params[1, 1:3] += torch.tensor([4.0, 4.0]).to(device)
+        init_psf_params[0, 1] += torch.tensor(4.0).to(device)
+        init_psf_params[1, 1] += torch.tensor(4.0).to(device)
 
         # run the wake-phase training
         n_epochs = 300 if use_cuda else 1
@@ -173,4 +173,4 @@ class TestStarEncoderTraining:
         if not use_cuda:
             return
 
-        assert torch.all(estimate_residuals.abs() <= init_residuals.abs() * 0.10)
+        assert estimate_residuals.abs().sum <= init_residuals.abs().sum() * 0.10
