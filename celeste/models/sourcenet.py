@@ -585,7 +585,7 @@ class SourceEncoder(nn.Module):
         return image_ptiles
 
     def _get_full_params_from_sampled_params(
-        self, slen, tile_locs_sampled, *tile_params_sampled, tile_is_on_array_sampled
+        self, slen, tile_locs_sampled, tile_is_on_array_sampled, *tile_params_sampled
     ):
         # NOTE: off sources should have tile_locs == 0.
         # NOTE: assume that each param in each tile is already pushed to the front.
@@ -618,7 +618,7 @@ class SourceEncoder(nn.Module):
         locs = _locs.view(n_samples, -1, 2)
         _indx_sort = _argfront(locs[..., 0], dim=1)
         indx_sort = _indx_sort.unsqueeze(2)
-        locs = torch.gather(_locs, 1, indx_sort.repeat(1, 1, 2))
+        locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
         locs = locs[:, 0:max_sources, ...]
 
         # now do the same for the rest of the parameters (without scaling or biasing ofc)
@@ -682,7 +682,6 @@ class SourceEncoder(nn.Module):
             prob_galaxy,
         ) = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
 
-        #  TODO: Would refactoring some of the below be useful?
         if return_map_source_params:
             tile_galaxy_bool_sampled = (prob_galaxy > 0.5).float()
             loc_sd = torch.zeros_like(loc_logvar)
@@ -703,7 +702,6 @@ class SourceEncoder(nn.Module):
         tile_locs_sampled = torch.normal(loc_mean, loc_sd)
         tile_locs_sampled *= tile_is_on_array
 
-        # TODO: Double check that I need to do the multiplication by galaxy_bool below.
         tile_galaxy_params_sampled = torch.normal(galaxy_param_mean, galaxy_param_sd)
         tile_galaxy_params_sampled *= tile_is_on_array * tile_galaxy_bool_sampled
 
@@ -740,7 +738,6 @@ class SourceEncoder(nn.Module):
             image, n_samples, return_map_n_sources, return_map_source_params,
         )
 
-        # TODO: resolve pycharm errors below.
         # get parameters on full image
         (
             n_sources,
@@ -751,10 +748,10 @@ class SourceEncoder(nn.Module):
         ) = self._get_full_params_from_sampled_params(
             slen,
             tile_locs_sampled,
+            tile_is_on_array_sampled,
             tile_galaxy_params_sampled,
             tile_log_fluxes_sampled,
             tile_galaxy_bool_sampled,
-            tile_is_on_array_sampled,
         )
 
         return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool
