@@ -91,6 +91,7 @@ class TestStarEncoderTraining:
         assert test_star["fluxes"].min() > 0
 
         # get the estimated params
+        trained_star_encoder.eval()
         locs, source_params, n_sources = trained_star_encoder.sample_encoder(
             test_image.to(device),
             n_samples=1,
@@ -144,28 +145,32 @@ class TestStarEncoderTraining:
         init_psf_params[1, 1:3] += torch.tensor([4.0, 4.0]).to(device)
 
         # run the wake-phase training
-        n_epochs = 2000 if use_cuda else 1
+        n_epochs = 300 if use_cuda else 1
 
+        trained_star_encoder.eval()
         estimate_params, map_loss = wake.run_wake(
             true_image.to(device),
             trained_star_encoder,
             init_psf_params,
             init_background_params,
-            n_samples=100,
+            n_samples=10,
             n_epochs=n_epochs,
-            lr=1e-1,
-            print_every=100,
+            lr=1e-2,
+            print_every=10,
             run_map=False,
         )
 
         # TODO: add assertions
-        # propose: residuals PSF is less than 10% of the true PSF
+        # propose: PSF residual reduce by 90%
         estimate_psf_params = list(estimate_params.power_law_psf.parameters())[0]
         estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
 
-        residuals = true_psf.to(device) - estimate_psf.to(device)
+        init_psf = psf_transform.PowerLawPSF(init_psf_params).forward().detach()
+        init_residuals = true_psf.to(device) - init_psf.to(device)
+
+        estimate_residuals = true_psf.to(device) - estimate_psf.to(device)
 
         if not use_cuda:
             return
 
-        assert torch.all(residuals.abs() <= true_psf.to(device).abs() * 0.1)
+        assert torch.all(estimate_residuals.abs() <= init_residuals.abs() * 0.10)
