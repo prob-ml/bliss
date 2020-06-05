@@ -653,15 +653,13 @@ class SourceEncoder(nn.Module):
         # shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
         image_ptiles = self.get_images_in_tiles(image)
 
-        # pass through NN
         # shape = (n_ptiles x dim_out_all)
         h = self._get_var_params_all(image_ptiles)
 
         # shape = (n_ptiles x max_detections)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
-        # TODO: make sure to use inside a `with torch.no_grad()`.
-        # sample number of stars
+        # sample number of sources.
         # output shape = (n_samples x n_ptiles)
         if return_map_n_sources:
             tile_n_sources_sampled = torch.argmax(log_probs_n_sources_per_tile, dim=1)
@@ -674,18 +672,14 @@ class SourceEncoder(nn.Module):
             )
         tile_n_sources_sampled = tile_n_sources_sampled.view(n_samples, -1)
 
-        # shape = (n_samples x n_ptiles x max_detections x 1 )
+        # shape = (n_samples x n_ptiles x max_detections)
         is_on_array = get_is_on_from_n_sources(
             tile_n_sources_sampled, self.max_detections
         )
         is_on_array = is_on_array.unsqueeze(3).float()
 
         # get variational parameters: these are on image tiles
-        # loc_mean.shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        # TODO: make sure order is correct.
-        # TODO: instead of returning a single tuple like this, can return something like:
-        #       prob_galaxy, ((loc_mean, loc_logvar), (...),...)
-        #       this way can refactor the last bit.
+        # shape (all) = (n_samples x n_ptiles x max_detections x param_dim)
         (
             loc_mean,
             loc_logvar,
@@ -696,20 +690,19 @@ class SourceEncoder(nn.Module):
             prob_galaxy,
         ) = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
 
-        #  TODO: finish adding bernoulli prediction.
+        #  TODO: Do some refactoring here and below.
         if return_map_source_params:
-            # bernoulli_shape = torch.Size([tile_n_sources.size(0), self.max_detections])
-            # bernoulli_input = torch.full(bernoulli_shape, )
-            tile_galaxy_bool_sampled = torch.zeros()
+            tile_galaxy_bool_sampled = prob_galaxy > 0.5
             loc_sd = torch.zeros_like(loc_logvar)
             galaxy_param_sd = torch.zeros_like(galaxy_param_logvar)
             log_flux_sd = torch.zeros_like(log_flux_logvar)
         else:
+            tile_galaxy_bool_sampled = torch.bernoulli(prob_galaxy)
             loc_sd = torch.exp(0.5 * loc_logvar)
             galaxy_param_sd = torch.exp(0.5 * galaxy_param_logvar)
             log_flux_sd = torch.exp(0.5 * log_flux_logvar)
 
-        # shape = (n_samples x n_ptiles x max_detections x len(x,y))
+        # shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert loc_mean.shape == loc_sd.shape, "Shapes need to match"
         assert galaxy_param_mean.shape == galaxy_param_sd.shape, "Shapes need to match"
         assert log_flux_mean.shape == log_flux_sd.shape, "Shapes need to match"
@@ -737,6 +730,7 @@ class SourceEncoder(nn.Module):
         return_map_n_sources=False,
         return_map_source_params=False,
     ):
+        # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
 
         slen = image.shape[-1]
         (
