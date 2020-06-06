@@ -67,12 +67,15 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     single_image_n_ptiles = tile_coords.size(0)
     total_ptiles = single_image_n_ptiles * batchsize  # across all batches.
 
-    tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
-    left_tile_edges = tile_coords + edge_padding - 0.5
-    right_tile_edges = tile_coords - 0.5 + ptile_slen - edge_padding
+    # _tile_coords shape = (1 x single_image_n_ptiles x 1 x 2)
+    _tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
+    left_tile_edges = _tile_coords + edge_padding - 0.5
+    right_tile_edges = _tile_coords - 0.5 + ptile_slen - edge_padding
     locs = locs * (slen - 1)
 
     # indicator for each ptile, whether there is a loc there or not (loc order maintained)
+    # .unsqueeze(1) in order to get repetition across `single_image_n_ptiles` dimension.
+    # importantly, both have dim 2 at the end.
     tile_is_on_array = locs.unsqueeze(1) > left_tile_edges
     tile_is_on_array &= locs.unsqueeze(1) < right_tile_edges
     tile_is_on_array &= locs.unsqueeze(1) != 0
@@ -87,8 +90,11 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     # locs including leading/trailing zeroes) in the case that there are multiple objects
     # in that tile.
     # need to .unsqueeze(0) because switching from batches to just tiles.
-    tile_locs = tile_is_on_array.unsqueeze(0).unsqueeze(3) * locs.unsqueeze(1)
+    _tile_is_on_array = tile_is_on_array.view(batchsize, -1, max_sources, 1)
+    _locs = locs.view(batchsize, 1, max_sources, 2)
+    tile_locs = _tile_is_on_array * _locs
     tile_locs = tile_locs.view(total_ptiles, max_sources, 2)
+    _tile_coords = tile_coords.view(single_image_n_ptiles, 1, 2).repeat(batchsize, 1, 1)
     tile_locs -= tile_coords + edge_padding - 0.5  # recenter
     tile_locs /= ptile_slen - 2 * edge_padding  # re-normalize
     tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
@@ -112,7 +118,7 @@ def _get_tile_params(tile_is_on_array, indx_sort, params):
         batchsize = param.size(0)
         _param = param.view(batchsize, 1, max_sources, -1)
         param_dim = _param.size(-1)
-        _tile_is_on_array = tile_is_on_array.unsqueeze(0).unsqueeze(3)
+        _tile_is_on_array = tile_is_on_array.view(batchsize, -1, max_sources, 1)
 
         tiled_param = _tile_is_on_array * _param
         tiled_param = tiled_param.view(total_ptiles, max_sources, -1)
