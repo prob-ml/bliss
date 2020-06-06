@@ -127,6 +127,7 @@ def _get_tile_params(tile_is_on_array, indx_sort, params):
         _indx_sort = indx_sort.unsqueeze(2).repeat(1, 1, param_dim)
         tiled_param = torch.gather(tiled_param, 1, _indx_sort)
 
+        # TODO: do not squeeze log_flux when n_bands = 1
         tiled_param = tiled_param.squeeze(-1)  # squeeze last one if galaxy bool.
         tiled_params.append(tiled_param)
 
