@@ -92,7 +92,11 @@ class TestStarEncoderTraining:
 
         # get the estimated params
         trained_star_encoder.eval()
-        locs, source_params, n_sources = trained_star_encoder.sample_encoder(
+        (
+            est_locs,
+            est_source_params,
+            est_n_sources,
+        ) = trained_star_encoder.sample_encoder(
             test_image.to(device),
             n_samples=1,
             return_map_n_sources=True,
@@ -106,18 +110,27 @@ class TestStarEncoderTraining:
             return
 
         # test that parameters match.
-        assert n_sources == test_star["n_sources"].to(device)
+        assert est_n_sources == test_star["n_sources"].to(device)
 
-        diff_locs = test_star["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
+        # locs
+        true_locs = test_star["locs"].to(device)
+        true_ind = true_locs.argsort(1)
+        true_ind = true_ind[0, :, 0]
+
+        est_locs = est_locs.to(device)
+        est_ind = est_locs.to(device).argsort(1)
+        est_ind = est_ind[0, :, 0]
+
+        diff_locs = true_locs[:, true_ind, :] - est_locs[:, est_ind, :]
         diff_locs *= test_image.size(-1)
         assert diff_locs.abs().max() <= 0.5
 
         # fluxes
-        diff = test_star["log_fluxes"].sort(1)[0].to(device) - source_params.sort(1)[0]
-        assert torch.all(diff.abs() <= source_params.sort(1)[0].abs() * 0.10)
-        assert torch.all(
-            diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs().to(device) * 0.10
-        )
+        true_source_params = test_star["log_fluxes"][:, true_ind,].to(device)
+        est_source_params = est_source_params[:, est_ind, :].to(device)
+        diff = true_source_params - est_source_params
+        assert (diff.abs() <= est_source_params.abs() * 0.10).all()
+        assert (diff.abs() <= true_source_params.abs() * 0.10).all()
 
     def test_star_wake(self, trained_star_encoder, data_path, fitted_powerlaw_psf):
         # load the test image
@@ -173,4 +186,4 @@ class TestStarEncoderTraining:
         if not use_cuda:
             return
 
-        assert estimate_residuals.abs().sum <= init_residuals.abs().sum() * 0.10
+        assert estimate_residuals.abs().sum() <= init_residuals.abs().sum() * 0.10
