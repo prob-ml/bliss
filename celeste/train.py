@@ -226,20 +226,15 @@ class SleepTraining(TrainModel):
         self.n_source_params = n_source_params
         assert self.n_source_params == self.encoder.n_source_params
 
-    # TODO: Get rid of 'if' statement once transition is complete.
-    def _get_params_from_batch(self, batch):
-        class_name = self.dataset.__class__.__name__
-        assert class_name == "SourceDataset"
-        warnings.warn(
-            "In transition to full galaxy & star implementation, so only star_prob==1 "
-            "and star_prob==0 are supported."
+    @staticmethod
+    def _get_params_from_batch(batch):
+        return (
+            batch["images"],
+            batch["locs"],
+            batch["galaxy_params"],
+            batch["log_fluxes"],
+            batch["galaxy_bool"],
         )
-
-        if self.dataset.simulator.star_prob > 0.99:
-            return batch["log_fluxes"], batch["star_locs"], batch["images"]
-
-        else:
-            return batch["galaxy_params"], batch["galaxy_locs"], batch["images"]
 
     def get_batch_generator(self):
         assert (
@@ -256,12 +251,23 @@ class SleepTraining(TrainModel):
     def get_results(self, batch):
         # log_fluxes or gal_params are returned as true_source_params.
         # already in cuda.
-        true_source_params, true_locs, images = self._get_params_from_batch(batch)
+        (
+            images,
+            true_locs,
+            true_galaxy_params,
+            true_log_fluxes,
+            true_galaxy_bool,
+        ) = self._get_params_from_batch(batch)
 
         # evaluate log q
         loss, counter_loss, locs_loss, source_params_loss = sleep.get_inv_kl_loss(
-            self.encoder, images, true_locs, true_source_params, use_l2_loss=False
-        )[0:4]
+            self.encoder,
+            images,
+            true_locs,
+            true_galaxy_params,
+            true_log_fluxes,
+            true_galaxy_bool,
+        )
 
         return loss, counter_loss, locs_loss, source_params_loss
 

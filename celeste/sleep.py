@@ -46,7 +46,6 @@ def get_inv_kl_loss(
         galaxy_params_loss,
         star_params_loss,
         galaxy_bool_loss,
-        perm_indx,
     ) = _get_params_loss(
         n_source_log_probs,
         loc_mean,
@@ -130,11 +129,9 @@ def _get_params_loss(
     # enforce large error if source is off
     true_locs = true_locs + (true_is_on_array == 0).float().unsqueeze(-1) * 1e16
     locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
-
     galaxy_params_log_probs_all = _get_params_logprob_all_combs(
         true_galaxy_params, galaxy_params_mean, galaxy_params_logvar
     )
-
     star_params_log_probs_all = _get_params_logprob_all_combs(
         true_log_fluxes, log_flux_mean, log_flux_logvar
     )
@@ -143,8 +140,8 @@ def _get_params_loss(
     # we construct a bijective map from each estimated star to each true star
     (
         locs_loss,
-        star_params_loss,
         galaxy_params_loss,
+        star_params_loss,
         galaxy_bool_loss,
         perm_indx,
     ) = _get_min_perm_loss(
@@ -158,9 +155,9 @@ def _get_params_loss(
 
     loss_vec = (
         locs_loss * (locs_loss.detach() < 1e6).float()
-        + star_params_loss
-        + galaxy_params_loss
         + counter_loss
+        + galaxy_params_loss
+        + star_params_loss
         + galaxy_bool_loss
     )
 
@@ -173,7 +170,6 @@ def _get_params_loss(
         galaxy_params_loss,
         star_params_loss,
         galaxy_bool_loss,
-        perm_indx,
     )
 
 
@@ -257,8 +253,8 @@ def _get_log_probs_all_perms(
 
     return (
         locs_loss_all_perm,
-        star_params_loss_all_perm,
         galaxy_params_loss_all_perm,
+        star_params_loss_all_perm,
         galaxy_bool_loss_all_perm,
     )
 
@@ -275,8 +271,8 @@ def _get_min_perm_loss(
     # get log-probability under every possible matching of estimated star to true star
     (
         locs_log_probs_all_perm,
-        star_params_loss_all_perm,
         galaxy_params_loss_all_perm,
+        star_params_loss_all_perm,
         galaxy_bool_loss_all_perm,
     ) = _get_log_probs_all_perms(
         locs_log_probs_all,
@@ -301,4 +297,4 @@ def _get_min_perm_loss(
         galaxy_params_loss_all_perm, 1, indx.unsqueeze(1)
     ).squeeze()
 
-    return locs_loss, star_params_loss, galaxy_params_loss, galaxy_bool_loss, indx
+    return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss, indx
