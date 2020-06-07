@@ -4,7 +4,11 @@ from torch import optim
 
 import numpy as np
 
-from .datasets.simulated_datasets import get_mgrid, plot_multiple_stars
+from .datasets.simulated_datasets import (
+    get_mgrid,
+    plot_multiple_stars,
+    get_is_on_from_n_sources,
+)
 from .psf_transform import PowerLawPSF
 
 import time
@@ -184,6 +188,11 @@ def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
         return_map_n_sources=run_map,
         return_map_source_params=run_map,
     )[0:3]
+
+    max_stars = n_stars_sampled.max()
+    is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
+    is_on_array = is_on_array.unsqueeze(2).float()
+    fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
     loss = model_params.get_loss(
         locs=locs_sampled.detach(),
