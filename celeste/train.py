@@ -298,25 +298,19 @@ class SleepTraining(TrainModel):
         out_text = (
             f"{epoch} loss: {avg_loss:.4f}; counter loss: {avg_results[0]:.4f}; locs loss: "
             f"{avg_results[1]:.4f}; galaxy_params loss: {avg_results[2]:.4f}; "
-            f"star_params_loss: "
-            f"{avg_results[3]:.4f}; galaxy_bool_loss: {avg_results[4]:.4f}"
+            f"star_params_loss: {avg_results[3]:.4f}; galaxy_bool_loss: {avg_results[4]:.4f}"
             f"\t [{elapsed:.1f} seconds]"
         )
 
         self.write_to_output(out_text)
 
-    def log_eval(self, epoch, avg_results):
+    def log_eval(self, epoch, avg_loss, avg_results):
         assert self.verbose or self.out_dir, "Not doing anything"
 
-        (
-            test_loss,
-            test_counter_loss,
-            test_locs_loss,
-            test_source_param_loss,
-        ) = avg_results
         out_text = (
-            f"**** test loss: {test_loss:.3f}; counter loss: {test_counter_loss:.3f}; "
-            f"locs loss: {test_locs_loss:.3f}; source param loss: {test_source_param_loss:.3f} ****"
+            f"**** test loss: {avg_loss:.3f}; counter loss: {avg_results[0]:.3f}; "
+            f"locs loss: {avg_results[1]:.3f}; galaxy param loss: {avg_results[2]:.3f} "
+            f"star param loss: {avg_results[3]:.3f}; galaxy bool loss: {avg_results[4]:.3f}****"
         )
 
         self.write_to_output(out_text)
@@ -324,7 +318,9 @@ class SleepTraining(TrainModel):
         if self.state_file_template and self.output_file:
             state_file = Path(self.state_file_template.format(epoch))
             state_text = (
-                "**** writing the encoder parameters to " + state_file.as_posix()
+                "**** writing the encoder parameters to "
+                + state_file.as_posix()
+                + " ***"
             )
 
             self.write_to_output(state_text)
