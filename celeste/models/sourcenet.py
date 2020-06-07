@@ -211,7 +211,7 @@ def _get_full_params_from_sampled_params(
     return (n_sources, locs, *params)
 
 
-def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
+def _extract_ptiles_2d(img, tile_shape, step, batch_first=False):
     """
     Take in an image (tensor) and the shape of the padded tile
     we want to separate it into and
@@ -219,8 +219,6 @@ def _extract_ptiles_2d(img, tile_shape, step=None, batch_first=False):
 
     Taken from: https://gist.github.com/dem123456789/23f18fd78ac8da9615c347905e64fc78
     """
-    if step is None:
-        step = [1.0, 1.0]
 
     tile_H, tile_W = tile_shape[0], tile_shape[1]
     if img.size(2) < tile_H:
