@@ -54,7 +54,7 @@ def get_inv_kl_loss(
         galaxy_param_logvar,
         log_flux_mean,
         log_flux_logvar,
-        prob_galaxy,
+        prob_galaxy.squeeze(-1),
         true_tile_locs,
         true_tile_galaxy_params,
         true_tile_log_fluxes,
