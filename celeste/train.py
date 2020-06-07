@@ -216,11 +216,9 @@ class TrainModel(ABC):
 
 
 class SleepTraining(TrainModel):
-    def __init__(self, *args, n_source_params, lr=1e-3, weight_decay=1e-5, **kwargs):
-        super().__init__(*args, lr=lr, weight_decay=weight_decay, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.encoder = self.model
-        self.n_source_params = n_source_params
-        assert self.n_source_params == self.encoder.n_source_params
 
     @staticmethod
     def _get_params_from_batch(batch):

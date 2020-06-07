@@ -9,10 +9,10 @@ from celeste.models import sourcenet
 
 @pytest.fixture(scope="module")
 def trained_star_encoder(
-    config_path, data_path, single_band_galaxy_decoder, fitted_powerlaw_psf
+    config_path, data_path, single_band_galaxy_decoder, single_band_fitted_powerlaw_psf
 ):
     # create training dataset
-    n_bands = 2
+    n_bands = 1
     max_stars = 20
     mean_stars = 15
     min_stars = 5
@@ -22,13 +22,12 @@ def trained_star_encoder(
     # set background
     background = torch.zeros(n_bands, slen, slen, device=device)
     background[0] = 686.0
-    background[1] = 1123.0
 
     # simulate dataset
     n_images = 128
     simulator_args = (
         single_band_galaxy_decoder,
-        fitted_powerlaw_psf,
+        single_band_fitted_powerlaw_psf,
         background,
     )
 
@@ -54,7 +53,7 @@ def trained_star_encoder(
         edge_padding=3,
         n_bands=n_bands,
         max_detections=2,
-        n_source_params=n_bands,  # star has n_bands # fluxes
+        n_galaxy_params=single_band_galaxy_decoder.latent_dim,
         enc_conv_c=5,
         enc_kern=3,
         enc_hidden=64,

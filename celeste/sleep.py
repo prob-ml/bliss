@@ -117,7 +117,7 @@ def _get_params_loss(
     """
 
     # the loss for estimating the true number of sources
-    true_n_sources = true_is_on_array.sum(1).float()
+    true_n_sources = true_is_on_array.sum(1).long()
     one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.size(1))
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
@@ -295,6 +295,6 @@ def _get_min_perm_loss(
     ).squeeze()
     galaxy_bool_loss = torch.gather(
         galaxy_bool_loss_all_perm, 1, indx.unsqueeze(1)
-    ).squeeze()
+    ).squeeze()  # actually a 'loss' so no minus sign required.
 
     return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss, indx

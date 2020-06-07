@@ -102,7 +102,8 @@ def _sample_n_sources(
         m = Categorical(categorical_param)
         n_sources = m.sample([batchsize]) + min_sources
 
-    return n_sources.clamp(max=max_sources, min=min_sources).float().squeeze(1)
+    # long() here is necessary because used for indexing and one_hot encoding.
+    return n_sources.clamp(max=max_sources, min=min_sources).long().squeeze(1)
 
 
 def _sample_locs(max_sources, is_on_array, batchsize=1):

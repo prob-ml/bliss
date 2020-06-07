@@ -84,7 +84,8 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     tile_is_on_array = tile_is_on_array.view(total_ptiles, max_sources)
 
     # total number of sources in each tile.
-    tile_n_sources = tile_is_on_array.sum(dim=1).float()
+    # .long() because use for indexing later.
+    tile_n_sources = tile_is_on_array.sum(dim=1).long()
 
     # for each tile returned re-normalized locs in that tile, maintaining relative ordering of
     # locs including leading/trailing zeroes) in the case that there are multiple objects
@@ -313,7 +314,6 @@ class SourceEncoder(nn.Module):
         edge_padding,
         n_bands,
         max_detections,
-        n_star_params,
         n_galaxy_params,
         enc_conv_c=20,
         enc_kern=3,
@@ -418,7 +418,7 @@ class SourceEncoder(nn.Module):
         #  4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for
         #  n source_param's (flux per band or galaxy params.) + 1 for the Bernoulli variable
         #  of whether the source is a star or galaxy.
-        self.n_star_params = n_star_params
+        self.n_star_params = n_bands
         self.n_galaxy_params = n_galaxy_params
         self.n_params_per_source = (
             4 + 2 * (self.n_star_params + self.n_galaxy_params) + 1
@@ -592,7 +592,7 @@ class SourceEncoder(nn.Module):
     def forward(self, image_ptiles, n_sources):
         # will unsqueeze and squeeze n_sources later.
         assert len(n_sources.shape) == 1
-        n_sources = n_sources.unsqueeze(0)
+        n_sources = n_sources.unsqueeze(0)  # will be used to index.
 
         # h.shape = (n_ptiles x self.dim_out_all)
         h = self._get_var_params_all(image_ptiles)
@@ -601,19 +601,15 @@ class SourceEncoder(nn.Module):
         # shape = (n_ptiles x (max_detections+1))
         n_source_log_probs = self._get_logprob_n_from_var_params(h)
 
-        # extract parameters
-        prob_galaxy = self._get_prob_galaxy_for_n_sources(
-            h, n_sources=n_sources.clamp(max=self.max_detections)
-        )
-
         # loc_mean has shape = (1 x n_ptiles x max_detections x len(x,y))
         (
             loc_mean,
             loc_logvar,
-            log_flux_mean,
-            log_flux_logvar,
             galaxy_param_mean,
             galaxy_param_logvar,
+            log_flux_mean,
+            log_flux_logvar,
+            prob_galaxy,
         ) = self._get_var_params_for_n_sources(
             h, n_sources=n_sources.clamp(max=self.max_detections)
         )
@@ -624,10 +620,10 @@ class SourceEncoder(nn.Module):
             n_source_log_probs.squeeze(0),
             loc_mean.squeeze(0),
             loc_logvar.squeeze(0),
-            log_flux_mean.squeeze(0),
-            log_flux_logvar.squeeze(0),
             galaxy_param_mean.squeeze(0),
             galaxy_param_logvar.squeeze(0),
+            log_flux_mean.squeeze(0),
+            log_flux_logvar.squeeze(0),
             prob_galaxy.squeeze(0),
         )
 
