@@ -8,7 +8,7 @@ from celeste.models import sourcenet
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder(
+def trained_encoder(
     config_path, data_path, single_band_galaxy_decoder, single_band_fitted_powerlaw_psf
 ):
     # create training dataset
@@ -38,7 +38,7 @@ def trained_star_encoder(
         mean_sources=mean_stars,
         min_sources=min_stars,
         f_min=f_min,
-        star_prob=1.0,  # enforce only stars are created in the training images.
+        prob_galaxy=0.0,  # enforce only stars are created in the training images.
     )
 
     dataset = simulated_datasets.SourceDataset(
@@ -83,8 +83,6 @@ class TestStarSleepEncoder:
         # load test image
         test_star = torch.load(data_path.joinpath(f"{n_star}_star_test.pt"))
         test_image = test_star["images"]
-
-        assert test_star["fluxes"].min() > 0
 
         with torch.no_grad():
             # get the estimated params
