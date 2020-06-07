@@ -95,7 +95,7 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     tile_locs = _tile_is_on_array * _locs
     tile_locs = tile_locs.view(total_ptiles, max_sources, 2)
     _tile_coords = tile_coords.view(single_image_n_ptiles, 1, 2).repeat(batchsize, 1, 1)
-    tile_locs -= tile_coords + edge_padding - 0.5  # recenter
+    tile_locs -= _tile_coords + edge_padding - 0.5  # recenter
     tile_locs /= ptile_slen - 2 * edge_padding  # re-normalize
     tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
 
@@ -127,8 +127,6 @@ def _get_tile_params(tile_is_on_array, indx_sort, params):
         _indx_sort = indx_sort.unsqueeze(2).repeat(1, 1, param_dim)
         tiled_param = torch.gather(tiled_param, 1, _indx_sort)
 
-        # TODO: do not squeeze log_flux when n_bands = 1
-        tiled_param = tiled_param.squeeze(-1)  # squeeze last one if galaxy bool.
         tiled_params.append(tiled_param)
 
     return tiled_params
@@ -793,7 +791,7 @@ class SourceEncoder(nn.Module):
             tile_locs_sampled,
             tile_galaxy_params_sampled,
             tile_log_fluxes_sampled,
-            tile_galaxy_bool_sampled,
+            tile_galaxy_bool_sampled.unsqueeze(-1),
         )
 
         return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool

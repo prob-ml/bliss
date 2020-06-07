@@ -324,9 +324,10 @@ class SourceSimulator(object):
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
-        self.galaxy_decoder = galaxy_decoder  # full path
+        self.galaxy_decoder = galaxy_decoder
         self.galaxy_slen = self.galaxy_decoder.slen
         self.latent_dim = self.galaxy_decoder.latent_dim
+        assert self.galaxy_decoder.n_bands == self.n_bands
 
         # prior parameters
         self.f_min = f_min
@@ -579,7 +580,6 @@ class SourceDataset(Dataset):
             "n_stars": n_stars,
             "locs": locs,
             "galaxy_params": galaxy_params,
-            "fluxes": fluxes,
             "log_fluxes": log_fluxes,
             "galaxy_bool": galaxy_bool,
             "images": images,
