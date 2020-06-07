@@ -46,7 +46,7 @@ def trained_star_encoder(
     )
 
     # setup Star Encoder
-    star_encoder = sourcenet.SourceEncoder(
+    encoder = sourcenet.SourceEncoder(
         slen=slen,
         ptile_slen=8,
         step=2,
@@ -62,11 +62,10 @@ def trained_star_encoder(
     # train encoder
     # training wrapper
     SleepTraining = train.SleepTraining(
-        model=star_encoder,
+        model=encoder,
         dataset=dataset,
         slen=slen,
         n_bands=n_bands,
-        n_source_params=n_bands,  # star has n_bands # fluxes
         verbose=False,
         batchsize=32,
     )
@@ -74,26 +73,34 @@ def trained_star_encoder(
     n_epochs = 100 if use_cuda else 1
     SleepTraining.run(n_epochs=n_epochs)
 
-    return star_encoder
+    return encoder
 
 
 class TestStarSleepEncoder:
     @pytest.mark.parametrize("n_star", [1, 3])
-    def test_star_sleep(self, trained_star_encoder, n_star, data_path):
+    def test_star_sleep(self, trained_encoder, n_star, data_path):
 
         # load test image
-        test_star = torch.load(data_path.joinpath(f"{n_star}star_test_params"))
+        test_star = torch.load(data_path.joinpath(f"{n_star}_star_test.pt"))
         test_image = test_star["images"]
 
         assert test_star["fluxes"].min() > 0
 
-        # get the estimated params
-        locs, source_params, n_sources = trained_star_encoder.sample_encoder(
-            test_image.to(device),
-            n_samples=1,
-            return_map_n_sources=True,
-            return_map_source_params=True,
-        )
+        with torch.no_grad():
+            # get the estimated params
+            trained_encoder.eval()
+            (
+                n_sources,
+                locs,
+                galaxy_params,
+                log_fluxes,
+                galaxy_bool,
+            ) = trained_encoder.sample_encoder(
+                test_image.to(device),
+                n_samples=1,
+                return_map_n_sources=True,
+                return_map_source_params=True,
+            )
 
         # we only expect our assert statements to be true
         # when the model is trained in full, which requires cuda
@@ -108,8 +115,8 @@ class TestStarSleepEncoder:
         assert diff_locs.abs().max() <= 0.5
 
         # fluxes
-        diff = test_star["log_fluxes"].sort(1)[0].to(device) - source_params.sort(1)[0]
-        assert torch.all(diff.abs() <= source_params.sort(1)[0].abs() * 0.10)
+        diff = test_star["log_fluxes"].sort(1)[0].to(device) - log_fluxes.sort(1)[0]
+        assert torch.all(diff.abs() <= log_fluxes.sort(1)[0].abs() * 0.10)
         assert torch.all(
             diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs().to(device) * 0.10
         )
