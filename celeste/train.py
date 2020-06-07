@@ -14,7 +14,6 @@ from . import sleep
 
 
 def set_seed(torch_seed, np_seed):
-
     torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = True
 
@@ -260,7 +259,14 @@ class SleepTraining(TrainModel):
         ) = self._get_params_from_batch(batch)
 
         # evaluate log q
-        loss, counter_loss, locs_loss, source_params_loss = sleep.get_inv_kl_loss(
+        (
+            loss,
+            counter_loss,
+            locs_loss,
+            galaxy_params_loss,
+            star_params_loss,
+            galaxy_bool_loss,
+        ) = sleep.get_inv_kl_loss(
             self.encoder,
             images,
             true_locs,
@@ -269,7 +275,14 @@ class SleepTraining(TrainModel):
             true_galaxy_bool,
         )
 
-        return loss, counter_loss, locs_loss, source_params_loss
+        return (
+            loss,
+            counter_loss,
+            locs_loss,
+            galaxy_params_loss,
+            star_params_loss,
+            galaxy_bool_loss,
+        )
 
     def update_avg(self, avg_results, results):
         if avg_results is None:

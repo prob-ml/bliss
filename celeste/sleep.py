@@ -294,7 +294,7 @@ def _get_min_perm_loss(
         galaxy_params_loss_all_perm, 1, indx.unsqueeze(1)
     ).squeeze()
     galaxy_bool_loss = torch.gather(
-        galaxy_params_loss_all_perm, 1, indx.unsqueeze(1)
+        galaxy_bool_loss_all_perm, 1, indx.unsqueeze(1)
     ).squeeze()
 
     return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss, indx
