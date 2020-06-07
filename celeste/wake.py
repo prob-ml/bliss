@@ -182,7 +182,7 @@ class ModelParams(nn.Module):
 
 
 def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
-    locs_sampled, fluxes_sampled, n_stars_sampled = star_encoder.sample_encoder(
+    locs_sampled, log_fluxes_sampled, n_stars_sampled = star_encoder.sample_encoder(
         image,
         n_samples=n_samples,
         return_map_n_sources=run_map,
