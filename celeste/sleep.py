@@ -58,8 +58,8 @@ def get_inv_kl_loss(
         true_tile_locs,
         true_tile_galaxy_params,
         true_tile_log_fluxes,
-        true_tile_galaxy_bool,
-        true_tile_is_on_array.float(),
+        true_tile_galaxy_bool.squeeze(-1),
+        true_tile_is_on_array.long(),
     )
 
     return (
@@ -117,7 +117,7 @@ def _get_params_loss(
     """
 
     # the loss for estimating the true number of sources
-    true_n_sources = true_is_on_array.sum(1).long()
+    true_n_sources = true_is_on_array.sum(1)
     one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.size(1))
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
