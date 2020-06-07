@@ -169,13 +169,15 @@ class TrainModel(ABC):
 
         t0 = time.time()
         batch_generator = self.get_batch_generator()
-        avg_results = None  # average results for this epoch
+        avg_loss = 0.0  # average results for this epoch
+        avg_results = 0.0
 
         for batch in batch_generator:
 
-            results = self.get_results(batch)
-            loss = self.get_loss(results)
-            avg_results = self.update_avg(avg_results, results)
+            loss, results = self.get_loss_and_results(batch)
+            avg_loss, avg_results = self.update_avg(
+                avg_loss, avg_results, loss, results
+            )
 
             if train:
                 self.optimizer.zero_grad()
@@ -183,9 +185,9 @@ class TrainModel(ABC):
                 self.optimizer.step()
 
         if train and (self.output_file or self.verbose):
-            self.log_train(epoch, avg_results, t0)
+            self.log_train(epoch, avg_loss, avg_results, t0)
         elif not train:
-            self.log_eval(epoch, avg_results)
+            self.log_eval(epoch, avg_loss, avg_results)
 
     @abstractmethod
     def get_batch_generator(self):
@@ -194,26 +196,21 @@ class TrainModel(ABC):
         pass
 
     @abstractmethod
-    def get_results(self, batch):
+    def get_loss_and_results(self, batch):
         # get all training/evaluation results from a batch, this includes loss and maybe other
         # useful things to log.
         pass
 
     @abstractmethod
-    def update_avg(self, avg_results, results):
+    def update_avg(self, avg_loss, avg_results, loss, results):
         pass
 
     @abstractmethod
-    def get_loss(self, results):
-        # get loss from results to pass propagate, etc.
+    def log_train(self, epoch, avg_loss, avg_results, t0):
         pass
 
     @abstractmethod
-    def log_train(self, epoch, avg_results, t0):
-        pass
-
-    @abstractmethod
-    def log_eval(self, epoch, avg_results):
+    def log_eval(self, epoch, avg_loss, avg_results):
         # usually save state dict here.
         pass
 
@@ -244,10 +241,7 @@ class SleepTraining(TrainModel):
         for i in range(num_batches):
             yield self.dataset.get_batch(batchsize=self.batchsize)
 
-    def get_loss(self, results):
-        return results[0]
-
-    def get_results(self, batch):
+    def get_loss_and_results(self, batch):
         # log_fluxes or gal_params are returned as true_source_params.
         # already in cuda.
         (
@@ -275,8 +269,7 @@ class SleepTraining(TrainModel):
             true_galaxy_bool,
         )
 
-        return (
-            loss,
+        results = (
             counter_loss,
             locs_loss,
             galaxy_params_loss,
@@ -284,45 +277,30 @@ class SleepTraining(TrainModel):
             galaxy_bool_loss,
         )
 
-    def update_avg(self, avg_results, results):
-        if avg_results is None:
-            avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss = (
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-            )
-        else:
-            (
-                avg_loss,
-                avg_counter_loss,
-                avg_locs_loss,
-                avg_source_params_loss,
-            ) = avg_results
+        return loss, results
 
-        loss, counter_loss, locs_loss, source_params_loss = results
+    def update_avg(self, avg_loss, avg_results, loss, results):
 
         avg_loss += loss.item() * self.batchsize / len(self.dataset)
 
         tiles_per_epoch = len(self.dataset) * self.encoder.n_tiles
-        avg_counter_loss += counter_loss.sum().item() / tiles_per_epoch
-        avg_source_params_loss += source_params_loss.sum().item() / tiles_per_epoch
-        avg_locs_loss += locs_loss.sum().item() / tiles_per_epoch
+        avg_results += np.array([r.sum().item() / tiles_per_epoch for r in results])
 
-        return avg_loss, avg_counter_loss, avg_locs_loss, avg_source_params_loss
+        return avg_loss, avg_results
 
     def log_train(
-        self, epoch, avg_results, t0,
+        self, epoch, avg_loss, avg_results, t0,
     ):
         assert self.verbose or self.out_dir, "Not doing anything."
 
-        avg_loss, counter_loss, locs_loss, source_param_loss = avg_results
         # print and save train results.
         elapsed = time.time() - t0
         out_text = (
-            f"{epoch} loss: {avg_loss:.4f}; counter loss: {counter_loss:.4f}; locs loss: "
-            f"{locs_loss:.4f}; source_params loss: {source_param_loss:.4f} \t [{elapsed:.1f} "
-            f"seconds]"
+            f"{epoch} loss: {avg_loss:.4f}; counter loss: {avg_results[0]:.4f}; locs loss: "
+            f"{avg_results[1]:.4f}; galaxy_params loss: {avg_results[2]:.4f}; "
+            f"star_params_loss: "
+            f"{avg_results[3]:.4f}; galaxy_bool_loss: {avg_results[4]:.4f}"
+            f"\t [{elapsed:.1f} seconds]"
         )
 
         self.write_to_output(out_text)
