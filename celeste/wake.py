@@ -10,10 +10,9 @@ from .datasets.simulated_datasets import (
     get_is_on_from_n_sources,
 )
 from .psf_transform import PowerLawPSF
+from celeste import device
 
 import time
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def _sample_image(observed_image, sample_every=10):

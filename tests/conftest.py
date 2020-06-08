@@ -33,3 +33,9 @@ def single_band_galaxy_decoder(data_path):
     n_bands = 1
     galaxy_decoder_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
     return DecoderSamples(galaxy_slen, galaxy_decoder_file, n_bands=n_bands)
+
+
+@pytest.fixture(scope="session")
+def test_params(data_path):
+    test_star = torch.load(data_path.joinpath("3star_test_params"))
+    return test_star
