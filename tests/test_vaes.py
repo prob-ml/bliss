@@ -30,7 +30,7 @@ class TestSourceEncoder:
             edge_padding=3,
             n_bands=n_bands,
             max_detections=max_detections,
-            n_source_params=n_bands,
+            n_galaxy_params=8,
         ).to(device)
 
         star_encoder.eval()
@@ -46,14 +46,18 @@ class TestSourceEncoder:
             .to(device)
         )
 
+        print(image_ptiles.shape, n_star_per_tile.shape)
+
         # forward
         (
+            n_source_log_probs,
             loc_mean,
             loc_logvar,
+            galaxy_param_mean,
+            galaxy_param_logvar,
             log_flux_mean,
             log_flux_logvar,
-            logprob_bernoulli,
-            log_probs_n_sources,
+            prob_galaxy,
         ) = star_encoder.forward(image_ptiles, n_star_per_tile)
 
         assert torch.all(loc_mean <= 1.0)
@@ -90,6 +94,8 @@ class TestSourceEncoder:
         # we check the variational parameters against the hidden parameters
         # one by one
         h_out = star_encoder._get_var_params_all(image_ptiles)
+
+        # get index matrices
 
         for i in range(n_image_tiles):
             if n_star_per_tile[i] == 0:
@@ -135,15 +141,15 @@ class TestSourceEncoder:
                 )
 
                 assert torch.all(
-                    log_probs_n_sources[i, :].flatten()
+                    n_source_log_probs[i, :].flatten()
                     == star_encoder.log_softmax(
                         h_out[:, star_encoder.prob_n_source_indx]
                     )[i]
                 )
 
                 assert torch.all(
-                    logprob_bernoulli[i, 0:n_stars_i, :].flatten()
-                    == torch.nn.functional.logsigmoid(h_out)[
+                    prob_galaxy[i, 0:n_stars_i, :].flatten()
+                    == torch.nn.functional.sigmoid(h_out)[
                         i, star_encoder.bernoulli_indx[n_stars_i][0 : (1 * n_stars_i)]
                     ]
                 )
@@ -168,7 +174,7 @@ class TestSourceEncoder:
             edge_padding=3,
             n_bands=n_bands,
             max_detections=max_detections,
-            n_source_params=n_bands,
+            n_galaxy_params=8,
         ).to(device)
 
         star_encoder.eval()
@@ -224,7 +230,7 @@ class TestSourceEncoder:
             edge_padding=3,
             n_bands=n_bands,
             max_detections=max_detections,
-            n_source_params=n_bands,
+            n_galaxy_params=8,
         ).to(device)
 
         n_image_tiles = star_encoder.tile_coords.shape[0]

@@ -363,6 +363,7 @@ class SourceEncoder(nn.Module):
         momentum = 0.5
 
         # convolutional NN
+        conv_out_dim = self.enc_conv_c * ptile_slen ** 2
         self.enc_conv = nn.Sequential(
             nn.Conv2d(
                 self.n_bands, self.enc_conv_c, self.enc_kern, stride=1, padding=1
@@ -387,13 +388,6 @@ class SourceEncoder(nn.Module):
             ),
             nn.ReLU(),
             Flatten(),
-        )
-
-        # output dimension of convolutions
-        conv_out_dim = self.enc_conv_c * n_bands * ptile_slen * ptile_slen
-
-        # fully connected layers
-        self.enc_fc = nn.Sequential(
             nn.Linear(conv_out_dim, self.enc_hidden),
             nn.BatchNorm1d(
                 self.enc_hidden, momentum=momentum, track_running_stats=True
@@ -582,7 +576,6 @@ class SourceEncoder(nn.Module):
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
         h = self.enc_conv(log_img)
-        h = self.enc_fc(h)
 
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(h)
