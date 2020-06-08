@@ -30,12 +30,12 @@ class TestStarEncoderObjective:
         log_flux_logvar = torch.randn(batchsize, max_detections, n_bands, device=device)
 
         # get loss for locations
-        locs_log_probs_all = sleep._get_locs_logprob_all_combs(
+        locs_log_probs_all = sleep._get_params_logprob_all_combs(
             true_locs, loc_mean, loc_logvar
         )
 
         # get loss for fluxes
-        flux_log_probs_all = sleep._get_source_params_logprob_all_combs(
+        flux_log_probs_all = sleep._get_params_logprob_all_combs(
             true_log_fluxes, log_flux_mean, log_flux_logvar
         )
 
@@ -108,12 +108,12 @@ class TestStarEncoderObjective:
         ) * is_on_array.unsqueeze(2)
 
         # get loss for locations
-        locs_log_probs_all = sleep._get_locs_logprob_all_combs(
+        locs_log_probs_all = sleep._get_params_logprob_all_combs(
             true_locs, loc_mean, loc_logvar
         )
 
         # get loss for fluxes
-        flux_log_probs_all = sleep._get_source_params_logprob_all_combs(
+        flux_log_probs_all = sleep._get_params_logprob_all_combs(
             true_log_fluxes, log_flux_mean, log_flux_logvar
         )
 

@@ -390,9 +390,7 @@ class SourceEncoder(nn.Module):
         )
 
         # output dimension of convolutions
-        conv_out_dim = self.enc_conv(
-            torch.zeros(1, n_bands, ptile_slen, ptile_slen)
-        ).size(1)
+        conv_out_dim = self.enc_conv_c * n_bands * ptile_slen * ptile_slen
 
         # fully connected layers
         self.enc_fc = nn.Sequential(
