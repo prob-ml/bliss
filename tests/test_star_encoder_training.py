@@ -12,27 +12,48 @@ from celeste.models import sourcenet
 
 class TestStarEncoderTraining:
     @pytest.fixture(scope="module")
+    def init_psf_setup(self, data_path, fitted_powerlaw_psf):
+        psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
+        true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+        init_psf_params = true_psf_params.clone()
+        init_psf_params[0, 0:2] += torch.tensor([1.0, 1.0]).to(device)
+        init_psf_params[1, 0:2] += torch.tensor([1.0, 1.0]).to(device)
+
+        init_psf = psf_transform.PowerLawPSF(init_psf_params).forward().detach()
+
+        return {"init_psf_params": init_psf_params, "init_psf": init_psf}
+
+    @pytest.fixture(scope="module")
+    def test_params(self, data_path):
+        test_star = torch.load(data_path.joinpath("3star_test_params"))
+        test_image = test_star["images"]
+        return {"test_star": test_star, "test_image": test_image}
+
+    @pytest.fixture(scope="module")
     def trained_star_encoder(
-        config_path, data_path, single_band_galaxy_decoder, fitted_powerlaw_psf
+        config_path, data_path, single_band_galaxy_decoder, init_psf_setup
     ):
         # create training dataset
         n_bands = 2
         max_stars = 20
-        mean_stars = 15
+        mean_stars = 10
         min_stars = 5
-        f_min = 1e4
+        f_min = 1e3
         slen = 50
 
-        # set background
+        # set background for training
         background = torch.zeros(n_bands, slen, slen, device=device)
         background[0] = 686.0
         background[1] = 1123.0
 
+        # set initialized psf
+        init_psf = init_psf_setup["init_psf"]
+
         # simulate dataset
-        n_images = 128
+        n_images = 128 * 3
         simulator_args = (
             single_band_galaxy_decoder,
-            fitted_powerlaw_psf,
+            init_psf,
             background,
         )
 
@@ -76,22 +97,20 @@ class TestStarEncoderTraining:
             batchsize=32,
         )
 
-        n_epochs = 100 if use_cuda else 1
+        n_epochs = 250 if use_cuda else 1
         SleepTraining.run(n_epochs=n_epochs)
 
         return star_encoder
 
-    @pytest.mark.parametrize("n_star", [1, 3])
-    def test_star_sleep(self, trained_star_encoder, n_star, data_path):
+    def test_star_sleep(self, trained_star_encoder, test_params):
 
         # load test image
-        test_star = torch.load(data_path.joinpath(f"{n_star}star_test_params"))
-        test_image = test_star["images"]
+        test_star = test_params["test_star"]
+        test_image = test_params["test_image"]
 
         assert test_star["fluxes"].min() > 0
 
         # get the estimated params
-        trained_star_encoder.eval()
         (
             est_locs,
             est_source_params,
@@ -126,17 +145,24 @@ class TestStarEncoderTraining:
         assert diff_locs.abs().max() <= 0.5
 
         # fluxes
-        true_source_params = test_star["log_fluxes"][:, true_ind,].to(device)
+        true_source_params = test_star["log_fluxes"][:, true_ind, :].to(device)
         est_source_params = est_source_params[:, est_ind, :].to(device)
         diff = true_source_params - est_source_params
         assert (diff.abs() <= est_source_params.abs() * 0.10).all()
         assert (diff.abs() <= true_source_params.abs() * 0.10).all()
 
-    def test_star_wake(self, trained_star_encoder, data_path, fitted_powerlaw_psf):
+    def test_star_wake(
+        self,
+        trained_star_encoder,
+        data_path,
+        fitted_powerlaw_psf,
+        init_psf_setup,
+        test_params,
+    ):
         # load the test image
         # 3-stars 30*30
-        true_params = torch.load(data_path.joinpath("3star_test_params"))
-        true_image = true_params["images"]
+        true_params = test_params["test_params"]
+        true_image = test_params["test_image"]
 
         # initialization
         ## initialize background params, which will create the true background
@@ -149,16 +175,11 @@ class TestStarEncoderTraining:
         assert torch.all(init_background == true_params["background"].to(device))
 
         ## initialize psf params, just add 4 to each sigmas
-        true_psf = fitted_powerlaw_psf
-        psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-        true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-
-        init_psf_params = true_psf_params.clone()
-        init_psf_params[0, 1] += torch.tensor(4.0).to(device)
-        init_psf_params[1, 1] += torch.tensor(4.0).to(device)
+        true_psf = fitted_powerlaw_psf.clone()
+        init_psf_params = init_psf_setup["init_psf_params"]
 
         # run the wake-phase training
-        n_epochs = 300 if use_cuda else 1
+        n_epochs = 1000 if use_cuda else 1
 
         trained_star_encoder.eval()
         estimate_params, map_loss = wake.run_wake(
@@ -166,19 +187,18 @@ class TestStarEncoderTraining:
             trained_star_encoder,
             init_psf_params,
             init_background_params,
-            n_samples=10,
+            n_samples=1000,
             n_epochs=n_epochs,
             lr=1e-2,
             print_every=10,
             run_map=False,
         )
 
-        # TODO: add assertions
-        # propose: PSF residual reduce by 90%
+        # PSF residual reduce by 90%
         estimate_psf_params = list(estimate_params.power_law_psf.parameters())[0]
         estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
 
-        init_psf = psf_transform.PowerLawPSF(init_psf_params).forward().detach()
+        init_psf = init_psf_setup["init_psf"]
         init_residuals = true_psf.to(device) - init_psf.to(device)
 
         estimate_residuals = true_psf.to(device) - estimate_psf.to(device)
