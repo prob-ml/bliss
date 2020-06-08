@@ -115,7 +115,6 @@ def _get_params_loss(
         are log-probabilities for the number of sources (0, 1, ..., max_detections)
 
     """
-
     # the loss for estimating the true number of sources
     true_n_sources = true_is_on_array.sum(1)
     one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.size(1))
@@ -153,6 +152,7 @@ def _get_params_loss(
         true_is_on_array,
     )
 
+    # TODO: Is the detach here necessary?
     loss_vec = (
         locs_loss * (locs_loss.detach() < 1e6).float()
         + counter_loss

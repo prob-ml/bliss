@@ -21,7 +21,7 @@ def _sample_class_weights(class_weights, n_samples=1):
 
     assert not torch.any(torch.isnan(class_weights))
     cat_rv = categorical.Categorical(probs=class_weights)
-    return cat_rv.sample((n_samples,)).detach().squeeze()
+    return cat_rv.sample((n_samples,)).squeeze()
 
 
 def _get_tile_coords(image_xlen, image_ylen, ptile_slen, step):
