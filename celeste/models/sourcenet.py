@@ -436,7 +436,7 @@ class SourceEncoder(nn.Module):
             ("galaxy_params_var", self.n_galaxy_params),
             ("log_fluxes_mean", self.n_star_params),
             ("log_fluxes_var", self.n_star_params),
-            ("prob_galaxy", 1, lambda x: torch.sigmoid(x)),
+            ("prob_galaxy", 1, lambda x: torch.sigmoid(x).clamp(1e-4, 1 - 1e-4)),
         ]
         self.n_variational_params = len(self.variational_params)
 
@@ -724,7 +724,7 @@ class SourceEncoder(nn.Module):
         assert log_flux_mean.shape == log_flux_sd.shape, "Shapes need to match"
 
         # TODO: For really bad initialization sometimes I get locs > 1, so clamp. Is this ok?
-        tile_locs_sampled = torch.normal(loc_mean, loc_sd).clamp(min=0, max=1)
+        tile_locs_sampled = torch.normal(loc_mean, loc_sd).clamp(0, 1)
         tile_locs_sampled *= tile_is_on_array
 
         tile_galaxy_params_sampled = torch.normal(galaxy_param_mean, galaxy_param_sd)
