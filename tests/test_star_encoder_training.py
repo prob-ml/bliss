@@ -161,7 +161,7 @@ class TestStarEncoderTraining:
     ):
         # load the test image
         # 3-stars 30*30
-        true_params = test_params["test_params"]
+        true_params = test_params["test_star"]
         true_image = test_params["test_image"]
 
         # initialization
