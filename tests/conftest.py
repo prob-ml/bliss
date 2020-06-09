@@ -21,9 +21,9 @@ def config_path(root_path):
 
 
 @pytest.fixture(scope="session")
-def fitted_powerlaw_psf(data_path):
+def single_band_fitted_powerlaw_psf(data_path):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-    return get_fitted_powerlaw_psf(psf_file)
+    return get_fitted_powerlaw_psf(psf_file)[None, 0, ...]
 
 
 @pytest.fixture(scope="session")
