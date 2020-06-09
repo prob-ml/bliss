@@ -92,7 +92,9 @@ class TestStarEncoderObjective:
         ) * true_is_on_array.unsqueeze(2)
 
         # boolean indicating whether source is galaxy
-        true_galaxy_bool = (torch.rand(n_ptiles, max_detections) > 0.5).float()
+        true_galaxy_bool = (
+            (torch.rand(n_ptiles, max_detections) > 0.5).float().to(device)
+        )
 
         # estimated parameters
         loc_mean = torch.randn(
