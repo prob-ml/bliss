@@ -125,7 +125,7 @@ def _get_params_loss(
     # *_log_probs_all have shape n_ptiles x max_detections x max_detections
 
     # enforce large error if source is off
-    true_locs = true_locs + (true_is_on_array == 0).float().unsqueeze(-1) * 1e16
+    loc_mean = loc_mean + (true_is_on_array == 0).float().unsqueeze(-1) * 1e16
     locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
     galaxy_params_log_probs_all = _get_params_logprob_all_combs(
         true_galaxy_params, galaxy_params_mean, galaxy_params_logvar
@@ -185,9 +185,9 @@ def _get_transformed_params(true_params, param_mean, param_logvar):
     n_ptiles = true_params.size(0)
 
     # -1 in each view = n_source_params or 2 for locs.
-    _true_params = true_params.view(n_ptiles, max_detections, 1, -1)
-    _source_mean = param_mean.view(n_ptiles, 1, max_detections, -1)
-    _source_logvar = param_logvar.view(n_ptiles, 1, max_detections, -1)
+    _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+    _source_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+    _source_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
 
     return _true_params, _source_mean, _source_logvar
 
@@ -210,6 +210,7 @@ def _get_log_probs_all_perms(
     is_on_array,
     true_galaxy_bool,
 ):
+
     # get log-probability under every possible matching of estimated star to true star
     max_detections = galaxy_params_log_probs_all.size(-1)
     batchsize = galaxy_params_log_probs_all.size(0)
