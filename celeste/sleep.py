@@ -143,8 +143,8 @@ def _get_params_loss(
         galaxy_bool_loss,
     ) = _get_min_perm_loss(
         locs_log_probs_all,
-        star_params_log_probs_all,
         galaxy_params_log_probs_all,
+        star_params_log_probs_all,
         prob_galaxy,
         true_galaxy_bool,
         true_is_on_array,
@@ -216,8 +216,8 @@ def _get_log_probs_all_perms(
 
     n_permutations = math.factorial(max_detections)
     locs_log_probs_all_perm = torch.zeros(batchsize, n_permutations, device=device)
-    star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
+    star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
 
     for i, perm in enumerate(permutations(range(max_detections))):
@@ -258,8 +258,8 @@ def _get_log_probs_all_perms(
 
 def _get_min_perm_loss(
     locs_log_probs_all,
-    star_params_log_probs_all,
     galaxy_params_log_probs_all,
+    star_params_log_probs_all,
     prob_galaxy,
     true_galaxy_bool,
     is_on_array,
@@ -289,7 +289,9 @@ def _get_min_perm_loss(
     galaxy_params_loss = -torch.gather(
         galaxy_params_log_probs_all_perm, 1, indx.unsqueeze(1)
     ).squeeze()
-    galaxy_bool_loss = -torch.gather(
+
+    # TODO: Put back minus sign once we fix galaxy bool loss
+    galaxy_bool_loss = torch.gather(
         galaxy_bool_log_probs_all_perm, 1, indx.unsqueeze(1)
     ).squeeze()
 
