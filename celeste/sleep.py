@@ -242,7 +242,6 @@ def _get_log_probs_all_perms(
             * (1 - true_galaxy_bool)
         ).sum(1)
 
-        # similarly for galaxy bool, add 1e-5 fudge factor to avoid -inf.
         _prob_galaxy = prob_galaxy[:, perm]
         galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
         galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log1p(_prob_galaxy)

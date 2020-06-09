@@ -136,6 +136,7 @@ def _get_tile_params(tile_is_on_array, indx_sort, params):
 def _get_params_in_tiles(
     tile_coords, max_detections, slen, edge_padding, ptile_slen, locs, *params
 ):
+
     (
         tile_n_sources,
         tile_locs,  # sorted.
@@ -627,6 +628,9 @@ class SourceEncoder(nn.Module):
         return tile_coords
 
     def get_params_in_tiles(self, slen, locs, *params):
+        max_sources = locs.size(1)
+        assert self.max_detections <= max_sources, "Wasteful, lower max_detections."
+
         tile_coords = self._get_tile_coords(slen)
 
         return _get_params_in_tiles(
