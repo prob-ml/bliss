@@ -184,7 +184,6 @@ def _get_transformed_params(true_params, param_mean, param_logvar):
     max_detections = true_params.size(1)
     n_ptiles = true_params.size(0)
 
-    # -1 in each view = n_source_params or 2 for locs.
     _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
     _source_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
     _source_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
