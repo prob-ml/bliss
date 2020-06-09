@@ -9,63 +9,43 @@ from celeste.datasets import simulated_datasets
 
 
 class TestStarEncoderObjective:
-    def test_get_all_comb_losses(self):
+    def test_get_params_logprob_all_combs(self):
         # this checks that our function to return all combination of losses
         # is correct
 
         batchsize = 10
         max_detections = 4
-        max_stars = 6
-        n_bands = 2
+        n_source_params = 8
 
         # true parameters
-        true_locs = torch.rand(batchsize, max_stars, 2, device=device)
-        true_log_fluxes = torch.randn(batchsize, max_stars, n_bands, device=device)
+        true_params = torch.rand(batchsize, max_detections, n_source_params, device=device)
 
         # estimated parameters
-        loc_mean = torch.randn(batchsize, max_detections, 2, device=device)
-        loc_logvar = torch.randn(batchsize, max_detections, 2, device=device)
+        param_mean = torch.randn(batchsize, max_detections, n_source_params, device=device)
+        param_logvar = torch.randn(batchsize, max_detections, n_source_params, device=device)
 
-        log_flux_mean = torch.randn(batchsize, max_detections, n_bands, device=device)
-        log_flux_logvar = torch.randn(batchsize, max_detections, n_bands, device=device)
 
-        # get loss for locations
-        locs_log_probs_all = sleep._get_params_logprob_all_combs(
-            true_locs, loc_mean, loc_logvar
-        )
-
-        # get loss for fluxes
-        flux_log_probs_all = sleep._get_params_logprob_all_combs(
-            true_log_fluxes, log_flux_mean, log_flux_logvar
+        # get all losses
+        param_log_probs_all = sleep._get_params_logprob_all_combs(
+            true_params, param_mean, param_logvar
         )
 
         # for my sanity
-        assert list(locs_log_probs_all.shape) == [batchsize, max_stars, max_detections]
-        assert list(flux_log_probs_all.shape) == [batchsize, max_stars, max_detections]
+        assert list(param_log_probs_all.shape) == [batchsize, max_detections, max_detections]
 
         for i in range(batchsize):
-            for j in range(max_stars):
+            for j in range(max_detections):
                 for k in range(max_detections):
-                    flux_loss_ij = (
+
+                    param_loglik_ij = (
                         Normal(
-                            log_flux_mean[i, k],
-                            (torch.exp(log_flux_logvar[i, k]) + 1e-5).sqrt(),
+                            param_mean[i, k], (torch.exp(param_logvar[i, k]) + 1e-5).sqrt()
                         )
-                        .log_prob(true_log_fluxes[i, j])
+                        .log_prob(true_params[i, j])
                         .sum()
                     )
 
-                    assert flux_loss_ij == flux_log_probs_all[i, j, k]
-
-                    locs_loss_ij = (
-                        Normal(
-                            loc_mean[i, k], (torch.exp(loc_logvar[i, k]) + 1e-5).sqrt()
-                        )
-                        .log_prob(true_locs[i, j])
-                        .sum()
-                    )
-
-                    assert locs_loss_ij == locs_log_probs_all[i, j, k]
+                    assert param_loglik_ij == param_log_probs_all[i, j, k]
 
     def test_get_min_perm_loss(self):
         """
