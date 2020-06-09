@@ -1,15 +1,13 @@
-import numpy as np
 from itertools import permutations
+from copy import deepcopy
+
+import numpy as np
 import torch
 from torch.distributions import Normal
 
 from celeste import device
 from celeste import sleep
 from celeste.datasets import simulated_datasets
-
-from itertools import permutations
-
-from copy import deepcopy
 
 
 class TestStarEncoderObjective:
