@@ -290,8 +290,7 @@ def _get_min_perm_loss(
         galaxy_params_log_probs_all_perm, 1, indx.unsqueeze(1)
     ).squeeze()
 
-    # TODO: Put back minus sign once we fix galaxy bool loss
-    galaxy_bool_loss = torch.gather(
+    galaxy_bool_loss = -torch.gather(
         galaxy_bool_log_probs_all_perm, 1, indx.unsqueeze(1)
     ).squeeze()
 

@@ -260,7 +260,6 @@ class TestStarEncoderObjective:
                 torch.abs(galaxy_params_loss[i] - min_galaxy_params_loss) < 1e-5
             ), torch.abs(galaxy_params_loss[i] - min_galaxy_params_loss)
 
-            # TODO: Revive once we fix the bool loss in sleep.py.
-            # assert (
-            #     torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss) < 1e-5
-            # ), torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss)
+            assert (
+                torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss) < 1e-5
+            ), torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss)
