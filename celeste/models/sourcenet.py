@@ -155,6 +155,8 @@ def _get_params_in_tiles(
         max_detections, tile_n_sources, tile_locs, *tile_params, tile_is_on_array
     )
 
+    # tile_is_on_array shape = total_n_ptiles x max_detections
+    assert len(tile_is_on_array.shape) == 2
     return (tile_n_sources, *tile_params, tile_is_on_array)
 
 

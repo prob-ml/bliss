@@ -27,6 +27,9 @@ def get_inv_kl_loss(
         slen, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool
     )
 
+    n_ptiles = true_tile_is_on_array.size(0)
+    max_detections = true_tile_is_on_array.size(1)
+
     (
         n_source_log_probs,
         loc_mean,
@@ -37,6 +40,10 @@ def get_inv_kl_loss(
         log_flux_logvar,
         prob_galaxy,
     ) = encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
+
+    # TODO: make forward and get_params_in_tiles just return correct dimension ?
+    prob_galaxy = prob_galaxy.view(n_ptiles, max_detections)
+    true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_detections)
 
     (
         loss,
@@ -53,11 +60,11 @@ def get_inv_kl_loss(
         galaxy_param_logvar,
         log_flux_mean,
         log_flux_logvar,
-        prob_galaxy.squeeze(-1),
+        prob_galaxy,
         true_tile_locs,
         true_tile_galaxy_params,
         true_tile_log_fluxes,
-        true_tile_galaxy_bool.squeeze(-1),
+        true_tile_galaxy_bool,
         true_tile_is_on_array,
     )
 
@@ -115,7 +122,7 @@ def _get_params_loss(
 
     """
     # the loss for estimating the true number of sources
-    true_n_sources = true_is_on_array.sum(1).long()
+    true_n_sources = true_is_on_array.sum(1).long()  # per tile.
     one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.size(1))
     counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
@@ -173,16 +180,15 @@ def _get_params_loss(
 
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
     assert torch.all(n_source_log_probs <= 0)
-    assert n_source_log_probs.shape[0] == one_hot_encoding.shape[0]
-    assert n_source_log_probs.shape[1] == one_hot_encoding.shape[1]
+    assert n_source_log_probs.shape == one_hot_encoding.shape
 
-    return torch.sum(-n_source_log_probs * one_hot_encoding, dim=1)
+    return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
 
 
 def _get_transformed_params(true_params, param_mean, param_logvar):
     assert true_params.shape == param_mean.shape == param_logvar.shape
-    max_detections = true_params.size(1)
     n_ptiles = true_params.size(0)
+    max_detections = true_params.size(1)
 
     _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
     _source_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
@@ -196,7 +202,7 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
         true_params, param_mean, param_logvar
     )
 
-    _sd = (torch.exp(_param_logvar) + 1e-5).sqrt()
+    _sd = (_param_logvar.exp() + 1e-5).sqrt()
     param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
     return param_log_probs_all
 
@@ -210,12 +216,12 @@ def _get_log_probs_all_perms(
     true_galaxy_bool,
 ):
 
-    # get log-probability under every possible matching of estimated star to true star
+    # get log-probability under every possible matching of estimated source to true source
+    n_ptiles = galaxy_params_log_probs_all.size(0)
     max_detections = galaxy_params_log_probs_all.size(-1)
-    batchsize = galaxy_params_log_probs_all.size(0)
 
     n_permutations = math.factorial(max_detections)
-    locs_log_probs_all_perm = torch.zeros(batchsize, n_permutations, device=device)
+    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations, device=device)
     galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
