@@ -188,9 +188,9 @@ def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
         return_map_source_params=run_map,
     )[0:3]
 
-    max_stars = n_stars_sampled.max()
+    max_stars = log_fluxes_sampled.shape[1]
     is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
-    is_on_array = is_on_array.unsqueeze(2).float()
+    is_on_array = is_on_array.unsqueeze(-1).float()
     fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
     loss = model_params.get_loss(
