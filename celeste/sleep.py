@@ -41,7 +41,7 @@ def get_inv_kl_loss(
         prob_galaxy,
     ) = encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
 
-    # TODO: make forward and get_params_in_tiles just return correct dimension ?
+    # TODO: make .forward() and .get_params_in_tiles() just return correct dimensions ?
     prob_galaxy = prob_galaxy.view(n_ptiles, max_detections)
     true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_detections)
 
@@ -142,7 +142,7 @@ def _get_params_loss(
     )
 
     # inside _get_min_perm_loss is where the matching happens:
-    # we construct a bijective map from each estimated star to each true star
+    # we construct a bijective map from each estimated source to each true source
     (
         locs_loss,
         galaxy_params_loss,
@@ -227,14 +227,14 @@ def _get_log_probs_all_perms(
     galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
 
     for i, perm in enumerate(permutations(range(max_detections))):
-        # note that we multiply is_on_array:
-        # we only evaluate the loss if the source is on
+        # note that we multiply is_on_array, we only evaluate the loss if the source is on.
         locs_log_probs_all_perm[:, i] = (
-            locs_log_probs_all[:, perm, :].diagonal(dim1=1, dim2=2) * is_on_array
+            locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
         ).sum(1)
 
         # if galaxy, evaluate the galaxy parameters,
         # hence the multiplication by (true_galaxy_bool)
+        # TODO: Why do you take diagonal here? Part of selecting that permutation???
         galaxy_params_log_probs_all_perm[:, i] = (
             galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
             * is_on_array
@@ -248,6 +248,7 @@ def _get_log_probs_all_perms(
             * (1 - true_galaxy_bool)
         ).sum(1)
 
+        # TODO: Should `prob_galaxy` also be a tensor like the others? shape=max_detections**2 ??
         _prob_galaxy = prob_galaxy[:, perm]
         galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
         galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log1p(_prob_galaxy)
@@ -284,19 +285,16 @@ def _get_min_perm_loss(
         true_galaxy_bool,
     )
 
+    # TODO: Why do we select it based on the location losses?
     # find the permutation that minimizes the location losses
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
 
     # get the star & galaxy losses according to the found permutation
-    star_params_loss = -torch.gather(
-        star_params_log_probs_all_perm, 1, indx.unsqueeze(1)
-    ).squeeze()
+    _indx = indx.unsqueeze(1)
+    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, _indx).squeeze()
     galaxy_params_loss = -torch.gather(
-        galaxy_params_log_probs_all_perm, 1, indx.unsqueeze(1)
+        galaxy_params_log_probs_all_perm, 1, _indx
     ).squeeze()
-
-    galaxy_bool_loss = -torch.gather(
-        galaxy_bool_log_probs_all_perm, 1, indx.unsqueeze(1)
-    ).squeeze()
+    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, _indx).squeeze()
 
     return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
