@@ -8,11 +8,11 @@ from celeste.models import sourcenet
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder(
-    config_path, data_path, single_band_galaxy_decoder, fitted_powerlaw_psf
+def trained_encoder(
+    config_path, data_path, single_band_galaxy_decoder, single_band_fitted_powerlaw_psf
 ):
     # create training dataset
-    n_bands = 2
+    n_bands = 1
     max_stars = 20
     mean_stars = 15
     min_stars = 5
@@ -22,13 +22,12 @@ def trained_star_encoder(
     # set background
     background = torch.zeros(n_bands, slen, slen, device=device)
     background[0] = 686.0
-    background[1] = 1123.0
 
     # simulate dataset
     n_images = 128
     simulator_args = (
         single_band_galaxy_decoder,
-        fitted_powerlaw_psf,
+        single_band_fitted_powerlaw_psf,
         background,
     )
 
@@ -39,7 +38,7 @@ def trained_star_encoder(
         mean_sources=mean_stars,
         min_sources=min_stars,
         f_min=f_min,
-        star_prob=1.0,  # enforce only stars are created in the training images.
+        prob_galaxy=0.0,  # enforce only stars are created in the training images.
     )
 
     dataset = simulated_datasets.SourceDataset(
@@ -47,14 +46,14 @@ def trained_star_encoder(
     )
 
     # setup Star Encoder
-    star_encoder = sourcenet.SourceEncoder(
+    encoder = sourcenet.SourceEncoder(
         slen=slen,
         ptile_slen=8,
         step=2,
         edge_padding=3,
         n_bands=n_bands,
         max_detections=2,
-        n_source_params=n_bands,  # star has n_bands # fluxes
+        n_galaxy_params=single_band_galaxy_decoder.latent_dim,
         enc_conv_c=5,
         enc_kern=3,
         enc_hidden=64,
@@ -63,11 +62,10 @@ def trained_star_encoder(
     # train encoder
     # training wrapper
     SleepTraining = train.SleepTraining(
-        model=star_encoder,
+        model=encoder,
         dataset=dataset,
         slen=slen,
         n_bands=n_bands,
-        n_source_params=n_bands,  # star has n_bands # fluxes
         verbose=False,
         batchsize=32,
     )
@@ -75,31 +73,30 @@ def trained_star_encoder(
     n_epochs = 100 if use_cuda else 1
     SleepTraining.run(n_epochs=n_epochs)
 
-    return star_encoder
+    return encoder
 
 
 class TestStarSleepEncoder:
-    @pytest.mark.parametrize("n_star", [1, 3])
-    def test_star_sleep(self, trained_star_encoder, n_star, data_path):
+    def test_star_sleep(self, trained_encoder, test_star):
 
         # load test image
-        test_star = torch.load(data_path.joinpath(f"{n_star}star_test_params"))
         test_image = test_star["images"]
 
-        assert test_star["fluxes"].min() > 0
-
-        # get the estimated params
-        (
-            est_locs,
-            est_source_params,
-            est_n_sources,
-        ) = trained_star_encoder.sample_encoder(
-            test_image.to(device),
-            n_samples=1,
-            return_map_n_sources=True,
-            return_map_source_params=True,
-            training=False,
-        )
+        with torch.no_grad():
+            # get the estimated params
+            trained_encoder.eval()
+            (
+                n_sources,
+                locs,
+                galaxy_params,
+                log_fluxes,
+                galaxy_bool,
+            ) = trained_encoder.sample_encoder(
+                test_image.to(device),
+                n_samples=1,
+                return_map_n_sources=True,
+                return_map_source_params=True,
+            )
 
         # we only expect our assert statements to be true
         # when the model is trained in full, which requires cuda
@@ -107,24 +104,15 @@ class TestStarSleepEncoder:
             return
 
         # test that parameters match.
-        assert est_n_sources == test_star["n_sources"].to(device)
+        assert n_sources == test_star["n_sources"].to(device)
 
-        # locs
-        true_locs = test_star["locs"].to(device)
-        true_ind = true_locs.argsort(1)
-        true_ind = true_ind[0, :, 0]
-
-        est_locs = est_locs.to(device)
-        est_ind = est_locs.to(device).argsort(1)
-        est_ind = est_ind[0, :, 0]
-
-        diff_locs = true_locs[:, true_ind, :] - est_locs[:, est_ind, :]
+        diff_locs = test_star["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
         diff_locs *= test_image.size(-1)
         assert diff_locs.abs().max() <= 0.5
 
         # fluxes
-        true_source_params = test_star["log_fluxes"][:, true_ind, :].to(device)
-        est_source_params = est_source_params[:, est_ind, :].to(device)
-        diff = true_source_params - est_source_params
-        assert (diff.abs() <= est_source_params.abs() * 0.10).all()
-        assert (diff.abs() <= true_source_params.abs() * 0.10).all()
+        diff = test_star["log_fluxes"].sort(1)[0].to(device) - log_fluxes.sort(1)[0]
+        assert torch.all(diff.abs() <= log_fluxes.sort(1)[0].abs() * 0.10)
+        assert torch.all(
+            diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs().to(device) * 0.10
+        )

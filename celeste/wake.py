@@ -181,12 +181,20 @@ class ModelParams(nn.Module):
 
 
 def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
-    locs_sampled, log_fluxes_sampled, n_stars_sampled = star_encoder.sample_encoder(
-        image,
-        n_samples=n_samples,
-        return_map_n_sources=run_map,
-        return_map_source_params=run_map,
-    )[0:3]
+    with torch.no_grad():
+        star_encoder.eval()
+        (
+            n_stars_sampled,
+            locs_sampled,
+            galaxy_params_sampled,
+            log_fluxes_sampled,
+            galaxy_bool_sampled,
+        ) = star_encoder.sample_encoder(
+            image,
+            n_samples=n_samples,
+            return_map_n_sources=run_map,
+            return_map_source_params=run_map,
+        )
 
     max_stars = log_fluxes_sampled.shape[1]
     is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
@@ -194,9 +202,7 @@ def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
     fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
     loss = model_params.get_loss(
-        locs=locs_sampled.detach(),
-        fluxes=fluxes_sampled.detach(),
-        n_stars=n_stars_sampled.detach(),
+        locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
     )[1].mean()
 
     return loss
@@ -215,15 +221,9 @@ def run_wake(
 ):
     model_params = ModelParams(image, init_psf_params, init_background_params)
 
-    avg_loss = 0.0
-    counter = 0
     t0 = time.time()
     test_losses = []
 
-    # optimizer = optim.Adam([{'params': model_params.power_law_psf.parameters(),
-    #                         'lr': lr},
-    #                         {'params': model_params.planar_background.parameters(),
-    #                         'lr': lr}])
     optimizer = optim.Adam(
         [{"params": model_params.power_law_psf.parameters(), "lr": lr}]
     )
@@ -239,9 +239,6 @@ def run_wake(
 
         loss.backward()
         optimizer.step()
-
-        # avg_loss += loss.detach()
-        # counter += 1
 
         if ((epoch % print_every) == 0) or (epoch == n_epochs):
             eval_loss = get_wake_loss(
