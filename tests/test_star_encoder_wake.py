@@ -16,8 +16,8 @@ class TestStarEncoderTraining:
         psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
         true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
         init_psf_params = true_psf_params.clone()
-        init_psf_params[0, 0:2] += torch.tensor([1.0, 1.0]).to(device)
-        init_psf_params[1, 0:2] += torch.tensor([1.0, 1.0]).to(device)
+        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device)
+        init_psf_params[1, 1:3] += torch.tensor([1.0, 1.0]).to(device)
 
         init_psf = psf_transform.PowerLawPSF(init_psf_params).forward().detach()
 
@@ -127,9 +127,9 @@ class TestStarEncoderTraining:
             trained_star_encoder,
             init_psf_params,
             init_background_params,
-            n_samples=1500,
+            n_samples=1000,
             n_epochs=n_epochs,
-            lr=0.01,
+            lr=0.001,
             print_every=10,
             run_map=False,
         )
