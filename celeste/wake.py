@@ -4,12 +4,15 @@ from torch import optim
 
 import numpy as np
 
-from .datasets.simulated_datasets import get_mgrid, plot_multiple_stars
+from .datasets.simulated_datasets import (
+    get_mgrid,
+    plot_multiple_stars,
+    get_is_on_from_n_sources,
+)
 from .psf_transform import PowerLawPSF
+from celeste import device
 
 import time
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def _sample_image(observed_image, sample_every=10):
@@ -85,7 +88,7 @@ class PlanarBackground(nn.Module):
 
 
 class ModelParams(nn.Module):
-    def __init__(self, observed_image, init_psf_params, init_background_params, pad=5):
+    def __init__(self, observed_image, init_psf_params, init_background_params, pad=0):
 
         super(ModelParams, self).__init__()
 
@@ -125,7 +128,7 @@ class ModelParams(nn.Module):
 
     def _plot_stars(self, locs, fluxes, n_stars, psf):
         self.stars = plot_multiple_stars(
-            self.slen, locs, n_stars, fluxes, psf, self.cached_grid
+            self.slen, locs, n_stars, psf, fluxes, self.cached_grid
         )
 
     def _get_init_background(self, sample_every=25):
@@ -178,17 +181,28 @@ class ModelParams(nn.Module):
 
 
 def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
-    locs_sampled, fluxes_sampled, n_stars_sampled = star_encoder.sample_encoder(
-        image,
-        return_map_n_stars=run_map,
-        return_map_star_params=run_map,
-        n_samples=n_samples,
-    )[0:3]
+    with torch.no_grad():
+        star_encoder.eval()
+        (
+            n_stars_sampled,
+            locs_sampled,
+            galaxy_params_sampled,
+            log_fluxes_sampled,
+            galaxy_bool_sampled,
+        ) = star_encoder.sample_encoder(
+            image,
+            n_samples=n_samples,
+            return_map_n_sources=run_map,
+            return_map_source_params=run_map,
+        )
+
+    max_stars = log_fluxes_sampled.shape[1]
+    is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
+    is_on_array = is_on_array.unsqueeze(-1).float()
+    fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
     loss = model_params.get_loss(
-        locs=locs_sampled.detach(),
-        fluxes=fluxes_sampled.detach(),
-        n_stars=n_stars_sampled.detach(),
+        locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
     )[1].mean()
 
     return loss
@@ -200,7 +214,6 @@ def run_wake(
     init_psf_params,
     init_background_params,
     n_samples,
-    out_filename,
     n_epochs=100,
     lr=1e-3,
     print_every=20,
@@ -208,15 +221,9 @@ def run_wake(
 ):
     model_params = ModelParams(image, init_psf_params, init_background_params)
 
-    avg_loss = 0.0
-    counter = 0
     t0 = time.time()
     test_losses = []
 
-    # optimizer = optim.Adam([{'params': model_params.power_law_psf.parameters(),
-    #                         'lr': lr},
-    #                         {'params': model_params.planar_background.parameters(),
-    #                         'lr': lr}])
     optimizer = optim.Adam(
         [{"params": model_params.power_law_psf.parameters(), "lr": lr}]
     )
@@ -233,9 +240,6 @@ def run_wake(
         loss.backward()
         optimizer.step()
 
-        # avg_loss += loss.detach()
-        # counter += 1
-
         if ((epoch % print_every) == 0) or (epoch == n_epochs):
             eval_loss = get_wake_loss(
                 image, star_encoder, model_params, n_samples=1, run_map=True
@@ -249,21 +253,9 @@ def run_wake(
             )
 
             test_losses.append(eval_loss)
-            np.savetxt(out_filename + "-wake_losses", test_losses)
 
             # reset
-            avg_loss = 0.0
-            counter = 0
             t0 = time.time()
-
-        np.save(
-            out_filename + "-powerlaw_psf_params",
-            list(model_params.power_law_psf.parameters())[0].data.cpu().numpy(),
-        )
-        np.save(
-            out_filename + "-planarback_params",
-            list(model_params.planar_background.parameters())[0].data.cpu().numpy(),
-        )
 
     map_loss = get_wake_loss(
         image, star_encoder, model_params, n_samples=1, run_map=True
