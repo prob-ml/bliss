@@ -4,6 +4,24 @@ import torch
 
 from celeste.datasets.simulated_datasets import get_fitted_powerlaw_psf
 from celeste.datasets.galaxy_datasets import DecoderSamples
+from celeste import use_cuda
+
+
+def pytest_addoption(parser):
+    parser.addoption("--dev", action="store", default="0", help="ID of device to use.")
+
+
+def pytest_generate_tests(metafunc):
+    # This is called for every test. Only get/set command line arguments
+    # if the argument is specified in the list of test "fixturenames".
+    option_value = metafunc.config.option.name
+    if "dev" in metafunc.fixturenames and option_value is not None:
+        metafunc.parametrize("dev", [option_value])
+
+
+@pytest.fixture(scope="session")
+def device(dev):
+    return torch.device(f"cuda:{dev}" if use_cuda else "cpu")
 
 
 @pytest.fixture(scope="session")

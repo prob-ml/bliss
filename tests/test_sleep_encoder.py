@@ -3,7 +3,7 @@ import pytest
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 
-from celeste import device, use_cuda
+from celeste import use_cuda
 from celeste import train
 from celeste.datasets import simulated_datasets
 from celeste.models import sourcenet
@@ -16,7 +16,9 @@ def trained_encoder(
     single_band_galaxy_decoder,
     single_band_fitted_powerlaw_psf,
     profile,
+    device,
 ):
+
     # create training dataset
     n_bands = 1
     max_stars = 20
