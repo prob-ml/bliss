@@ -251,7 +251,7 @@ def _get_log_probs_all_perms(
 
         _prob_galaxy = prob_galaxy[:, perm]
         galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
-        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log1p(_prob_galaxy)
+        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - _prob_galaxy)
         galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
 
     return (

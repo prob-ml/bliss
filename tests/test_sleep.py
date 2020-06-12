@@ -235,7 +235,7 @@ class TestStarEncoderObjective:
 
                 p = _prob_galaxy.unsqueeze(0)[:, perm].squeeze()
                 galaxy_bool_loss_perm = -_true_galaxy_bool * torch.log(p)
-                galaxy_bool_loss_perm -= (1 - _true_galaxy_bool) * torch.log1p(p)
+                galaxy_bool_loss_perm -= (1 - _true_galaxy_bool) * torch.log(1 - p)
 
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_perm = deepcopy(perm)
