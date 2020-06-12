@@ -8,20 +8,19 @@ from celeste import use_cuda
 
 
 def pytest_addoption(parser):
-    parser.addoption("--dev", action="store", default="0", help="ID of device to use.")
-
-
-def pytest_generate_tests(metafunc):
-    # This is called for every test. Only get/set command line arguments
-    # if the argument is specified in the list of test "fixturenames".
-    option_value = metafunc.config.option.name
-    if "dev" in metafunc.fixturenames and option_value is not None:
-        metafunc.parametrize("dev", [option_value])
+    parser.addoption(
+        "--device-id", action="store", default="0", help="ID of device to use."
+    )
 
 
 @pytest.fixture(scope="session")
-def device(dev):
-    return torch.device(f"cuda:{dev}" if use_cuda else "cpu")
+def device_id(pytestconfig):
+    return pytestconfig.getoption("device_id")
+
+
+@pytest.fixture(scope="session")
+def device(device_id):
+    return torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
 
 
 @pytest.fixture(scope="session")
