@@ -18,7 +18,6 @@ def trained_encoder(
     profile,
     device,
 ):
-
     # create training dataset
     n_bands = 1
     max_stars = 20

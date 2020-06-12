@@ -4,12 +4,12 @@ import torch
 
 from celeste.datasets.simulated_datasets import get_fitted_powerlaw_psf
 from celeste.datasets.galaxy_datasets import DecoderSamples
-from celeste import use_cuda
+from celeste import use_cuda, update_device
 
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--device-id", action="store", default="0", help="ID of device to use."
+        "--device-id", action="store", default="0", help="ID of cuda device to use."
     )
 
 
@@ -20,7 +20,9 @@ def device_id(pytestconfig):
 
 @pytest.fixture(scope="session")
 def device(device_id):
-    return torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
+    new_device = torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
+    update_device(new_device)
+    return new_device
 
 
 @pytest.fixture(scope="session")
