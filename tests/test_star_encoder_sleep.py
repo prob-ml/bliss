@@ -77,11 +77,9 @@ def trained_encoder(
 
 
 class TestStarSleepEncoder:
-    @pytest.mark.parametrize("n_star", [1, 3])
-    def test_star_sleep(self, trained_encoder, n_star, data_path):
+    def test_star_sleep(self, trained_encoder, test_star):
 
         # load test image
-        test_star = torch.load(data_path.joinpath(f"{n_star}_star_test.pt"))
         test_image = test_star["images"]
 
         with torch.no_grad():
