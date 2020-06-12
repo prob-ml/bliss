@@ -43,7 +43,7 @@ class TestStarEncoderTraining:
         init_psf = init_psf_setup["init_psf"]
 
         # simulate dataset
-        n_images = 64 * 5
+        n_images = 64 * 3
         simulator_args = (
             single_band_galaxy_decoder,
             init_psf,
@@ -89,7 +89,7 @@ class TestStarEncoderTraining:
             batchsize=32,
         )
 
-        n_epochs = 500 if use_cuda else 1
+        n_epochs = 300 if use_cuda else 1
         SleepTraining.run(n_epochs=n_epochs)
 
         return star_encoder
@@ -131,7 +131,7 @@ class TestStarEncoderTraining:
             n_samples=1000,
             n_epochs=n_epochs,
             lr=0.001,
-            print_every=5000,
+            print_every=10,
             run_map=False,
         )
 
