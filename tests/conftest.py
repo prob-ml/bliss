@@ -1,5 +1,6 @@
 import pytest
 import pathlib
+import torch
 
 from celeste.datasets.simulated_datasets import get_fitted_powerlaw_psf
 from celeste.datasets.galaxy_datasets import DecoderSamples
@@ -32,3 +33,9 @@ def single_band_galaxy_decoder(data_path):
     n_bands = 1
     galaxy_decoder_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
     return DecoderSamples(galaxy_slen, galaxy_decoder_file, n_bands=n_bands)
+
+
+@pytest.fixture(scope="session")
+def test_star(data_path):
+    test_star = torch.load(data_path.joinpath("3_star_test.pt"))
+    return test_star
