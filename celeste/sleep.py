@@ -209,11 +209,11 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
 def _get_log_probs_all_perms(
     locs_log_probs_all,
-    star_params_log_probs_all,
     galaxy_params_log_probs_all,
+    star_params_log_probs_all,
     prob_galaxy,
-    is_on_array,
     true_galaxy_bool,
+    is_on_array,
 ):
 
     # get log-probability under every possible matching of estimated source to true source
@@ -234,7 +234,8 @@ def _get_log_probs_all_perms(
 
         # if galaxy, evaluate the galaxy parameters,
         # hence the multiplication by (true_galaxy_bool)
-        # TODO: Why do you take diagonal here? Part of selecting that permutation???
+        # the diagonal is a clever way of selecting the elements of each permutation (first index
+        # of mean/var with second index of true_param etc.)
         galaxy_params_log_probs_all_perm[:, i] = (
             galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
             * is_on_array
@@ -248,7 +249,6 @@ def _get_log_probs_all_perms(
             * (1 - true_galaxy_bool)
         ).sum(1)
 
-        # TODO: Should `prob_galaxy` also be a tensor like the others? shape=max_detections**2 ??
         _prob_galaxy = prob_galaxy[:, perm]
         galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
         galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log1p(_prob_galaxy)
@@ -278,14 +278,14 @@ def _get_min_perm_loss(
         galaxy_bool_log_probs_all_perm,
     ) = _get_log_probs_all_perms(
         locs_log_probs_all,
-        star_params_log_probs_all,
         galaxy_params_log_probs_all,
+        star_params_log_probs_all,
         prob_galaxy,
-        is_on_array,
         true_galaxy_bool,
+        is_on_array,
     )
 
-    # TODO: Why do we select it based on the location losses?
+    # TODO: Why do we select it based on the location losses only?
     # find the permutation that minimizes the location losses
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
 
