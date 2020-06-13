@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch import optim
+import pytorch_lightning as ptl
 
 import numpy as np
 
@@ -146,15 +147,23 @@ class ModelParams(nn.Module):
     def get_psf(self):
         return self.power_law_psf.forward()
 
-    def get_loss(self, use_cached_stars=False, locs=None, fluxes=None, n_stars=None):
-        background = self.get_background()
+    def get_loss(
+        self,
+        psf,
+        background,
+        use_cached_stars=False,
+        locs=None,
+        fluxes=None,
+        n_stars=None,
+    ):
+        # background = self.get_background()
 
         if not use_cached_stars:
             assert locs is not None
             assert fluxes is not None
             assert n_stars is not None
 
-            psf = self.get_psf()
+            # psf = self.get_psf()
             self._plot_stars(locs, fluxes, n_stars, psf)
         else:
             assert hasattr(self, "stars")
@@ -262,3 +271,81 @@ def run_wake(
     )
 
     return model_params, map_loss
+
+
+class WakeEncoder(ptl.LightningModule):
+
+    # ---------------
+    # Model
+    # ----------------
+
+    def __init__(
+        self, star_encoder, init_psf_params, init_background_params, n_samples, lr,
+    ):
+        super(WakeEncoder, self).__init__()
+
+        self.init_psf_params = init_psf_params
+        self.init_background_params = init_background_params
+        self.star_encoder = star_encoder.eval()
+        self.n_samples = n_samples
+        self.lr = lr
+
+    def forwad(self):
+        background = self.model_params.get_background()
+        psf = self.model_params.get_psf()
+        return background, psf
+
+    # ---------------
+    # Loss
+    # ----------------
+
+    def get_wake_loss(self, obs_img, run_map=False):
+        with torch.no_grad():
+            (
+                n_stars_sampled,
+                locs_sampled,
+                galaxy_params_sampled,
+                log_fluxes_sampled,
+                galaxy_bool_sampled,
+            ) = self.star_encoder.sample_encoder(
+                obs_img,
+                n_samples=self.n_samples,
+                return_map_n_sources=run_map,
+                return_map_source_params=run_map,
+            )
+
+        max_stars = log_fluxes_sampled.shape[1]
+        is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
+        is_on_array = is_on_array.unsqueeze(-1).float()
+        fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
+
+        background, psf = self.forward()
+        loss = self.model_params.get_loss(
+            background,
+            psf,
+            locs=locs_sampled,
+            fluxes=fluxes_sampled,
+            n_stars=n_stars_sampled,
+        )[1].mean()
+
+        return loss
+
+    # ---------------
+    # Optimizer
+    # ----------------
+
+    def configure_optimizers(self):
+        return optim.Adam(
+            [{"params": self.model_params.power_law_psf.parameters(), "lr": self.lr}]
+        )
+
+    # ---------------
+    # Training
+    # ----------------
+
+    def training_step(self, batch, batch_idx):
+        observed_img = batch
+        loss = get_wake_loss()
+        logs = {"train_loss": loss}
+
+        return {"loss": loss, "log": logs}
