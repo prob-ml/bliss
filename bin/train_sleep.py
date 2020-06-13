@@ -175,10 +175,11 @@ if __name__ == "__main__":
     )
 
     # data params that can be changed, default==None means use ones in .json file.
-    parser.add_argument("--slen", type=int, default=None)
+    parser.add_argument("--slen", type=int, default=100)
     parser.add_argument("--n-bands", type=int, default=1)
-    parser.add_argument("--max-sources", type=int, default=None)
-    parser.add_argument("--mean-sources", type=int, default=None)
+    parser.add_argument("--max-sources", type=int, default=10)
+    parser.add_argument("--mean-sources", type=int, default=5)
+    parser.add_argument("--min-sources", type=int, default=1)
 
     # training params
     parser.add_argument(
