@@ -149,22 +149,16 @@ class ModelParams(nn.Module):
         return self.power_law_psf.forward()
 
     def get_loss(
-        self,
-        psf,
-        background,
-        use_cached_stars=False,
-        locs=None,
-        fluxes=None,
-        n_stars=None,
+        self, use_cached_stars=False, locs=None, fluxes=None, n_stars=None,
     ):
-        # background = self.get_background()
+        background = self.get_background()
 
         if not use_cached_stars:
             assert locs is not None
             assert fluxes is not None
             assert n_stars is not None
 
-            # psf = self.get_psf()
+            psf = self.get_psf()
             self._plot_stars(locs, fluxes, n_stars, psf)
         else:
             assert hasattr(self, "stars")
@@ -305,7 +299,7 @@ class WakePhase(ptl.LightningModule):
     # Loss
     # ----------------
 
-    def get_wake_loss(self, obs_img, n_samples, run_map=False):
+    def get_wake_loss(self, obs_img, model_params, n_samples, run_map=False):
         (
             n_stars_sampled,
             locs_sampled,
@@ -324,13 +318,8 @@ class WakePhase(ptl.LightningModule):
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        self.model_params = self.forward()
-        loss = self.model_params.get_loss(
-            self.model_params.background,
-            self.model_params.psf,
-            locs=locs_sampled,
-            fluxes=fluxes_sampled,
-            n_stars=n_stars_sampled,
+        loss = model_params.get_loss(
+            locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
         )[1].mean()
 
         return loss
@@ -360,14 +349,16 @@ class WakePhase(ptl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         img = batch
-        loss = self.get_wake_loss(img, self.n_samples)
+        model_params = self(img)
+        loss = self.get_wake_loss(img, model_params, self.n_samples)
         logs = {"train_loss": loss}
 
         return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
         img = batch
-        loss = self.get_wake_loss(img, 1, run_map=True)
+        model_params = self(img)
+        loss = self.get_wake_loss(img, model_params, 1, run_map=True)
         logs = {"val_loss": loss}
 
         return {"loss": loss, "log": logs}
