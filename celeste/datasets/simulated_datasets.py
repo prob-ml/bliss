@@ -295,6 +295,8 @@ class SourceSimulator(object):
         max_sources=20,
         mean_sources=10,
         min_sources=0,
+        loc_min=0.0,
+        loc_max=1.0,
         f_min=1e3,
         f_max=1e6,
         alpha=0.5,
@@ -321,6 +323,7 @@ class SourceSimulator(object):
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
+        # TODO: make sure galaxy_decoder is in .eval() mode and .detacched().
         self.galaxy_decoder = galaxy_decoder
         self.galaxy_slen = self.galaxy_decoder.slen
         self.latent_dim = self.galaxy_decoder.latent_dim
@@ -331,6 +334,10 @@ class SourceSimulator(object):
         self.f_max = f_max
         self.alpha = alpha  # pareto parameter.
         self.use_pareto = use_pareto
+
+        self.loc_min = loc_min
+        self.loc_max = loc_max
+        assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
 
         self.transpose_psf = transpose_psf
         self.psf = psf.to(device)
@@ -451,7 +458,9 @@ class SourceSimulator(object):
 
     def sample_parameters(self, batchsize=1):
         n_sources, is_on_array = self._sample_n_sources(batchsize)
+
         locs = _sample_locs(self.max_sources, is_on_array, batchsize)
+        locs = locs.clamp(self.loc_min, self.loc_max)
 
         n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
             n_sources, is_on_array

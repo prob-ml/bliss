@@ -97,7 +97,6 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         """
         z = self.fc(z)
 
-        # view takes in -1 and automatically determines that dimension.
         # This dimension is the number of samples.
         z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
         z = self.deconv(z)

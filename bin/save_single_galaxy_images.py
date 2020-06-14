@@ -83,9 +83,7 @@ def main(args):
     output_path = paths["data"].joinpath(f"{args.output_dir}")
     output_path.mkdir(exist_ok=True)
 
-    dataset = all_datasets[args.dataset_name].load_dataset_from_params(
-        args.dset_param_file
-    )
+    dataset = all_datasets[args.dataset_name].from_args(args)
 
     file_paths = [output_path.joinpath(f"image{i}") for i in range(args.n_processes)]
     generate_args = [
@@ -127,8 +125,6 @@ if __name__ == "__main__":
 
     # properties of individually saved images.
     parser.add_argument("--dataset", type=str, choices=all_datasets.keys())
-    parser.add_argument("--slen", type=int, default=51)
-    parser.add_argument("--n-bands", type=int)
     parser.add_argument("--images-per-process", type=int, required=True)
     parser.add_argument(
         "--n-processes",
@@ -136,6 +132,15 @@ if __name__ == "__main__":
         help="Number of parallel processes to run to write images in disk.",
         required=True,
     )
+
+    parser.add_argument("--slen", type=int, default=51)
+    parser.add_argument("--n-bands", type=int)
+    parser.add_argument("--snr", type=float, default=200, help="SNR to use for noise")
+
+    catsim_group = parser.add_argument_group(
+        "Catsim Dataset Options", "Specify options for rendering catsim images",
+    )
+    catsim_datasets.CatsimGalaxies.add_args(catsim_group)
 
     pargs = parser.parse_args()
 

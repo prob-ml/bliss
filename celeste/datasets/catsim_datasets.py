@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import inspect
 import sys
 
 import descwl
@@ -8,6 +9,11 @@ from astropy.table import Column, Table
 import galsim
 
 from .galaxy_datasets import SingleGalaxyDataset
+
+bands_dict = {
+    1: ("i",),
+    6: ("y", "z", "i", "r", "g", "u"),
+}
 
 
 def get_pixel_scale(survey_name):
@@ -47,7 +53,6 @@ class CatsimGalaxies(SingleGalaxyDataset):
         filter_dict=None,
         snr=200,
         n_bands=6,
-        bands: tuple = ("y", "z", "i", "r", "g", "u"),
         dtype=np.float32,
         preserve_flux=False,
         add_noise=True,
@@ -81,11 +86,10 @@ class CatsimGalaxies(SingleGalaxyDataset):
             preserve_flux is False
         ), "Otherwise variance of the noise will change which is not desirable."
         # ToDo: Create a test or assertion to check that mean == variance approx.
-        assert n_bands == len(bands)
 
         self.survey_name = survey_name
-        self.bands = bands
         self.n_bands = n_bands
+        self.bands = bands_dict[self.n_bands]
 
         self.slen = slen
         self.pixel_scale = get_pixel_scale(self.survey_name)
@@ -169,6 +173,27 @@ class CatsimGalaxies(SingleGalaxyDataset):
         )
         return filters
 
+    @staticmethod
+    def add_args(parser):
+        # add arguments to configure dataset directly from parser
+        parser.add_argument(
+            "--catalog-file", type=str, help="Catalog file to load entries"
+        )
+
+        parser.add_argument("--survey", type=str, default="LSST", help="Survey to use.")
+
+    @classmethod
+    def from_args(cls, args):
+        args_dict = vars(args)
+        catalog_file = args_dict["catalog_file"]
+
+        kwargs = inspect.getfullargspec(cls.__init__).args
+        kwargs.remove("catalog_file")
+
+        args_dict = {k: v for k, v in args_dict.items() if k in kwargs}
+
+        return cls.__init__(catalog_file, **args_dict)
+
 
 # ToDo: LATER More flexibility than drawing randomly centered in central pixel.
 class CatsimRenderer(object):
@@ -183,7 +208,7 @@ class CatsimRenderer(object):
         min_snr=0.05,
         truncate_radius=30,
         add_noise=True,
-        preserve_flux=True,
+        preserve_flux=False,
         verbose=False,
     ):
         """
