@@ -18,6 +18,7 @@ def trained_encoder(
     profile,
     device,
 ):
+
     # create training dataset
     n_bands = 1
     max_stars = 20
@@ -93,7 +94,7 @@ def trained_encoder(
 
 
 class TestStarSleepEncoder:
-    def test_star_sleep(self, trained_encoder, test_star):
+    def test_star_sleep(self, trained_encoder, test_star, device):
 
         # load test image
         test_image = test_star["images"]
