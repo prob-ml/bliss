@@ -14,16 +14,40 @@ def get_pixel_scale(survey_name):
     return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
 
 
+def save_images(
+    dataset, file_path, prop_file_path=None, n_images=1,
+):
+    """
+    Generate images from dataset cls and save num_images into h5py file.
+    """
+
+    if prop_file_path:
+        with open(prop_file_path, "w") as prop_file:
+            dataset.print_props(prop_file)
+
+    with h5py.File(file_path, "w") as images_file:
+        hds_shape = (n_images, dataset.n_bands, dataset.slen, dataset.slen)
+        hds = images_file.create_dataset("images", hds_shape, dtype=dataset.dtype)
+        for i in range(n_images):
+            random_idx = random.randrange(len(dataset))
+            output = dataset[random_idx]
+            image = output["image"]
+            hds[i, :, :, :] = image
+            hds.flush()
+        hds.attrs["background"] = dataset.background
+        hds.flush()
+
+
 class CatsimGalaxies(SingleGalaxyDataset):
     def __init__(
         self,
         catalog_file,
-        survey_name=None,
-        slen=41,
+        survey_name="LSST",
+        slen=51,
         filter_dict=None,
         snr=200,
-        n_bands=1,
-        bands=None,
+        n_bands=6,
+        bands: tuple = ("y", "z", "i", "r", "g", "u"),
         dtype=np.float32,
         preserve_flux=False,
         add_noise=True,
@@ -46,7 +70,7 @@ class CatsimGalaxies(SingleGalaxyDataset):
         assert survey_name == "LSST", "Only using default survey name for now is LSST."
         assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
         assert (
-            slen >= 41
+            slen >= 51
         ), "Does not seem to work well if the number of pixels is too low."
         assert slen % 2 == 1, "Odd number of pixels is preferred."
         assert (
@@ -144,30 +168,6 @@ class CatsimGalaxies(SingleGalaxyDataset):
             <= 25.3  # cut on magnitude same as BTK does (gold sample)
         )
         return filters
-
-
-def save_images(
-    dataset, file_path, prop_file_path=None, n_images=1,
-):
-    """
-    Generate images from dataset cls and save num_images into h5py file.
-    """
-
-    if prop_file_path:
-        with open(prop_file_path, "w") as prop_file:
-            dataset.print_props(prop_file)
-
-    with h5py.File(file_path, "w") as images_file:
-        hds_shape = (n_images, dataset.n_bands, dataset.slen, dataset.slen)
-        hds = images_file.create_dataset("images", hds_shape, dtype=dataset.dtype)
-        for i in range(n_images):
-            random_idx = random.randrange(len(dataset))
-            output = dataset[random_idx]
-            image = output["image"]
-            hds[i, :, :, :] = image
-            hds.flush()
-        hds.attrs["background"] = dataset.background
-        hds.flush()
 
 
 # ToDo: LATER More flexibility than drawing randomly centered in central pixel.

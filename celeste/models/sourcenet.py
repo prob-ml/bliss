@@ -500,10 +500,6 @@ class SourceEncoder(nn.Module):
 
         return indx_mats, prob_n_source_indx
 
-    ######################
-    # Forward modules
-    ######################
-
     def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
         """
         Index into all possible combinations of variational parameters (h) to obtain actually
