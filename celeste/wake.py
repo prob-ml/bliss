@@ -292,7 +292,7 @@ class WakePhase(ptl.LightningModule):
         self.n_samples = n_samples
         self.lr = lr
 
-    def forwad(self, img):
+    def forward(self, img):
         return ModelParams(img, self.init_psf_params, self.init_background_params)
 
     # ---------------
@@ -349,16 +349,16 @@ class WakePhase(ptl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         img = batch
-        model_params = self(img)
-        loss = self.get_wake_loss(img, model_params, self.n_samples)
+        self.model_params = self(img)
+        loss = self.get_wake_loss(img, self.model_params, self.n_samples)
         logs = {"train_loss": loss}
 
         return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
         img = batch
-        model_params = self(img)
-        loss = self.get_wake_loss(img, model_params, 1, run_map=True)
+        self.model_params = self(img)
+        loss = self.get_wake_loss(img, self.model_params, 1, run_map=True)
         logs = {"val_loss": loss}
 
         return {"loss": loss, "log": logs}
