@@ -8,15 +8,13 @@ import multiprocessing
 
 from . import setup_paths
 
-from celeste.datasets import galaxy_datasets
+from celeste.datasets import catsim_datasets
 from celeste.datasets.catsim_datasets import save_images
 
-all_datasets = {
-    cls.__name__: cls for cls in galaxy_datasets.SingleGalaxyDataset.__subclasses__()
-}
+all_datasets = {"CatsimGalaxies": catsim_datasets.CatsimGalaxies}
 
 final_image_name = "images.hd5f"
-background_name = "background.npy"
+background_name = "background.pt"
 
 
 def generate(
@@ -103,9 +101,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Use multiprocessing to save images from the specified dataset into .hdf5 "
-        "file in the default data directory, along with the background used for this images "
-        "in background.npy"
+        description="Use multiprocessing to save images from the specified dataset into "
+        "images.hdf5 file in the default data directory, along with the background used for "
+        "this images in background.pt"
     )
 
     # io stuff
@@ -120,7 +118,7 @@ if __name__ == "__main__":
         "--output-dir",
         type=str,
         required=True,
-        description="Results will be written to data/output_dir",
+        help="Results will be written to data/output_dir",
     )
 
     parser.add_argument(

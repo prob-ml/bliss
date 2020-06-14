@@ -9,7 +9,7 @@ from celeste import use_cuda
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--device-id", action="store", default="0", help="ID of cuda device to use."
+        "--device-id", action="store", default=0, help="ID of cuda device to use."
     )
 
 
@@ -22,7 +22,7 @@ def device_id(pytestconfig):
 def device(device_id):
     new_device = torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
     if use_cuda:
-        torch.cuda.set_device(device)
+        torch.cuda.set_device(new_device)
     return new_device
 
 
