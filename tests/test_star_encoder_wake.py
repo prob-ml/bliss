@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 import torch
+import pytorch_lightning as ptl
 
 from celeste import device, use_cuda
 from celeste import psf_transform
@@ -120,23 +121,23 @@ class TestStarEncoderTraining:
         true_psf = single_band_fitted_powerlaw_psf.clone()
         init_psf_params = init_psf_setup["init_psf_params"]
 
-        # run the wake-phase training
-        n_epochs = 4000 if use_cuda else 1
-
-        estimate_params, map_loss = wake.run_wake(
-            test_image.to(device),
+        wake_phase_model = wake.WakePhase(
             trained_star_encoder,
+            test_image,
             init_psf_params,
             init_background_params,
             n_samples=1000,
-            n_epochs=n_epochs,
             lr=0.001,
-            print_every=10,
-            run_map=False,
         )
 
-        # PSF residual reduce by 70%
-        estimate_psf_params = list(estimate_params.power_law_psf.parameters())[0]
+        # run the wake-phase training
+        n_epochs = 4000 if use_cuda else 1
+
+        wake_trainer = ptl.Trainer(gpus=0, max_epochs=n_epochs, val_check_interval=10)
+
+        wake_trainer.fit(wake_phase_model)
+
+        estimate_psf_params = list(wake_phase_model.parameters())[0]
         estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
 
         init_psf = init_psf_setup["init_psf"]

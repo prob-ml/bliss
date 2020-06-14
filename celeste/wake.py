@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch import optim
+from torch.utils.data import DataLoader
 import pytorch_lightning as ptl
 
 import numpy as np
@@ -189,146 +190,160 @@ class ModelParams(nn.Module):
         return recon_mean, loss
 
 
-def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
-    with torch.no_grad():
-        star_encoder.eval()
-        (
-            n_stars_sampled,
-            locs_sampled,
-            galaxy_params_sampled,
-            log_fluxes_sampled,
-            galaxy_bool_sampled,
-        ) = star_encoder.sample_encoder(
-            image,
-            n_samples=n_samples,
-            return_map_n_sources=run_map,
-            return_map_source_params=run_map,
-        )
+# def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
+#    with torch.no_grad():
+#        star_encoder.eval()
+#        (
+#            n_stars_sampled,
+#            locs_sampled,
+#            galaxy_params_sampled,
+#            log_fluxes_sampled,
+#            galaxy_bool_sampled,
+#        ) = star_encoder.sample_encoder(
+#            image,
+#            n_samples=n_samples,
+#            return_map_n_sources=run_map,
+#            return_map_source_params=run_map,
+#        )
 
-    max_stars = log_fluxes_sampled.shape[1]
-    is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
-    is_on_array = is_on_array.unsqueeze(-1).float()
-    fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
+#    max_stars = log_fluxes_sampled.shape[1]
+#    is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
+#    is_on_array = is_on_array.unsqueeze(-1).float()
+#    fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-    loss = model_params.get_loss(
-        locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
-    )[1].mean()
+#    loss = model_params.get_loss(
+#        locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
+#    )[1].mean()
 
-    return loss
-
-
-def run_wake(
-    image,
-    star_encoder,
-    init_psf_params,
-    init_background_params,
-    n_samples,
-    n_epochs=100,
-    lr=1e-3,
-    print_every=20,
-    run_map=False,
-):
-    model_params = ModelParams(image, init_psf_params, init_background_params)
-
-    t0 = time.time()
-    test_losses = []
-
-    optimizer = optim.Adam(
-        [{"params": model_params.power_law_psf.parameters(), "lr": lr}]
-    )
-
-    if run_map:
-        n_samples = 1
-
-    for epoch in range(1, n_epochs + 1):
-
-        optimizer.zero_grad()
-
-        loss = get_wake_loss(image, star_encoder, model_params, n_samples, run_map)
-
-        loss.backward()
-        optimizer.step()
-
-        if ((epoch % print_every) == 0) or (epoch == n_epochs):
-            eval_loss = get_wake_loss(
-                image, star_encoder, model_params, n_samples=1, run_map=True
-            ).detach()
-
-            elapsed = time.time() - t0
-            print(
-                "[{}] loss: {:0.4f} \t[{:.1f} seconds]".format(
-                    epoch, eval_loss, elapsed
-                )
-            )
-
-            test_losses.append(eval_loss)
-
-            # reset
-            t0 = time.time()
-
-    map_loss = get_wake_loss(
-        image, star_encoder, model_params, n_samples=1, run_map=True
-    )
-
-    return model_params, map_loss
+#    return loss
 
 
-class WakeEncoder(ptl.LightningModule):
+# def run_wake(
+#    image,
+#    star_encoder,
+#    init_psf_params,
+#    init_background_params,
+#    n_samples,
+#    n_epochs=100,
+#    lr=1e-3,
+#    print_every=20,
+#    run_map=False,
+# ):
+#   model_params = ModelParams(image, init_psf_params, init_background_params)
+
+#    t0 = time.time()
+#    test_losses = []
+
+#    optimizer = optim.Adam(
+#       [{"params": model_params.power_law_psf.parameters(), "lr": lr}]
+#   )
+
+#   if run_map:
+#       n_samples = 1
+
+#    for epoch in range(1, n_epochs + 1):
+
+#        optimizer.zero_grad()
+
+#        loss = get_wake_loss(image, star_encoder, model_params, n_samples, run_map)
+
+#        loss.backward()
+#        optimizer.step()
+
+#        if ((epoch % print_every) == 0) or (epoch == n_epochs):
+#            eval_loss = get_wake_loss(
+#                image, star_encoder, model_params, n_samples=1, run_map=True
+#            ).detach()
+
+#           elapsed = time.time() - t0
+#            print(
+#                "[{}] loss: {:0.4f} \t[{:.1f} seconds]".format(
+#                    epoch, eval_loss, elapsed
+#                )
+#            )
+
+#            test_losses.append(eval_loss)
+
+#            # reset
+#            t0 = time.time()
+
+#    map_loss = get_wake_loss(
+#        image, star_encoder, model_params, n_samples=1, run_map=True
+#    )
+
+#    return model_params, map_loss
+
+
+class WakePhase(ptl.LightningModule):
 
     # ---------------
     # Model
     # ----------------
 
     def __init__(
-        self, star_encoder, init_psf_params, init_background_params, n_samples, lr,
+        self,
+        star_encoder,
+        observed_img,
+        init_psf_params,
+        init_background_params,
+        n_samples,
+        lr,
     ):
-        super(WakeEncoder, self).__init__()
+        super(WakePhase, self).__init__()
 
+        self.star_encoder = star_encoder
+        self.observed_img = observed_img
         self.init_psf_params = init_psf_params
         self.init_background_params = init_background_params
-        self.star_encoder = star_encoder.eval()
         self.n_samples = n_samples
         self.lr = lr
 
-    def forwad(self):
-        background = self.model_params.get_background()
-        psf = self.model_params.get_psf()
-        return background, psf
+    def forwad(self, img):
+        return ModelParams(img, self.init_psf_params, self.init_background_params)
 
     # ---------------
     # Loss
     # ----------------
 
-    def get_wake_loss(self, obs_img, run_map=False):
-        with torch.no_grad():
-            (
-                n_stars_sampled,
-                locs_sampled,
-                galaxy_params_sampled,
-                log_fluxes_sampled,
-                galaxy_bool_sampled,
-            ) = self.star_encoder.sample_encoder(
-                obs_img,
-                n_samples=self.n_samples,
-                return_map_n_sources=run_map,
-                return_map_source_params=run_map,
-            )
+    def get_wake_loss(self, obs_img, n_samples, run_map=False):
+        (
+            n_stars_sampled,
+            locs_sampled,
+            galaxy_params_sampled,
+            log_fluxes_sampled,
+            galaxy_bool_sampled,
+        ) = self.star_encoder.sample_encoder(
+            obs_img,
+            n_samples=n_samples,
+            return_map_n_sources=run_map,
+            return_map_source_params=run_map,
+        )
 
         max_stars = log_fluxes_sampled.shape[1]
         is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        background, psf = self.forward()
+        self.model_params = self.forward()
         loss = self.model_params.get_loss(
-            background,
-            psf,
+            self.model_params.background,
+            self.model_params.psf,
             locs=locs_sampled,
             fluxes=fluxes_sampled,
             n_stars=n_stars_sampled,
         )[1].mean()
 
         return loss
+
+    # ---------------
+    # Data
+    # ----------------
+
+    def train_dataloader(self):
+        return DataLoader(self.observed_img, batch_size=self.observed_img.shape[0])
+
+    def val_dataloader(self):
+        return DataLoader(self.observed_img, batch_size=self.observed_img.shape[0])
 
     # ---------------
     # Optimizer
@@ -344,8 +359,15 @@ class WakeEncoder(ptl.LightningModule):
     # ----------------
 
     def training_step(self, batch, batch_idx):
-        observed_img = batch
-        loss = get_wake_loss()
+        img = batch
+        loss = self.get_wake_loss(img, self.n_samples)
         logs = {"train_loss": loss}
+
+        return {"loss": loss, "log": logs}
+
+    def validation_step(self, batch, batch_idx):
+        img = batch
+        loss = self.get_wake_loss(img, 1, run_map=True)
+        logs = {"val_loss": loss}
 
         return {"loss": loss, "log": logs}
