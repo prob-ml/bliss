@@ -133,7 +133,7 @@ class TestStarEncoderTraining:
         # run the wake-phase training
         n_epochs = 4000 if use_cuda else 1
 
-        wake_trainer = ptl.Trainer(gpus=0, max_epochs=n_epochs, val_check_interval=10)
+        wake_trainer = ptl.Trainer(gpus=[1], max_epochs=n_epochs, val_check_interval=10)
 
         wake_trainer.fit(wake_phase_model)
 

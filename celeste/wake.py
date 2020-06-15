@@ -149,7 +149,7 @@ class ModelParams(nn.Module):
         return self.power_law_psf.forward()
 
     def get_loss(
-        self, use_cached_stars=False, locs=None, fluxes=None, n_stars=None,
+        self, psf, use_cached_stars=False, locs=None, fluxes=None, n_stars=None,
     ):
         background = self.get_background()
 
@@ -158,7 +158,7 @@ class ModelParams(nn.Module):
             assert fluxes is not None
             assert n_stars is not None
 
-            psf = self.get_psf()
+            # psf = self.get_psf()
             self._plot_stars(locs, fluxes, n_stars, psf)
         else:
             assert hasattr(self, "stars")
@@ -287,39 +287,42 @@ class WakePhase(ptl.LightningModule):
 
         self.star_encoder = star_encoder
         self.observed_img = observed_img
-        self.init_psf_params = init_psf_params
-        self.init_background_params = init_background_params
         self.n_samples = n_samples
         self.lr = lr
 
-    def forward(self, img):
-        return ModelParams(img, self.init_psf_params, self.init_background_params)
+        self.model_params = ModelParams(
+            observed_img, init_psf_params, init_background_params
+        )
+
+    def forward(self):
+        return self.model_params.get_psf()
 
     # ---------------
     # Loss
     # ----------------
 
-    def get_wake_loss(self, obs_img, model_params, n_samples, run_map=False):
-        (
-            n_stars_sampled,
-            locs_sampled,
-            galaxy_params_sampled,
-            log_fluxes_sampled,
-            galaxy_bool_sampled,
-        ) = self.star_encoder.sample_encoder(
-            obs_img,
-            n_samples=n_samples,
-            return_map_n_sources=run_map,
-            return_map_source_params=run_map,
-        )
+    def get_wake_loss(self, obs_img, psf, n_samples, run_map=False):
+        with torch.no_grad():
+            (
+                n_stars_sampled,
+                locs_sampled,
+                galaxy_params_sampled,
+                log_fluxes_sampled,
+                galaxy_bool_sampled,
+            ) = self.star_encoder.sample_encoder(
+                obs_img,
+                n_samples=n_samples,
+                return_map_n_sources=run_map,
+                return_map_source_params=run_map,
+            )
 
         max_stars = log_fluxes_sampled.shape[1]
         is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        loss = model_params.get_loss(
-            locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
+        loss = self.model_params.get_loss(
+            psf, locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
         )[1].mean()
 
         return loss
@@ -349,16 +352,16 @@ class WakePhase(ptl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         img = batch
-        self.model_params = self(img)
-        loss = self.get_wake_loss(img, self.model_params, self.n_samples)
+        psf = self.forward()
+        loss = self.get_wake_loss(img, psf, self.n_samples)
         logs = {"train_loss": loss}
 
         return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
         img = batch
-        self.model_params = self(img)
-        loss = self.get_wake_loss(img, self.model_params, 1, run_map=True)
+        psf = self.forward()
+        loss = self.get_wake_loss(img, psf, 1, run_map=True)
         logs = {"val_loss": loss}
 
         return {"loss": loss, "log": logs}
