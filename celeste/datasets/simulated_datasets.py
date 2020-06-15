@@ -323,7 +323,7 @@ class SourceSimulator(object):
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
-        # TODO: make sure galaxy_decoder is in .eval() mode and .detacched().
+        # TODO: make sure galaxy_decoder is in .eval() mode and .detach().
         self.galaxy_decoder = galaxy_decoder
         self.galaxy_slen = self.galaxy_decoder.slen
         self.latent_dim = self.galaxy_decoder.latent_dim
