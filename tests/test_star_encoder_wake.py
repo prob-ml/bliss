@@ -104,7 +104,7 @@ class TestStarEncoderTraining:
     ):
         # load the test image
         # 3-stars 30*30
-        test_image = test_star["images"]
+        test_image = test_star["images"].to(device)
 
         # initialization
         # initialize background params, which will create the true background
@@ -133,7 +133,9 @@ class TestStarEncoderTraining:
         # run the wake-phase training
         n_epochs = 4000 if use_cuda else 1
 
-        wake_trainer = ptl.Trainer(gpus=[1], max_epochs=n_epochs, val_check_interval=10)
+        wake_trainer = ptl.Trainer(
+            gpus=[1], max_epochs=n_epochs, check_val_every_n_epoch=10
+        )
 
         wake_trainer.fit(wake_phase_model)
 
