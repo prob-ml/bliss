@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import torch
 import pytorch_lightning as ptl
+from pytorch_lightning.profiler import AdvancedProfiler
 
 from celeste import device, use_cuda
 from celeste import psf_transform
@@ -44,7 +45,7 @@ class TestStarEncoderTraining:
         init_psf = init_psf_setup["init_psf"]
 
         # simulate dataset
-        n_images = 64 * 3
+        n_images = 64 * 4
         simulator_args = (
             single_band_galaxy_decoder,
             init_psf,
@@ -133,11 +134,16 @@ class TestStarEncoderTraining:
         # run the wake-phase training
         n_epochs = 4000 if use_cuda else 1
 
+        # implement tensorboard
+        profiler = AdvancedProfiler()
+
         wake_trainer = ptl.Trainer(
             gpus=[0],
+            profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
+            check_val_every_n_epoch=10,
         )
 
         wake_trainer.fit(wake_phase_model)

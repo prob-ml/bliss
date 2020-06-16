@@ -345,6 +345,9 @@ class WakePhase(ptl.LightningModule):
     def train_dataloader(self):
         return DataLoader(self.observed_img, batch_size=None)
 
+    def val_dataloader(self):
+        return DataLoader(self.observed_img, batch_size=None)
+
     # ---------------
     # Optimizer
     # ----------------
@@ -365,3 +368,13 @@ class WakePhase(ptl.LightningModule):
         logs = {"train_loss": loss}
 
         return {"loss": loss, "log": logs}
+
+    def validation_step(self, batch, batch_idx):
+        img = batch.unsqueeze(0)
+        psf = self.forward()
+        loss_val = self.get_wake_loss(img, psf, 1, run_map=True)
+
+        return {"val_loss": loss_val}
+
+    def validation_epoch_end(self, outputs):
+        return {"val_loss": outputs[-1]["val_loss"]}
