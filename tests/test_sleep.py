@@ -71,7 +71,7 @@ def trained_encoder(
     n_epochs = 100 if use_cuda else 1
     SleepTraining.run(n_epochs=n_epochs)
 
-    return encoder
+    return image_encoder
 
 
 class TestStarSleepEncoder:
