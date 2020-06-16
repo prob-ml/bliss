@@ -104,7 +104,7 @@ class TestStarEncoderTraining:
     ):
         # load the test image
         # 3-stars 30*30
-        test_image = test_star["images"].to(device)
+        test_image = test_star["images"]
 
         # initialization
         # initialize background params, which will create the true background
@@ -134,12 +134,17 @@ class TestStarEncoderTraining:
         n_epochs = 4000 if use_cuda else 1
 
         wake_trainer = ptl.Trainer(
-            gpus=[1], max_epochs=n_epochs, check_val_every_n_epoch=10
+            gpus=[0],
+            min_epochs=n_epochs,
+            max_epochs=n_epochs,
+            reload_dataloaders_every_epoch=True,
         )
 
         wake_trainer.fit(wake_phase_model)
 
-        estimate_psf_params = list(wake_phase_model.parameters())[0]
+        estimate_psf_params = list(
+            wake_phase_model.model_params.power_law_psf.parameters()
+        )[0]
         estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
 
         init_psf = init_psf_setup["init_psf"]
