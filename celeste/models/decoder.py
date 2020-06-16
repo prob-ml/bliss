@@ -113,7 +113,7 @@ def _sample_locs(max_sources, is_on_array, batchsize=1):
     return locs
 
 
-def _plot_one_source(slen, locs, source, cached_grid=None):
+def _render_one_source(slen, locs, source, cached_grid=None):
     """
     :param slen:
     :param locs: is batchsize x len((x,y))
@@ -141,8 +141,8 @@ def _plot_one_source(slen, locs, source, cached_grid=None):
     assert (
         source.shape[0] == batchsize
     ), "PSF should be expanded, check if shape is correct."
-    source_plotted = F.grid_sample(source, grid_loc, align_corners=True)
-    return source_plotted
+    source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
+    return source_rendered
 
 
 def _check_sources_and_locs(locs, n_sources, batchsize):
@@ -196,7 +196,7 @@ def get_mgrid(slen):
     return mgrid.type(torch.FloatTensor).to(device)
 
 
-def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
+def render_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     """
 
     Args:
@@ -205,7 +205,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
         n_sources: has shape = (batchsize)
         psf: A psf/star with shape (n_bands x slen x slen) tensor
         fluxes: Is (batchsize x n_bands x max_stars)
-        cached_grid: Grid where the stars should be plotted with shape (slen x slen)
+        cached_grid: Grid where the stars should be rendered with shape (slen x slen)
 
     Returns:
     """
@@ -233,7 +233,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
         fluxes_n = fluxes[:, n, :]  # shape = (batchsize x n_bands)
-        one_star = _plot_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
+        one_star = _render_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
         scene += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(
             batchsize, n_bands, 1, 1
         )
@@ -241,7 +241,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     return scene
 
 
-def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=None):
+def render_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=None):
     batchsize = locs.shape[0]
     n_bands = single_galaxies.shape[2]
 
@@ -261,7 +261,7 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
         ]  # shape = (batchsize x n_bands x slen x slen)
 
         # shape= (batchsize, n_bands, slen, slen)
-        one_galaxy = _plot_one_source(slen, locs_n, galaxy, cached_grid=grid)
+        one_galaxy = _render_one_source(slen, locs_n, galaxy, cached_grid=grid)
         scene += one_galaxy
 
     return scene
@@ -503,14 +503,14 @@ class SourceSimulator(object):
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
         # need n_sources because *_locs are not necessarily ordered.
-        galaxies = plot_multiple_galaxies(
+        galaxies = render_multiple_galaxies(
             self.slen,
             galaxy_locs,
             n_sources,
             single_galaxies,
             cached_grid=self.cached_grid,
         )
-        stars = plot_multiple_stars(
+        stars = render_multiple_stars(
             self.slen,
             star_locs,
             n_sources,

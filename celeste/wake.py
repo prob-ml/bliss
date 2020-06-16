@@ -8,7 +8,7 @@ import numpy as np
 
 from celeste.models.decoder import (
     get_mgrid,
-    plot_multiple_stars,
+    render_multiple_stars,
 )
 from .models.encoder import get_is_on_from_n_sources
 from .psf_transform import PowerLawPSF
@@ -127,7 +127,7 @@ class ModelParams(nn.Module):
         self.cached_grid = get_mgrid(observed_image.shape[-1]).to(device)
 
     def _plot_stars(self, locs, fluxes, n_stars, psf):
-        self.stars = plot_multiple_stars(
+        self.stars = render_multiple_stars(
             self.slen, locs, n_stars, psf, fluxes, self.cached_grid
         )
 
