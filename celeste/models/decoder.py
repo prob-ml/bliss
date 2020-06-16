@@ -7,8 +7,9 @@ import torch.nn.functional as F
 from torch.distributions import Poisson, Categorical
 from torch.utils.data import IterableDataset
 
-from .. import device
-from .. import psf_transform
+from celeste import device
+from celeste import psf_transform
+from celeste.models.encoder import get_is_on_from_n_sources
 
 
 def _pareto_cdf(x, f_min, alpha):
@@ -263,24 +264,6 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
         scene += one_galaxy
 
     return scene
-
-
-def get_is_on_from_n_sources(n_sources, max_sources):
-    """Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
-    whether there are more than l sources on the kth batch.
-    """
-    assert not torch.any(torch.isnan(n_sources))
-    assert torch.all(n_sources >= 0)
-    assert torch.all(n_sources <= max_sources)
-
-    is_on_array = torch.zeros(
-        *n_sources.shape, max_sources, device=device, dtype=torch.float
-    )
-
-    for i in range(max_sources):
-        is_on_array[..., i] = n_sources > i
-
-    return is_on_array
 
 
 class SourceSimulator(object):

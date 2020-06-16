@@ -8,8 +8,7 @@ from celeste import device, use_cuda
 from celeste import psf_transform
 from celeste import train
 from celeste import wake
-from celeste.datasets import simulated_datasets
-from celeste.models import sourcenet
+from celeste.models import encoder, decoder
 
 
 class TestStarEncoderTraining:
@@ -64,12 +63,12 @@ class TestStarEncoderTraining:
 
         batchsize = 32
         n_batches = int(n_images / batchsize)
-        dataset = simulated_datasets.SimulatedDataset(
+        dataset = decoder.SourceDataset(
             n_batches, simulator_args, simulator_kwargs, batchsize=batchsize
         )
 
         # setup Star Encoder
-        encoder = sourcenet.SourceEncoder(
+        encoder = encoder.SourceEncoder(
             slen=slen,
             ptile_slen=8,
             step=2,

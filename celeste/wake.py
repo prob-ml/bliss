@@ -6,11 +6,11 @@ import pytorch_lightning as ptl
 
 import numpy as np
 
-from .datasets.simulated_datasets import (
+from celeste.models.decoder import (
     get_mgrid,
     plot_multiple_stars,
-    get_is_on_from_n_sources,
 )
+from .models.encoder import get_is_on_from_n_sources
 from .psf_transform import PowerLawPSF
 from celeste import device
 

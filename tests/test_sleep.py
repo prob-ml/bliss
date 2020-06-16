@@ -3,8 +3,7 @@ import pytest
 
 from celeste import use_cuda
 from celeste import train
-from celeste.datasets import simulated_datasets
-from celeste.models import sourcenet
+from celeste.models import encoder, decoder
 
 
 @pytest.fixture(scope="module")
@@ -42,12 +41,10 @@ def trained_encoder(
         prob_galaxy=0.0,  # enforce only stars are created in the training images.
     )
 
-    dataset = simulated_datasets.SourceDataset(
-        n_images, simulator_args, simulator_kwargs
-    )
+    dataset = decoder.SourceDataset(n_images, simulator_args, simulator_kwargs)
 
     # setup Star Encoder
-    encoder = sourcenet.SourceEncoder(
+    encoder = encoder.SourceEncoder(
         slen=slen,
         ptile_slen=8,
         step=2,

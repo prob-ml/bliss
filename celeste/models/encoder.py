@@ -1,8 +1,25 @@
 import torch
 import torch.nn as nn
 from torch.distributions import categorical
-from ..datasets.simulated_datasets import get_is_on_from_n_sources
 from .. import device
+
+
+def get_is_on_from_n_sources(n_sources, max_sources):
+    """Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
+    whether there are more than l sources on the kth batch.
+    """
+    assert not torch.any(torch.isnan(n_sources))
+    assert torch.all(n_sources >= 0)
+    assert torch.all(n_sources <= max_sources)
+
+    is_on_array = torch.zeros(
+        *n_sources.shape, max_sources, device=device, dtype=torch.float
+    )
+
+    for i in range(max_sources):
+        is_on_array[..., i] = n_sources > i
+
+    return is_on_array
 
 
 def _argfront(is_on_array, dim):
@@ -136,7 +153,6 @@ def _get_tile_params(tile_is_on_array, indx_sort, params):
 def _get_params_in_tiles(
     tile_coords, max_detections, slen, edge_padding, ptile_slen, locs, *params
 ):
-
     (
         tile_n_sources,
         tile_locs,  # sorted.

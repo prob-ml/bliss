@@ -6,8 +6,8 @@ from . import setup_paths
 from . import setup_device
 
 from celeste import train
-from celeste.models import sourcenet
-from celeste.datasets import simulated_datasets, galaxy_datasets
+from celeste.models import encoder, decoder
+from celeste.datasets import galaxy_datasets
 
 
 # TODO: part of this function can probably be a more general utility function in
@@ -29,12 +29,10 @@ def setup_dataset(args, paths):
     )
 
     # load psf
-    psf = simulated_datasets.get_fitted_powerlaw_psf(psf_file)[None, 0]
+    psf = decoder.get_fitted_powerlaw_psf(psf_file)[None, 0]
 
     # load background
-    background = simulated_datasets.get_background(
-        background_file, args.n_bands, args.slen
-    )
+    background = decoder.get_background(background_file, args.n_bands, args.slen)
 
     simulator_args = (
         galaxy_decoder,
@@ -46,9 +44,7 @@ def setup_dataset(args, paths):
         max_sources=args.max_sources, mean_sources=args.mean_sources, min_sources=0,
     )
 
-    dataset = simulated_datasets.SourceDataset(
-        args.n_images, simulator_args, simulator_kwargs
-    )
+    dataset = decoder.SourceDataset(args.n_images, simulator_args, simulator_kwargs)
 
     assert args.n_bands == 1, "Only 1 band is supported at the moment."
     assert (
@@ -76,7 +72,7 @@ def main(args):
 
     galaxy_dataset = setup_dataset(args, paths)
 
-    galaxy_encoder = sourcenet.SourceEncoder(
+    galaxy_encoder = encoder.SourceEncoder(
         slen=args.slen,
         n_bands=args.n_bands,
         ptile_slen=args.ptile_slen,
