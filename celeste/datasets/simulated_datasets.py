@@ -492,7 +492,7 @@ class SourceSimulator(object):
             images_mean = images_mean.clamp(min=1.0)
 
         images = (
-            torch.sqrt(images_mean) * torch.rand(*images_mean.shape, device=device)
+            torch.sqrt(images_mean) * torch.randn(*images_mean.shape, device=device)
             + images_mean
         )
 

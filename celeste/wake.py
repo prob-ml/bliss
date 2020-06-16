@@ -149,7 +149,13 @@ class ModelParams(nn.Module):
         return self.power_law_psf.forward()
 
     def get_loss(
-        self, psf, use_cached_stars=False, locs=None, fluxes=None, n_stars=None,
+        self,
+        obs_img,
+        psf,
+        use_cached_stars=False,
+        locs=None,
+        fluxes=None,
+        n_stars=None,
     ):
         background = self.get_background()
 
@@ -166,9 +172,9 @@ class ModelParams(nn.Module):
 
         recon_mean = self.stars + background
 
-        error = 0.5 * (
-            (self.observed_image - recon_mean) ** 2 / recon_mean
-        ) + 0.5 * torch.log(recon_mean)
+        error = 0.5 * ((obs_img - recon_mean) ** 2 / recon_mean) + 0.5 * torch.log(
+            recon_mean
+        )
 
         loss = (
             error[
@@ -303,6 +309,7 @@ class WakePhase(ptl.LightningModule):
 
     def get_wake_loss(self, obs_img, psf, n_samples, run_map=False):
         with torch.no_grad():
+            self.star_encoder.eval()
             (
                 n_stars_sampled,
                 locs_sampled,
@@ -322,7 +329,11 @@ class WakePhase(ptl.LightningModule):
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
         loss = self.model_params.get_loss(
-            psf, locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
+            obs_img,
+            psf,
+            locs=locs_sampled,
+            fluxes=fluxes_sampled,
+            n_stars=n_stars_sampled,
         )[1].mean()
 
         return loss
@@ -332,10 +343,7 @@ class WakePhase(ptl.LightningModule):
     # ----------------
 
     def train_dataloader(self):
-        return DataLoader(self.observed_img, batch_size=self.observed_img.shape[0])
-
-    def val_dataloader(self):
-        return DataLoader(self.observed_img, batch_size=self.observed_img.shape[0])
+        return DataLoader(self.observed_img, batch_size=None)
 
     # ---------------
     # Optimizer
@@ -351,17 +359,9 @@ class WakePhase(ptl.LightningModule):
     # ----------------
 
     def training_step(self, batch, batch_idx):
-        img = batch
+        img = batch.unsqueeze(0)
         psf = self.forward()
         loss = self.get_wake_loss(img, psf, self.n_samples)
         logs = {"train_loss": loss}
-
-        return {"loss": loss, "log": logs}
-
-    def validation_step(self, batch, batch_idx):
-        img = batch
-        psf = self.forward()
-        loss = self.get_wake_loss(img, psf, 1, run_map=True)
-        logs = {"val_loss": loss}
 
         return {"loss": loss, "log": logs}
