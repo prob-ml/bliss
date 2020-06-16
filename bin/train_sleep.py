@@ -72,7 +72,7 @@ def main(args):
 
     galaxy_dataset = setup_dataset(args, paths)
 
-    galaxy_encoder = encoder.SourceEncoder(
+    galaxy_encoder = encoder.ImageEncoder(
         slen=args.slen,
         n_bands=args.n_bands,
         ptile_slen=args.ptile_slen,

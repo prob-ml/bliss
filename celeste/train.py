@@ -1,10 +1,3 @@
-from pathlib import Path
-from abc import ABC, abstractmethod
-import warnings
-import time
-import shutil
-
-import numpy as np
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -116,7 +109,7 @@ class SleepPhase(pl.LightningModule):
             star_params_loss,
             galaxy_bool_loss,
         ) = sleep.get_inv_kl_loss(
-            self.model,
+            self.image_encoder,
             images,
             true_locs,
             true_galaxy_params,

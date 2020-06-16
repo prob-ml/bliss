@@ -1,9 +1,8 @@
 import torch
 import numpy as np
 
-import celeste.models.encoder
 from celeste import device
-from celeste.models import encoder, decoder
+from celeste.models import encoder
 
 
 class TestSourceEncoder:
@@ -19,7 +18,7 @@ class TestSourceEncoder:
         n_bands = 2
 
         # get encoder
-        star_encoder = encoder.SourceEncoder(
+        star_encoder = encoder.ImageEncoder(
             slen=101,
             ptile_slen=ptile_slen,
             step=2,
@@ -72,7 +71,7 @@ class TestSourceEncoder:
             assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_per_tile).all()
 
         # check pattern of zeros
-        is_on_array = celeste.models.encoder.get_is_on_from_n_sources(
+        is_on_array = celeste.models.image_encoder.get_is_on_from_n_sources(
             n_star_per_tile, star_encoder.max_detections
         )
         assert torch.all((loc_mean * is_on_array.unsqueeze(2).float()) == loc_mean)
@@ -154,7 +153,7 @@ class TestSourceEncoder:
         n_samples = 10
 
         # get encoder
-        star_encoder = encoder.SourceEncoder(
+        star_encoder = encoder.ImageEncoder(
             slen=101,
             ptile_slen=ptile_slen,
             step=2,

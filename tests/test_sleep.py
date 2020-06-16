@@ -44,7 +44,7 @@ def trained_encoder(
     dataset = decoder.SourceDataset(n_images, simulator_args, simulator_kwargs)
 
     # setup Star Encoder
-    encoder = encoder.SourceEncoder(
+    image_encoder = encoder.ImageEncoder(
         slen=slen,
         ptile_slen=8,
         step=2,
@@ -60,7 +60,7 @@ def trained_encoder(
     # train encoder
     # training wrapper
     SleepTraining = train.SleepTraining(
-        model=encoder,
+        model=image_encoder,
         dataset=dataset,
         slen=slen,
         n_bands=n_bands,

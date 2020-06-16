@@ -163,6 +163,7 @@ def _get_grid(slen, cached_grid=None):
     return grid
 
 
+# TODO: Make it more explicit that this is to obtain an LSST background.
 def get_background(background_file, n_bands, slen):
     # for numpy background that are not necessarily of the correct size.
     background = np.load(background_file)

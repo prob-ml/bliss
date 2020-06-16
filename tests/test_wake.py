@@ -68,7 +68,7 @@ class TestStarEncoderTraining:
         )
 
         # setup Star Encoder
-        encoder = encoder.SourceEncoder(
+        star_encoder = encoder.ImageEncoder(
             slen=slen,
             ptile_slen=8,
             step=2,

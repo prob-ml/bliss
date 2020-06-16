@@ -324,7 +324,7 @@ class Flatten(nn.Module):
         return tensor.view(tensor.size(0), -1)
 
 
-class SourceEncoder(nn.Module):
+class ImageEncoder(nn.Module):
     def __init__(
         self,
         slen,
@@ -358,7 +358,7 @@ class SourceEncoder(nn.Module):
         * For fluxes this should equal number of bands, for galaxies it will be the number of latent
         dimensions in the network.
         """
-        super(SourceEncoder, self).__init__()
+        super(ImageEncoder, self).__init__()
 
         # image parameters
         self.slen = slen
