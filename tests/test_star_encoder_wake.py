@@ -19,7 +19,6 @@ class TestStarEncoderTraining:
         true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
         init_psf_params = true_psf_params.clone()[None, 0, ...]
         init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device)
-        # init_psf_params[1, 1:3] += torch.tensor([1.0, 1.0]).to(device)
 
         init_psf = psf_transform.PowerLawPSF(init_psf_params).forward().detach()
 
@@ -111,12 +110,6 @@ class TestStarEncoderTraining:
         # initialize background params, which will create the true background
         init_background_params = torch.zeros(1, 3, device=device)
         init_background_params[0, 0] = 686.0
-
-        # make sure test background equals the initialization
-        # init_background = (
-        #     wake.PlanarBackground(init_background_params, 30).forward().detach()
-        # )
-        # assert torch.all(init_background == test_star["background"].to(device))
 
         # initialize psf params, just add 4 to each sigmas
         true_psf = single_band_fitted_powerlaw_psf.clone()

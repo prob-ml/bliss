@@ -14,8 +14,6 @@ from .datasets.simulated_datasets import (
 from .psf_transform import PowerLawPSF
 from celeste import device
 
-import time
-
 
 def _sample_image(observed_image, sample_every=10):
     batchsize = observed_image.shape[0]
@@ -188,90 +186,6 @@ class ModelParams(nn.Module):
         )
 
         return recon_mean, loss
-
-
-# def get_wake_loss(image, star_encoder, model_params, n_samples, run_map=False):
-#    with torch.no_grad():
-#        star_encoder.eval()
-#        (
-#            n_stars_sampled,
-#            locs_sampled,
-#            galaxy_params_sampled,
-#            log_fluxes_sampled,
-#            galaxy_bool_sampled,
-#        ) = star_encoder.sample_encoder(
-#            image,
-#            n_samples=n_samples,
-#            return_map_n_sources=run_map,
-#            return_map_source_params=run_map,
-#        )
-
-#    max_stars = log_fluxes_sampled.shape[1]
-#    is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
-#    is_on_array = is_on_array.unsqueeze(-1).float()
-#    fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
-
-#    loss = model_params.get_loss(
-#        locs=locs_sampled, fluxes=fluxes_sampled, n_stars=n_stars_sampled,
-#    )[1].mean()
-
-#    return loss
-
-
-# def run_wake(
-#    image,
-#    star_encoder,
-#    init_psf_params,
-#    init_background_params,
-#    n_samples,
-#    n_epochs=100,
-#    lr=1e-3,
-#    print_every=20,
-#    run_map=False,
-# ):
-#   model_params = ModelParams(image, init_psf_params, init_background_params)
-
-#    t0 = time.time()
-#    test_losses = []
-
-#    optimizer = optim.Adam(
-#       [{"params": model_params.power_law_psf.parameters(), "lr": lr}]
-#   )
-
-#   if run_map:
-#       n_samples = 1
-
-#    for epoch in range(1, n_epochs + 1):
-
-#        optimizer.zero_grad()
-
-#        loss = get_wake_loss(image, star_encoder, model_params, n_samples, run_map)
-
-#        loss.backward()
-#        optimizer.step()
-
-#        if ((epoch % print_every) == 0) or (epoch == n_epochs):
-#            eval_loss = get_wake_loss(
-#                image, star_encoder, model_params, n_samples=1, run_map=True
-#            ).detach()
-
-#           elapsed = time.time() - t0
-#            print(
-#                "[{}] loss: {:0.4f} \t[{:.1f} seconds]".format(
-#                    epoch, eval_loss, elapsed
-#                )
-#            )
-
-#            test_losses.append(eval_loss)
-
-#            # reset
-#            t0 = time.time()
-
-#    map_loss = get_wake_loss(
-#        image, star_encoder, model_params, n_samples=1, run_map=True
-#    )
-
-#    return model_params, map_loss
 
 
 class WakePhase(ptl.LightningModule):
