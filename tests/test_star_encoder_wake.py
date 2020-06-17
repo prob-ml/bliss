@@ -91,7 +91,7 @@ class TestStarEncoderTraining:
             batchsize=32,
         )
 
-        n_epochs = 300 if use_cuda else 1
+        n_epochs = 200 if use_cuda else 1
         SleepTraining.run(n_epochs=n_epochs)
 
         return star_encoder
@@ -122,23 +122,26 @@ class TestStarEncoderTraining:
         true_psf = single_band_fitted_powerlaw_psf.clone()
         init_psf_params = init_psf_setup["init_psf_params"]
 
+        hparams = {"n_samples": 1000, "lr": 0.001}
         wake_phase_model = wake.WakePhase(
             trained_star_encoder,
             test_image,
             init_psf_params,
             init_background_params,
-            n_samples=1000,
-            lr=0.001,
+            hparams,
         )
 
         # run the wake-phase training
-        n_epochs = 4000 if use_cuda else 1
+        n_epochs = 2800 if use_cuda else 1
 
         # implement tensorboard
-        profiler = AdvancedProfiler()
+        profiler = AdvancedProfiler(output_filename="wake_phase.txt")
+
+        # runs on gpu or cpu?
+        device_num = [0] if use_cuda else 0  # 0 means no gpu
 
         wake_trainer = ptl.Trainer(
-            gpus=[0],
+            gpus=device_num,
             profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,

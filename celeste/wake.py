@@ -286,15 +286,15 @@ class WakePhase(ptl.LightningModule):
         observed_img,
         init_psf_params,
         init_background_params,
-        n_samples,
-        lr,
+        hparams,
     ):
         super(WakePhase, self).__init__()
+        self.hparams = hparams
 
         self.star_encoder = star_encoder
         self.observed_img = observed_img
-        self.n_samples = n_samples
-        self.lr = lr
+        self.n_samples = self.hparams["n_samples"]
+        self.lr = self.hparams["lr"]
 
         self.model_params = ModelParams(
             observed_img, init_psf_params, init_background_params
