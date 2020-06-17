@@ -7,3 +7,4 @@ pytest-cov
 black
 h5py
 matplotlib
+pytorch-lightning
