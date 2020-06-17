@@ -295,7 +295,7 @@ def _tile_images(images, ptile_slen, step):
         ).reshape(-1, 1, ptile_slen, ptile_slen)
 
         # torch.cat(...) works with empty tensors.
-        image_ptiles = torch.cat((image_ptiles, image_ptiles_b), dim=1)
+        image_ptiles = torch.cat((image_ptiles, image_ptiles_b.to(device)), dim=1)
 
     return image_ptiles
 
