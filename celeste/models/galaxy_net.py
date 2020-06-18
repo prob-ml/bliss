@@ -127,10 +127,10 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         samples, _ = self.forward(z)
 
         if return_latent:
-            return z, samples.detach()
+            return z, samples
 
         else:
-            return samples.detach()  # shape = (num_samples, n_bands, slen, slen)
+            return samples  # shape = (num_samples, n_bands, slen, slen)
 
 
 class OneCenteredGalaxy(nn.Module):

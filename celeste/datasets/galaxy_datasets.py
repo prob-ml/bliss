@@ -56,6 +56,7 @@ class DecoderSamples(SingleGalaxyDataset):
             device
         )
         self.dec.load_state_dict(torch.load(decoder_file, map_location=device))
+        self.dec.eval()
         self.n_bands = n_bands
         self.slen = slen
         self.num_images = num_images
@@ -78,7 +79,8 @@ class DecoderSamples(SingleGalaxyDataset):
         # returns = (z, images) where z.shape = (n_samples, latent_dim) and images.shape =
         # (n_samples, n_bands, slen, slen)
 
-        return self.dec.get_sample(batchsize, return_latent=True)
+        with torch.no_grad():
+            return self.dec.get_sample(batchsize, return_latent=True)
 
     def print_props(self, output=sys.stdout):
         pass
