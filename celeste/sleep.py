@@ -4,8 +4,12 @@ from itertools import permutations
 import torch
 from torch.distributions import Normal
 from torch.nn import functional
+from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
+import pytorch_lightning as pl
 
 from . import device
+from celeste.datasets.simulated_datasets import SourceDataset
 
 
 def get_inv_kl_loss(
@@ -296,3 +300,93 @@ def _get_min_perm_loss(
     ).squeeze()
 
     return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
+
+
+class SleepTrainData(Dataset):
+    def __init__(self, dataset, n_images):
+        super(SleepTrainData, self).__init__()
+
+        self.dataset = dataset
+        self.train_data = dataset.get_batch(batchsize=n_images)
+        self.n_sources = self.train_data["n_sources"]
+        self.n_galaxies = self.train_data["n_galaxies"]
+        self.n_stars = self.train_data["n_stars"]
+        self.locs = self.train_data["locs"]
+        self.galaxy_params = self.train_data["galaxy_params"]
+        self.log_fluxes = self.train_data["item"]
+        self.galaxy_bool = self.train_data["galaxy_bool"]
+        self.images = self.train_data["images"]
+        self.background = self.train_data["background"]
+
+    def __getitem__(self, item):
+        n_sources = self.n_sources[item]
+        n_galaxies = self.n_galaxies[item]
+        n_stars = self.n_stars[item]
+        locs = self.locs[item]
+        galaxy_params = self.galaxy_params[item]
+        log_fluxes = self.log_fluxes[item]
+        galaxy_bool = self.galaxy_bool[item]
+        images = self.images[item]
+        background = self.background[item]
+
+        return {
+            "n_sources": n_sources,
+            "n_galaxies": n_galaxies,
+            "n_stars": n_stars,
+            "locs": locs,
+            "galaxy_params": galaxy_params,
+            "log_fluxes": log_fluxes,
+            "galaxy_bool": galaxy_bool,
+            "images": images,
+            "background": background,
+        }
+
+
+class SleepPhase(pl.LightningModule):
+    def __init__(
+        self,
+        n_images,
+        batch_size,
+        galaxy_decoder,
+        psf,
+        background,
+        slen,
+        n_bands,
+        max_sources,
+        mean_sources,
+        min_sources,
+        f_min,
+        prob_galaxy,
+        alpha=0.5,
+        use_pareto=True,
+        transpose_psf=False,
+        add_noise=True,
+        draw_poisson=True,
+    ):
+        super(SleepPhase, self).__init__()
+
+        self.n_images = n_images
+        self.batch_size = batch_size
+        self.simulator_args = (galaxy_decoder, psf, background)
+        self.simulator_kwargs = dict(
+            slen=slen,
+            n_bands=n_bands,
+            max_sources=max_sources,
+            mean_sources=mean_sources,
+            min_sources=min_sources,
+            f_min=f_min,
+            prob_galaxy=prob_galaxy,
+            alpha=alpha,
+            use_pareto=use_pareto,
+            transpose_psf=transpose_psf,
+            add_noise=add_noise,
+            draw_poisson=draw_poisson,
+        )
+
+        def train_dataloader(self):
+            dataset = SourceDataset(
+                self.n_images, self.simulator_args, self.simulator_kwargs
+            )
+            train_data = SleepTrainData(dataset, self.n_images)
+
+            return DataLoader(train_data, batch_size=self.batch_size)
