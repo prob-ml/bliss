@@ -38,7 +38,7 @@ class SingleGalaxyDataset(Dataset, ABC):
 
 
 class DecoderSamples(SingleGalaxyDataset):
-    def __init__(self, slen, decoder_file, n_bands=6, latent_dim=8, num_images=1000):
+    def __init__(self, slen, decoder_file = None, n_bands=6, latent_dim=8, num_images=1000):
         """
         Load and sample from the specified decoder in `decoder_file`.
 
@@ -55,7 +55,8 @@ class DecoderSamples(SingleGalaxyDataset):
         self.dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(
             device
         )
-        self.dec.load_state_dict(torch.load(decoder_file, map_location=device))
+        if decoder_file is not None: 
+            self.dec.load_state_dict(torch.load(decoder_file, map_location=device))
         self.n_bands = n_bands
         self.slen = slen
         self.num_images = num_images
