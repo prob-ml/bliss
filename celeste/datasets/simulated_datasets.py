@@ -550,18 +550,18 @@ class SourceDataset(Dataset):
         self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
+        self.dataset = self.get_batch(batchsize=self.n_images)
 
     def __getitem__(self, item):
-        dataset = self.get_batch(batchsize=self.n_images)
-        n_sources = dataset["n_sources"][item]
-        n_galaxies = dataset["n_galaxies"][item]
-        n_stars = dataset["n_stars"][item]
-        locs = dataset["locs"][item]
-        galaxy_params = dataset["galaxy_params"][item]
-        log_fluxes = dataset["item"][item]
-        galaxy_bool = dataset["galaxy_bool"][item]
-        images = dataset["images"][item]
-        background = dataset["background"][item]
+        n_sources = self.dataset["n_sources"][item]
+        n_galaxies = self.dataset["n_galaxies"][item]
+        n_stars = self.dataset["n_stars"][item]
+        locs = self.dataset["locs"][item]
+        galaxy_params = self.dataset["galaxy_params"][item]
+        log_fluxes = self.dataset["item"][item]
+        galaxy_bool = self.dataset["galaxy_bool"][item]
+        images = self.dataset["images"][item]
+        background = self.dataset["background"][item]
 
         return {
             "n_sources": n_sources,
