@@ -551,6 +551,30 @@ class SourceDataset(Dataset):
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
 
+    def __getitem__(self, item):
+        dataset = self.get_batch(batchsize=self.n_images)
+        n_sources = dataset["n_sources"][item]
+        n_galaxies = dataset["n_galaxies"][item]
+        n_stars = dataset["n_stars"][item]
+        locs = dataset["locs"][item]
+        galaxy_params = dataset["galaxy_params"][item]
+        log_fluxes = dataset["item"][item]
+        galaxy_bool = dataset["galaxy_bool"][item]
+        images = dataset["images"][item]
+        background = dataset["background"][item]
+
+        return {
+            "n_sources": n_sources,
+            "n_galaxies": n_galaxies,
+            "n_stars": n_stars,
+            "locs": locs,
+            "galaxy_params": galaxy_params,
+            "log_fluxes": log_fluxes,
+            "galaxy_bool": galaxy_bool,
+            "images": images,
+            "background": background,
+        }
+
     def __len__(self):
         return self.n_images
 
