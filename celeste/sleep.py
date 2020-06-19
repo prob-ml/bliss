@@ -4,12 +4,8 @@ from itertools import permutations
 import torch
 from torch.distributions import Normal
 from torch.nn import functional
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
-import pytorch_lightning as pl
 
 from . import device
-from celeste.datasets.simulated_datasets import SourceDataset
 
 
 def get_inv_kl_loss(
@@ -300,52 +296,3 @@ def _get_min_perm_loss(
     ).squeeze()
 
     return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
-
-
-class SleepPhase(pl.LightningModule):
-    def __init__(
-        self,
-        n_images,
-        batch_size,
-        galaxy_decoder,
-        psf,
-        background,
-        slen,
-        n_bands,
-        max_sources,
-        mean_sources,
-        min_sources,
-        f_min,
-        prob_galaxy,
-        alpha=0.5,
-        use_pareto=True,
-        transpose_psf=False,
-        add_noise=True,
-        draw_poisson=True,
-    ):
-        super(SleepPhase, self).__init__()
-
-        self.n_images = n_images
-        self.batch_size = batch_size
-        self.simulator_args = (galaxy_decoder, psf, background)
-        self.simulator_kwargs = dict(
-            slen=slen,
-            n_bands=n_bands,
-            max_sources=max_sources,
-            mean_sources=mean_sources,
-            min_sources=min_sources,
-            f_min=f_min,
-            prob_galaxy=prob_galaxy,
-            alpha=alpha,
-            use_pareto=use_pareto,
-            transpose_psf=transpose_psf,
-            add_noise=add_noise,
-            draw_poisson=draw_poisson,
-        )
-
-        def train_dataloader(self):
-            dataset = SourceDataset(
-                self.n_images, self.simulator_args, self.simulator_kwargs
-            )
-
-            return DataLoader(dataset, batch_size=self.batch_size)
