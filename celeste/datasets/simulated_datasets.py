@@ -152,7 +152,7 @@ def _check_sources_and_locs(locs, n_sources, batchsize):
     assert locs.shape[2] == 2
     assert len(n_sources) == batchsize
     assert len(n_sources.shape) == 1
-    assert max(n_sources) <= locs.shape[1]
+    # assert max(n_sources) <= locs.shape[1]
 
 
 def _get_grid(slen, cached_grid=None):
@@ -230,7 +230,7 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     )  # all stars are just the PSF so we copy it.
 
     # this loop plots each of the ith star in each of the (batchsize) images.
-    max_n = max(n_sources).int()
+    max_n = locs.shape[1]
     for n in range(max_n):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
