@@ -253,7 +253,7 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     grid = _get_grid(slen, cached_grid)
 
     scene = torch.zeros(batchsize, n_bands, slen, slen, device=device)
-    max_n = max(n_sources).int()
+    max_n = locs.shape[1]
     for n in range(max_n):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
