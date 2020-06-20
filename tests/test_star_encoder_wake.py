@@ -125,7 +125,7 @@ class TestStarEncoderTraining:
         )
 
         # run the wake-phase training
-        n_epochs = 2800 if use_cuda else 1
+        n_epochs = 2800 if use_cuda else 20
 
         # implement tensorboard
         profiler = AdvancedProfiler(output_filename="wake_phase.txt")
