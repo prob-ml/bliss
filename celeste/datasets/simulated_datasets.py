@@ -152,7 +152,6 @@ def _check_sources_and_locs(locs, n_sources, batchsize):
     assert locs.shape[2] == 2
     assert len(n_sources) == batchsize
     assert len(n_sources.shape) == 1
-    # assert max(n_sources) <= locs.shape[1]
 
 
 def _get_grid(slen, cached_grid=None):
