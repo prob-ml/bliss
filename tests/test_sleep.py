@@ -68,7 +68,7 @@ def trained_encoder(
         batchsize=32,
     )
 
-    n_epochs = 100 if use_cuda else 1
+    n_epochs = 150 if use_cuda else 1
     SleepTraining.run(n_epochs=n_epochs)
 
     return image_encoder

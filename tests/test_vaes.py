@@ -71,7 +71,7 @@ class TestSourceEncoder:
             assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_per_tile).all()
 
         # check pattern of zeros
-        is_on_array = celeste.models.image_encoder.get_is_on_from_n_sources(
+        is_on_array = encoder.get_is_on_from_n_sources(
             n_star_per_tile, star_encoder.max_detections
         )
         assert torch.all((loc_mean * is_on_array.unsqueeze(2).float()) == loc_mean)
