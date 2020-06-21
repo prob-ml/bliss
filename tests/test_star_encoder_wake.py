@@ -134,13 +134,14 @@ class TestStarEncoderTraining:
         # runs on gpu or cpu?
         device_num = [0] if use_cuda else 0  # 0 means no gpu
 
+        use_val = 10 if use_cuda else 1
         wake_trainer = ptl.Trainer(
             gpus=device_num,
             profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
-            check_val_every_n_epoch=10,
+            check_val_every_n_epoch=use_val,
         )
 
         wake_trainer.fit(wake_phase_model)
