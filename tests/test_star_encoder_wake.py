@@ -115,7 +115,8 @@ class TestStarEncoderTraining:
         true_psf = single_band_fitted_powerlaw_psf.clone()
         init_psf_params = init_psf_setup["init_psf_params"]
 
-        hparams = {"n_samples": 1000, "lr": 0.001}
+        n_samples = 1000 if use_cuda else 1
+        hparams = {"n_samples": n_samples, "lr": 0.001}
         wake_phase_model = wake.WakePhase(
             trained_star_encoder,
             test_image,
@@ -133,13 +134,14 @@ class TestStarEncoderTraining:
         # runs on gpu or cpu?
         device_num = [0] if use_cuda else 0  # 0 means no gpu
 
+        use_val = 10 if use_cuda else 1
         wake_trainer = ptl.Trainer(
             gpus=device_num,
             profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
-            check_val_every_n_epoch=10,
+            check_val_every_n_epoch=use_val,
         )
 
         wake_trainer.fit(wake_phase_model)
