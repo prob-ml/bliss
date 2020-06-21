@@ -115,7 +115,8 @@ class TestStarEncoderTraining:
         true_psf = single_band_fitted_powerlaw_psf.clone()
         init_psf_params = init_psf_setup["init_psf_params"]
 
-        hparams = {"n_samples": 1000, "lr": 0.001}
+        n_samples = 1000 if use_cuda else 1
+        hparams = {"n_samples": n_samples, "lr": 0.001}
         wake_phase_model = wake.WakePhase(
             trained_star_encoder,
             test_image,
@@ -125,7 +126,7 @@ class TestStarEncoderTraining:
         )
 
         # run the wake-phase training
-        n_epochs = 2800 if use_cuda else 20
+        n_epochs = 2800 if use_cuda else 1
 
         # implement tensorboard
         profiler = AdvancedProfiler(output_filename="wake_phase.txt")
