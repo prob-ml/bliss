@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 from torch.distributions import Poisson, Categorical
+from torch.utils.data import IterableDataset
 
 from .. import device
 from .. import psf_transform
@@ -550,30 +551,6 @@ class SourceDataset(Dataset):
         self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
-        self.dataset = self.get_batch(batchsize=self.n_images)
-
-    def __getitem__(self, item):
-        n_sources = self.dataset["n_sources"][item]
-        n_galaxies = self.dataset["n_galaxies"][item]
-        n_stars = self.dataset["n_stars"][item]
-        locs = self.dataset["locs"][item]
-        galaxy_params = self.dataset["galaxy_params"][item]
-        log_fluxes = self.dataset["item"][item]
-        galaxy_bool = self.dataset["galaxy_bool"][item]
-        images = self.dataset["images"][item]
-        background = self.dataset["background"][item]
-
-        return {
-            "n_sources": n_sources,
-            "n_galaxies": n_galaxies,
-            "n_stars": n_stars,
-            "locs": locs,
-            "galaxy_params": galaxy_params,
-            "log_fluxes": log_fluxes,
-            "galaxy_bool": galaxy_bool,
-            "images": images,
-            "background": background,
-        }
 
     def __len__(self):
         return self.n_images
@@ -591,6 +568,61 @@ class SourceDataset(Dataset):
             galaxy_bool,
             star_bool,
         ) = self.simulator.sample_parameters(batchsize=batchsize)
+
+        galaxy_locs = locs * galaxy_bool.unsqueeze(2)
+        star_locs = locs * star_bool.unsqueeze(2)
+        images = self.simulator.generate_images(
+            n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
+        )
+
+        return {
+            "n_sources": n_sources,
+            "n_galaxies": n_galaxies,
+            "n_stars": n_stars,
+            "locs": locs,
+            "galaxy_params": galaxy_params,
+            "log_fluxes": log_fluxes,
+            "galaxy_bool": galaxy_bool,
+            "images": images,
+            "background": self.simulator.background,
+        }
+
+
+class SourceIterableDataset(IterableDataset):
+    def __init__(self, n_images, simulator_args, simulator_kwargs, batchsize):
+        super(SourceIterableDataset, self).__init__()
+
+        self.n_images = n_images
+        self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
+        self.slen = self.simulator.slen
+        self.n_bands = self.simulator.n_bands
+        self.batchsize = batchsize
+
+    def __iter__(self):
+        return self.batch_generator()
+
+    def batch_generator(self):
+        assert (
+            self.n_images % self.batchsize == 0
+        ), "It's easier if they are multiples of each other"
+
+        num_batches = int(self.n_images / self.batchsize)
+        for i in range(num_batches):
+            yield self.get_batch()
+
+    def get_batch(self):
+        (
+            n_sources,
+            n_galaxies,
+            n_stars,
+            locs,
+            galaxy_params,
+            single_galaxies,
+            fluxes,
+            log_fluxes,
+            galaxy_bool,
+            star_bool,
+        ) = self.simulator.sample_parameters(batchsize=self.batchsize)
 
         galaxy_locs = locs * galaxy_bool.unsqueeze(2)
         star_locs = locs * star_bool.unsqueeze(2)
