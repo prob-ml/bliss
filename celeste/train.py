@@ -328,11 +328,10 @@ class SleepTraining(TrainModel):
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(self, n_image, dataset, encoder, lr=1e-3, weight_decay=1e-5):
+    def __init__(self, dataset, encoder, lr=1e-3, weight_decay=1e-5):
         """dataset is an SourceIterableDataset class"""
         super(SleepPhase, self).__init__()
 
-        self.n_image = n_image
         self.dataset = dataset
         self.model = encoder
         self.lr = lr
@@ -379,7 +378,7 @@ class SleepPhase(pl.LightningModule):
         avg_galaxy_params_loss = 0
         avg_star_params_loss = 0
         avg_galaxy_bool_loss = 0
-        tiles_per_epoch = self.n_image * self.model.n_tiles
+        tiles_per_epoch = self.dataset.n_batches * len(outputs) * self.model.n_tiles
 
         for output in outputs:
             avg_loss += output["loss"] * len(outputs)
@@ -395,7 +394,7 @@ class SleepPhase(pl.LightningModule):
                 outputs
             )
 
-        avg_loss /= self.n_image
+        avg_loss /= self.dataset.n_batches * len(outputs)
         avg_counter_loss /= tiles_per_epoch
         avg_locs_loss /= tiles_per_epoch
         avg_galaxy_params_loss /= tiles_per_epoch

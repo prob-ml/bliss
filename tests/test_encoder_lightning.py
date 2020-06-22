@@ -23,7 +23,7 @@ def trained_encoder(
 
     # set background
     background = torch.zeros(n_bands, slen, slen, device=device)
-    background[0] = 686.0
+    background.fill_(686.0)
 
     # simulate dataset
     n_images = 128
@@ -43,8 +43,10 @@ def trained_encoder(
         prob_galaxy=0.0,  # enforce only stars are created in the training images.
     )
 
-    dataset = simulated_datasets.SourceIterableDataset(
-        n_images, simulator_args, simulator_kwargs, batchsize=32
+    batchsize = 32
+    n_batches = int(n_images / batchsize)
+    dataset = simulated_datasets.SimulatedDataset(
+        n_batches, simulator_args, simulator_kwargs, batchsize=batchsize
     )
 
     # setup Star Encoder
@@ -63,26 +65,26 @@ def trained_encoder(
 
     # train encoder
     # training wrapper
-    SleepTraining = train.SleepPhase(n_image=n_images, dataset=dataset, encoder=encoder)
+    sleep_net = train.SleepPhase(dataset=dataset, encoder=encoder)
 
     n_epochs = 100 if use_cuda else 1
     # implement profiler
     profiler = AdvancedProfiler(output_filename="sleep_phase.txt")
 
     # runs on gpu or cpu?
-    device_num = [0] if use_cuda else 0  # 0 means no gpu
+    n_device = [0] if use_cuda else 0  # 0 means no gpu
 
     sleep_trainer = pl.Trainer(
-        gpus=device_num,
+        gpus=n_device,
         profiler=profiler,
         min_epochs=n_epochs,
         max_epochs=n_epochs,
         reload_dataloaders_every_epoch=True,
     )
 
-    sleep_trainer.fit(SleepTraining)
+    sleep_trainer.fit(sleep_net)
 
-    return SleepTraining.model
+    return sleep_net.model
 
 
 class TestStarSleepEncoder:

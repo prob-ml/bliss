@@ -588,11 +588,11 @@ class SourceDataset(Dataset):
         }
 
 
-class SourceIterableDataset(IterableDataset):
-    def __init__(self, n_images, simulator_args, simulator_kwargs, batchsize):
-        super(SourceIterableDataset, self).__init__()
+class SimulatedDataset(IterableDataset):
+    def __init__(self, n_batches: int, simulator_args, simulator_kwargs, batchsize):
+        super(SimulatedDataset, self).__init__()
 
-        self.n_images = n_images
+        self.n_batches = n_batches
         self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
@@ -602,12 +602,7 @@ class SourceIterableDataset(IterableDataset):
         return self.batch_generator()
 
     def batch_generator(self):
-        assert (
-            self.n_images % self.batchsize == 0
-        ), "It's easier if they are multiples of each other"
-
-        num_batches = int(self.n_images / self.batchsize)
-        for i in range(num_batches):
+        for i in range(self.n_batches):
             yield self.get_batch()
 
     def get_batch(self):
