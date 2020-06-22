@@ -8,10 +8,9 @@ import multiprocessing
 
 from . import setup_paths
 
-from celeste.datasets import catsim_datasets
-from celeste.datasets.catsim_datasets import save_images
+from celeste.datasets import galaxy_datasets
 
-all_datasets = {"CatsimGalaxies": catsim_datasets.CatsimGalaxies}
+all_datasets = {"CatsimGalaxies": galaxy_datasets.CatsimGalaxies}
 
 final_image_name = "images.hd5f"
 background_name = "background.pt"
@@ -30,7 +29,9 @@ def generate(
         not file_path.exists() or overwrite
     ), "Trying to overwrite file without --overwrite"
 
-    save_images(dataset, file_path, prop_file_path=prop_file_path, n_images=n_images)
+    galaxy_datasets.save_images(
+        dataset, file_path, prop_file_path=prop_file_path, n_images=n_images
+    )
 
 
 def merge_files(output_path):
@@ -140,7 +141,7 @@ if __name__ == "__main__":
     catsim_group = parser.add_argument_group(
         "Catsim Dataset Options", "Specify options for rendering catsim images",
     )
-    catsim_datasets.CatsimGalaxies.add_args(catsim_group)
+    galaxy_datasets.CatsimGalaxies.add_args(catsim_group)
 
     pargs = parser.parse_args()
 

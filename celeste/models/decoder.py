@@ -7,9 +7,10 @@ import torch.nn.functional as F
 from torch.distributions import Poisson, Categorical
 from torch.utils.data import IterableDataset
 
-from celeste import device
-from celeste import psf_transform
-from celeste.models.encoder import get_is_on_from_n_sources
+from .. import device
+from .. import psf_transform
+from . import galaxy_net
+from .encoder import get_is_on_from_n_sources
 
 
 def _pareto_cdf(x, f_min, alpha):
@@ -163,7 +164,13 @@ def _get_grid(slen, cached_grid=None):
     return grid
 
 
-# TODO: Make it more explicit that this is to obtain an LSST background.
+def get_galaxy_decoder(decoder_state_file, slen=51, n_bands=1, latent_dim=8):
+    dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
+    dec.load_state_dict(torch.load(decoder_state_file, map_location=device))
+    dec.eval()
+    return dec
+
+
 def get_background(background_file, n_bands, slen):
     # for numpy background that are not necessarily of the correct size.
     background = np.load(background_file)
@@ -307,6 +314,7 @@ class SourceSimulator(object):
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
+        # galaxy parameters
         self.galaxy_decoder = galaxy_decoder
         self.galaxy_slen = self.galaxy_decoder.slen
         self.latent_dim = self.galaxy_decoder.latent_dim
@@ -322,6 +330,7 @@ class SourceSimulator(object):
         self.loc_max = loc_max
         assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
 
+        # psf
         self.transpose_psf = transpose_psf
         self.psf = psf.to(device)
         self.psf_og = self.psf.clone()
@@ -426,7 +435,8 @@ class SourceSimulator(object):
 
         # z has shape = (n_samples, latent_dim)
         # galaxies has shape = (n_samples, n_bands, slen, slen)
-        z, galaxies = self.galaxy_decoder.get_batch(n_samples)
+        with torch.no_grad():
+            z, galaxies = self.galaxy_decoder.get_sample(n_samples)
 
         galaxy_params = z.reshape(batchsize, -1, self.latent_dim)
         single_galaxies = galaxies.reshape(

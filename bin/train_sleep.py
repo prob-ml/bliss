@@ -7,7 +7,6 @@ from . import setup_device
 
 from celeste import train
 from celeste.models import encoder, decoder
-from celeste.datasets import galaxy_datasets
 
 
 # TODO: part of this function can probably be a more general utility function in
@@ -24,8 +23,8 @@ def setup_dataset(args, paths):
 
     # load decoder
     galaxy_slen = 51  # decoders are all created with this slen.
-    galaxy_decoder = galaxy_datasets.DecoderSamples(
-        galaxy_slen, decoder_file, n_bands=args.n_bands
+    galaxy_decoder = decoder.get_galaxy_decoder(
+        decoder_file, n_bands=args.n_bands, slen=galaxy_slen,
     )
 
     # load psf
