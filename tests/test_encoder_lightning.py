@@ -11,7 +11,11 @@ from celeste.models import sourcenet
 
 @pytest.fixture(scope="module")
 def trained_encoder(
-    config_path, data_path, single_band_galaxy_decoder, single_band_fitted_powerlaw_psf
+    config_path,
+    data_path,
+    single_band_galaxy_decoder,
+    single_band_fitted_powerlaw_psf,
+    profile,
 ):
     # create training dataset
     n_bands = 1
@@ -69,7 +73,7 @@ def trained_encoder(
 
     n_epochs = 100 if use_cuda else 1
     # implement profiler
-    profiler = AdvancedProfiler(output_filename="sleep_phase.txt")
+    profiler = AdvancedProfiler(output_filename=profile)
 
     # runs on gpu or cpu?
     n_device = [0] if use_cuda else 0  # 0 means no gpu
