@@ -8,12 +8,17 @@ from celeste import use_cuda
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--device-id", action="store", default=0, help="ID of cuda device to use."
+        "--device-id",
+        action="store",
+        default=0,
+        type=int,
+        help="ID of cuda device to use.",
     )
     parser.addoption(
         "--profile",
         action="store",
         default=None,
+        type=str,
         help="None or file path to store profiler",
     )
 

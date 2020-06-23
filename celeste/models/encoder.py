@@ -408,6 +408,7 @@ class ImageEncoder(nn.Module):
             Flatten(),
             nn.Linear(conv_out_dim, self.enc_hidden),
             nn.LayerNorm(self.enc_hidden),
+            nn.Dropout(p=0.1),
             nn.ReLU(),
             nn.Linear(self.enc_hidden, self.enc_hidden),
             nn.LayerNorm(self.enc_hidden),
