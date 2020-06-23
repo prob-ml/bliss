@@ -154,16 +154,9 @@ class ModelParams(nn.Module):
             recon_mean
         )
 
-        loss = (
-            error[
-                :,
-                :,
-                self.pad : (self.slen - self.pad),
-                self.pad : (self.slen - self.pad),
-            ]
-            .reshape(error.shape[0], -1)
-            .sum(1)
-        )
+        loss = error[
+            :, :, self.pad : (self.slen - self.pad), self.pad : (self.slen - self.pad),
+        ].sum((1, 2, 3))
 
         return recon_mean, loss
 
