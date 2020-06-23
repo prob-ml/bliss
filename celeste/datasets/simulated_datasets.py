@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 from torch.distributions import Poisson, Categorical
+from torch.utils.data import IterableDataset
 
 from .. import device
 from .. import psf_transform
@@ -253,7 +254,7 @@ def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=N
     grid = _get_grid(slen, cached_grid)
 
     scene = torch.zeros(batchsize, n_bands, slen, slen, device=device)
-    max_n = max(n_sources).int()
+    max_n = locs.shape[1]
     for n in range(max_n):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
@@ -567,6 +568,56 @@ class SourceDataset(Dataset):
             galaxy_bool,
             star_bool,
         ) = self.simulator.sample_parameters(batchsize=batchsize)
+
+        galaxy_locs = locs * galaxy_bool.unsqueeze(2)
+        star_locs = locs * star_bool.unsqueeze(2)
+        images = self.simulator.generate_images(
+            n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
+        )
+
+        return {
+            "n_sources": n_sources,
+            "n_galaxies": n_galaxies,
+            "n_stars": n_stars,
+            "locs": locs,
+            "galaxy_params": galaxy_params,
+            "log_fluxes": log_fluxes,
+            "galaxy_bool": galaxy_bool,
+            "images": images,
+            "background": self.simulator.background,
+        }
+
+
+class SimulatedDataset(IterableDataset):
+    def __init__(self, n_batches: int, simulator_args, simulator_kwargs, batchsize):
+        super(SimulatedDataset, self).__init__()
+
+        self.n_batches = n_batches
+        self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
+        self.slen = self.simulator.slen
+        self.n_bands = self.simulator.n_bands
+        self.batchsize = batchsize
+
+    def __iter__(self):
+        return self.batch_generator()
+
+    def batch_generator(self):
+        for i in range(self.n_batches):
+            yield self.get_batch()
+
+    def get_batch(self):
+        (
+            n_sources,
+            n_galaxies,
+            n_stars,
+            locs,
+            galaxy_params,
+            single_galaxies,
+            fluxes,
+            log_fluxes,
+            galaxy_bool,
+            star_bool,
+        ) = self.simulator.sample_parameters(batchsize=self.batchsize)
 
         galaxy_locs = locs * galaxy_bool.unsqueeze(2)
         star_locs = locs * star_bool.unsqueeze(2)

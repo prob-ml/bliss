@@ -25,29 +25,30 @@ class TestStarEncoderTraining:
         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 
     @pytest.fixture(scope="module")
-    def trained_star_encoder(
-        self, data_path, single_band_galaxy_decoder, init_psf_setup
+    def trained_encoder(
+        config_path,
+        data_path,
+        single_band_galaxy_decoder,
+        single_band_fitted_powerlaw_psf,
+        profile,
     ):
         # create training dataset
         n_bands = 1
         max_stars = 20
-        mean_stars = 10
+        mean_stars = 15
         min_stars = 5
-        f_min = 1e3
+        f_min = 1e4
         slen = 50
 
-        # set background for training
+        # set background
         background = torch.zeros(n_bands, slen, slen, device=device)
-        background[0] = 686.0
-
-        # set initialized psf
-        init_psf = init_psf_setup["init_psf"]
+        background.fill_(686.0)
 
         # simulate dataset
         n_images = 64 * 4
         simulator_args = (
             single_band_galaxy_decoder,
-            init_psf,
+            single_band_fitted_powerlaw_psf,
             background,
         )
 
@@ -61,19 +62,21 @@ class TestStarEncoderTraining:
             prob_galaxy=0.0,  # enforce only stars are created in the training images.
         )
 
-        dataset = simulated_datasets.SourceDataset(
-            n_images, simulator_args, simulator_kwargs
+        batchsize = 32
+        n_batches = int(n_images / batchsize)
+        dataset = simulated_datasets.SimulatedDataset(
+            n_batches, simulator_args, simulator_kwargs, batchsize=batchsize
         )
 
         # setup Star Encoder
-        star_encoder = sourcenet.SourceEncoder(
+        encoder = sourcenet.SourceEncoder(
             slen=slen,
             ptile_slen=8,
             step=2,
             edge_padding=3,
             n_bands=n_bands,
             max_detections=2,
-            n_galaxy_params=8,  # star has n_bands # fluxes
+            n_galaxy_params=single_band_galaxy_decoder.latent_dim,
             enc_conv_c=5,
             enc_kern=3,
             enc_hidden=64,
@@ -81,23 +84,30 @@ class TestStarEncoderTraining:
 
         # train encoder
         # training wrapper
-        SleepTraining = train.SleepTraining(
-            model=star_encoder,
-            dataset=dataset,
-            slen=slen,
-            n_bands=n_bands,
-            verbose=False,
-            batchsize=32,
-        )
+        sleep_net = train.SleepPhase(dataset=dataset, encoder=encoder)
 
         n_epochs = 200 if use_cuda else 1
-        SleepTraining.run(n_epochs=n_epochs)
+        # implement profiler
+        profiler = AdvancedProfiler(output_filename=profile)
 
-        return star_encoder
+        # runs on gpu or cpu?
+        n_device = [0] if use_cuda else 0  # 0 means no gpu
+
+        sleep_trainer = ptl.Trainer(
+            gpus=n_device,
+            profiler=profiler,
+            min_epochs=n_epochs,
+            max_epochs=n_epochs,
+            reload_dataloaders_every_epoch=True,
+        )
+
+        sleep_trainer.fit(sleep_net)
+
+        return sleep_net.model
 
     def test_star_wake(
         self,
-        trained_star_encoder,
+        trained_encoder,
         single_band_fitted_powerlaw_psf,
         init_psf_setup,
         test_star,
@@ -118,7 +128,7 @@ class TestStarEncoderTraining:
         n_samples = 1000 if use_cuda else 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
         wake_phase_model = wake.WakePhase(
-            trained_star_encoder,
+            trained_encoder,
             test_image,
             init_psf_params,
             init_background_params,
