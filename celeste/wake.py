@@ -143,26 +143,10 @@ class ModelParams(nn.Module):
         return self.power_law_psf.forward()
 
     def get_loss(
-        self,
-        obs_img,
-        psf,
-        use_cached_stars=False,
-        locs=None,
-        fluxes=None,
-        n_stars=None,
+        self, obs_img, psf, locs=None, fluxes=None, n_stars=None,
     ):
         background = self.get_background()
-
-        if not use_cached_stars:
-            assert locs is not None
-            assert fluxes is not None
-            assert n_stars is not None
-
-            # psf = self.get_psf()
-            self._plot_stars(locs, fluxes, n_stars, psf)
-        else:
-            assert hasattr(self, "stars")
-            self.stars = self.stars.detach()
+        self._plot_stars(locs, fluxes, n_stars, psf)
 
         recon_mean = self.stars + background
 
