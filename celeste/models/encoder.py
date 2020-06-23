@@ -1,8 +1,25 @@
 import torch
 import torch.nn as nn
 from torch.distributions import categorical
-from ..datasets.simulated_datasets import get_is_on_from_n_sources
 from .. import device
+
+
+def get_is_on_from_n_sources(n_sources, max_sources):
+    """Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
+    whether there are more than l sources on the kth batch.
+    """
+    assert not torch.any(torch.isnan(n_sources))
+    assert torch.all(n_sources >= 0)
+    assert torch.all(n_sources <= max_sources)
+
+    is_on_array = torch.zeros(
+        *n_sources.shape, max_sources, device=device, dtype=torch.float
+    )
+
+    for i in range(max_sources):
+        is_on_array[..., i] = n_sources > i
+
+    return is_on_array
 
 
 def _argfront(is_on_array, dim):
@@ -62,10 +79,10 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     assert torch.all(locs <= 1.0)
     assert torch.all(locs >= 0.0)
 
-    batchsize = locs.size(0)
+    batch_size = locs.size(0)
     max_sources = locs.size(1)
     single_image_n_ptiles = tile_coords.size(0)
-    total_ptiles = single_image_n_ptiles * batchsize  # across all batches.
+    total_ptiles = single_image_n_ptiles * batch_size  # across all batches.
 
     # _tile_coords shape = (1 x single_image_n_ptiles x 1 x 2)
     _tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
@@ -91,11 +108,13 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     # locs including leading/trailing zeroes) in the case that there are multiple objects
     # in that tile.
     # need to .unsqueeze(0) because switching from batches to just tiles.
-    _tile_is_on_array = tile_is_on_array.view(batchsize, -1, max_sources, 1)
-    _locs = locs.view(batchsize, 1, max_sources, 2)
+    _tile_is_on_array = tile_is_on_array.view(batch_size, -1, max_sources, 1)
+    _locs = locs.view(batch_size, 1, max_sources, 2)
     tile_locs = _tile_is_on_array * _locs
     tile_locs = tile_locs.view(total_ptiles, max_sources, 2)
-    _tile_coords = tile_coords.view(single_image_n_ptiles, 1, 2).repeat(batchsize, 1, 1)
+    _tile_coords = tile_coords.view(single_image_n_ptiles, 1, 2).repeat(
+        batch_size, 1, 1
+    )
     tile_locs -= _tile_coords + edge_padding - 0.5  # recenter
     tile_locs /= ptile_slen - 2 * edge_padding  # re-normalize
     tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
@@ -116,10 +135,10 @@ def _get_tile_params(tile_is_on_array, indx_sort, params):
     for param in params:
         assert max_sources == param.size(1)
         # this will work even for galaxy_bool
-        batchsize = param.size(0)
-        _param = param.view(batchsize, 1, max_sources, -1)
+        batch_size = param.size(0)
+        _param = param.view(batch_size, 1, max_sources, -1)
         param_dim = _param.size(-1)
-        _tile_is_on_array = tile_is_on_array.view(batchsize, -1, max_sources, 1)
+        _tile_is_on_array = tile_is_on_array.view(batch_size, -1, max_sources, 1)
 
         tiled_param = _tile_is_on_array * _param
         tiled_param = tiled_param.view(total_ptiles, max_sources, -1)
@@ -154,6 +173,8 @@ def _get_params_in_tiles(
         max_detections, tile_n_sources, tile_locs, *tile_params, tile_is_on_array
     )
 
+    # tile_is_on_array shape = total_n_ptiles x max_detections
+    assert len(tile_is_on_array.shape) == 2
     return (tile_n_sources, *tile_params, tile_is_on_array)
 
 
@@ -267,11 +288,11 @@ def _tile_images(images, ptile_slen, step):
 
     NOTE: input and output are torch tensors, not numpy arrays.
 
-    :param images: A tensor of size (batchsize x n_bands x slen x slen)
+    :param images: A tensor of size (batch_size x n_bands x slen x slen)
     :param ptile_slen: The side length of each padded tile.
     :param step:
     :return: image_ptiles, output tensor of shape:
-             (batchsize * ptiles per image) x n_bands x ptile_slen x ptile_slen
+             (batch_size * ptiles per image) x n_bands x ptile_slen x ptile_slen
     :rtype: class:`torch.Tensor`
     """
 
@@ -305,7 +326,7 @@ class Flatten(nn.Module):
         return tensor.view(tensor.size(0), -1)
 
 
-class SourceEncoder(nn.Module):
+class ImageEncoder(nn.Module):
     def __init__(
         self,
         slen,
@@ -318,6 +339,7 @@ class SourceEncoder(nn.Module):
         enc_conv_c=20,
         enc_kern=3,
         enc_hidden=256,
+        momentum=0.5,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -339,7 +361,7 @@ class SourceEncoder(nn.Module):
         * For fluxes this should equal number of bands, for galaxies it will be the number of latent
         dimensions in the network.
         """
-        super(SourceEncoder, self).__init__()
+        super(ImageEncoder, self).__init__()
 
         # image parameters
         self.slen = slen
@@ -360,7 +382,7 @@ class SourceEncoder(nn.Module):
         self.enc_kern = enc_kern
         self.enc_hidden = enc_hidden
 
-        momentum = 0.5
+        self.momentum = momentum
 
         # convolutional NN
         conv_out_dim = self.enc_conv_c * ptile_slen ** 2
@@ -372,9 +394,7 @@ class SourceEncoder(nn.Module):
             nn.Conv2d(
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
             ),
-            nn.BatchNorm2d(
-                self.enc_conv_c, momentum=momentum, track_running_stats=True
-            ),
+            nn.LayerNorm((self.ptile_slen, self.ptile_slen),),
             nn.ReLU(),
             nn.Conv2d(
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
@@ -383,25 +403,18 @@ class SourceEncoder(nn.Module):
             nn.Conv2d(
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
             ),
-            nn.BatchNorm2d(
-                self.enc_conv_c, momentum=momentum, track_running_stats=True
-            ),
+            nn.LayerNorm((self.ptile_slen, self.ptile_slen),),
             nn.ReLU(),
             Flatten(),
             nn.Linear(conv_out_dim, self.enc_hidden),
-            nn.BatchNorm1d(
-                self.enc_hidden, momentum=momentum, track_running_stats=True
-            ),
+            nn.LayerNorm(self.enc_hidden),
+            nn.Dropout(p=0.1),
             nn.ReLU(),
             nn.Linear(self.enc_hidden, self.enc_hidden),
-            nn.BatchNorm1d(
-                self.enc_hidden, momentum=momentum, track_running_stats=True
-            ),
+            nn.LayerNorm(self.enc_hidden),
             nn.ReLU(),
             nn.Linear(self.enc_hidden, self.enc_hidden),
-            nn.BatchNorm1d(
-                self.enc_hidden, momentum=momentum, track_running_stats=True
-            ),
+            nn.LayerNorm(self.enc_hidden),
             nn.ReLU(),
         )
 
@@ -496,10 +509,6 @@ class SourceEncoder(nn.Module):
             prob_n_source_indx[n_detections] = curr_indx
 
         return indx_mats, prob_n_source_indx
-
-    ######################
-    # Forward modules
-    ######################
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
         """
@@ -627,6 +636,9 @@ class SourceEncoder(nn.Module):
         return tile_coords
 
     def get_params_in_tiles(self, slen, locs, *params):
+        max_sources = locs.size(1)
+        assert self.max_detections <= max_sources, "Wasteful, lower max_detections."
+
         tile_coords = self._get_tile_coords(slen)
 
         return _get_params_in_tiles(
@@ -640,7 +652,7 @@ class SourceEncoder(nn.Module):
         )
 
     def get_images_in_tiles(self, images):
-        assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
+        assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
 
         image_ptiles = _tile_images(images, self.ptile_slen, self.step)

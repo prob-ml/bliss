@@ -2,17 +2,18 @@ import numpy as np
 import warnings
 
 import torch
-from torch.utils.data import Dataset
 import torch.nn.functional as F
 from torch.distributions import Poisson, Categorical
 from torch.utils.data import IterableDataset
 
 from .. import device
 from .. import psf_transform
+from . import galaxy_net
+from .encoder import get_is_on_from_n_sources
 
 
 def _pareto_cdf(x, f_min, alpha):
-    return 1 - (f_min / x) ** (alpha)
+    return 1 - (f_min / x) ** alpha
 
 
 def _draw_pareto_maxed(f_min, f_max, alpha, shape):
@@ -83,47 +84,51 @@ def _expand_psf(psf, slen):
 
 
 def _sample_n_sources(
-    mean_sources, min_sources, max_sources, batchsize=1, draw_poisson=True
+    mean_sources, min_sources, max_sources, batch_size=1, draw_poisson=True
 ):
     """
-    Return tensor of size batchsize.
-    :return: A tensor with shape = (batchsize)
+    Return tensor of size batch_size.
+    :return: A tensor with shape = (batch_size)
     """
     if draw_poisson:
         m = Poisson(torch.full((1,), mean_sources, dtype=torch.float, device=device))
-        n_sources = m.sample([batchsize])
+        n_sources = m.sample([batch_size])
     else:
         categorical_param = torch.full(
             (1,), max_sources - min_sources, dtype=torch.float, device=device
         )
         m = Categorical(categorical_param)
-        n_sources = m.sample([batchsize]) + min_sources
+        n_sources = m.sample([batch_size]) + min_sources
 
     # long() here is necessary because used for indexing and one_hot encoding.
     return n_sources.clamp(max=max_sources, min=min_sources).long().squeeze(1)
 
 
-def _sample_locs(max_sources, is_on_array, batchsize=1):
+def _sample_locs(
+    max_sources, is_on_array, batch_size, locs_min=0.0, locs_max=1.0,
+):
+    assert 0 <= locs_min <= locs_max <= 1.0
+
     # 2 = (x,y)
-    # torch.rand returns numbers between (0,1)
-    locs = torch.rand(batchsize, max_sources, 2, device=device) * is_on_array.unsqueeze(
-        2
-    )
+    locs = torch.rand(batch_size, max_sources, 2, device=device)
+    locs *= is_on_array.unsqueeze(2)
+    locs = locs * locs_max + locs_min
+
     return locs
 
 
-def _plot_one_source(slen, locs, source, cached_grid=None):
+def _render_one_source(slen, locs, source, cached_grid=None):
     """
     :param slen:
-    :param locs: is batchsize x len((x,y))
-    :param source: is a (batchsize, n_bands, slen, slen) tensor, which could either be a
+    :param locs: is batch_size x len((x,y))
+    :param source: is a (batch_size, n_bands, slen, slen) tensor, which could either be a
                     `expanded_psf` (psf repeated multiple times) for the case of of stars.
                     Or multiple galaxies in the case of galaxies.
     :param cached_grid:
-    :return: shape = (batchsize x n_bands x slen x slen)
+    :return: shape = (batch_size x n_bands x slen x slen)
     """
 
-    batchsize = locs.shape[0]
+    batch_size = locs.shape[0]
     assert locs.shape[1] == 2
 
     if cached_grid is None:
@@ -135,20 +140,13 @@ def _plot_one_source(slen, locs, source, cached_grid=None):
 
     # scale locs so they take values between -1 and 1 for grid sample
     locs = (locs - 0.5) * 2
-    grid_loc = grid.view(1, slen, slen, 2) - locs[:, [1, 0]].view(batchsize, 1, 1, 2)
+    grid_loc = grid.view(1, slen, slen, 2) - locs[:, [1, 0]].view(batch_size, 1, 1, 2)
 
     assert (
-        source.shape[0] == batchsize
+        source.shape[0] == batch_size
     ), "PSF should be expanded, check if shape is correct."
-    source_plotted = F.grid_sample(source, grid_loc, align_corners=True)
-    return source_plotted
-
-
-def _check_sources_and_locs(locs, n_sources, batchsize):
-    assert len(locs.shape) == 3, "Using batchsize as the first dimension."
-    assert locs.shape[2] == 2
-    assert len(n_sources) == batchsize
-    assert len(n_sources.shape) == 1
+    source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
+    return source_rendered
 
 
 def _get_grid(slen, cached_grid=None):
@@ -160,6 +158,27 @@ def _get_grid(slen, cached_grid=None):
         grid = cached_grid
 
     return grid
+
+
+def _check_sources_and_locs(locs, n_sources, batch_size):
+    assert len(locs.shape) == 3, "Using batch_size as the first dimension."
+    assert locs.shape[2] == 2
+    assert len(n_sources) == batch_size
+    assert len(n_sources.shape) == 1
+
+
+def get_mgrid(slen):
+    offset = (slen - 1) / 2
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    return mgrid.type(torch.FloatTensor).to(device)
+
+
+def get_galaxy_decoder(decoder_state_file, slen=51, n_bands=1, latent_dim=8):
+    dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
+    dec.load_state_dict(torch.load(decoder_state_file, map_location=device))
+    dec.eval()
+    return dec
 
 
 def get_background(background_file, n_bands, slen):
@@ -187,33 +206,26 @@ def get_fitted_powerlaw_psf(psf_file):
     return psf
 
 
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    return mgrid.type(torch.FloatTensor).to(device)
-
-
-def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
+def render_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     """
 
     Args:
         slen:
-        locs: is (batchsize x max_num_stars x len(x_loc, y_loc))
-        n_sources: has shape = (batchsize)
+        locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
+        n_sources: has shape = (batch_size)
         psf: A psf/star with shape (n_bands x slen x slen) tensor
-        fluxes: Is (batchsize x n_bands x max_stars)
-        cached_grid: Grid where the stars should be plotted with shape (slen x slen)
+        fluxes: Is (batch_size x n_bands x max_stars)
+        cached_grid: Grid where the stars should be rendered with shape (slen x slen)
 
     Returns:
     """
 
-    batchsize = locs.shape[0]
-    _check_sources_and_locs(locs, n_sources, batchsize)
+    batch_size = locs.shape[0]
+    _check_sources_and_locs(locs, n_sources, batch_size)
     grid = _get_grid(slen, cached_grid)
 
     n_bands = psf.shape[0]
-    scene = torch.zeros(batchsize, n_bands, slen, slen, device=device)
+    scene = torch.zeros(batch_size, n_bands, slen, slen, device=device)
 
     assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
     assert fluxes is not None
@@ -222,65 +234,47 @@ def plot_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     assert fluxes.shape[2] == n_bands
 
     expanded_psf = psf.expand(
-        batchsize, n_bands, -1, -1
+        batch_size, n_bands, -1, -1
     )  # all stars are just the PSF so we copy it.
 
-    # this loop plots each of the ith star in each of the (batchsize) images.
+    # this loop plots each of the ith star in each of the (batch_size) images.
     max_n = locs.shape[1]
     for n in range(max_n):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-        fluxes_n = fluxes[:, n, :]  # shape = (batchsize x n_bands)
-        one_star = _plot_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
+        fluxes_n = fluxes[:, n, :]  # shape = (batch_size x n_bands)
+        one_star = _render_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
         scene += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(
-            batchsize, n_bands, 1, 1
+            batch_size, n_bands, 1, 1
         )
 
     return scene
 
 
-def plot_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=None):
-    batchsize = locs.shape[0]
+def render_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=None):
+    batch_size = locs.shape[0]
     n_bands = single_galaxies.shape[2]
 
-    assert single_galaxies.shape[0] == batchsize
+    assert single_galaxies.shape[0] == batch_size
     assert single_galaxies.shape[1] == locs.shape[1]  # max_galaxies
 
-    _check_sources_and_locs(locs, n_sources, batchsize)
+    _check_sources_and_locs(locs, n_sources, batch_size)
     grid = _get_grid(slen, cached_grid)
 
-    scene = torch.zeros(batchsize, n_bands, slen, slen, device=device)
+    scene = torch.zeros(batch_size, n_bands, slen, slen, device=device)
     max_n = locs.shape[1]
     for n in range(max_n):
         is_on_n = (n < n_sources).float()
         locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
         galaxy = single_galaxies[
             :, n, :, :, :
-        ]  # shape = (batchsize x n_bands x slen x slen)
+        ]  # shape = (batch_size x n_bands x slen x slen)
 
-        # shape= (batchsize, n_bands, slen, slen)
-        one_galaxy = _plot_one_source(slen, locs_n, galaxy, cached_grid=grid)
+        # shape= (batch_size, n_bands, slen, slen)
+        one_galaxy = _render_one_source(slen, locs_n, galaxy, cached_grid=grid)
         scene += one_galaxy
 
     return scene
-
-
-def get_is_on_from_n_sources(n_sources, max_sources):
-    """Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
-    whether there are more than l sources on the kth batch.
-    """
-    assert not torch.any(torch.isnan(n_sources))
-    assert torch.all(n_sources >= 0)
-    assert torch.all(n_sources <= max_sources)
-
-    is_on_array = torch.zeros(
-        *n_sources.shape, max_sources, device=device, dtype=torch.float
-    )
-
-    for i in range(max_sources):
-        is_on_array[..., i] = n_sources > i
-
-    return is_on_array
 
 
 class SourceSimulator(object):
@@ -295,6 +289,8 @@ class SourceSimulator(object):
         max_sources=20,
         mean_sources=10,
         min_sources=0,
+        loc_min=0.0,
+        loc_max=1.0,
         f_min=1e3,
         f_max=1e6,
         alpha=0.5,
@@ -321,6 +317,7 @@ class SourceSimulator(object):
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
+        # galaxy parameters
         self.galaxy_decoder = galaxy_decoder
         self.galaxy_slen = self.galaxy_decoder.slen
         self.latent_dim = self.galaxy_decoder.latent_dim
@@ -332,6 +329,11 @@ class SourceSimulator(object):
         self.alpha = alpha  # pareto parameter.
         self.use_pareto = use_pareto
 
+        self.loc_min = loc_min
+        self.loc_max = loc_max
+        assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
+
+        # psf
         self.transpose_psf = transpose_psf
         self.psf = psf.to(device)
         self.psf_og = self.psf.clone()
@@ -352,13 +354,13 @@ class SourceSimulator(object):
         assert self.background.shape[1] == self.slen
         assert self.background.shape[2] == self.slen
 
-    def _sample_n_sources(self, batchsize):
+    def _sample_n_sources(self, batch_size):
         # sample number of sources
         n_sources = _sample_n_sources(
             self.mean_sources,
             self.min_sources,
             self.max_sources,
-            batchsize,
+            batch_size,
             draw_poisson=self.draw_poisson,
         )
 
@@ -368,10 +370,10 @@ class SourceSimulator(object):
         return n_sources, is_on_array
 
     def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
-        batchsize = n_sources.size(0)
+        batch_size = n_sources.size(0)
 
         # n_galaxies shouldn't exceed n_sources.
-        uniform = torch.rand(batchsize, self.max_sources, device=device)
+        uniform = torch.rand(batch_size, self.max_sources, device=device)
         galaxy_bool = uniform < self.prob_galaxy
         galaxy_bool = (galaxy_bool * is_on_array).float()
         star_bool = (1 - galaxy_bool) * is_on_array
@@ -395,27 +397,29 @@ class SourceSimulator(object):
 
         return log_fluxes
 
-    def _sample_fluxes(self, n_stars, star_bool, batchsize):
+    def _sample_fluxes(self, n_stars, star_bool, batch_size):
         """
 
-        :return: fluxes, a shape (batchsize x max_sources x n_bands) tensor
+        :return: fluxes, a shape (batch_size x max_sources x n_bands) tensor
         """
-        assert n_stars.shape[0] == batchsize
+        assert n_stars.shape[0] == batch_size
 
         if self.use_pareto:
             base_fluxes = _draw_pareto_maxed(
                 self.f_min,
                 self.f_max,
                 alpha=self.alpha,
-                shape=(batchsize, self.max_sources),
+                shape=(batch_size, self.max_sources),
             )
         else:  # use uniform in range (f_min, f_max)
-            uniform_base = torch.rand(batchsize, self.max_sources, device=device)
+            uniform_base = torch.rand(batch_size, self.max_sources, device=device)
             base_fluxes = uniform_base * (self.f_max - self.f_min) + self.f_min
 
         if self.n_bands > 1:
             colors = (
-                torch.rand(batchsize, self.max_sources, self.n_bands - 1, device=device)
+                torch.rand(
+                    batch_size, self.max_sources, self.n_bands - 1, device=device
+                )
                 * 0.15
                 + 0.3
             )
@@ -431,16 +435,17 @@ class SourceSimulator(object):
     def _sample_galaxy_params_and_single_images(self, n_galaxies, galaxy_bool):
         assert len(n_galaxies.shape) == 1
 
-        batchsize = n_galaxies.size(0)
-        n_samples = batchsize * self.max_sources
+        batch_size = n_galaxies.size(0)
+        n_samples = batch_size * self.max_sources
 
         # z has shape = (n_samples, latent_dim)
         # galaxies has shape = (n_samples, n_bands, slen, slen)
-        z, galaxies = self.galaxy_decoder.get_batch(n_samples)
+        with torch.no_grad():
+            z, galaxies = self.galaxy_decoder.get_sample(n_samples)
 
-        galaxy_params = z.reshape(batchsize, -1, self.latent_dim)
+        galaxy_params = z.reshape(batch_size, -1, self.latent_dim)
         single_galaxies = galaxies.reshape(
-            batchsize, -1, self.n_bands, self.galaxy_slen, self.galaxy_slen
+            batch_size, -1, self.n_bands, self.galaxy_slen, self.galaxy_slen
         )
 
         # zero out excess according to n_galaxies.
@@ -449,9 +454,16 @@ class SourceSimulator(object):
 
         return galaxy_params, single_galaxies
 
-    def sample_parameters(self, batchsize=1):
-        n_sources, is_on_array = self._sample_n_sources(batchsize)
-        locs = _sample_locs(self.max_sources, is_on_array, batchsize)
+    def sample_parameters(self, batch_size=1):
+        n_sources, is_on_array = self._sample_n_sources(batch_size)
+
+        locs = _sample_locs(
+            self.max_sources,
+            is_on_array,
+            batch_size,
+            locs_min=self.loc_min,
+            locs_max=self.loc_max,
+        )
 
         n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
             n_sources, is_on_array
@@ -462,7 +474,7 @@ class SourceSimulator(object):
             n_sources, galaxy_bool
         )
 
-        fluxes = self._sample_fluxes(n_sources, star_bool, batchsize)
+        fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
         log_fluxes = self._get_log_fluxes(fluxes)
 
         return (
@@ -478,7 +490,6 @@ class SourceSimulator(object):
             star_bool,
         )
 
-    # ToDo: Change so that it uses galsim (Poisson Noise?)
     @staticmethod
     def _apply_noise(images_mean):
         # add noise to images.
@@ -505,19 +516,18 @@ class SourceSimulator(object):
 
         return images
 
-    # TODO: What to do for non-aligned multi-band images in the case of galaxies.
     def _draw_image_from_params(
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
         # need n_sources because *_locs are not necessarily ordered.
-        galaxies = plot_multiple_galaxies(
+        galaxies = render_multiple_galaxies(
             self.slen,
             galaxy_locs,
             n_sources,
             single_galaxies,
             cached_grid=self.cached_grid,
         )
-        stars = plot_multiple_stars(
+        stars = render_multiple_stars(
             self.slen,
             star_locs,
             n_sources,
@@ -538,61 +548,18 @@ class SourceSimulator(object):
         return self._prepare_images(images)
 
 
-class SourceDataset(Dataset):
-    def __init__(self, n_images, simulator_args, simulator_kwargs):
-        """
-        :param n_images: same as batchsize.
-        """
-        self.n_images = n_images  # = batchsize.
-        self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
-        self.slen = self.simulator.slen
-        self.n_bands = self.simulator.n_bands
-
-    def __len__(self):
-        return self.n_images
-
-    def get_batch(self, batchsize=32):
-        (
-            n_sources,
-            n_galaxies,
-            n_stars,
-            locs,
-            galaxy_params,
-            single_galaxies,
-            fluxes,
-            log_fluxes,
-            galaxy_bool,
-            star_bool,
-        ) = self.simulator.sample_parameters(batchsize=batchsize)
-
-        galaxy_locs = locs * galaxy_bool.unsqueeze(2)
-        star_locs = locs * star_bool.unsqueeze(2)
-        images = self.simulator.generate_images(
-            n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
-        )
-
-        return {
-            "n_sources": n_sources,
-            "n_galaxies": n_galaxies,
-            "n_stars": n_stars,
-            "locs": locs,
-            "galaxy_params": galaxy_params,
-            "log_fluxes": log_fluxes,
-            "galaxy_bool": galaxy_bool,
-            "images": images,
-            "background": self.simulator.background,
-        }
-
-
 class SimulatedDataset(IterableDataset):
-    def __init__(self, n_batches: int, simulator_args, simulator_kwargs, batchsize):
+    def __init__(
+        self, n_batches: int, batch_size: int, simulator_args, simulator_kwargs
+    ):
         super(SimulatedDataset, self).__init__()
 
         self.n_batches = n_batches
+        self.batch_size = batch_size
+
         self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
         self.slen = self.simulator.slen
         self.n_bands = self.simulator.n_bands
-        self.batchsize = batchsize
 
     def __iter__(self):
         return self.batch_generator()
@@ -613,7 +580,7 @@ class SimulatedDataset(IterableDataset):
             log_fluxes,
             galaxy_bool,
             star_bool,
-        ) = self.simulator.sample_parameters(batchsize=self.batchsize)
+        ) = self.simulator.sample_parameters(batch_size=self.batch_size)
 
         galaxy_locs = locs * galaxy_bool.unsqueeze(2)
         star_locs = locs * star_bool.unsqueeze(2)

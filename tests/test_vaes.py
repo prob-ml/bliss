@@ -2,8 +2,7 @@ import torch
 import numpy as np
 
 from celeste import device
-from celeste.datasets import simulated_datasets
-from celeste.models import sourcenet
+from celeste.models import encoder
 
 
 class TestSourceEncoder:
@@ -19,7 +18,7 @@ class TestSourceEncoder:
         n_bands = 2
 
         # get encoder
-        star_encoder = sourcenet.SourceEncoder(
+        star_encoder = encoder.ImageEncoder(
             slen=101,
             ptile_slen=ptile_slen,
             step=2,
@@ -72,7 +71,7 @@ class TestSourceEncoder:
             assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_per_tile).all()
 
         # check pattern of zeros
-        is_on_array = simulated_datasets.get_is_on_from_n_sources(
+        is_on_array = encoder.get_is_on_from_n_sources(
             n_star_per_tile, star_encoder.max_detections
         )
         assert torch.all((loc_mean * is_on_array.unsqueeze(2).float()) == loc_mean)
@@ -154,7 +153,7 @@ class TestSourceEncoder:
         n_samples = 10
 
         # get encoder
-        star_encoder = sourcenet.SourceEncoder(
+        star_encoder = encoder.ImageEncoder(
             slen=101,
             ptile_slen=ptile_slen,
             step=2,
@@ -164,45 +163,48 @@ class TestSourceEncoder:
             n_galaxy_params=8,
         ).to(device)
 
-        star_encoder.eval()
+        with torch.no_grad():
+            star_encoder.eval()
 
-        # simulate image padded tiles
-        image_ptiles = (
-            torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device)
-            + 10.0
-        )
-        n_star_per_tile_sampled = torch.from_numpy(
-            np.random.choice(max_detections, (n_samples, n_image_tiles))
-        )
+            # simulate image padded tiles
+            image_ptiles = (
+                torch.randn(
+                    n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device
+                )
+                + 10.0
+            )
+            n_star_per_tile_sampled = torch.from_numpy(
+                np.random.choice(max_detections, (n_samples, n_image_tiles))
+            )
 
-        h = star_encoder._get_var_params_all(image_ptiles).detach()
-        (
-            loc_mean,
-            loc_logvar,
-            galaxy_param_mean,
-            galaxy_param_logvar,
-            log_flux_mean,
-            log_flux_logvar,
-            prob_galaxy,
-        ) = star_encoder._get_var_params_for_n_sources(h, n_star_per_tile_sampled)
-
-        #  test prediction matches tile by tile
-        for i in range(n_samples):
+            h = star_encoder._get_var_params_all(image_ptiles).detach()
             (
-                _,
-                loc_mean_i,
-                loc_logvar_i,
-                galaxy_param_mean_i,
-                galaxy_param_logvar_i,
-                log_flux_mean_i,
-                log_flux_logvar_i,
-                prob_galaxy_i,
-            ) = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
+                loc_mean,
+                loc_logvar,
+                galaxy_param_mean,
+                galaxy_param_logvar,
+                log_flux_mean,
+                log_flux_logvar,
+                prob_galaxy,
+            ) = star_encoder._get_var_params_for_n_sources(h, n_star_per_tile_sampled)
 
-            assert (loc_mean_i - loc_mean[i]).abs().max() < 1e-6
-            assert torch.all(loc_logvar_i == loc_logvar[i])
-            assert torch.all(log_flux_mean_i == log_flux_mean[i])
-            assert torch.all(log_flux_logvar_i == log_flux_logvar[i])
+            #  test prediction matches tile by tile
+            for i in range(n_samples):
+                (
+                    _,
+                    loc_mean_i,
+                    loc_logvar_i,
+                    galaxy_param_mean_i,
+                    galaxy_param_logvar_i,
+                    log_flux_mean_i,
+                    log_flux_logvar_i,
+                    prob_galaxy_i,
+                ) = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 
-            assert torch.all(galaxy_param_mean_i == galaxy_param_mean[i])
-            assert torch.all(galaxy_param_logvar_i == galaxy_param_logvar[i])
+                assert (loc_mean_i - loc_mean[i]).abs().max() < 1e-6
+                assert torch.all(loc_logvar_i == loc_logvar[i])
+                assert torch.all(log_flux_mean_i == log_flux_mean[i])
+                assert torch.all(log_flux_logvar_i == log_flux_logvar[i])
+
+                assert torch.all(galaxy_param_mean_i == galaxy_param_mean[i])
+                assert torch.all(galaxy_param_logvar_i == galaxy_param_logvar[i])

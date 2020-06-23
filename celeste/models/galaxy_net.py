@@ -97,7 +97,6 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         """
         z = self.fc(z)
 
-        # view takes in -1 and automatically determines that dimension.
         # This dimension is the number of samples.
         z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
         z = self.deconv(z)
@@ -117,7 +116,7 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         # reconstructed mean and variance, these are per pixel.
         return recon_mean, recon_var
 
-    def get_sample(self, num_samples, return_latent=False):
+    def get_sample(self, num_samples):
         p_z = Normal(
             torch.zeros(1, dtype=torch.float, device=device),
             torch.ones(1, dtype=torch.float, device=device),
@@ -127,11 +126,8 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         )  # shape = (8,)
         samples, _ = self.forward(z)
 
-        if return_latent:
-            return z, samples.detach()
-
-        else:
-            return samples.detach()  # shape = (num_samples, n_bands, slen, slen)
+        # samples shape = (num_samples, n_bands, slen, slen)
+        return z, samples
 
 
 class OneCenteredGalaxy(nn.Module):

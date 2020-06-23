@@ -6,17 +6,17 @@ import pytorch_lightning as ptl
 
 import numpy as np
 
-from .datasets.simulated_datasets import (
+from celeste.models.decoder import (
     get_mgrid,
-    plot_multiple_stars,
-    get_is_on_from_n_sources,
+    render_multiple_stars,
 )
+from .models.encoder import get_is_on_from_n_sources
 from .psf_transform import PowerLawPSF
 from celeste import device
 
 
 def _sample_image(observed_image, sample_every=10):
-    batchsize = observed_image.shape[0]
+    batch_size = observed_image.shape[0]
     n_bands = observed_image.shape[1]
     slen = observed_image.shape[-1]
 
@@ -30,7 +30,7 @@ def _sample_image(observed_image, sample_every=10):
             x1 = j * sample_every
             samples[:, i, j] = (
                 observed_image[:, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)]
-                .reshape(batchsize, n_bands, -1)
+                .reshape(batch_size, n_bands, -1)
                 .min(2)[0]
                 .mean(0)
             )
@@ -94,7 +94,7 @@ class ModelParams(nn.Module):
 
         self.pad = pad
 
-        # observed image is batchsize (or 1) x n_bands x slen x slen
+        # observed image is batch_size (or 1) x n_bands x slen x slen
         assert len(observed_image.shape) == 4
 
         self.observed_image = observed_image
@@ -127,7 +127,7 @@ class ModelParams(nn.Module):
         self.cached_grid = get_mgrid(observed_image.shape[-1]).to(device)
 
     def _plot_stars(self, locs, fluxes, n_stars, psf):
-        self.stars = plot_multiple_stars(
+        self.stars = render_multiple_stars(
             self.slen, locs, n_stars, psf, fluxes, self.cached_grid
         )
 
