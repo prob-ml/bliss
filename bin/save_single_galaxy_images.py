@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
+import os
 import argparse
 import h5py
-import numpy as np
+import torch
 import multiprocessing
 
-from celeste.datasets import galaxy_datasets
-from celeste.datasets.catsim_datasets import save_images
+from . import setup_paths
 
-all_datasets = {
-    cls.__name__: cls for cls in galaxy_datasets.SingleGalaxyDataset.__subclasses__()
-}
+from celeste.datasets import galaxy_datasets
+
+all_datasets = {"CatsimGalaxies": galaxy_datasets.CatsimGalaxies}
 
 final_image_name = "images.hd5f"
-background_name = "background.npy"
+background_name = "background.pt"
 
 
 def generate(
@@ -29,7 +29,9 @@ def generate(
         not file_path.exists() or overwrite
     ), "Trying to overwrite file without --overwrite"
 
-    save_images(dataset, file_path, prop_file_path=prop_file_path, n_images=n_images)
+    galaxy_datasets.save_images(
+        dataset, file_path, prop_file_path=prop_file_path, n_images=n_images
+    )
 
 
 def merge_files(output_path):
@@ -70,21 +72,19 @@ def save_background(output_path):
     with h5py.File(new_file_path, "r") as curr_file:
         ds = curr_file["images"]
         background = ds.attrs["background"]
-        np.save(background_path, background)
+        torch.save(background_path, background)
 
 
 def main(args):
+    paths = setup_paths(args)
 
     assert (
         args.n_processes <= multiprocessing.cpu_count()
     ), "Requesting more cpus than available."
-    output_path = utils.data_path.joinpath(f"{args.out_dir}")
+    output_path = paths["data"].joinpath(f"{args.output_dir}")
     output_path.mkdir(exist_ok=True)
 
-    # load dataset only once.
-    dataset = all_datasets[args.dataset_name].load_dataset_from_params(
-        args.dset_param_file
-    )
+    dataset = all_datasets[args.dataset_name].from_args(args)
 
     file_paths = [output_path.joinpath(f"image{i}") for i in range(args.n_processes)]
     generate_args = [
@@ -100,51 +100,51 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Use multiprocessing to save images from the specified dataset into .hdf5 "
-        "file in the default data directory, along with the background used for this images "
-        "in background.npy"
+        description="Use multiprocessing to save images from the specified dataset into "
+        "images.hdf5 file in the default data directory, along with the background used for "
+        "this images in background.pt"
     )
 
     # io stuff
     parser.add_argument(
-        "--out-dir",
+        "--root-dir",
+        help="Absolute path to directory containing bin and celeste package.",
+        type=str,
+        default=os.path.abspath(".."),
+    )
+
+    parser.add_argument(
+        "--output-dir",
         type=str,
         required=True,
-        description="Will write results in data/{output_dir}.",
+        help="Results will be written to data/output_dir",
     )
-    parser.add_argument(
-        "--filename",
-        type=str,
-        default="images",
-        description="name for final image file.",
-    )
+
     parser.add_argument(
         "--overwrite", action="store_true", help="Whether to overwrite existing files"
     )
 
     # properties of individually saved images.
     parser.add_argument("--dataset", type=str, choices=all_datasets.keys())
-    parser.add_argument(
-        "--dset-params-file",
-        type=str,
-        default=None,
-        help="Specify params file relative to data folder, "
-        "from which to load params for dataset.",
-    )
     parser.add_argument("--images-per-process", type=int, required=True)
-    parser.add_argument("--slen", type=int, default=51)
-    parser.add_argument("--n-bands", type=int)
-
-    # multiprocessing
     parser.add_argument(
         "--n-processes",
         type=str,
-        help="Number of parallel processes " "to run to write images in disk.",
+        help="Number of parallel processes to run to write images in disk.",
         required=True,
     )
 
+    parser.add_argument("--slen", type=int, default=51)
+    parser.add_argument("--n-bands", type=int)
+    parser.add_argument("--snr", type=float, default=200, help="SNR to use for noise")
+
+    catsim_group = parser.add_argument_group(
+        "Catsim Dataset Options", "Specify options for rendering catsim images",
+    )
+    galaxy_datasets.CatsimGalaxies.add_args(catsim_group)
+
     pargs = parser.parse_args()
 
-    assert pargs.n_bands in [1, 6] or not pargs.generate, "Only 1 or 6 bands supported."
+    assert pargs.n_bands in [1, 6] or not pargs.generate, "Only 1 or 6 bands suggested."
 
     main(pargs)

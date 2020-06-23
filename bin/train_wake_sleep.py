@@ -71,10 +71,10 @@ star_dataset = simulated_datasets_lib.load_dataset_from_params(
 
 print("data generation time: {:.3f}secs".format(time.time() - t0))
 # get loader
-batchsize = 20
+batch_size = 20
 
 loader = torch.utils.data.DataLoader(
-    dataset=star_dataset, batch_size=batchsize, shuffle=True
+    dataset=star_dataset, batch_size=batch_size, shuffle=True
 )
 
 ###############

@@ -1,41 +1,12 @@
 #!/usr/bin/env python
 import argparse
 import os
-from pathlib import Path
-import torch
+
+from . import setup_paths
+from . import setup_device
 
 from celeste import train
-from celeste.models import sourcenet
-from celeste.datasets import simulated_datasets, galaxy_datasets
-
-
-def setup_paths(args):
-    root_path = Path(args.root_dir)
-    path_dict = {
-        "root": root_path,
-        "data": root_path.joinpath("data"),
-        "config": root_path.joinpath("config"),
-        "results": root_path.joinpath("results"),
-    }
-
-    for p in path_dict.values():
-        assert p.exists(), f"path {p.as_posix()} does not exist"
-
-    return path_dict
-
-
-def setup_device(args):
-    assert (
-        args.no_cuda or torch.cuda.is_available()
-    ), "cuda is not available but --no-cuda is false"
-
-    if not args.no_cuda:
-        device = torch.device(f"cuda:{args.device}")
-        torch.cuda.set_device(device)
-    else:
-        device = torch.device("cpu")
-
-    return device
+from celeste.models import encoder, decoder
 
 
 # TODO: part of this function can probably be a more general utility function in
@@ -52,17 +23,15 @@ def setup_dataset(args, paths):
 
     # load decoder
     galaxy_slen = 51  # decoders are all created with this slen.
-    galaxy_decoder = galaxy_datasets.DecoderSamples(
-        galaxy_slen, decoder_file, n_bands=args.n_bands
+    galaxy_decoder = decoder.get_galaxy_decoder(
+        decoder_file, n_bands=args.n_bands, slen=galaxy_slen,
     )
 
     # load psf
-    psf = simulated_datasets.get_fitted_powerlaw_psf(psf_file)[None, 0]
+    psf = decoder.get_fitted_powerlaw_psf(psf_file)[None, 0]
 
     # load background
-    background = simulated_datasets.get_background(
-        background_file, args.n_bands, args.slen
-    )
+    background = decoder.get_background(background_file, args.n_bands, args.slen)
 
     simulator_args = (
         galaxy_decoder,
@@ -74,9 +43,7 @@ def setup_dataset(args, paths):
         max_sources=args.max_sources, mean_sources=args.mean_sources, min_sources=0,
     )
 
-    dataset = simulated_datasets.SourceDataset(
-        args.n_images, simulator_args, simulator_kwargs
-    )
+    dataset = decoder.SourceDataset(args.n_images, simulator_args, simulator_kwargs)
 
     assert args.n_bands == 1, "Only 1 band is supported at the moment."
     assert (
@@ -97,14 +64,14 @@ def main(args):
     out_dir = paths["results"].joinpath(args.output_name) if args.output_name else None
 
     print(
-        f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}, "
+        f"running sleep phase for n_epochs={args.n_epochs}, batch_size={args.batch_size}, "
         f"n_images={args.n_images}, device={device}"
     )
     print(f"output dir: {out_dir}")
 
     galaxy_dataset = setup_dataset(args, paths)
 
-    galaxy_encoder = sourcenet.SourceEncoder(
+    galaxy_encoder = encoder.ImageEncoder(
         slen=args.slen,
         n_bands=args.n_bands,
         ptile_slen=args.ptile_slen,
@@ -120,7 +87,7 @@ def main(args):
         args.slen,
         n_bands=1,
         n_source_params=galaxy_dataset.simulator.latent_dim,
-        batchsize=args.batchsize,
+        batch_size=args.batch_size,
         eval_every=args.eval_every,
         out_dir=out_dir,
         verbose=True,
@@ -175,10 +142,11 @@ if __name__ == "__main__":
     )
 
     # data params that can be changed, default==None means use ones in .json file.
-    parser.add_argument("--slen", type=int, default=None)
+    parser.add_argument("--slen", type=int, default=100)
     parser.add_argument("--n-bands", type=int, default=1)
-    parser.add_argument("--max-sources", type=int, default=None)
-    parser.add_argument("--mean-sources", type=int, default=None)
+    parser.add_argument("--max-sources", type=int, default=10)
+    parser.add_argument("--mean-sources", type=int, default=5)
+    parser.add_argument("--min-sources", type=int, default=1)
 
     # training params
     parser.add_argument(
@@ -188,7 +156,7 @@ if __name__ == "__main__":
         "--n-epochs", type=int, default=201, help="Number of epochs to run for."
     )
     parser.add_argument(
-        "--batchsize", type=int, default=32, help="Number of batches in each epoch."
+        "--batch-size", type=int, default=32, help="Number of batches in each epoch."
     )
     parser.add_argument(
         "--eval-every",
