@@ -5,9 +5,8 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 
-import celeste.models.encoder
-from celeste import device
-from celeste import sleep
+from celeste import device, sleep
+from celeste.models import encoder
 
 
 class TestStarEncoderObjective:
@@ -76,7 +75,7 @@ class TestStarEncoderObjective:
         true_n_sources = torch.from_numpy(
             np.random.choice(max_detections + 1, n_ptiles)
         ).to(device)
-        true_is_on_array = celeste.models.encoder.get_is_on_from_n_sources(
+        true_is_on_array = encoder.get_is_on_from_n_sources(
             true_n_sources, max_detections
         ).float()
 

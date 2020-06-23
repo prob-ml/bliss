@@ -5,9 +5,7 @@ import pytorch_lightning as ptl
 from pytorch_lightning.profiler import AdvancedProfiler
 
 from celeste import device, use_cuda
-from celeste import psf_transform
-from celeste import train
-from celeste import wake
+from celeste import psf_transform, wake, sleep
 from celeste.models import encoder, decoder
 
 
@@ -25,7 +23,7 @@ class TestStarEncoderTraining:
 
     @pytest.fixture(scope="module")
     def trained_encoder(
-        config_path,
+        self,
         data_path,
         single_band_galaxy_decoder,
         single_band_fitted_powerlaw_psf,
@@ -61,10 +59,10 @@ class TestStarEncoderTraining:
             prob_galaxy=0.0,  # enforce only stars are created in the training images.
         )
 
-        batchsize = 32
-        n_batches = int(n_images / batchsize)
-        dataset = decoder.SourceDataset(
-            n_batches, simulator_args, simulator_kwargs, batchsize=batchsize
+        batch_size = 32
+        n_batches = int(n_images / batch_size)
+        dataset = decoder.SimulatedDataset(
+            n_batches, batch_size, simulator_args, simulator_kwargs
         )
 
         # setup Star Encoder
@@ -83,7 +81,7 @@ class TestStarEncoderTraining:
 
         # train encoder
         # training wrapper
-        sleep_net = train.SleepPhase(dataset=dataset, encoder=encoder)
+        sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=star_encoder)
 
         n_epochs = 200 if use_cuda else 1
         # implement profiler

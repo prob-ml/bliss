@@ -5,7 +5,7 @@ from .. import device
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
-    """Return a boolean array of shape=(batchsize, max_sources) whose (k,l)th entry indicates
+    """Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
     whether there are more than l sources on the kth batch.
     """
     assert not torch.any(torch.isnan(n_sources))
@@ -79,10 +79,10 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     assert torch.all(locs <= 1.0)
     assert torch.all(locs >= 0.0)
 
-    batchsize = locs.size(0)
+    batch_size = locs.size(0)
     max_sources = locs.size(1)
     single_image_n_ptiles = tile_coords.size(0)
-    total_ptiles = single_image_n_ptiles * batchsize  # across all batches.
+    total_ptiles = single_image_n_ptiles * batch_size  # across all batches.
 
     # _tile_coords shape = (1 x single_image_n_ptiles x 1 x 2)
     _tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
@@ -108,11 +108,13 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     # locs including leading/trailing zeroes) in the case that there are multiple objects
     # in that tile.
     # need to .unsqueeze(0) because switching from batches to just tiles.
-    _tile_is_on_array = tile_is_on_array.view(batchsize, -1, max_sources, 1)
-    _locs = locs.view(batchsize, 1, max_sources, 2)
+    _tile_is_on_array = tile_is_on_array.view(batch_size, -1, max_sources, 1)
+    _locs = locs.view(batch_size, 1, max_sources, 2)
     tile_locs = _tile_is_on_array * _locs
     tile_locs = tile_locs.view(total_ptiles, max_sources, 2)
-    _tile_coords = tile_coords.view(single_image_n_ptiles, 1, 2).repeat(batchsize, 1, 1)
+    _tile_coords = tile_coords.view(single_image_n_ptiles, 1, 2).repeat(
+        batch_size, 1, 1
+    )
     tile_locs -= _tile_coords + edge_padding - 0.5  # recenter
     tile_locs /= ptile_slen - 2 * edge_padding  # re-normalize
     tile_locs = torch.relu(tile_locs)  # some are negative now; set these to 0
@@ -133,10 +135,10 @@ def _get_tile_params(tile_is_on_array, indx_sort, params):
     for param in params:
         assert max_sources == param.size(1)
         # this will work even for galaxy_bool
-        batchsize = param.size(0)
-        _param = param.view(batchsize, 1, max_sources, -1)
+        batch_size = param.size(0)
+        _param = param.view(batch_size, 1, max_sources, -1)
         param_dim = _param.size(-1)
-        _tile_is_on_array = tile_is_on_array.view(batchsize, -1, max_sources, 1)
+        _tile_is_on_array = tile_is_on_array.view(batch_size, -1, max_sources, 1)
 
         tiled_param = _tile_is_on_array * _param
         tiled_param = tiled_param.view(total_ptiles, max_sources, -1)
@@ -286,11 +288,11 @@ def _tile_images(images, ptile_slen, step):
 
     NOTE: input and output are torch tensors, not numpy arrays.
 
-    :param images: A tensor of size (batchsize x n_bands x slen x slen)
+    :param images: A tensor of size (batch_size x n_bands x slen x slen)
     :param ptile_slen: The side length of each padded tile.
     :param step:
     :return: image_ptiles, output tensor of shape:
-             (batchsize * ptiles per image) x n_bands x ptile_slen x ptile_slen
+             (batch_size * ptiles per image) x n_bands x ptile_slen x ptile_slen
     :rtype: class:`torch.Tensor`
     """
 
@@ -406,7 +408,6 @@ class ImageEncoder(nn.Module):
             Flatten(),
             nn.Linear(conv_out_dim, self.enc_hidden),
             nn.LayerNorm(self.enc_hidden),
-            # nn.Dropout(p=0.2),
             nn.ReLU(),
             nn.Linear(self.enc_hidden, self.enc_hidden),
             nn.LayerNorm(self.enc_hidden),
@@ -650,7 +651,7 @@ class ImageEncoder(nn.Module):
         )
 
     def get_images_in_tiles(self, images):
-        assert len(images.shape) == 4  # should be batchsize x n_bands x slen x slen
+        assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
 
         image_ptiles = _tile_images(images, self.ptile_slen, self.step)

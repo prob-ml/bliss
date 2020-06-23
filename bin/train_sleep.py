@@ -64,7 +64,7 @@ def main(args):
     out_dir = paths["results"].joinpath(args.output_name) if args.output_name else None
 
     print(
-        f"running sleep phase for n_epochs={args.n_epochs}, batchsize={args.batchsize}, "
+        f"running sleep phase for n_epochs={args.n_epochs}, batch_size={args.batch_size}, "
         f"n_images={args.n_images}, device={device}"
     )
     print(f"output dir: {out_dir}")
@@ -87,7 +87,7 @@ def main(args):
         args.slen,
         n_bands=1,
         n_source_params=galaxy_dataset.simulator.latent_dim,
-        batchsize=args.batchsize,
+        batch_size=args.batch_size,
         eval_every=args.eval_every,
         out_dir=out_dir,
         verbose=True,
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         "--n-epochs", type=int, default=201, help="Number of epochs to run for."
     )
     parser.add_argument(
-        "--batchsize", type=int, default=32, help="Number of batches in each epoch."
+        "--batch-size", type=int, default=32, help="Number of batches in each epoch."
     )
     parser.add_argument(
         "--eval-every",

@@ -1,14 +1,21 @@
 import torch
 import pytest
+import pytorch_lightning as pl
+from pytorch_lightning.profiler import AdvancedProfiler
 
 from celeste import use_cuda
-from celeste import train
-from celeste.models import encoder, decoder
+from celeste import sleep
+from celeste.models import decoder, encoder
 
 
 @pytest.fixture(scope="module")
 def trained_encoder(
-    data_path, single_band_galaxy_decoder, single_band_fitted_powerlaw_psf, device,
+    data_path,
+    single_band_galaxy_decoder,
+    single_band_fitted_powerlaw_psf,
+    profile,
+    device,
+    device_id,
 ):
 
     # create training dataset
@@ -21,7 +28,7 @@ def trained_encoder(
 
     # set background
     background = torch.zeros(n_bands, slen, slen, device=device)
-    background[0] = 686.0
+    background.fill_(686.0)
 
     # simulate dataset
     n_images = 128
@@ -41,7 +48,11 @@ def trained_encoder(
         prob_galaxy=0.0,  # enforce only stars are created in the training images.
     )
 
-    dataset = decoder.SourceDataset(n_images, simulator_args, simulator_kwargs)
+    batch_size = 32
+    n_batches = int(n_images / batch_size)
+    dataset = decoder.SimulatedDataset(
+        n_batches, batch_size, simulator_args, simulator_kwargs
+    )
 
     # setup Star Encoder
     image_encoder = encoder.ImageEncoder(
@@ -59,19 +70,26 @@ def trained_encoder(
 
     # train encoder
     # training wrapper
-    SleepTraining = train.SleepTraining(
-        model=image_encoder,
-        dataset=dataset,
-        slen=slen,
-        n_bands=n_bands,
-        verbose=False,
-        batchsize=32,
-    )
+    sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
 
     n_epochs = 150 if use_cuda else 1
-    SleepTraining.run(n_epochs=n_epochs)
 
-    return image_encoder
+    profiler = AdvancedProfiler(output_filename=profile) if profile else None
+
+    # runs on gpu or cpu?
+    n_device = [device_id] if use_cuda else 0  # 0 means no gpu
+
+    sleep_trainer = pl.Trainer(
+        gpus=n_device,
+        profiler=profiler,
+        min_epochs=n_epochs,
+        max_epochs=n_epochs,
+        reload_dataloaders_every_epoch=True,
+    )
+
+    sleep_trainer.fit(sleep_net)
+
+    return sleep_net.image_encoder
 
 
 class TestStarSleepEncoder:
@@ -101,14 +119,14 @@ class TestStarSleepEncoder:
         if not use_cuda:
             return
 
-        # test that parameters match.
+        # test n_sources and locs
         assert n_sources == test_star["n_sources"].to(device)
 
         diff_locs = test_star["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
         diff_locs *= test_image.size(-1)
         assert diff_locs.abs().max() <= 0.5
 
-        # fluxes
+        # test fluxes
         diff = test_star["log_fluxes"].sort(1)[0].to(device) - log_fluxes.sort(1)[0]
         assert torch.all(diff.abs() <= log_fluxes.sort(1)[0].abs() * 0.10)
         assert torch.all(

@@ -16,7 +16,7 @@ from celeste import device
 
 
 def _sample_image(observed_image, sample_every=10):
-    batchsize = observed_image.shape[0]
+    batch_size = observed_image.shape[0]
     n_bands = observed_image.shape[1]
     slen = observed_image.shape[-1]
 
@@ -30,7 +30,7 @@ def _sample_image(observed_image, sample_every=10):
             x1 = j * sample_every
             samples[:, i, j] = (
                 observed_image[:, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)]
-                .reshape(batchsize, n_bands, -1)
+                .reshape(batch_size, n_bands, -1)
                 .min(2)[0]
                 .mean(0)
             )
@@ -94,7 +94,7 @@ class ModelParams(nn.Module):
 
         self.pad = pad
 
-        # observed image is batchsize (or 1) x n_bands x slen x slen
+        # observed image is batch_size (or 1) x n_bands x slen x slen
         assert len(observed_image.shape) == 4
 
         self.observed_image = observed_image

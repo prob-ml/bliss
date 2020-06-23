@@ -2,8 +2,7 @@ import pytest
 import pathlib
 import torch
 
-from celeste.models.decoder import get_fitted_powerlaw_psf
-from celeste.datasets.galaxy_datasets import DecoderSamples
+from celeste.models.decoder import get_fitted_powerlaw_psf, get_galaxy_decoder
 from celeste import use_cuda
 
 
@@ -11,11 +10,22 @@ def pytest_addoption(parser):
     parser.addoption(
         "--device-id", action="store", default=0, help="ID of cuda device to use."
     )
+    parser.addoption(
+        "--profile",
+        action="store",
+        default=None,
+        help="None or file path to store profiler",
+    )
 
 
 @pytest.fixture(scope="session")
 def device_id(pytestconfig):
     return pytestconfig.getoption("device_id")
+
+
+@pytest.fixture(scope="session")
+def profile(pytestconfig):
+    return pytestconfig.getoption("profile")
 
 
 @pytest.fixture(scope="session")
@@ -44,27 +54,15 @@ def single_band_fitted_powerlaw_psf(data_path):
 
 @pytest.fixture(scope="session")
 def single_band_galaxy_decoder(data_path):
-    galaxy_slen = 51
-    n_bands = 1
-    galaxy_decoder_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
-    return DecoderSamples(galaxy_slen, galaxy_decoder_file, n_bands=n_bands)
+
+    decoder_state_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
+    galaxy_decoder = get_galaxy_decoder(
+        decoder_state_file, slen=51, n_bands=1, latent_dim=8
+    )
+    return galaxy_decoder
 
 
 @pytest.fixture(scope="session")
 def test_star(data_path):
     test_star = torch.load(data_path.joinpath("3_star_test.pt"))
     return test_star
-
-
-def pytest_addoption(parser):
-    parser.addoption(
-        "--profile",
-        action="store",
-        default=None,
-        help="None or file path to store profiler",
-    )
-
-
-@pytest.fixture(scope="session")
-def profile(pytestconfig):
-    return pytestconfig.getoption("--profile")

@@ -279,10 +279,8 @@ class CatsimRenderer(object):
         self.background = self.get_background()
 
     def get_obs(self):
-        """
-        Returns a list of :class:`Survey` objects, each of them has an image attribute which is
+        """Returns a list of :class:`Survey` objects, each of them has an image attribute which is
         where images are written to by iso_render_engine.render_galaxy.
-        :return:
         """
         obs = []
         for band in self.bands:
@@ -317,9 +315,7 @@ class CatsimRenderer(object):
 
     # ToDo: Consider a context manager.
     def reset_obs(self):
-        """
-        Reset it so we can draw on it again.
-        :return:
+        """Reset it so we can draw on it again.
         """
         for single_obs in self.obs:
             single_obs.image = galsim.Image(
@@ -373,12 +369,7 @@ class CatsimRenderer(object):
         return image, self.background
 
     def single_band(self, entry, single_obs, band):
-        """
-        Builds galaxy from a single entry in the catalog. With no background sky level added.
-        :param entry:
-        :param single_obs:
-        :param band:
-        :return:
+        """Builds galaxy from a single entry in the catalog. With no background sky level added.
         """
 
         galaxy_builder = descwl.model.GalaxyBuilder(
