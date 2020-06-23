@@ -4,14 +4,12 @@ import torch
 import pytorch_lightning as ptl
 from pytorch_lightning.profiler import AdvancedProfiler
 
-from celeste import device, use_cuda
-from celeste import psf_transform, wake, sleep
-from celeste.models import encoder, decoder
+from celeste import use_cuda, psf_transform, wake
 
 
 class TestStarEncoderTraining:
     @pytest.fixture(scope="module")
-    def init_psf_setup(self, data_path):
+    def init_psf_setup(self, data_path, device):
         psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
         true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
         init_psf_params = true_psf_params.clone()[None, 0, ...]
@@ -24,83 +22,23 @@ class TestStarEncoderTraining:
     @pytest.fixture(scope="module")
     def trained_encoder(
         self,
-        data_path,
+        get_trained_encoder,
         single_band_galaxy_decoder,
-        single_band_fitted_powerlaw_psf,
+        init_psf_setup,
+        device,
+        device_id,
         profile,
     ):
-        # create training dataset
-        n_bands = 1
-        max_stars = 20
-        mean_stars = 15
-        min_stars = 5
-        f_min = 1e4
-        slen = 50
-
-        # set background
-        background = torch.zeros(n_bands, slen, slen, device=device)
-        background.fill_(686.0)
-
-        # simulate dataset
-        n_images = 64 * 4
-        simulator_args = (
+        return get_trained_encoder(
             single_band_galaxy_decoder,
-            single_band_fitted_powerlaw_psf,
-            background,
+            init_psf_setup["init_psf"],
+            device,
+            device_id,
+            profile,
+            n_images=64 * 6,
+            batch_size=32,
+            n_epochs=200,
         )
-
-        simulator_kwargs = dict(
-            slen=slen,
-            n_bands=n_bands,
-            max_sources=max_stars,
-            mean_sources=mean_stars,
-            min_sources=min_stars,
-            f_min=f_min,
-            prob_galaxy=0.0,  # enforce only stars are created in the training images.
-        )
-
-        batch_size = 32
-        n_batches = int(n_images / batch_size)
-        dataset = decoder.SimulatedDataset(
-            n_batches, batch_size, simulator_args, simulator_kwargs
-        )
-
-        # setup Star Encoder
-        star_encoder = encoder.ImageEncoder(
-            slen=slen,
-            ptile_slen=8,
-            step=2,
-            edge_padding=3,
-            n_bands=n_bands,
-            max_detections=2,
-            n_galaxy_params=single_band_galaxy_decoder.latent_dim,
-            enc_conv_c=5,
-            enc_kern=3,
-            enc_hidden=64,
-        ).to(device)
-
-        # train encoder
-        # training wrapper
-        sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=star_encoder)
-
-        n_epochs = 200 if use_cuda else 1
-        # implement profiler
-        profiler = AdvancedProfiler(output_filename=profile)
-
-        # runs on gpu or cpu?
-        n_device = [0] if use_cuda else 0  # 0 means no gpu
-
-        sleep_trainer = ptl.Trainer(
-            gpus=n_device,
-            profiler=profiler,
-            min_epochs=n_epochs,
-            max_epochs=n_epochs,
-            reload_dataloaders_every_epoch=True,
-        )
-
-        sleep_trainer.fit(sleep_net)
-
-        return sleep_net.model
 
     def test_star_wake(
         self,
@@ -108,7 +46,10 @@ class TestStarEncoderTraining:
         single_band_fitted_powerlaw_psf,
         init_psf_setup,
         test_star,
+        device,
+        device_id,
     ):
+
         # load the test image
         # 3-stars 30*30
         test_image = test_star["images"]
@@ -139,7 +80,7 @@ class TestStarEncoderTraining:
         profiler = AdvancedProfiler(output_filename="wake_phase.txt")
 
         # runs on gpu or cpu?
-        device_num = [0] if use_cuda else 0  # 0 means no gpu
+        device_num = [device_id] if use_cuda else 0  # 0 means no gpu
 
         use_val = 10 if use_cuda else 1
         wake_trainer = ptl.Trainer(

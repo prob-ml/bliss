@@ -1,95 +1,24 @@
 import torch
 import pytest
-import pytorch_lightning as pl
-from pytorch_lightning.profiler import AdvancedProfiler
-
 from celeste import use_cuda
-from celeste import sleep
-from celeste.models import decoder, encoder
 
 
 @pytest.fixture(scope="module")
 def trained_encoder(
-    data_path,
+    get_trained_encoder,
     single_band_galaxy_decoder,
     single_band_fitted_powerlaw_psf,
-    profile,
     device,
     device_id,
+    profile,
 ):
-
-    # create training dataset
-    n_bands = 1
-    max_stars = 20
-    mean_stars = 15
-    min_stars = 5
-    f_min = 1e4
-    slen = 50
-
-    # set background
-    background = torch.zeros(n_bands, slen, slen, device=device)
-    background.fill_(686.0)
-
-    # simulate dataset
-    n_images = 128
-    simulator_args = (
+    return get_trained_encoder(
         single_band_galaxy_decoder,
         single_band_fitted_powerlaw_psf,
-        background,
+        device,
+        device_id,
+        profile,
     )
-
-    simulator_kwargs = dict(
-        slen=slen,
-        n_bands=n_bands,
-        max_sources=max_stars,
-        mean_sources=mean_stars,
-        min_sources=min_stars,
-        f_min=f_min,
-        prob_galaxy=0.0,  # enforce only stars are created in the training images.
-    )
-
-    batch_size = 32
-    n_batches = int(n_images / batch_size)
-    dataset = decoder.SimulatedDataset(
-        n_batches, batch_size, simulator_args, simulator_kwargs
-    )
-
-    # setup Star Encoder
-    image_encoder = encoder.ImageEncoder(
-        slen=slen,
-        ptile_slen=8,
-        step=2,
-        edge_padding=3,
-        n_bands=n_bands,
-        max_detections=2,
-        n_galaxy_params=single_band_galaxy_decoder.latent_dim,
-        enc_conv_c=5,
-        enc_kern=3,
-        enc_hidden=64,
-    ).to(device)
-
-    # train encoder
-    # training wrapper
-    sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
-
-    n_epochs = 150 if use_cuda else 1
-
-    profiler = AdvancedProfiler(output_filename=profile) if profile else None
-
-    # runs on gpu or cpu?
-    n_device = [device_id] if use_cuda else 0  # 0 means no gpu
-
-    sleep_trainer = pl.Trainer(
-        gpus=n_device,
-        profiler=profiler,
-        min_epochs=n_epochs,
-        max_epochs=n_epochs,
-        reload_dataloaders_every_epoch=True,
-    )
-
-    sleep_trainer.fit(sleep_net)
-
-    return sleep_net.image_encoder
 
 
 class TestStarSleepEncoder:
