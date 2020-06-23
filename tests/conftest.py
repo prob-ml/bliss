@@ -39,3 +39,17 @@ def single_band_galaxy_decoder(data_path):
 def test_star(data_path):
     test_star = torch.load(data_path.joinpath("3_star_test.pt"))
     return test_star
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--profile",
+        action="store",
+        default=None,
+        help="None or file path to store profiler",
+    )
+
+
+@pytest.fixture(scope="session")
+def profile(pytestconfig):
+    return pytestconfig.getoption("--profile")

@@ -1,5 +1,7 @@
 import torch
 import pytest
+import pytorch_lightning as pl
+from pytorch_lightning.profiler import AdvancedProfiler
 
 from celeste import device, use_cuda
 from celeste import train
@@ -9,7 +11,11 @@ from celeste.models import sourcenet
 
 @pytest.fixture(scope="module")
 def trained_encoder(
-    config_path, data_path, single_band_galaxy_decoder, single_band_fitted_powerlaw_psf
+    config_path,
+    data_path,
+    single_band_galaxy_decoder,
+    single_band_fitted_powerlaw_psf,
+    profile,
 ):
     # create training dataset
     n_bands = 1
@@ -21,7 +27,7 @@ def trained_encoder(
 
     # set background
     background = torch.zeros(n_bands, slen, slen, device=device)
-    background[0] = 686.0
+    background.fill_(686.0)
 
     # simulate dataset
     n_images = 128
@@ -41,8 +47,10 @@ def trained_encoder(
         prob_galaxy=0.0,  # enforce only stars are created in the training images.
     )
 
-    dataset = simulated_datasets.SourceDataset(
-        n_images, simulator_args, simulator_kwargs
+    batchsize = 32
+    n_batches = int(n_images / batchsize)
+    dataset = simulated_datasets.SimulatedDataset(
+        n_batches, simulator_args, simulator_kwargs, batchsize=batchsize
     )
 
     # setup Star Encoder
@@ -61,19 +69,26 @@ def trained_encoder(
 
     # train encoder
     # training wrapper
-    SleepTraining = train.SleepTraining(
-        model=encoder,
-        dataset=dataset,
-        slen=slen,
-        n_bands=n_bands,
-        verbose=False,
-        batchsize=32,
-    )
+    sleep_net = train.SleepPhase(dataset=dataset, encoder=encoder)
 
     n_epochs = 100 if use_cuda else 1
-    SleepTraining.run(n_epochs=n_epochs)
+    # implement profiler
+    profiler = AdvancedProfiler(output_filename=profile)
 
-    return encoder
+    # runs on gpu or cpu?
+    n_device = [0] if use_cuda else 0  # 0 means no gpu
+
+    sleep_trainer = pl.Trainer(
+        gpus=n_device,
+        profiler=profiler,
+        min_epochs=n_epochs,
+        max_epochs=n_epochs,
+        reload_dataloaders_every_epoch=True,
+    )
+
+    sleep_trainer.fit(sleep_net)
+
+    return sleep_net.model
 
 
 class TestStarSleepEncoder:
