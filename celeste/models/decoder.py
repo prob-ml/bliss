@@ -104,12 +104,16 @@ def _sample_n_sources(
     return n_sources.clamp(max=max_sources, min=min_sources).long().squeeze(1)
 
 
-def _sample_locs(max_sources, is_on_array, batch_size=1):
+def _sample_locs(
+    max_sources, is_on_array, batch_size, locs_min=0.0, locs_max=1.0,
+):
+    assert 0 <= locs_min <= locs_max <= 1.0
+
     # 2 = (x,y)
-    # torch.rand returns numbers between (0,1)
-    locs = torch.rand(
-        batch_size, max_sources, 2, device=device
-    ) * is_on_array.unsqueeze(2)
+    locs = torch.rand(batch_size, max_sources, 2, device=device)
+    locs *= is_on_array.unsqueeze(2)
+    locs = locs * locs_max + locs_min
+
     return locs
 
 
@@ -145,13 +149,6 @@ def _render_one_source(slen, locs, source, cached_grid=None):
     return source_rendered
 
 
-def _check_sources_and_locs(locs, n_sources, batch_size):
-    assert len(locs.shape) == 3, "Using batch_size as the first dimension."
-    assert locs.shape[2] == 2
-    assert len(n_sources) == batch_size
-    assert len(n_sources.shape) == 1
-
-
 def _get_grid(slen, cached_grid=None):
     if cached_grid is None:
         grid = get_mgrid(slen)
@@ -161,6 +158,20 @@ def _get_grid(slen, cached_grid=None):
         grid = cached_grid
 
     return grid
+
+
+def _check_sources_and_locs(locs, n_sources, batch_size):
+    assert len(locs.shape) == 3, "Using batch_size as the first dimension."
+    assert locs.shape[2] == 2
+    assert len(n_sources) == batch_size
+    assert len(n_sources.shape) == 1
+
+
+def get_mgrid(slen):
+    offset = (slen - 1) / 2
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    return mgrid.type(torch.FloatTensor).to(device)
 
 
 def get_galaxy_decoder(decoder_state_file, slen=51, n_bands=1, latent_dim=8):
@@ -193,13 +204,6 @@ def get_fitted_powerlaw_psf(psf_file):
     psf = power_law_psf.forward().detach()
     assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
     return psf
-
-
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    return mgrid.type(torch.FloatTensor).to(device)
 
 
 def render_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
@@ -453,8 +457,13 @@ class SourceSimulator(object):
     def sample_parameters(self, batch_size=1):
         n_sources, is_on_array = self._sample_n_sources(batch_size)
 
-        locs = _sample_locs(self.max_sources, is_on_array, batch_size)
-        locs = locs.clamp(self.loc_min, self.loc_max)
+        locs = _sample_locs(
+            self.max_sources,
+            is_on_array,
+            batch_size,
+            locs_min=self.loc_min,
+            locs_max=self.loc_max,
+        )
 
         n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
             n_sources, is_on_array
