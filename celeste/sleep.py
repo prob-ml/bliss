@@ -360,8 +360,11 @@ class SleepPhase(pl.LightningModule):
         avg_galaxy_params_loss = 0
         avg_star_params_loss = 0
         avg_galaxy_bool_loss = 0
+
         tiles_per_epoch = (
-            self.dataset.n_batches * len(outputs) * self.image_encoder.n_tiles
+            self.dataset.n_batches
+            * self.dataset.batch_size
+            * self.image_encoder.n_tiles
         )
 
         for output in outputs:
