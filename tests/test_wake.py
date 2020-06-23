@@ -82,15 +82,12 @@ class TestStarEncoderTraining:
         # runs on gpu or cpu?
         device_num = [device_id] if use_cuda else 0  # 0 means no gpu
 
-        # TODO: uncomment once pytorch lightning new version is released.
-        # use_val = 10 if use_cuda else 1
         wake_trainer = ptl.Trainer(
             gpus=device_num,
             profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
-            # check_val_every_n_epoch=use_val,
         )
 
         wake_trainer.fit(wake_phase_model)
