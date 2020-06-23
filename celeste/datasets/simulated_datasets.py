@@ -11,21 +11,17 @@ from .. import device
 from .. import psf_transform
 
 
-def _draw_pareto(f_min, alpha, shape):
-    uniform_samples = torch.rand(*shape, device=device)
-    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
+def _pareto_cdf(x, f_min, alpha):
+    return 1 - (f_min / x) ** (alpha)
 
 
 def _draw_pareto_maxed(f_min, f_max, alpha, shape):
     # draw pareto conditioned on being less than f_max
 
-    pareto_samples = _draw_pareto(f_min, alpha, shape)
+    u_max = _pareto_cdf(f_max, f_min, alpha)
+    uniform_samples = torch.rand(*shape, device=device) * u_max
 
-    while torch.any(pareto_samples > f_max):
-        indx = pareto_samples > f_max
-        pareto_samples[indx] = _draw_pareto(f_min, alpha, [torch.sum(indx).item()])
-
-    return pareto_samples
+    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
 
 
 def _check_psf(psf, slen):
