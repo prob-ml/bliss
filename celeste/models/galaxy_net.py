@@ -240,6 +240,7 @@ class OneCenteredGalaxy(pl.LightningModule):
     # Optimizer
     # ----------------
 
+    # TODO: Does this work???
     def configure_optimizers(self):
         return Adam(
             [{"params": self.parameters(), "lr": self.lr}],
@@ -263,16 +264,17 @@ class OneCenteredGalaxy(pl.LightningModule):
         return {"loss": loss, "logs": logs}
 
     def validation_epoch_end(self, outputs):
-        avg_loss = 0.0
-
-        for output in outputs:
-            avg_loss += output["loss"]
 
         # TODO: does the dataloader guarantee correct size?
+        avg_loss = 0.0
+        for output in outputs:
+            avg_loss += output["loss"]
         avg_loss /= len(outputs) * self.batch_size
 
         # TODO: How to save correctly into the logging folder?
         torch.save(self.vae.state_dict(), vae_file.as_posix())
+
+        # TODO: add plotting images and their residuals with plot_reconstruction function.
 
         return {"val_loss": outputs[-1]["val_loss"]}
 
