@@ -326,6 +326,41 @@ class SleepPhase(pl.LightningModule):
     def forward(self):
         pass
 
+    def get_loss(self, batch):
+        (images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,) = (
+            batch["images"],
+            batch["locs"],
+            batch["galaxy_params"],
+            batch["log_fluxes"],
+            batch["galaxy_bool"],
+        )
+
+        # evaluate log q
+        (
+            loss,
+            counter_loss,
+            locs_loss,
+            galaxy_params_loss,
+            star_params_loss,
+            galaxy_bool_loss,
+        ) = get_inv_kl_loss(
+            self.image_encoder,
+            images,
+            true_locs,
+            true_galaxy_params,
+            true_log_fluxes,
+            true_galaxy_bool,
+        )
+
+        return (
+            loss,
+            counter_loss,
+            locs_loss,
+            galaxy_params_loss,
+            star_params_loss,
+            galaxy_bool_loss,
+        )
+
     def configure_optimizers(self):
         return Adam(
             [{"params": self.image_encoder.parameters(), "lr": self.lr}],
@@ -394,14 +429,14 @@ class SleepPhase(pl.LightningModule):
         avg_star_params_loss /= tiles_per_epoch
         avg_galaxy_bool_loss /= tiles_per_epoch
 
-        log = {
+        logs = {
             "counter_loss": avg_counter_loss,
             "locs_loss": avg_locs_loss,
             "galaxy_params_loss": avg_galaxy_params_loss,
             "star_params_loss": avg_star_params_loss,
             "galaxy_bool_loss": avg_galaxy_bool_loss,
         }
-        logs = {"log": log}
+        logs = {"logs": logs}
 
         if self.save_logs is False:
             return avg_loss
@@ -427,38 +462,3 @@ class SleepPhase(pl.LightningModule):
             logs["log"]["val_loss"] = avg_loss
 
             return logs
-
-    def get_loss(self, batch):
-        (images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,) = (
-            batch["images"],
-            batch["locs"],
-            batch["galaxy_params"],
-            batch["log_fluxes"],
-            batch["galaxy_bool"],
-        )
-
-        # evaluate log q
-        (
-            loss,
-            counter_loss,
-            locs_loss,
-            galaxy_params_loss,
-            star_params_loss,
-            galaxy_bool_loss,
-        ) = get_inv_kl_loss(
-            self.image_encoder,
-            images,
-            true_locs,
-            true_galaxy_params,
-            true_log_fluxes,
-            true_galaxy_bool,
-        )
-
-        return (
-            loss,
-            counter_loss,
-            locs_loss,
-            galaxy_params_loss,
-            star_params_loss,
-            galaxy_bool_loss,
-        )

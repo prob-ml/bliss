@@ -4,11 +4,12 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 
-
 from celeste import use_cuda, psf_transform, wake, sleep
 from celeste.models import decoder, encoder
 
 
+# TODO: Remove validation steps from running in tests, in fact, remove any printing to speed them
+#  up.
 def get_trained_encoder(
     galaxy_decoder,
     psf,
@@ -117,7 +118,6 @@ class TestStarSleepEncoder:
 
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
-
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"]
 
@@ -158,7 +158,7 @@ class TestStarSleepEncoder:
 
 
 class TestStarEncoderTraining:
-    @pytest.fixture(scope="module")
+    @pytest.fixture(scope="class")
     def init_psf_setup(self, data_path, device):
         psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
         true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
@@ -197,7 +197,6 @@ class TestStarEncoderTraining:
         wprof,
         log,
     ):
-
         # load the test image
         # 3-stars 30*30
         test_image = test_3_stars["images"]
