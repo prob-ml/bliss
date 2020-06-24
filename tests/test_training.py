@@ -14,7 +14,7 @@ def get_trained_encoder(
     psf,
     device,
     device_id,
-    profile=None,
+    profile,
     n_bands=1,
     max_stars=20,
     mean_stars=15,
@@ -71,7 +71,7 @@ def get_trained_encoder(
     # training wrapper
     sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
 
-    profiler = AdvancedProfiler(output_filename=profile) if profile else None
+    profiler = AdvancedProfiler(output_filename=profile)
 
     # runs on gpu or cpu?
     n_device = [device_id] if use_cuda else 0  # 0 means no gpu
@@ -97,14 +97,14 @@ class TestStarSleepEncoder:
         single_band_fitted_powerlaw_psf,
         device,
         device_id,
-        profile,
+        sprof,
     ):
         return get_trained_encoder(
             single_band_galaxy_decoder,
             single_band_fitted_powerlaw_psf,
             device,
             device_id,
-            profile,
+            sprof,
             prob_galaxy=0.0,  # only stars will be drawn.
         )
 
@@ -164,14 +164,14 @@ class TestStarEncoderTraining:
 
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self, single_band_galaxy_decoder, init_psf_setup, device, device_id, profile,
+        self, single_band_galaxy_decoder, init_psf_setup, device, device_id, sprof,
     ):
         return get_trained_encoder(
             single_band_galaxy_decoder,
             init_psf_setup["init_psf"],
             device,
             device_id,
-            profile,
+            sprof,
             n_images=64 * 6,
             batch_size=32,
             n_epochs=200,
@@ -186,6 +186,7 @@ class TestStarEncoderTraining:
         test_3_stars,
         device,
         device_id,
+        wprof,
     ):
 
         # load the test image
@@ -215,7 +216,7 @@ class TestStarEncoderTraining:
         n_epochs = 2800 if use_cuda else 1
 
         # implement tensorboard
-        profiler = AdvancedProfiler(output_filename="wake_phase.txt")
+        profiler = AdvancedProfiler(output_filename=wprof)
 
         # runs on gpu or cpu?
         device_num = [device_id] if use_cuda else 0  # 0 means no gpu
