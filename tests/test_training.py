@@ -23,7 +23,7 @@ def get_trained_encoder(
     slen=50,
     n_images=128,
     batch_size=32,
-    n_epochs=150,
+    n_epochs=200,
     prob_galaxy=0.0,
 ):
     assert galaxy_decoder.n_bands == psf.size(0) == n_bands

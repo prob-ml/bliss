@@ -331,7 +331,10 @@ class SleepPhase(pl.LightningModule):
     def train_dataloader(self):
         return DataLoader(self.dataset, batch_size=None)
 
-    def training_step(self, batch, batch_idx):
+    def val_dataloader(self):
+        return DataLoader(self.dataset, batch_size=None)
+
+    def step(self, batch):
         (
             loss,
             counter_loss,
@@ -353,7 +356,13 @@ class SleepPhase(pl.LightningModule):
             },
         }
 
-    def training_epoch_end(self, outputs):
+    def training_step(self, batch, batch_idx):
+        return self.step(batch)
+
+    def validation_step(self, batch, batch_indx):
+        return self.step(batch)
+
+    def epoch_end(self, outputs):
         avg_loss = 0
         avg_counter_loss = 0
         avg_locs_loss = 0
@@ -381,16 +390,28 @@ class SleepPhase(pl.LightningModule):
         avg_star_params_loss /= tiles_per_epoch
         avg_galaxy_bool_loss /= tiles_per_epoch
 
-        return {
-            "log": {
-                "train_loss": avg_loss,
-                "counter_loss": avg_counter_loss,
-                "locs_loss": avg_locs_loss,
-                "galaxy_params_loss": avg_galaxy_params_loss,
-                "star_params_loss": avg_star_params_loss,
-                "galaxy_bool_loss": avg_galaxy_bool_loss,
-            }
+        log = {
+            "counter_loss": avg_counter_loss,
+            "locs_loss": avg_locs_loss,
+            "galaxy_params_loss": avg_galaxy_params_loss,
+            "star_params_loss": avg_star_params_loss,
+            "galaxy_bool_loss": avg_galaxy_bool_loss,
         }
+        logs = {"log": log}
+
+        return avg_loss, logs
+
+    def training_epoch_end(self, outputs):
+        (avg_loss, logs) = self.epoch_end(outputs)
+        logs["log"]["train_loss"] = avg_loss
+
+        return logs
+
+    def validation_epoch_end(self, outputs):
+        (avg_loss, logs) = self.epoch_end(outputs)
+        logs["log"]["val_loss"] = avg_loss
+
+        return logs
 
     def get_loss(self, batch):
         (images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,) = (
