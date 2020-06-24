@@ -149,8 +149,7 @@ class TestSourceEncoder:
                     )
 
     def test_forward_to_hidden2d(self):
-        """
-        * Consistency check of using forward vs get_var_params
+        """Consistency check of using forward vs get_var_params
         """
 
         n_image_tiles = 30

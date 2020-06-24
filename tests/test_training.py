@@ -90,7 +90,7 @@ def get_trained_encoder(
 
 
 class TestStarSleepEncoder:
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="function")
     def trained_encoder(
         self,
         single_band_galaxy_decoder,
