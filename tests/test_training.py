@@ -89,7 +89,6 @@ def get_trained_encoder(
     return sleep_net.image_encoder
 
 
-@pytest.mark.only
 class TestStarSleepEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(
