@@ -361,27 +361,20 @@ class SleepPhase(pl.LightningModule):
         avg_star_params_loss = 0
         avg_galaxy_bool_loss = 0
 
-        tiles_per_epoch = (
-            self.dataset.n_batches
-            * self.dataset.batch_size
-            * self.image_encoder.n_tiles
-        )
+        tiles_per_batch = self.dataset.batch_size * self.image_encoder.n_tiles
+        tiles_per_epoch = tiles_per_batch * self.dataset.n_batches
 
+        # len(output) == n_batches
+        # the sum below is over tiles_per_batch
         for output in outputs:
-            avg_loss += output["loss"] * len(outputs)
-            avg_counter_loss += torch.sum(output["logs"]["counter_loss"]) * len(outputs)
-            avg_locs_loss += torch.sum(output["logs"]["locs_loss"]) * len(outputs)
-            avg_galaxy_params_loss += torch.sum(
-                output["logs"]["galaxy_params_loss"]
-            ) * len(outputs)
-            avg_star_params_loss += torch.sum(output["logs"]["star_params_loss"]) * len(
-                outputs
-            )
-            avg_galaxy_bool_loss += torch.sum(output["logs"]["galaxy_bool_loss"]) * len(
-                outputs
-            )
+            avg_loss += output["loss"]
+            avg_counter_loss += torch.sum(output["logs"]["counter_loss"])
+            avg_locs_loss += torch.sum(output["logs"]["locs_loss"])
+            avg_galaxy_params_loss += torch.sum(output["logs"]["galaxy_params_loss"])
+            avg_star_params_loss += torch.sum(output["logs"]["star_params_loss"])
+            avg_galaxy_bool_loss += torch.sum(output["logs"]["galaxy_bool_loss"])
 
-        avg_loss /= self.dataset.n_batches * len(outputs)
+        avg_loss /= self.dataset.n_batches
         avg_counter_loss /= tiles_per_epoch
         avg_locs_loss /= tiles_per_epoch
         avg_galaxy_params_loss /= tiles_per_epoch
