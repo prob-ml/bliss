@@ -161,7 +161,7 @@ class TestStarEncoderTraining:
 
         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 
-    @pytest.fixture(scope="module")
+    @pytest.fixture(scope="class")
     def trained_encoder(
         self, single_band_galaxy_decoder, init_psf_setup, device, device_id, profile,
     ):
