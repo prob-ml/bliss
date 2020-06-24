@@ -394,7 +394,7 @@ class ImageEncoder(nn.Module):
             nn.Conv2d(
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
             ),
-            nn.LayerNorm((self.ptile_slen, self.ptile_slen),),
+            nn.LayerNorm((self.enc_conv_c, self.ptile_slen, self.ptile_slen),),
             nn.ReLU(),
             nn.Conv2d(
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
@@ -403,12 +403,12 @@ class ImageEncoder(nn.Module):
             nn.Conv2d(
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
             ),
-            nn.LayerNorm((self.ptile_slen, self.ptile_slen),),
+            nn.LayerNorm((self.enc_conv_c, self.ptile_slen, self.ptile_slen),),
             nn.ReLU(),
             Flatten(),
             nn.Linear(conv_out_dim, self.enc_hidden),
             nn.LayerNorm(self.enc_hidden),
-            nn.Dropout(p=0.1),
+            nn.Dropout(p=0.2),
             nn.ReLU(),
             nn.Linear(self.enc_hidden, self.enc_hidden),
             nn.LayerNorm(self.enc_hidden),

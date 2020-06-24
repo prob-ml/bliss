@@ -2,15 +2,11 @@ import torch
 import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader
-import pytorch_lightning as ptl
+import pytorch_lightning as pl
 
 import numpy as np
 
-from celeste.models.decoder import (
-    get_mgrid,
-    render_multiple_stars,
-)
-from .models.encoder import get_is_on_from_n_sources
+from .models import decoder, encoder
 from .psf_transform import PowerLawPSF
 from celeste import device
 
@@ -46,7 +42,7 @@ def _fit_plane_to_background(background):
     planar_params = np.zeros((n_bands, 3))
     for i in range(n_bands):
         y = background[i].flatten().detach().cpu().numpy()
-        grid = get_mgrid(slen).detach().cpu().numpy()
+        grid = decoder.get_mgrid(slen).detach().cpu().numpy()
 
         x = np.ones((slen ** 2, 3))
         x[:, 1:] = np.array(
@@ -73,7 +69,7 @@ class PlanarBackground(nn.Module):
         self.image_slen = image_slen
 
         # get grid
-        _mgrid = get_mgrid(image_slen).to(device)
+        _mgrid = decoder.get_mgrid(image_slen).to(device)
         self.mgrid = torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
 
         # initial weights
@@ -124,10 +120,10 @@ class ModelParams(nn.Module):
 
         self.init_background = self.planar_background.forward().detach()
 
-        self.cached_grid = get_mgrid(observed_image.shape[-1]).to(device)
+        self.cached_grid = decoder.get_mgrid(observed_image.shape[-1]).to(device)
 
     def _plot_stars(self, locs, fluxes, n_stars, psf):
-        self.stars = render_multiple_stars(
+        self.stars = decoder.render_multiple_stars(
             self.slen, locs, n_stars, psf, fluxes, self.cached_grid
         )
 
@@ -188,7 +184,7 @@ class ModelParams(nn.Module):
         return recon_mean, loss
 
 
-class WakePhase(ptl.LightningModule):
+class WakePhase(pl.LightningModule):
 
     # ---------------
     # Model
@@ -238,7 +234,7 @@ class WakePhase(ptl.LightningModule):
             )
 
         max_stars = log_fluxes_sampled.shape[1]
-        is_on_array = get_is_on_from_n_sources(n_stars_sampled, max_stars)
+        is_on_array = encoder.get_is_on_from_n_sources(n_stars_sampled, max_stars)
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
