@@ -88,6 +88,6 @@ def single_band_galaxy_decoder(data_path):
 
 
 @pytest.fixture(scope="session")
-def test_star(data_path):
+def test_3_stars(data_path):
     test_star = torch.load(data_path.joinpath("3_star_test.pt"))
     return test_star

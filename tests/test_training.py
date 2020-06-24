@@ -89,8 +89,9 @@ def get_trained_encoder(
     return sleep_net.image_encoder
 
 
+@pytest.mark.only
 class TestStarSleepEncoder:
-    @pytest.fixture(scope="function")
+    @pytest.fixture(scope="class")
     def trained_encoder(
         self,
         single_band_galaxy_decoder,
@@ -108,9 +109,10 @@ class TestStarSleepEncoder:
             prob_galaxy=0.0,  # only stars will be drawn.
         )
 
-    def test_star_sleep(self, trained_encoder, test_star, device):
+    @pytest.mark.parametrize("n_stars", ["1", "3"])
+    def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
 
-        # load test image
+        test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"]
 
         with torch.no_grad():
@@ -182,14 +184,14 @@ class TestStarEncoderTraining:
         trained_encoder,
         single_band_fitted_powerlaw_psf,
         init_psf_setup,
-        test_star,
+        test_3_stars,
         device,
         device_id,
     ):
 
         # load the test image
         # 3-stars 30*30
-        test_image = test_star["images"]
+        test_image = test_3_stars["images"]
 
         # initialization
         # initialize background params, which will create the true background
