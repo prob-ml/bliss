@@ -2,12 +2,8 @@ import pytest
 import pathlib
 import torch
 
+from celeste import use_cuda
 from celeste.models.decoder import get_fitted_powerlaw_psf, get_galaxy_decoder
-from celeste import use_cuda, sleep
-
-import pytorch_lightning as pl
-from pytorch_lightning.profiler import AdvancedProfiler
-from celeste.models import decoder, encoder
 
 
 def pytest_addoption(parser):
@@ -25,6 +21,26 @@ def pytest_addoption(parser):
         type=str,
         help="None or file path to store profiler",
     )
+
+    parser.addoption(
+        "--repeat", action="store", help="Number of times to repeat each test"
+    )
+
+
+# allows test repetition with --repeat flag.
+def pytest_generate_tests(metafunc):
+    if metafunc.config.option.repeat is not None:
+        count = int(metafunc.config.option.repeat)
+
+        # We're going to duplicate these tests by parametrizing them,
+        # which requires that each test has a fixture to accept the parameter.
+        # We can add a new fixture like so:
+        metafunc.fixturenames.append("tmp_ct")
+
+        # Now we parametrize. This is what happens when we do e.g.,
+        # @pytest.mark.parametrize('tmp_ct', range(count))
+        # def test_foo(): pass
+        metafunc.parametrize("tmp_ct", range(count))
 
 
 @pytest.fixture(scope="session")
@@ -72,89 +88,6 @@ def single_band_galaxy_decoder(data_path):
 
 
 @pytest.fixture(scope="session")
-def test_star(data_path):
+def test_3_stars(data_path):
     test_star = torch.load(data_path.joinpath("3_star_test.pt"))
     return test_star
-
-
-@pytest.fixture(scope="session")
-def get_trained_encoder():
-    def func(
-        galaxy_decoder,
-        psf,
-        device,
-        device_id,
-        profile=None,
-        n_bands=1,
-        max_stars=20,
-        mean_stars=15,
-        min_stars=5,
-        f_min=1e4,
-        slen=50,
-        n_images=128,
-        batch_size=32,
-        n_epochs=150,
-    ):
-        assert galaxy_decoder.n_bands == psf.size(0) == n_bands
-
-        n_epochs = n_epochs if use_cuda else 1
-
-        background = torch.zeros(n_bands, slen, slen, device=device)
-        background.fill_(686.0)
-
-        simulator_args = (
-            galaxy_decoder,
-            psf,
-            background,
-        )
-
-        simulator_kwargs = dict(
-            slen=slen,
-            n_bands=n_bands,
-            max_sources=max_stars,
-            mean_sources=mean_stars,
-            min_sources=min_stars,
-            f_min=f_min,
-            prob_galaxy=0.0,  # only stars will be drawn.
-        )
-
-        n_batches = int(n_images / batch_size)
-        dataset = decoder.SimulatedDataset(
-            n_batches, batch_size, simulator_args, simulator_kwargs
-        )
-
-        # setup Star Encoder
-        image_encoder = encoder.ImageEncoder(
-            slen=slen,
-            ptile_slen=8,
-            step=2,
-            edge_padding=3,
-            n_bands=n_bands,
-            max_detections=2,
-            n_galaxy_params=galaxy_decoder.latent_dim,
-            enc_conv_c=5,
-            enc_kern=3,
-            enc_hidden=64,
-        ).to(device)
-
-        # training wrapper
-        sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
-
-        profiler = AdvancedProfiler(output_filename=profile) if profile else None
-
-        # runs on gpu or cpu?
-        n_device = [device_id] if use_cuda else 0  # 0 means no gpu
-
-        sleep_trainer = pl.Trainer(
-            gpus=n_device,
-            profiler=profiler,
-            min_epochs=n_epochs,
-            max_epochs=n_epochs,
-            reload_dataloaders_every_epoch=True,
-        )
-
-        sleep_trainer.fit(sleep_net)
-
-        return sleep_net.image_encoder
-
-    return func
