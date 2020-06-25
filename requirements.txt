@@ -4,6 +4,7 @@ astropy
 torch
 pytest
 pytest-cov
+pytest-benchmark
 black
 h5py
 matplotlib
