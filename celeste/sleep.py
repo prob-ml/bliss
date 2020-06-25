@@ -310,7 +310,7 @@ def _get_min_perm_loss(
 
 class SleepPhase(pl.LightningModule):
     def __init__(
-        self, dataset, image_encoder, save_logs=False, lr=1e-3, weight_decay=1e-5
+        self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5, logging=False,
     ):
         """dataset is an SourceIterableDataset class"""
         super(SleepPhase, self).__init__()
@@ -321,7 +321,7 @@ class SleepPhase(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
-        self.save_logs = save_logs
+        self.logging = logging
 
     def forward(self):
         pass
@@ -385,7 +385,7 @@ class SleepPhase(pl.LightningModule):
 
         return {
             "loss": loss,
-            "logs": {
+            "log": {
                 "training_loss": loss,
                 "counter_loss": counter_loss,
                 "locs_loss": locs_loss,
@@ -416,11 +416,11 @@ class SleepPhase(pl.LightningModule):
         # the sum below is over tiles_per_batch
         for output in outputs:
             avg_loss += output["loss"]
-            avg_counter_loss += torch.sum(output["logs"]["counter_loss"])
-            avg_locs_loss += torch.sum(output["logs"]["locs_loss"])
-            avg_galaxy_params_loss += torch.sum(output["logs"]["galaxy_params_loss"])
-            avg_star_params_loss += torch.sum(output["logs"]["star_params_loss"])
-            avg_galaxy_bool_loss += torch.sum(output["logs"]["galaxy_bool_loss"])
+            avg_counter_loss += torch.sum(output["log"]["counter_loss"])
+            avg_locs_loss += torch.sum(output["log"]["locs_loss"])
+            avg_galaxy_params_loss += torch.sum(output["log"]["galaxy_params_loss"])
+            avg_star_params_loss += torch.sum(output["log"]["star_params_loss"])
+            avg_galaxy_bool_loss += torch.sum(output["log"]["galaxy_bool_loss"])
 
         avg_loss /= self.dataset.n_batches
         avg_counter_loss /= tiles_per_epoch
@@ -436,29 +436,18 @@ class SleepPhase(pl.LightningModule):
             "star_params_loss": avg_star_params_loss,
             "galaxy_bool_loss": avg_galaxy_bool_loss,
         }
-        logs = {"logs": logs}
+        logs = {"log": logs}
 
-        if self.save_logs is False:
-            return avg_loss
-        else:
-            return avg_loss, logs
+        return avg_loss, logs
 
     def training_epoch_end(self, outputs):
-        if self.save_logs is False:
-            avg_loss = self.epoch_end(outputs)
-            return {"train_loss": avg_loss}
-        else:
-            (avg_loss, logs) = self.epoch_end(outputs)
-            logs["log"]["train_loss"] = avg_loss
-
-            return logs
+        avg_loss, logs = self.epoch_end(outputs)
+        loss_dict = {"train_loss": avg_loss}
+        logs["log"]["train_loss"] = avg_loss
+        return logs if self.logging else loss_dict
 
     def validation_epoch_end(self, outputs):
-        if self.save_logs is False:
-            avg_loss = self.epoch_end(outputs)
-            return {"train_loss": avg_loss}
-        else:
-            (avg_loss, logs) = self.epoch_end(outputs)
-            logs["log"]["val_loss"] = avg_loss
-
-            return logs
+        avg_loss, logs = self.epoch_end(outputs)
+        loss_dict = {"val_loss": avg_loss}
+        logs["log"]["val_loss"] = avg_loss
+        return logs if self.logging else loss_dict
