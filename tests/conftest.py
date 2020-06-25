@@ -73,6 +73,11 @@ def wprof(pytestconfig):
 
 
 @pytest.fixture(scope="session")
+def log(pytestconfig):
+    return pytestconfig.getoption("log")
+
+
+@pytest.fixture(scope="session")
 def device(device_id):
     new_device = torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
     if use_cuda:
