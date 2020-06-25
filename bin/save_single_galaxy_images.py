@@ -19,8 +19,7 @@ background_name = "background.pt"
 def generate(
     n_images, file_path, output_path, dataset, overwrite=False,
 ):
-    """
-    Generate a single image .hdf5 file with the dataset and dataset parameters specified.
+    """Generate a single image .hdf5 file with the dataset and dataset parameters specified.
     """
 
     prop_file_path = output_path.joinpath(f"prop_{file_path.name}.txt")
@@ -92,7 +91,7 @@ def main(args):
         for fp in file_paths
     ]
     with multiprocessing.Pool(processes=args.n_processes) as pool:
-        pool.starmap(save_images, generate_args)
+        pool.starmap(generate, generate_args)
 
     merge_files(output_path)
     save_background(output_path)
