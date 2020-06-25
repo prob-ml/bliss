@@ -309,7 +309,9 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5):
+    def __init__(
+        self, dataset, image_encoder, save_logs=False, lr=1e-3, weight_decay=1e-5
+    ):
         """dataset is an SourceIterableDataset class"""
         super(SleepPhase, self).__init__()
 
@@ -318,6 +320,8 @@ class SleepPhase(pl.LightningModule):
 
         self.lr = lr
         self.weight_decay = weight_decay
+
+        self.save_logs = save_logs
 
     def forward(self):
         pass
@@ -399,19 +403,30 @@ class SleepPhase(pl.LightningModule):
         }
         logs = {"log": log}
 
-        return avg_loss, logs
+        if self.save_logs is False:
+            return avg_loss
+        else:
+            return avg_loss, logs
 
     def training_epoch_end(self, outputs):
-        (avg_loss, logs) = self.epoch_end(outputs)
-        logs["log"]["train_loss"] = avg_loss
+        if self.save_logs is False:
+            avg_loss = self.epoch_end(outputs)
+            return {"train_loss": avg_loss}
+        else:
+            (avg_loss, logs) = self.epoch_end(outputs)
+            logs["log"]["train_loss"] = avg_loss
 
-        return logs
+            return logs
 
     def validation_epoch_end(self, outputs):
-        (avg_loss, logs) = self.epoch_end(outputs)
-        logs["log"]["val_loss"] = avg_loss
+        if self.save_logs is False:
+            avg_loss = self.epoch_end(outputs)
+            return {"train_loss": avg_loss}
+        else:
+            (avg_loss, logs) = self.epoch_end(outputs)
+            logs["log"]["val_loss"] = avg_loss
 
-        return logs
+            return logs
 
     def get_loss(self, batch):
         (images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,) = (

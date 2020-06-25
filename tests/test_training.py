@@ -14,7 +14,8 @@ def get_trained_encoder(
     psf,
     device,
     device_id,
-    profile=None,
+    profile,
+    save_logs,
     n_bands=1,
     max_stars=20,
     mean_stars=15,
@@ -69,14 +70,18 @@ def get_trained_encoder(
     ).to(device)
 
     # training wrapper
-    sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
+    sleep_net = sleep.SleepPhase(
+        dataset=dataset, image_encoder=image_encoder, save_logs=save_logs
+    )
 
-    profiler = AdvancedProfiler(output_filename=profile) if profile else None
+    profiler = AdvancedProfiler(output_filename=profile)
 
     # runs on gpu or cpu?
     n_device = [device_id] if use_cuda else 0  # 0 means no gpu
 
     sleep_trainer = pl.Trainer(
+        logger=save_logs,
+        checkpoint_callback=save_logs,
         gpus=n_device,
         profiler=profiler,
         min_epochs=n_epochs,
@@ -97,14 +102,16 @@ class TestStarSleepEncoder:
         single_band_fitted_powerlaw_psf,
         device,
         device_id,
-        profile,
+        sprof,
+        log,
     ):
         return get_trained_encoder(
             single_band_galaxy_decoder,
             single_band_fitted_powerlaw_psf,
             device,
             device_id,
-            profile,
+            sprof,
+            log,
             prob_galaxy=0.0,  # only stars will be drawn.
         )
 
@@ -164,14 +171,15 @@ class TestStarEncoderTraining:
 
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self, single_band_galaxy_decoder, init_psf_setup, device, device_id, profile,
+        self, single_band_galaxy_decoder, init_psf_setup, device, device_id, sprof, log
     ):
         return get_trained_encoder(
             single_band_galaxy_decoder,
             init_psf_setup["init_psf"],
             device,
             device_id,
-            profile,
+            sprof,
+            log,
             n_images=64 * 6,
             batch_size=32,
             n_epochs=200,
@@ -186,6 +194,8 @@ class TestStarEncoderTraining:
         test_3_stars,
         device,
         device_id,
+        wprof,
+        log,
     ):
 
         # load the test image
@@ -209,18 +219,21 @@ class TestStarEncoderTraining:
             init_psf_params,
             init_background_params,
             hparams,
+            log,
         )
 
         # run the wake-phase training
         n_epochs = 2800 if use_cuda else 1
 
         # implement tensorboard
-        profiler = AdvancedProfiler(output_filename="wake_phase.txt")
+        profiler = AdvancedProfiler(output_filename=wprof)
 
         # runs on gpu or cpu?
         device_num = [device_id] if use_cuda else 0  # 0 means no gpu
 
         wake_trainer = pl.Trainer(
+            logger=log,
+            checkpoint_callback=log,
             gpus=device_num,
             profiler=profiler,
             min_epochs=n_epochs,
@@ -230,9 +243,7 @@ class TestStarEncoderTraining:
 
         wake_trainer.fit(wake_phase_model)
 
-        estimate_psf_params = list(
-            wake_phase_model.model_params.power_law_psf.parameters()
-        )[0]
+        estimate_psf_params = list(wake_phase_model.power_law_psf.parameters())[0]
         estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
 
         init_psf = init_psf_setup["init_psf"]

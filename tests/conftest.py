@@ -15,11 +15,25 @@ def pytest_addoption(parser):
         help="ID of cuda device to use.",
     )
     parser.addoption(
-        "--profile",
+        "--sprof",
         action="store",
         default=None,
         type=str,
-        help="None or file path to store profiler",
+        help="None or file path to store sleep phase training profiler",
+    )
+    parser.addoption(
+        "--wprof",
+        action="store",
+        default=None,
+        type=str,
+        help="None or file path to store wake phase training profiler",
+    )
+    parser.addoption(
+        "--log",
+        action="store",
+        default=False,
+        type=bool,
+        help="False or True to enable logger for the training",
     )
 
     parser.addoption(
@@ -49,8 +63,18 @@ def device_id(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def profile(pytestconfig):
-    return pytestconfig.getoption("profile")
+def sprof(pytestconfig):
+    return pytestconfig.getoption("sprof")
+
+
+@pytest.fixture(scope="session")
+def wprof(pytestconfig):
+    return pytestconfig.getoption("wprof")
+
+
+@pytest.fixture(scope="session")
+def log(pytestconfig):
+    return pytestconfig.getoption("log")
 
 
 @pytest.fixture(scope="session")
