@@ -15,16 +15,17 @@ def pytest_addoption(parser):
         type=int,
         help="ID of cuda device to use.",
     )
+
     parser.addoption(
-        "--profiling", action="store", default=None, type=str, help="Enable profiler",
+        "--profiling", action="store_true", help="Enable profiler",
     )
 
     parser.addoption(
-        "--logging", action="store", default=False, type=bool, help="Enable logger.",
+        "--logging", action="store_true", help="Enable logger.",
     )
 
     parser.addoption(
-        "--repeat", action="store", help="Number of times to repeat each test"
+        "--repeat", default=1, type=str, help="Number of times to repeat each test"
     )
 
 
@@ -69,12 +70,13 @@ def device_id(pytestconfig):
 @pytest.fixture(scope="session")
 def profiler(pytestconfig, logs_path):
     profiling = pytestconfig.getoption("profiling")
-    profiler = AdvancedProfiler(output_filename=logs_path) if profiling else None
+    profile_file = logs_path.joinpath("profile.txt")
+    profiler = AdvancedProfiler(output_filename=profile_file) if profiling else None
     return profiler
 
 
 @pytest.fixture(scope="session")
-def logging(pytestconfig):
+def save_logs(pytestconfig):
     return pytestconfig.getoption("logging")
 
 

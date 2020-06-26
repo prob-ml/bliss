@@ -310,7 +310,7 @@ def _get_min_perm_loss(
 
 class SleepPhase(pl.LightningModule):
     def __init__(
-        self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5, logging=False,
+        self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5, save_logs=False,
     ):
         """dataset is an SourceIterableDataset class"""
         super(SleepPhase, self).__init__()
@@ -321,7 +321,7 @@ class SleepPhase(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
-        self.logging = logging
+        self.save_logs = save_logs
 
     def forward(self):
         pass
@@ -383,17 +383,19 @@ class SleepPhase(pl.LightningModule):
             galaxy_bool_loss,
         ) = self.get_loss(batch)
 
-        return {
+        output = {
             "loss": loss,
             "log": {
-                "training_loss": loss,
-                "counter_loss": counter_loss,
-                "locs_loss": locs_loss,
-                "galaxy_params_loss": galaxy_params_loss,
-                "star_params_loss": star_params_loss,
-                "galaxy_bool_loss": galaxy_bool_loss,
+                "train_loss": loss,
+                "counter_loss": counter_loss.sum(),
+                "locs_loss": locs_loss.sum(),
+                "galaxy_params_loss": galaxy_params_loss.sum(),
+                "star_params_loss": star_params_loss.sum(),
+                "galaxy_bool_loss": galaxy_bool_loss.sum(),
             },
         }
+
+        return output
 
     def training_step(self, batch, batch_idx):
         return self.step(batch)
@@ -401,7 +403,7 @@ class SleepPhase(pl.LightningModule):
     def validation_step(self, batch, batch_indx):
         return self.step(batch)
 
-    def epoch_end(self, outputs):
+    def validation_epoch_end(self, outputs):
         avg_loss = 0
         avg_counter_loss = 0
         avg_locs_loss = 0
@@ -436,18 +438,7 @@ class SleepPhase(pl.LightningModule):
             "star_params_loss": avg_star_params_loss,
             "galaxy_bool_loss": avg_galaxy_bool_loss,
         }
-        logs = {"log": logs}
 
-        return avg_loss, logs
+        results = {"val_loss": avg_loss, "log": logs}
 
-    def training_epoch_end(self, outputs):
-        if self.logging:
-            avg_loss, logs = self.epoch_end(outputs)
-            logs["log"]["train_loss"] = avg_loss
-            return logs
-
-    def validation_epoch_end(self, outputs):
-        if self.logging:
-            avg_loss, logs = self.epoch_end(outputs)
-            logs["log"]["val_loss"] = avg_loss
-            return logs
+        return results
