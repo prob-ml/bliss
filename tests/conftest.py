@@ -52,8 +52,8 @@ def root_path():
 
 @pytest.fixture(scope="session")
 def logs_path(root_path):
-    logs_path = root_path.joinpath("logs")
-    logs_path.mkdir(exist_ok=True)
+    logs_path = root_path.joinpath("logs/test_log")
+    logs_path.mkdir(exist_ok=True, parents=True)
     return logs_path
 
 

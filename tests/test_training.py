@@ -6,6 +6,35 @@ import pytorch_lightning as pl
 from celeste import use_cuda, psf_transform, wake, sleep
 from celeste.models import decoder, encoder
 
+from pytorch_lightning.utilities import rank_zero_only
+from pytorch_lightning.loggers import LightningLoggerBase
+
+
+class MyLogger(LightningLoggerBase):
+    def __init__(self):
+        self.name = ""
+        self.version = ""
+        self.experiment = ""
+
+    def log_hyperparams(self, params):
+        # params is an argparse.Namespace
+        # your code to record hyperparameters goes here
+        pass
+
+    def log_metrics(self, metrics, step):
+        # metrics is a dictionary of metric names and values
+        # your code to record metrics goes here
+        pass
+
+    def save(self):
+        # Optional. Any code necessary to save logger data goes here
+        pass
+
+    def finalize(self, status):
+        # Optional. Any code that needs to be run after training
+        # finishes goes here
+        pass
+
 
 def get_trained_encoder(
     galaxy_decoder,
@@ -76,10 +105,12 @@ def get_trained_encoder(
     # runs on gpu or cpu?
     n_device = [device_id] if use_cuda else 0  # 0 means no gpu
 
+    logger = MyLogger()
     sleep_trainer = pl.Trainer(
         gpus=n_device,
         profiler=profiler,
         min_epochs=n_epochs,
+        logger=logger,
         max_epochs=n_epochs,
         reload_dataloaders_every_epoch=True,
         default_root_dir=logs_path,
