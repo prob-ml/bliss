@@ -1,6 +1,7 @@
 import pytest
 import pathlib
 import torch
+from pytorch_lightning.profiler import AdvancedProfiler
 
 from celeste import use_cuda
 from celeste.models.decoder import get_fitted_powerlaw_psf, get_galaxy_decoder
@@ -44,29 +45,6 @@ def pytest_generate_tests(metafunc):
 
 
 @pytest.fixture(scope="session")
-def device_id(pytestconfig):
-    return pytestconfig.getoption("device_id")
-
-
-@pytest.fixture(scope="session")
-def profiling(pytestconfig):
-    return pytestconfig.getoption("profiling")
-
-
-@pytest.fixture(scope="session")
-def logging(pytestconfig):
-    return pytestconfig.getoption("logging")
-
-
-@pytest.fixture(scope="session")
-def device(device_id):
-    new_device = torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
-    if use_cuda:
-        torch.cuda.set_device(new_device)
-    return new_device
-
-
-@pytest.fixture(scope="session")
 def root_path():
     return pathlib.Path(__file__).parent.parent.absolute()
 
@@ -84,6 +62,31 @@ def data_path(root_path):
 
 
 @pytest.fixture(scope="session")
+def device_id(pytestconfig):
+    return pytestconfig.getoption("device_id")
+
+
+@pytest.fixture(scope="session")
+def profiler(pytestconfig, logs_path):
+    profiling = pytestconfig.getoption("profiling")
+    profiler = AdvancedProfiler(output_filename=logs_path) if profiling else None
+    return profiler
+
+
+@pytest.fixture(scope="session")
+def logging(pytestconfig):
+    return pytestconfig.getoption("logging")
+
+
+@pytest.fixture(scope="session")
+def device(device_id):
+    new_device = torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
+    if use_cuda:
+        torch.cuda.set_device(new_device)
+    return new_device
+
+
+@pytest.fixture(scope="session")
 def single_band_fitted_powerlaw_psf(data_path):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
     return get_fitted_powerlaw_psf(psf_file)[None, 0, ...]
@@ -91,7 +94,6 @@ def single_band_fitted_powerlaw_psf(data_path):
 
 @pytest.fixture(scope="session")
 def single_band_galaxy_decoder(data_path):
-
     decoder_state_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
     galaxy_decoder = get_galaxy_decoder(
         decoder_state_file, slen=51, n_bands=1, latent_dim=8

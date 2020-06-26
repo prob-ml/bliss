@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 import torch
 import pytorch_lightning as pl
-from pytorch_lightning.profiler import AdvancedProfiler
 
 from celeste import use_cuda, psf_transform, wake, sleep
 from celeste.models import decoder, encoder
@@ -15,8 +14,9 @@ def get_trained_encoder(
     psf,
     device,
     device_id,
-    profiling,
+    profiler,
     logging,
+    logs_path,
     n_bands=1,
     max_stars=20,
     mean_stars=15,
@@ -75,8 +75,6 @@ def get_trained_encoder(
         dataset=dataset, image_encoder=image_encoder, logging=logging
     )
 
-    profiler = AdvancedProfiler(output_filename=profile)
-
     # runs on gpu or cpu?
     n_device = [device_id] if use_cuda else 0  # 0 means no gpu
 
@@ -94,6 +92,7 @@ def get_trained_encoder(
     return sleep_net.image_encoder
 
 
+@pytest.mark.only
 class TestStarSleepEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(

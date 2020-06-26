@@ -441,13 +441,13 @@ class SleepPhase(pl.LightningModule):
         return avg_loss, logs
 
     def training_epoch_end(self, outputs):
-        avg_loss, logs = self.epoch_end(outputs)
-        loss_dict = {"train_loss": avg_loss}
-        logs["log"]["train_loss"] = avg_loss
-        return logs if self.logging else loss_dict
+        if self.logging:
+            avg_loss, logs = self.epoch_end(outputs)
+            logs["log"]["train_loss"] = avg_loss
+            return logs
 
     def validation_epoch_end(self, outputs):
-        avg_loss, logs = self.epoch_end(outputs)
-        loss_dict = {"val_loss": avg_loss}
-        logs["log"]["val_loss"] = avg_loss
-        return logs if self.logging else loss_dict
+        if self.logging:
+            avg_loss, logs = self.epoch_end(outputs)
+            logs["log"]["val_loss"] = avg_loss
+            return logs
