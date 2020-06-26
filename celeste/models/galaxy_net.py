@@ -149,6 +149,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         num_workers=2,
         tt_split=0.1,
         batch_size=64,
+        logging=False,
     ):
         super(OneCenteredGalaxy, self).__init__()
 
@@ -161,6 +162,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.num_workers = num_workers
         self.tt_split = tt_split
         self.batch_size = batch_size
+        self.logging = logging
 
         self.dataset = dataset
 
@@ -171,9 +173,9 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.register_buffer("one", torch.ones(1))
 
     def forward(self, image, background):
-        z_mean, z_var = self.enc.forward(
-            image - background
-        )  # shape = [nsamples, latent_dim]
+
+        # shape = [nsamples, latent_dim]
+        z_mean, z_var = self.enc.forward(image - background)
 
         q_z = Normal(z_mean, z_var.sqrt())
         z = q_z.rsample()
@@ -193,10 +195,11 @@ class OneCenteredGalaxy(pl.LightningModule):
         return recon_mean, recon_var, kl_z
 
     def get_loss(self, image, background):
-        # image includes background.
+        # NOTE: image includes background.
 
         # sampling images from the real distribution
-        recon_mean, recon_var, kl_z = self.forward(image, background)  # z | x ~ decoder
+        # z | x ~ decoder
+        recon_mean, recon_var, kl_z = self.forward(image, background)
 
         # -log p(x | z), dimensions: torch.Size([ nsamples, n_bands, slen, slen])
         # assuming covariance is diagonal.

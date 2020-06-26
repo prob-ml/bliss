@@ -15,25 +15,11 @@ def pytest_addoption(parser):
         help="ID of cuda device to use.",
     )
     parser.addoption(
-        "--sprof",
-        action="store",
-        default=None,
-        type=str,
-        help="None or file path to store sleep phase training profiler",
+        "--profiling", action="store", default=None, type=str, help="Enable profiler",
     )
+
     parser.addoption(
-        "--wprof",
-        action="store",
-        default=None,
-        type=str,
-        help="None or file path to store wake phase training profiler",
-    )
-    parser.addoption(
-        "--log",
-        action="store",
-        default=False,
-        type=bool,
-        help="False or True to enable logger for the training",
+        "--logging", action="store", default=False, type=bool, help="Enable logger.",
     )
 
     parser.addoption(
@@ -63,18 +49,13 @@ def device_id(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def sprof(pytestconfig):
-    return pytestconfig.getoption("sprof")
+def profiling(pytestconfig):
+    return pytestconfig.getoption("profiling")
 
 
 @pytest.fixture(scope="session")
-def wprof(pytestconfig):
-    return pytestconfig.getoption("wprof")
-
-
-@pytest.fixture(scope="session")
-def log(pytestconfig):
-    return pytestconfig.getoption("log")
+def logging(pytestconfig):
+    return pytestconfig.getoption("logging")
 
 
 @pytest.fixture(scope="session")
@@ -88,6 +69,13 @@ def device(device_id):
 @pytest.fixture(scope="session")
 def root_path():
     return pathlib.Path(__file__).parent.parent.absolute()
+
+
+@pytest.fixture(scope="session")
+def logs_path(root_path):
+    logs_path = root_path.joinpath("logs")
+    logs_path.mkdir(exist_ok=True)
+    return logs_path
 
 
 @pytest.fixture(scope="session")
