@@ -4,7 +4,6 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 
-
 from celeste import use_cuda, psf_transform, wake, sleep
 from celeste.models import decoder, encoder
 
@@ -74,7 +73,7 @@ def get_trained_encoder(
         dataset=dataset, image_encoder=image_encoder, save_logs=save_logs
     )
 
-    profiler = AdvancedProfiler(output_filename=profile)
+    profiler = AdvancedProfiler(output_filename=profile) if profile != None else None
 
     # runs on gpu or cpu?
     n_device = [device_id] if use_cuda else 0  # 0 means no gpu
@@ -117,7 +116,6 @@ class TestStarSleepEncoder:
 
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
-
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"]
 
@@ -197,7 +195,6 @@ class TestStarEncoderTraining:
         wprof,
         log,
     ):
-
         # load the test image
         # 3-stars 30*30
         test_image = test_3_stars["images"]
@@ -226,7 +223,7 @@ class TestStarEncoderTraining:
         n_epochs = 2800 if use_cuda else 1
 
         # implement tensorboard
-        profiler = AdvancedProfiler(output_filename=wprof)
+        profiler = AdvancedProfiler(output_filename=wprof) if wprof != None else None
 
         # runs on gpu or cpu?
         device_num = [device_id] if use_cuda else 0  # 0 means no gpu
