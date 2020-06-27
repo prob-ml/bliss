@@ -73,7 +73,7 @@ class TestStarEncoderTraining:
             edge_padding=3,
             n_bands=n_bands,
             max_detections=2,
-            n_galaxy_params=8,  # star has n_bands # fluxes
+            n_galaxy_params=dataset.simulator.latent_dim,  # star has n_bands # fluxes
             enc_conv_c=5,
             enc_kern=3,
             enc_hidden=64,

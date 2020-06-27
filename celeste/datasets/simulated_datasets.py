@@ -325,11 +325,11 @@ class SourceSimulator(object):
         self.draw_poisson = draw_poisson
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
-        
-        if(self.all_stars): 
+
+        if self.all_stars:
             self.galaxy_decoder = None
             self.latent_dim = 2
-        else: 
+        else:
             self.galaxy_decoder = galaxy_decoder
             self.galaxy_slen = self.galaxy_decoder.slen
             self.latent_dim = self.galaxy_decoder.latent_dim
@@ -466,14 +466,17 @@ class SourceSimulator(object):
             n_sources, is_on_array
         )
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
-        
-        if self.all_stars: 
-            galaxy_params = torch.zeros(batchsize, self.max_sources, self.latent_dim, device = device)
-            single_galaxies = None
-        else: 
-            galaxy_params, single_galaxies = self._sample_galaxy_params_and_single_images(
-                n_sources, galaxy_bool
+
+        if self.all_stars:
+            galaxy_params = torch.zeros(
+                batchsize, self.max_sources, self.latent_dim, device=device
             )
+            single_galaxies = None
+        else:
+            (
+                galaxy_params,
+                single_galaxies,
+            ) = self._sample_galaxy_params_and_single_images(n_sources, galaxy_bool)
 
         fluxes = self._sample_fluxes(n_sources, star_bool, batchsize)
         log_fluxes = self._get_log_fluxes(fluxes)
@@ -522,10 +525,10 @@ class SourceSimulator(object):
     def _draw_image_from_params(
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
-        
-        if self.all_stars: 
-            galaxies = 0.0 
-        else: 
+
+        if self.all_stars:
+            galaxies = 0.0
+        else:
             # need n_sources because *_locs are not necessarily ordered.
             galaxies = plot_multiple_galaxies(
                 self.slen,
