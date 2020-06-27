@@ -5,9 +5,8 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 
-from celeste import device
-from celeste import sleep
-from celeste.datasets import simulated_datasets
+from celeste import device, sleep
+from celeste.models import encoder
 
 
 class TestStarEncoderObjective:
@@ -76,7 +75,7 @@ class TestStarEncoderObjective:
         true_n_sources = torch.from_numpy(
             np.random.choice(max_detections + 1, n_ptiles)
         ).to(device)
-        true_is_on_array = simulated_datasets.get_is_on_from_n_sources(
+        true_is_on_array = encoder.get_is_on_from_n_sources(
             true_n_sources, max_detections
         ).float()
 
@@ -235,7 +234,7 @@ class TestStarEncoderObjective:
 
                 p = _prob_galaxy.unsqueeze(0)[:, perm].squeeze()
                 galaxy_bool_loss_perm = -_true_galaxy_bool * torch.log(p)
-                galaxy_bool_loss_perm -= (1 - _true_galaxy_bool) * torch.log1p(p)
+                galaxy_bool_loss_perm -= (1 - _true_galaxy_bool) * torch.log(1 - p)
 
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_perm = deepcopy(perm)
@@ -260,7 +259,6 @@ class TestStarEncoderObjective:
                 torch.abs(galaxy_params_loss[i] - min_galaxy_params_loss) < 1e-5
             ), torch.abs(galaxy_params_loss[i] - min_galaxy_params_loss)
 
-            # TODO: Revive once we fix the bool loss in sleep.py.
-            # assert (
-            #     torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss) < 1e-5
-            # ), torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss)
+            assert (
+                torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss) < 1e-5
+            ), torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss)
