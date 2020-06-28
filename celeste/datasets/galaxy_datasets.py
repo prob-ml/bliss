@@ -16,20 +16,11 @@ bands_dict = {
 }
 
 
-def get_pixel_scale(survey_name):
-    return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
-
-
 def save_images(
-    dataset, file_path, prop_file_path=None, n_images=1,
+    dataset, file_path, n_images=1,
 ):
+    """Generate images from dataset cls and save num_images into h5py file.
     """
-    Generate images from dataset cls and save num_images into h5py file.
-    """
-
-    if prop_file_path:
-        with open(prop_file_path, "w") as prop_file:
-            dataset.print_props(prop_file)
 
     with h5py.File(file_path, "w") as images_file:
         hds_shape = (n_images, dataset.n_bands, dataset.slen, dataset.slen)
@@ -42,6 +33,56 @@ def save_images(
             hds.flush()
         hds.attrs["background"] = dataset.background
         hds.flush()
+
+
+class H5Catalog(Dataset):
+    def __init__(self, h5_file, slen, n_bands):
+        """ A dataset created from single galaxy images in a h5py file.
+        """
+        super().__init__()
+
+        self.file = h5py.File(h5_file, "r")
+
+        assert "images" in self.file, "The dataset is not in this file"
+
+        self.dset = self.file["images"]
+        self.n_bands = self.dset.shape[1]
+        self.slen = self.dset.shape[2]
+        assert (
+            self.slen == slen == self.dset.shape[3]
+        ), "slen does not match expected values."
+        assert (
+            self.n_bands == n_bands
+        ), "Number of bands in training and in dataset do not match."
+
+        assert "background" in self.dset.attrs, "Background is not in file"
+        self.background = self.dset.attrs["background"]
+
+    def __len__(self):
+        """Number of images saved in the file.
+        """
+        return self.dset.shape[0]
+
+    def __getitem__(self, idx):
+        return {
+            "image": self.dset[idx],  # shape = (n_bands, slen, slen)
+            "background": self.background,
+            "num_galaxies": 1,
+        }
+
+    def print_props(self, prop_file=sys.stdout):
+        pass
+
+    def __exit__(self):
+        self.file.close()
+
+
+def get_pixel_scale(survey_name):
+    return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
+
+
+def filter_bounds(cat, param, min_val=-np.inf, max_val=np.inf):
+    return cat[(cat[param] >= min_val) & (cat[param] <= max_val)]
 
 
 class SurveyObs(object):
@@ -86,206 +127,6 @@ class SurveyObs(object):
             single_obs.image = galsim.Image(
                 bounds=single_obs.image_bounds, scale=self.pixel_scale, dtype=self.dtype
             )
-
-
-class H5Catalog(Dataset):
-    def __init__(self, h5_file, slen, n_bands):
-        """ A dataset created from single galaxy images in a h5py file.
-        """
-        super().__init__()
-
-        self.file = h5py.File(h5_file, "r")
-
-        assert "images" in self.file, "The dataset is not in this file"
-
-        self.dset = self.file["images"]
-        self.n_bands = self.dset.shape[1]
-        self.slen = self.dset.shape[2]
-        assert (
-            self.slen == slen == self.dset.shape[3]
-        ), "slen does not match expected values."
-        assert (
-            self.n_bands == n_bands
-        ), "Number of bands in training and in dataset do not match."
-
-        assert "background" in self.dset.attrs, "Background is not in file"
-        self.background = self.dset.attrs["background"]
-
-    def __len__(self):
-        """
-        Number of images saved in the file.
-        :return:
-        """
-        return self.dset.shape[0]
-
-    def __getitem__(self, idx):
-        return {
-            "image": self.dset[idx],  # shape = (n_bands, slen, slen)
-            "background": self.background,
-            "num_galaxies": 1,
-        }
-
-    def print_props(self, prop_file=sys.stdout):
-        pass
-
-    def __exit__(self):
-        self.file.close()
-
-
-class CatsimGalaxies(Dataset):
-    def __init__(
-        self,
-        catalog_file,
-        survey_name="LSST",
-        slen=51,
-        filter_dict=None,
-        snr=200,
-        n_bands=6,
-        dtype=np.float32,
-        deviate_center=False,
-        preserve_flux=False,
-        add_noise=True,
-        render_kwargs=None,
-    ):
-        """
-        This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)
-         and returns a galaxy drawn from the catalog with realistic seeing conditions using
-         functions from WeakLensingDeblending.
-
-        For now, only one galaxy can be returned at once.
-
-        :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST
-                    survey.
-        :param render_kwargs: Additional keyword arguments that will go into the renderer.
-        :param filter_dict: Exclude some entries from based CATSIM on dict of filters, default is
-                           to exclude >=25.3 i_ab
-        """
-        super().__init__()
-        assert survey_name == "LSST", "Only using default survey name for now is LSST."
-        assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
-        assert (
-            slen >= 51
-        ), "Does not seem to work well if the number of pixels is too low."
-        assert slen % 2 == 1, "Odd number of pixels is preferred."
-        assert (
-            filter_dict is None
-        ), "Not supporting different dict yet, need to change argparse + save_props below."
-        assert dtype is np.float32, "Only float32 is supported for now."
-        assert (
-            preserve_flux is False
-        ), "Otherwise variance of the noise will change which is not desirable."
-        # ToDo: Create a test or assertion to check that mean == variance approx.
-
-        self.survey_name = survey_name
-        self.n_bands = n_bands
-        self.bands = bands_dict[self.n_bands]
-
-        self.slen = slen
-        self.pixel_scale = get_pixel_scale(self.survey_name)
-        self.stamp_size = self.pixel_scale * self.slen  # arcsecs.
-        self.snr = snr
-        self.dtype = dtype
-        self.preserve_flux = preserve_flux
-        self.add_noise = add_noise
-        self.deviate_center = deviate_center
-
-        self.renderer = CatsimRenderer(
-            self.survey_name,
-            self.bands,
-            self.stamp_size,
-            self.pixel_scale,
-            snr=self.snr,
-            dtype=self.dtype,
-            preserve_flux=self.preserve_flux,
-            add_noise=self.add_noise,
-            deviate_center=deviate_center,
-            **render_kwargs,
-        )
-        self.background = self.renderer.background
-
-        # prepare catalog table.
-        self.table = Table.read(catalog_file)  # full path
-        self.table = self.table[
-            np.random.permutation(len(self.table))
-        ]  # shuffle in case that order matters.
-        self.filtered_dict = (
-            CatsimGalaxies.get_default_filters() if filter_dict is None else filter_dict
-        )
-        self.cat = self.get_filtered_table()
-
-    def __len__(self):
-        return len(self.cat)
-
-    # ToDo: Remove all non-visible sources from catalogue directly?
-    def __getitem__(self, idx):
-
-        while True:  # loop until visible galaxy is selected.
-            try:
-                entry = self.cat[idx]
-                final, background = self.renderer.draw(entry)
-                break
-
-            except descwl.render.SourceNotVisible:
-                idx = np.random.choice(
-                    np.arange(len(self))
-                )  # select some other random galaxy to return.
-
-        return {"image": final, "background": background, "num_galaxies": 1}
-
-    def print_props(self, output=sys.stdout):
-        print(
-            f"slen: {self.slen} \n"
-            f"snr: {self.snr} \n"
-            f"survey name: {self.survey_name} \n"
-            f"bands: {self.bands}\n"
-            f"pixel scale: {self.pixel_scale}\n"
-            f"filter_dict: Default\n"
-            f"min_snr: {self.renderer.min_snr}\n"
-            f"truncate_radius: {self.renderer.truncate_radius}\n"
-            f"add_noise: {self.renderer.add_noise}\n"
-            f"preserve_flux: {self.renderer.preserve_flux}\n"
-            f"deviate center: {self.deviate_center}\n"
-            f"dtype: {self.renderer.dtype}",
-            file=output,
-        )
-
-    def get_filtered_table(self):
-        cat = self.table.copy()
-        for param, pfilter in self.filtered_dict.items():
-            cat = cat[pfilter(param, cat)]
-        return cat
-
-    @staticmethod
-    def get_default_filters():
-        # ToDo: Make a cut on the size? Something like:
-        # sizes = self.renderer.get_size(self.cat); cat = cat[sizes < 30] (size in pixels)
-        filters = dict(
-            i_ab=lambda param, x: x[param]
-            <= 25.3  # cut on magnitude same as BTK does (gold sample)
-        )
-        return filters
-
-    @staticmethod
-    def add_args(parser):
-        # add arguments to configure dataset directly from parser
-        parser.add_argument(
-            "--catalog-file", type=str, help="Catalog file to load entries from."
-        )
-
-        parser.add_argument("--survey", type=str, default="LSST", help="Survey to use.")
-        parser.add_argument("--deviate-center", action="store_true")
-
-    @classmethod
-    def from_args(cls, args):
-        args_dict = vars(args)
-        catalog_file = args_dict["catalog_file"]
-
-        kwargs = inspect.getfullargspec(cls.__init__).args
-        kwargs.remove("catalog_file")
-
-        args_dict = {k: v for k, v in args_dict.items() if k in kwargs}
-
-        return cls.__init__(catalog_file, **args_dict)
 
 
 # ToDo: More flexibility than drawing randomly centered in central pixel.
@@ -360,8 +201,10 @@ class CatsimRenderer(object):
 
     def center_deviation(self, entry):
         # random deviation from exactly in center of center pixel, in arcsecs.
-        entry["ra"] = (np.random.rand() - 0.5) * self.pixel_scale  # arcsecs
-        entry["dec"] = (np.random.rand() - 0.5) * self.pixel_scale
+        deviation_ra = (np.random.rand() - 0.5) if self.deviate_center else 0.0
+        deviation_dec = (np.random.rand() - 0.5) if self.deviate_center else 0.0
+        entry["ra"] = deviation_ra * self.pixel_scale  # arcsecs
+        entry["dec"] = deviation_dec * self.pixel_scale
         return entry
 
     def draw(self, entry):
@@ -377,7 +220,7 @@ class CatsimRenderer(object):
 
         with SurveyObs(self) as obs:
             for i, band in enumerate(self.bands):
-                entry = self.center_deviation(entry) if self.deviate_center else entry
+                entry = self.center_deviation(entry)
                 image_no_background = self.single_band(entry, obs[i], band)
                 image[i, :, :] = image_no_background + self.background[i]
 
@@ -441,3 +284,152 @@ class CatsimRenderer(object):
                 image_temp.addNoise(noise)
 
         return image_temp.array
+
+
+class CatsimGalaxies(Dataset):
+    def __init__(
+        self,
+        catalog_file,
+        survey_name="LSST",
+        slen=51,
+        snr=200,
+        n_bands=6,
+        dtype=np.float32,
+        deviate_center=False,
+        preserve_flux=False,
+        add_noise=True,
+    ):
+        """
+        This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)
+         and returns a galaxy drawn from the catalog with realistic seeing conditions using
+         functions from WeakLensingDeblending.
+
+        For now, only one galaxy can be returned at once.
+
+        :param snr: The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST
+                    survey.
+        """
+        super().__init__()
+        assert survey_name == "LSST", "Only using default survey name for now is LSST."
+        assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
+        assert (
+            slen >= 51
+        ), "Does not seem to work well if the number of pixels is too low."
+        assert slen % 2 == 1, "Odd number of pixels is preferred."
+        assert dtype is np.float32, "Only float32 is supported for now."
+        assert (
+            preserve_flux is False
+        ), "Otherwise variance of the noise will change which is not desirable."
+        # ToDo: Create a test or assertion to check that mean == variance approx.
+
+        self.survey_name = survey_name
+        self.n_bands = n_bands
+        self.bands = bands_dict[self.n_bands]
+
+        self.slen = slen
+        self.pixel_scale = get_pixel_scale(self.survey_name)
+        self.stamp_size = self.pixel_scale * self.slen  # arcsecs.
+        self.snr = snr
+        self.dtype = dtype
+        self.preserve_flux = preserve_flux
+        self.add_noise = add_noise
+        self.deviate_center = deviate_center
+
+        self.renderer = CatsimRenderer(
+            self.survey_name,
+            self.bands,
+            self.stamp_size,
+            self.pixel_scale,
+            snr=self.snr,
+            dtype=self.dtype,
+            preserve_flux=self.preserve_flux,
+            add_noise=self.add_noise,
+            deviate_center=deviate_center,
+        )
+        self.background = self.renderer.background
+
+        # prepare catalog table.
+        self.table = Table.read(catalog_file)  # full path
+        self.table = self.table[
+            np.random.permutation(len(self.table))
+        ]  # shuffle in case that order matters.
+
+        # TODO: Add support for other dicts.
+        self.filter_dict = self.get_default_filters()
+        self.cat = self.get_filtered_table()
+
+    def __len__(self):
+        return len(self.cat)
+
+    # ToDo: Remove all non-visible sources from catalogue directly?
+    def __getitem__(self, idx):
+
+        while True:  # loop until visible galaxy is selected.
+            try:
+                entry = self.cat[idx]
+                final, background = self.renderer.draw(entry)
+                break
+
+            except descwl.render.SourceNotVisible:
+                idx = np.random.choice(
+                    np.arange(len(self))
+                )  # select some other random galaxy to return.
+
+        return {"image": final, "background": background, "num_galaxies": 1}
+
+    def print_props(self, output=sys.stdout):
+        print(
+            f"slen: {self.slen} \n"
+            f"snr: {self.snr} \n"
+            f"survey name: {self.survey_name} \n"
+            f"bands: {self.bands}\n"
+            f"pixel scale: {self.pixel_scale}\n"
+            f"filter_dict: Default\n"
+            f"min_snr: {self.renderer.min_snr}\n"
+            f"truncate_radius: {self.renderer.truncate_radius}\n"
+            f"add_noise: {self.renderer.add_noise}\n"
+            f"preserve_flux: {self.renderer.preserve_flux}\n"
+            f"deviate center: {self.deviate_center}\n"
+            f"dtype: {self.renderer.dtype}",
+            file=output,
+        )
+
+    def get_filtered_table(self):
+        cat = self.table.copy()
+        for param, bounds in self.filter_dict.items():
+            min_val, max_val = bounds
+            cat = filter_bounds(cat, param, min_val, max_val)
+        return cat
+
+    @staticmethod
+    def get_default_filters():
+        # ToDo: Make a cut on the size? Something like:
+        # sizes = self.renderer.get_size(self.cat); cat = cat[sizes < 30] (size in pixels)
+        # cut on magnitude same as BTK does (gold sample)
+        filters = dict(i_ab=(-np.inf, 25.3))
+        return filters
+
+    @staticmethod
+    def add_args(parser):
+        # add arguments to configure dataset directly from parser
+        parser.add_argument(
+            "--catalog-file",
+            type=str,
+            help="Catalog file to load entries from.",
+            required=True,
+        )
+
+        parser.add_argument("--survey", type=str, default="LSST", help="Survey to use.")
+        parser.add_argument("--deviate-center", action="store_true")
+
+    @classmethod
+    def from_args(cls, args):
+        args_dict = vars(args)
+        catalog_file = args_dict["catalog_file"]
+
+        kwargs = inspect.getfullargspec(cls.__init__).args
+        kwargs.remove("catalog_file")
+
+        args_dict = {k: v for k, v in args_dict.items() if k in kwargs}
+
+        return cls(catalog_file, **args_dict)
