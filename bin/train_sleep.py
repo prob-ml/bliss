@@ -16,21 +16,14 @@ def setup_dataset(args, paths):
     background_file = paths["data"].joinpath(args.background_file)
     psf_file = paths["data"].joinpath(args.psf_file)
 
-    print(
-        f"files to be used:\n decoder: {decoder_file}\n background_file: {background_file}\n"
-        f"psf_file: {psf_file}"
-    )
+    if args.verbose:
+        print(
+            f"files to be used:\n decoder: {decoder_file}\n background_file: {background_file}\n"
+            f"psf_file: {psf_file}"
+        )
 
-    # load decoder
-    galaxy_slen = 51  # decoders are all created with this slen.
-    galaxy_decoder = decoder.get_galaxy_decoder(
-        decoder_file, n_bands=args.n_bands, slen=galaxy_slen,
-    )
-
-    # load psf
+    galaxy_decoder = decoder.get_galaxy_decoder(decoder_file, n_bands=args.n_bands)
     psf = decoder.get_fitted_powerlaw_psf(psf_file)[None, 0]
-
-    # load background
     background = decoder.get_background(background_file, args.n_bands, args.slen)
 
     simulator_args = (
@@ -43,7 +36,7 @@ def setup_dataset(args, paths):
         max_sources=args.max_sources, mean_sources=args.mean_sources, min_sources=0,
     )
 
-    dataset = decoder.SourceDataset(args.n_images, simulator_args, simulator_kwargs)
+    dataset = decoder.SimulatedDataset(args.n_images, simulator_args, simulator_kwargs)
 
     assert args.n_bands == 1, "Only 1 band is supported at the moment."
     assert (

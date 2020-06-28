@@ -83,9 +83,11 @@ def main(args):
     output_path = paths["data"].joinpath(f"{args.output_dir}")
     output_path.mkdir(exist_ok=True)
 
-    dataset = all_datasets[args.dataset_name].from_args(args)
+    dataset = all_datasets[args.dataset].from_args(args)
 
-    file_paths = [output_path.joinpath(f"image{i}") for i in range(args.n_processes)]
+    file_paths = [
+        output_path.joinpath(f"image{i}.hdf5") for i in range(args.n_processes)
+    ]
     generate_args = [
         (args.n_images_per_process, fp, output_path, dataset, args.overwrite)
         for fp in file_paths
@@ -134,7 +136,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument("--slen", type=int, default=51)
-    parser.add_argument("--n-bands", type=int)
+    parser.add_argument("--n-bands", type=int, default=1)
     parser.add_argument("--snr", type=float, default=200, help="SNR to use for noise")
 
     catsim_group = parser.add_argument_group(
@@ -145,5 +147,4 @@ if __name__ == "__main__":
     pargs = parser.parse_args()
 
     assert pargs.n_bands in [1, 6] or not pargs.generate, "Only 1 or 6 bands suggested."
-
     main(pargs)

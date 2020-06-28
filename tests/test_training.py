@@ -6,35 +6,6 @@ import pytorch_lightning as pl
 from celeste import use_cuda, psf_transform, wake, sleep
 from celeste.models import decoder, encoder
 
-from pytorch_lightning.utilities import rank_zero_only
-from pytorch_lightning.loggers import LightningLoggerBase
-
-
-class MyLogger(LightningLoggerBase):
-    def __init__(self):
-        self.name = ""
-        self.version = ""
-        self.experiment = ""
-
-    def log_hyperparams(self, params):
-        # params is an argparse.Namespace
-        # your code to record hyperparameters goes here
-        pass
-
-    def log_metrics(self, metrics, step):
-        # metrics is a dictionary of metric names and values
-        # your code to record metrics goes here
-        pass
-
-    def save(self):
-        # Optional. Any code necessary to save logger data goes here
-        pass
-
-    def finalize(self, status):
-        # Optional. Any code that needs to be run after training
-        # finishes goes here
-        pass
-
 
 def get_trained_encoder(
     galaxy_decoder,
@@ -105,12 +76,10 @@ def get_trained_encoder(
     # runs on gpu or cpu?
     n_device = [device_id] if use_cuda else 0  # 0 means no gpu
 
-    logger = MyLogger()
     sleep_trainer = pl.Trainer(
         gpus=n_device,
         profiler=profiler,
         min_epochs=n_epochs,
-        logger=logger,
         max_epochs=n_epochs,
         reload_dataloaders_every_epoch=True,
         default_root_dir=logs_path,
@@ -186,106 +155,105 @@ class TestStarSleepEncoder:
         )
 
 
-#
-# class TestStarWakePhase:
-#     @pytest.fixture(scope="class")
-#     def init_psf_setup(self, data_path, device):
-#         psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-#         true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-#         init_psf_params = true_psf_params.clone()[None, 0, ...]
-#         init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device)
-#
-#         init_psf = psf_transform.PowerLawPSF(init_psf_params).forward().detach()
-#
-#         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
-#
-#     @pytest.fixture(scope="class")
-#     def trained_encoder(
-#         self,
-#         single_band_galaxy_decoder,
-#         init_psf_setup,
-#         device,
-#         device_id,
-#         profiler,
-#         logging,
-#         logs_path,
-#     ):
-#         return get_trained_encoder(
-#             single_band_galaxy_decoder,
-#             init_psf_setup["init_psf"],
-#             device,
-#             device_id,
-#             profiler,
-#             logging,
-#             logs_path,
-#             n_images=64 * 6,
-#             batch_size=32,
-#             n_epochs=200,
-#             prob_galaxy=0.0,
-#         )
-#
-#     def test_star_wake(
-#         self,
-#         trained_encoder,
-#         single_band_fitted_powerlaw_psf,
-#         init_psf_setup,
-#         test_3_stars,
-#         device,
-#         device_id,
-#         profiler,
-#         logging,
-#         logs_path,
-#     ):
-#         # load the test image
-#         # 3-stars 30*30
-#         test_image = test_3_stars["images"]
-#
-#         # initialization
-#         # initialize background params, which will create the true background
-#         init_background_params = torch.zeros(1, 3, device=device)
-#         init_background_params[0, 0] = 686.0
-#
-#         # initialize psf params, just add 4 to each sigmas
-#         true_psf = single_band_fitted_powerlaw_psf.clone()
-#         init_psf_params = init_psf_setup["init_psf_params"]
-#
-#         n_samples = 1000 if use_cuda else 1
-#         hparams = {"n_samples": n_samples, "lr": 0.001}
-#         wake_phase_model = wake.WakePhase(
-#             trained_encoder,
-#             test_image,
-#             init_psf_params,
-#             init_background_params,
-#             hparams,
-#             logging,
-#         )
-#
-#         # run the wake-phase training
-#         n_epochs = 2800 if use_cuda else 1
-#
-#         # runs on gpu or cpu?
-#         device_num = [device_id] if use_cuda else 0  # 0 means no gpu
-#
-#         wake_trainer = pl.Trainer(
-#             gpus=device_num,
-#             profiler=profiler,
-#             min_epochs=n_epochs,
-#             max_epochs=n_epochs,
-#             reload_dataloaders_every_epoch=True,
-#             default_root_dir=logs_path,
-#         )
-#
-#         wake_trainer.fit(wake_phase_model)
-#
-#         estimate_psf_params = list(wake_phase_model.power_law_psf.parameters())[0]
-#         estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
-#
-#         init_psf = init_psf_setup["init_psf"]
-#         init_residuals = true_psf.to(device) - init_psf.to(device)
-#
-#         estimate_residuals = true_psf.to(device) - estimate_psf.to(device)
-#
-#         if not use_cuda:
-#             return
-#
-#         assert estimate_residuals.abs().sum() <= init_residuals.abs().sum() * 0.30
+class TestStarWakePhase:
+    @pytest.fixture(scope="class")
+    def init_psf_setup(self, data_path, device):
+        psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
+        true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+        init_psf_params = true_psf_params.clone()[None, 0, ...]
+        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device)
+
+        init_psf = psf_transform.PowerLawPSF(init_psf_params).forward().detach()
+
+        return {"init_psf_params": init_psf_params, "init_psf": init_psf}
+
+    @pytest.fixture(scope="class")
+    def trained_encoder(
+        self,
+        single_band_galaxy_decoder,
+        init_psf_setup,
+        device,
+        device_id,
+        profiler,
+        save_logs,
+        logs_path,
+    ):
+        return get_trained_encoder(
+            single_band_galaxy_decoder,
+            init_psf_setup["init_psf"],
+            device,
+            device_id,
+            profiler,
+            save_logs,
+            logs_path,
+            n_images=64 * 6,
+            batch_size=32,
+            n_epochs=200,
+            prob_galaxy=0.0,
+        )
+
+    def test_star_wake(
+        self,
+        trained_encoder,
+        single_band_fitted_powerlaw_psf,
+        init_psf_setup,
+        test_3_stars,
+        device,
+        device_id,
+        profiler,
+        save_logs,
+        logs_path,
+    ):
+        # load the test image
+        # 3-stars 30*30
+        test_image = test_3_stars["images"]
+
+        # initialization
+        # initialize background params, which will create the true background
+        init_background_params = torch.zeros(1, 3, device=device)
+        init_background_params[0, 0] = 686.0
+
+        # initialize psf params, just add 4 to each sigmas
+        true_psf = single_band_fitted_powerlaw_psf.clone()
+        init_psf_params = init_psf_setup["init_psf_params"]
+
+        n_samples = 1000 if use_cuda else 1
+        hparams = {"n_samples": n_samples, "lr": 0.001}
+        wake_phase_model = wake.WakePhase(
+            trained_encoder,
+            test_image,
+            init_psf_params,
+            init_background_params,
+            hparams,
+            save_logs,
+        )
+
+        # run the wake-phase training
+        n_epochs = 2800 if use_cuda else 1
+
+        # runs on gpu or cpu?
+        device_num = [device_id] if use_cuda else 0  # 0 means no gpu
+
+        wake_trainer = pl.Trainer(
+            gpus=device_num,
+            profiler=profiler,
+            min_epochs=n_epochs,
+            max_epochs=n_epochs,
+            reload_dataloaders_every_epoch=True,
+            default_root_dir=logs_path,
+        )
+
+        wake_trainer.fit(wake_phase_model)
+
+        estimate_psf_params = list(wake_phase_model.power_law_psf.parameters())[0]
+        estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
+
+        init_psf = init_psf_setup["init_psf"]
+        init_residuals = true_psf.to(device) - init_psf.to(device)
+
+        estimate_residuals = true_psf.to(device) - estimate_psf.to(device)
+
+        if not use_cuda:
+            return
+
+        assert estimate_residuals.abs().sum() <= init_residuals.abs().sum() * 0.30

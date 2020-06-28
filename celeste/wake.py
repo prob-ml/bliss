@@ -238,7 +238,7 @@ class WakePhase(pl.LightningModule):
 
     def _get_init_background(self, sample_every=25):
         sampled_background = _sample_image(self.observed_img, sample_every)
-        self.init_background_params = torch.Tensor(
+        self.init_background_params = torch.tensor(
             _fit_plane_to_background(sampled_background)
         ).to(device)
         self.planar_background = PlanarBackground(

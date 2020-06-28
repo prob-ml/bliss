@@ -45,6 +45,7 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("tmp_ct", range(count))
 
 
+# paths
 @pytest.fixture(scope="session")
 def root_path():
     return pathlib.Path(__file__).parent.parent.absolute()
@@ -62,11 +63,7 @@ def data_path(root_path):
     return root_path.joinpath("data")
 
 
-@pytest.fixture(scope="session")
-def device_id(pytestconfig):
-    return pytestconfig.getoption("device_id")
-
-
+# logging and profiling.
 @pytest.fixture(scope="session")
 def profiler(pytestconfig, logs_path):
     profiling = pytestconfig.getoption("profiling")
@@ -78,6 +75,12 @@ def profiler(pytestconfig, logs_path):
 @pytest.fixture(scope="session")
 def save_logs(pytestconfig):
     return pytestconfig.getoption("logging")
+
+
+# data and memory.
+@pytest.fixture(scope="session")
+def device_id(pytestconfig):
+    return pytestconfig.getoption("device_id")
 
 
 @pytest.fixture(scope="session")

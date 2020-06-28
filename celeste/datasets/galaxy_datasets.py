@@ -44,6 +44,50 @@ def save_images(
         hds.flush()
 
 
+class SurveyObs(object):
+    def __init__(self, renderer):
+        """Returns a list of :class:`Survey` objects, each of them has an image attribute which is
+        where images are written to by iso_render_engine.render_galaxy.
+        """
+        self.pixel_scale = renderer.pixel_scale
+        self.bands = renderer.bands
+        self.survey_name = renderer.survey_name
+        self.image_size = renderer.image_size
+        self.dtype = renderer.dtype
+
+        obs = []
+        for band in self.bands:
+            # dictionary of default values.
+            survey_dict = descwl.survey.Survey.get_defaults(
+                survey_name=self.survey_name, filter_band=band
+            )
+
+            assert (
+                self.pixel_scale == survey_dict["pixel_scale"]
+            ), "Pixel scale does not match particular band?"
+            survey_dict["image_width"] = self.image_size  # pixels
+            survey_dict["image_height"] = self.image_size
+
+            descwl_survey = descwl.survey.Survey(
+                no_analysis=True,
+                survey_name=self.survey_name,
+                filter_band=band,
+                **survey_dict,
+            )
+            obs.append(descwl_survey)
+
+        self.obs = obs
+
+    def __enter__(self):
+        return self.obs
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for single_obs in self.obs:
+            single_obs.image = galsim.Image(
+                bounds=single_obs.image_bounds, scale=self.pixel_scale, dtype=self.dtype
+            )
+
+
 class H5Catalog(Dataset):
     def __init__(self, h5_file, slen, n_bands):
         """ A dataset created from single galaxy images in a h5py file.
@@ -98,6 +142,7 @@ class CatsimGalaxies(Dataset):
         snr=200,
         n_bands=6,
         dtype=np.float32,
+        deviate_center=False,
         preserve_flux=False,
         add_noise=True,
         render_kwargs=None,
@@ -142,6 +187,7 @@ class CatsimGalaxies(Dataset):
         self.dtype = dtype
         self.preserve_flux = preserve_flux
         self.add_noise = add_noise
+        self.deviate_center = deviate_center
 
         self.renderer = CatsimRenderer(
             self.survey_name,
@@ -152,6 +198,7 @@ class CatsimGalaxies(Dataset):
             dtype=self.dtype,
             preserve_flux=self.preserve_flux,
             add_noise=self.add_noise,
+            deviate_center=deviate_center,
             **render_kwargs,
         )
         self.background = self.renderer.background
@@ -197,6 +244,7 @@ class CatsimGalaxies(Dataset):
             f"truncate_radius: {self.renderer.truncate_radius}\n"
             f"add_noise: {self.renderer.add_noise}\n"
             f"preserve_flux: {self.renderer.preserve_flux}\n"
+            f"deviate center: {self.deviate_center}\n"
             f"dtype: {self.renderer.dtype}",
             file=output,
         )
@@ -221,10 +269,11 @@ class CatsimGalaxies(Dataset):
     def add_args(parser):
         # add arguments to configure dataset directly from parser
         parser.add_argument(
-            "--catalog-file", type=str, help="Catalog file to load entries"
+            "--catalog-file", type=str, help="Catalog file to load entries from."
         )
 
         parser.add_argument("--survey", type=str, default="LSST", help="Survey to use.")
+        parser.add_argument("--deviate-center", action="store_true")
 
     @classmethod
     def from_args(cls, args):
@@ -254,6 +303,7 @@ class CatsimRenderer(object):
         add_noise=True,
         preserve_flux=False,
         verbose=False,
+        deviate_center=False,
     ):
         """
         Can draw a single entry in CATSIM in the given bands.
@@ -272,55 +322,20 @@ class CatsimRenderer(object):
         self.truncate_radius = truncate_radius
         self.add_noise = add_noise
         self.preserve_flux = preserve_flux  # when changing SNR.
+        self.deviate_center = deviate_center
         self.verbose = verbose
         self.dtype = dtype
-
-        self.obs = self.get_obs()
         self.background = self.get_background()
-
-    def get_obs(self):
-        """Returns a list of :class:`Survey` objects, each of them has an image attribute which is
-        where images are written to by iso_render_engine.render_galaxy.
-        """
-        obs = []
-        for band in self.bands:
-            # dictionary of default values.
-            survey_dict = descwl.survey.Survey.get_defaults(
-                survey_name=self.survey_name, filter_band=band
-            )
-
-            assert (
-                self.pixel_scale == survey_dict["pixel_scale"]
-            ), "Pixel scale does not match particular band?"
-            survey_dict["image_width"] = self.image_size  # pixels
-            survey_dict["image_height"] = self.image_size
-
-            descwl_survey = descwl.survey.Survey(
-                no_analysis=True,
-                survey_name=self.survey_name,
-                filter_band=band,
-                **survey_dict,
-            )
-            obs.append(descwl_survey)
-
-        return obs
 
     def get_background(self):
         background = np.zeros(
             (self.n_bands, self.image_size, self.image_size), dtype=self.dtype
         )
-        for i, single_obs in enumerate(self.obs):
-            background[i, :, :] = single_obs.mean_sky_level
-        return background
 
-    # ToDo: Consider a context manager.
-    def reset_obs(self):
-        """Reset it so we can draw on it again.
-        """
-        for single_obs in self.obs:
-            single_obs.image = galsim.Image(
-                bounds=single_obs.image_bounds, scale=self.pixel_scale, dtype=np.float32
-            )
+        with SurveyObs(self) as obs:
+            for i, single_obs in enumerate(obs):
+                background[i, :, :] = single_obs.mean_sky_level
+        return background
 
     # noinspection DuplicatedCode
     def get_size(self, cat):
@@ -329,17 +344,18 @@ class CatsimRenderer(object):
         rendering observing conditions / survey.
         """
         assert "i" in self.bands, "Requires the i band to be present."
-        i_obs = self.obs[self.bands.index("i")]
+        with SurveyObs(self) as obs:
+            i_obs = obs[self.bands.index("i")]
 
-        f = cat["fluxnorm_bulge"] / (cat["fluxnorm_disk"] + cat["fluxnorm_bulge"])
-        hlr_d = np.sqrt(cat["a_d"] * cat["b_d"])
-        hlr_b = np.sqrt(cat["a_b"] * cat["b_b"])
-        r_sec = np.hypot(hlr_d * (1 - f) ** 0.5 * 4.66, hlr_b * f ** 0.5 * 1.46)
-        psf = i_obs.psf_model
-        psf_r_sec = psf.calculateMomentRadius()
-        size = (
-            np.sqrt(r_sec ** 2 + psf_r_sec ** 2) / self.pixel_scale
-        )  # size is in pixels.
+            f = cat["fluxnorm_bulge"] / (cat["fluxnorm_disk"] + cat["fluxnorm_bulge"])
+            hlr_d = np.sqrt(cat["a_d"] * cat["b_d"])
+            hlr_b = np.sqrt(cat["a_b"] * cat["b_b"])
+            r_sec = np.hypot(hlr_d * (1 - f) ** 0.5 * 4.66, hlr_b * f ** 0.5 * 1.46)
+            psf = i_obs.psf_model
+            psf_r_sec = psf.calculateMomentRadius()
+            size = (
+                np.sqrt(r_sec ** 2 + psf_r_sec ** 2) / self.pixel_scale
+            )  # size is in pixels.
         return Column(size, name="size")
 
     def center_deviation(self, entry):
@@ -353,18 +369,17 @@ class CatsimRenderer(object):
         Return a multi-band image corresponding to the entry from the catalog given.
 
         * The final image includes its background based on survey's sky level.
-        * Each galaxy is aligned across the bands because `entry` is the same.
+        * If deviate_center==True, then galaxy not aligned between bands.
         """
         image = np.zeros(
             (self.n_bands, self.image_size, self.image_size), dtype=self.dtype
         )
 
-        for i, band in enumerate(self.bands):
-            entry = self.center_deviation(entry)  # different for each band.
-            image_no_background = self.single_band(entry, self.obs[i], band)
-            image[i, :, :] = image_no_background + self.background[i]
-
-        self.reset_obs()
+        with SurveyObs(self) as obs:
+            for i, band in enumerate(self.bands):
+                entry = self.center_deviation(entry) if self.deviate_center else entry
+                image_no_background = self.single_band(entry, obs[i], band)
+                image[i, :, :] = image_no_background + self.background[i]
 
         return image, self.background
 
