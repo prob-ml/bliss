@@ -7,7 +7,8 @@ from pathlib import Path
 import torch
 import os
 
-from . import setup_paths, setup_device
+from . import setup_paths, setup_device, setup_seed
+
 from celeste import use_cuda
 from celeste.datasets import galaxy_datasets
 from celeste.models import galaxy_net
@@ -23,11 +24,13 @@ def main(args):
 
     assert args.model in models, "Not implemented."
 
-    # setup paths.
+    # setup.
     setup_paths(args)
     setup_device(args)
+    setup_seed(args)
 
     # setup dataset.
+    dataset = datasets[args.dataset].from_args(args)
 
     # setup additional arguments for model.
 

@@ -34,7 +34,6 @@ def setup_device(args):
 
 
 def setup_seed(args):
-    # determinism
     if args.torch_seed:
         torch.manual_seed(args.torch_seed)
 

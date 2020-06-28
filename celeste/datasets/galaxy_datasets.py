@@ -76,18 +76,16 @@ class H5Catalog(Dataset):
     def __exit__(self):
         self.file.close()
 
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument("--h5-file", type=int, default=8)
+
     @classmethod
     def from_args(cls, args):
         args_dict = vars(args)
         parameters = inspect.signature(cls).parameters
-        filtered_dict = {
-            param: value for param, value in args_dict.items() if param in parameters
-        }
-        return cls(**filtered_dict)
-
-    @staticmethod
-    def add_args(parser):
-        parser.add_argument("--h5-file", type=int, default=8)
+        args_dict = {param: args_dict[param] for param in parameters}
+        return cls(**args_dict)
 
 
 def get_pixel_scale(survey_name):
@@ -439,7 +437,6 @@ class CatsimGalaxies(Dataset):
     @classmethod
     def from_args(cls, args):
         args_dict = vars(args)
-        kwargs = inspect.getfullargspec(cls.__init__).args
-        args_dict = {k: v for k, v in args_dict.items() if k in kwargs}
-
+        parameters = inspect.signature(cls).parameters
+        args_dict = {param: args_dict[param] for param in parameters}
         return cls(**args_dict)
