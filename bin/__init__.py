@@ -1,5 +1,8 @@
 from pathlib import Path
 import torch
+import numpy as np
+
+from celeste import use_cuda
 
 
 def setup_paths(args):
@@ -28,3 +31,16 @@ def setup_device(args):
         device = torch.device("cpu")
 
     return device
+
+
+def setup_seed(args):
+    # determinism
+    if args.torch_seed:
+        torch.manual_seed(args.torch_seed)
+
+        if use_cuda:
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+
+    if args.numpy_seed:
+        np.random.seed(args.numpy_seed)

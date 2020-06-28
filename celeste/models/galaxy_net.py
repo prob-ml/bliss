@@ -1,7 +1,7 @@
 import inspect
 import numpy as np
 import pytorch_lightning as pl
-from .. import device
+import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import DataLoader, SubsetRandomSampler
@@ -10,6 +10,10 @@ import torch.nn.functional as f
 from torch.distributions import Normal
 from torch.optim import Adam
 
+from .. import device
+
+plt.switch_backend("Agg")
+
 
 class Flatten(nn.Module):
     @staticmethod
@@ -17,7 +21,7 @@ class Flatten(nn.Module):
         return tensor.view(tensor.size(0), -1)
 
 
-class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
+class CenteredGalaxyEncoder(nn.Module):
     def __init__(self, slen, latent_dim, n_bands, hidden=256):
         super(CenteredGalaxyEncoder, self).__init__()
 
@@ -61,7 +65,7 @@ class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
         return z_mean, z_var
 
 
-class CenteredGalaxyDecoder(nn.Module):  # generator
+class CenteredGalaxyDecoder(nn.Module):
     def __init__(self, slen, latent_dim, n_bands, hidden=256):
         super(CenteredGalaxyDecoder, self).__init__()
 
@@ -92,12 +96,7 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         )
 
     def forward(self, z):
-        """
-
-        :param z: Has shape = latent_dim.
-        :return:
-        """
-        z = self.fc(z)
+        z = self.fc(z)  # latent variable
 
         # This dimension is the number of samples.
         z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
@@ -125,7 +124,7 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         )
         z = p_z.rsample(torch.tensor([num_samples, self.latent_dim])).view(
             num_samples, -1
-        )  # shape = (8,)
+        )
         samples, _ = self.forward(z)
 
         # samples shape = (num_samples, n_bands, slen, slen)
@@ -141,7 +140,7 @@ class OneCenteredGalaxy(pl.LightningModule):
     def __init__(
         self,
         dataset,
-        slen,
+        slen=51,
         latent_dim=8,
         n_bands=1,
         lr=1e-4,
@@ -153,7 +152,7 @@ class OneCenteredGalaxy(pl.LightningModule):
     ):
         super(OneCenteredGalaxy, self).__init__()
 
-        self.slen = slen  # The dimensions of the image slen * slen
+        self.slen = slen
         self.latent_dim = latent_dim
         self.n_bands = n_bands
 
@@ -279,19 +278,11 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         # TODO: add plotting images and their residuals with plot_reconstruction function.
 
-        return {"val_loss": outputs[-1]["val_loss"]}
+        return {"val_loss": avg_loss}
 
     def rmse_pp(self, image, background):
         recon_mean, recon_var, kl_z = self.forward(image, background)
         return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
-
-    @classmethod
-    def from_args(cls, args_dict):
-        parameters = inspect.signature(cls).parameters
-        filtered_dict = {
-            param: value for param, value in args_dict.items() if param in parameters
-        }
-        return cls(**filtered_dict)
 
     def plot_reconstruction(self, epoch):
         num_examples = min(10, self.batch_size)
@@ -350,3 +341,17 @@ class OneCenteredGalaxy(pl.LightningModule):
                     plt.close()
 
                 break
+
+    @classmethod
+    def from_args(cls, dataset, args):
+        args_dict = vars(args)
+        parameters = inspect.signature(cls).parameters
+        filtered_dict = {
+            param: value for param, value in args_dict.items() if param in parameters
+        }
+        return cls(dataset, **filtered_dict)
+
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument("--latent-dim", type=int, default=8)
+        parser.add_argument("--tt-split", type=float, default=0.1)

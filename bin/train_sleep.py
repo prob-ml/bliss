@@ -11,42 +11,6 @@ from celeste.models import encoder, decoder
 
 # TODO: part of this function can probably be a more general utility function in
 #       simulated_datasets.py
-def setup_dataset(args, paths):
-    decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
-    background_file = paths["data"].joinpath(args.background_file)
-    psf_file = paths["data"].joinpath(args.psf_file)
-
-    if args.verbose:
-        print(
-            f"files to be used:\n decoder: {decoder_file}\n background_file: {background_file}\n"
-            f"psf_file: {psf_file}"
-        )
-
-    galaxy_decoder = decoder.get_galaxy_decoder(decoder_file, n_bands=args.n_bands)
-    psf = decoder.get_fitted_powerlaw_psf(psf_file)[None, 0]
-    background = decoder.get_background(background_file, args.n_bands, args.slen)
-
-    simulator_args = (
-        galaxy_decoder,
-        psf,
-        background,
-    )
-
-    simulator_kwargs = dict(
-        max_sources=args.max_sources, mean_sources=args.mean_sources, min_sources=0,
-    )
-
-    dataset = decoder.SimulatedDataset(args.n_images, simulator_args, simulator_kwargs)
-
-    assert args.n_bands == 1, "Only 1 band is supported at the moment."
-    assert (
-        dataset.simulator.n_bands
-        == psf.shape[0]
-        == background.shape[0]
-        == galaxy_decoder.n_bands
-    ), "All bands should be consistent"
-
-    return dataset
 
 
 def main(args):
@@ -100,32 +64,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Sleep phase galaxy training [argument parser]",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-
-    parser.add_argument(
-        "--device", type=int, default=0, metavar="DEV", help="GPU device ID"
-    )
-
-    parser.add_argument(
-        "--root-dir",
-        help="Absolute path to directory containing bin and celeste package.",
-        type=str,
-        default=os.path.abspath(".."),
-    )
-
-    parser.add_argument(
-        "--output-name",
-        type=str,
-        default=None,
-        metavar="DIR",
-        help="Directory name relative to root/results path, where output will be saved.",
-    )
-
-    parser.add_argument(
-        "--torch-seed", type=int, default=None, help="Random seed for pytorch",
-    )
-    parser.add_argument(
-        "--np-seed", type=int, default=None, help="Random seed for numpy",
     )
 
     parser.add_argument(

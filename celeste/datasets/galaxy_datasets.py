@@ -36,7 +36,7 @@ def save_images(
 
 
 class H5Catalog(Dataset):
-    def __init__(self, h5_file, slen, n_bands):
+    def __init__(self, h5_file="images.hdf5", slen=51, n_bands=1):
         """ A dataset created from single galaxy images in a h5py file.
         """
         super().__init__()
@@ -75,6 +75,19 @@ class H5Catalog(Dataset):
 
     def __exit__(self):
         self.file.close()
+
+    @classmethod
+    def from_args(cls, args):
+        args_dict = vars(args)
+        parameters = inspect.signature(cls).parameters
+        filtered_dict = {
+            param: value for param, value in args_dict.items() if param in parameters
+        }
+        return cls(**filtered_dict)
+
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument("--h5-file", type=int, default=8)
 
 
 def get_pixel_scale(survey_name):
@@ -289,7 +302,7 @@ class CatsimRenderer(object):
 class CatsimGalaxies(Dataset):
     def __init__(
         self,
-        catalog_file,
+        catalog_file="OneDegSq.fits",
         survey_name="LSST",
         slen=51,
         snr=200,
@@ -379,6 +392,7 @@ class CatsimGalaxies(Dataset):
 
     def print_props(self, output=sys.stdout):
         print(
+            f"len(cat): {len(self.cat)} \n",
             f"slen: {self.slen} \n"
             f"snr: {self.snr} \n"
             f"survey name: {self.survey_name} \n"
@@ -425,11 +439,7 @@ class CatsimGalaxies(Dataset):
     @classmethod
     def from_args(cls, args):
         args_dict = vars(args)
-        catalog_file = args_dict["catalog_file"]
-
         kwargs = inspect.getfullargspec(cls.__init__).args
-        kwargs.remove("catalog_file")
-
         args_dict = {k: v for k, v in args_dict.items() if k in kwargs}
 
-        return cls(catalog_file, **args_dict)
+        return cls(**args_dict)
