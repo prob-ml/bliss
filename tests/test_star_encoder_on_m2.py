@@ -18,7 +18,7 @@ torch.manual_seed(664)
 np.random.seed(4534)
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(data_path, sprof, log):
+def trained_star_encoder_m2(data_path, device, device_id, sprof, log):
     
     # dataset parameters
     n_bands = 2
