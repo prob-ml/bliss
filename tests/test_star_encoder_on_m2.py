@@ -2,21 +2,24 @@ import torch
 import pytest
 import os
 
+import pytorch_lightning as pl
+from pytorch_lightning.profiler import AdvancedProfiler
+
 import numpy as np
 
 from celeste import device, use_cuda
-from celeste import train
-from celeste.datasets import simulated_datasets
-from celeste.models import sourcenet
+from celeste import use_cuda, psf_transform, wake, sleep
+from celeste.models import decoder, encoder
+
 from celeste import psf_transform
 from celeste import image_statistics
 
 torch.manual_seed(664)
 np.random.seed(4534)
 
-
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(data_path):
+def trained_star_encoder_m2(data_path, sprof, log):
+    
     # dataset parameters
     n_bands = 2
     max_stars = 2500
@@ -40,7 +43,7 @@ def trained_star_encoder_m2(data_path):
 
     # create simulated dataset
     # simulate dataset
-    n_images = 200
+    n_images = 200 if use_cuda else 4
     simulator_args = (
         None,
         psf_og,
@@ -58,13 +61,15 @@ def trained_star_encoder_m2(data_path):
         f_max=f_max,
         alpha=alpha,
     )
-
-    dataset = simulated_datasets.SourceDataset(
-        n_images, simulator_args, simulator_kwargs
+    
+    batch_size = 20 if use_cuda else 4
+    n_batches = int(n_images / batch_size)
+    dataset = decoder.SimulatedDataset(
+        n_batches, batch_size, simulator_args, simulator_kwargs
     )
 
     # set up star encoder
-    star_encoder = sourcenet.SourceEncoder(
+    star_encoder = encoder.ImageEncoder(
         slen=slen,
         ptile_slen=8,
         step=2,
@@ -78,23 +83,32 @@ def trained_star_encoder_m2(data_path):
     ).to(device)
 
     # set up training module
-    SleepTraining = train.SleepTraining(
-        model=star_encoder,
-        dataset=dataset,
-        slen=slen,
-        n_bands=n_bands,
-        verbose=True,
-        batchsize=20,
+    profiler = AdvancedProfiler(output_filename=sprof)
+    sleep_net = sleep.SleepPhase(
+        dataset=dataset, image_encoder=star_encoder, save_logs=log
+    )
+    n_device = [device_id] if use_cuda else 0  
+    n_epochs = 200 if use_cuda else 1
+    sleep_trainer = pl.Trainer(
+        logger=log,
+        checkpoint_callback=log,
+        gpus=n_device,
+        profiler=profiler,
+        min_epochs=n_epochs,
+        max_epochs=n_epochs,
+        reload_dataloaders_every_epoch=True,
     )
 
-    n_epochs = 200 if use_cuda else 1
-    SleepTraining.run(n_epochs=n_epochs)
+    sleep_trainer.fit(sleep_net)
 
-    return star_encoder
+    return sleep_net.image_encoder
 
 
 class TestStarSleepEncoderM2:
-    def test_star_sleep_m2(self, data_path, trained_star_encoder_m2):
+        
+    def test_star_sleep_m2(self,
+                            data_path, 
+                            trained_star_encoder_m2):
 
         # the trained star encoder
         trained_star_encoder_m2.eval()

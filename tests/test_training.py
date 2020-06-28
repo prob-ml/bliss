@@ -63,7 +63,7 @@ def get_trained_encoder(
         edge_padding=3,
         n_bands=n_bands,
         max_detections=2,
-        n_galaxy_params=galaxy_decoder.latent_dim,
+        n_galaxy_params=dataset.simulator.latent_dim,
         enc_conv_c=5,
         enc_kern=3,
         enc_hidden=64,

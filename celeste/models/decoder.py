@@ -476,7 +476,7 @@ class SourceSimulator(object):
 
         if self.all_stars:
             galaxy_params = torch.zeros(
-                batchsize, self.max_sources, self.latent_dim, device=device
+                batch_size, self.max_sources, self.latent_dim, device=device
             )
             single_galaxies = None
         else:
@@ -535,14 +535,14 @@ class SourceSimulator(object):
             galaxies = 0.0
         else:
             # need n_sources because *_locs are not necessarily ordered.
-            galaxies = plot_multiple_galaxies(
+            galaxies = render_multiple_galaxies(
                 self.slen,
                 galaxy_locs,
                 n_sources,
                 single_galaxies,
                 cached_grid=self.cached_grid,
             )
-        stars = plot_multiple_stars(
+        stars = render_multiple_stars(
             self.slen,
             star_locs,
             n_sources,
