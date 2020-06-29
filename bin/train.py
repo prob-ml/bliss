@@ -105,6 +105,7 @@ if __name__ == "__main__":
     # ----------------
 
     parser.add_argument("--profile", action="store_true", help="Whether to profile.")
+    parser.add_argument("--save-log", action="store_true", help="Log output?")
 
     # ---------------
     # Paths

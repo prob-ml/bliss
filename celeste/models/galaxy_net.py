@@ -148,7 +148,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         num_workers=2,
         tt_split=0.1,
         batch_size=64,
-        logging=False,
+        save_log=False,
     ):
         super(OneCenteredGalaxy, self).__init__()
 
@@ -161,7 +161,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.num_workers = num_workers
         self.tt_split = tt_split
         self.batch_size = batch_size
-        self.logging = logging
+        self.save_log = save_log
 
         self.dataset = dataset
 
