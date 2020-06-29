@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
-import numpy as np
-import subprocess
-from pathlib import Path
-import torch
 import os
+import numpy as np
+import torch
+import pytorch_lightning as pl
+from pytorch_lightning.profiler import AdvancedProfiler
 
-from . import setup_paths, setup_device, setup_seed
+from . import setup_paths, setup_device
 
 from celeste import use_cuda
 from celeste.datasets import galaxy_datasets
@@ -20,44 +20,58 @@ models = [galaxy_net.OneCenteredGalaxy]
 models = {cls.__name__: cls for cls in models}
 
 
+def setup_seed(args):
+    if args.torch_seed:
+        torch.manual_seed(args.torch_seed)
+
+        if use_cuda:
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+
+    if args.numpy_seed:
+        np.random.seed(args.numpy_seed)
+
+
+def setup_profiler(args, output_path):
+    profiler = None
+    if args.profile:
+        profile_file = output_path.joinpath("profile.txt")
+        profiler = AdvancedProfiler(output_filename=profile_file)
+    return profiler
+
+
 def main(args):
 
     assert args.model in models, "Not implemented."
 
     # setup.
-    setup_paths(args)
+    paths = setup_paths(args)
     setup_device(args)
     setup_seed(args)
+    output_path = paths["results"].joinpath(args.output_dir)
 
     # setup dataset.
     dataset = datasets[args.dataset].from_args(args)
 
-    # setup additional arguments for model.
-
-    # create model.
-    model = models[args.model].from_args()
+    # setup model
+    model_cls = models[args.model]
+    model = model_cls.from_args(dataset, args)
 
     # setup trainer
+    profiler = setup_profiler(args, output_path)
+    n_device = [args.device]
+
+    sleep_trainer = pl.Trainer(
+        gpus=n_device,
+        profiler=profiler,
+        min_epochs=args.n_epochs,
+        max_epochs=args.n_epochs,
+        reload_dataloaders_every_epoch=True,
+        default_root_dir=output_path,
+    )
 
     # train!
-    # Additional settings.
-    args["dir_name"] = testing_path.joinpath(args["dir_name"])
-    project_dir = Path(args["dir_name"])
-
-    # check if directory exists or if we should overwrite.
-    if project_dir.is_dir() and not args["overwrite"]:
-        raise IOError("Directory already exists.")
-    elif project_dir.is_dir():
-        subprocess.run(f"rm -r {project_dir.as_posix()}", shell=True)
-
-    project_dir.mkdir()
-
-    torch.manual_seed(pargs.seed)
-    np.random.seed(pargs.seed)
-
-    # run.
-    with torch.cuda.device(args["device"]):
-        run(args)
+    sleep_trainer.fit(model)
 
 
 if __name__ == "__main__":
@@ -85,6 +99,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--np-seed", type=int, default=None, help="Random seed for numpy",
     )
+
+    # ---------------
+    # Profile and Logging
+    # ----------------
+
+    parser.add_argument("--profile", action="store_true", help="Whether to profile.")
 
     # ---------------
     # Paths

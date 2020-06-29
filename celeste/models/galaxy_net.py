@@ -346,10 +346,8 @@ class OneCenteredGalaxy(pl.LightningModule):
     def from_args(cls, dataset, args):
         args_dict = vars(args)
         parameters = inspect.signature(cls).parameters
-        filtered_dict = {
-            param: value for param, value in args_dict.items() if param in parameters
-        }
-        return cls(dataset, **filtered_dict)
+        args_dict = {param: args_dict[param] for param in parameters}
+        return cls(dataset, **args_dict)
 
     @staticmethod
     def add_args(parser):
