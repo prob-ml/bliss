@@ -310,7 +310,7 @@ def _get_min_perm_loss(
 
 class SleepPhase(pl.LightningModule):
     def __init__(
-        self, dataset, image_encoder, save_logs=False, lr=1e-3, weight_decay=1e-5
+        self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5, save_logs=False,
     ):
         """dataset is an SourceIterableDataset class"""
         super(SleepPhase, self).__init__()
@@ -325,108 +325,6 @@ class SleepPhase(pl.LightningModule):
 
     def forward(self):
         pass
-
-    def configure_optimizers(self):
-        return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": self.lr}],
-            weight_decay=self.weight_decay,
-        )
-
-    def train_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None)
-
-    def val_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None)
-
-    def step(self, batch):
-        (
-            loss,
-            counter_loss,
-            locs_loss,
-            galaxy_params_loss,
-            star_params_loss,
-            galaxy_bool_loss,
-        ) = self.get_loss(batch)
-
-        return {
-            "loss": loss,
-            "logs": {
-                "training_loss": loss,
-                "counter_loss": counter_loss,
-                "locs_loss": locs_loss,
-                "galaxy_params_loss": galaxy_params_loss,
-                "star_params_loss": star_params_loss,
-                "galaxy_bool_loss": galaxy_bool_loss,
-            },
-        }
-
-    def training_step(self, batch, batch_idx):
-        return self.step(batch)
-
-    def validation_step(self, batch, batch_indx):
-        return self.step(batch)
-
-    def epoch_end(self, outputs):
-        avg_loss = 0
-        avg_counter_loss = 0
-        avg_locs_loss = 0
-        avg_galaxy_params_loss = 0
-        avg_star_params_loss = 0
-        avg_galaxy_bool_loss = 0
-
-        tiles_per_batch = self.dataset.batch_size * self.image_encoder.n_tiles
-        tiles_per_epoch = tiles_per_batch * self.dataset.n_batches
-
-        # len(output) == n_batches
-        # the sum below is over tiles_per_batch
-        for output in outputs:
-            avg_loss += output["loss"]
-            avg_counter_loss += torch.sum(output["logs"]["counter_loss"])
-            avg_locs_loss += torch.sum(output["logs"]["locs_loss"])
-            avg_galaxy_params_loss += torch.sum(output["logs"]["galaxy_params_loss"])
-            avg_star_params_loss += torch.sum(output["logs"]["star_params_loss"])
-            avg_galaxy_bool_loss += torch.sum(output["logs"]["galaxy_bool_loss"])
-
-        avg_loss /= self.dataset.n_batches
-        avg_counter_loss /= tiles_per_epoch
-        avg_locs_loss /= tiles_per_epoch
-        avg_galaxy_params_loss /= tiles_per_epoch
-        avg_star_params_loss /= tiles_per_epoch
-        avg_galaxy_bool_loss /= tiles_per_epoch
-
-        log = {
-            "counter_loss": avg_counter_loss,
-            "locs_loss": avg_locs_loss,
-            "galaxy_params_loss": avg_galaxy_params_loss,
-            "star_params_loss": avg_star_params_loss,
-            "galaxy_bool_loss": avg_galaxy_bool_loss,
-        }
-        logs = {"log": log}
-
-        if self.save_logs is False:
-            return avg_loss
-        else:
-            return avg_loss, logs
-
-    def training_epoch_end(self, outputs):
-        if self.save_logs is False:
-            avg_loss = self.epoch_end(outputs)
-            return {"train_loss": avg_loss}
-        else:
-            (avg_loss, logs) = self.epoch_end(outputs)
-            logs["log"]["train_loss"] = avg_loss
-
-            return logs
-
-    def validation_epoch_end(self, outputs):
-        if self.save_logs is False:
-            avg_loss = self.epoch_end(outputs)
-            return {"train_loss": avg_loss}
-        else:
-            (avg_loss, logs) = self.epoch_end(outputs)
-            logs["log"]["val_loss"] = avg_loss
-
-            return logs
 
     def get_loss(self, batch):
         (images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,) = (
@@ -462,3 +360,85 @@ class SleepPhase(pl.LightningModule):
             star_params_loss,
             galaxy_bool_loss,
         )
+
+    def configure_optimizers(self):
+        return Adam(
+            [{"params": self.image_encoder.parameters(), "lr": self.lr}],
+            weight_decay=self.weight_decay,
+        )
+
+    def train_dataloader(self):
+        return DataLoader(self.dataset, batch_size=None)
+
+    def val_dataloader(self):
+        return DataLoader(self.dataset, batch_size=None)
+
+    def step(self, batch):
+        (
+            loss,
+            counter_loss,
+            locs_loss,
+            galaxy_params_loss,
+            star_params_loss,
+            galaxy_bool_loss,
+        ) = self.get_loss(batch)
+
+        output = {
+            "loss": loss,
+            "log": {
+                "train_loss": loss,
+                "counter_loss": counter_loss.sum(),
+                "locs_loss": locs_loss.sum(),
+                "galaxy_params_loss": galaxy_params_loss.sum(),
+                "star_params_loss": star_params_loss.sum(),
+                "galaxy_bool_loss": galaxy_bool_loss.sum(),
+            },
+        }
+
+        return output
+
+    def training_step(self, batch, batch_idx):
+        return self.step(batch)
+
+    def validation_step(self, batch, batch_indx):
+        return self.step(batch)
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = 0
+        avg_counter_loss = 0
+        avg_locs_loss = 0
+        avg_galaxy_params_loss = 0
+        avg_star_params_loss = 0
+        avg_galaxy_bool_loss = 0
+
+        tiles_per_batch = self.dataset.batch_size * self.image_encoder.n_tiles
+        tiles_per_epoch = tiles_per_batch * self.dataset.n_batches
+
+        # len(output) == n_batches
+        # the sum below is over tiles_per_batch
+        for output in outputs:
+            avg_loss += output["loss"]
+            avg_counter_loss += torch.sum(output["log"]["counter_loss"])
+            avg_locs_loss += torch.sum(output["log"]["locs_loss"])
+            avg_galaxy_params_loss += torch.sum(output["log"]["galaxy_params_loss"])
+            avg_star_params_loss += torch.sum(output["log"]["star_params_loss"])
+            avg_galaxy_bool_loss += torch.sum(output["log"]["galaxy_bool_loss"])
+
+        avg_loss /= self.dataset.n_batches
+        avg_counter_loss /= tiles_per_epoch
+        avg_locs_loss /= tiles_per_epoch
+        avg_galaxy_params_loss /= tiles_per_epoch
+        avg_star_params_loss /= tiles_per_epoch
+        avg_galaxy_bool_loss /= tiles_per_epoch
+
+        logs = {
+            "counter_loss": avg_counter_loss,
+            "locs_loss": avg_locs_loss,
+            "galaxy_params_loss": avg_galaxy_params_loss,
+            "star_params_loss": avg_star_params_loss,
+            "galaxy_bool_loss": avg_galaxy_bool_loss,
+        }
+
+        results = {"val_loss": avg_loss, "log": logs}
+
+        return results
