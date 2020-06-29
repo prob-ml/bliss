@@ -186,8 +186,8 @@ class OneCenteredGalaxy(pl.LightningModule):
         recon_mean, recon_var = self.dec.forward(z)
 
         # kl can behave wildly w/out background.
-        recon_mean += background
-        recon_var += background
+        recon_mean = recon_mean + background
+        recon_var = recon_var + background
 
         return recon_mean, recon_var, kl_z
 
@@ -252,6 +252,7 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         image, background = batch["image"], batch["background"]
+
         loss = self.get_loss(image, background)
         logs = {"train_loss": loss}
         return {"loss": loss, "logs": logs}

@@ -169,7 +169,7 @@ if __name__ == "__main__":
         default=None,
         help="Whether to evaluate and log every so epochs.",
     )
-    parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument("--num-workers", type=int, default=0)
 
     # ---------------
     # Model
