@@ -4,6 +4,7 @@ import os
 import argparse
 import h5py
 import torch
+import shutil
 import multiprocessing
 
 from . import setup_paths
@@ -14,24 +15,6 @@ all_datasets = {"CatsimGalaxies": galaxy_datasets.CatsimGalaxies}
 
 final_image_name = "images.hd5f"
 background_name = "background.pt"
-
-
-def generate(
-    n_images, file_path, output_path, dataset, overwrite=False,
-):
-    """
-    Generate a single image .hdf5 file with the dataset and dataset parameters specified.
-    """
-
-    prop_file_path = output_path.joinpath(f"prop_{file_path.name}.txt")
-
-    assert (
-        not file_path.exists() or overwrite
-    ), "Trying to overwrite file without --overwrite"
-
-    galaxy_datasets.save_images(
-        dataset, file_path, prop_file_path=prop_file_path, n_images=n_images
-    )
 
 
 def merge_files(output_path):
@@ -71,28 +54,36 @@ def save_background(output_path):
     background_path = output_path.joinpath(background_name)
     with h5py.File(new_file_path, "r") as curr_file:
         ds = curr_file["images"]
-        background = ds.attrs["background"]
-        torch.save(background_path, background)
+        background = torch.from_numpy(ds.attrs["background"])
+        torch.save(background, background_path)
 
 
 def main(args):
-    paths = setup_paths(args)
-
     assert (
         args.n_processes <= multiprocessing.cpu_count()
     ), "Requesting more cpus than available."
-    output_path = paths["data"].joinpath(f"{args.output_dir}")
+
+    # load paths.
+    paths = setup_paths(args)
+    output_path = paths["results"].joinpath(f"{args.output_dir}")
+    assert not output_path.exists() or args.overwrite, "Need to overwrite."
+    if args.overwrite and output_path.exists():
+        shutil.rmtree(output_path)
     output_path.mkdir(exist_ok=True)
-
-    dataset = all_datasets[args.dataset_name].from_args(args)
-
-    file_paths = [output_path.joinpath(f"image{i}") for i in range(args.n_processes)]
-    generate_args = [
-        (args.n_images_per_process, fp, output_path, dataset, args.overwrite)
-        for fp in file_paths
+    prop_file_path = output_path.joinpath("prop.txt")
+    file_paths = [
+        output_path.joinpath(f"image{i}.hdf5") for i in range(args.n_processes)
     ]
+
+    # load dataset and save properties
+    dataset = all_datasets[args.dataset].from_args(args)
+    with open(prop_file_path, "w") as prop_file:
+        dataset.print_props(prop_file)
+
+    # prepare multiprocessing.
+    generate_args = [(dataset, fp, args.n_images_per_process) for fp in file_paths]
     with multiprocessing.Pool(processes=args.n_processes) as pool:
-        pool.starmap(save_images, generate_args)
+        pool.starmap(galaxy_datasets.save_images, generate_args)
 
     merge_files(output_path)
     save_background(output_path)
@@ -110,7 +101,7 @@ if __name__ == "__main__":
         "--root-dir",
         help="Absolute path to directory containing bin and celeste package.",
         type=str,
-        default=os.path.abspath(".."),
+        default=os.path.abspath("."),
     )
 
     parser.add_argument(
@@ -126,16 +117,16 @@ if __name__ == "__main__":
 
     # properties of individually saved images.
     parser.add_argument("--dataset", type=str, choices=all_datasets.keys())
-    parser.add_argument("--images-per-process", type=int, required=True)
+    parser.add_argument("--n-images-per-process", type=int, required=True)
     parser.add_argument(
         "--n-processes",
-        type=str,
+        type=int,
         help="Number of parallel processes to run to write images in disk.",
         required=True,
     )
 
     parser.add_argument("--slen", type=int, default=51)
-    parser.add_argument("--n-bands", type=int)
+    parser.add_argument("--n-bands", type=int, default=1)
     parser.add_argument("--snr", type=float, default=200, help="SNR to use for noise")
 
     catsim_group = parser.add_argument_group(
@@ -144,7 +135,6 @@ if __name__ == "__main__":
     galaxy_datasets.CatsimGalaxies.add_args(catsim_group)
 
     pargs = parser.parse_args()
-
     assert pargs.n_bands in [1, 6] or not pargs.generate, "Only 1 or 6 bands suggested."
 
     main(pargs)

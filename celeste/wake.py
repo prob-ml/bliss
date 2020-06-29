@@ -219,10 +219,7 @@ class WakePhase(pl.LightningModule):
         loss = self.get_wake_loss(img, psf, self.n_samples)
         logs = {"train_loss": loss}
 
-        if self.save_logs is False:
-            return {"loss": loss}
-        else:
-            return {"loss": loss, "log": logs}
+        return {"loss": loss, "log": logs} if self.save_logs else {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
@@ -241,7 +238,7 @@ class WakePhase(pl.LightningModule):
 
     def _get_init_background(self, sample_every=25):
         sampled_background = _sample_image(self.observed_img, sample_every)
-        self.init_background_params = torch.Tensor(
+        self.init_background_params = torch.tensor(
             _fit_plane_to_background(sampled_background)
         ).to(device)
         self.planar_background = PlanarBackground(

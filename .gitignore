@@ -13,3 +13,4 @@ celeste.egg-info/
 .DS_Store
 .eggs
 .tox
+*lightning_logs
