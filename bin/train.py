@@ -113,7 +113,7 @@ if __name__ == "__main__":
         "--root-dir",
         help="Absolute path to directory containing bin and celeste package.",
         type=str,
-        default=os.path.abspath(".."),
+        default=os.path.abspath("."),
     )
 
     parser.add_argument(
@@ -159,9 +159,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        help="What model we are training?",
         choices=[*models],
         required=True,
+        help="What are we training?",
     )
 
     # one centered galaxy
@@ -174,8 +174,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        required=True,
         choices=[*datasets],
+        required=True,
         help="Specifies the dataset to be used to train the model.",
     )
 
