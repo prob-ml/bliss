@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
+from pytorch_lightning.loggers import TensorBoardLogger
 
 from . import setup_paths, setup_device
 
@@ -40,6 +41,15 @@ def setup_profiler(args, output_path):
     return profiler
 
 
+def setup_logger(args, output_path):
+    logger = None
+    if args.save_logs:
+        logger = TensorBoardLogger(
+            save_dir=output_path, version=1, name="lightning_logs"
+        )
+    return logger
+
+
 def main(args):
 
     assert args.model in models, "Not implemented."
@@ -59,8 +69,8 @@ def main(args):
 
     # setup trainer
     profiler = setup_profiler(args, output_path)
+    logger = setup_logger(args, output_path)
     n_device = [args.device]
-
     sleep_trainer = pl.Trainer(
         gpus=n_device,
         profiler=profiler,
@@ -68,6 +78,7 @@ def main(args):
         max_epochs=args.n_epochs,
         reload_dataloaders_every_epoch=True,
         default_root_dir=output_path,
+        logger=logger,
     )
 
     # train!

@@ -148,7 +148,6 @@ class OneCenteredGalaxy(pl.LightningModule):
         num_workers=2,
         tt_split=0.1,
         batch_size=64,
-        save_log=False,
     ):
         super(OneCenteredGalaxy, self).__init__()
 
@@ -161,7 +160,6 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.num_workers = num_workers
         self.tt_split = tt_split
         self.batch_size = batch_size
-        self.save_log = save_log
 
         self.dataset = dataset
 
@@ -242,7 +240,6 @@ class OneCenteredGalaxy(pl.LightningModule):
     # Optimizer
     # ----------------
 
-    # TODO: Does this work???
     def configure_optimizers(self):
         return Adam(
             [{"params": self.parameters(), "lr": self.lr}],
@@ -274,7 +271,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         avg_loss /= len(outputs) * self.batch_size
 
         # TODO: How to save correctly into the logging folder?
-        torch.save(self.vae.state_dict(), vae_file.as_posix())
+        # torch.save(self.vae.state_dict(), vae_file.as_posix())
 
         # TODO: add plotting images and their residuals with plot_reconstruction function.
 
@@ -284,63 +281,63 @@ class OneCenteredGalaxy(pl.LightningModule):
         recon_mean, recon_var, kl_z = self.forward(image, background)
         return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
 
-    def plot_reconstruction(self, epoch):
-        num_examples = min(10, self.batch_size)
-
-        num_cols = 3  # also look at recon_var
-
-        plots_path = Path(self.dir_name, f"plots")
-        bands_indices = [
-            min(2, self.num_bands - 1)
-        ]  # only i band if available, otherwise the highest band.
-        plots_path.mkdir(parents=True, exist_ok=True)
-
-        plt.ioff()
-        with torch.no_grad():
-            for batch_idx, data in enumerate(self.test_loader):
-                image = data["image"].cuda()  # copies from cpu to gpu memory.
-                background = data[
-                    "background"
-                ].cuda()  # not having background will be a problem.
-                num_galaxies = data["num_galaxies"]
-                self.vae.eval()
-
-                recon_mean, recon_var, _ = self.vae(image, background)
-                for j in bands_indices:
-                    plt.figure(figsize=(5 * 3, 2 + 4 * num_examples))
-                    plt.tight_layout()
-                    plt.suptitle("Epoch {:d}".format(epoch))
-
-                    for i in range(num_examples):
-                        vmax1 = image[
-                            i, j
-                        ].max()  # we are looking at the ith sample in the jth band.
-                        vmax2 = max(
-                            image[i, j].max(),
-                            recon_mean[i, j].max(),
-                            recon_var[i, j].max(),
-                        )
-
-                        plt.subplot(num_examples, num_cols, num_cols * i + 1)
-                        plt.title("image [{} galaxies]".format(num_galaxies[i]))
-                        plt.imshow(image[i, j].data.cpu().numpy(), vmax=vmax1)
-                        plt.colorbar()
-
-                        plt.subplot(num_examples, num_cols, num_cols * i + 2)
-                        plt.title("recon_mean")
-                        plt.imshow(recon_mean[i, j].data.cpu().numpy(), vmax=vmax1)
-                        plt.colorbar()
-
-                        plt.subplot(num_examples, num_cols, num_cols * i + 3)
-                        plt.title("recon_var")
-                        plt.imshow(recon_var[i, j].data.cpu().numpy(), vmax=vmax2)
-                        plt.colorbar()
-
-                    plot_file = plots_path.joinpath(f"plot_{epoch}_{j}")
-                    plt.savefig(plot_file.as_posix())
-                    plt.close()
-
-                break
+    # def plot_reconstruction(self, epoch):
+    #     num_examples = min(10, self.batch_size)
+    #
+    #     num_cols = 3  # also look at recon_var
+    #
+    #     plots_path = Path(self.dir_name, f"plots")
+    #     bands_indices = [
+    #         min(2, self.num_bands - 1)
+    #     ]  # only i band if available, otherwise the highest band.
+    #     plots_path.mkdir(parents=True, exist_ok=True)
+    #
+    #     plt.ioff()
+    #     with torch.no_grad():
+    #         for batch_idx, data in enumerate(self.test_loader):
+    #             image = data["image"].cuda()  # copies from cpu to gpu memory.
+    #             background = data[
+    #                 "background"
+    #             ].cuda()  # not having background will be a problem.
+    #             num_galaxies = data["num_galaxies"]
+    #             self.vae.eval()
+    #
+    #             recon_mean, recon_var, _ = self.vae(image, background)
+    #             for j in bands_indices:
+    #                 plt.figure(figsize=(5 * 3, 2 + 4 * num_examples))
+    #                 plt.tight_layout()
+    #                 plt.suptitle("Epoch {:d}".format(epoch))
+    #
+    #                 for i in range(num_examples):
+    #                     vmax1 = image[
+    #                         i, j
+    #                     ].max()  # we are looking at the ith sample in the jth band.
+    #                     vmax2 = max(
+    #                         image[i, j].max(),
+    #                         recon_mean[i, j].max(),
+    #                         recon_var[i, j].max(),
+    #                     )
+    #
+    #                     plt.subplot(num_examples, num_cols, num_cols * i + 1)
+    #                     plt.title("image [{} galaxies]".format(num_galaxies[i]))
+    #                     plt.imshow(image[i, j].data.cpu().numpy(), vmax=vmax1)
+    #                     plt.colorbar()
+    #
+    #                     plt.subplot(num_examples, num_cols, num_cols * i + 2)
+    #                     plt.title("recon_mean")
+    #                     plt.imshow(recon_mean[i, j].data.cpu().numpy(), vmax=vmax1)
+    #                     plt.colorbar()
+    #
+    #                     plt.subplot(num_examples, num_cols, num_cols * i + 3)
+    #                     plt.title("recon_var")
+    #                     plt.imshow(recon_var[i, j].data.cpu().numpy(), vmax=vmax2)
+    #                     plt.colorbar()
+    #
+    #                 plot_file = plots_path.joinpath(f"plot_{epoch}_{j}")
+    #                 plt.savefig(plot_file.as_posix())
+    #                 plt.close()
+    #
+    #             break
 
     @classmethod
     def from_args(cls, dataset, args):
