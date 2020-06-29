@@ -1,8 +1,18 @@
+import inspect
+import numpy as np
+import pytorch_lightning as pl
+import matplotlib.pyplot as plt
+
 import torch
+from torch.utils.data import DataLoader, SubsetRandomSampler
 import torch.nn as nn
 import torch.nn.functional as f
 from torch.distributions import Normal
+from torch.optim import Adam
+
 from .. import device
+
+plt.switch_backend("Agg")
 
 
 class Flatten(nn.Module):
@@ -11,12 +21,8 @@ class Flatten(nn.Module):
         return tensor.view(tensor.size(0), -1)
 
 
-class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
+class CenteredGalaxyEncoder(nn.Module):
     def __init__(self, slen, latent_dim, n_bands, hidden=256):
-        """
-
-        :rtype: NoneType
-        """
         super(CenteredGalaxyEncoder, self).__init__()
 
         self.slen = slen
@@ -59,7 +65,7 @@ class CenteredGalaxyEncoder(nn.Module):  # recognition, inference
         return z_mean, z_var
 
 
-class CenteredGalaxyDecoder(nn.Module):  # generator
+class CenteredGalaxyDecoder(nn.Module):
     def __init__(self, slen, latent_dim, n_bands, hidden=256):
         super(CenteredGalaxyDecoder, self).__init__()
 
@@ -90,12 +96,7 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         )
 
     def forward(self, z):
-        """
-
-        :param z: Has shape = latent_dim.
-        :return:
-        """
-        z = self.fc(z)
+        z = self.fc(z)  # latent variable
 
         # This dimension is the number of samples.
         z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
@@ -123,20 +124,44 @@ class CenteredGalaxyDecoder(nn.Module):  # generator
         )
         z = p_z.rsample(torch.tensor([num_samples, self.latent_dim])).view(
             num_samples, -1
-        )  # shape = (8,)
+        )
         samples, _ = self.forward(z)
 
         # samples shape = (num_samples, n_bands, slen, slen)
         return z, samples
 
 
-class OneCenteredGalaxy(nn.Module):
-    def __init__(self, slen, latent_dim=8, n_bands=1):
+class OneCenteredGalaxy(pl.LightningModule):
+
+    # ---------------
+    # Model
+    # ----------------
+
+    def __init__(
+        self,
+        dataset,
+        slen=51,
+        latent_dim=8,
+        n_bands=1,
+        num_workers=2,
+        batch_size=64,
+        tt_split=0.1,
+        lr=1e-4,
+        weight_decay=1e-6,
+    ):
         super(OneCenteredGalaxy, self).__init__()
 
-        self.slen = slen  # The dimensions of the image slen * slen
+        self.slen = slen
         self.latent_dim = latent_dim
         self.n_bands = n_bands
+
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.num_workers = num_workers
+        self.tt_split = tt_split
+        self.batch_size = batch_size
+
+        self.dataset = dataset
 
         self.enc = CenteredGalaxyEncoder(slen, latent_dim, n_bands)
         self.dec = CenteredGalaxyDecoder(slen, latent_dim, n_bands)
@@ -145,64 +170,189 @@ class OneCenteredGalaxy(nn.Module):
         self.register_buffer("one", torch.ones(1))
 
     def forward(self, image, background):
-        z_mean, z_var = self.enc.forward(
-            image - background
-        )  # shape = [nsamples, latent_dim]
+
+        # shape = [nsamples, latent_dim]
+        z_mean, z_var = self.enc.forward(image - background)
 
         q_z = Normal(z_mean, z_var.sqrt())
-        z = (
-            q_z.rsample()
-        )  # using stochastic optimization by sampling only one z from prior.
+        z = q_z.rsample()
 
         log_q_z = q_z.log_prob(z).sum(1)
         p_z = Normal(self.zero, self.one)  # prior on z.
         log_p_z = p_z.log_prob(z).sum(1)
         kl_z = log_q_z - log_p_z  # log q(z | x) - log p(z)
 
-        recon_mean, recon_var = self.dec.forward(
-            z
-        )  # this reconstructed mean/variances images (per pixel quantities)
+        # reconstructed mean/variances images (per pixel quantities)
+        recon_mean, recon_var = self.dec.forward(z)
 
-        recon_mean = (
-            recon_mean + background
-        )  # w/out kl can behave wildly if not background.
+        # kl can behave wildly w/out background.
+        recon_mean = recon_mean + background
         recon_var = recon_var + background
 
         return recon_mean, recon_var, kl_z
 
-    def loss(self, image, background):
-        """
+    def get_loss(self, image, background):
+        # NOTE: image includes background.
 
-        :param image: The complete image that includes the background.
-        :param background:
-        :return:
-        """
         # sampling images from the real distribution
-        recon_mean, recon_var, kl_z = self.forward(image, background)  # z | x ~ decoder
+        # z | x ~ decoder
+        recon_mean, recon_var, kl_z = self.forward(image, background)
 
         # -log p(x | z), dimensions: torch.Size([ nsamples, n_bands, slen, slen])
         # assuming covariance is diagonal.
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 
-        # image.size(0) = first dimension = number of samples, .sum(1) sum over
-        # all dimensions except sample.
-        recon_losses = recon_losses.view(image.size(0), -1).sum(1)  # shape = [nsamples]
+        # image.size(0) == n_samples.
+        recon_losses = recon_losses.view(image.size(0), -1).sum(1)
 
-        # the expectation is subtle and implicit bc we are using stochastic
-        # optimization multiple times.
-        # sum here is over the samples (only remaining dimensions)
-        loss = (
-            recon_losses + kl_z
-        ).sum()  # this is actually just ELBO, shape=[nsamples]
+        # ELBO
+        loss = (recon_losses + kl_z).sum()
 
         return loss
 
-    def rmse_pp(self, image, background):
-        """
-        Per pixel avg. rmse.
-        :param image:
-        :param background:
-        :return:
-        """
-        recon_mean, recon_var, kl_z = self.forward(image, background)
-        return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
+    # ---------------
+    # Data
+    # ----------------
+
+    def train_dataloader(self):
+        split = len(self.dataset) * self.tt_split
+        train_indices = np.arange(split, len(self.dataset))
+        return DataLoader(
+            self.dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            sampler=SubsetRandomSampler(train_indices),
+        )
+
+    def val_dataloader(self):
+
+        test_indices = np.arange(len(self.dataset) * self.tt_split)
+        return DataLoader(
+            self.dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            sampler=SubsetRandomSampler(test_indices),
+        )
+
+    # ---------------
+    # Optimizer
+    # ----------------
+
+    def configure_optimizers(self):
+        return Adam(
+            [{"params": self.parameters(), "lr": self.lr}],
+            weight_decay=self.weight_decay,
+        )
+
+    # ---------------
+    # Training
+    # ----------------
+
+    def training_step(self, batch, batch_idx):
+        image, background = batch["image"], batch["background"]
+
+        loss = self.get_loss(image, background)
+        logs = {"train_loss": loss}
+        return {"loss": loss, "logs": logs}
+
+    def validation_step(self, batch, batch_idx):
+        image, background = batch["image"], batch["background"]
+        loss = self.get_loss(image, background)
+        logs = {"val_loss": loss}
+        return {"loss": loss, "logs": logs}
+
+    # def validation_epoch_end(self, outputs):
+    #
+    #     # TODO: does the dataloader guarantee correct size?
+    #     avg_loss = 0.0
+    #     for output in outputs:
+    #         avg_loss += output["loss"]
+    #     avg_loss /= len(outputs) * self.batch_size
+    #
+    #     # TODO: How to save correctly into the logging folder?
+    #     # torch.save(self.vae.state_dict(), vae_file.as_posix())
+    #
+    #     # TODO: add plotting images and their residuals with plot_reconstruction function.
+    #
+    #     return {"val_loss": avg_loss}
+
+    # def rmse_pp(self, image, background):
+    #     recon_mean, recon_var, kl_z = self.forward(image, background)
+    #     return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
+
+    # def plot_reconstruction(self, epoch):
+    #     num_examples = min(10, self.batch_size)
+    #
+    #     num_cols = 3  # also look at recon_var
+    #
+    #     plots_path = Path(self.dir_name, f"plots")
+    #     bands_indices = [
+    #         min(2, self.num_bands - 1)
+    #     ]  # only i band if available, otherwise the highest band.
+    #     plots_path.mkdir(parents=True, exist_ok=True)
+    #
+    #     plt.ioff()
+    #     with torch.no_grad():
+    #         for batch_idx, data in enumerate(self.test_loader):
+    #             image = data["image"].cuda()  # copies from cpu to gpu memory.
+    #             background = data[
+    #                 "background"
+    #             ].cuda()  # not having background will be a problem.
+    #             num_galaxies = data["num_galaxies"]
+    #             self.vae.eval()
+    #
+    #             recon_mean, recon_var, _ = self.vae(image, background)
+    #             for j in bands_indices:
+    #                 plt.figure(figsize=(5 * 3, 2 + 4 * num_examples))
+    #                 plt.tight_layout()
+    #                 plt.suptitle("Epoch {:d}".format(epoch))
+    #
+    #                 for i in range(num_examples):
+    #                     vmax1 = image[
+    #                         i, j
+    #                     ].max()  # we are looking at the ith sample in the jth band.
+    #                     vmax2 = max(
+    #                         image[i, j].max(),
+    #                         recon_mean[i, j].max(),
+    #                         recon_var[i, j].max(),
+    #                     )
+    #
+    #                     plt.subplot(num_examples, num_cols, num_cols * i + 1)
+    #                     plt.title("image [{} galaxies]".format(num_galaxies[i]))
+    #                     plt.imshow(image[i, j].data.cpu().numpy(), vmax=vmax1)
+    #                     plt.colorbar()
+    #
+    #                     plt.subplot(num_examples, num_cols, num_cols * i + 2)
+    #                     plt.title("recon_mean")
+    #                     plt.imshow(recon_mean[i, j].data.cpu().numpy(), vmax=vmax1)
+    #                     plt.colorbar()
+    #
+    #                     plt.subplot(num_examples, num_cols, num_cols * i + 3)
+    #                     plt.title("recon_var")
+    #                     plt.imshow(recon_var[i, j].data.cpu().numpy(), vmax=vmax2)
+    #                     plt.colorbar()
+    #
+    #                 plot_file = plots_path.joinpath(f"plot_{epoch}_{j}")
+    #                 plt.savefig(plot_file.as_posix())
+    #                 plt.close()
+    #
+    #             break
+
+    @classmethod
+    def from_args(cls, dataset, args):
+        args_dict = vars(args)
+
+        parameters = list(inspect.signature(cls).parameters)
+        parameters.remove("dataset")
+
+        args_dict = {param: args_dict[param] for param in parameters}
+        return cls(dataset, **args_dict)
+
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument("--latent-dim", type=int, default=8, help="latent dim")
+        parser.add_argument(
+            "--tt-split", type=float, default=0.1, help="train/test split"
+        )

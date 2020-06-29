@@ -1,6 +1,7 @@
 import pytest
 import pathlib
 import torch
+from pytorch_lightning.profiler import AdvancedProfiler
 
 from celeste import use_cuda
 from celeste.models.decoder import get_fitted_powerlaw_psf, get_galaxy_decoder
@@ -14,30 +15,17 @@ def pytest_addoption(parser):
         type=int,
         help="ID of cuda device to use.",
     )
+
     parser.addoption(
-        "--sprof",
-        action="store",
-        default=None,
-        type=str,
-        help="None or file path to store sleep phase training profiler",
-    )
-    parser.addoption(
-        "--wprof",
-        action="store",
-        default=None,
-        type=str,
-        help="None or file path to store wake phase training profiler",
-    )
-    parser.addoption(
-        "--log",
-        action="store",
-        default=False,
-        type=bool,
-        help="False or True to enable logger for the training",
+        "--profiling", action="store_true", help="Enable profiler",
     )
 
     parser.addoption(
-        "--repeat", action="store", help="Number of times to repeat each test"
+        "--logging", action="store_true", help="Enable logger.",
+    )
+
+    parser.addoption(
+        "--repeat", default=1, type=str, help="Number of times to repeat each test"
     )
 
 
@@ -57,24 +45,42 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("tmp_ct", range(count))
 
 
+# paths
+@pytest.fixture(scope="session")
+def root_path():
+    return pathlib.Path(__file__).parent.parent.absolute()
+
+
+@pytest.fixture(scope="session")
+def logs_path(root_path):
+    logs_path = root_path.joinpath("tests/logs")
+    logs_path.mkdir(exist_ok=True, parents=True)
+    return logs_path
+
+
+@pytest.fixture(scope="session")
+def data_path(root_path):
+    return root_path.joinpath("data")
+
+
+# logging and profiling.
+@pytest.fixture(scope="session")
+def profiler(pytestconfig, logs_path):
+    profiling = pytestconfig.getoption("profiling")
+    profile_file = logs_path.joinpath("profile.txt")
+    profiler = AdvancedProfiler(output_filename=profile_file) if profiling else None
+    return profiler
+
+
+@pytest.fixture(scope="session")
+def save_logs(pytestconfig):
+    return pytestconfig.getoption("logging")
+
+
+# data and memory.
 @pytest.fixture(scope="session")
 def device_id(pytestconfig):
     return pytestconfig.getoption("device_id")
-
-
-@pytest.fixture(scope="session")
-def sprof(pytestconfig):
-    return pytestconfig.getoption("sprof")
-
-
-@pytest.fixture(scope="session")
-def wprof(pytestconfig):
-    return pytestconfig.getoption("wprof")
-
-
-@pytest.fixture(scope="session")
-def log(pytestconfig):
-    return pytestconfig.getoption("log")
 
 
 @pytest.fixture(scope="session")
@@ -86,16 +92,6 @@ def device(device_id):
 
 
 @pytest.fixture(scope="session")
-def root_path():
-    return pathlib.Path(__file__).parent.parent.absolute()
-
-
-@pytest.fixture(scope="session")
-def data_path(root_path):
-    return root_path.joinpath("data")
-
-
-@pytest.fixture(scope="session")
 def single_band_fitted_powerlaw_psf(data_path):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
     return get_fitted_powerlaw_psf(psf_file)[None, 0, ...]
@@ -103,7 +99,6 @@ def single_band_fitted_powerlaw_psf(data_path):
 
 @pytest.fixture(scope="session")
 def single_band_galaxy_decoder(data_path):
-
     decoder_state_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
     galaxy_decoder = get_galaxy_decoder(
         decoder_state_file, slen=51, n_bands=1, latent_dim=8
