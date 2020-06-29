@@ -78,7 +78,9 @@ class H5Catalog(Dataset):
 
     @staticmethod
     def add_args(parser):
-        parser.add_argument("--h5-file", type=int, default="images.hdf5")
+        parser.add_argument(
+            "--h5-file", type=str, default="images.hdf5", help="file path"
+        )
 
     @classmethod
     def from_args(cls, args):
@@ -427,7 +429,7 @@ class CatsimGalaxies(Dataset):
         parser.add_argument(
             "--catalog-file",
             type=str,
-            required=True,
+            default=None,
             help="Catalog file to load entries from.",
         )
         parser.add_argument("--survey", type=str, default="LSST", help="Survey to use.")

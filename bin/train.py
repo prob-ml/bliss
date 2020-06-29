@@ -29,8 +29,8 @@ def setup_seed(args):
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
 
-    if args.numpy_seed:
-        np.random.seed(args.numpy_seed)
+    if args.np_seed:
+        np.random.seed(args.np_seed)
 
 
 def setup_profiler(args, output_path):
@@ -52,7 +52,7 @@ def setup_logger(args, output_path):
 
 def main(args):
 
-    assert args.model in models, "Not implemented."
+    assert args.model_name in models, "Not implemented."
 
     # setup.
     paths = setup_paths(args)
@@ -61,10 +61,10 @@ def main(args):
     output_path = paths["results"].joinpath(args.output_dir)
 
     # setup dataset.
-    dataset = datasets[args.dataset].from_args(args)
+    dataset = datasets[args.dataset_name].from_args(args)
 
     # setup model
-    model_cls = models[args.model]
+    model_cls = models[args.model_name]
     model = model_cls.from_args(dataset, args)
 
     # setup trainer
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     # ----------------
 
     parser.add_argument("--profile", action="store_true", help="Whether to profile.")
-    parser.add_argument("--save-log", action="store_true", help="Log output?")
+    parser.add_argument("--save-logs", action="store_true", help="Log output?")
 
     # ---------------
     # Paths
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-dir",
         type=str,
-        default=None,
+        required=True,
         help="Directory name relative to root/results path, where output will be saved.",
     )
 
@@ -151,6 +151,10 @@ if __name__ == "__main__":
         metavar="BS",
         help="input batch size for training.",
     )
+    # TODO: implement this functionality for single galaxies.
+    parser.add_argument(
+        "--n-images", type=int, default=640, help="Number of images in epoch"
+    )
     parser.add_argument(
         "--n-epochs",
         type=int,
@@ -158,23 +162,30 @@ if __name__ == "__main__":
         metavar="E",
         help="number of epochs to train.",
     )
+    # TODO: add this to trainer
     parser.add_argument(
-        "--evaluate-every",
+        "--eval-every",
         type=int,
         default=None,
         help="Whether to evaluate and log every so epochs.",
     )
+    parser.add_argument("--num-workers", type=int, default=2)
 
     # ---------------
     # Model
     # ----------------
     parser.add_argument(
-        "--model",
+        "--model-name",
         type=str,
         choices=[*models],
         required=True,
         help="What are we training?",
     )
+    parser.add_argument("--slen", type=int, default=51)
+    parser.add_argument("--n-bands", type=int, default=1)
+
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--weight-decay", type=float, default=1e-6)
 
     # one centered galaxy
     one_centered_galaxy_group = parser.add_argument_group("[One Centered Galaxy Model]")
@@ -184,7 +195,7 @@ if __name__ == "__main__":
     # Dataset
     # ----------------
     parser.add_argument(
-        "--dataset",
+        "--dataset-name",
         type=str,
         choices=[*datasets],
         required=True,

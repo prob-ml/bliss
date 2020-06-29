@@ -143,11 +143,11 @@ class OneCenteredGalaxy(pl.LightningModule):
         slen=51,
         latent_dim=8,
         n_bands=1,
+        num_workers=2,
+        batch_size=64,
+        tt_split=0.1,
         lr=1e-4,
         weight_decay=1e-6,
-        num_workers=2,
-        tt_split=0.1,
-        batch_size=64,
     ):
         super(OneCenteredGalaxy, self).__init__()
 
@@ -262,24 +262,24 @@ class OneCenteredGalaxy(pl.LightningModule):
         logs = {"val_loss": loss}
         return {"loss": loss, "logs": logs}
 
-    def validation_epoch_end(self, outputs):
+    # def validation_epoch_end(self, outputs):
+    #
+    #     # TODO: does the dataloader guarantee correct size?
+    #     avg_loss = 0.0
+    #     for output in outputs:
+    #         avg_loss += output["loss"]
+    #     avg_loss /= len(outputs) * self.batch_size
+    #
+    #     # TODO: How to save correctly into the logging folder?
+    #     # torch.save(self.vae.state_dict(), vae_file.as_posix())
+    #
+    #     # TODO: add plotting images and their residuals with plot_reconstruction function.
+    #
+    #     return {"val_loss": avg_loss}
 
-        # TODO: does the dataloader guarantee correct size?
-        avg_loss = 0.0
-        for output in outputs:
-            avg_loss += output["loss"]
-        avg_loss /= len(outputs) * self.batch_size
-
-        # TODO: How to save correctly into the logging folder?
-        # torch.save(self.vae.state_dict(), vae_file.as_posix())
-
-        # TODO: add plotting images and their residuals with plot_reconstruction function.
-
-        return {"val_loss": avg_loss}
-
-    def rmse_pp(self, image, background):
-        recon_mean, recon_var, kl_z = self.forward(image, background)
-        return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
+    # def rmse_pp(self, image, background):
+    #     recon_mean, recon_var, kl_z = self.forward(image, background)
+    #     return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
 
     # def plot_reconstruction(self, epoch):
     #     num_examples = min(10, self.batch_size)
@@ -342,7 +342,10 @@ class OneCenteredGalaxy(pl.LightningModule):
     @classmethod
     def from_args(cls, dataset, args):
         args_dict = vars(args)
-        parameters = inspect.signature(cls).parameters
+
+        parameters = list(inspect.signature(cls).parameters)
+        parameters.remove("dataset")
+
         args_dict = {param: args_dict[param] for param in parameters}
         return cls(dataset, **args_dict)
 

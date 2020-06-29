@@ -1,8 +1,5 @@
 from pathlib import Path
 import torch
-import numpy as np
-
-from celeste import use_cuda
 
 
 def setup_paths(args):
