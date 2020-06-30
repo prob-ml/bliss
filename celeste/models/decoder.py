@@ -382,21 +382,6 @@ class SourceSimulator(object):
 
         return n_galaxies, n_stars, galaxy_bool, star_bool
 
-    @staticmethod
-    def _get_log_fluxes(fluxes):
-        """
-        To obtain fluxes from log_fluxes.
-
-        >> is_on_array = get_is_on_from_n_stars(n_stars, max_sources)
-        >> fluxes = np.exp(log_fluxes) * is_on_array
-        """
-        log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(device)
-        )  # prevent log(0) errors.
-        log_fluxes = torch.log(log_fluxes)
-
-        return log_fluxes
-
     def _sample_fluxes(self, n_stars, star_bool, batch_size):
         """
 
@@ -475,7 +460,7 @@ class SourceSimulator(object):
         )
 
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
-        log_fluxes = self._get_log_fluxes(fluxes)
+        log_fluxes = fluxes.clamp(1).log()
 
         return (
             n_sources,
