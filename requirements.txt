@@ -2,8 +2,6 @@ numpy
 scipy
 astropy
 torch
-pytest
-pytest-cov
 black
 h5py
 matplotlib
