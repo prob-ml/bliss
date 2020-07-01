@@ -142,10 +142,10 @@ class TestSourceEncoder:
                     )
 
                     assert torch.all(
-                        prob_galaxy[i, 0:n_stars_i, :].flatten()
+                        prob_galaxy[i, 0:n_stars_i, :].flatten().to(device)
                         == torch.sigmoid(h_out)[
                             i, prob_galaxy_indx_mat[n_stars_i][0 : (1 * n_stars_i)]
-                        ]
+                        ].to(device)
                     )
 
     def test_forward_to_hidden2d(self):
