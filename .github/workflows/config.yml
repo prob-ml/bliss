@@ -52,13 +52,13 @@ jobs:
       run: |
         black --check .
         # pytest and pytest-cov must be in requirements.txt
-        pytest --cov=./celeste/ --cov-report=xml --durations=0
+        pytest --cov=./ --cov-report=xml --durations=0
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./celeste/coverage.xml
+        file: ./coverage.xml
         flags: unittests
         env_vars: OS,PYTHON
         name: codecov-umbrella
