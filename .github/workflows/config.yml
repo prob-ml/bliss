@@ -51,7 +51,6 @@ jobs:
     - name: Run Tests
       run: |
         black --check .
-        # pytest and pytest-cov must be in requirements.txt
         pytest --cov=./ --cov-report=xml --durations=0
 
     - name: Upload coverage to Codecov
