@@ -28,16 +28,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest pytest-cov
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Install Git LFS
-      run: |
-            curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
-            sudo apt-get update
-            sudo apt-get install -y git-lfs openssh-client
-            git lfs install
-            mkdir -p ~/.ssh
-            ssh-keyscan -H github.com >> ~/.ssh/known_hosts
-            ssh git@github.com git-lfs-authenticate "${GITHUB_REPOSITORY}" download
-            git lfs pull
+#    - name: Install Git LFS
+#      run: |
+#            curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
+#            sudo apt-get update
+#            sudo apt-get install -y git-lfs openssh-client
+#            git lfs install
+#            mkdir -p ~/.ssh
+#            ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+#            ssh git@github.com git-lfs-authenticate "${GITHUB_REPOSITORY}" download
+#            git lfs pull
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
