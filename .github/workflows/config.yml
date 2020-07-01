@@ -51,7 +51,7 @@ jobs:
     - name: Run Tests
       run: |
         black --check .
-        pytest --cov=./ --cov-report=xml --durations=0
+        pytest --cov=./celeste --cov-report=xml --durations=0
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
