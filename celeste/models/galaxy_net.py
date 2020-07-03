@@ -1,18 +1,39 @@
 import inspect
+
+# import io
 import numpy as np
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 
+# import tensorflow as tf
+
 import torch
 from torch.utils.data import DataLoader, SubsetRandomSampler
 import torch.nn as nn
-import torch.nn.functional as f
+import torch.nn.functional as F
 from torch.distributions import Normal
 from torch.optim import Adam
 
 from .. import device
 
 plt.switch_backend("Agg")
+
+
+# def plot_to_image(figure):
+#     """Converts the matplotlib plot specified by 'figure' to a PNG image and
+#   returns it. The supplied figure is closed and inaccessible after this call."""
+#     # Save the plot to a PNG in memory.
+#     buf = io.BytesIO()
+#     plt.savefig(buf, format="png")
+#     # Closing the figure prevents it from being displayed directly inside
+#     # the notebook.
+#     plt.close(figure)
+#     buf.seek(0)
+#     # Convert PNG buffer to TF image
+#     image = tf.image.decode_png(buf.getvalue(), channels=4)
+#     # Add the batch dimension
+#     image = tf.expand_dims(image, 0)
+#     return image
 
 
 class Flatten(nn.Module):
@@ -105,7 +126,7 @@ class CenteredGalaxyDecoder(nn.Module):
 
         # first half of the bands is now used.
         # expected number of photons has to be positive, this is why we use f.relu here.
-        recon_mean = f.relu(z[:, : self.n_bands])
+        recon_mean = F.relu(z[:, : self.n_bands])
 
         # sometimes nn can get variance to be really small, if sigma gets really small
         # then small learning
@@ -170,6 +191,8 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.register_buffer("one", torch.ones(1))
 
     def forward(self, image, background):
+        # sampling images from the real distribution
+        # z | x ~ decoder
 
         # shape = [nsamples, latent_dim]
         z_mean, z_var = self.enc.forward(image - background)
@@ -191,18 +214,15 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         return recon_mean, recon_var, kl_z
 
-    def get_loss(self, image, background):
+    @staticmethod
+    def get_loss(image, recon_mean, recon_var, kl_z):
         # NOTE: image includes background.
-
-        # sampling images from the real distribution
-        # z | x ~ decoder
-        recon_mean, recon_var, kl_z = self.forward(image, background)
 
         # -log p(x | z), dimensions: torch.Size([ nsamples, n_bands, slen, slen])
         # assuming covariance is diagonal.
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 
-        # image.size(0) == n_samples.
+        # image.size(0) = n_samples.
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
 
         # ELBO
@@ -252,85 +272,79 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         image, background = batch["image"], batch["background"]
-
-        loss = self.get_loss(image, background)
+        recon_mean, recon_var, kl_z = self(image, background)
+        loss = self.get_loss(image, recon_mean, recon_var, kl_z)
         logs = {"train_loss": loss}
         return {"loss": loss, "logs": logs}
 
     def validation_step(self, batch, batch_idx):
         image, background = batch["image"], batch["background"]
-        loss = self.get_loss(image, background)
-        return {"val_loss": loss}
+        recon_mean, recon_var, kl_z = self(image, background)
+        loss = self.get_loss(image, recon_mean, recon_var, kl_z)
+        return {
+            "val_loss": loss,
+            "image": image,
+            "recon_mean": recon_mean,
+            "recon_var": recon_var,
+        }
 
     def validation_epoch_end(self, outputs):
-        # logs loss, saves checkpoints automatically and saves images.
+        # logs loss, saves checkpoints (implicitly) and saves images.
         # TODO: add plotting images and their residuals with plot_reconstruction function.
 
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         tensorboard_logs = {"val_loss": avg_loss}
+
+        # get first 10 images, reconstruction means, variances. Add them as a grid.
+        image = outputs[-1]["image"][:5]
+        recon_mean = outputs[-1]["recon_mean"][:5]
+        recon_var = outputs[-1]["recon_var"][:5]
+
+        fig = self.plot_reconstruction(image, recon_mean, recon_var)
+        self.logger.experiment.add_figure("Summary images", fig, self.current_epoch)
+
         return {"val_loss": avg_loss, "log": tensorboard_logs}
 
     # def rmse_pp(self, image, background):
     #     recon_mean, recon_var, kl_z = self.forward(image, background)
     #     return torch.sqrt(((recon_mean - image) ** 2).sum()) / self.slen ** 2
 
-    # def plot_reconstruction(self, epoch):
-    #     num_examples = min(10, self.batch_size)
-    #
-    #     num_cols = 3  # also look at recon_var
-    #
-    #     plots_path = Path(self.dir_name, f"plots")
-    #     bands_indices = [
-    #         min(2, self.num_bands - 1)
-    #     ]  # only i band if available, otherwise the highest band.
-    #     plots_path.mkdir(parents=True, exist_ok=True)
-    #
-    #     plt.ioff()
-    #     with torch.no_grad():
-    #         for batch_idx, data in enumerate(self.test_loader):
-    #             image = data["image"].cuda()  # copies from cpu to gpu memory.
-    #             background = data[
-    #                 "background"
-    #             ].cuda()  # not having background will be a problem.
-    #             num_galaxies = data["num_galaxies"]
-    #             self.vae.eval()
-    #
-    #             recon_mean, recon_var, _ = self.vae(image, background)
-    #             for j in bands_indices:
-    #                 plt.figure(figsize=(5 * 3, 2 + 4 * num_examples))
-    #                 plt.tight_layout()
-    #                 plt.suptitle("Epoch {:d}".format(epoch))
-    #
-    #                 for i in range(num_examples):
-    #                     vmax1 = image[
-    #                         i, j
-    #                     ].max()  # we are looking at the ith sample in the jth band.
-    #                     vmax2 = max(
-    #                         image[i, j].max(),
-    #                         recon_mean[i, j].max(),
-    #                         recon_var[i, j].max(),
-    #                     )
-    #
-    #                     plt.subplot(num_examples, num_cols, num_cols * i + 1)
-    #                     plt.title("image [{} galaxies]".format(num_galaxies[i]))
-    #                     plt.imshow(image[i, j].data.cpu().numpy(), vmax=vmax1)
-    #                     plt.colorbar()
-    #
-    #                     plt.subplot(num_examples, num_cols, num_cols * i + 2)
-    #                     plt.title("recon_mean")
-    #                     plt.imshow(recon_mean[i, j].data.cpu().numpy(), vmax=vmax1)
-    #                     plt.colorbar()
-    #
-    #                     plt.subplot(num_examples, num_cols, num_cols * i + 3)
-    #                     plt.title("recon_var")
-    #                     plt.imshow(recon_var[i, j].data.cpu().numpy(), vmax=vmax2)
-    #                     plt.colorbar()
-    #
-    #                 plot_file = plots_path.joinpath(f"plot_{epoch}_{j}")
-    #                 plt.savefig(plot_file.as_posix())
-    #                 plt.close()
-    #
-    #             break
+    def plot_reconstruction(self, image, recon_mean, recon_var):
+        assert image.size(0) >= 5
+        num_examples = 5
+        num_cols = 4
+        # only i band if available, otherwise the highest band.
+        band_idx = min(2, self.n_bands - 1)
+        residuals = image - recon_mean
+        plt.ioff()
+
+        fig = plt.figure(figsize=(5 * 2, 2 + 4 * num_examples))
+        plt.tight_layout()
+        plt.suptitle("Epoch {:d}".format(self.current_epoch))
+
+        for i in range(num_examples):
+
+            plt.subplot(num_examples, num_cols, num_cols * i + 1)
+            plt.title("image")
+            plt.imshow(image[i, band_idx].data.cpu().numpy())
+            plt.colorbar()
+
+            plt.subplot(num_examples, num_cols, num_cols * i + 2)
+            plt.title("recon_mean")
+            plt.imshow(recon_mean[i, band_idx].data.cpu().numpy())
+            plt.colorbar()
+
+            plt.subplot(num_examples, num_cols, num_cols * i + 3)
+            plt.title("recon_var")
+            plt.imshow(recon_var[i, band_idx].data.cpu().numpy())
+            plt.colorbar()
+
+            plt.subplot(num_examples, num_cols, num_cols * i + 4)
+            plt.title("residuals")
+            plt.imshow(residuals[i, band_idx].data.cpu().numpy())
+            plt.colorbar()
+
+        return fig
 
     @classmethod
     def from_args(cls, dataset, args):

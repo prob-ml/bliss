@@ -5,7 +5,7 @@ import h5py
 import torch
 import multiprocessing
 
-from . import setup_paths, add_path_args
+from .utils import setup_paths, add_path_args
 
 from celeste.datasets import galaxy_datasets
 
