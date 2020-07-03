@@ -260,23 +260,14 @@ class OneCenteredGalaxy(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         image, background = batch["image"], batch["background"]
         loss = self.get_loss(image, background)
-        logs = {"val_loss": loss}
-        return {"loss": loss, "logs": logs}
+        return {"val_loss": loss}
 
-    # def validation_epoch_end(self, outputs):
-    #
-    #     # TODO: does the dataloader guarantee correct size?
-    #     avg_loss = 0.0
-    #     for output in outputs:
-    #         avg_loss += output["loss"]
-    #     avg_loss /= len(outputs) * self.batch_size
-    #
-    #     # TODO: How to save correctly into the logging folder?
-    #     # torch.save(self.vae.state_dict(), vae_file.as_posix())
-    #
-    #     # TODO: add plotting images and their residuals with plot_reconstruction function.
-    #
-    #     return {"val_loss": avg_loss}
+    def validation_epoch_end(self, outputs):
+        # logs loss, saves checkpoints automatically and saves images.
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        tensorboard_logs = {"val_loss": avg_loss}
+        # TODO: add plotting images and their residuals with plot_reconstruction function.
+        return {"val_loss": avg_loss, "log": tensorboard_logs}
 
     # def rmse_pp(self, image, background):
     #     recon_mean, recon_var, kl_z = self.forward(image, background)

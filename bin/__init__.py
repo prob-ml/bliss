@@ -7,7 +7,7 @@ def setup_paths(args):
     path_dict = {
         "root": root_path,
         "data": root_path.joinpath("data"),
-        "results": root_path.joinpath("results"),
+        "results": root_path.joinpath("logs"),
     }
 
     for p in path_dict.values():
