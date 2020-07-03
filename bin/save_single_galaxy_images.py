@@ -87,7 +87,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Use multiprocessing to save images from the specified dataset into "
         "images.hdf5 file in the default data directory, along with the background used for "
-        "this images in background.pt"
+        "this images in background.pt",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     # ---------------
