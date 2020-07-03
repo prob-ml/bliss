@@ -42,50 +42,34 @@ class TestSourceEncoder:
                 .to(device)
             )
 
-            # forward
-            (
-                n_source_log_probs,
-                loc_mean,
-                loc_logvar,
-                galaxy_param_mean,
-                galaxy_param_logvar,
-                log_flux_mean,
-                log_flux_logvar,
-                prob_galaxy,
-            ) = star_encoder.forward(image_ptiles, n_star_per_tile)
+            pred = star_encoder.forward(image_ptiles, n_star_per_tile)
 
-            assert torch.all(loc_mean <= 1.0)
-            assert torch.all(loc_mean >= 0.0)
+            assert torch.all(0.0 <= pred["loc_mean"])
+            assert torch.all(pred["loc_mean"] <= 1.0)
 
             # test we have the correct pattern of zeros
-            assert ((loc_mean != 0).sum(1)[:, 0] == n_star_per_tile).all()
-            assert ((loc_mean != 0).sum(1)[:, 1] == n_star_per_tile).all()
+            assert ((pred["loc_mean"] != 0).sum(1)[:, 0] == n_star_per_tile).all()
+            assert ((pred["loc_mean"] != 0).sum(1)[:, 1] == n_star_per_tile).all()
 
-            assert ((loc_logvar != 0).sum(1)[:, 0] == n_star_per_tile).all()
-            assert ((loc_logvar != 0).sum(1)[:, 1] == n_star_per_tile).all()
+            assert ((pred["loc_logvar"] != 0).sum(1)[:, 0] == n_star_per_tile).all()
+            assert ((pred["loc_logvar"] != 0).sum(1)[:, 1] == n_star_per_tile).all()
 
             for n in range(n_bands):
-                assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_per_tile).all()
-                assert ((log_flux_mean[:, :, n] != 0).sum(1) == n_star_per_tile).all()
-
-                assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_per_tile).all()
-                assert ((log_flux_logvar[:, :, n] != 0).sum(1) == n_star_per_tile).all()
+                assert (
+                    (pred["loc_mean"][:, :, n] != 0).sum(1) == n_star_per_tile
+                ).all()
+                assert (
+                    (pred["log_flux_mean"][:, :, n] != 0).sum(1) == n_star_per_tile
+                ).all()
 
             # check pattern of zeros
             is_on_array = encoder.get_is_on_from_n_sources(
                 n_star_per_tile, star_encoder.max_detections
             )
-            assert torch.all((loc_mean * is_on_array.unsqueeze(2).float()) == loc_mean)
-            assert torch.all(
-                (loc_logvar * is_on_array.unsqueeze(2).float()) == loc_logvar
-            )
-
-            assert torch.all(
-                (log_flux_mean * is_on_array.unsqueeze(2).float()) == log_flux_mean
-            )
-            assert torch.all(
-                (log_flux_logvar * is_on_array.unsqueeze(2).float()) == log_flux_logvar
-            )
+            _loc_mean = pred["loc_mean"] * is_on_array.unsqueeze(2).float()
+            _log_flux_mean = pred["log_flux_mean"] * is_on_array.unsqueeze(2).float()
+            assert torch.all(_loc_mean == pred["loc_mean"])
+            assert torch.all(_log_flux_mean == pred["log_flux_mean"])
 
             # we check the variational parameters against the hidden parameters
             # one by one
@@ -96,56 +80,48 @@ class TestSourceEncoder:
             locs_var_indx_mat = star_encoder.indx_mats[1]
             log_flux_mean_indx_mat = star_encoder.indx_mats[4]
             log_flux_var_indx_mat = star_encoder.indx_mats[5]
-            prob_galaxy_indx_mat = star_encoder.indx_mats[6]
             prob_n_source_indx_mat = star_encoder.prob_n_source_indx
 
             for i in range(n_image_tiles):
                 if n_star_per_tile[i] == 0:
-                    assert torch.all(loc_mean[i] == 0)
-                    assert torch.all(loc_logvar[i] == 0)
-                    assert torch.all(log_flux_mean[i] == 0)
-                    assert torch.all(log_flux_logvar[i] == 0)
+                    assert torch.all(pred["loc_mean"][i] == 0)
+                    assert torch.all(pred["loc_logvar"][i] == 0)
+                    assert torch.all(pred["log_flux_mean"][i] == 0)
+                    assert torch.all(pred["log_flux_logvar"][i] == 0)
                 else:
                     n_stars_i = int(n_star_per_tile[i])
 
                     assert torch.all(
-                        loc_mean[i, 0:n_stars_i, :].flatten()
+                        pred["loc_mean"][i, :n_stars_i].flatten()
                         == torch.sigmoid(h_out)[
-                            i, locs_mean_indx_mat[n_stars_i][0 : (2 * n_stars_i)],
-                        ]
-                    )
-                    assert torch.all(
-                        loc_logvar[i, 0:n_stars_i, :].flatten()
-                        == h_out[i, locs_var_indx_mat[n_stars_i][0 : (2 * n_stars_i)],]
-                    )
-
-                    assert torch.all(
-                        log_flux_mean[i, 0:n_stars_i, :].flatten()
-                        == h_out[
-                            i,
-                            log_flux_mean_indx_mat[n_stars_i][
-                                0 : (n_bands * n_stars_i)
-                            ],
-                        ]
-                    )
-                    assert torch.all(
-                        log_flux_logvar[i, 0:n_stars_i, :].flatten()
-                        == h_out[
-                            i,
-                            log_flux_var_indx_mat[n_stars_i][0 : (n_bands * n_stars_i)],
+                            i, locs_mean_indx_mat[n_stars_i][: (2 * n_stars_i)],
                         ]
                     )
 
                     assert torch.all(
-                        n_source_log_probs[i, :].flatten()
+                        pred["loc_logvar"][i, :n_stars_i].flatten()
+                        == h_out[i, locs_var_indx_mat[n_stars_i][: (2 * n_stars_i)],]
+                    )
+
+                    assert torch.all(
+                        pred["log_flux_mean"][i, :n_stars_i].flatten()
+                        == h_out[
+                            i,
+                            log_flux_mean_indx_mat[n_stars_i][: (n_bands * n_stars_i)],
+                        ]
+                    )
+
+                    assert torch.all(
+                        pred["log_flux_logvar"][i, :n_stars_i].flatten()
+                        == h_out[
+                            i,
+                            log_flux_var_indx_mat[n_stars_i][: (n_bands * n_stars_i)],
+                        ]
+                    )
+
+                    assert torch.all(
+                        pred["n_source_log_probs"][i].flatten()
                         == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
-                    )
-
-                    assert torch.all(
-                        prob_galaxy[i, 0:n_stars_i, :].flatten().to(device)
-                        == torch.sigmoid(h_out)[
-                            i, prob_galaxy_indx_mat[n_stars_i][0 : (1 * n_stars_i)]
-                        ].to(device)
                     )
 
     def test_forward_to_hidden2d(self):
@@ -196,21 +172,13 @@ class TestSourceEncoder:
 
             #  test prediction matches tile by tile
             for i in range(n_samples):
-                (
-                    _,
-                    loc_mean_i,
-                    loc_logvar_i,
-                    galaxy_param_mean_i,
-                    galaxy_param_logvar_i,
-                    log_flux_mean_i,
-                    log_flux_logvar_i,
-                    prob_galaxy_i,
-                ) = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
+                pred_i = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 
-                assert (loc_mean_i - loc_mean[i]).abs().max() < 1e-6
-                assert torch.all(loc_logvar_i == loc_logvar[i])
-                assert torch.all(log_flux_mean_i == log_flux_mean[i])
-                assert torch.all(log_flux_logvar_i == log_flux_logvar[i])
-
-                assert torch.all(galaxy_param_mean_i == galaxy_param_mean[i])
-                assert torch.all(galaxy_param_logvar_i == galaxy_param_logvar[i])
+                assert (pred_i["loc_mean"] - loc_mean[i]).abs().max() < 1e-6
+                assert torch.all(pred_i["loc_logvar"] == loc_logvar[i])
+                assert torch.all(pred_i["log_flux_mean"] == log_flux_mean[i])
+                assert torch.all(pred_i["log_flux_logvar"] == log_flux_logvar[i])
+                assert torch.all(pred_i["galaxy_param_mean"] == galaxy_param_mean[i])
+                assert torch.all(
+                    pred_i["galaxy_param_logvar"] == galaxy_param_logvar[i]
+                )
