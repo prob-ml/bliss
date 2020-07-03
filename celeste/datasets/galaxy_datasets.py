@@ -431,7 +431,9 @@ class CatsimGalaxies(Dataset):
             default=None,
             help="Catalog file to load entries from.",
         )
-        parser.add_argument("--survey", type=str, default="LSST", help="Survey to use.")
+        parser.add_argument(
+            "--survey-name", type=str, default="LSST", help="Survey to use."
+        )
         parser.add_argument(
             "--deviate-center",
             action="store_true",

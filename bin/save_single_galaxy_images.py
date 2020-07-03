@@ -9,7 +9,7 @@ from . import setup_paths, add_path_args
 
 from celeste.datasets import galaxy_datasets
 
-all_datasets = {"CatsimGalaxies": galaxy_datasets.CatsimGalaxies}
+datasets = {"CatsimGalaxies": galaxy_datasets.CatsimGalaxies}
 
 final_image_name = "images.hd5f"
 background_name = "background.pt"
@@ -70,7 +70,7 @@ def main(args):
     ]
 
     # load dataset and save properties
-    dataset = all_datasets[args.dataset].from_args(args)
+    dataset = datasets[args.dataset].from_args(args)
     with open(prop_file_path, "w") as prop_file:
         dataset.print_props(prop_file)
 
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     # Datasets
     # ----------------
     # properties of individually saved images.
-    parser.add_argument("--dataset-name", type=str, choices=all_datasets.keys())
+    parser.add_argument("--dataset", type=str, choices=[*datasets], required=True)
     parser.add_argument("--n-images-per-process", type=int, required=True)
     parser.add_argument(
         "--n-processes",
