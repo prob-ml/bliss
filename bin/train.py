@@ -2,15 +2,12 @@
 
 import argparse
 import os
-import numpy as np
-import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from . import setup_paths, setup_device
 
-from celeste import use_cuda
 from celeste.datasets import galaxy_datasets
 from celeste.models import galaxy_net
 
@@ -27,19 +24,19 @@ def setup_seed(args):
         pl.seed_everything(args.seed)
 
 
-def setup_profiler(args, output_path):
+def setup_profiler(args, paths):
     profiler = None
-    if args.profile:
-        profile_file = output_path.joinpath("profile.txt")
+    if args.profiler:
+        profile_file = paths["output"].joinpath("profile.txt")
         profiler = AdvancedProfiler(output_filename=profile_file)
     return profiler
 
 
-def setup_logger(args, output_path):
-    logger = None
-    if args.save_logs:
+def setup_logger(args, paths):
+    logger = False
+    if args.logger:
         logger = TensorBoardLogger(
-            save_dir=output_path, version=1, name="lightning_logs"
+            save_dir=paths["output"], version=1, name="lightning_logs"
         )
     return logger
 
@@ -52,7 +49,6 @@ def main(args):
     paths = setup_paths(args)
     setup_device(args)
     setup_seed(args)
-    output_path = paths["results"].joinpath(args.output_dir)
 
     # setup dataset.
     dataset = datasets[args.dataset_name].from_args(args)
@@ -62,10 +58,9 @@ def main(args):
     model = model_cls.from_args(dataset, args)
 
     # setup trainer
-    profiler = setup_profiler(args, output_path)
-    logger = setup_logger(args, output_path)
-    n_device = [args.device]
-    trainer = pl.Trainer.from_argparse_args(args)
+    profiler = setup_profiler(args, paths)
+    logger = setup_logger(args, paths)
+    trainer = pl.Trainer.from_argparse_args(args, logger=logger, profiler=profiler)
 
     # train!
     trainer.fit(model)
@@ -106,6 +101,13 @@ if __name__ == "__main__":
     )
 
     # ---------------
+    # Optimizer
+    # ----------------
+    optimizer_group = parser.add_argument_group("[Optimizer]")
+    optimizer_group.add_argument("--lr", type=float, default=1e-4)
+    optimizer_group.add_argument("--weight-decay", type=float, default=1e-6)
+
+    # ---------------
     # Model
     # ----------------
     models_group = parser.add_argument_group("[All Models]")
@@ -122,13 +124,6 @@ if __name__ == "__main__":
     # one centered galaxy
     one_centered_galaxy_group = parser.add_argument_group("[One Centered Galaxy Model]")
     galaxy_net.OneCenteredGalaxy.add_args(one_centered_galaxy_group)
-
-    # ---------------
-    # Optimizer
-    # ----------------
-    optimizer_group = parser.add_argument_group("[Optimizer]")
-    optimizer_group.add_argument("--lr", type=float, default=1e-4)
-    optimizer_group.add_argument("--weight-decay", type=float, default=1e-6)
 
     # ---------------
     # Dataset
@@ -164,8 +159,5 @@ if __name__ == "__main__":
     # ----------------
     parser = pl.Trainer.add_argparse_args(parser)
     pargs = parser.parse_args()
-
-    print(vars(pargs))
-    assert False
 
     main(pargs)
