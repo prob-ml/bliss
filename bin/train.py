@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -11,11 +10,11 @@ from . import setup_paths, setup_device, add_path_args
 from celeste.datasets import galaxy_datasets
 from celeste.models import galaxy_net
 
-datasets = [galaxy_datasets.H5Catalog, galaxy_datasets.CatsimGalaxies]
-datasets = {cls.__name__: cls for cls in datasets}
+_datasets = [galaxy_datasets.H5Catalog, galaxy_datasets.CatsimGalaxies]
+datasets = {cls.__name__: cls for cls in _datasets}
 
-models = [galaxy_net.OneCenteredGalaxy]
-models = {cls.__name__: cls for cls in models}
+_models = [galaxy_net.OneCenteredGalaxy]
+models = {cls.__name__: cls for cls in _models}
 
 
 def setup_seed(args):
@@ -51,10 +50,10 @@ def main(args):
     setup_seed(args)
 
     # setup dataset.
-    dataset = datasets[args.dataset_name].from_args(args)
+    dataset = datasets[args.dataset].from_args(args)
 
     # setup model
-    model_cls = models[args.model_name]
+    model_cls = models[args.model]
     model = model_cls.from_args(dataset, args)
 
     # setup trainer
@@ -93,7 +92,7 @@ if __name__ == "__main__":
     # ----------------
     models_group = parser.add_argument_group("[All Models]")
     models_group.add_argument(
-        "--model-name",
+        "--model",
         type=str,
         choices=[*models],
         required=True,
@@ -111,7 +110,7 @@ if __name__ == "__main__":
     # ----------------
     general_dataset_group = parser.add_argument_group("[All Datasets]")
     general_dataset_group.add_argument(
-        "--dataset-name",
+        "--dataset",
         type=str,
         choices=[*datasets],
         required=True,

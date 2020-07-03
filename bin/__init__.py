@@ -41,7 +41,7 @@ def setup_paths(args):
     assert not paths["output"].exists() or args.overwrite, "Enforcing overwrite."
     if args.overwrite and paths["output"].exists():
         shutil.rmtree(paths["output"])
-        paths["output"].mkdir(parents=False)
+    paths["output"].mkdir(parents=False)
 
     for p in paths.values():
         assert p.exists(), f"path {p.as_posix()} does not exist"
