@@ -199,26 +199,16 @@ class SleepPhase(pl.LightningModule):
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)
 
-        (
-            n_source_log_probs,
-            loc_mean,
-            loc_logvar,
-            galaxy_param_mean,
-            galaxy_param_logvar,
-            log_flux_mean,
-            log_flux_logvar,
-            prob_galaxy,
-        ) = self.forward(image_ptiles, true_tile_n_sources)
+        pred = self.forward(image_ptiles, true_tile_n_sources)
 
         # TODO: make .forward() and .get_params_in_tiles() just return correct dimensions ?
-        prob_galaxy = prob_galaxy.view(n_ptiles, max_detections)
+        prob_galaxy = pred["prob_galaxy"].view(n_ptiles, max_detections)
         true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_detections)
 
         # the loss for estimating the true number of sources
+        n_source_log_probs = pred["n_source_log_probs"]
         true_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
-        one_hot_encoding = functional.one_hot(
-            true_n_sources, n_source_log_probs.size(1)
-        )
+        one_hot_encoding = functional.one_hot(true_n_sources, max_detections + 1)
         counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
         # the following three functions computes the log-probability of parameters when
@@ -227,15 +217,16 @@ class SleepPhase(pl.LightningModule):
         # *_log_probs_all have shape n_ptiles x max_detections x max_detections
 
         # enforce large error if source is off
+        loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
         locs_log_probs_all = _get_params_logprob_all_combs(
             true_locs, loc_mean, loc_logvar
         )
         galaxy_params_log_probs_all = _get_params_logprob_all_combs(
-            true_galaxy_params, galaxy_param_mean, galaxy_param_logvar
+            true_galaxy_params, pred["galaxy_param_mean"], pred["galaxy_param_logvar"]
         )
         star_params_log_probs_all = _get_params_logprob_all_combs(
-            true_log_fluxes, log_flux_mean, log_flux_logvar
+            true_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
 
         # inside _get_min_perm_loss is where the matching happens:
