@@ -11,181 +11,6 @@ import pytorch_lightning as pl
 from . import device
 
 
-def get_inv_kl_loss(
-    image_encoder,
-    images,
-    true_locs,
-    true_galaxy_params,
-    true_log_fluxes,
-    true_galaxy_bool,
-):
-    # extract image tiles
-    # true_tile_locs has shape = (n_ptiles x max_detections x 2)
-    # true_tile_n_sources has shape = (n_ptiles)
-    slen = images.size(-1)
-    image_ptiles = image_encoder.get_images_in_tiles(images)
-    (
-        true_tile_n_sources,
-        true_tile_locs,
-        true_tile_galaxy_params,
-        true_tile_log_fluxes,
-        true_tile_galaxy_bool,
-        true_tile_is_on_array,
-    ) = image_encoder.get_params_in_tiles(
-        slen, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool
-    )
-
-    n_ptiles = true_tile_is_on_array.size(0)
-    max_detections = true_tile_is_on_array.size(1)
-
-    (
-        n_source_log_probs,
-        loc_mean,
-        loc_logvar,
-        galaxy_param_mean,
-        galaxy_param_logvar,
-        log_flux_mean,
-        log_flux_logvar,
-        prob_galaxy,
-    ) = image_encoder.forward(image_ptiles, n_sources=true_tile_n_sources)
-
-    # TODO: make .forward() and .get_params_in_tiles() just return correct dimensions ?
-    prob_galaxy = prob_galaxy.view(n_ptiles, max_detections)
-    true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_detections)
-
-    (
-        loss,
-        counter_loss,
-        locs_loss,
-        galaxy_params_loss,
-        star_params_loss,
-        galaxy_bool_loss,
-    ) = _get_params_loss(
-        n_source_log_probs,
-        loc_mean,
-        loc_logvar,
-        galaxy_param_mean,
-        galaxy_param_logvar,
-        log_flux_mean,
-        log_flux_logvar,
-        prob_galaxy,
-        true_tile_locs,
-        true_tile_galaxy_params,
-        true_tile_log_fluxes,
-        true_tile_galaxy_bool,
-        true_tile_is_on_array,
-    )
-
-    return (
-        loss,
-        counter_loss,
-        locs_loss,
-        galaxy_params_loss,
-        star_params_loss,
-        galaxy_bool_loss,
-    )
-
-
-def _get_params_loss(
-    n_source_log_probs,
-    loc_mean,
-    loc_logvar,
-    galaxy_params_mean,
-    galaxy_params_logvar,
-    log_flux_mean,
-    log_flux_logvar,
-    prob_galaxy,
-    true_locs,
-    true_galaxy_params,
-    true_log_fluxes,
-    true_galaxy_bool,
-    true_is_on_array,
-):
-    """
-    NOTE: All the quantities are per-tile quantities on first dimension,
-    for simplicity not added to names.
-
-    loc_mean shape = (n_ptiles x max_detections x 2)
-    log_flux_mean shape = (n_ptiles x max_detections x n_bands)
-    galaxy_params_mean shape = (n_ptiles x max_detections x n_galaxy_params)
-
-    the *_logvar inputs should the same shape as their respective means
-    the true_* inputs, except for true_is_on_array,
-    should have same shape as their respective means, e.g.
-    true_locs should have the same shape as loc_mean
-
-    In true_locs, the off sources must have parameter value = 0
-
-    true_is_on_array shape = (n_ptiles x max_detections)
-        Indicates if sources is on (1) or off (0)
-
-    true_galaxy_bool shape = (n_ptiles x max_detections)
-        indicating whether each source is a galaxy (1) or star (0)
-
-    prob_galaxy shape = (n_ptiles x max_detections)
-        are probabilities for each source to be a galaxy
-
-    n_source_log_probs shape = (n_ptiles x (max_detections + 1))
-        are log-probabilities for the number of sources (0, 1, ..., max_detections)
-
-    """
-    # the loss for estimating the true number of sources
-    true_n_sources = true_is_on_array.sum(1).long()  # per tile.
-    one_hot_encoding = functional.one_hot(true_n_sources, n_source_log_probs.size(1))
-    counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
-
-    # the following three functions computes the log-probability of parameters when
-    # each estimated source i is matched with true source j for
-    # i, j in {1, ..., max_detections}
-    # *_log_probs_all have shape n_ptiles x max_detections x max_detections
-
-    # enforce large error if source is off
-    loc_mean = loc_mean + (true_is_on_array == 0).float().unsqueeze(-1) * 1e16
-    locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
-    galaxy_params_log_probs_all = _get_params_logprob_all_combs(
-        true_galaxy_params, galaxy_params_mean, galaxy_params_logvar
-    )
-    star_params_log_probs_all = _get_params_logprob_all_combs(
-        true_log_fluxes, log_flux_mean, log_flux_logvar
-    )
-
-    # inside _get_min_perm_loss is where the matching happens:
-    # we construct a bijective map from each estimated source to each true source
-    (
-        locs_loss,
-        galaxy_params_loss,
-        star_params_loss,
-        galaxy_bool_loss,
-    ) = _get_min_perm_loss(
-        locs_log_probs_all,
-        galaxy_params_log_probs_all,
-        star_params_log_probs_all,
-        prob_galaxy,
-        true_galaxy_bool,
-        true_is_on_array,
-    )
-
-    # TODO: Is the detach here necessary?
-    loss_vec = (
-        locs_loss * (locs_loss.detach() < 1e6).float()
-        + counter_loss
-        + galaxy_params_loss
-        + star_params_loss
-        + galaxy_bool_loss
-    )
-
-    loss = loss_vec.mean()
-
-    return (
-        loss,
-        counter_loss,
-        locs_loss,
-        galaxy_params_loss,
-        star_params_loss,
-        galaxy_bool_loss,
-    )
-
-
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
     assert torch.all(n_source_log_probs <= 0)
     assert n_source_log_probs.shape == one_hot_encoding.shape
@@ -193,22 +18,16 @@ def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
     return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
 
 
-def _get_transformed_params(true_params, param_mean, param_logvar):
+def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     assert true_params.shape == param_mean.shape == param_logvar.shape
+
     n_ptiles = true_params.size(0)
     max_detections = true_params.size(1)
 
+    # reshape to evaluate all combinations of log_prob.
     _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
-    _source_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
-    _source_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
-
-    return _true_params, _source_mean, _source_logvar
-
-
-def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
-    _true_params, _param_mean, _param_logvar = _get_transformed_params(
-        true_params, param_mean, param_logvar
-    )
+    _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+    _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
 
     _sd = (_param_logvar.exp() + 1e-5).sqrt()
     param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
@@ -312,9 +131,9 @@ class SleepPhase(pl.LightningModule):
     def __init__(
         self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5, save_logs=False,
     ):
-        """dataset is an SourceIterableDataset class"""
         super(SleepPhase, self).__init__()
 
+        # assumes dataset is a IterableDataset class.
         self.dataset = dataset
         self.image_encoder = image_encoder
 
@@ -323,10 +142,36 @@ class SleepPhase(pl.LightningModule):
 
         self.save_logs = save_logs
 
-    def forward(self):
-        pass
+    def forward(self, image_ptiles, n_sources):
+        return self.image_encoder.forward(image_ptiles, n_sources)
 
     def get_loss(self, batch):
+        """
+
+        loc_mean shape = (n_ptiles x max_detections x 2)
+        log_flux_mean shape = (n_ptiles x max_detections x n_bands)
+        galaxy_param_mean shape = (n_ptiles x max_detections x n_galaxy_params)
+
+        the *_logvar inputs should the same shape as their respective means
+        the true_tile_* inputs, except for true_tile_is_on_array,
+        should have same shape as their respective means, e.g.
+        true_locs should have the same shape as loc_mean
+
+        In true_locs, the off sources must have parameter value = 0
+
+        true_is_on_array shape = (n_ptiles x max_detections)
+            Indicates if sources is on (1) or off (0)
+
+        true_galaxy_bool shape = (n_ptiles x max_detections)
+            indicating whether each source is a galaxy (1) or star (0)
+
+        prob_galaxy shape = (n_ptiles x max_detections)
+            are probabilities for each source to be a galaxy
+
+        n_source_log_probs shape = (n_ptiles x (max_detections + 1))
+            are log-probabilities for the number of sources (0, 1, ..., max_detections)
+
+        """
         (images, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool,) = (
             batch["images"],
             batch["locs"],
@@ -335,22 +180,90 @@ class SleepPhase(pl.LightningModule):
             batch["galaxy_bool"],
         )
 
-        # evaluate log q
+        # extract image tiles
+        # true_tile_locs has shape = (n_ptiles x max_detections x 2)
+        # true_tile_n_sources has shape = (n_ptiles)
+        slen = images.size(-1)
+        image_ptiles = self.image_encoder.get_images_in_tiles(images)
         (
-            loss,
-            counter_loss,
+            true_tile_n_sources,
+            true_tile_locs,
+            true_tile_galaxy_params,
+            true_tile_log_fluxes,
+            true_tile_galaxy_bool,
+            true_tile_is_on_array,
+        ) = self.image_encoder.get_params_in_tiles(
+            slen, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool
+        )
+
+        n_ptiles = true_tile_is_on_array.size(0)
+        max_detections = true_tile_is_on_array.size(1)
+
+        (
+            n_source_log_probs,
+            loc_mean,
+            loc_logvar,
+            galaxy_param_mean,
+            galaxy_param_logvar,
+            log_flux_mean,
+            log_flux_logvar,
+            prob_galaxy,
+        ) = self.forward(image_ptiles, true_tile_n_sources)
+
+        # TODO: make .forward() and .get_params_in_tiles() just return correct dimensions ?
+        prob_galaxy = prob_galaxy.view(n_ptiles, max_detections)
+        true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_detections)
+
+        # the loss for estimating the true number of sources
+        true_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
+        one_hot_encoding = functional.one_hot(
+            true_n_sources, n_source_log_probs.size(1)
+        )
+        counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
+
+        # the following three functions computes the log-probability of parameters when
+        # each estimated source i is matched with true source j for
+        # i, j in {1, ..., max_detections}
+        # *_log_probs_all have shape n_ptiles x max_detections x max_detections
+
+        # enforce large error if source is off
+        loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
+        locs_log_probs_all = _get_params_logprob_all_combs(
+            true_locs, loc_mean, loc_logvar
+        )
+        galaxy_params_log_probs_all = _get_params_logprob_all_combs(
+            true_galaxy_params, galaxy_param_mean, galaxy_param_logvar
+        )
+        star_params_log_probs_all = _get_params_logprob_all_combs(
+            true_log_fluxes, log_flux_mean, log_flux_logvar
+        )
+
+        # inside _get_min_perm_loss is where the matching happens:
+        # we construct a bijective map from each estimated source to each true source
+        (
             locs_loss,
             galaxy_params_loss,
             star_params_loss,
             galaxy_bool_loss,
-        ) = get_inv_kl_loss(
-            self.image_encoder,
-            images,
-            true_locs,
-            true_galaxy_params,
-            true_log_fluxes,
-            true_galaxy_bool,
+        ) = _get_min_perm_loss(
+            locs_log_probs_all,
+            galaxy_params_log_probs_all,
+            star_params_log_probs_all,
+            prob_galaxy,
+            true_tile_galaxy_bool,
+            true_tile_is_on_array,
         )
+
+        # TODO: Is the detach here necessary?
+        loss_vec = (
+            locs_loss * (locs_loss.detach() < 1e6).float()
+            + counter_loss
+            + galaxy_params_loss
+            + star_params_loss
+            + galaxy_bool_loss
+        )
+
+        loss = loss_vec.mean()
 
         return (
             loss,
