@@ -207,8 +207,8 @@ class SleepPhase(pl.LightningModule):
 
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"]
-        true_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
-        one_hot_encoding = functional.one_hot(true_n_sources, max_detections + 1)
+        true_tile_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
+        one_hot_encoding = functional.one_hot(true_tile_n_sources, max_detections + 1)
         counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
         # the following three functions computes the log-probability of parameters when
@@ -220,13 +220,15 @@ class SleepPhase(pl.LightningModule):
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
         locs_log_probs_all = _get_params_logprob_all_combs(
-            true_locs, loc_mean, loc_logvar
+            true_tile_locs, loc_mean, loc_logvar
         )
         galaxy_params_log_probs_all = _get_params_logprob_all_combs(
-            true_galaxy_params, pred["galaxy_param_mean"], pred["galaxy_param_logvar"]
+            true_tile_galaxy_params,
+            pred["galaxy_param_mean"],
+            pred["galaxy_param_logvar"],
         )
         star_params_log_probs_all = _get_params_logprob_all_combs(
-            true_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
+            true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
 
         # inside _get_min_perm_loss is where the matching happens:
