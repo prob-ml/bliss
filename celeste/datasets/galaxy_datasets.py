@@ -27,8 +27,7 @@ def save_images(
         hds = images_file.create_dataset("images", hds_shape, dtype=dataset.dtype)
         for i in range(n_images):
             random_idx = random.randrange(len(dataset))
-            output = dataset[random_idx]
-            image = output["image"]
+            image = dataset[random_idx]["image"]
             hds[i, :, :, :] = image
             hds.flush()
         hds.attrs["background"] = dataset.background
@@ -78,12 +77,12 @@ class H5Catalog(Dataset):
 
     @staticmethod
     def add_args(parser):
-        parser.add_argument(
-            "--h5-file", type=str, default="images.hdf5", help="file path"
-        )
+        parser.add_argument("--h5-file", type=str, default=None, help="file path")
 
     @classmethod
     def from_args(cls, args):
+        assert args.h5_file, "Specify h5_file if using this dataset."
+
         args_dict = vars(args)
         parameters = inspect.signature(cls).parameters
         args_dict = {param: args_dict[param] for param in parameters}
@@ -433,10 +432,16 @@ class CatsimGalaxies(Dataset):
             help="Catalog file to load entries from.",
         )
         parser.add_argument("--survey", type=str, default="LSST", help="Survey to use.")
-        parser.add_argument("--deviate-center", action="store_true")
+        parser.add_argument(
+            "--deviate-center",
+            action="store_true",
+            help="Randomly deviate galaxies from center.",
+        )
 
     @classmethod
     def from_args(cls, args):
+        assert args.catalog_file, "Need to specify catalog file in catsim dataset."
+
         args_dict = vars(args)
         parameters = inspect.signature(cls).parameters
         args_dict = {param: args_dict[param] for param in parameters}

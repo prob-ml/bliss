@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from . import setup_paths, setup_device
+from . import setup_paths, setup_device, add_path_args
 
 from celeste.datasets import galaxy_datasets
 from celeste.models import galaxy_net
@@ -79,26 +79,7 @@ if __name__ == "__main__":
     # ---------------
     # Paths
     # ----------------
-    paths_group = parser.add_argument_group("[Paths]")
-    paths_group.add_argument(
-        "--root-dir",
-        help="Absolute path to directory containing bin and celeste package.",
-        type=str,
-        default=os.path.abspath("."),
-    )
-
-    paths_group.add_argument(
-        "--output-dir",
-        type=str,
-        required=True,
-        help="Directory name relative to root/logs path, where output will be saved.",
-    )
-
-    paths_group.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Whether to overwrite if directory already exists.",
-    )
+    parser = add_path_args(parser)
 
     # ---------------
     # Optimizer
