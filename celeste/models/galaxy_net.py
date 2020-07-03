@@ -264,9 +264,10 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         # logs loss, saves checkpoints automatically and saves images.
+        # TODO: add plotting images and their residuals with plot_reconstruction function.
+
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         tensorboard_logs = {"val_loss": avg_loss}
-        # TODO: add plotting images and their residuals with plot_reconstruction function.
         return {"val_loss": avg_loss, "log": tensorboard_logs}
 
     # def rmse_pp(self, image, background):

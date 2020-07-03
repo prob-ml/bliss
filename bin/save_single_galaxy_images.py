@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
 import h5py
 import torch
-import shutil
 import multiprocessing
 
-from . import setup_paths
+from . import setup_paths, add_path_args
 
 from celeste.datasets import galaxy_datasets
 
@@ -65,14 +63,10 @@ def main(args):
 
     # load paths.
     paths = setup_paths(args)
-    output_path = paths["results"].joinpath(f"{args.output_dir}")
-    assert not output_path.exists() or args.overwrite, "Need to overwrite."
-    if args.overwrite and output_path.exists():
-        shutil.rmtree(output_path)
-    output_path.mkdir(exist_ok=True)
-    prop_file_path = output_path.joinpath("prop.txt")
+
+    prop_file_path = paths["output"].joinpath("prop.txt")
     file_paths = [
-        output_path.joinpath(f"image{i}.hdf5") for i in range(args.n_processes)
+        paths["output"].joinpath(f"image{i}.hdf5") for i in range(args.n_processes)
     ]
 
     # load dataset and save properties
@@ -85,8 +79,8 @@ def main(args):
     with multiprocessing.Pool(processes=args.n_processes) as pool:
         pool.starmap(galaxy_datasets.save_images, generate_args)
 
-    merge_files(output_path)
-    save_background(output_path)
+    merge_files(paths["output"])
+    save_background(paths["output"])
 
 
 if __name__ == "__main__":
@@ -96,27 +90,16 @@ if __name__ == "__main__":
         "this images in background.pt"
     )
 
-    # io stuff
-    parser.add_argument(
-        "--root-dir",
-        help="Absolute path to directory containing bin and celeste package.",
-        type=str,
-        default=os.path.abspath("."),
-    )
+    # ---------------
+    # Paths
+    # ----------------
+    parser = add_path_args(parser)
 
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        required=True,
-        help="Results will be written to data/output_dir",
-    )
-
-    parser.add_argument(
-        "--overwrite", action="store_true", help="Whether to overwrite existing files"
-    )
-
+    # ---------------
+    # Datasets
+    # ----------------
     # properties of individually saved images.
-    parser.add_argument("--dataset", type=str, choices=all_datasets.keys())
+    parser.add_argument("--dataset-name", type=str, choices=all_datasets.keys())
     parser.add_argument("--n-images-per-process", type=int, required=True)
     parser.add_argument(
         "--n-processes",
@@ -124,14 +107,11 @@ if __name__ == "__main__":
         help="Number of parallel processes to run to write images in disk.",
         required=True,
     )
-
     parser.add_argument("--slen", type=int, default=51)
     parser.add_argument("--n-bands", type=int, default=1)
     parser.add_argument("--snr", type=float, default=200, help="SNR to use for noise")
 
-    catsim_group = parser.add_argument_group(
-        "Catsim Dataset Options", "Specify options for rendering catsim images",
-    )
+    catsim_group = parser.add_argument_group("[Catsim Dataset]")
     galaxy_datasets.CatsimGalaxies.add_args(catsim_group)
 
     pargs = parser.parse_args()
