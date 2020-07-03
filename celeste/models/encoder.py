@@ -616,16 +616,16 @@ class ImageEncoder(nn.Module):
 
         # in the case of stars these are log_flux_mean, and log_flux_logvar.
         # squeeze if possible to account for non-sampling case.
-        return (
-            n_source_log_probs.squeeze(0),
-            loc_mean.squeeze(0),
-            loc_logvar.squeeze(0),
-            galaxy_param_mean.squeeze(0),
-            galaxy_param_logvar.squeeze(0),
-            log_flux_mean.squeeze(0),
-            log_flux_logvar.squeeze(0),
-            prob_galaxy.squeeze(0),
-        )
+        return {
+            "n_source_log_probs": n_source_log_probs.squeeze(0),
+            "loc_mean": loc_mean.squeeze(0),
+            "loc_logvar": loc_logvar.squeeze(0),
+            "galaxy_param_mean": galaxy_param_mean.squeeze(0),
+            "galaxy_param_logvar": galaxy_param_logvar.squeeze(0),
+            "log_flux_mean": log_flux_mean.squeeze(0),
+            "log_flux_logvar": log_flux_logvar.squeeze(0),
+            "prob_galaxy": prob_galaxy.squeeze(0),
+        }
 
     def _get_tile_coords(self, slen):
         tile_coords = self.tile_coords
