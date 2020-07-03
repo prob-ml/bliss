@@ -306,13 +306,11 @@ class CatsimGalaxies(Dataset):
         slen=51,
         snr=200,
         n_bands=6,
-        dtype=np.float32,
         deviate_center=False,
         preserve_flux=False,
         add_noise=True,
     ):
-        """
-        This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)
+        """This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)
          and returns a galaxy drawn from the catalog with realistic seeing conditions using
          functions from WeakLensingDeblending.
 
@@ -324,28 +322,24 @@ class CatsimGalaxies(Dataset):
         super().__init__()
         assert survey_name == "LSST", "Only using default survey name for now is LSST."
         assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
-        assert (
-            slen >= 51
-        ), "Does not seem to work well if the number of pixels is too low."
+        assert add_noise, "Are you sure?"
+        assert slen >= 51, "Galaxies won't fit."
         assert slen % 2 == 1, "Odd number of pixels is preferred."
-        assert dtype is np.float32, "Only float32 is supported for now."
-        assert (
-            preserve_flux is False
-        ), "Otherwise variance of the noise will change which is not desirable."
-        # ToDo: Create a test or assertion to check that mean == variance approx.
+        assert preserve_flux is False, "Otherwise variance of the noise will change."
+        # ToDo: Create a test/assertion to check that mean == variance approx.
 
         self.survey_name = survey_name
         self.n_bands = n_bands
         self.bands = bands_dict[self.n_bands]
+        self.snr = snr
 
         self.slen = slen
         self.pixel_scale = get_pixel_scale(self.survey_name)
         self.stamp_size = self.pixel_scale * self.slen  # arcsecs.
-        self.snr = snr
-        self.dtype = dtype
         self.preserve_flux = preserve_flux
         self.add_noise = add_noise
         self.deviate_center = deviate_center
+        self.dtype = np.float32
 
         self.renderer = CatsimRenderer(
             self.survey_name,
@@ -437,8 +431,11 @@ class CatsimGalaxies(Dataset):
         parser.add_argument(
             "--deviate-center",
             action="store_true",
-            help="Randomly deviate galaxies from center.",
+            help="Randomly deviate galaxies from center of image.",
         )
+        parser.add_argument("--preserve-flux", action="store_true")
+        parser.add_argument("--add-noise", action="store_false")
+        parser.add_argument("--verbose", action="store_true")
 
     @classmethod
     def from_args(cls, args):
