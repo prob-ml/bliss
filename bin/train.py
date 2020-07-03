@@ -22,15 +22,9 @@ models = {cls.__name__: cls for cls in models}
 
 
 def setup_seed(args):
-    if args.torch_seed:
-        torch.manual_seed(args.torch_seed)
-
-        if use_cuda:
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
-
-    if args.np_seed:
-        np.random.seed(args.np_seed)
+    if args.deterministic:
+        assert args.seed is not None
+        pl.seed_everything(args.seed)
 
 
 def setup_profiler(args, output_path):
@@ -71,18 +65,10 @@ def main(args):
     profiler = setup_profiler(args, output_path)
     logger = setup_logger(args, output_path)
     n_device = [args.device]
-    sleep_trainer = pl.Trainer(
-        gpus=n_device,
-        profiler=profiler,
-        min_epochs=args.n_epochs,
-        max_epochs=args.n_epochs,
-        reload_dataloaders_every_epoch=True,
-        default_root_dir=output_path,
-        logger=logger,
-    )
+    trainer = pl.Trainer.from_argparse_args(args)
 
     # train!
-    sleep_trainer.fit(model)
+    trainer.fit(model)
 
 
 if __name__ == "__main__":
@@ -91,116 +77,79 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # ---------------
-    # Device
-    # ----------------
     parser.add_argument(
-        "--device", type=int, default=0, metavar="DEV", help="GPU device ID"
+        "--seed", type=int, default=None, help="Random seed for pytorch, numpy, ...",
     )
-
-    parser.add_argument(
-        "--no-cuda",
-        action="store_true",
-        help="whether to using a discrete graphics card",
-    )
-
-    parser.add_argument(
-        "--torch-seed", type=int, default=None, help="Random seed for pytorch",
-    )
-    parser.add_argument(
-        "--np-seed", type=int, default=None, help="Random seed for numpy",
-    )
-
-    # ---------------
-    # Profile and Logging
-    # ----------------
-
-    parser.add_argument("--profile", action="store_true", help="Whether to profile.")
-    parser.add_argument("--save-logs", action="store_true", help="Log output?")
 
     # ---------------
     # Paths
     # ----------------
-    parser.add_argument(
+    paths_group = parser.add_argument_group("[Paths]")
+    paths_group.add_argument(
         "--root-dir",
         help="Absolute path to directory containing bin and celeste package.",
         type=str,
         default=os.path.abspath("."),
     )
 
-    parser.add_argument(
+    paths_group.add_argument(
         "--output-dir",
         type=str,
         required=True,
-        help="Directory name relative to root/results path, where output will be saved.",
+        help="Directory name relative to root/logs path, where output will be saved.",
     )
 
-    parser.add_argument(
+    paths_group.add_argument(
         "--overwrite",
         action="store_true",
         help="Whether to overwrite if directory already exists.",
     )
 
     # ---------------
-    # Training
-    # ----------------
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=64,
-        metavar="BS",
-        help="input batch size for training.",
-    )
-    # TODO: implement this functionality for single galaxies.
-    parser.add_argument(
-        "--n-images", type=int, default=640, help="Number of images in epoch"
-    )
-    parser.add_argument(
-        "--n-epochs",
-        type=int,
-        default=100,
-        metavar="E",
-        help="number of epochs to train.",
-    )
-    # TODO: add this to trainer
-    parser.add_argument(
-        "--eval-every",
-        type=int,
-        default=None,
-        help="Whether to evaluate and log every so epochs.",
-    )
-    parser.add_argument("--num-workers", type=int, default=0)
-
-    # ---------------
     # Model
     # ----------------
-    parser.add_argument(
+    models_group = parser.add_argument_group("[All Models]")
+    models_group.add_argument(
         "--model-name",
         type=str,
         choices=[*models],
         required=True,
         help="What are we training?",
     )
-    parser.add_argument("--slen", type=int, default=51)
-    parser.add_argument("--n-bands", type=int, default=1)
-
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--weight-decay", type=float, default=1e-6)
+    models_group.add_argument("--slen", type=int, default=51)
+    models_group.add_argument("--n-bands", type=int, default=1)
 
     # one centered galaxy
     one_centered_galaxy_group = parser.add_argument_group("[One Centered Galaxy Model]")
     galaxy_net.OneCenteredGalaxy.add_args(one_centered_galaxy_group)
 
     # ---------------
+    # Optimizer
+    # ----------------
+    optimizer_group = parser.add_argument_group("[Optimizer]")
+    optimizer_group.add_argument("--lr", type=float, default=1e-4)
+    optimizer_group.add_argument("--weight-decay", type=float, default=1e-6)
+
+    # ---------------
     # Dataset
     # ----------------
-    parser.add_argument(
+    general_dataset_group = parser.add_argument_group("[All Datasets]")
+    general_dataset_group.add_argument(
         "--dataset-name",
         type=str,
         choices=[*datasets],
         required=True,
         help="Specifies the dataset to be used to train the model.",
     )
+
+    general_dataset_group.add_argument(
+        "--batch-size",
+        type=int,
+        default=64,
+        metavar="BS",
+        help="input batch size for training.",
+    )
+    general_dataset_group.add_argument("--num-workers", type=int, default=0)
 
     # h5
     h5_group = parser.add_argument_group("[H5 Dataset]")
@@ -210,6 +159,13 @@ if __name__ == "__main__":
     catsim_group = parser.add_argument_group("[Catsim Dataset]")
     galaxy_datasets.CatsimGalaxies.add_args(catsim_group)
 
+    # ---------------
+    # Trainer
+    # ----------------
+    parser = pl.Trainer.add_argparse_args(parser)
     pargs = parser.parse_args()
+
+    print(vars(pargs))
+    assert False
 
     main(pargs)
