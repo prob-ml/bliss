@@ -42,8 +42,6 @@ def setup_logger(args, paths):
 
 def main(args):
 
-    assert args.model_name in models, "Not implemented."
-
     # setup.
     paths = setup_paths(args)
     setup_device(args)
