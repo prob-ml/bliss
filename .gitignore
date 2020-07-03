@@ -14,3 +14,4 @@ celeste.egg-info/
 .eggs
 .tox
 *lightning_logs
+bin/run.sh

@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from . import setup_paths, add_path_args
+from .utils import setup_paths, add_path_args
 
 from celeste.datasets import galaxy_datasets
 from celeste.models import galaxy_net
