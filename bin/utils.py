@@ -1,6 +1,5 @@
 from pathlib import Path
 import os
-import torch
 import shutil
 
 
