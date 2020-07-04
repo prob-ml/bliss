@@ -299,7 +299,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         residuals = image - recon_mean
         plt.ioff()
 
-        fig = plt.figure(figsize=(7 * 2, 2 + 5 * num_examples))
+        fig = plt.figure(figsize=(8 * 2, 4 + 5 * num_examples))
         plt.tight_layout()
         plt.suptitle("Epoch {:d}".format(self.current_epoch))
 
