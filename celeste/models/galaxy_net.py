@@ -256,7 +256,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         recon_mean, recon_var, kl_z = self(image, background)
         loss = self.get_loss(image, recon_mean, recon_var, kl_z)
         logs = {"train_loss": loss}
-        return {"loss": loss, "logs": logs}
+        return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
         image, background = batch["image"], batch["background"]
@@ -274,7 +274,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         # TODO: add plotting images and their residuals with plot_reconstruction function.
 
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        tensorboard_logs = {"val_loss": avg_loss}
+        tensorboard_logs = {"avg_val_loss": avg_loss}
 
         # get first 10 images, reconstruction means, variances. Add them as a grid.
         image = outputs[-1]["image"][:5]
@@ -282,7 +282,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         recon_var = outputs[-1]["recon_var"][:5]
 
         fig = self.plot_reconstruction(image, recon_mean, recon_var)
-        self.logger.experiment.add_figure("Summary images", fig, self.current_epoch)
+        self.logger.experiment.add_figure(f"Summary images {self.current_epoch}", fig)
 
         return {"val_loss": avg_loss, "log": tensorboard_logs}
 
@@ -299,7 +299,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         residuals = image - recon_mean
         plt.ioff()
 
-        fig = plt.figure(figsize=(5 * 2, 2 + 4 * num_examples))
+        fig = plt.figure(figsize=(7 * 2, 2 + 5 * num_examples))
         plt.tight_layout()
         plt.suptitle("Epoch {:d}".format(self.current_epoch))
 
