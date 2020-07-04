@@ -296,10 +296,10 @@ class OneCenteredGalaxy(pl.LightningModule):
         num_cols = 4
         # only i band if available, otherwise the highest band.
         band_idx = min(2, self.n_bands - 1)
-        residuals = image - recon_mean
+        residuals = (image - recon_mean) / torch.sqrt(image)
         plt.ioff()
 
-        fig = plt.figure(figsize=(8 * 2, 4 + 5 * num_examples))
+        fig = plt.figure(figsize=(20, 20))
         plt.tight_layout()
         plt.suptitle("Epoch {:d}".format(self.current_epoch))
 
