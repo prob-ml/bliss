@@ -4,6 +4,7 @@ import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from .utils import setup_paths, add_path_args
 
@@ -40,6 +41,21 @@ def setup_logger(args, paths):
     return logger
 
 
+def setup_checkpoint_callback(args, paths):
+    checkpoint_callback = False
+    if args.checkpoint_callback:
+        checkpoint_callback = ModelCheckpoint(
+            filepath=paths["output"],
+            save_top_k=True,
+            verbose=True,
+            monitor="val_loss",
+            mode="min",
+            prefix="",
+        )
+
+    return checkpoint_callback
+
+
 def main(args):
 
     # setup.
@@ -56,7 +72,10 @@ def main(args):
     # setup trainer
     profiler = setup_profiler(args, paths)
     logger = setup_logger(args, paths)
-    trainer = pl.Trainer.from_argparse_args(args, logger=logger, profiler=profiler)
+    checkpoint_callback = setup_checkpoint_callback(args, paths)
+    trainer = pl.Trainer.from_argparse_args(
+        args, logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback
+    )
 
     # train!
     trainer.fit(model)
