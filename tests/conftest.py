@@ -17,11 +17,15 @@ def pytest_addoption(parser):
     )
 
     parser.addoption(
-        "--profiling", action="store_true", help="Enable profiler",
+        "--gpus", default="0,", type=str, help="--gpus option for trainer."
     )
 
     parser.addoption(
-        "--logging", action="store_true", help="Enable logger.",
+        "--profile", action="store_true", help="Enable profiler",
+    )
+
+    parser.addoption(
+        "--log", action="store_true", help="Enable logger.",
     )
 
     parser.addoption(
@@ -66,7 +70,7 @@ def data_path(root_path):
 # logging and profiling.
 @pytest.fixture(scope="session")
 def profiler(pytestconfig, logs_path):
-    profiling = pytestconfig.getoption("profiling")
+    profiling = pytestconfig.getoption("profile")
     profile_file = logs_path.joinpath("profile.txt")
     profiler = AdvancedProfiler(output_filename=profile_file) if profiling else None
     return profiler
@@ -74,7 +78,7 @@ def profiler(pytestconfig, logs_path):
 
 @pytest.fixture(scope="session")
 def save_logs(pytestconfig):
-    return pytestconfig.getoption("logging")
+    return pytestconfig.getoption("log")
 
 
 # data and memory.
@@ -89,6 +93,11 @@ def device(device_id):
     if use_cuda:
         torch.cuda.set_device(new_device)
     return new_device
+
+
+@pytest.fixture(scope="session")
+def gpus(pytestconfig):
+    return pytestconfig.getoption("gpus")
 
 
 @pytest.fixture(scope="session")
