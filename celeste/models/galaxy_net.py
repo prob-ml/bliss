@@ -171,6 +171,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
+    @pl.core.decorators.auto_move_data
     def forward(self, image, background):
         # sampling images from the real distribution
         # z | x ~ decoder
