@@ -42,7 +42,7 @@ class CenteredGalaxyEncoder(nn.Module):
             nn.Linear(16 * self.slen ** 2, hidden),
             nn.ReLU(),
             nn.Linear(hidden, hidden),
-            nn.BatchNorm1d(hidden, track_running_stats=False),
+            nn.BatchNorm1d(hidden),
             nn.ReLU(),
             nn.Dropout(p=0.1),
             nn.Linear(hidden, hidden),
