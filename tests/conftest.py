@@ -97,7 +97,10 @@ def device(device_id):
 
 @pytest.fixture(scope="session")
 def gpus(pytestconfig):
-    return pytestconfig.getoption("gpus")
+    if use_cuda:
+        return pytestconfig.getoption("gpus")
+    else:
+        return None
 
 
 @pytest.fixture(scope="session")
