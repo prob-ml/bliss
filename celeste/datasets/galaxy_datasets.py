@@ -3,11 +3,15 @@ import random
 import inspect
 import sys
 
-import descwl
 import h5py
 import galsim
 from astropy.table import Column, Table
 from torch.utils.data import Dataset
+
+try:
+    import descwl
+except ImportError:
+    pass
 
 
 bands_dict = {
