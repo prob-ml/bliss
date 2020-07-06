@@ -14,15 +14,16 @@ class TestGalaxyVAE:
         h5_file = data_path.joinpath("catsim_single_galaxies.hdf5")
         dataset = galaxy_datasets.H5Catalog(h5_file, slen=51, n_bands=1)
         n_epochs = 100 if use_cuda else 1
+        check_val_every_n_epoch = 50 if use_cuda else 1
         trainer = pl.Trainer(
             gpus=gpus,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             limit_train_batches=20,
             profiler=None,
-            logger=False,
             checkpoint_callback=False,
-            limit_val_batches=0.0,  # no validation.
+            limit_val_batches=1,
+            check_val_every_n_epoch=check_val_every_n_epoch,
         )
 
         # TODO: Allow tt_split ==0 if no validation.
