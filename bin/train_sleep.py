@@ -3,7 +3,6 @@ import argparse
 import os
 
 from . import setup_paths
-from . import setup_device
 
 from celeste import train
 from celeste.models import encoder, decoder
@@ -16,7 +15,6 @@ from celeste.models import encoder, decoder
 def main(args):
 
     paths = setup_paths(args)
-    device = setup_device(args)
 
     out_dir = paths["results"].joinpath(args.output_name) if args.output_name else None
 
