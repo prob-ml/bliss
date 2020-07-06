@@ -7,9 +7,9 @@ import multiprocessing
 
 from .utils import setup_paths, add_path_args
 
-from celeste.datasets import galaxy_datasets
+from celeste.datasets import catsim, galaxy_datasets
 
-datasets = {"CatsimGalaxies": galaxy_datasets.CatsimGalaxies}
+datasets = {"CatsimGalaxies": catsim.CatsimGalaxies}
 
 final_image_name = "images.hd5f"
 background_name = "background.pt"
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     parser.add_argument("--snr", type=float, default=200, help="SNR to use for noise")
 
     catsim_group = parser.add_argument_group("[Catsim Dataset]")
-    galaxy_datasets.CatsimGalaxies.add_args(catsim_group)
+    catsim.CatsimGalaxies.add_args(catsim_group)
 
     pargs = parser.parse_args()
     assert pargs.n_bands in [1, 6] or not pargs.generate, "Only 1 or 6 bands suggested."

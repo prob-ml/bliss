@@ -8,10 +8,10 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from .utils import setup_paths, add_path_args
 
-from celeste.datasets import galaxy_datasets
+from celeste.datasets import galaxy_datasets, catsim
 from celeste.models import galaxy_net
 
-_datasets = [galaxy_datasets.H5Catalog, galaxy_datasets.CatsimGalaxies]
+_datasets = [galaxy_datasets.H5Catalog, catsim.CatsimGalaxies]
 datasets = {cls.__name__: cls for cls in _datasets}
 
 _models = [galaxy_net.OneCenteredGalaxy]
@@ -148,7 +148,7 @@ if __name__ == "__main__":
 
     # catsim galaxies
     catsim_group = parser.add_argument_group("[Catsim Dataset]")
-    galaxy_datasets.CatsimGalaxies.add_args(catsim_group)
+    catsim.CatsimGalaxies.add_args(catsim_group)
 
     # ---------------
     # Trainer
