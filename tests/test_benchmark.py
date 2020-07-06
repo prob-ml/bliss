@@ -124,4 +124,6 @@ def test_benchmark(
     # )
 
     with torch.no_grad():
-        benchmark(sleep_trainer.fit, sleep_net)
+        benchmark.pedantic(
+            sleep_trainer.fit, args=(sleep_net,), rounds=10, iterations=5
+        )
