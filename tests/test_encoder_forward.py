@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-from celeste import device
-from celeste.models import encoder
+from bliss import device
+from bliss.models import encoder
 
 
 class TestSourceEncoder:

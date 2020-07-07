@@ -8,7 +8,7 @@ import numpy as np
 
 from .models import decoder, encoder
 from .psf_transform import PowerLawPSF
-from celeste import device
+from bliss import device
 
 
 def _sample_image(observed_image, sample_every=10):

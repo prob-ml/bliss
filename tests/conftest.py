@@ -3,8 +3,8 @@ import pathlib
 import torch
 from pytorch_lightning.profiler import AdvancedProfiler
 
-from celeste import use_cuda
-from celeste.models.decoder import get_fitted_powerlaw_psf, get_galaxy_decoder
+from bliss import use_cuda
+from bliss.models.decoder import get_fitted_powerlaw_psf, get_galaxy_decoder
 
 
 def pytest_addoption(parser):

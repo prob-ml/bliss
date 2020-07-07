@@ -8,8 +8,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from .utils import setup_paths, add_path_args
 
-from celeste.datasets import galaxy_datasets, catsim
-from celeste.models import galaxy_net
+from bliss.datasets import galaxy_datasets, catsim
+from bliss.models import galaxy_net
 
 _datasets = [galaxy_datasets.H5Catalog, catsim.CatsimGalaxies]
 datasets = {cls.__name__: cls for cls in _datasets}
