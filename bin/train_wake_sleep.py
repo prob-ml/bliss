@@ -181,8 +181,8 @@ for iteration in range(0, n_iter):
     print("RUNNING SLEEP PHASE. ITER = " + str(iteration + 1))
 
     # update psf
-    loader.dataset.simulator.psf = model_params.get_psf().detach()
-    loader.dataset.simulator.background = (
+    loader.dataset.image_decoder.psf = model_params.get_psf().detach()
+    loader.dataset.image_decoder.background = (
         model_params.get_background().squeeze(0).detach()
     )
 

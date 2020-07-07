@@ -277,7 +277,7 @@ def render_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid
     return scene
 
 
-class SourceSimulator(object):
+class ImageDecoder(object):
     def __init__(
         self,
         galaxy_decoder,
@@ -564,17 +564,15 @@ class SourceSimulator(object):
 
 
 class SimulatedDataset(IterableDataset):
-    def __init__(
-        self, n_batches: int, batch_size: int, simulator_args, simulator_kwargs
-    ):
+    def __init__(self, n_batches: int, batch_size: int, decoder_args, decoder_kwargs):
         super(SimulatedDataset, self).__init__()
 
         self.n_batches = n_batches
         self.batch_size = batch_size
 
-        self.simulator = SourceSimulator(*simulator_args, **simulator_kwargs)
-        self.slen = self.simulator.slen
-        self.n_bands = self.simulator.n_bands
+        self.image_decoder = ImageDecoder(*decoder_args, **decoder_kwargs)
+        self.slen = self.image_decoder.slen
+        self.n_bands = self.image_decoder.n_bands
 
     def __iter__(self):
         return self.batch_generator()
@@ -595,11 +593,11 @@ class SimulatedDataset(IterableDataset):
             log_fluxes,
             galaxy_bool,
             star_bool,
-        ) = self.simulator.sample_parameters(batch_size=self.batch_size)
+        ) = self.image_decoder.sample_parameters(batch_size=self.batch_size)
 
         galaxy_locs = locs * galaxy_bool.unsqueeze(2)
         star_locs = locs * star_bool.unsqueeze(2)
-        images = self.simulator.generate_images(
+        images = self.image_decoder.generate_images(
             n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
         )
 
@@ -612,18 +610,18 @@ class SimulatedDataset(IterableDataset):
             "log_fluxes": log_fluxes,
             "galaxy_bool": galaxy_bool,
             "images": images,
-            "background": self.simulator.background,
+            "background": self.image_decoder.background,
         }
 
     # TODO: finish adding these methods.
     # @classmethod
-    # def from_args(cls, simulator_args, args):
+    # def from_args(cls, decoder_args, args):
     #     args_dict = vars(args)
-    #     parameters = inspect.signature(SourceSimulator).parameters
-    #     simulator_kwargs = {
+    #     parameters = inspect.signature(ImageDecoder).parameters
+    #     decoder_kwargs = {
     #         param: value for param, value in args_dict.items() if param in parameters
     #     }
-    #     return cls(*simulator_args, **simulator_kwargs)
+    #     return cls(*decoder_args, **decoder_kwargs)
 
     # def setup_dataset(args, paths):
     #     decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
@@ -640,21 +638,21 @@ class SimulatedDataset(IterableDataset):
     #     psf = decoder.get_fitted_powerlaw_psf(psf_file)[None, 0]
     #     background = decoder.get_background(background_file, args.n_bands, args.slen)
     #
-    #     simulator_args = (
+    #     decoder_args = (
     #         galaxy_decoder,
     #         psf,
     #         background,
     #     )
     #
-    #     simulator_kwargs = dict(
+    #     decoder_kwargs = dict(
     #         max_sources=args.max_sources, mean_sources=args.mean_sources, min_sources=0,
     #     )
     #
-    #     dataset = decoder.SimulatedDataset(args.n_images, simulator_args, simulator_kwargs)
+    #     dataset = decoder.SimulatedDataset(args.n_images, decoder_args, decoder_kwargs)
     #
     #     assert args.n_bands == 1, "Only 1 band is supported at the moment."
     #     assert (
-    #         dataset.simulator.n_bands
+    #         dataset.decoder.n_bands
     #         == psf.shape[0]
     #         == background.shape[0]
     #         == galaxy_decoder.n_bands

@@ -33,13 +33,13 @@ def get_trained_encoder(
     background = torch.zeros(n_bands, slen, slen, device=device)
     background.fill_(686.0)
 
-    simulator_args = (
+    decoder_args = (
         galaxy_decoder,
         psf,
         background,
     )
 
-    simulator_kwargs = dict(
+    decoder_kwargs = dict(
         slen=slen,
         n_bands=n_bands,
         max_sources=max_stars,
@@ -51,7 +51,7 @@ def get_trained_encoder(
 
     n_batches = int(n_images / batch_size)
     dataset = decoder.SimulatedDataset(
-        n_batches, batch_size, simulator_args, simulator_kwargs
+        n_batches, batch_size, decoder_args, decoder_kwargs
     )
 
     # setup Star Encoder

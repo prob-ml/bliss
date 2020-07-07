@@ -33,7 +33,7 @@ def main(args):
         step=args.step,
         edge_padding=args.edge_padding,
         max_detections=args.max_detections,
-        n_source_params=galaxy_dataset.simulator.latent_dim,
+        n_source_params=galaxy_dataset.image_decoder.latent_dim,
     ).to(device)
 
     train_sleep = train.SleepTraining(
@@ -41,7 +41,7 @@ def main(args):
         galaxy_dataset,
         args.slen,
         n_bands=1,
-        n_source_params=galaxy_dataset.simulator.latent_dim,
+        n_source_params=galaxy_dataset.image_decoder.latent_dim,
         batch_size=args.batch_size,
         eval_every=args.eval_every,
         out_dir=out_dir,
