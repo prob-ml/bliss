@@ -4,8 +4,8 @@ import os
 
 from . import setup_paths
 
-from celeste import train
-from celeste.models import encoder, decoder
+from bliss import train
+from bliss.models import encoder, decoder
 
 
 # TODO: part of this function can probably be a more general utility function in

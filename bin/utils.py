@@ -7,7 +7,7 @@ def add_path_args(parser):
     paths_group = parser.add_argument_group("[Paths]")
     paths_group.add_argument(
         "--root",
-        help="Absolute path to directory containing bin and celeste package.",
+        help="Absolute path to directory containing bin and bliss package.",
         type=str,
         default=os.path.abspath("."),
     )

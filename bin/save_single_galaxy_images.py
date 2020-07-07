@@ -7,7 +7,7 @@ import multiprocessing
 
 from .utils import setup_paths, add_path_args
 
-from celeste.datasets import catsim, galaxy_datasets
+from bliss.datasets import catsim, galaxy_datasets
 
 datasets = {"CatsimGalaxies": catsim.CatsimGalaxies}
 

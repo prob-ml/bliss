@@ -3,9 +3,9 @@ import pytest
 import torch
 import numpy as np
 
-from celeste import use_cuda
-from celeste.datasets import galaxy_datasets
-from celeste.models import galaxy_net
+from bliss import use_cuda
+from bliss.datasets import galaxy_datasets
+from bliss.models import galaxy_net
 
 
 class TestGalaxyVAE:

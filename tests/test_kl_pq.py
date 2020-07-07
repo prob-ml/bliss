@@ -5,8 +5,8 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 
-from celeste import device, sleep
-from celeste.models import encoder
+from bliss import device, sleep
+from bliss.models import encoder
 
 
 class TestStarEncoderObjective:

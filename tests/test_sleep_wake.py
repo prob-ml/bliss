@@ -3,8 +3,8 @@ import pytest
 import torch
 import pytorch_lightning as pl
 
-from celeste import use_cuda, psf_transform, wake, sleep
-from celeste.models import decoder, encoder
+from bliss import use_cuda, psf_transform, wake, sleep
+from bliss.models import decoder, encoder
 
 
 def get_trained_encoder(
