@@ -614,3 +614,50 @@ class SimulatedDataset(IterableDataset):
             "images": images,
             "background": self.simulator.background,
         }
+
+    # TODO: finish adding these methods.
+    # @classmethod
+    # def from_args(cls, simulator_args, args):
+    #     args_dict = vars(args)
+    #     parameters = inspect.signature(SourceSimulator).parameters
+    #     simulator_kwargs = {
+    #         param: value for param, value in args_dict.items() if param in parameters
+    #     }
+    #     return cls(*simulator_args, **simulator_kwargs)
+
+    # def setup_dataset(args, paths):
+    #     decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
+    #     background_file = paths["data"].joinpath(args.background_file)
+    #     psf_file = paths["data"].joinpath(args.psf_file)
+    #
+    #     if args.verbose:
+    #         print(
+    #             f"files to be used:\n decoder: {decoder_file}\n background_file: {background_file}\n"
+    #             f"psf_file: {psf_file}"
+    #         )
+    #
+    #     galaxy_decoder = decoder.get_galaxy_decoder(decoder_file, n_bands=args.n_bands)
+    #     psf = decoder.get_fitted_powerlaw_psf(psf_file)[None, 0]
+    #     background = decoder.get_background(background_file, args.n_bands, args.slen)
+    #
+    #     simulator_args = (
+    #         galaxy_decoder,
+    #         psf,
+    #         background,
+    #     )
+    #
+    #     simulator_kwargs = dict(
+    #         max_sources=args.max_sources, mean_sources=args.mean_sources, min_sources=0,
+    #     )
+    #
+    #     dataset = decoder.SimulatedDataset(args.n_images, simulator_args, simulator_kwargs)
+    #
+    #     assert args.n_bands == 1, "Only 1 band is supported at the moment."
+    #     assert (
+    #         dataset.simulator.n_bands
+    #         == psf.shape[0]
+    #         == background.shape[0]
+    #         == galaxy_decoder.n_bands
+    #     ), "All bands should be consistent"
+    #
+    #     return dataset
