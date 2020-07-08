@@ -3,6 +3,7 @@ import pytest
 import torch
 import pytorch_lightning as pl
 
+import bliss.datasets.simulated
 from bliss import use_cuda, psf_transform, wake, sleep
 from bliss.models import decoder, encoder
 
@@ -50,7 +51,7 @@ def get_trained_encoder(
     )
 
     n_batches = int(n_images / batch_size)
-    dataset = decoder.SimulatedDataset(
+    dataset = bliss.datasets.simulated.SimulatedDataset(
         n_batches, batch_size, decoder_args, decoder_kwargs
     )
 

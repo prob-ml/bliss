@@ -143,7 +143,7 @@ class WakePhase(pl.LightningModule):
 
         self.init_background = self.planar_background.forward()
 
-        self.cached_grid = decoder.get_mgrid(observed_img.shape[-1])
+        self.cached_grid = get_mgrid(observed_img.shape[-1])
 
     def forward(self):
         return self.get_psf()
