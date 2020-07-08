@@ -415,7 +415,7 @@ class ImageDecoder(object):
 
         return scene
 
-    def render_multiple_galaxies(self, locs, n_sources, single_galaxies):
+    def render_multiple_galaxies(self, n_sources, locs, single_galaxies):
         batch_size = locs.shape[0]
         n_bands = single_galaxies.shape[2]
 
@@ -430,14 +430,12 @@ class ImageDecoder(object):
 
             # shape = (batch_size x n_bands x slen x slen)
             galaxy = single_galaxies[:, n, :, :, :]
-
-            # shape= (batch_size, n_bands, slen, slen)
             one_galaxy = self._render_one_source(locs_n, galaxy)
             scene += one_galaxy
 
         return scene
 
-    def _draw_image_from_params(
+    def generate_images(
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
 
@@ -450,17 +448,10 @@ class ImageDecoder(object):
         stars = self.render_multiple_stars(star_locs, n_sources, fluxes,)
 
         # shape = (n_images x n_bands x slen x slen)
-        return galaxies + stars
+        images = galaxies + stars
 
-    def generate_images(
-        self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
-    ):
-        images = self._draw_image_from_params(
-            n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
-        )
-
+        # add background and noise
         images = images + self.background.unsqueeze(0)
-
         if self.add_noise:
             images = self._apply_noise(images)
 
