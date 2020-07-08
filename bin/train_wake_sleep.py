@@ -61,12 +61,7 @@ print("generating data: ")
 n_images = 200
 t0 = time.time()
 star_dataset = simulated_datasets_lib.load_dataset_from_params(
-    psf_og,
-    data_params,
-    n_images=n_images,
-    background=background,
-    transpose_psf=False,
-    add_noise=True,
+    psf_og, data_params, n_images=n_images, background=background, add_noise=True,
 )
 
 print("data generation time: {:.3f}secs".format(time.time() - t0))

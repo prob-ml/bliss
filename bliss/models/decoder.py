@@ -266,7 +266,6 @@ class ImageDecoder(object):
         assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
 
         # psf
-        self.transpose_psf = transpose_psf
         self.psf_og = psf.clone()
         self.psf = self._get_psf()
 
@@ -325,8 +324,10 @@ class ImageDecoder(object):
         else:
             psf = self._trim_psf(_slen)
 
-        assert len(self.psf.shape) == 3
-        assert self.background.shape[0] == self.psf.shape[0] == self.n_bands
+        assert len(psf.shape) == 3
+        assert self.background.shape[0] == psf.shape[0] == self.n_bands
+
+        return psf
 
     def _pareto_cdf(self, x):
         return 1 - (self.f_min / x) ** self.alpha
