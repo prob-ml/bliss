@@ -224,7 +224,6 @@ class ImageDecoder(object):
         f_max=1e6,
         alpha=0.5,
         use_pareto=True,
-        transpose_psf=False,
         add_noise=True,
         draw_poisson=True,
     ):
@@ -325,9 +324,6 @@ class ImageDecoder(object):
             psf = self._expand_psf(_slen)
         else:
             psf = self._trim_psf(_slen)
-
-        if self.transpose_psf:
-            self.psf = self.psf.transpose(1, 2)
 
         assert len(self.psf.shape) == 3
         assert self.background.shape[0] == self.psf.shape[0] == self.n_bands
