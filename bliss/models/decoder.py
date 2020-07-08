@@ -55,13 +55,6 @@ def _get_grid(slen, cached_grid=None):
     return grid
 
 
-def _check_sources_and_locs(locs, n_sources, batch_size):
-    assert len(locs.shape) == 3, "Using batch_size as the first dimension."
-    assert locs.shape[2] == 2
-    assert len(n_sources) == batch_size
-    assert len(n_sources.shape) == 1
-
-
 def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
@@ -121,7 +114,6 @@ def render_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     n_bands = psf.shape[0]
     scene = torch.zeros(batch_size, n_bands, slen, slen, device=device)
 
-    _check_sources_and_locs(locs, n_sources, batch_size)
     assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
     assert fluxes.shape[0] == locs.shape[0]
     assert fluxes.shape[1] == locs.shape[1]
@@ -152,7 +144,6 @@ def render_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid
     assert single_galaxies.shape[0] == batch_size
     assert single_galaxies.shape[1] == locs.shape[1]  # max_galaxies
 
-    _check_sources_and_locs(locs, n_sources, batch_size)
     grid = _get_grid(slen, cached_grid)
 
     scene = torch.zeros(batch_size, n_bands, slen, slen, device=device)
