@@ -121,7 +121,6 @@ class ImageDecoder(object):
         # first dimension of psf is number of bands
         # dimension of the psf/slen should be odd
         psf_slen = psf.shape[2]
-        assert len(psf) == 3
         assert psf.shape[1] == psf_slen
         assert (psf_slen % 2) == 1
         assert len(psf.shape) == 3

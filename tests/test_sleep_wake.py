@@ -3,57 +3,20 @@ import pytest
 import torch
 import pytorch_lightning as pl
 
-import bliss.datasets.simulated
 from bliss import use_cuda, psf_transform, wake, sleep
-from bliss.models import decoder, encoder
+from bliss.models import encoder
 
 
 def get_trained_encoder(
-    galaxy_decoder,
-    psf,
-    device,
-    device_id,
-    profiler,
-    save_logs,
-    logs_path,
-    n_bands=1,
-    max_stars=20,
-    mean_stars=15,
-    min_stars=5,
-    f_min=1e4,
-    slen=50,
-    n_images=128,
-    batch_size=32,
-    n_epochs=150,
-    prob_galaxy=0.0,
+    star_dataset, device, device_id, profiler, save_logs, logs_path,
 ):
-    assert galaxy_decoder.n_bands == psf.size(0) == n_bands
 
-    n_epochs = n_epochs if use_cuda else 1
+    n_epochs = 100 if use_cuda else 1
+    n_device = [device_id] if use_cuda else 0  # 0 means no gpu
 
-    background = torch.zeros(n_bands, slen, slen, device=device)
-    background.fill_(686.0)
-
-    decoder_args = (
-        galaxy_decoder,
-        psf,
-        background,
-    )
-
-    decoder_kwargs = {
-        "slen": slen,
-        "n_bands": n_bands,
-        "max_sources": max_stars,
-        "mean_sources": mean_stars,
-        "min_sources": min_stars,
-        "f_min": f_min,
-        "prob_galaxy": prob_galaxy,
-    }
-
-    n_batches = int(n_images / batch_size)
-    dataset = bliss.datasets.simulated.SimulatedDataset(
-        n_batches, batch_size, decoder_args, decoder_kwargs
-    )
+    slen = star_dataset.slen
+    n_bands = star_dataset.n_bands
+    latent_dim = star_dataset.image_decoder.latent_dim
 
     # setup Star Encoder
     image_encoder = encoder.ImageEncoder(
@@ -63,7 +26,7 @@ def get_trained_encoder(
         edge_padding=3,
         n_bands=n_bands,
         max_detections=2,
-        n_galaxy_params=dataset.simulator.latent_dim,
+        n_galaxy_params=latent_dim,
         enc_conv_c=5,
         enc_kern=3,
         enc_hidden=64,
@@ -71,11 +34,8 @@ def get_trained_encoder(
 
     # training wrapper
     sleep_net = sleep.SleepPhase(
-        dataset=dataset, image_encoder=image_encoder, save_logs=save_logs
+        dataset=star_dataset, image_encoder=image_encoder, save_logs=save_logs
     )
-
-    # runs on gpu or cpu?
-    n_device = [device_id] if use_cuda else 0  # 0 means no gpu
 
     sleep_trainer = pl.Trainer(
         gpus=n_device,
@@ -94,28 +54,14 @@ def get_trained_encoder(
 class TestStarSleepEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self,
-        single_band_galaxy_decoder,
-        single_band_fitted_powerlaw_psf,
-        device,
-        device_id,
-        profiler,
-        save_logs,
-        logs_path,
+        self, star_dataset, device, device_id, profiler, save_logs, logs_path,
     ):
         return get_trained_encoder(
-            single_band_galaxy_decoder,
-            single_band_fitted_powerlaw_psf,
-            device,
-            device_id,
-            profiler,
-            save_logs,
-            logs_path,
-            prob_galaxy=0.0,  # only stars will be drawn.
-            n_epochs=1,
+            star_dataset, device, device_id, profiler, save_logs, logs_path,
         )
 
-    @pytest.mark.parametrize("n_stars", ["3"])
+    @pytest.mark.only
+    @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"]
@@ -171,7 +117,7 @@ class TestStarWakePhase:
     @pytest.fixture(scope="class")
     def trained_encoder(
         self,
-        single_band_galaxy_decoder,
+        star_dataset,
         init_psf_setup,
         device,
         device_id,
@@ -179,18 +125,9 @@ class TestStarWakePhase:
         save_logs,
         logs_path,
     ):
+        star_dataset.image_decoder.psf = init_psf_setup["init_psf"]
         return get_trained_encoder(
-            single_band_galaxy_decoder,
-            init_psf_setup["init_psf"],
-            device,
-            device_id,
-            profiler,
-            save_logs,
-            logs_path,
-            n_images=64 * 6,
-            batch_size=32,
-            n_epochs=200,
-            prob_galaxy=0.0,
+            star_dataset, device, device_id, profiler, save_logs, logs_path,
         )
 
     def test_star_wake(
