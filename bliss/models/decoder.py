@@ -12,19 +12,6 @@ from . import galaxy_net
 from .encoder import get_is_on_from_n_sources
 
 
-def _sample_locs(
-    max_sources, is_on_array, batch_size, locs_min=0.0, locs_max=1.0,
-):
-    assert 0 <= locs_min <= locs_max <= 1.0
-
-    # 2 = (x,y)
-    locs = torch.rand(batch_size, max_sources, 2, device=device)
-    locs *= is_on_array.unsqueeze(2)
-    locs = locs * locs_max + locs_min
-
-    return locs
-
-
 def _render_one_source(slen, locs, source, cached_grid=None):
     """
     :param slen:
@@ -129,14 +116,13 @@ def render_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
     """
 
     batch_size = locs.shape[0]
-    _check_sources_and_locs(locs, n_sources, batch_size)
     grid = _get_grid(slen, cached_grid)
 
     n_bands = psf.shape[0]
     scene = torch.zeros(batch_size, n_bands, slen, slen, device=device)
 
+    _check_sources_and_locs(locs, n_sources, batch_size)
     assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
-    assert fluxes is not None
     assert fluxes.shape[0] == locs.shape[0]
     assert fluxes.shape[1] == locs.shape[1]
     assert fluxes.shape[2] == n_bands
@@ -341,10 +327,17 @@ class ImageDecoder(object):
         n_sources = n_sources.long().squeeze(1)
         return n_sources
 
+    def _sample_locs(self, is_on_array, batch_size):
+
+        # 2 = (x,y)
+        locs = torch.rand(batch_size, self.max_sources, 2, device=device)
+        locs *= is_on_array.unsqueeze(2)
+        locs = locs * self.loc_max + self.loc_min
+
+        return locs
+
     def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
         batch_size = n_sources.size(0)
-
-        # n_galaxies shouldn't exceed n_sources.
         uniform = torch.rand(batch_size, self.max_sources, device=device)
         galaxy_bool = uniform < self.prob_galaxy
         galaxy_bool = (galaxy_bool * is_on_array).float()
@@ -424,16 +417,8 @@ class ImageDecoder(object):
 
     def sample_parameters(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
-
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-
-        locs = _sample_locs(
-            self.max_sources,
-            is_on_array,
-            batch_size,
-            locs_min=self.loc_min,
-            locs_max=self.loc_max,
-        )
+        locs = self._sample_locs(is_on_array, batch_size)
 
         n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
             n_sources, is_on_array
@@ -482,17 +467,6 @@ class ImageDecoder(object):
 
         return images
 
-    def _prepare_images(self, images):
-        """Apply background and noise if requested.
-        """
-
-        images = images + self.background.unsqueeze(0)
-
-        if self.add_noise:
-            images = self._apply_noise(images)
-
-        return images
-
     def _draw_image_from_params(
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
@@ -526,7 +500,13 @@ class ImageDecoder(object):
         images = self._draw_image_from_params(
             n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
         )
-        return self._prepare_images(images)
+
+        images = images + self.background.unsqueeze(0)
+
+        if self.add_noise:
+            images = self._apply_noise(images)
+
+        return images
 
 
 class SimulatedDataset(IterableDataset):
