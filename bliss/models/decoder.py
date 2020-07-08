@@ -12,77 +12,6 @@ from . import galaxy_net
 from .encoder import get_is_on_from_n_sources
 
 
-def _pareto_cdf(x, f_min, alpha):
-    return 1 - (f_min / x) ** alpha
-
-
-def _draw_pareto_maxed(f_min, f_max, alpha, shape):
-    # draw pareto conditioned on being less than f_max
-
-    u_max = _pareto_cdf(f_max, f_min, alpha)
-    uniform_samples = torch.rand(*shape, device=device) * u_max
-
-    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
-
-
-def _check_psf(psf, slen):
-    # first dimension of psf is number of bands
-    assert len(psf.shape) == 3
-    n_bands = psf.shape[0]
-
-    # dimension of the psf should be odd
-    psf_slen = psf.shape[2]
-    assert psf.shape[1] == psf_slen
-    assert (psf_slen % 2) == 1
-    # same for slen
-    assert (slen % 2) == 1
-
-
-def _trim_psf(psf, slen):
-    """
-    Crop the psf to length slen x slen,
-    centered at the middle
-    :param psf:
-    :param slen:
-    :return:
-    """
-
-    _check_psf(psf, slen)
-    psf_slen = psf.shape[2]
-    psf_center = (psf_slen - 1) / 2
-
-    assert psf_slen >= slen
-
-    r = np.floor(slen / 2)
-    l_indx = int(psf_center - r)
-    u_indx = int(psf_center + r + 1)
-
-    return psf[:, l_indx:u_indx, l_indx:u_indx]
-
-
-def _expand_psf(psf, slen):
-    """
-    Pad the psf with zeros so that it is size slen,
-    :param psf:
-    :param slen:
-    :return:
-    """
-
-    _check_psf(psf, slen)
-    n_bands = psf.shape[0]
-    psf_slen = psf.shape[2]
-
-    assert psf_slen <= slen, "Should be using trim psf."
-
-    psf_expanded = torch.zeros(n_bands, slen, slen, device=device)
-
-    offset = int((slen - psf_slen) / 2)
-
-    psf_expanded[:, offset : (offset + psf_slen), offset : (offset + psf_slen)] = psf
-
-    return psf_expanded
-
-
 def _sample_n_sources(
     mean_sources, min_sources, max_sources, batch_size=1, draw_poisson=True
 ):
@@ -305,8 +234,8 @@ class ImageDecoder(object):
         self.background = background.to(device)
 
         assert len(background.shape) == 3
-        assert background.shape[0] == self.n_bands
-        assert background.shape[1] == background.shape[2] == self.slen
+        assert self.background.shape[0] == self.n_bands
+        assert self.background.shape[1] == self.background.shape[2] == self.slen
 
         self.max_sources = max_sources
         self.mean_sources = mean_sources
@@ -339,24 +268,79 @@ class ImageDecoder(object):
 
         # psf
         self.transpose_psf = transpose_psf
-        self.psf = psf.to(device)
-        self.psf_og = self.psf.clone()
+        self.psf_og = psf.clone()
+        self.psf = self._get_psf()
+
+    def _trim_psf(self, slen):
+        """Crop the psf to length slen x slen,
+        centered at the middle.
+        """
+
+        psf_slen = self.psf_og.shape[2]
+        psf_center = (psf_slen - 1) / 2
+
+        assert psf_slen >= slen
+
+        r = np.floor(slen / 2)
+        l_indx = int(psf_center - r)
+        u_indx = int(psf_center + r + 1)
+
+        return self.psf_og[:, l_indx:u_indx, l_indx:u_indx]
+
+    def _expand_psf(self, slen):
+        """Pad the psf with zeros so that it is size slen,
+        """
+
+        n_bands = self.psf_og.shape[0]
+        psf_slen = self.psf_og.shape[2]
+
+        assert psf_slen <= slen, "Should be using trim psf."
+
+        psf_expanded = torch.zeros(n_bands, slen, slen, device=device)
+
+        offset = int((slen - psf_slen) / 2)
+
+        psf_expanded[
+            :, offset : (offset + psf_slen), offset : (offset + psf_slen)
+        ] = self.psf_og
+
+        return psf_expanded
+
+    def _get_psf(self):
+        # first dimension of psf is number of bands
+        assert len(self.psf_og.shape) == 3
+
         # get psf shape to match image shape
         # if slen is even, we still make psf dimension odd.
         # otherwise, the psf won't have a peak in the center pixel.
         _slen = self.slen + ((self.slen % 2) == 0) * 1
+
+        # dimension of the psf/slen should be odd
+        psf_slen = self.psf_og.shape[2]
+        assert self.psf_og.shape[1] == psf_slen
+        assert (psf_slen % 2) == 1
+        assert (_slen % 2) == 1
+
         if self.slen >= self.psf_og.shape[-1]:
-            self.psf = _expand_psf(self.psf_og, _slen)
+            psf = self._expand_psf(_slen)
         else:
-            self.psf = _trim_psf(self.psf_og, _slen)
+            psf = self._trim_psf(_slen)
 
         if self.transpose_psf:
             self.psf = self.psf.transpose(1, 2)
 
         assert len(self.psf.shape) == 3
         assert self.background.shape[0] == self.psf.shape[0] == self.n_bands
-        assert self.background.shape[1] == self.slen
-        assert self.background.shape[2] == self.slen
+
+    def _pareto_cdf(self, x):
+        return 1 - (self.f_min / x) ** self.alpha
+
+    def _draw_pareto_maxed(self, shape):
+        # draw pareto conditioned on being less than f_max
+
+        u_max = self._pareto_cdf(self.f_max)
+        uniform_samples = torch.rand(*shape, device=device) * u_max
+        return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     def _sample_n_sources(self, batch_size):
         # sample number of sources
@@ -409,12 +393,8 @@ class ImageDecoder(object):
         assert n_stars.shape[0] == batch_size
 
         if self.use_pareto:
-            base_fluxes = _draw_pareto_maxed(
-                self.f_min,
-                self.f_max,
-                alpha=self.alpha,
-                shape=(batch_size, self.max_sources),
-            )
+            shape = (batch_size, self.max_sources)
+            base_fluxes = self._draw_pareto_maxed(shape)
         else:  # use uniform in range (f_min, f_max)
             uniform_base = torch.rand(batch_size, self.max_sources, device=device)
             base_fluxes = uniform_base * (self.f_max - self.f_min) + self.f_min
