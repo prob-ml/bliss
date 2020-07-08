@@ -60,7 +60,6 @@ class TestStarSleepEncoder:
             star_dataset, device, device_id, profiler, save_logs, logs_path,
         )
 
-    @pytest.mark.only
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
@@ -130,10 +129,11 @@ class TestStarWakePhase:
             star_dataset, device, device_id, profiler, save_logs, logs_path,
         )
 
+    @pytest.mark.only
     def test_star_wake(
         self,
         trained_encoder,
-        single_band_fitted_powerlaw_psf,
+        star_dataset,
         init_psf_setup,
         test_3_stars,
         device,
@@ -152,18 +152,19 @@ class TestStarWakePhase:
         init_background_params[0, 0] = 686.0
 
         # initialize psf params, just add 4 to each sigmas
-        true_psf = single_band_fitted_powerlaw_psf.clone()
+        true_psf = star_dataset.image_decoder.psf.clone()
         init_psf_params = init_psf_setup["init_psf_params"]
 
         n_samples = 1000 if use_cuda else 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
         wake_phase_model = wake.WakePhase(
             trained_encoder,
+            star_dataset.image_decoder,
             test_image,
             init_psf_params,
             init_background_params,
             hparams,
-            save_logs,
+            save_logs=save_logs,
         )
 
         # run the wake-phase training
