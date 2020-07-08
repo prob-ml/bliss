@@ -75,69 +75,67 @@ class ImageDecoder(object):
         self.loc_max = loc_max
         assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
 
-        # psf
-        self.psf_og = psf.clone()
-        self.psf = self._get_psf()
+        self.psf = psf
 
-    def _trim_psf(self, slen):
+    def _trim_psf(self):
         """Crop the psf to length slen x slen,
         centered at the middle.
         """
 
-        psf_slen = self.psf_og.shape[2]
-        psf_center = (psf_slen - 1) / 2
-
-        assert psf_slen >= slen
-
-        r = np.floor(slen / 2)
-        l_indx = int(psf_center - r)
-        u_indx = int(psf_center + r + 1)
-
-        return self.psf_og[:, l_indx:u_indx, l_indx:u_indx]
-
-    def _expand_psf(self, slen):
-        """Pad the psf with zeros so that it is size slen,
-        """
-
-        n_bands = self.psf_og.shape[0]
-        psf_slen = self.psf_og.shape[2]
-
-        assert psf_slen <= slen, "Should be using trim psf."
-
-        psf_expanded = torch.zeros(n_bands, slen, slen, device=device)
-
-        offset = int((slen - psf_slen) / 2)
-
-        psf_expanded[
-            :, offset : (offset + psf_slen), offset : (offset + psf_slen)
-        ] = self.psf_og
-
-        return psf_expanded
-
-    def _get_psf(self):
-        # first dimension of psf is number of bands
-        assert len(self.psf_og.shape) == 3
-
-        # get psf shape to match image shape
-        # if slen is even, we still make psf dimension odd.
+        # if self.slen is even, we still make psf dimension odd.
         # otherwise, the psf won't have a peak in the center pixel.
         _slen = self.slen + ((self.slen % 2) == 0) * 1
 
+        psf_slen = self._psf.shape[2]
+        psf_center = (psf_slen - 1) / 2
+
+        assert psf_slen >= _slen
+
+        r = np.floor(_slen / 2)
+        l_indx = int(psf_center - r)
+        u_indx = int(psf_center + r + 1)
+
+        self._psf = self._psf[:, l_indx:u_indx, l_indx:u_indx]
+
+    def _expand_psf(self):
+        """Pad the psf with zeros so that it is size slen,
+        """
+
+        _slen = self.slen + ((self.slen % 2) == 0) * 1
+        n_bands = self._psf.shape[0]
+        psf_slen = self._psf.shape[2]
+
+        assert psf_slen <= _slen, "Should be using trim psf."
+
+        psf_expanded = torch.zeros(n_bands, _slen, _slen, device=device)
+        offset = int((_slen - psf_slen) / 2)
+
+        psf_expanded[
+            :, offset : (offset + psf_slen), offset : (offset + psf_slen)
+        ] = self._psf
+
+        self._psf = psf_expanded
+
+    @property
+    def psf(self):
+        return self._psf
+
+    @psf.setter
+    def psf(self, psf):
+        # first dimension of psf is number of bands
         # dimension of the psf/slen should be odd
-        psf_slen = self.psf_og.shape[2]
-        assert self.psf_og.shape[1] == psf_slen
+        psf_slen = psf.shape[2]
+        assert len(psf) == 3
+        assert psf.shape[1] == psf_slen
         assert (psf_slen % 2) == 1
-        assert (_slen % 2) == 1
-
-        if self.slen >= self.psf_og.shape[-1]:
-            psf = self._expand_psf(_slen)
-        else:
-            psf = self._trim_psf(_slen)
-
         assert len(psf.shape) == 3
         assert self.background.shape[0] == psf.shape[0] == self.n_bands
 
-        return psf
+        self._psf = psf
+        if self.slen >= psf.shape[-1]:
+            self._expand_psf()
+        else:
+            self._trim_psf()
 
     def _pareto_cdf(self, x):
         return 1 - (self.f_min / x) ** self.alpha
@@ -333,29 +331,28 @@ class ImageDecoder(object):
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
-    def render_multiple_stars(self, n_sources, locs, fluxes, psf):
+    def render_multiple_stars(self, n_sources, locs, fluxes):
         """
 
         Args:
             n_sources: has shape = (batch_size)
             locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
             fluxes: Is (batch_size x n_bands x max_stars)
-            psf:
 
         Returns:
         """
 
         batch_size = locs.shape[0]
-        n_bands = psf.shape[0]
+        n_bands = self.psf.shape[0]
         scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)
 
-        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
+        assert len(self.psf.shape) == 3  # the shape is (n_bands, slen, slen)
         assert fluxes.shape[0] == locs.shape[0]
         assert fluxes.shape[1] == locs.shape[1]
         assert fluxes.shape[2] == n_bands
 
         # all stars are just the PSF so we copy it.
-        expanded_psf = psf.expand(batch_size, n_bands, -1, -1)
+        expanded_psf = self.psf.expand(batch_size, n_bands, -1, -1)
 
         # this loop plots each of the ith star in each of the (batch_size) images.
         max_n = locs.shape[1]
@@ -394,6 +391,7 @@ class ImageDecoder(object):
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
 
+<<<<<<< HEAD
         galaxies = 0.0
         if not self.all_stars:
             # need n_sources because *_locs are not necessarily ordered.
@@ -401,6 +399,13 @@ class ImageDecoder(object):
                 galaxy_locs, n_sources, single_galaxies,
             )
         stars = self.render_multiple_stars(star_locs, n_sources, fluxes,)
+=======
+        # need n_sources because *_locs are not necessarily ordered.
+        galaxies = self.render_multiple_galaxies(
+            n_sources, galaxy_locs, single_galaxies
+        )
+        stars = self.render_multiple_stars(n_sources, star_locs, fluxes)
+>>>>>>> resolving errors in wake.py
 
         # shape = (n_images x n_bands x slen x slen)
         images = galaxies + stars

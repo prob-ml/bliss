@@ -117,6 +117,7 @@ class WakePhase(pl.LightningModule):
         self.n_samples = self.hparams["n_samples"]
         self.lr = self.hparams["lr"]
         self.slen = observed_img.shape[-1]
+        assert self.image_decoder.slen == self.slen, "cached grid won't match."
 
         # get n_bands
         assert observed_img.shape[1] == init_psf_params.shape[0]
@@ -142,8 +143,6 @@ class WakePhase(pl.LightningModule):
             )
 
         self.init_background = self.planar_background.forward()
-
-        self.cached_grid = get_mgrid(observed_img.shape[-1])
 
     def forward(self):
         return self.get_psf()
@@ -174,9 +173,9 @@ class WakePhase(pl.LightningModule):
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
         background = self.get_background()
-        self._plot_stars(locs_sampled, fluxes_sampled, n_stars_sampled)
+        stars = self._plot_stars(locs_sampled, fluxes_sampled, n_stars_sampled)
 
-        recon_mean = self.stars + background
+        recon_mean = stars + background
 
         error = 0.5 * ((obs_img - recon_mean) ** 2 / recon_mean) + 0.5 * torch.log(
             recon_mean
@@ -234,10 +233,11 @@ class WakePhase(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         return {"val_loss": outputs[-1]["val_loss"]}
 
-    def _plot_stars(self, n_stars, locs, fluxes):
-        self.stars = self.image_decoder.render_multiple_stars(
-            self.slen, n_stars, locs, fluxes, self.cached_grid
-        )
+    def _plot_stars(self, n_stars, locs, fluxes, psf):
+        # TODO: Still need to check if using setter here is the right thing to do.
+        self.image_decoder.psf = psf
+        stars = self.image_decoder.render_multiple_stars(n_stars, locs, fluxes)
+        return stars
 
     def _get_init_background(self, sample_every=25):
         sampled_background = _sample_image(self.observed_img, sample_every)
