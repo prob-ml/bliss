@@ -51,7 +51,6 @@ class ImageDecoder(object):
         self.all_stars = self.prob_galaxy == 0.0
 
         self.add_noise = add_noise
-        self.cached_grid = get_mgrid(self.slen)
 
         if self.all_stars:
             self.galaxy_decoder = None
@@ -71,6 +70,7 @@ class ImageDecoder(object):
         self.loc_max = loc_max
         assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
 
+        self.cached_grid = get_mgrid(self.slen)
         self.psf = psf
 
     def _trim_psf(self):

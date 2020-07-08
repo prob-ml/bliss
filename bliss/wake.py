@@ -173,7 +173,7 @@ class WakePhase(pl.LightningModule):
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
         background = self.get_background()
-        stars = self._plot_stars(locs_sampled, fluxes_sampled, n_stars_sampled, psf)
+        stars = self._plot_stars(n_stars_sampled, locs_sampled, fluxes_sampled, psf)
 
         recon_mean = stars + background
 
@@ -234,7 +234,6 @@ class WakePhase(pl.LightningModule):
         return {"val_loss": outputs[-1]["val_loss"]}
 
     def _plot_stars(self, n_stars, locs, fluxes, psf):
-        # TODO: Still need to check if using setter here is the right thing to do.
         self.image_decoder.psf = psf
         stars = self.image_decoder.render_multiple_stars(n_stars, locs, fluxes)
         return stars

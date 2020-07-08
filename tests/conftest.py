@@ -104,48 +104,10 @@ def gpus(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def star_dataset(data_path, device):
+def fitted_psf(data_path):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-    decoder_state_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
-
-    n_bands = 1
-    slen = 50
-    max_stars = 20
-    mean_stars = 15
-    min_stars = 5
-    f_min = 1e4
-    n_images = 128
-    batch_size = 32
-    prob_galaxy = 0.0
-    n_batches = int(n_images / batch_size)
-
     psf = SimulatedDataset.get_psf_from_file(psf_file)[None, 0, ...]
-    galaxy_decoder = SimulatedDataset.get_gal_decoder_from_file(
-        decoder_state_file, slen=51, n_bands=1, latent_dim=8
-    )
-    background = torch.zeros(n_bands, slen, slen, device=device)
-    background.fill_(686.0)
-
-    decoder_args = (
-        galaxy_decoder,
-        psf,
-        background,
-    )
-
-    decoder_kwargs = {
-        "slen": slen,
-        "n_bands": n_bands,
-        "max_sources": max_stars,
-        "mean_sources": mean_stars,
-        "min_sources": min_stars,
-        "f_min": f_min,
-        "prob_galaxy": prob_galaxy,
-    }
-
-    assert galaxy_decoder.n_bands == psf.size(0) == n_bands
-    star_dataset = SimulatedDataset(n_batches, batch_size, decoder_args, decoder_kwargs)
-
-    return star_dataset
+    return psf
 
 
 @pytest.fixture(scope="session")
