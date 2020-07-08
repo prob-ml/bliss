@@ -3,7 +3,7 @@ import warnings
 
 import torch
 import torch.nn.functional as F
-from torch.distributions import Poisson, Categorical
+from torch.distributions import Poisson
 
 from .. import device
 from .encoder import get_is_on_from_n_sources
@@ -33,9 +33,7 @@ class ImageDecoder(object):
         f_min=1e3,
         f_max=1e6,
         alpha=0.5,
-        use_pareto=True,
         add_noise=True,
-        draw_poisson=True,
     ):
 
         self.slen = slen
@@ -52,7 +50,6 @@ class ImageDecoder(object):
         self.prob_galaxy = float(prob_galaxy)
         self.all_stars = self.prob_galaxy == 0.0
 
-        self.draw_poisson = draw_poisson
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
@@ -69,7 +66,6 @@ class ImageDecoder(object):
         self.f_min = f_min
         self.f_max = f_max
         self.alpha = alpha  # pareto parameter.
-        self.use_pareto = use_pareto
 
         self.loc_min = loc_min
         self.loc_max = loc_max
@@ -148,22 +144,12 @@ class ImageDecoder(object):
         return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     def _sample_n_sources(self, batch_size):
+        # always poisson distributed.
 
-        if self.draw_poisson:
-            m = Poisson(
-                torch.full((1,), self.mean_sources, dtype=torch.float, device=device)
-            )
-            n_sources = m.sample([batch_size])
-
-        else:
-            categorical_param = torch.full(
-                (1,),
-                self.max_sources - self.min_sources,
-                dtype=torch.float,
-                device=device,
-            )
-            m = Categorical(categorical_param)
-            n_sources = m.sample([batch_size]) + self.min_sources
+        m = Poisson(
+            torch.full((1,), self.mean_sources, dtype=torch.float, device=device)
+        )
+        n_sources = m.sample([batch_size])
 
         # long() here is necessary because used for indexing and one_hot encoding.
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
@@ -212,12 +198,8 @@ class ImageDecoder(object):
         """
         assert n_stars.shape[0] == batch_size
 
-        if self.use_pareto:
-            shape = (batch_size, self.max_sources)
-            base_fluxes = self._draw_pareto_maxed(shape)
-        else:  # use uniform in range (f_min, f_max)
-            uniform_base = torch.rand(batch_size, self.max_sources, device=device)
-            base_fluxes = uniform_base * (self.f_max - self.f_min) + self.f_min
+        shape = (batch_size, self.max_sources)
+        base_fluxes = self._draw_pareto_maxed(shape)
 
         if self.n_bands > 1:
             colors = (
