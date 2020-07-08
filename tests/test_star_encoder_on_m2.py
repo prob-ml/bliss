@@ -7,19 +7,22 @@ from pytorch_lightning.profiler import AdvancedProfiler
 
 import numpy as np
 
-from celeste import device, use_cuda
-from celeste import use_cuda, psf_transform, wake, sleep
-from celeste.models import decoder, encoder
+from bliss import device, use_cuda
+from bliss import use_cuda, psf_transform, wake, sleep
+from bliss.models import decoder, encoder
 
-from celeste import psf_transform
-from celeste import image_statistics
+from bliss import psf_transform
+from bliss import image_statistics
 
 torch.manual_seed(84)
 np.random.seed(43)
 
+
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(data_path, device, device_id, sprof, log):
-    
+def trained_star_encoder_m2(
+    data_path, device, device_id, profiler, save_logs, logs_path
+):
+
     # dataset parameters
     n_bands = 2
     max_stars = 2500
@@ -61,7 +64,7 @@ def trained_star_encoder_m2(data_path, device, device_id, sprof, log):
         f_max=f_max,
         alpha=alpha,
     )
-    
+
     batch_size = 20 if use_cuda else 4
     n_batches = int(n_images / batch_size)
     dataset = decoder.SimulatedDataset(
@@ -83,20 +86,19 @@ def trained_star_encoder_m2(data_path, device, device_id, sprof, log):
     ).to(device)
 
     # set up training module
-    profiler = AdvancedProfiler(output_filename=sprof)
+    # profiler = AdvancedProfiler(output_filename=sprof)
     sleep_net = sleep.SleepPhase(
-        dataset=dataset, image_encoder=star_encoder, save_logs=log
+        dataset=dataset, image_encoder=star_encoder, save_logs=save_logs
     )
-    n_device = [device_id] if use_cuda else 0  
+    n_device = [device_id] if use_cuda else 0
     n_epochs = 200 if use_cuda else 1
     sleep_trainer = pl.Trainer(
-        logger=log,
-        checkpoint_callback=log,
         gpus=n_device,
         profiler=profiler,
         min_epochs=n_epochs,
         max_epochs=n_epochs,
         reload_dataloaders_every_epoch=True,
+        default_root_dir=logs_path,
     )
 
     sleep_trainer.fit(sleep_net)
@@ -105,10 +107,7 @@ def trained_star_encoder_m2(data_path, device, device_id, sprof, log):
 
 
 class TestStarSleepEncoderM2:
-        
-    def test_star_sleep_m2(self,
-                            data_path, 
-                            trained_star_encoder_m2):
+    def test_star_sleep_m2(self, data_path, trained_star_encoder_m2):
 
         # the trained star encoder
         trained_star_encoder_m2.eval()
