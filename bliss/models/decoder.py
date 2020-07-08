@@ -20,38 +20,6 @@ def get_mgrid(slen):
     return mgrid.type(torch.FloatTensor).to(device)
 
 
-def get_galaxy_decoder(decoder_state_file, slen=51, n_bands=1, latent_dim=8):
-    dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
-    dec.load_state_dict(torch.load(decoder_state_file, map_location=device))
-    dec.eval()
-    return dec
-
-
-def get_background(background_file, n_bands, slen):
-    # for numpy background that are not necessarily of the correct size.
-    background = np.load(background_file)
-    background = torch.from_numpy(background).float()
-
-    assert n_bands == background.shape[0]
-
-    # TODO: way to vectorize this?
-    # now convert background to size of scenes
-    values = background.mean((1, 2))  # shape = (n_bands)
-    background = torch.zeros(n_bands, slen, slen)
-    for i, value in enumerate(values):
-        background[i, ...] = value
-
-    return background
-
-
-def get_fitted_powerlaw_psf(psf_file):
-    psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-    power_law_psf = psf_transform.PowerLawPSF(psf_params)
-    psf = power_law_psf.forward().detach()
-    assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
-    return psf
-
-
 class ImageDecoder(object):
     def __init__(
         self,
@@ -498,57 +466,64 @@ class SimulatedDataset(IterableDataset):
             "background": self.image_decoder.background,
         }
 
+    @staticmethod
+    def get_decoder_from_file(decoder_file, slen, n_bands, latent_dim):
+        dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
+        dec.load_state_dict(torch.load(decoder_file, map_location=device))
+        dec.eval()
+        return dec
+
+    @staticmethod
+    def get_background_from_file(background_file, slen, n_bands):
+        # for numpy background that are not necessarily of the correct size.
+        background = np.load(background_file)
+        background = torch.from_numpy(background).float()
+
+        assert n_bands == background.shape[0]
+
+        # now convert background to size of scenes
+        values = background.mean((1, 2))  # shape = (n_bands)
+        background = torch.zeros(n_bands, slen, slen)
+        for i, value in enumerate(values):
+            background[i, ...] = value
+
+        return background
+
+    @staticmethod
+    def get_psf_from_file(psf_file):
+        psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+        power_law_psf = psf_transform.PowerLawPSF(psf_params)
+        psf = power_law_psf.forward().detach()
+        assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
+        return psf
+
+    @staticmethod
+    def decoder_args_from_args(args, paths: dict):
+        slen, latent_dim, n_bands = args.slen, args.latent_dim, args.n_bands
+        decoder_file = paths["data"].joinpath(args.decoder_state_file)
+        background_file = paths["data"].joinpath(args.background_file)
+        psf_file = paths["data"].joinpath(args.psf_file)
+
+        dec = SimulatedDataset.get_decoder_from_args(
+            decoder_file, slen, n_bands, latent_dim
+        )
+        background = SimulatedDataset.get_background_from_file(
+            background_file, slen, n_bands
+        )
+        psf = SimulatedDataset.get_psf_from_file(psf_file)
+
+        return dec, psf, background
+
     @classmethod
-    def from_args(cls, args, decoder_args: dict):
+    def from_args(cls, args, paths: dict):
         args_dict = vars(args)
         parameters = inspect.signature(ImageDecoder).parameters
 
-        decoder_kwargs = [param for param in parameters if param not in decoder_args]
+        decoder_args_names = ["galaxy_decoder", "psf", "background"]
+        decoder_args = SimulatedDataset.decoder_args_from_args(args, paths)
         decoder_kwargs = {
             param: value
             for param, value in args_dict.items()
-            if param in decoder_kwargs
+            if param in parameters and param not in decoder_args_names
         }
-        decoder_args = list(decoder_args.values())
         return cls(*decoder_args, **decoder_kwargs)
-
-    @staticmethod
-    def decoder_args_from_files(galaxy_decoder_file, background_file, psf_file):
-        pass
-
-    # def setup_dataset(args, paths):
-    #     decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
-    #     background_file = paths["data"].joinpath(args.background_file)
-    #     psf_file = paths["data"].joinpath(args.psf_file)
-    #
-    #     if args.verbose:
-    #         print(
-    #             f"files to be used:\n decoder: {decoder_file}\n background_file: {background_file}\n"
-    #             f"psf_file: {psf_file}"
-    #         )
-    #
-    #     galaxy_decoder = decoder.get_galaxy_decoder(decoder_file, n_bands=args.n_bands)
-    #     psf = decoder.get_fitted_powerlaw_psf(psf_file)[None, 0]
-    #     background = decoder.get_background(background_file, args.n_bands, args.slen)
-    #
-    #     decoder_args = (
-    #         galaxy_decoder,
-    #         psf,
-    #         background,
-    #     )
-    #
-    #     decoder_kwargs = dict(
-    #         max_sources=args.max_sources, mean_sources=args.mean_sources, min_sources=0,
-    #     )
-    #
-    #     dataset = decoder.SimulatedDataset(args.n_images, decoder_args, decoder_kwargs)
-    #
-    #     assert args.n_bands == 1, "Only 1 band is supported at the moment."
-    #     assert (
-    #         dataset.decoder.n_bands
-    #         == psf.shape[0]
-    #         == background.shape[0]
-    #         == galaxy_decoder.n_bands
-    #     ), "All bands should be consistent"
-    #
-    #     return dataset
