@@ -12,38 +12,6 @@ from . import galaxy_net
 from .encoder import get_is_on_from_n_sources
 
 
-def _render_one_source(slen, locs, source, cached_grid=None):
-    """
-    :param slen:
-    :param locs: is batch_size x len((x,y))
-    :param source: is a (batch_size, n_bands, slen, slen) tensor, which could either be a
-                    `expanded_psf` (psf repeated multiple times) for the case of of stars.
-                    Or multiple galaxies in the case of galaxies.
-    :param cached_grid:
-    :return: shape = (batch_size x n_bands x slen x slen)
-    """
-
-    batch_size = locs.shape[0]
-    assert locs.shape[1] == 2
-
-    if cached_grid is None:
-        grid = get_mgrid(slen)
-    else:
-        assert cached_grid.shape[0] == slen
-        assert cached_grid.shape[1] == slen
-        grid = cached_grid
-
-    # scale locs so they take values between -1 and 1 for grid sample
-    locs = (locs - 0.5) * 2
-    grid_loc = grid.view(1, slen, slen, 2) - locs[:, [1, 0]].view(batch_size, 1, 1, 2)
-
-    assert (
-        source.shape[0] == batch_size
-    ), "PSF should be expanded, check if shape is correct."
-    source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
-    return source_rendered
-
-
 def _get_grid(slen, cached_grid=None):
     if cached_grid is None:
         grid = get_mgrid(slen)
@@ -92,74 +60,6 @@ def get_fitted_powerlaw_psf(psf_file):
     psf = power_law_psf.forward().detach()
     assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
     return psf
-
-
-def render_multiple_stars(slen, locs, n_sources, psf, fluxes, cached_grid=None):
-    """
-
-    Args:
-        slen:
-        locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
-        n_sources: has shape = (batch_size)
-        psf: A psf/star with shape (n_bands x slen x slen) tensor
-        fluxes: Is (batch_size x n_bands x max_stars)
-        cached_grid: Grid where the stars should be rendered with shape (slen x slen)
-
-    Returns:
-    """
-
-    batch_size = locs.shape[0]
-    grid = _get_grid(slen, cached_grid)
-
-    n_bands = psf.shape[0]
-    scene = torch.zeros(batch_size, n_bands, slen, slen, device=device)
-
-    assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
-    assert fluxes.shape[0] == locs.shape[0]
-    assert fluxes.shape[1] == locs.shape[1]
-    assert fluxes.shape[2] == n_bands
-
-    expanded_psf = psf.expand(
-        batch_size, n_bands, -1, -1
-    )  # all stars are just the PSF so we copy it.
-
-    # this loop plots each of the ith star in each of the (batch_size) images.
-    max_n = locs.shape[1]
-    for n in range(max_n):
-        is_on_n = (n < n_sources).float()
-        locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-        fluxes_n = fluxes[:, n, :]  # shape = (batch_size x n_bands)
-        one_star = _render_one_source(slen, locs_n, expanded_psf, cached_grid=grid)
-        scene += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(
-            batch_size, n_bands, 1, 1
-        )
-
-    return scene
-
-
-def render_multiple_galaxies(slen, locs, n_sources, single_galaxies, cached_grid=None):
-    batch_size = locs.shape[0]
-    n_bands = single_galaxies.shape[2]
-
-    assert single_galaxies.shape[0] == batch_size
-    assert single_galaxies.shape[1] == locs.shape[1]  # max_galaxies
-
-    grid = _get_grid(slen, cached_grid)
-
-    scene = torch.zeros(batch_size, n_bands, slen, slen, device=device)
-    max_n = locs.shape[1]
-    for n in range(max_n):
-        is_on_n = (n < n_sources).float()
-        locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-        galaxy = single_galaxies[
-            :, n, :, :, :
-        ]  # shape = (batch_size x n_bands x slen x slen)
-
-        # shape= (batch_size, n_bands, slen, slen)
-        one_galaxy = _render_one_source(slen, locs_n, galaxy, cached_grid=grid)
-        scene += one_galaxy
-
-    return scene
 
 
 class ImageDecoder(object):
@@ -458,29 +358,96 @@ class ImageDecoder(object):
 
         return images
 
+    def _render_one_source(self, locs, source):
+        """
+        :param locs: is batch_size x len((x,y))
+        :param source: is a (batch_size, n_bands, slen, slen) tensor, which could either be a
+                        `expanded_psf` (psf repeated multiple times) for the case of of stars.
+                        Or multiple galaxies in the case of galaxies.
+        :return: shape = (batch_size x n_bands x slen x slen)
+        """
+
+        batch_size = locs.shape[0]
+        assert locs.shape[1] == 2
+        assert source.shape[0] == batch_size
+
+        # scale locs so they take values between -1 and 1 for grid sample
+        locs = (locs - 0.5) * 2
+
+        _grid = self.cached_grid.view(1, self.slen, self.slen, 2)
+        grid_loc = _grid - locs[:, [1, 0]].view(batch_size, 1, 1, 2)
+        source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
+        return source_rendered
+
+    def render_multiple_stars(self, n_sources, locs, fluxes):
+        """
+
+        Args:
+            n_sources: has shape = (batch_size)
+            locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
+            fluxes: Is (batch_size x n_bands x max_stars)
+
+        Returns:
+        """
+
+        batch_size = locs.shape[0]
+        n_bands = self.psf.shape[0]
+        scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)
+
+        assert len(self.psf.shape) == 3  # the shape is (n_bands, slen, slen)
+        assert fluxes.shape[0] == locs.shape[0]
+        assert fluxes.shape[1] == locs.shape[1]
+        assert fluxes.shape[2] == n_bands
+
+        # all stars are just the PSF so we copy it.
+        expanded_psf = self.psf.expand(batch_size, n_bands, -1, -1)
+
+        # this loop plots each of the ith star in each of the (batch_size) images.
+        max_n = locs.shape[1]
+        for n in range(max_n):
+            is_on_n = (n < n_sources).float()
+            locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
+            fluxes_n = fluxes[:, n, :]  # shape = (batch_size x n_bands)
+            one_star = self._render_one_source(locs_n, expanded_psf)
+            scene += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(
+                batch_size, n_bands, 1, 1
+            )
+
+        return scene
+
+    def render_multiple_galaxies(self, locs, n_sources, single_galaxies):
+        batch_size = locs.shape[0]
+        n_bands = single_galaxies.shape[2]
+
+        assert single_galaxies.shape[0] == batch_size
+        assert single_galaxies.shape[1] == locs.shape[1]  # max_galaxies
+
+        scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)
+        max_n = locs.shape[1]
+        for n in range(max_n):
+            is_on_n = (n < n_sources).float()
+            locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
+
+            # shape = (batch_size x n_bands x slen x slen)
+            galaxy = single_galaxies[:, n, :, :, :]
+
+            # shape= (batch_size, n_bands, slen, slen)
+            one_galaxy = self._render_one_source(locs_n, galaxy)
+            scene += one_galaxy
+
+        return scene
+
     def _draw_image_from_params(
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
 
-        if self.all_stars:
-            galaxies = 0.0
-        else:
+        galaxies = 0.0
+        if not self.all_stars:
             # need n_sources because *_locs are not necessarily ordered.
-            galaxies = render_multiple_galaxies(
-                self.slen,
-                galaxy_locs,
-                n_sources,
-                single_galaxies,
-                cached_grid=self.cached_grid,
+            galaxies = self.render_multiple_galaxies(
+                galaxy_locs, n_sources, single_galaxies,
             )
-        stars = render_multiple_stars(
-            self.slen,
-            star_locs,
-            n_sources,
-            self.psf,
-            fluxes,
-            cached_grid=self.cached_grid,
-        )
+        stars = self.render_multiple_stars(star_locs, n_sources, fluxes,)
 
         # shape = (n_images x n_bands x slen x slen)
         return galaxies + stars
