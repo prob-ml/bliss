@@ -337,28 +337,29 @@ class ImageDecoder(object):
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
-    def render_multiple_stars(self, n_sources, locs, fluxes):
+    def render_multiple_stars(self, n_sources, locs, fluxes, psf):
         """
 
         Args:
             n_sources: has shape = (batch_size)
             locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
             fluxes: Is (batch_size x n_bands x max_stars)
+            psf:
 
         Returns:
         """
 
         batch_size = locs.shape[0]
-        n_bands = self.psf.shape[0]
+        n_bands = psf.shape[0]
         scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)
 
-        assert len(self.psf.shape) == 3  # the shape is (n_bands, slen, slen)
+        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
         assert fluxes.shape[0] == locs.shape[0]
         assert fluxes.shape[1] == locs.shape[1]
         assert fluxes.shape[2] == n_bands
 
         # all stars are just the PSF so we copy it.
-        expanded_psf = self.psf.expand(batch_size, n_bands, -1, -1)
+        expanded_psf = psf.expand(batch_size, n_bands, -1, -1)
 
         # this loop plots each of the ith star in each of the (batch_size) images.
         max_n = locs.shape[1]

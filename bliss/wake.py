@@ -6,7 +6,8 @@ import pytorch_lightning as pl
 
 import numpy as np
 
-from .models import decoder, encoder
+from .models import encoder
+from .models.decoder import get_mgrid
 from .psf_transform import PowerLawPSF
 from bliss import device
 
@@ -42,7 +43,7 @@ def _fit_plane_to_background(background):
     planar_params = np.zeros((n_bands, 3))
     for i in range(n_bands):
         y = background[i].flatten().detach().cpu().numpy()
-        grid = decoder.get_mgrid(slen).detach().cpu().numpy()
+        grid = get_mgrid(slen).detach().cpu().numpy()
 
         x = np.ones((slen ** 2, 3))
         x[:, 1:] = np.array(
@@ -69,7 +70,7 @@ class PlanarBackground(nn.Module):
         self.image_slen = image_slen
 
         # get grid
-        _mgrid = decoder.get_mgrid(image_slen).to(device)
+        _mgrid = get_mgrid(image_slen).to(device)
         self.mgrid = torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
 
         # initial weights
@@ -92,6 +93,7 @@ class WakePhase(pl.LightningModule):
     def __init__(
         self,
         star_encoder,
+        image_decoder,
         observed_img,
         init_psf_params,
         init_background_params,
@@ -102,6 +104,7 @@ class WakePhase(pl.LightningModule):
         super(WakePhase, self).__init__()
 
         self.star_encoder = star_encoder
+        self.image_decoder = image_decoder
         self.save_logs = save_logs
 
         # observed image is batch_size (or 1) x n_bands x slen x slen
@@ -171,7 +174,7 @@ class WakePhase(pl.LightningModule):
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
         background = self.get_background()
-        self._plot_stars(locs_sampled, fluxes_sampled, n_stars_sampled, psf)
+        self._plot_stars(locs_sampled, fluxes_sampled, n_stars_sampled)
 
         recon_mean = self.stars + background
 
@@ -231,9 +234,9 @@ class WakePhase(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         return {"val_loss": outputs[-1]["val_loss"]}
 
-    def _plot_stars(self, locs, fluxes, n_stars, psf):
-        self.stars = decoder.render_multiple_stars(
-            self.slen, locs, n_stars, psf, fluxes, self.cached_grid
+    def _plot_stars(self, n_stars, locs, fluxes):
+        self.stars = self.image_decoder.render_multiple_stars(
+            self.slen, n_stars, locs, fluxes, self.cached_grid
         )
 
     def _get_init_background(self, sample_every=25):
