@@ -40,15 +40,15 @@ def get_trained_encoder(
         background,
     )
 
-    decoder_kwargs = dict(
-        slen=slen,
-        n_bands=n_bands,
-        max_sources=max_stars,
-        mean_sources=mean_stars,
-        min_sources=min_stars,
-        f_min=f_min,
-        prob_galaxy=prob_galaxy,
-    )
+    decoder_kwargs = {
+        "slen": slen,
+        "n_bands": n_bands,
+        "max_sources": max_stars,
+        "mean_sources": mean_stars,
+        "min_sources": min_stars,
+        "f_min": f_min,
+        "prob_galaxy": prob_galaxy,
+    }
 
     n_batches = int(n_images / batch_size)
     dataset = bliss.datasets.simulated.SimulatedDataset(

@@ -4,7 +4,7 @@ import torch
 from pytorch_lightning.profiler import AdvancedProfiler
 
 from bliss import use_cuda
-from bliss.models.decoder import get_fitted_powerlaw_psf, get_galaxy_decoder
+from bliss.datasets.simulated import SimulatedDataset
 
 
 def pytest_addoption(parser):
@@ -106,7 +106,7 @@ def gpus(pytestconfig):
 @pytest.fixture(scope="session")
 def single_band_fitted_powerlaw_psf(data_path):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-    return get_fitted_powerlaw_psf(psf_file)[None, 0, ...]
+    return SimulatedDataset.get_fitted_powerlaw_psf(psf_file)[None, 0, ...]
 
 
 @pytest.fixture(scope="session")

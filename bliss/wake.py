@@ -173,7 +173,7 @@ class WakePhase(pl.LightningModule):
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
         background = self.get_background()
-        stars = self._plot_stars(locs_sampled, fluxes_sampled, n_stars_sampled)
+        stars = self._plot_stars(locs_sampled, fluxes_sampled, n_stars_sampled, psf)
 
         recon_mean = stars + background
 
