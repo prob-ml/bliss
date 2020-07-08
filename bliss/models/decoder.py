@@ -1,4 +1,5 @@
 import numpy as np
+import inspect
 import warnings
 
 import torch
@@ -497,15 +498,23 @@ class SimulatedDataset(IterableDataset):
             "background": self.image_decoder.background,
         }
 
-    # TODO: finish adding these methods.
-    # @classmethod
-    # def from_args(cls, decoder_args, args):
-    #     args_dict = vars(args)
-    #     parameters = inspect.signature(ImageDecoder).parameters
-    #     decoder_kwargs = {
-    #         param: value for param, value in args_dict.items() if param in parameters
-    #     }
-    #     return cls(*decoder_args, **decoder_kwargs)
+    @classmethod
+    def from_args(cls, args, decoder_args: dict):
+        args_dict = vars(args)
+        parameters = inspect.signature(ImageDecoder).parameters
+
+        decoder_kwargs = [param for param in parameters if param not in decoder_args]
+        decoder_kwargs = {
+            param: value
+            for param, value in args_dict.items()
+            if param in decoder_kwargs
+        }
+        decoder_args = list(decoder_args.values())
+        return cls(*decoder_args, **decoder_kwargs)
+
+    @staticmethod
+    def decoder_args_from_files(galaxy_decoder_file, background_file, psf_file):
+        pass
 
     # def setup_dataset(args, paths):
     #     decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
