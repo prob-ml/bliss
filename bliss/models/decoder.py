@@ -12,27 +12,6 @@ from . import galaxy_net
 from .encoder import get_is_on_from_n_sources
 
 
-def _sample_n_sources(
-    mean_sources, min_sources, max_sources, batch_size=1, draw_poisson=True
-):
-    """
-    Return tensor of size batch_size.
-    :return: A tensor with shape = (batch_size)
-    """
-    if draw_poisson:
-        m = Poisson(torch.full((1,), mean_sources, dtype=torch.float, device=device))
-        n_sources = m.sample([batch_size])
-    else:
-        categorical_param = torch.full(
-            (1,), max_sources - min_sources, dtype=torch.float, device=device
-        )
-        m = Categorical(categorical_param)
-        n_sources = m.sample([batch_size]) + min_sources
-
-    # long() here is necessary because used for indexing and one_hot encoding.
-    return n_sources.clamp(max=max_sources, min=min_sources).long().squeeze(1)
-
-
 def _sample_locs(
     max_sources, is_on_array, batch_size, locs_min=0.0, locs_max=1.0,
 ):
@@ -340,19 +319,27 @@ class ImageDecoder(object):
         return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     def _sample_n_sources(self, batch_size):
-        # sample number of sources
-        n_sources = _sample_n_sources(
-            self.mean_sources,
-            self.min_sources,
-            self.max_sources,
-            batch_size,
-            draw_poisson=self.draw_poisson,
-        )
 
-        # multiply by zero where they are no sources (all 1s up front each row)
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
+        if self.draw_poisson:
+            m = Poisson(
+                torch.full((1,), self.mean_sources, dtype=torch.float, device=device)
+            )
+            n_sources = m.sample([batch_size])
 
-        return n_sources, is_on_array
+        else:
+            categorical_param = torch.full(
+                (1,),
+                self.max_sources - self.min_sources,
+                dtype=torch.float,
+                device=device,
+            )
+            m = Categorical(categorical_param)
+            n_sources = m.sample([batch_size]) + self.min_sources
+
+        # long() here is necessary because used for indexing and one_hot encoding.
+        n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
+        n_sources = n_sources.long().squeeze(1)
+        return n_sources
 
     def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
         batch_size = n_sources.size(0)
@@ -436,7 +423,9 @@ class ImageDecoder(object):
         return galaxy_params, single_galaxies
 
     def sample_parameters(self, batch_size=1):
-        n_sources, is_on_array = self._sample_n_sources(batch_size)
+        n_sources = self._sample_n_sources(batch_size)
+
+        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
 
         locs = _sample_locs(
             self.max_sources,
