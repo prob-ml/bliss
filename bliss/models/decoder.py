@@ -12,17 +12,6 @@ from . import galaxy_net
 from .encoder import get_is_on_from_n_sources
 
 
-def _get_grid(slen, cached_grid=None):
-    if cached_grid is None:
-        grid = get_mgrid(slen)
-    else:
-        assert cached_grid.shape[0] == slen
-        assert cached_grid.shape[1] == slen
-        grid = cached_grid
-
-    return grid
-
-
 def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
