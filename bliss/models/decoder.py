@@ -312,16 +312,20 @@ class SourceSimulator(object):
         self.mean_sources = mean_sources
         self.min_sources = min_sources
         self.prob_galaxy = float(prob_galaxy)
+        self.all_stars = self.prob_galaxy == 0.0
 
         self.draw_poisson = draw_poisson
         self.add_noise = add_noise
         self.cached_grid = get_mgrid(self.slen)
 
-        # galaxy parameters
-        self.galaxy_decoder = galaxy_decoder
-        self.galaxy_slen = self.galaxy_decoder.slen
-        self.latent_dim = self.galaxy_decoder.latent_dim
-        assert self.galaxy_decoder.n_bands == self.n_bands
+        if self.all_stars:
+            self.galaxy_decoder = None
+            self.latent_dim = 1
+        else:
+            self.galaxy_decoder = galaxy_decoder
+            self.galaxy_slen = self.galaxy_decoder.slen
+            self.latent_dim = self.galaxy_decoder.latent_dim
+            assert self.galaxy_decoder.n_bands == self.n_bands
 
         # prior parameters
         self.f_min = f_min
@@ -470,9 +474,16 @@ class SourceSimulator(object):
         )
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
-        galaxy_params, single_galaxies = self._sample_galaxy_params_and_single_images(
-            n_sources, galaxy_bool
-        )
+        if self.all_stars:
+            galaxy_params = torch.zeros(
+                batch_size, self.max_sources, self.latent_dim, device=device
+            )
+            single_galaxies = None
+        else:
+            (
+                galaxy_params,
+                single_galaxies,
+            ) = self._sample_galaxy_params_and_single_images(n_sources, galaxy_bool)
 
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
         log_fluxes = self._get_log_fluxes(fluxes)
@@ -519,14 +530,18 @@ class SourceSimulator(object):
     def _draw_image_from_params(
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
-        # need n_sources because *_locs are not necessarily ordered.
-        galaxies = render_multiple_galaxies(
-            self.slen,
-            galaxy_locs,
-            n_sources,
-            single_galaxies,
-            cached_grid=self.cached_grid,
-        )
+
+        if self.all_stars:
+            galaxies = 0.0
+        else:
+            # need n_sources because *_locs are not necessarily ordered.
+            galaxies = render_multiple_galaxies(
+                self.slen,
+                galaxy_locs,
+                n_sources,
+                single_galaxies,
+                cached_grid=self.cached_grid,
+            )
         stars = render_multiple_stars(
             self.slen,
             star_locs,
