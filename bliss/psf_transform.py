@@ -25,17 +25,9 @@ def get_psf_params(psfield_fit_file, bands):
 
         # I think these parameters are constrained to be positive
         # take log; we will take exp later
-        psf_params[i] = torch.log(torch.Tensor([sigma1, sigma2, sigmap, beta, b, p0]))
+        psf_params[i] = torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]).log()
 
     return psf_params
-
-
-def psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
-    term1 = torch.exp(-(r ** 2) / (2 * sigma1))
-    term2 = b * torch.exp(-(r ** 2) / (2 * sigma2))
-    term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
-
-    return (term1 + term2 + term3) / (1 + b + p0)
 
 
 class PowerLawPSF(nn.Module):
@@ -60,19 +52,24 @@ class PowerLawPSF(nn.Module):
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = get_psf(
-                self.psf_slen, self.init_psf_params[i], self.cached_radii_grid
-            )
+            psf_i = self.get_psf(self.init_psf_params[i])
             self.normalization_constant[i] = 1 / psf_i.sum()
 
         # initial psf
         self.init_psf = self.get_psf()
         self.init_psf_sum = self.init_psf.sum(-1).sum(-1).detach()
 
+    @staticmethod
+    def psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
+        term1 = torch.exp(-(r ** 2) / (2 * sigma1))
+        term2 = b * torch.exp(-(r ** 2) / (2 * sigma2))
+        term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
+        return (term1 + term2 + term3) / (1 + b + p0)
+
     def get_psf_single_band(self, psf_params):
         assert (self.psf_slen % 2) == 1
         _psf_params = torch.exp(psf_params)
-        return psf_fun(
+        return self.psf_fun(
             self.cached_radii_grid,
             _psf_params[0],
             _psf_params[1],
@@ -84,25 +81,18 @@ class PowerLawPSF(nn.Module):
 
     def get_psf(self):
         # TODO make the psf function vectorized ...
+        psf = torch.tensor([])
         for i in range(self.n_bands):
             _psf = self.get_psf_single_band(self.params[i])
             _psf *= self.normalization_constant[i]
-
-            if i == 0:
-                psf = _psf.unsqueeze(0)
-            else:
-                psf = torch.cat((psf, _psf.unsqueeze(0)))
+            psf = torch.cat((psf, _psf.unsqueeze(0)))
 
         assert (psf > 0).all()
-
         return psf
 
     def forward(self):
         psf = self.get_psf()
-        psf = psf * (self.init_psf_sum / psf.sum(-1).sum(-1)).unsqueeze(-1).unsqueeze(
-            -1
-        )
-
+        norm = psf.sum(-1).sum(-1)
+        psf *= (self.init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
         l_pad = (self.image_slen - self.psf_slen) // 2
-
         return pad(psf, (l_pad,) * 4)
