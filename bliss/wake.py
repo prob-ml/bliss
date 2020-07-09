@@ -145,7 +145,7 @@ class WakePhase(pl.LightningModule):
         self.init_background = self.planar_background.forward()
 
     def forward(self):
-        return self.get_psf()
+        return self.power_law_psf.forward()
 
     # ---------------
     # Loss
@@ -249,6 +249,3 @@ class WakePhase(pl.LightningModule):
 
     def get_background(self):
         return self.planar_background.forward().unsqueeze(0)
-
-    def get_psf(self):
-        return self.power_law_psf.forward()
