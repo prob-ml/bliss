@@ -25,6 +25,7 @@ class PowerLawPSF(nn.Module):
         super(PowerLawPSF, self).__init__()
         assert len(init_psf_params.shape) == 2
         assert image_slen % 2 == 1, "image_slen must be odd"
+        assert (self.psf_slen % 2) == 1, "psf_slen must be odd"
 
         self.n_bands = init_psf_params.shape[0]
         self.init_psf_params = init_psf_params.clone()
@@ -56,7 +57,6 @@ class PowerLawPSF(nn.Module):
         return (term1 + term2 + term3) / (1 + b + p0)
 
     def get_psf_single_band(self, psf_params):
-        assert (self.psf_slen % 2) == 1
         _psf_params = torch.exp(psf_params)
         return self.psf_fun(
             self.cached_radii_grid,
@@ -84,4 +84,6 @@ class PowerLawPSF(nn.Module):
         norm = psf.sum(-1).sum(-1)
         psf *= (self.init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
         l_pad = (self.image_slen - self.psf_slen) // 2
+
+        # add padding so psf has length of image_slen
         return pad(psf, (l_pad,) * 4)
