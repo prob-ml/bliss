@@ -395,7 +395,7 @@ class ImageEncoder(nn.Module):
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
             ),
             # nn.LayerNorm((self.enc_conv_c, self.ptile_slen, self.ptile_slen),),
-            nn.BatchNorm2d(self.enc_conv_c, momentum=0.5, track_running_stats=True),
+            nn.BatchNorm2d(self.enc_conv_c, momentum=0.5),
             nn.ReLU(),
             nn.Conv2d(
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
@@ -405,21 +405,21 @@ class ImageEncoder(nn.Module):
                 self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
             ),
             # nn.LayerNorm((self.enc_conv_c, self.ptile_slen, self.ptile_slen),),
-            nn.BatchNorm2d(self.enc_conv_c, momentum=0.5, track_running_stats=True),
+            nn.BatchNorm2d(self.enc_conv_c, momentum=0.5),
             nn.ReLU(),
             Flatten(),
             nn.Linear(conv_out_dim, self.enc_hidden),
             #             nn.LayerNorm(self.enc_hidden),
             #             nn.Dropout(p=0.2),
-            nn.BatchNorm1d(self.enc_hidden, momentum=0.5, track_running_stats=True),
+            nn.BatchNorm1d(self.enc_hidden, momentum=0.5),
             nn.ReLU(),
             nn.Linear(self.enc_hidden, self.enc_hidden),
             #             nn.LayerNorm(self.enc_hidden),
-            nn.BatchNorm1d(self.enc_hidden, momentum=0.5, track_running_stats=True),
+            nn.BatchNorm1d(self.enc_hidden, momentum=0.5),
             nn.ReLU(),
             nn.Linear(self.enc_hidden, self.enc_hidden),
             #             nn.LayerNorm(self.enc_hidden),
-            nn.BatchNorm1d(self.enc_hidden, momentum=0.5, track_running_stats=True),
+            nn.BatchNorm1d(self.enc_hidden, momentum=0.5),
             nn.ReLU(),
         )
 

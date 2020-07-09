@@ -39,7 +39,7 @@ def trained_star_encoder_m2(
     background[1] = 1123.0
 
     # load SDSS PSF
-    psf_file = os.path.join(data_path, "psField-002583-2-0136.fit")
+    psf_file = os.path.join(data_path, "psField-002583-2-0136.fits")
     init_psf_params = psf_transform.get_psf_params(psf_file, bands=[2, 3])
     power_law_psf = psf_transform.PowerLawPSF(init_psf_params.to(device))
     psf_og = power_law_psf.forward().detach()
@@ -113,15 +113,15 @@ class TestStarSleepEncoderM2:
         trained_star_encoder_m2.eval()
 
         # load hubble parameters and SDSS image
-        hubble_data = np.load(os.path.join(data_path, "true_hubble_m2.npz"))
+        hubble_data = np.load(os.path.join(data_path, "true_hubble_m2.npy"))
 
         # the SDSS image
-        test_image = torch.Tensor(hubble_data["sdss_image"]).unsqueeze(0).to(device)
+        test_image = torch.from_numpy(hubble_data["sdss_image"]).unsqueeze(0).to(device)
 
         # the true parameters
-        true_locs = torch.Tensor(hubble_data["true_locs"]).to(device)
-        true_fluxes = torch.Tensor(hubble_data["true_fluxes"]).to(device)
-        nelec_per_nmgy = torch.Tensor(hubble_data["nelec_per_nmgy"]).to(device)
+        true_locs = torch.from_numpy(hubble_data["true_locs"]).to(device)
+        true_fluxes = torch.from_numpy(hubble_data["true_fluxes"]).to(device)
+        nelec_per_nmgy = torch.from_numpy(hubble_data["nelec_per_nmgy"]).to(device)
 
         # get estimated parameters
         (
