@@ -195,7 +195,9 @@ class TestStarWakePhase:
         # load the test image
         # 3-stars 30*30
         test_image = test_3_stars["images"]
-        star_dataset = get_star_dataset(data_path, device, slen=test_image.size(-1))
+        star_dataset = get_star_dataset(
+            fitted_psf, data_path, device, slen=test_image.size(-1)
+        )
 
         # initialization
         # initialize background params, which will create the true background
@@ -236,7 +238,15 @@ class TestStarWakePhase:
         wake_trainer.fit(wake_phase_model)
 
         estimate_psf_params = list(wake_phase_model.power_law_psf.parameters())[0]
-        estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
+        estimate_psf = (
+            psf_transform.PowerLawPSF(
+                estimate_psf_params,
+                image_slen=true_psf.size(-1),
+                psf_slen=true_psf.size(-1),
+            )
+            .forward()
+            .detach()
+        )
 
         init_psf = init_psf_setup["init_psf"]
         init_residuals = true_psf.to(device) - init_psf.to(device)
