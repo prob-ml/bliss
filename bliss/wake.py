@@ -126,9 +126,7 @@ class WakePhase(pl.LightningModule):
         # get psf
         psf_slen = self.slen + ((self.slen % 2) == 0) * 1
         self.init_psf_params = init_psf_params
-        self.power_law_psf = self.power_law_psf = PowerLawPSF(
-            self.init_psf_params, image_slen=psf_slen
-        )
+        self.power_law_psf = PowerLawPSF(self.init_psf_params, image_slen=psf_slen)
         self.init_psf = self.power_law_psf.forward().clone()
         self.psf = self.power_law_psf.forward()
 
