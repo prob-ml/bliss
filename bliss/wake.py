@@ -2,37 +2,14 @@ import torch
 import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader
+from torch.distributions.normal import Normal
 import pytorch_lightning as pl
 
 import numpy as np
 
-from .models import encoder
-from .models.decoder import get_mgrid
+from .models import decoder, encoder
 from .psf_transform import PowerLawPSF
 from bliss import device
-
-
-def _sample_image(observed_image, sample_every=10):
-    batch_size = observed_image.shape[0]
-    n_bands = observed_image.shape[1]
-    slen = observed_image.shape[-1]
-
-    samples = torch.zeros(
-        n_bands, int(np.floor(slen / sample_every)), int(np.floor(slen / sample_every))
-    )
-
-    for i in range(samples.shape[1]):
-        for j in range(samples.shape[2]):
-            x0 = i * sample_every
-            x1 = j * sample_every
-            samples[:, i, j] = (
-                observed_image[:, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)]
-                .reshape(batch_size, n_bands, -1)
-                .min(2)[0]
-                .mean(0)
-            )
-
-    return samples
 
 
 def _fit_plane_to_background(background):
@@ -43,7 +20,7 @@ def _fit_plane_to_background(background):
     planar_params = np.zeros((n_bands, 3))
     for i in range(n_bands):
         y = background[i].flatten().detach().cpu().numpy()
-        grid = get_mgrid(slen).detach().cpu().numpy()
+        grid = decoder.get_mgrid(slen).detach().cpu().numpy()
 
         x = np.ones((slen ** 2, 3))
         x[:, 1:] = np.array(
@@ -70,7 +47,7 @@ class PlanarBackground(nn.Module):
         self.image_slen = image_slen
 
         # get grid
-        _mgrid = get_mgrid(image_slen).to(device)
+        _mgrid = decoder.get_mgrid(image_slen).to(device)
         self.mgrid = torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
 
         # initial weights
@@ -93,7 +70,6 @@ class WakePhase(pl.LightningModule):
     def __init__(
         self,
         star_encoder,
-        image_decoder,
         observed_img,
         init_psf_params,
         init_background_params,
@@ -115,7 +91,6 @@ class WakePhase(pl.LightningModule):
         self.n_samples = self.hparams["n_samples"]
         self.lr = self.hparams["lr"]
         self.slen = observed_img.shape[-1]
-        assert self.image_decoder.slen == self.slen, "cached grid won't match."
 
         # get n_bands
         assert observed_img.shape[1] == init_psf_params.shape[0]
@@ -125,29 +100,20 @@ class WakePhase(pl.LightningModule):
         psf_slen = self.slen + ((self.slen % 2) == 0) * 1
         self.init_psf_params = init_psf_params
         self.power_law_psf = PowerLawPSF(self.init_psf_params, image_slen=psf_slen)
-        self.init_psf = self.power_law_psf.forward().clone()
         self.psf = self.power_law_psf.forward()
 
         # set up initial background parameters
-        if init_background_params is None:
-            self._get_init_background()
-        else:
-            assert init_background_params.shape[0] == self.n_bands
-            self.init_background_params = init_background_params
-            self.planar_background = PlanarBackground(
-                image_slen=self.slen, init_background_params=self.init_background_params
-            )
+        assert init_background_params is not None
+        assert init_background_params.shape[0] == self.n_bands
+        self.init_background_params = init_background_params
+        self.planar_background = PlanarBackground(
+            image_slen=self.slen, init_background_params=self.init_background_params
+        )
 
-        self.init_background = self.planar_background.forward()
+        self.cached_grid = decoder.get_mgrid(observed_img.shape[-1])
 
-    def forward(self):
-        return self.power_law_psf.forward()
+    def forward(self, obs_img, run_map=False):
 
-    # ---------------
-    # Loss
-    # ----------------
-
-    def get_wake_loss(self, obs_img, psf, n_samples, run_map=False):
         with torch.no_grad():
             self.star_encoder.eval()
             (
@@ -158,7 +124,7 @@ class WakePhase(pl.LightningModule):
                 galaxy_bool_sampled,
             ) = self.star_encoder.sample_encoder(
                 obs_img,
-                n_samples=n_samples,
+                n_samples=self.n_samples,
                 return_map_n_sources=run_map,
                 return_map_source_params=run_map,
             )
@@ -168,27 +134,19 @@ class WakePhase(pl.LightningModule):
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        background = self.get_background()
-        stars = self._plot_stars(n_stars_sampled, locs_sampled, fluxes_sampled, psf)
-
-        recon_mean = stars + background
-
-        error = 0.5 * ((obs_img - recon_mean) ** 2 / recon_mean) + 0.5 * torch.log(
-            recon_mean
+        background = self.planar_background.forward().unsqueeze(0)
+        self.stars = decoder.render_multiple_stars(
+            self.slen,
+            locs_sampled,
+            n_stars_sampled,
+            self.psf,
+            fluxes_sampled,
+            self.cached_grid,
         )
 
-        loss = (
-            error[
-                :,
-                :,
-                self.pad : (self.slen - self.pad),
-                self.pad : (self.slen - self.pad),
-            ]
-            .sum((1, 2, 3))
-            .mean()
-        )
+        recon_mean = self.stars + background
 
-        return loss
+        return recon_mean
 
     # ---------------
     # Data
@@ -213,35 +171,59 @@ class WakePhase(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
-        psf = self.forward()
-        loss = self.get_wake_loss(img, psf, self.n_samples, run_map=False)
+        recon_mean = self.forward(img)
+        error = Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
+
+        last = self.slen - self.pad
+        loss = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
         logs = {"train_loss": loss}
 
         return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
-        psf = self.forward()
-        loss_val = self.get_wake_loss(img, psf, 1, run_map=True)
+        recon_mean = self.forward()
+        error = Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
+
+        last = self.slen - self.pad
+        loss_val = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
 
         return {"val_loss": loss_val}
 
     def validation_epoch_end(self, outputs):
         return {"val_loss": outputs[-1]["val_loss"]}
 
-    def _plot_stars(self, n_stars, locs, fluxes, psf):
-        self.image_decoder.psf = psf
-        stars = self.image_decoder.render_multiple_stars(n_stars, locs, fluxes)
-        return stars
+    # def _get_init_background(self, sample_every=25):
+    #    sampled_background = self._sample_image(self.observed_img, sample_every)
+    #    self.init_background_params = torch.tensor(
+    #        _fit_plane_to_background(sampled_background)
+    #    ).to(device)
+    #    self.planar_background = PlanarBackground(
+    #        image_slen=self.slen, init_background_params=self.init_background_params
+    #    )
 
-    def _get_init_background(self, sample_every=25):
-        sampled_background = _sample_image(self.observed_img, sample_every)
-        self.init_background_params = torch.tensor(
-            _fit_plane_to_background(sampled_background)
-        ).to(device)
-        self.planar_background = PlanarBackground(
-            image_slen=self.slen, init_background_params=self.init_background_params
-        )
+    # def _sample_image(observed_image, sample_every=10):
+    #    batch_size = observed_image.shape[0]
+    #    n_bands = observed_image.shape[1]
+    #    slen = observed_image.shape[-1]
 
-    def get_background(self):
-        return self.planar_background.forward().unsqueeze(0)
+    #    samples = torch.zeros(
+    #        n_bands,
+    #        int(np.floor(slen / sample_every)),
+    #        int(np.floor(slen / sample_every)),
+    #    )
+
+    #    for i in range(samples.shape[1]):
+    #        for j in range(samples.shape[2]):
+    #            x0 = i * sample_every
+    #            x1 = j * sample_every
+    #            samples[:, i, j] = (
+    #                observed_image[
+    #                    :, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)
+    #                ]
+    #               .reshape(batch_size, n_bands, -1)
+    #                .min(2)[0]
+    #                .mean(0)
+    #            )
+
+    #    return samples
