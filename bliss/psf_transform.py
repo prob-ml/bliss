@@ -7,27 +7,16 @@ from .models import decoder
 from . import device
 
 
-def get_psf_params(psfield_fit_file, bands):
+def get_psf_params(psfield_fit_file, bands: list):
     psfield = fits.open(psfield_fit_file)
-
     psf_params = torch.zeros(len(bands), 6)
-
-    for i in range(len(bands)):
-        band = bands[i]
-
-        sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
-        sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
-        sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
-
-        beta = psfield[6].data["psf_beta"][0][band]
-        b = psfield[6].data["psf_b"][0][band]
-        p0 = psfield[6].data["psf_p0"][0][band]
-
-        # I think these parameters are constrained to be positive
-        # take log; we will take exp later
-        psf_params[i] = torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]).log()
-
-    return psf_params
+    psf_params[:, 0] = psfield[6]["psf_sigma1"][0][bands] ** 2
+    psf_params[:, 1] = psfield[6]["psf_sigma2"][0][bands] ** 2
+    psf_params[:, 2] = psfield[6]["psf_sigmap"][0][bands] ** 2
+    psf_params[:, 3] = psfield[6]["psf_beta"][0][bands]
+    psf_params[:, 4] = psfield[6]["psf_b"][0][bands]
+    psf_params[:, 5] = psfield[6]["psf_p0"][0][bands]
+    return psf_params.log()
 
 
 class PowerLawPSF(nn.Module):
@@ -47,12 +36,12 @@ class PowerLawPSF(nn.Module):
         self.cached_radii_grid = (grid ** 2).sum(2).sqrt().to(device)
 
         # initial weights
-        self.params = nn.Parameter(init_psf_params.clone())
+        self.params = nn.Parameter(init_psf_params.clone(), requires_grad=True)
 
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = self.get_psf(self.init_psf_params[i])
+            psf_i = self.get_psf_single_band(self.init_psf_params[i])
             self.normalization_constant[i] = 1 / psf_i.sum()
 
         # initial psf
