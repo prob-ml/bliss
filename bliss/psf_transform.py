@@ -70,7 +70,7 @@ class PowerLawPSF(nn.Module):
 
     def get_psf(self):
         # TODO make the psf function vectorized ...
-        psf = torch.tensor([])
+        psf = torch.tensor([]).to(device)
         for i in range(self.n_bands):
             _psf = self.get_psf_single_band(self.params[i])
             _psf *= self.normalization_constant[i]
