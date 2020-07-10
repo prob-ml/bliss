@@ -251,7 +251,7 @@ class ImageDecoder(object):
         galaxy_params = torch.zeros(
             batch_size, self.max_sources, self.latent_dim, device=device
         )
-        single_galaxies = None
+        single_galaxies = 0.0
         if not self.all_stars:
             (
                 galaxy_params,

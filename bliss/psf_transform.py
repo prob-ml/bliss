@@ -7,16 +7,25 @@ from .models import decoder
 from . import device
 
 
-def get_psf_params(psfield_fit_file, bands: list):
+def get_psf_params(psfield_fit_file, bands):
     psfield = fits.open(psfield_fit_file)
+
     psf_params = torch.zeros(len(bands), 6)
-    psf_params[:, 0] = psfield[6]["psf_sigma1"][0][bands] ** 2
-    psf_params[:, 1] = psfield[6]["psf_sigma2"][0][bands] ** 2
-    psf_params[:, 2] = psfield[6]["psf_sigmap"][0][bands] ** 2
-    psf_params[:, 3] = psfield[6]["psf_beta"][0][bands]
-    psf_params[:, 4] = psfield[6]["psf_b"][0][bands]
-    psf_params[:, 5] = psfield[6]["psf_p0"][0][bands]
-    return psf_params.log()
+
+    for i in range(len(bands)):
+        band = bands[i]
+
+        sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
+        sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
+        sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
+
+        beta = psfield[6].data["psf_beta"][0][band]
+        b = psfield[6].data["psf_b"][0][band]
+        p0 = psfield[6].data["psf_p0"][0][band]
+
+        psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
+
+    return psf_params
 
 
 class PowerLawPSF(nn.Module):

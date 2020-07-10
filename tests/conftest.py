@@ -134,7 +134,7 @@ def get_star_dataset(device):
         assert 1 <= n_bands <= 2
         assert len(psf.shape) == 3
 
-        dec_kwargs.update({"prob_galaxy": 0.0})
+        dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": n_bands, "slen": slen})
         background = torch.zeros(2, slen, slen, device=device)
         background[0] = 686.0
         background[1] = 1123.0
@@ -191,7 +191,8 @@ def get_trained_star_encoder(device, device_id, profiler, save_logs, logs_path):
         )
 
         sleep_trainer.fit(sleep_net)
-        return image_encoder
+        sleep_net.image_encoder.eval()
+        return sleep_net.image_encoder
 
     return trained_star_encoder
 
