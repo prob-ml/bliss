@@ -25,7 +25,7 @@ class PowerLawPSF(nn.Module):
         super(PowerLawPSF, self).__init__()
         assert len(init_psf_params.shape) == 2
         assert image_slen % 2 == 1, "image_slen must be odd"
-        assert (self.psf_slen % 2) == 1, "psf_slen must be odd"
+        assert (psf_slen % 2) == 1, "psf_slen must be odd"
 
         self.n_bands = init_psf_params.shape[0]
         self.init_psf_params = init_psf_params.clone()
