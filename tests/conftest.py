@@ -10,13 +10,6 @@ from bliss.models import galaxy_net, encoder
 
 
 def pytest_addoption(parser):
-    parser.addoption(
-        "--device-id",
-        action="store",
-        default=0,
-        type=int,
-        help="ID of cuda device to use.",
-    )
 
     parser.addoption(
         "--gpus", default="0,", type=str, help="--gpus option for trainer."
@@ -83,26 +76,24 @@ def save_logs(pytestconfig):
     return pytestconfig.getoption("log")
 
 
-# data and memory.
 @pytest.fixture(scope="session")
-def device_id(pytestconfig):
-    return pytestconfig.getoption("device_id")
+def gpus(pytestconfig):
+    gpus = pytestconfig.getoption("gpus")
+    if not use_cuda:
+        gpus = None
+
+    return gpus
 
 
 @pytest.fixture(scope="session")
-def device(device_id):
+def device(gpus):
+    device_id = gpus.split(",")
+    assert len(device_id) == 2 and device_id[1] == ""
+    device_id = int(gpus[0])
     new_device = torch.device(f"cuda:{device_id}" if use_cuda else "cpu")
     if use_cuda:
         torch.cuda.set_device(new_device)
     return new_device
-
-
-@pytest.fixture(scope="session")
-def gpus(pytestconfig):
-    if use_cuda:
-        return pytestconfig.getoption("gpus")
-    else:
-        return None
 
 
 @pytest.fixture(scope="session")
@@ -152,12 +143,11 @@ def get_star_dataset(device):
 
 
 @pytest.fixture(scope="session")
-def get_trained_star_encoder(device, device_id, profiler, save_logs, logs_path):
+def get_trained_star_encoder(device, gpus, profiler, save_logs, logs_path):
     def trained_star_encoder(
         star_dataset, n_epochs=100, enc_conv_c=5, enc_kern=3, enc_hidden=64
     ):
         n_epochs = n_epochs if use_cuda else 1
-        n_device = [device_id] if use_cuda else 0  # 0 means no gpu
 
         slen = star_dataset.slen
         n_bands = star_dataset.n_bands
@@ -182,7 +172,7 @@ def get_trained_star_encoder(device, device_id, profiler, save_logs, logs_path):
         )
 
         sleep_trainer = pl.Trainer(
-            gpus=n_device,
+            gpus=gpus,
             profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,

@@ -4,6 +4,7 @@ import torch
 import pytorch_lightning as pl
 
 from bliss import use_cuda, psf_transform, wake
+from bliss.models.decoder import get_mgrid
 
 
 class TestStarSleepEncoder:
@@ -68,33 +69,31 @@ class TestStarWakePhase:
 
         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 
-    @pytest.fixture(scope="class")
-    def trained_encoder(
-        self, init_psf_setup, get_star_dataset, get_trained_star_encoder,
+    @pytest.mark.only
+    def test_star_wake(
+        self,
+        get_trained_star_encoder,
+        get_star_dataset,
+        fitted_psf,
+        init_psf_setup,
+        test_3_stars,
+        device,
+        gpus,
+        profiler,
+        save_logs,
+        logs_path,
     ):
+        # get dataset and encoder
         star_dataset = get_star_dataset(
             init_psf_setup["init_psf"],
             n_bands=1,
             slen=50,
             batch_size=32,
-            n_images=64 * 6,
+            n_images=64 * 6 if use_cuda else 32,
         )
         n_epochs = 200 if use_cuda else 1
         trained_encoder = get_trained_star_encoder(star_dataset, n_epochs=n_epochs)
-        return trained_encoder
 
-    def test_star_wake(
-        self,
-        trained_encoder,
-        fitted_psf,
-        init_psf_setup,
-        test_3_stars,
-        device,
-        device_id,
-        profiler,
-        save_logs,
-        logs_path,
-    ):
         # load the test image
         # 3-stars 30*30
         test_image = test_3_stars["images"]
@@ -109,8 +108,12 @@ class TestStarWakePhase:
 
         n_samples = 1000 if use_cuda else 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
+        image_decoder = star_dataset.image_decoder
+        image_decoder.slen = test_image.size(-1)
+        image_decoder.cached_grid = get_mgrid((test_image.size(-1)))
         wake_phase_model = wake.WakePhase(
             trained_encoder,
+            star_dataset.image_decoder,
             test_image,
             init_psf_params,
             init_background_params,
@@ -121,11 +124,8 @@ class TestStarWakePhase:
         # run the wake-phase training
         n_epochs = 2800 if use_cuda else 1
 
-        # runs on gpu or cpu?
-        device_num = [device_id] if use_cuda else 0  # 0 means no gpu
-
         wake_trainer = pl.Trainer(
-            gpus=device_num,
+            gpus=gpus,
             profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
