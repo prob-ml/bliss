@@ -61,6 +61,7 @@ class SimulatedDataset(IterableDataset):
 
     @staticmethod
     def get_gal_decoder_from_file(decoder_file, slen, n_bands, latent_dim):
+        # TODO: galaxy slen is separate
         dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
         dec.load_state_dict(torch.load(decoder_file, map_location=device))
         dec.eval()

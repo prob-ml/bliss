@@ -3,63 +3,19 @@ import pytest
 import torch
 import pytorch_lightning as pl
 
-from bliss import use_cuda, psf_transform, wake, sleep
-from bliss.models import encoder
-
-
-def get_trained_encoder(
-    star_dataset, device, device_id, profiler, save_logs, logs_path,
-):
-
-    n_epochs = 100 if use_cuda else 1
-    n_device = [device_id] if use_cuda else 0  # 0 means no gpu
-
-    slen = star_dataset.slen
-    n_bands = star_dataset.n_bands
-    latent_dim = star_dataset.image_decoder.latent_dim
-
-    # setup Star Encoder
-    image_encoder = encoder.ImageEncoder(
-        slen=slen,
-        ptile_slen=8,
-        step=2,
-        edge_padding=3,
-        n_bands=n_bands,
-        max_detections=2,
-        n_galaxy_params=latent_dim,
-        enc_conv_c=5,
-        enc_kern=3,
-        enc_hidden=64,
-    ).to(device)
-
-    # training wrapper
-    sleep_net = sleep.SleepPhase(
-        dataset=star_dataset, image_encoder=image_encoder, save_logs=save_logs
-    )
-
-    sleep_trainer = pl.Trainer(
-        gpus=n_device,
-        profiler=profiler,
-        min_epochs=n_epochs,
-        max_epochs=n_epochs,
-        reload_dataloaders_every_epoch=True,
-        default_root_dir=logs_path,
-    )
-
-    sleep_trainer.fit(sleep_net)
-
-    return sleep_net.image_encoder
+from bliss import use_cuda, psf_transform, wake
 
 
 class TestStarSleepEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self, star_dataset, device, device_id, profiler, save_logs, logs_path,
+        self, fitted_psf, get_star_dataset, get_trained_star_encoder,
     ):
-        return get_trained_encoder(
-            star_dataset, device, device_id, profiler, save_logs, logs_path,
-        )
+        star_dataset = get_star_dataset(fitted_psf, n_bands=1, slen=50, batch_size=32)
+        trained_encoder = get_trained_star_encoder(star_dataset, n_epochs=1)
+        return trained_encoder
 
+    # @pytest.mark.only
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))

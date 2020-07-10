@@ -8,7 +8,6 @@ import numpy as np
 
 from bliss import use_cuda, sleep
 from bliss.models import decoder, encoder
-from bliss.datasets import simulated
 
 from bliss import psf_transform
 from bliss import image_statistics

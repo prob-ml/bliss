@@ -1,10 +1,12 @@
 import pytest
 import pathlib
 import torch
+import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 
-from bliss import use_cuda
+from bliss import use_cuda, sleep
 from bliss.datasets.simulated import SimulatedDataset
+from bliss.models import galaxy_net, encoder
 
 
 def pytest_addoption(parser):
@@ -104,10 +106,91 @@ def gpus(pytestconfig):
 
 
 @pytest.fixture(scope="session")
+def galaxy_decoder(data_path):
+    slen = 51
+    latent_dim = 8
+    n_bands = 1
+    decoder_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
+    dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
+    dec.load_state_dict(torch.load(decoder_file, map_location=device))
+    dec.eval()
+    return dec
+
+
+@pytest.fixture(scope="session")
 def fitted_psf(data_path):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-    psf = SimulatedDataset.get_psf_from_file(psf_file)[None, 0, ...]
+    psf = SimulatedDataset.get_psf_from_file(psf_file)
+    assert psf.size(0) == 2
+    assert len(psf.shape) == 3
     return psf
+
+
+@pytest.fixture(scope="session")
+def get_star_dataset():
+    def star_dataset(
+        psf, batch_size=32, n_images=128, n_bands=1, slen=50, **dec_kwargs
+    ):
+        assert 1 <= n_bands <= 2
+        assert len(psf.shape) == 3
+
+        dec_kwargs.update({"prob_galaxy": 0.0})
+        background = torch.zeros(2, slen, slen, device=device)
+        background[0] = 686.0
+        background[1] = 1123.0
+
+        # slice if necessary.
+        background = background[range(n_bands)]
+        psf = psf[range(n_bands)]
+
+        dec_args = (None, psf, background)
+
+        n_batches = int(n_images / batch_size)
+        return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
+
+    return star_dataset
+
+
+@pytest.fixture(scope="session")
+def get_trained_star_encoder(device, device_id, profiler, save_logs, logs_path):
+    def trained_star_encoder(star_dataset, n_epochs=100):
+        n_epochs = n_epochs if use_cuda else 1
+        n_device = [device_id] if use_cuda else 0  # 0 means no gpu
+
+        slen = star_dataset.slen
+        n_bands = star_dataset.n_bands
+        latent_dim = star_dataset.image_decoder.latent_dim
+
+        # setup Star Encoder
+        image_encoder = encoder.ImageEncoder(
+            slen=slen,
+            ptile_slen=8,
+            step=2,
+            edge_padding=3,
+            n_bands=n_bands,
+            max_detections=2,
+            n_galaxy_params=latent_dim,
+            enc_conv_c=5,
+            enc_kern=3,
+            enc_hidden=64,
+        ).to(device)
+
+        sleep_net = sleep.SleepPhase(
+            dataset=star_dataset, image_encoder=image_encoder, save_logs=save_logs
+        )
+
+        sleep_trainer = pl.Trainer(
+            gpus=n_device,
+            profiler=profiler,
+            min_epochs=n_epochs,
+            max_epochs=n_epochs,
+            reload_dataloaders_every_epoch=True,
+            default_root_dir=logs_path,
+        )
+
+        sleep_trainer.fit(sleep_net)
+
+    return trained_star_encoder
 
 
 @pytest.fixture(scope="session")
