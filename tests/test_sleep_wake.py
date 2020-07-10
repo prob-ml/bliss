@@ -69,7 +69,6 @@ class TestStarWakePhase:
 
         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 
-    @pytest.mark.only
     def test_star_wake(
         self,
         get_trained_star_encoder,
