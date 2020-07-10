@@ -89,11 +89,11 @@ def gpus(pytestconfig):
 def device(gpus):
     new_device = torch.device("cpu")
     if gpus and use_cuda:
-        torch.cuda.set_device(new_device)
         device_id = gpus.split(",")
         assert len(device_id) == 2 and device_id[1] == ""
         device_id = int(gpus[0])
         new_device = torch.device(f"cuda:{device_id}")
+        torch.cuda.set_device(new_device)
 
     return new_device
 
