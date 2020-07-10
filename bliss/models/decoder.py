@@ -52,10 +52,9 @@ class ImageDecoder(object):
 
         self.add_noise = add_noise
 
-        if self.all_stars:
-            self.galaxy_decoder = None
-            self.latent_dim = 1
-        else:
+        self.galaxy_decoder = None
+        self.latent_dim = 1
+        if not self.all_stars:
             self.galaxy_decoder = galaxy_decoder
             self.galaxy_slen = self.galaxy_decoder.slen
             self.latent_dim = self.galaxy_decoder.latent_dim

@@ -127,7 +127,7 @@ def fitted_psf(data_path):
 
 
 @pytest.fixture(scope="session")
-def get_star_dataset():
+def get_star_dataset(device):
     def star_dataset(
         psf, batch_size=32, n_images=128, n_bands=1, slen=50, **dec_kwargs
     ):
@@ -153,7 +153,9 @@ def get_star_dataset():
 
 @pytest.fixture(scope="session")
 def get_trained_star_encoder(device, device_id, profiler, save_logs, logs_path):
-    def trained_star_encoder(star_dataset, n_epochs=100):
+    def trained_star_encoder(
+        star_dataset, n_epochs=100, enc_conv_c=5, enc_kern=3, enc_hidden=64
+    ):
         n_epochs = n_epochs if use_cuda else 1
         n_device = [device_id] if use_cuda else 0  # 0 means no gpu
 
@@ -170,9 +172,9 @@ def get_trained_star_encoder(device, device_id, profiler, save_logs, logs_path):
             n_bands=n_bands,
             max_detections=2,
             n_galaxy_params=latent_dim,
-            enc_conv_c=5,
-            enc_kern=3,
-            enc_hidden=64,
+            enc_conv_c=enc_conv_c,
+            enc_kern=enc_kern,
+            enc_hidden=enc_hidden,
         ).to(device)
 
         sleep_net = sleep.SleepPhase(
