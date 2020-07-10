@@ -376,7 +376,7 @@ class ImageDecoder(object):
             galaxies = self.render_multiple_galaxies(
                 galaxy_locs, n_sources, single_galaxies,
             )
-        stars = self.render_multiple_stars(star_locs, n_sources, fluxes,)
+        stars = self.render_multiple_stars(n_sources, star_locs, fluxes)
 
         # shape = (n_images x n_bands x slen x slen)
         images = galaxies + stars

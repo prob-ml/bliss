@@ -191,6 +191,7 @@ def get_trained_star_encoder(device, device_id, profiler, save_logs, logs_path):
         )
 
         sleep_trainer.fit(sleep_net)
+        return image_encoder
 
     return trained_star_encoder
 
