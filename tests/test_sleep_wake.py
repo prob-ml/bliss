@@ -60,7 +60,6 @@ class TestStarSleepEncoder:
             star_dataset, device, device_id, profiler, save_logs, logs_path,
         )
 
-    @pytest.mark.only
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
