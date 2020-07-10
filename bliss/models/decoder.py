@@ -372,7 +372,6 @@ class ImageDecoder(object):
         self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
     ):
 
-<<<<<<< HEAD
         galaxies = 0.0
         if not self.all_stars:
             # need n_sources because *_locs are not necessarily ordered.
@@ -380,13 +379,6 @@ class ImageDecoder(object):
                 galaxy_locs, n_sources, single_galaxies,
             )
         stars = self.render_multiple_stars(star_locs, n_sources, fluxes,)
-=======
-        # need n_sources because *_locs are not necessarily ordered.
-        galaxies = self.render_multiple_galaxies(
-            n_sources, galaxy_locs, single_galaxies
-        )
-        stars = self.render_multiple_stars(n_sources, star_locs, fluxes)
->>>>>>> resolving errors in wake.py
 
         # shape = (n_images x n_bands x slen x slen)
         images = galaxies + stars

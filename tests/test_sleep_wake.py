@@ -5,52 +5,10 @@ import pytorch_lightning as pl
 
 from bliss import use_cuda, psf_transform, wake, sleep
 from bliss.models import encoder
-from bliss.datasets.simulated import SimulatedDataset
-
-
-def get_star_dataset(psf, data_path, device, slen=50):
-    decoder_state_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
-
-    n_bands = 1
-    max_stars = 20
-    mean_stars = 15
-    min_stars = 5
-    f_min = 1e4
-    n_images = 128
-    batch_size = 32
-    prob_galaxy = 0.0
-    n_batches = int(n_images / batch_size)
-
-    galaxy_decoder = SimulatedDataset.get_gal_decoder_from_file(
-        decoder_state_file, slen=51, n_bands=1, latent_dim=8
-    )
-    background = torch.zeros(n_bands, slen, slen, device=device)
-    background.fill_(686.0)
-
-    decoder_args = (
-        galaxy_decoder,
-        psf,
-        background,
-    )
-
-    decoder_kwargs = {
-        "slen": slen,
-        "n_bands": n_bands,
-        "max_sources": max_stars,
-        "mean_sources": mean_stars,
-        "min_sources": min_stars,
-        "f_min": f_min,
-        "prob_galaxy": prob_galaxy,
-    }
-
-    assert galaxy_decoder.n_bands == psf.size(0) == n_bands
-    star_dataset = SimulatedDataset(n_batches, batch_size, decoder_args, decoder_kwargs)
-
-    return star_dataset
 
 
 def get_trained_encoder(
-    star_dataset, device, device_id, profiler, save_logs, logs_path
+    star_dataset, device, device_id, profiler, save_logs, logs_path,
 ):
 
     n_epochs = 100 if use_cuda else 1
@@ -96,14 +54,13 @@ def get_trained_encoder(
 class TestStarSleepEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self, fitted_psf, device, device_id, profiler, save_logs, data_path, logs_path,
+        self, star_dataset, device, device_id, profiler, save_logs, logs_path,
     ):
-        star_dataset = get_star_dataset(fitted_psf, data_path, device, slen=50)
-
         return get_trained_encoder(
-            star_dataset, device, device_id, profiler, save_logs, logs_path
+            star_dataset, device, device_id, profiler, save_logs, logs_path,
         )
 
+    @pytest.mark.only
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
@@ -160,22 +117,17 @@ class TestStarWakePhase:
     @pytest.fixture(scope="class")
     def trained_encoder(
         self,
+        star_dataset,
         init_psf_setup,
-        test_3_stars,
         device,
         device_id,
         profiler,
         save_logs,
-        data_path,
         logs_path,
     ):
-        slen = test_3_stars["images"].size(-1)
-        star_dataset = get_star_dataset(
-            init_psf_setup["init_psf"], data_path, device, slen=slen
-        )
-
+        star_dataset.image_decoder.psf = init_psf_setup["init_psf"]
         return get_trained_encoder(
-            star_dataset, device, device_id, profiler, save_logs, logs_path
+            star_dataset, device, device_id, profiler, save_logs, logs_path,
         )
 
     def test_star_wake(
@@ -188,7 +140,6 @@ class TestStarWakePhase:
         device_id,
         profiler,
         save_logs,
-        data_path,
         logs_path,
     ):
         # load the test image
@@ -204,19 +155,18 @@ class TestStarWakePhase:
         init_background_params[0, 0] = 686.0
 
         # initialize psf params, just add 4 to each sigmas
-        true_psf = fitted_psf
+        true_psf = single_band_fitted_powerlaw_psf.clone()
         init_psf_params = init_psf_setup["init_psf_params"]
 
         n_samples = 1000 if use_cuda else 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
         wake_phase_model = wake.WakePhase(
             trained_encoder,
-            star_dataset.image_decoder,
             test_image,
             init_psf_params,
             init_background_params,
             hparams,
-            save_logs=save_logs,
+            save_logs,
         )
 
         # run the wake-phase training
@@ -237,15 +187,7 @@ class TestStarWakePhase:
         wake_trainer.fit(wake_phase_model)
 
         estimate_psf_params = list(wake_phase_model.power_law_psf.parameters())[0]
-        estimate_psf = (
-            psf_transform.PowerLawPSF(
-                estimate_psf_params,
-                image_slen=true_psf.size(-1),
-                psf_slen=true_psf.size(-1),
-            )
-            .forward()
-            .detach()
-        )
+        estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
 
         init_psf = init_psf_setup["init_psf"]
         init_residuals = true_psf.to(device) - init_psf.to(device)
