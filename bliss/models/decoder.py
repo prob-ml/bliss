@@ -121,9 +121,9 @@ class ImageDecoder(object):
         # first dimension of psf is number of bands
         # dimension of the psf/slen should be odd
         psf_slen = psf.shape[2]
+        assert len(psf.shape) == 3
         assert psf.shape[1] == psf_slen
         assert (psf_slen % 2) == 1
-        assert len(psf.shape) == 3
         assert self.background.shape[0] == psf.shape[0] == self.n_bands
 
         self._psf = psf
@@ -131,16 +131,6 @@ class ImageDecoder(object):
             self._expand_psf()
         else:
             self._trim_psf()
-
-    def _pareto_cdf(self, x):
-        return 1 - (self.f_min / x) ** self.alpha
-
-    def _draw_pareto_maxed(self, shape):
-        # draw pareto conditioned on being less than f_max
-
-        u_max = self._pareto_cdf(self.f_max)
-        uniform_samples = torch.rand(*shape, device=device) * u_max
-        return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     def _sample_n_sources(self, batch_size):
         # always poisson distributed.
@@ -174,6 +164,16 @@ class ImageDecoder(object):
         n_stars = star_bool.sum(1)
 
         return n_galaxies, n_stars, galaxy_bool, star_bool
+
+    def _pareto_cdf(self, x):
+        return 1 - (self.f_min / x) ** self.alpha
+
+    def _draw_pareto_maxed(self, shape):
+        # draw pareto conditioned on being less than f_max
+
+        u_max = self._pareto_cdf(self.f_max)
+        uniform_samples = torch.rand(*shape, device=device) * u_max
+        return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     @staticmethod
     def _get_log_fluxes(fluxes):
@@ -249,12 +249,11 @@ class ImageDecoder(object):
         )
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
-        if self.all_stars:
-            galaxy_params = torch.zeros(
-                batch_size, self.max_sources, self.latent_dim, device=device
-            )
-            single_galaxies = None
-        else:
+        galaxy_params = torch.zeros(
+            batch_size, self.max_sources, self.latent_dim, device=device
+        )
+        single_galaxies = None
+        if not self.all_stars:
             (
                 galaxy_params,
                 single_galaxies,

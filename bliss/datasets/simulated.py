@@ -103,6 +103,8 @@ class SimulatedDataset(IterableDataset):
         background = SimulatedDataset.get_background_from_file(
             background_file, slen, n_bands
         )
+
+        # TODO: adjust to correct number of bands.
         psf = SimulatedDataset.get_psf_from_file(psf_file)
 
         return dec, psf, background

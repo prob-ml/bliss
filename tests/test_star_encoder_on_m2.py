@@ -3,13 +3,12 @@ import pytest
 import os
 
 import pytorch_lightning as pl
-from pytorch_lightning.profiler import AdvancedProfiler
 
 import numpy as np
 
-from bliss import device, use_cuda
-from bliss import use_cuda, psf_transform, wake, sleep
+from bliss import use_cuda, sleep
 from bliss.models import decoder, encoder
+from bliss.datasets import simulated
 
 from bliss import psf_transform
 from bliss import image_statistics
