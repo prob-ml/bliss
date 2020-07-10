@@ -178,7 +178,6 @@ class TestStarWakePhase:
             star_dataset, device, device_id, profiler, save_logs, logs_path
         )
 
-    @pytest.mark.only
     def test_star_wake(
         self,
         trained_encoder,
