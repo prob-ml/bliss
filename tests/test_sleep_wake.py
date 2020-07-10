@@ -15,7 +15,6 @@ class TestStarSleepEncoder:
         trained_encoder = get_trained_star_encoder(star_dataset, n_epochs=100)
         return trained_encoder
 
-    @pytest.mark.only
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
@@ -71,19 +70,18 @@ class TestStarWakePhase:
 
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self,
-        star_dataset,
-        init_psf_setup,
-        device,
-        device_id,
-        profiler,
-        save_logs,
-        logs_path,
+        self, init_psf_setup, get_star_dataset, get_trained_star_encoder,
     ):
-        star_dataset.image_decoder.psf = init_psf_setup["init_psf"]
-        return get_trained_encoder(
-            star_dataset, device, device_id, profiler, save_logs, logs_path,
+        star_dataset = get_star_dataset(
+            init_psf_setup["init_psf"],
+            n_bands=1,
+            slen=50,
+            batch_size=32,
+            n_images=64 * 6,
         )
+        n_epochs = 200 if use_cuda else 1
+        trained_encoder = get_trained_star_encoder(star_dataset, n_epochs=n_epochs)
+        return trained_encoder
 
     def test_star_wake(
         self,
@@ -100,17 +98,13 @@ class TestStarWakePhase:
         # load the test image
         # 3-stars 30*30
         test_image = test_3_stars["images"]
-        star_dataset = get_star_dataset(
-            fitted_psf, data_path, device, slen=test_image.size(-1)
-        )
 
-        # initialization
         # initialize background params, which will create the true background
         init_background_params = torch.zeros(1, 3, device=device)
         init_background_params[0, 0] = 686.0
 
         # initialize psf params, just add 4 to each sigmas
-        true_psf = single_band_fitted_powerlaw_psf.clone()
+        true_psf = fitted_psf[None, 0].clone()
         init_psf_params = init_psf_setup["init_psf_params"]
 
         n_samples = 1000 if use_cuda else 1
@@ -146,7 +140,6 @@ class TestStarWakePhase:
 
         init_psf = init_psf_setup["init_psf"]
         init_residuals = true_psf.to(device) - init_psf.to(device)
-
         estimate_residuals = true_psf.to(device) - estimate_psf.to(device)
 
         if not use_cuda:
