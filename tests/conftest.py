@@ -135,7 +135,7 @@ def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
 
 
 @pytest.fixture(scope="session")
-def get_trained_encoder(device, gpus, profiler, save_logs, logs_path):
+def get_trained_encoder(device, gpus):
     def trained_encoder(
         dataset,
         n_epochs=100,
