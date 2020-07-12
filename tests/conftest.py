@@ -103,7 +103,7 @@ def galaxy_decoder(data_path):
     slen = 51
     latent_dim = 8
     n_bands = 1
-    decoder_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
+    decoder_file = data_path.joinpath("galaxy_decoder_1_band.dat")
     dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
     dec.load_state_dict(torch.load(decoder_file, map_location=device))
     dec.eval()
