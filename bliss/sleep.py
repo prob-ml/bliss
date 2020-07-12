@@ -251,8 +251,8 @@ class SleepPhase(pl.LightningModule):
         loss_vec = (
             locs_loss * (locs_loss.detach() < 1e6).float()
             + counter_loss
-            + galaxy_params_loss
-            + star_params_loss
+            # + galaxy_params_loss
+            # + star_params_loss
             + galaxy_bool_loss
         )
 

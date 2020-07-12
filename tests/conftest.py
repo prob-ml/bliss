@@ -175,6 +175,7 @@ def get_trained_encoder(device, gpus, profiler, save_logs, logs_path):
         enc_conv_c=5,
         enc_kern=3,
         enc_hidden=64,
+        max_detections=2,
     ):
         n_epochs = n_epochs if use_cuda else 1
 
@@ -189,7 +190,7 @@ def get_trained_encoder(device, gpus, profiler, save_logs, logs_path):
             step=step,
             edge_padding=edge_padding,
             n_bands=n_bands,
-            max_detections=2,
+            max_detections=max_detections,
             n_galaxy_params=latent_dim,
             enc_conv_c=enc_conv_c,
             enc_kern=enc_kern,
