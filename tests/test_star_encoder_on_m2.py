@@ -1,18 +1,9 @@
 import torch
 import pytest
 import os
-
-import pytorch_lightning as pl
-from pytorch_lightning.profiler import AdvancedProfiler
-
 import numpy as np
 
-from bliss import device, use_cuda
-from bliss import use_cuda, psf_transform, wake, sleep
-from bliss.models import decoder, encoder
-
-from bliss import psf_transform
-from bliss import image_statistics
+from bliss import use_cuda, psf_transform, image_statistics
 
 torch.manual_seed(84)
 np.random.seed(43)
@@ -20,94 +11,37 @@ np.random.seed(43)
 
 @pytest.fixture(scope="module")
 def trained_star_encoder_m2(
-    data_path, device, device_id, profiler, save_logs, logs_path
+    data_path, device, get_star_dataset, get_trained_star_encoder
 ):
-
-    # dataset parameters
-    n_bands = 2
-    max_stars = 2500
-    mean_stars = 1200
-    min_stars = 0
-    f_min = 1e3
-    f_max = 1000000
-    alpha = 0.5
-    slen = 100
-
-    # set background
-    background = torch.zeros(n_bands, slen, slen, device=device)
-    background[0] = 686.0
-    background[1] = 1123.0
 
     # load SDSS PSF
     psf_file = os.path.join(data_path, "psField-002583-2-0136.fits")
     init_psf_params = psf_transform.get_psf_params(psf_file, bands=[2, 3])
     power_law_psf = psf_transform.PowerLawPSF(init_psf_params.to(device))
     psf_og = power_law_psf.forward().detach()
-
-    # create simulated dataset
-    # simulate dataset
-    n_images = 200 if use_cuda else 4
-    simulator_args = (
-        None,
-        psf_og,
-        background,
-    )
-
-    simulator_kwargs = dict(
-        slen=slen,
-        n_bands=n_bands,
-        prob_galaxy=0.0,
-        max_sources=max_stars,
-        mean_sources=mean_stars,
-        min_sources=min_stars,
-        f_min=f_min,
-        f_max=f_max,
-        alpha=alpha,
-    )
-
-    batch_size = 20 if use_cuda else 4
-    n_batches = int(n_images / batch_size)
-    dataset = decoder.SimulatedDataset(
-        n_batches, batch_size, simulator_args, simulator_kwargs
-    )
-
-    # set up star encoder
-    star_encoder = encoder.ImageEncoder(
-        slen=slen,
-        ptile_slen=8,
-        step=2,
-        edge_padding=3,
-        n_bands=n_bands,
-        max_detections=2,
-        n_galaxy_params=dataset.simulator.latent_dim,
-        enc_conv_c=20,
-        enc_kern=3,
-        enc_hidden=256,
-    ).to(device)
-
-    # set up training module
-    # profiler = AdvancedProfiler(output_filename=sprof)
-    sleep_net = sleep.SleepPhase(
-        dataset=dataset, image_encoder=star_encoder, save_logs=save_logs
-    )
-    n_device = [device_id] if use_cuda else 0
     n_epochs = 200 if use_cuda else 1
-    sleep_trainer = pl.Trainer(
-        gpus=n_device,
-        profiler=profiler,
-        min_epochs=n_epochs,
-        max_epochs=n_epochs,
-        reload_dataloaders_every_epoch=True,
-        default_root_dir=logs_path,
+
+    star_dataset = get_star_dataset(
+        psf_og,
+        n_bands=2,
+        slen=100,
+        n_images=200 if use_cuda else 4,
+        batch_size=20 if use_cuda else 4,
+        max_sources=2500,
+        mean_sources=1200,
+        min_sources=0,
+        f_min=1e3,
+        f_max=1e6,
+        alpha=0.5,
     )
-
-    sleep_trainer.fit(sleep_net)
-
-    return sleep_net.image_encoder
+    trained_encoder = get_trained_star_encoder(
+        star_dataset, n_epochs=n_epochs, enc_conv_c=20, enc_kern=3, enc_hidden=256,
+    )
+    return trained_encoder
 
 
 class TestStarSleepEncoderM2:
-    def test_star_sleep_m2(self, data_path, trained_star_encoder_m2):
+    def test_star_sleep_m2(self, data_path, device, trained_star_encoder_m2):
 
         # the trained star encoder
         trained_star_encoder_m2.eval()
@@ -156,4 +90,4 @@ class TestStarSleepEncoderM2:
             return
 
         assert sleep_tpr > 0.45
-        assert sleep_ppv > 0.35
+        assert sleep_ppv > 0.33
