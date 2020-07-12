@@ -22,6 +22,7 @@ class TestGalaxyVAE:
             limit_train_batches=20,
             profiler=None,
             checkpoint_callback=False,
+            logger=False,
             limit_val_batches=1,
             check_val_every_n_epoch=check_val_every_n_epoch,
         )

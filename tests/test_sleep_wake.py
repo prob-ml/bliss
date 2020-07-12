@@ -78,9 +78,6 @@ class TestStarWakePhase:
         test_3_stars,
         device,
         gpus,
-        profiler,
-        save_logs,
-        logs_path,
     ):
         # get dataset and encoder
         star_dataset = get_star_dataset(
@@ -117,7 +114,6 @@ class TestStarWakePhase:
             init_psf_params,
             init_background_params,
             hparams,
-            save_logs,
         )
 
         # run the wake-phase training
@@ -125,11 +121,12 @@ class TestStarWakePhase:
 
         wake_trainer = pl.Trainer(
             gpus=gpus,
-            profiler=profiler,
+            profiler=None,
+            logger=False,
+            checkpoint_callback=False,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
-            default_root_dir=logs_path,
         )
 
         wake_trainer.fit(wake_phase_model)

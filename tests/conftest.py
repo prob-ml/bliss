@@ -16,14 +16,6 @@ def pytest_addoption(parser):
     )
 
     parser.addoption(
-        "--profile", action="store_true", help="Enable profiler",
-    )
-
-    parser.addoption(
-        "--log", action="store_true", help="Enable logger.",
-    )
-
-    parser.addoption(
         "--repeat", default=1, type=str, help="Number of times to repeat each test"
     )
 
@@ -51,29 +43,8 @@ def root_path():
 
 
 @pytest.fixture(scope="session")
-def logs_path(root_path):
-    logs_path = root_path.joinpath("tests/logs")
-    logs_path.mkdir(exist_ok=True, parents=True)
-    return logs_path
-
-
-@pytest.fixture(scope="session")
 def data_path(root_path):
     return root_path.joinpath("data")
-
-
-# logging and profiling.
-@pytest.fixture(scope="session")
-def profiler(pytestconfig, logs_path):
-    profiling = pytestconfig.getoption("profile")
-    profile_file = logs_path.joinpath("profile.txt")
-    profiler = AdvancedProfiler(output_filename=profile_file) if profiling else None
-    return profiler
-
-
-@pytest.fixture(scope="session")
-def save_logs(pytestconfig):
-    return pytestconfig.getoption("log")
 
 
 @pytest.fixture(scope="session")
@@ -197,17 +168,16 @@ def get_trained_encoder(device, gpus, profiler, save_logs, logs_path):
             enc_hidden=enc_hidden,
         ).to(device)
 
-        sleep_net = sleep.SleepPhase(
-            dataset=dataset, image_encoder=image_encoder, save_logs=save_logs
-        )
+        sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
 
         sleep_trainer = pl.Trainer(
             gpus=gpus,
-            profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
-            default_root_dir=logs_path,
+            profiler=None,
+            logger=False,
+            checkpoint_callback=False,
         )
 
         sleep_trainer.fit(sleep_net)

@@ -128,9 +128,7 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(
-        self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5, save_logs=False,
-    ):
+    def __init__(self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5):
         super(SleepPhase, self).__init__()
 
         # assumes dataset is a IterableDataset class.
@@ -139,8 +137,6 @@ class SleepPhase(pl.LightningModule):
 
         self.lr = lr
         self.weight_decay = weight_decay
-
-        self.save_logs = save_logs
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder.forward(image_ptiles, n_sources)
