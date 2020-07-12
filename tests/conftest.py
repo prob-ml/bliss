@@ -2,7 +2,6 @@ import pytest
 import pathlib
 import torch
 import pytorch_lightning as pl
-from pytorch_lightning.profiler import AdvancedProfiler
 
 from bliss import use_cuda, sleep
 from bliss.datasets.simulated import SimulatedDataset
