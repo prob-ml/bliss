@@ -7,11 +7,7 @@ import pytorch_lightning as pl
 class TestGalaxyEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self,
-        single_band_galaxy_decoder,
-        fitted_psf,
-        get_galaxy_dataset,
-        get_trained_encoder,
+        self, get_galaxy_dataset, get_trained_encoder,
     ):
 
         # draw galaxies only in 2x2 center tile
