@@ -43,4 +43,4 @@ class TestGalaxyEncoder:
         return trained_encoder
 
     def test_n_sources_and_locs(self, trained_encoder):
-        tr
+        pass
