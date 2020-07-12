@@ -69,7 +69,7 @@ def device(gpus):
 
 
 @pytest.fixture(scope="session")
-def galaxy_decoder(data_path):
+def galaxy_decoder(data_path, device):
     slen = 51
     latent_dim = 8
     n_bands = 1
