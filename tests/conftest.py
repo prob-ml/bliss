@@ -146,16 +146,15 @@ def get_star_dataset(device):
 
 @pytest.fixture(scope="session")
 def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
-    def galaxy_dataset(batch_size=32, n_images=128, slen=50, **dec_kwargs):
+    def galaxy_dataset(batch_size=32, n_images=128, slen=10, **dec_kwargs):
 
         n_bands = 1
 
         background = torch.zeros(n_bands, slen, slen, device=device)
         background[0] = 5000.0
-
-        # slice if necessary.
         psf = fitted_psf[range(n_bands)]
         dec_args = (galaxy_decoder, psf, background)
+
         n_batches = int(n_images / batch_size)
 
         dec_kwargs.update({"prob_galaxy": 1.0, "n_bands": n_bands, "slen": slen})

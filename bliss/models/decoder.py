@@ -148,8 +148,8 @@ class ImageDecoder(object):
 
         # 2 = (x,y)
         locs = torch.rand(batch_size, self.max_sources, 2, device=device)
+        locs = locs * (self.loc_max - self.loc_min) + self.loc_min
         locs *= is_on_array.unsqueeze(2)
-        locs = locs * self.loc_max + self.loc_min
 
         return locs
 
