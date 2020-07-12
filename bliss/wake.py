@@ -216,7 +216,7 @@ class WakePhase(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
         psf = self.forward()
-        loss = self.get_wake_loss(img, psf, self.n_samples)
+        loss = self.get_wake_loss(img, psf, self.n_samples, run_map=False)
         logs = {"train_loss": loss}
 
         return {"loss": loss, "log": logs} if self.save_logs else {"loss": loss}
