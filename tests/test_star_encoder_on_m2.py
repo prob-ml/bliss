@@ -90,4 +90,4 @@ class TestStarSleepEncoderM2:
             return
 
         assert sleep_tpr > 0.45
-        assert sleep_ppv > 0.35
+        assert sleep_ppv > 0.33
