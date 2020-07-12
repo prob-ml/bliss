@@ -3,118 +3,20 @@ import pytest
 import torch
 import pytorch_lightning as pl
 
-from bliss import use_cuda, psf_transform, wake, sleep
-from bliss.models import decoder, encoder
-
-
-def get_trained_encoder(
-    galaxy_decoder,
-    psf,
-    device,
-    device_id,
-    profiler,
-    save_logs,
-    logs_path,
-    n_bands=1,
-    max_stars=20,
-    mean_stars=15,
-    min_stars=5,
-    f_min=1e4,
-    slen=50,
-    n_images=128,
-    batch_size=32,
-    n_epochs=150,
-    prob_galaxy=0.0,
-):
-    assert galaxy_decoder.n_bands == psf.size(0) == n_bands
-
-    n_epochs = n_epochs if use_cuda else 1
-
-    background = torch.zeros(n_bands, slen, slen, device=device)
-    background.fill_(686.0)
-
-    simulator_args = (
-        galaxy_decoder,
-        psf,
-        background,
-    )
-
-    simulator_kwargs = dict(
-        slen=slen,
-        n_bands=n_bands,
-        max_sources=max_stars,
-        mean_sources=mean_stars,
-        min_sources=min_stars,
-        f_min=f_min,
-        prob_galaxy=prob_galaxy,
-    )
-
-    n_batches = int(n_images / batch_size)
-    dataset = decoder.SimulatedDataset(
-        n_batches, batch_size, simulator_args, simulator_kwargs
-    )
-
-    # setup Star Encoder
-    image_encoder = encoder.ImageEncoder(
-        slen=slen,
-        ptile_slen=8,
-        step=2,
-        edge_padding=3,
-        n_bands=n_bands,
-        max_detections=2,
-        n_galaxy_params=dataset.simulator.latent_dim,
-        enc_conv_c=5,
-        enc_kern=3,
-        enc_hidden=64,
-    ).to(device)
-
-    # training wrapper
-    sleep_net = sleep.SleepPhase(
-        dataset=dataset, image_encoder=image_encoder, save_logs=save_logs
-    )
-
-    # runs on gpu or cpu?
-    n_device = [device_id] if use_cuda else 0  # 0 means no gpu
-
-    sleep_trainer = pl.Trainer(
-        gpus=n_device,
-        profiler=profiler,
-        min_epochs=n_epochs,
-        max_epochs=n_epochs,
-        reload_dataloaders_every_epoch=True,
-        default_root_dir=logs_path,
-    )
-
-    sleep_trainer.fit(sleep_net)
-
-    return sleep_net.image_encoder
+from bliss import use_cuda, psf_transform, wake
+from bliss.models.decoder import get_mgrid
 
 
 class TestStarSleepEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self,
-        single_band_galaxy_decoder,
-        single_band_fitted_powerlaw_psf,
-        device,
-        device_id,
-        profiler,
-        save_logs,
-        logs_path,
+        self, fitted_psf, get_star_dataset, get_trained_star_encoder,
     ):
-        return get_trained_encoder(
-            single_band_galaxy_decoder,
-            single_band_fitted_powerlaw_psf,
-            device,
-            device_id,
-            profiler,
-            save_logs,
-            logs_path,
-            prob_galaxy=0.0,  # only stars will be drawn.
-            n_epochs=1,
-        )
+        star_dataset = get_star_dataset(fitted_psf, n_bands=1, slen=50, batch_size=32)
+        trained_encoder = get_trained_star_encoder(star_dataset, n_epochs=100)
+        return trained_encoder
 
-    @pytest.mark.parametrize("n_stars", ["3"])
+    @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"]
@@ -167,60 +69,50 @@ class TestStarWakePhase:
 
         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 
-    @pytest.fixture(scope="class")
-    def trained_encoder(
-        self,
-        single_band_galaxy_decoder,
-        init_psf_setup,
-        device,
-        device_id,
-        profiler,
-        save_logs,
-        logs_path,
-    ):
-        return get_trained_encoder(
-            single_band_galaxy_decoder,
-            init_psf_setup["init_psf"],
-            device,
-            device_id,
-            profiler,
-            save_logs,
-            logs_path,
-            n_images=64 * 6,
-            batch_size=32,
-            n_epochs=200,
-            prob_galaxy=0.0,
-        )
-
     def test_star_wake(
         self,
-        trained_encoder,
-        single_band_fitted_powerlaw_psf,
+        get_trained_star_encoder,
+        get_star_dataset,
+        fitted_psf,
         init_psf_setup,
         test_3_stars,
         device,
-        device_id,
+        gpus,
         profiler,
         save_logs,
         logs_path,
     ):
+        # get dataset and encoder
+        star_dataset = get_star_dataset(
+            init_psf_setup["init_psf"],
+            n_bands=1,
+            slen=50,
+            batch_size=32,
+            n_images=64 * 6 if use_cuda else 32,
+        )
+        n_epochs = 200 if use_cuda else 1
+        trained_encoder = get_trained_star_encoder(star_dataset, n_epochs=n_epochs)
+
         # load the test image
         # 3-stars 30*30
         test_image = test_3_stars["images"]
 
-        # initialization
         # initialize background params, which will create the true background
         init_background_params = torch.zeros(1, 3, device=device)
         init_background_params[0, 0] = 686.0
 
         # initialize psf params, just add 4 to each sigmas
-        true_psf = single_band_fitted_powerlaw_psf.clone()
+        true_psf = fitted_psf[None, 0].clone()
         init_psf_params = init_psf_setup["init_psf_params"]
 
         n_samples = 1000 if use_cuda else 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
+        image_decoder = star_dataset.image_decoder
+        image_decoder.slen = test_image.size(-1)
+        image_decoder.cached_grid = get_mgrid((test_image.size(-1)))
         wake_phase_model = wake.WakePhase(
             trained_encoder,
+            star_dataset.image_decoder,
             test_image,
             init_psf_params,
             init_background_params,
@@ -231,11 +123,8 @@ class TestStarWakePhase:
         # run the wake-phase training
         n_epochs = 2800 if use_cuda else 1
 
-        # runs on gpu or cpu?
-        device_num = [device_id] if use_cuda else 0  # 0 means no gpu
-
         wake_trainer = pl.Trainer(
-            gpus=device_num,
+            gpus=gpus,
             profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
@@ -250,7 +139,6 @@ class TestStarWakePhase:
 
         init_psf = init_psf_setup["init_psf"]
         init_residuals = true_psf.to(device) - init_psf.to(device)
-
         estimate_residuals = true_psf.to(device) - estimate_psf.to(device)
 
         if not use_cuda:

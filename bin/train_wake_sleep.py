@@ -61,12 +61,7 @@ print("generating data: ")
 n_images = 200
 t0 = time.time()
 star_dataset = simulated_datasets_lib.load_dataset_from_params(
-    psf_og,
-    data_params,
-    n_images=n_images,
-    background=background,
-    transpose_psf=False,
-    add_noise=True,
+    psf_og, data_params, n_images=n_images, background=background, add_noise=True,
 )
 
 print("data generation time: {:.3f}secs".format(time.time() - t0))
@@ -181,8 +176,8 @@ for iteration in range(0, n_iter):
     print("RUNNING SLEEP PHASE. ITER = " + str(iteration + 1))
 
     # update psf
-    loader.dataset.simulator.psf = model_params.get_psf().detach()
-    loader.dataset.simulator.background = (
+    loader.dataset.image_decoder.psf = model_params.get_psf().detach()
+    loader.dataset.image_decoder.background = (
         model_params.get_background().squeeze(0).detach()
     )
 
