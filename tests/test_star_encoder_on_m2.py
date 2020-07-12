@@ -10,9 +10,7 @@ np.random.seed(43)
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(
-    data_path, device, get_star_dataset, get_trained_star_encoder
-):
+def trained_star_encoder_m2(data_path, device, get_star_dataset, get_trained_encoder):
 
     # load SDSS PSF
     psf_file = os.path.join(data_path, "psField-002583-2-0136.fits")
@@ -34,7 +32,7 @@ def trained_star_encoder_m2(
         f_max=1e6,
         alpha=0.5,
     )
-    trained_encoder = get_trained_star_encoder(
+    trained_encoder = get_trained_encoder(
         star_dataset, n_epochs=n_epochs, enc_conv_c=20, enc_kern=3, enc_hidden=256,
     )
     return trained_encoder

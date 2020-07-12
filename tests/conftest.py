@@ -145,22 +145,50 @@ def get_star_dataset(device):
 
 
 @pytest.fixture(scope="session")
-def get_trained_star_encoder(device, gpus, profiler, save_logs, logs_path):
-    def trained_star_encoder(
-        star_dataset, n_epochs=100, enc_conv_c=5, enc_kern=3, enc_hidden=64
+def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
+    def galaxy_dataset(batch_size=32, n_images=128, slen=50, **dec_kwargs):
+
+        n_bands = 1
+
+        background = torch.zeros(n_bands, slen, slen, device=device)
+        background[0] = 5000.0
+
+        # slice if necessary.
+        psf = fitted_psf[range(n_bands)]
+        dec_args = (galaxy_decoder, psf, background)
+        n_batches = int(n_images / batch_size)
+
+        dec_kwargs.update({"prob_galaxy": 1.0, "n_bands": n_bands, "slen": slen})
+
+        return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
+
+    return galaxy_dataset
+
+
+@pytest.fixture(scope="session")
+def get_trained_encoder(device, gpus, profiler, save_logs, logs_path):
+    def trained_encoder(
+        dataset,
+        n_epochs=100,
+        ptile_slen=8,
+        step=2,
+        edge_padding=3,
+        enc_conv_c=5,
+        enc_kern=3,
+        enc_hidden=64,
     ):
         n_epochs = n_epochs if use_cuda else 1
 
-        slen = star_dataset.slen
-        n_bands = star_dataset.n_bands
-        latent_dim = star_dataset.image_decoder.latent_dim
+        slen = dataset.slen
+        n_bands = dataset.n_bands
+        latent_dim = dataset.image_decoder.latent_dim
 
         # setup Star Encoder
         image_encoder = encoder.ImageEncoder(
             slen=slen,
-            ptile_slen=8,
-            step=2,
-            edge_padding=3,
+            ptile_slen=ptile_slen,
+            step=step,
+            edge_padding=edge_padding,
             n_bands=n_bands,
             max_detections=2,
             n_galaxy_params=latent_dim,
@@ -170,7 +198,7 @@ def get_trained_star_encoder(device, gpus, profiler, save_logs, logs_path):
         ).to(device)
 
         sleep_net = sleep.SleepPhase(
-            dataset=star_dataset, image_encoder=image_encoder, save_logs=save_logs
+            dataset=dataset, image_encoder=image_encoder, save_logs=save_logs
         )
 
         sleep_trainer = pl.Trainer(
@@ -186,7 +214,7 @@ def get_trained_star_encoder(device, gpus, profiler, save_logs, logs_path):
         sleep_net.image_encoder.eval()
         return sleep_net.image_encoder
 
-    return trained_star_encoder
+    return trained_encoder
 
 
 @pytest.fixture(scope="session")
