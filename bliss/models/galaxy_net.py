@@ -283,7 +283,9 @@ class OneCenteredGalaxy(pl.LightningModule):
         recon_var = outputs[-1]["recon_var"][:5]
 
         fig = self.plot_reconstruction(image, recon_mean, recon_var)
-        self.logger.experiment.add_figure(f"Summary images {self.current_epoch}", fig)
+
+        if self.logger:
+            self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
 
         return {"val_loss": avg_loss, "log": tensorboard_logs}
 

@@ -15,8 +15,8 @@ class TestGalaxyEncoder:
     ):
 
         # draw galaxies only in 2x2 center tile
-        loc_min = (0.4,)
-        loc_max = (0.6,)
+        loc_min = 0.4
+        loc_max = 0.6
 
         # encoder looks at 10x10 padded tile, and detects galaxies in 2x2 tile.
         ptile_slen = 10
@@ -43,4 +43,4 @@ class TestGalaxyEncoder:
         return trained_encoder
 
     def test_n_sources_and_locs(self, trained_encoder):
-        pass
+        tr
