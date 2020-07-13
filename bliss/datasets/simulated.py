@@ -124,8 +124,8 @@ class SimulatedDataset(IterableDataset):
         }
         return cls(args.n_batches, args.batch_size, *decoder_args, **decoder_kwargs)
 
-    @classmethod
-    def add_args(cls, parser):
+    @staticmethod
+    def add_args(parser):
         parser.add_argument(
             "--galaxy-decoder-file",
             type=str,

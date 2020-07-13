@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
     # sleep image encoder
     image_encoder_group = parser.add_argument_group("[Sleep Phase Image Encoder]")
-    sleep.SleepPhase.add_args(parser)
+    sleep.SleepPhase.add_args(image_encoder_group)
 
     # ---------------
     # Dataset

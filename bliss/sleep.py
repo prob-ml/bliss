@@ -349,17 +349,8 @@ class SleepPhase(pl.LightningModule):
 
         return results
 
-    @classmethod
-    def from_args(cls, dataset, args):
-        args_dict = vars(args)
-        parameters = inspect.signature(encoder.ImageEncoder).parameters
-        encoder_kwargs = {
-            param: value for param, value in args_dict.items() if param in parameters
-        }
-        return cls(dataset, encoder_kwargs)
-
-    @classmethod
-    def add_args(cls, parser):
+    @staticmethod
+    def add_args(parser):
 
         # encoder parameters.
         parser.add_argument(
@@ -394,13 +385,23 @@ class SleepPhase(pl.LightningModule):
         )
 
         # network parameters.
-        parser.add_argument(
-            "--enc-conv-c", type=int, default=20,
-        )
-        parser.add_argument(
-            "--enc-kern", type=int, default=3,
-        )
-        parser.add_argument(
-            "--enc-hidden", type=int, default=256,
-        )
+        parser.add_argument("--enc-conv-c", type=int, default=20)
+        parser.add_argument("--enc-kern", type=int, default=3)
+        parser.add_argument("--enc-hidden", type=int, default=256)
         parser.add_argument("--momentum", type=float, default=0.5)
+
+    @classmethod
+    def from_args(cls, dataset, args):
+        args_dict = vars(args)
+        encoder_params = inspect.signature(encoder.ImageEncoder).parameters
+        sleep_params = inspect.signature(cls).parameters
+        encoder_kwargs = {
+            param: value
+            for param, value in args_dict.items()
+            if param in encoder_params
+        }
+        sleep_kwargs = {
+            param: value for param, value in args_dict.items() if param in sleep_params
+        }
+
+        return cls(dataset, encoder_kwargs, **sleep_kwargs)
