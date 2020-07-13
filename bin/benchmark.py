@@ -55,8 +55,8 @@ print(
 
 def single_forward():
     with torch.no_grad():
-        for batch in sleep_net.train_dataloader():
-            sleep_net.training_step(batch)
+        for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
+            sleep_net.training_step(batch, batch_idx)
 
 
 print(
