@@ -40,7 +40,7 @@ class TestGalaxyEncoder:
         return trained_encoder
 
     def test_n_sources_and_locs(self, data_path, device, trained_encoder):
-        test_galaxy = torch.load(data_path.joinpath(f"test_small_galaxy.pt"))
+        test_galaxy = torch.load(data_path.joinpath(f"1_galaxy_small_test.pt"))
         test_image = test_galaxy["images"]
 
         with torch.no_grad():
