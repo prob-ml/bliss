@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 
 from bliss import use_cuda, sleep
 from bliss.datasets.simulated import SimulatedDataset
-from bliss.models import galaxy_net, encoder
 
 
 def pytest_addoption(parser):
