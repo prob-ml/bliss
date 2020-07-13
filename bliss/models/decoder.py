@@ -374,7 +374,7 @@ class ImageDecoder(object):
         if not self.all_stars:
             # need n_sources because *_locs are not necessarily ordered.
             galaxies = self.render_multiple_galaxies(
-                galaxy_locs, n_sources, single_galaxies,
+                n_sources, galaxy_locs, single_galaxies,
             )
         stars = self.render_multiple_stars(n_sources, star_locs, fluxes)
 
