@@ -47,7 +47,20 @@ image_encoder = encoder.ImageEncoder(
 sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
 
 print(
-    timeit.Timer(
-        "sleep_net.train_dataloader", "gc.enable()", globals=globals()
-    ).timeit()
+    timeit.Timer("sleep_net.train_dataloader", "gc.enable()", globals=globals()).repeat(
+        repeat=5, number=1
+    )
+)
+
+
+def single_forward():
+    with torch.no_grad():
+        for batch in sleep_net.train_dataloader():
+            sleep_net.training_step(batch)
+
+
+print(
+    timeit.Timer("single_forward", "gc.enable()", globals=globals()).repeat(
+        repeat=5, number=1
+    )
 )
