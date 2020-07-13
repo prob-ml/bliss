@@ -68,11 +68,11 @@ def main(args):
     setup_seed(args)
 
     # setup dataset.
-    dataset = datasets[args.dataset].from_args(args)
+    dataset = datasets[args.dataset].from_args(args, paths)
 
     # setup model
     model_cls = models[args.model]
-    model = model_cls.from_args(dataset, args)
+    model = model_cls.from_args(args, dataset)
 
     # setup trainer
     profiler = setup_profiler(args, paths)

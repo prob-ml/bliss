@@ -330,8 +330,15 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         return fig
 
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument("--latent-dim", type=int, default=8, help="latent dim")
+        parser.add_argument(
+            "--tt-split", type=float, default=0.1, help="train/test split"
+        )
+
     @classmethod
-    def from_args(cls, dataset, args):
+    def from_args(cls, args, dataset):
         args_dict = vars(args)
 
         parameters = list(inspect.signature(cls).parameters)
@@ -339,10 +346,3 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         args_dict = {param: args_dict[param] for param in parameters}
         return cls(dataset, **args_dict)
-
-    @staticmethod
-    def add_args(parser):
-        parser.add_argument("--latent-dim", type=int, default=8, help="latent dim")
-        parser.add_argument(
-            "--tt-split", type=float, default=0.1, help="train/test split"
-        )

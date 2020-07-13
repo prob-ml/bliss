@@ -391,15 +391,19 @@ class SleepPhase(pl.LightningModule):
         parser.add_argument("--momentum", type=float, default=0.5)
 
     @classmethod
-    def from_args(cls, dataset, args):
+    def from_args(cls, args, dataset):
         args_dict = vars(args)
+
         encoder_params = inspect.signature(encoder.ImageEncoder).parameters
-        sleep_params = inspect.signature(cls).parameters
         encoder_kwargs = {
             param: value
             for param, value in args_dict.items()
             if param in encoder_params
         }
+
+        sleep_params = list(inspect.signature(cls).parameters)
+        sleep_params.remove("dataset")
+        sleep_params.remove("encoder_kwargs")
         sleep_kwargs = {
             param: value for param, value in args_dict.items() if param in sleep_params
         }
