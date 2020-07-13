@@ -182,7 +182,7 @@ class WakePhase(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
-        recon_mean = self.forward()
+        recon_mean = self.forward(img)
         error = Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
         last = self.slen - self.pad
