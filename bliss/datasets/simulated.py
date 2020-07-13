@@ -115,12 +115,12 @@ class SimulatedDataset(IterableDataset):
         args_dict = vars(args)
         parameters = inspect.signature(ImageDecoder).parameters
 
-        decoder_args_names = ["galaxy_decoder", "psf", "background"]
+        args_names = ["n_batches", "batch_size", "galaxy_decoder", "psf", "background"]
         decoder_args = SimulatedDataset.decoder_args_from_args(args, paths)
         decoder_kwargs = {
-            param: value
-            for param, value in args_dict.items()
-            if param in parameters and param not in decoder_args_names
+            key: value
+            for key, value in args_dict.items()
+            if key in parameters and key not in args_names
         }
         return cls(args.n_batches, args.batch_size, *decoder_args, **decoder_kwargs)
 

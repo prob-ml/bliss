@@ -348,7 +348,7 @@ class CatsimGalaxies(Dataset):
             "--catalog-file",
             type=str,
             default=None,
-            help="Catalog file to load entries from relative to data directory.",
+            help="File relative to data directory to load catalog entries ",
         )
         parser.add_argument(
             "--survey-name", type=str, default="LSST", help="Survey to use."

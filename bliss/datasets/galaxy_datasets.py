@@ -71,7 +71,7 @@ class H5Catalog(Dataset):
             "--h5-file",
             type=str,
             default=None,
-            help="file path relative to data directory.",
+            help="File path relative to data directory.",
         )
 
     @classmethod
