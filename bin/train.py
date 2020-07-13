@@ -134,6 +134,9 @@ if __name__ == "__main__":
     )
 
     general_dataset_group.add_argument(
+        "--n-batches", type=int, default=1,
+    )
+    general_dataset_group.add_argument(
         "--batch-size",
         type=int,
         default=64,

@@ -106,6 +106,7 @@ class SimulatedDataset(IterableDataset):
 
         # TODO: adjust to correct number of bands.
         psf = SimulatedDataset.get_psf_from_file(psf_file)
+        psf = psf[range(n_bands)]
 
         return dec, psf, background
 
@@ -121,7 +122,7 @@ class SimulatedDataset(IterableDataset):
             for param, value in args_dict.items()
             if param in parameters and param not in decoder_args_names
         }
-        return cls(*decoder_args, **decoder_kwargs)
+        return cls(args.n_batches, args.batch_size, *decoder_args, **decoder_kwargs)
 
     @classmethod
     def add_args(cls, parser):
@@ -146,6 +147,15 @@ class SimulatedDataset(IterableDataset):
             help="File relative to data directory containing PSF to be used.",
         )
 
+        # general sources
         parser.add_argument("--max-sources", type=int, default=10)
         parser.add_argument("--mean-sources", type=int, default=5)
         parser.add_argument("--min-sources", type=int, default=1)
+        parser.add_argument("--loc-min", type=float, default=0.0)
+        parser.add_argument("--loc-max", type=float, default=1.0)
+        parser.add_argument("--prob-galaxy", type=float, default=0.0)
+
+        # stars.
+        parser.add_argument("--f-min", type=float, default=1e4)
+        parser.add_argument("--f-max", type=float, default=1e6)
+        parser.add_argument("--alpha", type=float, default=0.5)
