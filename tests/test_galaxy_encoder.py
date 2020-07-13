@@ -19,7 +19,7 @@ class TestGalaxyEncoder:
 
         # encoder looks at 10x10 padded tile, and detects galaxies in 2x2 tile.
         ptile_slen = 10
-        edge_padding = 8
+        edge_padding = 4
 
         galaxy_dataset = get_galaxy_dataset(
             slen=10,
