@@ -19,6 +19,7 @@ def _fit_plane_to_background(background):
 
     planar_params = np.zeros((n_bands, 3))
     for i in range(n_bands):
+        # can we make numpy to torch?
         y = background[i].flatten().detach().cpu().numpy()
         grid = decoder.get_mgrid(slen).detach().cpu().numpy()
 
@@ -47,10 +48,12 @@ class PlanarBackground(nn.Module):
         self.image_slen = image_slen
 
         # get grid
+        # can we use cached grid to replace?
         _mgrid = decoder.get_mgrid(image_slen).to(device)
         self.mgrid = torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
 
         # initial weights
+        # why do we clone the parameter here?
         self.params = nn.Parameter(init_background_params.clone())
 
     def forward(self):
@@ -61,7 +64,7 @@ class PlanarBackground(nn.Module):
         )
 
 
-class WakePhase(pl.LightningModule):
+class WakeNet(pl.LightningModule):
 
     # ---------------
     # Model
@@ -106,6 +109,7 @@ class WakePhase(pl.LightningModule):
         assert init_background_params is not None
         assert init_background_params.shape[0] == self.n_bands
         self.init_background_params = init_background_params
+        self.image_slen = image_slen
         self.planar_background = PlanarBackground(
             image_slen=self.slen, init_background_params=self.init_background_params
         )

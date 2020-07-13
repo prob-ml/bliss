@@ -57,7 +57,7 @@ class TestStarSleepEncoder:
         )
 
 
-class TestStarWakePhase:
+class TestStarWakeNet:
     @pytest.fixture(scope="class")
     def init_psf_setup(self, data_path, device):
         psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
@@ -107,7 +107,7 @@ class TestStarWakePhase:
         image_decoder = star_dataset.image_decoder
         image_decoder.slen = test_image.size(-1)
         image_decoder.cached_grid = get_mgrid((test_image.size(-1)))
-        wake_phase_model = wake.WakePhase(
+        wake_phase_model = wake.WakeNet(
             trained_encoder,
             star_dataset.image_decoder,
             test_image,
