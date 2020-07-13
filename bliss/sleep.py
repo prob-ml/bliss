@@ -138,6 +138,8 @@ class SleepPhase(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
+        assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
+
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder.forward(image_ptiles, n_sources)
 
@@ -347,22 +349,24 @@ class SleepPhase(pl.LightningModule):
 
     @classmethod
     def add_args(cls, parser):
+
+        # encoder parameters.
         parser.add_argument(
             "--ptile-slen",
             type=int,
-            default=20,
+            default=8,
             help="Side length of the padded tile in pixels.",
         )
         parser.add_argument(
             "--step",
             type=int,
-            default=5,
+            default=1,
             help="Distance between tile centers in pixels.",
         )
         parser.add_argument(
             "--edge-padding",
             type=int,
-            default=5,
+            default=3,
             help="Padding around each tile in pixels.",
         )
         parser.add_argument(
@@ -371,3 +375,21 @@ class SleepPhase(pl.LightningModule):
             default=2,
             help="Number of max detections in each tile. ",
         )
+        parser.add_argument(
+            "--n-galaxy-params",
+            type=int,
+            default=8,
+            help="Same as latent dim for galaxies.",
+        )
+
+        # network parameters.
+        parser.add_argument(
+            "--enc-conv-c", type=int, default=20,
+        )
+        parser.add_argument(
+            "--enc-kern", type=int, default=3,
+        )
+        parser.add_argument(
+            "--enc-hidden", type=int, default=256,
+        )
+        parser.add_argument("--momentum", type=float, default=0.5)

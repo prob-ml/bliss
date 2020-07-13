@@ -19,6 +19,7 @@ class SimulatedDataset(IterableDataset):
         self.image_decoder = ImageDecoder(*decoder_args, **decoder_kwargs)
         self.slen = self.image_decoder.slen
         self.n_bands = self.image_decoder.n_bands
+        self.latent_dim = self.image_decoder.latent_dim
 
     def __iter__(self):
         return self.batch_generator()
