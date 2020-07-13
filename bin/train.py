@@ -8,13 +8,18 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from .utils import setup_paths, add_path_args
 
-from bliss.datasets import galaxy_datasets, catsim
+from bliss import sleep
+from bliss.datasets import galaxy_datasets, catsim, simulated
 from bliss.models import galaxy_net
 
-_datasets = [galaxy_datasets.H5Catalog, catsim.CatsimGalaxies]
+_datasets = [
+    galaxy_datasets.H5Catalog,
+    catsim.CatsimGalaxies,
+    simulated.SimulatedDataset,
+]
 datasets = {cls.__name__: cls for cls in _datasets}
 
-_models = [galaxy_net.OneCenteredGalaxy]
+_models = [galaxy_net.OneCenteredGalaxy, sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
 
 
@@ -121,6 +126,10 @@ if __name__ == "__main__":
     one_centered_galaxy_group = parser.add_argument_group("[One Centered Galaxy Model]")
     galaxy_net.OneCenteredGalaxy.add_args(one_centered_galaxy_group)
 
+    # sleep image encoder
+    image_encoder_group = parser.add_argument_group("[Sleep Phase Image Encoder]")
+    sleep.SleepPhase.add_args(parser)
+
     # ---------------
     # Dataset
     # ----------------
@@ -152,6 +161,10 @@ if __name__ == "__main__":
     # catsim galaxies
     catsim_group = parser.add_argument_group("[Catsim Dataset]")
     catsim.CatsimGalaxies.add_args(catsim_group)
+
+    # simulated
+    simulated_group = parser.add_argument_group("[Simulated Dataset]")
+    simulated.SimulatedDataset.add_args(simulated_group)
 
     # ---------------
     # Trainer

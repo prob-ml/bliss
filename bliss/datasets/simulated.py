@@ -105,7 +105,6 @@ class SimulatedDataset(IterableDataset):
             background_file, slen, n_bands
         )
 
-        # TODO: adjust to correct number of bands.
         psf = SimulatedDataset.get_psf_from_file(psf_file)
         psf = psf[range(n_bands)]
 

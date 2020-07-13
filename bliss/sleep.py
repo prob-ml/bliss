@@ -1,5 +1,6 @@
 import math
 from itertools import permutations
+import inspect
 
 import torch
 from torch.distributions import Normal
@@ -9,6 +10,7 @@ from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 
 from . import device
+from .models import encoder
 
 
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
@@ -128,12 +130,12 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(self, dataset, image_encoder, lr=1e-3, weight_decay=1e-5):
+    def __init__(self, dataset, encoder_kwargs, lr=1e-3, weight_decay=1e-5):
         super(SleepPhase, self).__init__()
 
         # assumes dataset is a IterableDataset class.
         self.dataset = dataset
-        self.image_encoder = image_encoder
+        self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
         self.lr = lr
         self.weight_decay = weight_decay
@@ -346,6 +348,15 @@ class SleepPhase(pl.LightningModule):
         results = {"val_loss": avg_loss, "log": logs}
 
         return results
+
+    @classmethod
+    def from_args(cls, dataset, args):
+        args_dict = vars(args)
+        parameters = inspect.signature(encoder.ImageEncoder).parameters
+        encoder_kwargs = {
+            param: value for param, value in args_dict.items() if param in parameters
+        }
+        return cls(dataset, encoder_kwargs)
 
     @classmethod
     def add_args(cls, parser):
