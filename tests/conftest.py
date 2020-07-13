@@ -151,20 +151,20 @@ def get_trained_encoder(device, gpus):
         latent_dim = dataset.image_decoder.latent_dim
 
         # setup Star Encoder
-        image_encoder = encoder.ImageEncoder(
-            slen=slen,
+        encoder_kwargs = dict(
             ptile_slen=ptile_slen,
             step=step,
             edge_padding=edge_padding,
-            n_bands=n_bands,
-            max_detections=max_detections,
-            n_galaxy_params=latent_dim,
             enc_conv_c=enc_conv_c,
             enc_kern=enc_kern,
             enc_hidden=enc_hidden,
-        ).to(device)
+            max_detections=max_detections,
+            slen=slen,
+            n_bands=n_bands,
+            n_galaxy_params=latent_dim,
+        )
 
-        sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
+        sleep_net = sleep.SleepPhase(dataset, encoder_kwargs)
 
         sleep_trainer = pl.Trainer(
             gpus=gpus,
