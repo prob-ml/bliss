@@ -1,7 +1,5 @@
-import numpy as np
 import pytest
 import torch
-import pytorch_lightning as pl
 
 from bliss import use_cuda
 
@@ -41,5 +39,29 @@ class TestGalaxyEncoder:
         )
         return trained_encoder
 
-    def test_n_sources_and_locs(self, trained_encoder):
-        pass
+    def test_n_sources_and_locs(self, data_path, device, trained_encoder):
+        test_galaxy = torch.load(data_path.joinpath(f"test_small_galaxy.pt"))
+        test_image = test_galaxy["images"]
+
+        with torch.no_grad():
+            # get the estimated params
+            trained_encoder.eval()
+            (
+                n_sources,
+                locs,
+                galaxy_params,
+                log_fluxes,
+                galaxy_bool,
+            ) = trained_encoder.sample_encoder(
+                test_image.to(device),
+                n_samples=1,
+                return_map_n_sources=True,
+                return_map_source_params=True,
+            )
+
+        if not use_cuda:
+            return
+
+        diff_locs = test_galaxy["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
+        diff_locs *= test_image.size(-1)
+        assert diff_locs.abs().max() <= 0.5
