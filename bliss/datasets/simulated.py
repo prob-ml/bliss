@@ -123,7 +123,7 @@ class SimulatedDataset(IterableDataset):
             for key, value in args_dict.items()
             if key in parameters and key not in args_names
         }
-        return cls(args.n_batches, args.batch_size, *decoder_args, **decoder_kwargs)
+        return cls(args.n_batches, args.batch_size, decoder_args, decoder_kwargs)
 
     @staticmethod
     def add_args(parser):
