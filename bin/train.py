@@ -121,6 +121,7 @@ if __name__ == "__main__":
     )
     models_group.add_argument("--slen", type=int, default=51)
     models_group.add_argument("--n-bands", type=int, default=1)
+    models_group.add_argument("--latent-dim", type=int, default=8, help="For galaxies")
 
     # one centered galaxy
     one_centered_galaxy_group = parser.add_argument_group("[One Centered Galaxy Model]")

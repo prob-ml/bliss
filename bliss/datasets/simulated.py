@@ -94,12 +94,13 @@ class SimulatedDataset(IterableDataset):
     @staticmethod
     def decoder_args_from_args(args, paths: dict):
         slen, latent_dim, n_bands = args.slen, args.latent_dim, args.n_bands
-        decoder_file = paths["data"].joinpath(args.decoder_state_file)
+        gal_slen = args.gal_slen
+        decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
         background_file = paths["data"].joinpath(args.background_file)
         psf_file = paths["data"].joinpath(args.psf_file)
 
-        dec = SimulatedDataset.get_decoder_from_args(
-            decoder_file, slen, n_bands, latent_dim
+        dec = SimulatedDataset.get_gal_decoder_from_file(
+            decoder_file, gal_slen, n_bands, latent_dim
         )
         background = SimulatedDataset.get_background_from_file(
             background_file, slen, n_bands
@@ -154,6 +155,7 @@ class SimulatedDataset(IterableDataset):
         parser.add_argument("--loc-min", type=float, default=0.0)
         parser.add_argument("--loc-max", type=float, default=1.0)
         parser.add_argument("--prob-galaxy", type=float, default=0.0)
+        parser.add_argument("--gal-slen", type=int, default=51)
 
         # stars.
         parser.add_argument("--f-min", type=float, default=1e4)

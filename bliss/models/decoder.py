@@ -56,7 +56,7 @@ class ImageDecoder(object):
         self.latent_dim = 1
         if not self.all_stars:
             self.galaxy_decoder = galaxy_decoder
-            self.galaxy_slen = self.galaxy_decoder.slen
+            self.gal_slen = self.galaxy_decoder.slen
             self.latent_dim = self.galaxy_decoder.latent_dim
             assert self.galaxy_decoder.n_bands == self.n_bands
 
@@ -229,7 +229,7 @@ class ImageDecoder(object):
 
         galaxy_params = z.reshape(batch_size, -1, self.latent_dim)
         single_galaxies = galaxies.reshape(
-            batch_size, -1, self.n_bands, self.galaxy_slen, self.galaxy_slen
+            batch_size, -1, self.n_bands, self.gal_slen, self.gal_slen
         )
 
         # zero out excess according to n_galaxies.

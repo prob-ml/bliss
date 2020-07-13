@@ -393,6 +393,7 @@ class SleepPhase(pl.LightningModule):
     @classmethod
     def from_args(cls, args, dataset):
         args_dict = vars(args)
+        assert args_dict["latent_dim"] == args_dict["n_galaxy_params"]
 
         encoder_params = inspect.signature(encoder.ImageEncoder).parameters
         encoder_kwargs = {

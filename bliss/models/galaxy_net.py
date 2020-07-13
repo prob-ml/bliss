@@ -332,7 +332,6 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     @staticmethod
     def add_args(parser):
-        parser.add_argument("--latent-dim", type=int, default=8, help="latent dim")
         parser.add_argument(
             "--tt-split", type=float, default=0.1, help="train/test split"
         )
