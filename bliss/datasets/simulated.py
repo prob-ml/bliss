@@ -60,9 +60,8 @@ class SimulatedDataset(IterableDataset):
         }
 
     @staticmethod
-    def get_gal_decoder_from_file(decoder_file, slen, n_bands, latent_dim):
-        # TODO: galaxy slen is separate
-        dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
+    def get_gal_decoder_from_file(decoder_file, gal_slen=51, n_bands=1, latent_dim=8):
+        dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, latent_dim, n_bands).to(device)
         dec.load_state_dict(torch.load(decoder_file, map_location=device))
         dec.eval()
         return dec
@@ -123,3 +122,30 @@ class SimulatedDataset(IterableDataset):
             if param in parameters and param not in decoder_args_names
         }
         return cls(*decoder_args, **decoder_kwargs)
+
+    @classmethod
+    def add_args(cls, parser):
+        parser.add_argument(
+            "--galaxy-decoder-file",
+            type=str,
+            default="galaxy_decoder_1_band.dat",
+            help="File relative to data directory containing galaxy decoder state_dict.",
+        )
+
+        parser.add_argument(
+            "--background-file",
+            type=str,
+            default="background_galaxy_single_band_i.npy",
+            help="File relative to data directory containing background to be used.",
+        )
+
+        parser.add_argument(
+            "--psf-file",
+            type=str,
+            default="fitted_powerlaw_psf_params.npy",
+            help="File relative to data directory containing PSF to be used.",
+        )
+
+        parser.add_argument("--max-sources", type=int, default=10)
+        parser.add_argument("--mean-sources", type=int, default=5)
+        parser.add_argument("--min-sources", type=int, default=1)

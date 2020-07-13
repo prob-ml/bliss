@@ -344,3 +344,30 @@ class SleepPhase(pl.LightningModule):
         results = {"val_loss": avg_loss, "log": logs}
 
         return results
+
+    @classmethod
+    def add_args(cls, parser):
+        parser.add_argument(
+            "--ptile-slen",
+            type=int,
+            default=20,
+            help="Side length of the padded tile in pixels.",
+        )
+        parser.add_argument(
+            "--step",
+            type=int,
+            default=5,
+            help="Distance between tile centers in pixels.",
+        )
+        parser.add_argument(
+            "--edge-padding",
+            type=int,
+            default=5,
+            help="Padding around each tile in pixels.",
+        )
+        parser.add_argument(
+            "--max-detections",
+            type=int,
+            default=2,
+            help="Number of max detections in each tile. ",
+        )

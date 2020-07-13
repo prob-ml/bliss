@@ -70,13 +70,10 @@ def device(gpus):
 
 @pytest.fixture(scope="session")
 def galaxy_decoder(data_path, device):
-    slen = 51
-    latent_dim = 8
-    n_bands = 1
-    decoder_file = data_path.joinpath("galaxy_decoder_1_band.dat")
-    dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
-    dec.load_state_dict(torch.load(decoder_file, map_location=device))
-    dec.eval()
+    dec_file = data_path.joinpath("galaxy_decoder_1_band.dat")
+    dec = SimulatedDataset.get_gal_decoder_from_file(
+        dec_file, gal_slen=51, n_bands=1, latent_dim=8
+    )
     return dec
 
 
