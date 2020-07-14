@@ -109,14 +109,11 @@ class WakeNet(pl.LightningModule):
         self.psf = self.power_law_psf.forward()
 
         # set up initial background parameters
-        if init_background_params is None:
-            self._get_init_background()
-        else:
-            assert init_background_params.shape[0] == self.n_bands
-            self.init_background_params = init_background_params
-            self.planar_background = PlanarBackground(
-                image_slen=self.slen, init_background_params=self.init_background_params
-            )
+        assert init_background_params.shape[0] == self.n_bands
+        self.init_background_params = init_background_params
+        self.planar_background = PlanarBackground(
+            image_slen=self.slen, init_background_params=self.init_background_params
+        )
 
         self.init_background = self.planar_background.forward()
 
@@ -197,37 +194,37 @@ class WakeNet(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         return {"val_loss": outputs[-1]["val_loss"]}
 
-    # def _get_init_background(self, sample_every=25):
-    #    sampled_background = self._sample_image(self.observed_img, sample_every)
-    #    self.init_background_params = torch.tensor(
-    #        _fit_plane_to_background(sampled_background)
-    #    ).to(device)
-    #    self.planar_background = PlanarBackground(
-    #        image_slen=self.slen, init_background_params=self.init_background_params
-    #    )
+    def _get_init_background(self, sample_every=25):
+        sampled_background = self._sample_image(self.observed_img, sample_every)
+        self.init_background_params = torch.tensor(
+            _fit_plane_to_background(sampled_background)
+        ).to(device)
+        self.planar_background = PlanarBackground(
+            image_slen=self.slen, init_background_params=self.init_background_params
+        )
 
-    # def _sample_image(observed_image, sample_every=10):
-    #    batch_size = observed_image.shape[0]
-    #    n_bands = observed_image.shape[1]
-    #    slen = observed_image.shape[-1]
+    def _sample_image(observed_image, sample_every=10):
+        batch_size = observed_image.shape[0]
+        n_bands = observed_image.shape[1]
+        slen = observed_image.shape[-1]
 
-    #    samples = torch.zeros(
-    #        n_bands,
-    #        int(np.floor(slen / sample_every)),
-    #        int(np.floor(slen / sample_every)),
-    #    )
+        samples = torch.zeros(
+            n_bands,
+            int(np.floor(slen / sample_every)),
+            int(np.floor(slen / sample_every)),
+        )
 
-    #    for i in range(samples.shape[1]):
-    #        for j in range(samples.shape[2]):
-    #            x0 = i * sample_every
-    #            x1 = j * sample_every
-    #            samples[:, i, j] = (
-    #                observed_image[
-    #                    :, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)
-    #                ]
-    #               .reshape(batch_size, n_bands, -1)
-    #                .min(2)[0]
-    #                .mean(0)
-    #            )
+        for i in range(samples.shape[1]):
+            for j in range(samples.shape[2]):
+                x0 = i * sample_every
+                x1 = j * sample_every
+                samples[:, i, j] = (
+                    observed_image[
+                        :, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)
+                    ]
+                    .reshape(batch_size, n_bands, -1)
+                    .min(2)[0]
+                    .mean(0)
+                )
 
-    #    return samples
+        return samples
