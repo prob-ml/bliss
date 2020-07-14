@@ -247,7 +247,6 @@ class SleepPhase(pl.LightningModule):
             true_tile_is_on_array,
         )
 
-        # TODO: Is the detach here necessary?
         loss_vec = (
             locs_loss * (locs_loss.detach() < 1e6).float()
             + counter_loss
@@ -292,7 +291,7 @@ class SleepPhase(pl.LightningModule):
         output = {
             "loss": loss,
             "log": {
-                "train_loss": loss,
+                "loss": loss,
                 "counter_loss": counter_loss.sum(),
                 "locs_loss": locs_loss.sum(),
                 "galaxy_params_loss": galaxy_params_loss.sum(),
@@ -310,6 +309,7 @@ class SleepPhase(pl.LightningModule):
         return self.step(batch)
 
     def validation_epoch_end(self, outputs):
+
         avg_loss = 0
         avg_counter_loss = 0
         avg_locs_loss = 0

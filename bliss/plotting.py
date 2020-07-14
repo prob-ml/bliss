@@ -53,24 +53,6 @@ def plot_image(
         global_fig.colorbar(im, ax=fig)
 
 
-def plot_categorical_probs(log_prob_vec, fig):
-    n_cat = len(log_prob_vec)
-    points = [(i, torch.exp(log_prob_vec[i])) for i in range(n_cat)]
-
-    for pt in points:
-        # plot (x,y) pairs.
-        # vertical line: 2 x,y pairs: (a,0) and (a,b)
-        fig.plot([pt[0], pt[0]], [0, pt[1]], color="blue")
-
-    fig.plot(
-        np.arange(n_cat),
-        torch.exp(log_prob_vec).detach().numpy(),
-        "o",
-        markersize=5,
-        color="blue",
-    )
-
-
 def plot_subimage(
     fig,
     full_image,
