@@ -1,6 +1,7 @@
 import math
 from itertools import permutations
 import inspect
+import matplotlib.pyplot as plt
 
 import torch
 from torch.distributions import Normal
@@ -9,7 +10,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 
-from . import device
+from . import device, plotting
 from .models import encoder
 
 
@@ -278,7 +279,19 @@ class SleepPhase(pl.LightningModule):
     def val_dataloader(self):
         return DataLoader(self.dataset, batch_size=None)
 
-    def step(self, batch):
+    def training_step(self, batch, batch_idx):
+        (
+            loss,
+            counter_loss,
+            locs_loss,
+            galaxy_params_loss,
+            star_params_loss,
+            galaxy_bool_loss,
+        ) = self.get_loss(batch)
+        log = {"train_loss": loss}
+        return {"loss": loss, "log": log}
+
+    def validation_step(self, batch, batch_indx):
         (
             loss,
             counter_loss,
@@ -297,19 +310,16 @@ class SleepPhase(pl.LightningModule):
                 "galaxy_params_loss": galaxy_params_loss.sum(),
                 "star_params_loss": star_params_loss.sum(),
                 "galaxy_bool_loss": galaxy_bool_loss.sum(),
+                "images": batch["images"],
+                "locs": batch["locs"],
             },
         }
 
         return output
 
-    def training_step(self, batch, batch_idx):
-        return self.step(batch)
-
-    def validation_step(self, batch, batch_indx):
-        return self.step(batch)
-
     def validation_epoch_end(self, outputs):
 
+        # first we log some of the important losses and average over all batches.
         avg_loss = 0
         avg_counter_loss = 0
         avg_locs_loss = 0
@@ -346,6 +356,39 @@ class SleepPhase(pl.LightningModule):
         }
 
         results = {"val_loss": avg_loss, "log": logs}
+
+        # add some images to tensorboard for validating location/counts.
+        # Only use 10 images in the last batch
+        true_locs = outputs[-1]["log"]["locs"][:10]
+        images = outputs[-1]["log"]["images"][:10]
+        fig, axes = plt.subplots(nrows=2, ncols=5, figsize=(20, 20,))
+
+        for ax, image, true_loc in zip(axes.flatten(), images, true_locs):
+            with torch.no_grad():
+                # get the estimated params
+                self.image_encoder.eval()
+                (
+                    n_sources,
+                    locs,
+                    galaxy_params,
+                    log_fluxes,
+                    galaxy_bool,
+                ) = self.image_encoder.sample_encoder(
+                    image.unsqueeze(0),
+                    n_samples=1,
+                    return_map_n_sources=True,
+                    return_map_source_params=True,
+                )
+
+            assert len(image.shape) == 3
+            assert len(locs.shape) == 3 and locs.size(0) == 1
+            image = image[0].cpu().numpy()  # first band.
+            loc = locs[0].cpu().numpy()
+            true_loc = true_loc.cpu().numpy()
+            plotting.plot_image(ax, image, true_loc, loc)
+
+        if self.logger:
+            self.logger.experiment.add_figure(f"Validation {self.current_epoch}", fig)
 
         return results
 

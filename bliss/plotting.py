@@ -98,10 +98,9 @@ def plot_subimage(
 
     # get slens,
     full_slen = full_image.size(-1)
-    sub_slen = subimage.size(-1)
 
-    est_locs = get_sublocs(full_est_locs, full_slen, sub_slen, x0, x1)
-    true_locs = get_sublocs(full_true_locs, full_slen, sub_slen, x0, x1)
+    est_locs = get_sublocs(full_est_locs, full_slen, subimage_slen, x0, x1)
+    true_locs = get_sublocs(full_true_locs, full_slen, subimage_slen, x0, x1)
 
     plot_image(
         fig,
