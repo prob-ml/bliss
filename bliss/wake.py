@@ -7,7 +7,8 @@ import pytorch_lightning as pl
 
 import numpy as np
 
-from .models import decoder, encoder
+from .models import encoder
+from .models.decoder import get_mgrid
 from .psf_transform import PowerLawPSF
 from bliss import device
 
@@ -21,7 +22,7 @@ def _fit_plane_to_background(background):
     for i in range(n_bands):
         # can we make numpy to torch?
         y = background[i].flatten().detach().cpu().numpy()
-        grid = decoder.get_mgrid(slen).detach().cpu().numpy()
+        grid = get_mgrid(slen).detach().cpu().numpy()
 
         x = np.ones((slen ** 2, 3))
         x[:, 1:] = np.array(
@@ -49,7 +50,7 @@ class PlanarBackground(nn.Module):
 
         # get grid
         # can we use cached grid to replace?
-        _mgrid = decoder.get_mgrid(image_slen).to(device)
+        _mgrid = get_mgrid(image_slen).to(device)
         self.mgrid = torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
 
         # initial weights
@@ -73,6 +74,7 @@ class WakeNet(pl.LightningModule):
     def __init__(
         self,
         star_encoder,
+        image_decoder,
         observed_img,
         init_psf_params,
         init_background_params,
@@ -94,6 +96,7 @@ class WakeNet(pl.LightningModule):
         self.n_samples = self.hparams["n_samples"]
         self.lr = self.hparams["lr"]
         self.slen = observed_img.shape[-1]
+        assert self.image_decoder.slen == self.slen, "cached grid won't match."
 
         # get n_bands
         assert observed_img.shape[1] == init_psf_params.shape[0]
@@ -106,15 +109,16 @@ class WakeNet(pl.LightningModule):
         self.psf = self.power_law_psf.forward()
 
         # set up initial background parameters
-        assert init_background_params is not None
-        assert init_background_params.shape[0] == self.n_bands
-        self.init_background_params = init_background_params
-        self.image_slen = image_slen
-        self.planar_background = PlanarBackground(
-            image_slen=self.slen, init_background_params=self.init_background_params
-        )
+        if init_background_params is None:
+            self._get_init_background()
+        else:
+            assert init_background_params.shape[0] == self.n_bands
+            self.init_background_params = init_background_params
+            self.planar_background = PlanarBackground(
+                image_slen=self.slen, init_background_params=self.init_background_params
+            )
 
-        self.cached_grid = decoder.get_mgrid(observed_img.shape[-1])
+        self.init_background = self.planar_background.forward()
 
     def forward(self, obs_img, run_map=False):
 
@@ -138,17 +142,13 @@ class WakeNet(pl.LightningModule):
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        background = self.planar_background.forward().unsqueeze(0)
-        self.stars = decoder.render_multiple_stars(
-            self.slen,
-            locs_sampled,
-            n_stars_sampled,
-            self.psf,
-            fluxes_sampled,
-            self.cached_grid,
+        # background = self.planar_background.forward().unsqueeze(0)
+        self.image_decoder.psf = self.psf
+        stars = self.image_decoder.render_multiple_stars(
+            n_stars_sampled, locs_sampled, fluxes_sampled,
         )
 
-        recon_mean = self.stars + background
+        recon_mean = stars  # + background
 
         return recon_mean
 
