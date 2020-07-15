@@ -13,6 +13,7 @@ def plot_image(
     global_fig=None,
     diverging_cmap=False,
     alpha=1,
+    marker_size=1,
 ):
 
     # locations are coordinates in the image, on scale from 0 to 1
@@ -34,6 +35,7 @@ def plot_image(
             y=true_locs[:, 0] * (slen - 1),
             color="r",
             marker="x",
+            s=marker_size,
         )
 
     if not (estimated_locs is None):
@@ -45,6 +47,7 @@ def plot_image(
             color="b",
             marker="o",
             alpha=alpha,
+            s=marker_size,
         )
 
     if add_colorbar:

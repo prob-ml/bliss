@@ -78,9 +78,7 @@ class SimulatedDataset(IterableDataset):
     @staticmethod
     def get_background_from_file(background_file, slen, n_bands):
         # for numpy background that are not necessarily of the correct size.
-        background = np.load(background_file)
-        background = torch.from_numpy(background).float()
-
+        background = torch.load(background_file)
         assert n_bands == background.shape[0]
 
         # now convert background to size of scenes
@@ -150,7 +148,7 @@ class SimulatedDataset(IterableDataset):
 
         # general sources
         parser.add_argument("--max-sources", type=int, default=10)
-        parser.add_argument("--mean-sources", type=int, default=5)
+        parser.add_argument("--mean-sources", type=float, default=5)
         parser.add_argument("--min-sources", type=int, default=1)
         parser.add_argument("--loc-min", type=float, default=0.0)
         parser.add_argument("--loc-max", type=float, default=1.0)

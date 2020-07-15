@@ -312,6 +312,7 @@ class SleepPhase(pl.LightningModule):
                 "galaxy_bool_loss": galaxy_bool_loss.sum(),
                 "images": batch["images"],
                 "locs": batch["locs"],
+                "n_sources": batch["n_sources"],
             },
         }
 
@@ -359,11 +360,15 @@ class SleepPhase(pl.LightningModule):
 
         # add some images to tensorboard for validating location/counts.
         # Only use 10 images in the last batch
+        true_n_sources = outputs[-1]["log"]["n_sources"][:10]
         true_locs = outputs[-1]["log"]["locs"][:10]
         images = outputs[-1]["log"]["images"][:10]
         fig, axes = plt.subplots(nrows=2, ncols=5, figsize=(20, 20,))
 
-        for ax, image, true_loc in zip(axes.flatten(), images, true_locs):
+        # TODO: Is this ok or should we use the one obtained above? (mean)
+        for ax, image, true_loc, true_n_source in zip(
+            axes.flatten(), images, true_locs, true_n_sources
+        ):
             with torch.no_grad():
                 # get the estimated params
                 self.image_encoder.eval()
@@ -385,8 +390,13 @@ class SleepPhase(pl.LightningModule):
             image = image[0].cpu().numpy()  # first band.
             loc = locs[0].cpu().numpy()
             true_loc = true_loc.cpu().numpy()
-            plotting.plot_image(ax, image, true_loc, loc)
+            plotting.plot_image(ax, image, true_loc, loc, marker_size=2)
 
+            # add n_sources info
+            ax.set_title(
+                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
+            )
+        plt.tight_layout()
         if self.logger:
             self.logger.experiment.add_figure(f"Validation {self.current_epoch}", fig)
 
