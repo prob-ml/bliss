@@ -363,7 +363,7 @@ class SleepPhase(pl.LightningModule):
         true_n_sources = outputs[-1]["log"]["n_sources"][:10]
         true_locs = outputs[-1]["log"]["locs"][:10]
         images = outputs[-1]["log"]["images"][:10]
-        fig, axes = plt.subplots(nrows=2, ncols=5, figsize=(12, 12,))
+        fig, axes = plt.subplots(nrows=2, ncols=5, figsize=(20, 20,))
 
         # TODO: Is this ok or should we use the one obtained above? (mean)
         for ax, image, true_loc, true_n_source in zip(
@@ -396,7 +396,8 @@ class SleepPhase(pl.LightningModule):
             ax.set_xlabel(
                 f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
             )
-        plt.tight_layout()
+        plt.subplots_adjust(hspace=-0.8, wspace=0.8)
+
         if self.logger:
             self.logger.experiment.add_figure(f"Validation {self.current_epoch}", fig)
 
