@@ -396,7 +396,7 @@ class SleepPhase(pl.LightningModule):
             ax.set_xlabel(
                 f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
             )
-        plt.subplots_adjust(hspace=-0.8, wspace=0.8)
+        plt.subplots_adjust(hspace=-0.8, wspace=0.7)
 
         if self.logger:
             self.logger.experiment.add_figure(f"Validation {self.current_epoch}", fig)
