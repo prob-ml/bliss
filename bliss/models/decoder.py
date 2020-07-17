@@ -7,6 +7,7 @@ from torch.distributions import Poisson
 
 from .. import device
 from .encoder import get_is_on_from_n_sources
+from ..psf_transform import PowerLawPSF
 
 
 def get_mgrid(slen):
@@ -20,7 +21,7 @@ class ImageDecoder(object):
     def __init__(
         self,
         galaxy_decoder,
-        psf,
+        init_psf_params,
         background,
         n_bands=1,
         slen=50,
@@ -70,7 +71,10 @@ class ImageDecoder(object):
         assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
 
         self.cached_grid = get_mgrid(self.slen)
-        self.psf = psf
+
+        ## load psf_params and forward to psf
+        self.powerlawpsf = PowerLawPSF(init_psf_params)
+        self.psf = self.powerlawpsf.forward()
 
     def _trim_psf(self):
         """Crop the psf to length slen x slen,

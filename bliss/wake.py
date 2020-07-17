@@ -9,7 +9,6 @@ import numpy as np
 
 from .models import encoder
 from .models.decoder import get_mgrid
-from .psf_transform import PowerLawPSF
 from bliss import device
 
 
@@ -76,7 +75,6 @@ class WakeNet(pl.LightningModule):
         star_encoder,
         image_decoder,
         observed_img,
-        init_psf_params,
         init_background_params,
         hparams,
         pad=0,
@@ -99,14 +97,7 @@ class WakeNet(pl.LightningModule):
         assert self.image_decoder.slen == self.slen, "cached grid won't match."
 
         # get n_bands
-        assert observed_img.shape[1] == init_psf_params.shape[0]
-        self.n_bands = init_psf_params.shape[0]
-
-        # get psf
-        psf_slen = self.slen + ((self.slen % 2) == 0) * 1
-        self.init_psf_params = init_psf_params
-        self.power_law_psf = PowerLawPSF(self.init_psf_params, image_slen=psf_slen)
-        self.psf = self.power_law_psf.forward()
+        self.n_bands = self.image_decoder.n_bands
 
         # set up initial background parameters
         assert init_background_params.shape[0] == self.n_bands
@@ -139,13 +130,12 @@ class WakeNet(pl.LightningModule):
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        # background = self.planar_background.forward().unsqueeze(0)
-        self.image_decoder.psf = self.psf
+        background = self.planar_background.forward().unsqueeze(0)
         stars = self.image_decoder.render_multiple_stars(
             n_stars_sampled, locs_sampled, fluxes_sampled,
         )
 
-        recon_mean = stars  # + background
+        recon_mean = stars + background
 
         return recon_mean
 
@@ -164,7 +154,9 @@ class WakeNet(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        return optim.Adam([{"params": self.power_law_psf.parameters(), "lr": self.lr}])
+        return optim.Adam(
+            [{"params": self.image_decoder.powerlawpsf.parameters(), "lr": self.lr}]
+        )
 
     # ---------------
     # Training

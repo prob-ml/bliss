@@ -88,10 +88,10 @@ def fitted_psf(data_path):
 @pytest.fixture(scope="session")
 def get_star_dataset(device):
     def star_dataset(
-        psf, batch_size=32, n_images=128, n_bands=1, slen=50, **dec_kwargs
+        init_psf_params, batch_size=32, n_images=128, n_bands=1, slen=50, **dec_kwargs
     ):
         assert 1 <= n_bands <= 2
-        assert len(psf.shape) == 3
+        # assert len(psf.shape) == 3
 
         dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": n_bands, "slen": slen})
         background = torch.zeros(2, slen, slen, device=device)
@@ -100,9 +100,9 @@ def get_star_dataset(device):
 
         # slice if necessary.
         background = background[range(n_bands)]
-        psf = psf[range(n_bands)]
+        init_psf_params = init_psf_params[None, 0, ...]
 
-        dec_args = (None, psf, background)
+        dec_args = (None, init_psf_params, background)
 
         n_batches = int(n_images / batch_size)
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
