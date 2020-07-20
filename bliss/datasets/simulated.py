@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from torch.utils.data import IterableDataset
 
-from bliss import device, psf_transform
+from bliss import device
 from bliss.models import galaxy_net
-from bliss.models.decoder import ImageDecoder
+from bliss.models.decoder import ImageDecoder, PowerLawPSF
 
 
 class SimulatedDataset(IterableDataset):
@@ -88,6 +88,14 @@ class SimulatedDataset(IterableDataset):
             background[i, ...] = value
 
         return background
+
+    @staticmethod
+    def get_psf_from_file(psf_file):
+        psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+        power_law_psf = PowerLawPSF(psf_params)
+        psf = power_law_psf.forward().detach()
+        assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
+        return psf
 
     @staticmethod
     def decoder_args_from_args(args, paths: dict):

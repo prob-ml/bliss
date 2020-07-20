@@ -106,7 +106,7 @@ class WakeNet(pl.LightningModule):
             image_slen=self.slen, init_background_params=self.init_background_params
         )
 
-        self.init_background = self.planar_background.forward()
+        # self.init_background = self.planar_background.forward()
 
     def forward(self, obs_img, run_map=False):
 
@@ -130,12 +130,12 @@ class WakeNet(pl.LightningModule):
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        background = self.planar_background.forward().unsqueeze(0)
+        # background = self.planar_background.forward().unsqueeze(0)
         stars = self.image_decoder.render_multiple_stars(
             n_stars_sampled, locs_sampled, fluxes_sampled,
         )
 
-        recon_mean = stars + background
+        recon_mean = stars  # + background
 
         return recon_mean
 
@@ -220,3 +220,6 @@ class WakeNet(pl.LightningModule):
                 )
 
         return samples
+
+    def backward(self, trainer, loss, optimizer, optimizer_idx: int):
+        loss.backward(retain_graph=True)
