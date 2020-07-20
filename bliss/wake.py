@@ -9,7 +9,7 @@ import numpy as np
 
 from .models import encoder
 from .models.decoder import get_mgrid
-from bliss import device
+from . import device
 
 
 def _fit_plane_to_background(background):

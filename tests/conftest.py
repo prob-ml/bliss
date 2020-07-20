@@ -1,6 +1,7 @@
 import pytest
 import pathlib
 import torch
+import numpy as np
 import pytorch_lightning as pl
 
 from bliss import use_cuda, sleep
@@ -77,12 +78,12 @@ def galaxy_decoder(data_path, device):
 
 
 @pytest.fixture(scope="session")
-def fitted_psf(data_path):
+def fitted_psf_params(data_path, device):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-    psf = SimulatedDataset.get_psf_from_file(psf_file)
-    assert psf.size(0) == 2
-    assert len(psf.shape) == 3
-    return psf
+    psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+    # assert psf.size(0) == 2
+    # assert len(psf.shape) == 3
+    return psf_params
 
 
 @pytest.fixture(scope="session")

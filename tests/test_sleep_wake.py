@@ -3,28 +3,17 @@ import pytest
 import torch
 import pytorch_lightning as pl
 
-from bliss import use_cuda, psf_transform, wake
-from bliss.models.decoder import get_mgrid
+from bliss import use_cuda, wake
+from bliss.models.decoder import get_mgrid, PowerLawPSF
 
 
 class TestStarSleepEncoder:
-    @pytest.fixture(scope="module")
-    def init_psf_setup(self, data_path, device):
-        psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-        true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-        init_psf_params = true_psf_params.clone()[None, 0, ...]
-        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device)
-
-        init_psf = psf_transform.PowerLawPSF(init_psf_params).forward().detach()
-
-        return {"init_psf_params": init_psf_params, "init_psf": init_psf}
-
     @pytest.fixture(scope="class")
     def trained_encoder(
         self, init_psf_setup, get_star_dataset, get_trained_encoder,
     ):
         star_dataset = get_star_dataset(
-            init_psf_setup["init_psf_params"], n_bands=1, slen=50, batch_size=32
+            fitted_psf_params, n_bands=1, slen=50, batch_size=32
         )
         trained_encoder = get_trained_encoder(star_dataset, n_epochs=100)
         return trained_encoder
@@ -71,6 +60,17 @@ class TestStarSleepEncoder:
 
 
 class TestStarWakeNet:
+    @pytest.fixture(scope="class")
+    def init_psf_setup(self, data_path, device):
+        psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
+        true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+        init_psf_params = true_psf_params.clone()[None, 0, ...]
+        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device)
+
+        init_psf = PowerLawPSF(init_psf_params).forward().detach()
+
+        return {"init_psf_params": init_psf_params, "init_psf": init_psf}
+
     def test_star_wake(
         self,
         get_trained_encoder,
@@ -134,7 +134,7 @@ class TestStarWakeNet:
         wake_trainer.fit(wake_phase_model)
 
         estimate_psf_params = list(wake_phase_model.power_law_psf.parameters())[0]
-        estimate_psf = psf_transform.PowerLawPSF(estimate_psf_params).forward().detach()
+        estimate_psf = PowerLawPSF(estimate_psf_params).forward().detach()
 
         init_psf = init_psf_setup["init_psf"]
         init_residuals = true_psf.to(device) - init_psf.to(device)
