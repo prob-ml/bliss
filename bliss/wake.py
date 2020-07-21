@@ -155,7 +155,7 @@ class WakeNet(pl.LightningModule):
 
     def configure_optimizers(self):
         return optim.Adam(
-            [{"params": self.image_decoder.powerlawpsf.parameters(), "lr": self.lr}]
+            [{"params": self.image_decoder.power_law_psf.parameters(), "lr": self.lr}]
         )
 
     # ---------------

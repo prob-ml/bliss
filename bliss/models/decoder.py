@@ -74,8 +74,8 @@ class ImageDecoder(object):
 
         self.cached_grid = get_mgrid(self.slen)
 
-        ## load psf_params and forward to psf
-        self.powerlawpsf = PowerLawPSF(init_psf_params)
+        ## load psf_params
+        self.power_law_psf = PowerLawPSF(init_psf_params)
 
     def _trim_psf(self):
         """Crop the psf to length slen x slen,
@@ -326,7 +326,7 @@ class ImageDecoder(object):
         Returns:
         """
 
-        psf = self.powerlawpsf.forward()
+        psf = self.power_law_psf.forward()
         batch_size = locs.shape[0]
         n_bands = psf.shape[0]
         scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)

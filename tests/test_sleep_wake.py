@@ -134,7 +134,7 @@ class TestStarWakeNet:
         wake_trainer.fit(wake_phase_model)
 
         estimate_psf_params = list(
-            wake_phase_model.image_decoder.powerlawpsf.parameters()
+            wake_phase_model.image_decoder.power_law_psf.parameters()
         )[0]
         estimate_psf = PowerLawPSF(estimate_psf_params).forward().detach()[0]
 
