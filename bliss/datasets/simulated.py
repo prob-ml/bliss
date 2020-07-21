@@ -6,7 +6,7 @@ from torch.utils.data import IterableDataset
 
 from bliss import device
 from bliss.models import galaxy_net
-from bliss.models.decoder import ImageDecoder, PowerLawPSF
+from bliss.models.decoder import ImageDecoder
 
 
 class SimulatedDataset(IterableDataset):
