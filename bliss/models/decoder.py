@@ -76,7 +76,6 @@ class ImageDecoder(object):
 
         ## load psf_params and forward to psf
         self.powerlawpsf = PowerLawPSF(init_psf_params)
-        self.psf = self.powerlawpsf.forward()
 
     def _trim_psf(self):
         """Crop the psf to length slen x slen,
@@ -327,17 +326,18 @@ class ImageDecoder(object):
         Returns:
         """
 
+        psf = self.powerlawpsf.forward()
         batch_size = locs.shape[0]
-        n_bands = self.psf.shape[0]
+        n_bands = psf.shape[0]
         scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)
 
-        assert len(self.psf.shape) == 3  # the shape is (n_bands, slen, slen)
+        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
         assert fluxes.shape[0] == locs.shape[0]
         assert fluxes.shape[1] == locs.shape[1]
         assert fluxes.shape[2] == n_bands
 
         # all stars are just the PSF so we copy it.
-        expanded_psf = self.psf.expand(batch_size, n_bands, -1, -1)
+        expanded_psf = psf.expand(batch_size, n_bands, -1, -1)
 
         # this loop plots each of the ith star in each of the (batch_size) images.
         max_n = locs.shape[1]

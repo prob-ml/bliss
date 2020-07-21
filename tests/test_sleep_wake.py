@@ -104,7 +104,6 @@ class TestStarWakeNet:
 
         # initialize psf params, just add 4 to each sigmas
         true_psf = PowerLawPSF(fitted_psf_params).forward()[None, 0].clone()
-        init_psf_params = init_psf_setup["init_psf_params"]
 
         n_samples = 1000 if use_cuda else 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
@@ -134,7 +133,10 @@ class TestStarWakeNet:
 
         wake_trainer.fit(wake_phase_model)
 
-        estimate_psf = wake_phase_model.image_decoder.psf
+        estimate_psf_params = list(
+            wake_phase_model.image_decoder.powerlawpsf.parameters()
+        )[0]
+        estimate_psf = PowerLawPSF(estimate_psf_params).forward().detach()[0]
 
         init_psf = init_psf_setup["init_psf"]
         init_residuals = true_psf.to(device) - init_psf.to(device)

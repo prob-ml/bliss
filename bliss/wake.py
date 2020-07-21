@@ -220,6 +220,3 @@ class WakeNet(pl.LightningModule):
                 )
 
         return samples
-
-    def backward(self, trainer, loss, optimizer, optimizer_idx: int):
-        loss.backward(retain_graph=True)
