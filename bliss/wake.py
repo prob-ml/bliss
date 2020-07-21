@@ -187,7 +187,7 @@ class WakeNet(pl.LightningModule):
         return {"val_loss": outputs[-1]["val_loss"]}
 
     def _get_init_background(self, sample_every=25):
-        sampled_background = self._sample_image(self.observed_img, sample_every)
+        sampled_background = self._sample_image(sample_every)
         self.init_background_params = torch.tensor(
             _fit_plane_to_background(sampled_background)
         ).to(device)
@@ -195,10 +195,10 @@ class WakeNet(pl.LightningModule):
             image_slen=self.slen, init_background_params=self.init_background_params
         )
 
-    def _sample_image(observed_image, sample_every=10):
-        batch_size = observed_image.shape[0]
-        n_bands = observed_image.shape[1]
-        slen = observed_image.shape[-1]
+    def _sample_image(self, sample_every=10):
+        batch_size = self.observed_image.shape[0]
+        n_bands = self.observed_image.shape[1]
+        slen = self.observed_image.shape[-1]
 
         samples = torch.zeros(
             n_bands,
@@ -211,7 +211,7 @@ class WakeNet(pl.LightningModule):
                 x0 = i * sample_every
                 x1 = j * sample_every
                 samples[:, i, j] = (
-                    observed_image[
+                    self.observed_image[
                         :, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)
                     ]
                     .reshape(batch_size, n_bands, -1)
