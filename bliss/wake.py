@@ -103,10 +103,8 @@ class WakeNet(pl.LightningModule):
         assert init_background_params.shape[0] == self.n_bands
         self.init_background_params = init_background_params
         self.planar_background = PlanarBackground(
-            image_slen=self.slen, init_background_params=self.init_background_params
+            self.init_background_params, self.slen
         )
-
-        # self.init_background = self.planar_background.forward()
 
     def forward(self, obs_img, run_map=False):
 
