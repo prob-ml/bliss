@@ -70,7 +70,6 @@ class TestStarWakeNet:
 
         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 
-    @pytest.mark.only
     def test_star_wake(
         self,
         get_trained_encoder,
@@ -97,6 +96,7 @@ class TestStarWakeNet:
         test_image = test_3_stars["images"]
         test_slen = test_image.size(-1)
 
+        # TODO: Reuse these when creating the background in the fixture
         # initialize background params, which will create the true background
         init_background_params = torch.zeros(1, 3, device=device)
         init_background_params[0, 0] = 686.0

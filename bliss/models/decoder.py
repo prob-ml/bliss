@@ -165,7 +165,7 @@ class ImageDecoder(object):
         self.cached_grid = get_mgrid(self.slen)
 
         ## load psf_params
-        self.power_law_psf = PowerLawPSF(init_psf_params)
+        self.power_law_psf = PowerLawPSF(init_psf_params.clone())
 
     def _trim_psf(self, psf):
         """Crop the psf to length slen x slen,
