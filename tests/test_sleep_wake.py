@@ -132,7 +132,9 @@ class TestStarWakeNet:
         # round up psfs
         init_psf = init_psf_setup["init_psf"]
         true_psf = PowerLawPSF(fitted_psf_params).forward()[None, 0]
-        estimated_psf_params = list(wake_phase_model.power_law_psf.parameters())[0]
+        estimated_psf_params = list(
+            wake_phase_model.image_decoder.power_law_psf.parameters()
+        )[0]
         estimated_psf = PowerLawPSF(estimated_psf_params).forward().detach()
 
         init_residuals = true_psf.to(device) - init_psf.to(device)
