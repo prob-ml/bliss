@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 import torch
 import pytorch_lightning as pl
@@ -63,16 +62,15 @@ class TestStarSleepEncoder:
 
 class TestStarWakeNet:
     @pytest.fixture(scope="class")
-    def init_psf_setup(self, data_path, device):
-        psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-        true_psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-        init_psf_params = true_psf_params.clone()[None, 0, ...]
+    def init_psf_setup(self, fitted_psf_params, device):
+        # initialize psf params, just add 1 to each sigmas
+        init_psf_params = fitted_psf_params.clone()[None, 0]
         init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device)
-
         init_psf = PowerLawPSF(init_psf_params).forward().detach()
 
         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 
+    @pytest.mark.only
     def test_star_wake(
         self,
         get_trained_encoder,
@@ -95,24 +93,22 @@ class TestStarWakeNet:
         trained_encoder = get_trained_encoder(star_dataset, n_epochs=n_epochs)
 
         # load the test image
-        # 3-stars 30*30
+        # 3-stars 30*30 pixels.
         test_image = test_3_stars["images"]
+        test_slen = test_image.size(-1)
 
         # initialize background params, which will create the true background
         init_background_params = torch.zeros(1, 3, device=device)
         init_background_params[0, 0] = 686.0
 
-        # initialize psf params, just add 4 to each sigmas
-        true_psf = PowerLawPSF(fitted_psf_params).forward()[None, 0].clone()
-
         n_samples = 1000 if use_cuda else 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
         image_decoder = star_dataset.image_decoder
-        image_decoder.slen = test_image.size(-1)
-        image_decoder.cached_grid = get_mgrid((test_image.size(-1)))
+        image_decoder.slen = test_slen
+        image_decoder.cached_grid = get_mgrid(test_slen)
         wake_phase_model = wake.WakeNet(
             trained_encoder,
-            star_dataset.image_decoder,
+            image_decoder,
             test_image,
             init_background_params,
             hparams,
@@ -133,16 +129,16 @@ class TestStarWakeNet:
 
         wake_trainer.fit(wake_phase_model)
 
-        estimate_psf_params = list(
-            wake_phase_model.image_decoder.power_law_psf.parameters()
-        )[0]
-        estimate_psf = PowerLawPSF(estimate_psf_params).forward().detach()[0]
-
+        # round up psfs
         init_psf = init_psf_setup["init_psf"]
+        true_psf = PowerLawPSF(fitted_psf_params).forward()[None, 0]
+        estimated_psf_params = list(wake_phase_model.power_law_psf.parameters())[0]
+        estimated_psf = PowerLawPSF(estimated_psf_params).forward().detach()
+
         init_residuals = true_psf.to(device) - init_psf.to(device)
-        estimate_residuals = true_psf.to(device) - estimate_psf.to(device)
+        estimated_residuals = true_psf.to(device) - estimated_psf.to(device)
 
         if not use_cuda:
             return
 
-        assert estimate_residuals.abs().sum() <= init_residuals.abs().sum() * 0.30
+        assert estimated_residuals.abs().sum() <= init_residuals.abs().sum() * 0.30

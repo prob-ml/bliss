@@ -81,8 +81,6 @@ def galaxy_decoder(data_path, device):
 def fitted_psf_params(data_path, device):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
     psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-    # assert psf.size(0) == 2
-    # assert len(psf.shape) == 3
     return psf_params
 
 
@@ -92,7 +90,6 @@ def get_star_dataset(device):
         init_psf_params, batch_size=32, n_images=128, n_bands=1, slen=50, **dec_kwargs
     ):
         assert 1 <= n_bands <= 2
-        # assert len(psf.shape) == 3
 
         dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": n_bands, "slen": slen})
         background = torch.zeros(2, slen, slen, device=device)

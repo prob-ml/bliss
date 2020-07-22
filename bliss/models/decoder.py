@@ -46,10 +46,9 @@ class PowerLawPSF(nn.Module):
         super(PowerLawPSF, self).__init__()
         assert len(init_psf_params.shape) == 2
         assert image_slen % 2 == 1, "image_slen must be odd"
-        assert (psf_slen % 2) == 1, "psf_slen must be odd"
+        assert psf_slen % 2 == 1, "psf_slen must be odd"
 
         self.n_bands = init_psf_params.shape[0]
-        self.init_psf_params = init_psf_params.clone()
 
         self.psf_slen = psf_slen
         self.image_slen = image_slen
@@ -63,7 +62,7 @@ class PowerLawPSF(nn.Module):
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = self.get_psf_single_band(self.init_psf_params[i])
+            psf_i = self.get_psf_single_band(init_psf_params[i])
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
