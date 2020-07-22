@@ -162,7 +162,7 @@ class WakeNet(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
         recon_mean = self.forward(img)
-        error = Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
+        error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
         last = self.slen - self.pad
         loss = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
@@ -173,7 +173,7 @@ class WakeNet(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
         recon_mean = self.forward(img)
-        error = Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
+        error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
         last = self.slen - self.pad
         loss_val = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
