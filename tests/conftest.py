@@ -98,7 +98,7 @@ def get_star_dataset(device):
 
         # slice if necessary.
         background = background[range(n_bands)]
-        init_psf_params = init_psf_params[None, 0, ...]
+        init_psf_params = init_psf_params[range(n_bands)]
 
         dec_args = (None, init_psf_params, background)
 
