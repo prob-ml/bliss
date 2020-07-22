@@ -130,12 +130,12 @@ class WakeNet(pl.LightningModule):
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        # background = self.planar_background.forward().unsqueeze(0)
+        background = self.planar_background.forward().unsqueeze(0).detach()
         stars = self.image_decoder.render_multiple_stars(
             n_stars_sampled, locs_sampled, fluxes_sampled,
         )
 
-        recon_mean = stars  # + background
+        recon_mean = stars + background
 
         return recon_mean
 
