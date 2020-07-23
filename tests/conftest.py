@@ -116,6 +116,7 @@ def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
 
         n_bands = 1
 
+        # TODO: take background from test image.
         background = torch.zeros(n_bands, slen, slen, device=device)
         background[0] = 5000.0
         psf = fitted_psf[range(n_bands)]

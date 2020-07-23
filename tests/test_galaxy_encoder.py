@@ -12,35 +12,36 @@ class TestGalaxyEncoder:
 
         n_epochs = 100 if use_cuda else 1
         # draw galaxies only in 2x2 center tile
-        loc_min = 0.4
-        loc_max = 0.6
+        loc_min = 0.1
+        loc_max = 0.9
 
         # encoder looks at 10x10 padded tile, and detects galaxies in 2x2 tile.
-        ptile_slen = 10
-        edge_padding = 4
+        ptile_slen = 8
+        edge_padding = 3
 
         galaxy_dataset = get_galaxy_dataset(
-            slen=10,
+            slen=50,
             batch_size=32,
-            n_images=128,
+            n_images=320,
             loc_min=loc_min,
             loc_max=loc_max,
-            max_sources=1,
+            max_sources=3,
+            mean_sources=2,
             min_sources=1,
-            mean_sources=1,
         )
         trained_encoder = get_trained_encoder(
             galaxy_dataset,
             n_epochs=n_epochs,
-            max_detections=1,
+            max_detections=2,
             ptile_slen=ptile_slen,
-            step=1,
+            step=2,
             edge_padding=edge_padding,
         )
         return trained_encoder
 
-    def test_n_sources_and_locs(self, data_path, device, trained_encoder):
-        test_galaxy = torch.load(data_path.joinpath(f"1_galaxy_small_test.pt"))
+    @pytest.mark.parametrize("n_galaxies", ["1", "3"])
+    def test_n_sources_and_locs(self, n_galaxies, data_path, device, trained_encoder):
+        test_galaxy = torch.load(data_path.joinpath(f"{n_galaxies}_galaxy_test.pt"))
         test_image = test_galaxy["images"]
 
         with torch.no_grad():
@@ -62,6 +63,10 @@ class TestGalaxyEncoder:
         if not use_cuda:
             return
 
+        # check number of galaxies is correct
+        assert test_galaxy["n_galaxies"].item() == galaxy_bool.sum().item()
+
+        # check locations are accurate.
         diff_locs = test_galaxy["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
         diff_locs *= test_image.size(-1)
         assert diff_locs.abs().max() <= 0.5

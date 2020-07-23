@@ -252,7 +252,7 @@ class SleepPhase(pl.LightningModule):
             locs_loss * (locs_loss.detach() < 1e6).float()
             + counter_loss
             # + galaxy_params_loss
-            # + star_params_loss
+            + star_params_loss
             + galaxy_bool_loss
         )
 
@@ -400,6 +400,7 @@ class SleepPhase(pl.LightningModule):
 
         if self.logger:
             self.logger.experiment.add_figure(f"Validation {self.current_epoch}", fig)
+        plt.close(fig)
 
         return results
 
