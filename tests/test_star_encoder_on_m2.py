@@ -17,7 +17,7 @@ def trained_star_encoder_m2(data_path, device, get_star_dataset, get_trained_enc
     init_psf_params = psf_transform.get_psf_params(psf_file, bands=[2, 3])
     power_law_psf = psf_transform.PowerLawPSF(init_psf_params.to(device))
     psf_og = power_law_psf.forward().detach()
-    n_epochs = 200 if use_cuda else 1
+    n_epochs = 200 if use_cuda else 2
 
     star_dataset = get_star_dataset(
         psf_og,
