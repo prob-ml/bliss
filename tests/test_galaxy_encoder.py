@@ -10,10 +10,10 @@ class TestGalaxyEncoder:
         self, get_galaxy_dataset, get_trained_encoder,
     ):
 
-        n_epochs = 100 if use_cuda else 1
+        n_epochs = 150 if use_cuda else 1
         # draw galaxies only in 2x2 center tile
-        loc_min = 0.1
-        loc_max = 0.9
+        loc_min = 0.2
+        loc_max = 0.8
 
         # encoder looks at 10x10 padded tile, and detects galaxies in 2x2 tile.
         ptile_slen = 8
@@ -25,8 +25,8 @@ class TestGalaxyEncoder:
             n_images=320,
             loc_min=loc_min,
             loc_max=loc_max,
-            max_sources=3,
-            mean_sources=2,
+            max_sources=2,
+            mean_sources=1.5,
             min_sources=1,
         )
         trained_encoder = get_trained_encoder(
