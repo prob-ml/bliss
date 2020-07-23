@@ -2,25 +2,15 @@ import pytest
 import pathlib
 import torch
 import pytorch_lightning as pl
-from pytorch_lightning.profiler import AdvancedProfiler
 
 from bliss import use_cuda, sleep
 from bliss.datasets.simulated import SimulatedDataset
-from bliss.models import galaxy_net, encoder
 
 
 def pytest_addoption(parser):
 
     parser.addoption(
         "--gpus", default="0,", type=str, help="--gpus option for trainer."
-    )
-
-    parser.addoption(
-        "--profile", action="store_true", help="Enable profiler",
-    )
-
-    parser.addoption(
-        "--log", action="store_true", help="Enable logger.",
     )
 
     parser.addoption(
@@ -51,29 +41,8 @@ def root_path():
 
 
 @pytest.fixture(scope="session")
-def logs_path(root_path):
-    logs_path = root_path.joinpath("tests/logs")
-    logs_path.mkdir(exist_ok=True, parents=True)
-    return logs_path
-
-
-@pytest.fixture(scope="session")
 def data_path(root_path):
     return root_path.joinpath("data")
-
-
-# logging and profiling.
-@pytest.fixture(scope="session")
-def profiler(pytestconfig, logs_path):
-    profiling = pytestconfig.getoption("profile")
-    profile_file = logs_path.joinpath("profile.txt")
-    profiler = AdvancedProfiler(output_filename=profile_file) if profiling else None
-    return profiler
-
-
-@pytest.fixture(scope="session")
-def save_logs(pytestconfig):
-    return pytestconfig.getoption("log")
 
 
 @pytest.fixture(scope="session")
@@ -99,14 +68,11 @@ def device(gpus):
 
 
 @pytest.fixture(scope="session")
-def galaxy_decoder(data_path):
-    slen = 51
-    latent_dim = 8
-    n_bands = 1
-    decoder_file = data_path.joinpath("decoder_params_100_single_band_i.dat")
-    dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
-    dec.load_state_dict(torch.load(decoder_file, map_location=device))
-    dec.eval()
+def galaxy_decoder(data_path, device):
+    dec_file = data_path.joinpath("galaxy_decoder_1_band.dat")
+    dec = SimulatedDataset.get_gal_decoder_from_file(
+        dec_file, gal_slen=51, n_bands=1, latent_dim=8
+    )
     return dec
 
 
@@ -145,48 +111,76 @@ def get_star_dataset(device):
 
 
 @pytest.fixture(scope="session")
-def get_trained_star_encoder(device, gpus, profiler, save_logs, logs_path):
-    def trained_star_encoder(
-        star_dataset, n_epochs=100, enc_conv_c=5, enc_kern=3, enc_hidden=64
+def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
+    def galaxy_dataset(batch_size=32, n_images=128, slen=10, **dec_kwargs):
+
+        n_bands = 1
+
+        # TODO: take background from test image.
+        background = torch.zeros(n_bands, slen, slen, device=device)
+        background[0] = 5000.0
+        psf = fitted_psf[range(n_bands)]
+        dec_args = (galaxy_decoder, psf, background)
+
+        n_batches = int(n_images / batch_size)
+
+        dec_kwargs.update({"prob_galaxy": 1.0, "n_bands": n_bands, "slen": slen})
+
+        return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
+
+    return galaxy_dataset
+
+
+@pytest.fixture(scope="session")
+def get_trained_encoder(device, gpus):
+    def trained_encoder(
+        dataset,
+        n_epochs=100,
+        ptile_slen=8,
+        step=2,
+        edge_padding=3,
+        enc_conv_c=5,
+        enc_kern=3,
+        enc_hidden=64,
+        max_detections=2,
     ):
         n_epochs = n_epochs if use_cuda else 1
 
-        slen = star_dataset.slen
-        n_bands = star_dataset.n_bands
-        latent_dim = star_dataset.image_decoder.latent_dim
+        slen = dataset.slen
+        n_bands = dataset.n_bands
+        latent_dim = dataset.image_decoder.latent_dim
 
         # setup Star Encoder
-        image_encoder = encoder.ImageEncoder(
-            slen=slen,
-            ptile_slen=8,
-            step=2,
-            edge_padding=3,
-            n_bands=n_bands,
-            max_detections=2,
-            n_galaxy_params=latent_dim,
+        encoder_kwargs = dict(
+            ptile_slen=ptile_slen,
+            step=step,
+            edge_padding=edge_padding,
             enc_conv_c=enc_conv_c,
             enc_kern=enc_kern,
             enc_hidden=enc_hidden,
-        ).to(device)
-
-        sleep_net = sleep.SleepPhase(
-            dataset=star_dataset, image_encoder=image_encoder, save_logs=save_logs
+            max_detections=max_detections,
+            slen=slen,
+            n_bands=n_bands,
+            n_galaxy_params=latent_dim,
         )
+
+        sleep_net = sleep.SleepPhase(dataset, encoder_kwargs)
 
         sleep_trainer = pl.Trainer(
             gpus=gpus,
-            profiler=profiler,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
-            default_root_dir=logs_path,
+            profiler=None,
+            logger=False,
+            checkpoint_callback=False,
         )
 
         sleep_trainer.fit(sleep_net)
         sleep_net.image_encoder.eval()
         return sleep_net.image_encoder
 
-    return trained_star_encoder
+    return trained_encoder
 
 
 @pytest.fixture(scope="session")

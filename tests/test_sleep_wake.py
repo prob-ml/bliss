@@ -10,10 +10,10 @@ from bliss.models.decoder import get_mgrid
 class TestStarSleepEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(
-        self, fitted_psf, get_star_dataset, get_trained_star_encoder,
+        self, fitted_psf, get_star_dataset, get_trained_encoder,
     ):
         star_dataset = get_star_dataset(fitted_psf, n_bands=1, slen=50, batch_size=32)
-        trained_encoder = get_trained_star_encoder(star_dataset, n_epochs=100)
+        trained_encoder = get_trained_encoder(star_dataset, n_epochs=100)
         return trained_encoder
 
     @pytest.mark.parametrize("n_stars", ["1", "3"])
@@ -71,16 +71,13 @@ class TestStarWakePhase:
 
     def test_star_wake(
         self,
-        get_trained_star_encoder,
+        get_trained_encoder,
         get_star_dataset,
         fitted_psf,
         init_psf_setup,
         test_3_stars,
         device,
         gpus,
-        profiler,
-        save_logs,
-        logs_path,
     ):
         # get dataset and encoder
         star_dataset = get_star_dataset(
@@ -91,7 +88,7 @@ class TestStarWakePhase:
             n_images=64 * 6 if use_cuda else 32,
         )
         n_epochs = 200 if use_cuda else 1
-        trained_encoder = get_trained_star_encoder(star_dataset, n_epochs=n_epochs)
+        trained_encoder = get_trained_encoder(star_dataset, n_epochs=n_epochs)
 
         # load the test image
         # 3-stars 30*30
@@ -117,7 +114,6 @@ class TestStarWakePhase:
             init_psf_params,
             init_background_params,
             hparams,
-            save_logs,
         )
 
         # run the wake-phase training
@@ -125,11 +121,12 @@ class TestStarWakePhase:
 
         wake_trainer = pl.Trainer(
             gpus=gpus,
-            profiler=profiler,
+            profiler=None,
+            logger=False,
+            checkpoint_callback=False,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
-            default_root_dir=logs_path,
         )
 
         wake_trainer.fit(wake_phase_model)

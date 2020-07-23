@@ -53,10 +53,10 @@ class ImageDecoder(object):
         self.add_noise = add_noise
 
         self.galaxy_decoder = None
-        self.latent_dim = 1
+        self.latent_dim = 8
         if not self.all_stars:
             self.galaxy_decoder = galaxy_decoder
-            self.galaxy_slen = self.galaxy_decoder.slen
+            self.gal_slen = self.galaxy_decoder.slen
             self.latent_dim = self.galaxy_decoder.latent_dim
             assert self.galaxy_decoder.n_bands == self.n_bands
 
@@ -148,8 +148,8 @@ class ImageDecoder(object):
 
         # 2 = (x,y)
         locs = torch.rand(batch_size, self.max_sources, 2, device=device)
+        locs = locs * (self.loc_max - self.loc_min) + self.loc_min
         locs *= is_on_array.unsqueeze(2)
-        locs = locs * self.loc_max + self.loc_min
 
         return locs
 
@@ -229,7 +229,7 @@ class ImageDecoder(object):
 
         galaxy_params = z.reshape(batch_size, -1, self.latent_dim)
         single_galaxies = galaxies.reshape(
-            batch_size, -1, self.n_bands, self.galaxy_slen, self.galaxy_slen
+            batch_size, -1, self.n_bands, self.gal_slen, self.gal_slen
         )
 
         # zero out excess according to n_galaxies.
@@ -374,7 +374,7 @@ class ImageDecoder(object):
         if not self.all_stars:
             # need n_sources because *_locs are not necessarily ordered.
             galaxies = self.render_multiple_galaxies(
-                galaxy_locs, n_sources, single_galaxies,
+                n_sources, galaxy_locs, single_galaxies,
             )
         stars = self.render_multiple_stars(n_sources, star_locs, fluxes)
 

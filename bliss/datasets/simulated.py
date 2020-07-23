@@ -19,6 +19,7 @@ class SimulatedDataset(IterableDataset):
         self.image_decoder = ImageDecoder(*decoder_args, **decoder_kwargs)
         self.slen = self.image_decoder.slen
         self.n_bands = self.image_decoder.n_bands
+        self.latent_dim = self.image_decoder.latent_dim
 
     def __iter__(self):
         return self.batch_generator()
@@ -60,19 +61,24 @@ class SimulatedDataset(IterableDataset):
         }
 
     @staticmethod
-    def get_gal_decoder_from_file(decoder_file, slen, n_bands, latent_dim):
-        # TODO: galaxy slen is separate
-        dec = galaxy_net.CenteredGalaxyDecoder(slen, latent_dim, n_bands).to(device)
+    def get_gal_decoder_from_file(decoder_file, gal_slen=51, n_bands=1, latent_dim=8):
+        dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, latent_dim, n_bands).to(device)
         dec.load_state_dict(torch.load(decoder_file, map_location=device))
         dec.eval()
         return dec
 
     @staticmethod
+    def get_psf_from_file(psf_file):
+        psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+        power_law_psf = psf_transform.PowerLawPSF(psf_params)
+        psf = power_law_psf.forward().detach()
+        assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
+        return psf
+
+    @staticmethod
     def get_background_from_file(background_file, slen, n_bands):
         # for numpy background that are not necessarily of the correct size.
-        background = np.load(background_file)
-        background = torch.from_numpy(background).float()
-
+        background = torch.load(background_file)
         assert n_bands == background.shape[0]
 
         # now convert background to size of scenes
@@ -84,29 +90,22 @@ class SimulatedDataset(IterableDataset):
         return background
 
     @staticmethod
-    def get_psf_from_file(psf_file):
-        psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-        power_law_psf = psf_transform.PowerLawPSF(psf_params)
-        psf = power_law_psf.forward().detach()
-        assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
-        return psf
-
-    @staticmethod
     def decoder_args_from_args(args, paths: dict):
         slen, latent_dim, n_bands = args.slen, args.latent_dim, args.n_bands
-        decoder_file = paths["data"].joinpath(args.decoder_state_file)
+        gal_slen = args.gal_slen
+        decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
         background_file = paths["data"].joinpath(args.background_file)
         psf_file = paths["data"].joinpath(args.psf_file)
 
-        dec = SimulatedDataset.get_decoder_from_args(
-            decoder_file, slen, n_bands, latent_dim
+        dec = SimulatedDataset.get_gal_decoder_from_file(
+            decoder_file, gal_slen, n_bands, latent_dim
         )
         background = SimulatedDataset.get_background_from_file(
             background_file, slen, n_bands
         )
 
-        # TODO: adjust to correct number of bands.
         psf = SimulatedDataset.get_psf_from_file(psf_file)
+        psf = psf[range(n_bands)]
 
         return dec, psf, background
 
@@ -115,11 +114,48 @@ class SimulatedDataset(IterableDataset):
         args_dict = vars(args)
         parameters = inspect.signature(ImageDecoder).parameters
 
-        decoder_args_names = ["galaxy_decoder", "psf", "background"]
+        args_names = ["n_batches", "batch_size", "galaxy_decoder", "psf", "background"]
         decoder_args = SimulatedDataset.decoder_args_from_args(args, paths)
         decoder_kwargs = {
-            param: value
-            for param, value in args_dict.items()
-            if param in parameters and param not in decoder_args_names
+            key: value
+            for key, value in args_dict.items()
+            if key in parameters and key not in args_names
         }
-        return cls(*decoder_args, **decoder_kwargs)
+        return cls(args.n_batches, args.batch_size, decoder_args, decoder_kwargs)
+
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument(
+            "--galaxy-decoder-file",
+            type=str,
+            default="galaxy_decoder_1_band.dat",
+            help="File relative to data directory containing galaxy decoder state_dict.",
+        )
+
+        parser.add_argument(
+            "--background-file",
+            type=str,
+            default="background_galaxy_single_band_i.npy",
+            help="File relative to data directory containing background to be used.",
+        )
+
+        parser.add_argument(
+            "--psf-file",
+            type=str,
+            default="fitted_powerlaw_psf_params.npy",
+            help="File relative to data directory containing PSF to be used.",
+        )
+
+        # general sources
+        parser.add_argument("--max-sources", type=int, default=10)
+        parser.add_argument("--mean-sources", type=float, default=5)
+        parser.add_argument("--min-sources", type=int, default=1)
+        parser.add_argument("--loc-min", type=float, default=0.0)
+        parser.add_argument("--loc-max", type=float, default=1.0)
+        parser.add_argument("--prob-galaxy", type=float, default=0.0)
+        parser.add_argument("--gal-slen", type=int, default=51)
+
+        # stars.
+        parser.add_argument("--f-min", type=float, default=1e4)
+        parser.add_argument("--f-max", type=float, default=1e6)
+        parser.add_argument("--alpha", type=float, default=0.5)
