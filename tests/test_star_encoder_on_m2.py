@@ -17,7 +17,7 @@ def trained_star_encoder_m2(data_path, device, get_star_dataset, get_trained_enc
     init_psf_params = psf_transform.get_psf_params(psf_file, bands=[2, 3])
     power_law_psf = psf_transform.PowerLawPSF(init_psf_params.to(device))
     psf_og = power_law_psf.forward().detach()
-    n_epochs = 200 if use_cuda else 2
+    n_epochs = 200 if use_cuda else 1
 
     star_dataset = get_star_dataset(
         psf_og,
@@ -70,6 +70,10 @@ class TestStarSleepEncoderM2:
         )
         est_fluxes = est_log_fluxes.exp()
 
+        # check metrics if cuda is true
+        if not use_cuda:
+            return
+
         # summary statistics
         sleep_tpr, sleep_ppv = image_statistics.get_summary_stats(
             est_locs[0],
@@ -82,10 +86,6 @@ class TestStarSleepEncoderM2:
 
         print("Sleep phase TPR: ", sleep_tpr)
         print("Sleep phase PPV: ", sleep_ppv)
-
-        # check metrics if cuda is true
-        if not use_cuda:
-            return
 
         assert sleep_tpr > 0.45
         assert sleep_ppv > 0.33
