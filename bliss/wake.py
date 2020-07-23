@@ -99,13 +99,11 @@ class WakePhase(pl.LightningModule):
         init_background_params,
         hparams,
         pad=0,
-        save_logs=False,
     ):
         super(WakePhase, self).__init__()
 
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder
-        self.save_logs = save_logs
 
         # observed image is batch_size (or 1) x n_bands x slen x slen
         assert len(observed_img.shape) == 4
@@ -219,7 +217,7 @@ class WakePhase(pl.LightningModule):
         loss = self.get_wake_loss(img, psf, self.n_samples, run_map=False)
         logs = {"train_loss": loss}
 
-        return {"loss": loss, "log": logs} if self.save_logs else {"loss": loss}
+        return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)

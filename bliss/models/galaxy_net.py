@@ -283,7 +283,9 @@ class OneCenteredGalaxy(pl.LightningModule):
         recon_var = outputs[-1]["recon_var"][:5]
 
         fig = self.plot_reconstruction(image, recon_mean, recon_var)
-        self.logger.experiment.add_figure(f"Summary images {self.current_epoch}", fig)
+
+        if self.logger:
+            self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
 
         return {"val_loss": avg_loss, "log": tensorboard_logs}
 
@@ -328,8 +330,14 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         return fig
 
+    @staticmethod
+    def add_args(parser):
+        parser.add_argument(
+            "--tt-split", type=float, default=0.1, help="train/test split"
+        )
+
     @classmethod
-    def from_args(cls, dataset, args):
+    def from_args(cls, args, dataset):
         args_dict = vars(args)
 
         parameters = list(inspect.signature(cls).parameters)
@@ -337,10 +345,3 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         args_dict = {param: args_dict[param] for param in parameters}
         return cls(dataset, **args_dict)
-
-    @staticmethod
-    def add_args(parser):
-        parser.add_argument("--latent-dim", type=int, default=8, help="latent dim")
-        parser.add_argument(
-            "--tt-split", type=float, default=0.1, help="train/test split"
-        )

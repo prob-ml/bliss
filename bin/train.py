@@ -8,13 +8,18 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from .utils import setup_paths, add_path_args
 
-from bliss.datasets import galaxy_datasets, catsim
+from bliss import sleep
+from bliss.datasets import galaxy_datasets, catsim, simulated
 from bliss.models import galaxy_net
 
-_datasets = [galaxy_datasets.H5Catalog, catsim.CatsimGalaxies]
+_datasets = [
+    galaxy_datasets.H5Catalog,
+    catsim.CatsimGalaxies,
+    simulated.SimulatedDataset,
+]
 datasets = {cls.__name__: cls for cls in _datasets}
 
-_models = [galaxy_net.OneCenteredGalaxy]
+_models = [galaxy_net.OneCenteredGalaxy, sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
 
 
@@ -63,11 +68,11 @@ def main(args):
     setup_seed(args)
 
     # setup dataset.
-    dataset = datasets[args.dataset].from_args(args)
+    dataset = datasets[args.dataset].from_args(args, paths)
 
     # setup model
     model_cls = models[args.model]
-    model = model_cls.from_args(dataset, args)
+    model = model_cls.from_args(args, dataset)
 
     # setup trainer
     profiler = setup_profiler(args, paths)
@@ -116,10 +121,15 @@ if __name__ == "__main__":
     )
     models_group.add_argument("--slen", type=int, default=51)
     models_group.add_argument("--n-bands", type=int, default=1)
+    models_group.add_argument("--latent-dim", type=int, default=8, help="For galaxies")
 
     # one centered galaxy
     one_centered_galaxy_group = parser.add_argument_group("[One Centered Galaxy Model]")
     galaxy_net.OneCenteredGalaxy.add_args(one_centered_galaxy_group)
+
+    # sleep image encoder
+    image_encoder_group = parser.add_argument_group("[Sleep Phase Image Encoder]")
+    sleep.SleepPhase.add_args(image_encoder_group)
 
     # ---------------
     # Dataset
@@ -133,6 +143,9 @@ if __name__ == "__main__":
         help="Specifies the dataset to be used to train the model.",
     )
 
+    general_dataset_group.add_argument(
+        "--n-batches", type=int, default=1,
+    )
     general_dataset_group.add_argument(
         "--batch-size",
         type=int,
@@ -149,6 +162,10 @@ if __name__ == "__main__":
     # catsim galaxies
     catsim_group = parser.add_argument_group("[Catsim Dataset]")
     catsim.CatsimGalaxies.add_args(catsim_group)
+
+    # simulated
+    simulated_group = parser.add_argument_group("[Simulated Dataset]")
+    simulated.SimulatedDataset.add_args(simulated_group)
 
     # ---------------
     # Trainer

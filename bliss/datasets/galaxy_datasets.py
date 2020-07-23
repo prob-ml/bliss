@@ -67,13 +67,26 @@ class H5Catalog(Dataset):
 
     @staticmethod
     def add_args(parser):
-        parser.add_argument("--h5-file", type=str, default=None, help="file path")
+        parser.add_argument(
+            "--h5-file",
+            type=str,
+            default=None,
+            help="File path relative to data directory.",
+        )
 
     @classmethod
-    def from_args(cls, args):
+    def from_args(cls, args, paths: dict):
         assert args.h5_file, "Specify h5_file if using this dataset."
 
         args_dict = vars(args)
+
+        # update file paths
+        h5_file = paths["data"].joinpath(args_dict["h5_file"])
+        args_dict.update({"h5_file": h5_file})
+
+        # filter
         parameters = inspect.signature(cls).parameters
-        args_dict = {param: args_dict[param] for param in parameters}
+        args_dict = {
+            key: value for key, value in args_dict.items() if key in parameters
+        }
         return cls(**args_dict)

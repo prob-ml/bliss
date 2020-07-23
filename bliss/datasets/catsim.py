@@ -348,7 +348,7 @@ class CatsimGalaxies(Dataset):
             "--catalog-file",
             type=str,
             default=None,
-            help="Catalog file to load entries from.",
+            help="File relative to data directory to load catalog entries ",
         )
         parser.add_argument(
             "--survey-name", type=str, default="LSST", help="Survey to use."
@@ -363,10 +363,18 @@ class CatsimGalaxies(Dataset):
         parser.add_argument("--verbose", action="store_true")
 
     @classmethod
-    def from_args(cls, args):
+    def from_args(cls, args, paths: dict):
         assert args.catalog_file, "Need to specify catalog file in catsim dataset."
 
         args_dict = vars(args)
+
+        # update file paths
+        catalog_file = paths["data"].joinpath(args_dict["catalog_file"])
+        args_dict.update({"catalog_file": catalog_file})
+
+        # filter
         parameters = inspect.signature(cls).parameters
-        args_dict = {param: args_dict[param] for param in parameters}
+        args_dict = {
+            key: value for key, value in args_dict.items() if key in parameters
+        }
         return cls(**args_dict)
