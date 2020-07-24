@@ -2,37 +2,14 @@ import torch
 import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader
+from torch.distributions.normal import Normal
 import pytorch_lightning as pl
 
 import numpy as np
 
 from .models import encoder
 from .models.decoder import get_mgrid
-from .psf_transform import PowerLawPSF
-from bliss import device
-
-
-def _sample_image(observed_image, sample_every=10):
-    batch_size = observed_image.shape[0]
-    n_bands = observed_image.shape[1]
-    slen = observed_image.shape[-1]
-
-    samples = torch.zeros(
-        n_bands, int(np.floor(slen / sample_every)), int(np.floor(slen / sample_every))
-    )
-
-    for i in range(samples.shape[1]):
-        for j in range(samples.shape[2]):
-            x0 = i * sample_every
-            x1 = j * sample_every
-            samples[:, i, j] = (
-                observed_image[:, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)]
-                .reshape(batch_size, n_bands, -1)
-                .min(2)[0]
-                .mean(0)
-            )
-
-    return samples
+from . import device
 
 
 def _fit_plane_to_background(background):
@@ -42,6 +19,7 @@ def _fit_plane_to_background(background):
 
     planar_params = np.zeros((n_bands, 3))
     for i in range(n_bands):
+        # can we make numpy to torch?
         y = background[i].flatten().detach().cpu().numpy()
         grid = get_mgrid(slen).detach().cpu().numpy()
 
@@ -70,10 +48,12 @@ class PlanarBackground(nn.Module):
         self.image_slen = image_slen
 
         # get grid
+        # can we use cached grid to replace?
         _mgrid = get_mgrid(image_slen).to(device)
         self.mgrid = torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
 
         # initial weights
+        # why do we clone the parameter here?
         self.params = nn.Parameter(init_background_params.clone())
 
     def forward(self):
@@ -84,7 +64,7 @@ class PlanarBackground(nn.Module):
         )
 
 
-class WakePhase(pl.LightningModule):
+class WakeNet(pl.LightningModule):
 
     # ---------------
     # Model
@@ -95,12 +75,11 @@ class WakePhase(pl.LightningModule):
         star_encoder,
         image_decoder,
         observed_img,
-        init_psf_params,
         init_background_params,
         hparams,
         pad=0,
     ):
-        super(WakePhase, self).__init__()
+        super(WakeNet, self).__init__()
 
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder
@@ -118,36 +97,17 @@ class WakePhase(pl.LightningModule):
         assert self.image_decoder.slen == self.slen, "cached grid won't match."
 
         # get n_bands
-        assert observed_img.shape[1] == init_psf_params.shape[0]
-        self.n_bands = init_psf_params.shape[0]
-
-        # get psf
-        psf_slen = self.slen + ((self.slen % 2) == 0) * 1
-        self.init_psf_params = init_psf_params
-        self.power_law_psf = PowerLawPSF(self.init_psf_params, image_slen=psf_slen)
-        self.init_psf = self.power_law_psf.forward().clone()
-        self.psf = self.power_law_psf.forward()
+        self.n_bands = self.image_decoder.n_bands
 
         # set up initial background parameters
-        if init_background_params is None:
-            self._get_init_background()
-        else:
-            assert init_background_params.shape[0] == self.n_bands
-            self.init_background_params = init_background_params
-            self.planar_background = PlanarBackground(
-                image_slen=self.slen, init_background_params=self.init_background_params
-            )
+        assert init_background_params.shape[0] == self.n_bands
+        self.init_background_params = init_background_params
+        self.planar_background = PlanarBackground(init_background_params, self.slen)
 
-        self.init_background = self.planar_background.forward()
+        # self.init_background = self.planar_background.forward()
 
-    def forward(self):
-        return self.power_law_psf.forward()
+    def forward(self, obs_img, run_map=False):
 
-    # ---------------
-    # Loss
-    # ----------------
-
-    def get_wake_loss(self, obs_img, psf, n_samples, run_map=False):
         with torch.no_grad():
             self.star_encoder.eval()
             (
@@ -158,7 +118,7 @@ class WakePhase(pl.LightningModule):
                 galaxy_bool_sampled,
             ) = self.star_encoder.sample_encoder(
                 obs_img,
-                n_samples=n_samples,
+                n_samples=self.n_samples,
                 return_map_n_sources=run_map,
                 return_map_source_params=run_map,
             )
@@ -168,27 +128,14 @@ class WakePhase(pl.LightningModule):
         is_on_array = is_on_array.unsqueeze(-1).float()
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
 
-        background = self.get_background()
-        stars = self._plot_stars(n_stars_sampled, locs_sampled, fluxes_sampled, psf)
+        background = self.planar_background.forward().unsqueeze(0).detach()
+        stars = self.image_decoder.render_multiple_stars(
+            n_stars_sampled, locs_sampled, fluxes_sampled,
+        )
 
         recon_mean = stars + background
 
-        error = 0.5 * ((obs_img - recon_mean) ** 2 / recon_mean) + 0.5 * torch.log(
-            recon_mean
-        )
-
-        loss = (
-            error[
-                :,
-                :,
-                self.pad : (self.slen - self.pad),
-                self.pad : (self.slen - self.pad),
-            ]
-            .sum((1, 2, 3))
-            .mean()
-        )
-
-        return loss
+        return recon_mean
 
     # ---------------
     # Data
@@ -205,7 +152,9 @@ class WakePhase(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        return optim.Adam([{"params": self.power_law_psf.parameters(), "lr": self.lr}])
+        return optim.Adam(
+            [{"params": self.image_decoder.power_law_psf.parameters(), "lr": self.lr}]
+        )
 
     # ---------------
     # Training
@@ -213,35 +162,59 @@ class WakePhase(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
-        psf = self.forward()
-        loss = self.get_wake_loss(img, psf, self.n_samples, run_map=False)
+        recon_mean = self.forward(img)
+        error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
+
+        last = self.slen - self.pad
+        loss = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
         logs = {"train_loss": loss}
 
         return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
-        psf = self.forward()
-        loss_val = self.get_wake_loss(img, psf, 1, run_map=True)
+        recon_mean = self.forward(img)
+        error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
+
+        last = self.slen - self.pad
+        loss_val = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
 
         return {"val_loss": loss_val}
 
     def validation_epoch_end(self, outputs):
         return {"val_loss": outputs[-1]["val_loss"]}
 
-    def _plot_stars(self, n_stars, locs, fluxes, psf):
-        self.image_decoder.psf = psf
-        stars = self.image_decoder.render_multiple_stars(n_stars, locs, fluxes)
-        return stars
-
     def _get_init_background(self, sample_every=25):
-        sampled_background = _sample_image(self.observed_img, sample_every)
+        sampled_background = self._sample_image(sample_every)
         self.init_background_params = torch.tensor(
             _fit_plane_to_background(sampled_background)
         ).to(device)
         self.planar_background = PlanarBackground(
-            image_slen=self.slen, init_background_params=self.init_background_params
+            self.init_background_params, self.slen
         )
 
-    def get_background(self):
-        return self.planar_background.forward().unsqueeze(0)
+    def _sample_image(self, sample_every=10):
+        batch_size = self.observed_image.shape[0]
+        n_bands = self.observed_image.shape[1]
+        slen = self.observed_image.shape[-1]
+
+        samples = torch.zeros(
+            n_bands,
+            int(np.floor(slen / sample_every)),
+            int(np.floor(slen / sample_every)),
+        )
+
+        for i in range(samples.shape[1]):
+            for j in range(samples.shape[2]):
+                x0 = i * sample_every
+                x1 = j * sample_every
+                samples[:, i, j] = (
+                    self.observed_image[
+                        :, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)
+                    ]
+                    .reshape(batch_size, n_bands, -1)
+                    .min(2)[0]
+                    .mean(0)
+                )
+
+        return samples

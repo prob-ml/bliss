@@ -21,8 +21,8 @@ class TestGalaxyEncoder:
 
         galaxy_dataset = get_galaxy_dataset(
             slen=50,
-            batch_size=32,
-            n_images=320,
+            batch_size=32 if use_cuda else 2,
+            n_images=320 if use_cuda else 2,
             loc_min=loc_min,
             loc_max=loc_max,
             max_sources=2,
