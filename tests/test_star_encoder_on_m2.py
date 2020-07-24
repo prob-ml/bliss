@@ -3,7 +3,8 @@ import pytest
 import os
 import numpy as np
 
-from bliss import use_cuda, psf_transform, image_statistics
+from bliss import use_cuda, image_statistics
+from bliss.models import decoder
 
 torch.manual_seed(84)
 np.random.seed(43)
@@ -14,17 +15,15 @@ def trained_star_encoder_m2(data_path, device, get_star_dataset, get_trained_enc
 
     # load SDSS PSF
     psf_file = os.path.join(data_path, "psField-002583-2-0136.fits")
-    init_psf_params = psf_transform.get_psf_params(psf_file, bands=[2, 3])
-    power_law_psf = psf_transform.PowerLawPSF(init_psf_params.to(device))
-    psf_og = power_law_psf.forward().detach()
+    init_psf_params = decoder.get_psf_params(psf_file, bands=[2, 3]).to(device)
     n_epochs = 200 if use_cuda else 1
 
     star_dataset = get_star_dataset(
-        psf_og,
+        init_psf_params,
         n_bands=2,
         slen=100,
         n_images=200 if use_cuda else 4,
-        batch_size=20 if use_cuda else 4,
+        batch_size=10 if use_cuda else 4,
         max_sources=2500,
         mean_sources=1200,
         min_sources=0,

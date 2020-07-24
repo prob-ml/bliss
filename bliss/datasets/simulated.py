@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from torch.utils.data import IterableDataset
 
-from bliss import device, psf_transform
+from bliss import device
 from bliss.models import galaxy_net
-from bliss.models.decoder import ImageDecoder
+from bliss.models.decoder import ImageDecoder, PowerLawPSF
 
 
 class SimulatedDataset(IterableDataset):
@@ -44,7 +44,7 @@ class SimulatedDataset(IterableDataset):
 
         galaxy_locs = locs * galaxy_bool.unsqueeze(2)
         star_locs = locs * star_bool.unsqueeze(2)
-        images = self.image_decoder.generate_images(
+        images = self.image_decoder.render_images(
             n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
         )
 
@@ -70,7 +70,7 @@ class SimulatedDataset(IterableDataset):
     @staticmethod
     def get_psf_from_file(psf_file):
         psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-        power_law_psf = psf_transform.PowerLawPSF(psf_params)
+        power_law_psf = PowerLawPSF(psf_params)
         psf = power_law_psf.forward().detach()
         assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
         return psf
@@ -90,6 +90,10 @@ class SimulatedDataset(IterableDataset):
         return background
 
     @staticmethod
+    def get_psf_params_from_file(psf_file):
+        return torch.from_numpy(np.load(psf_file)).to(device)
+
+    @staticmethod
     def decoder_args_from_args(args, paths: dict):
         slen, latent_dim, n_bands = args.slen, args.latent_dim, args.n_bands
         gal_slen = args.gal_slen
@@ -104,17 +108,22 @@ class SimulatedDataset(IterableDataset):
             background_file, slen, n_bands
         )
 
-        psf = SimulatedDataset.get_psf_from_file(psf_file)
-        psf = psf[range(n_bands)]
+        psf_params = SimulatedDataset.get_psf_from_file(psf_file)
 
-        return dec, psf, background
+        return dec, psf_params, background
 
     @classmethod
     def from_args(cls, args, paths: dict):
         args_dict = vars(args)
         parameters = inspect.signature(ImageDecoder).parameters
 
-        args_names = ["n_batches", "batch_size", "galaxy_decoder", "psf", "background"]
+        args_names = [
+            "n_batches",
+            "batch_size",
+            "galaxy_decoder",
+            "init_psf_params",
+            "background",
+        ]
         decoder_args = SimulatedDataset.decoder_args_from_args(args, paths)
         decoder_kwargs = {
             key: value

@@ -2,6 +2,9 @@ import numpy as np
 import warnings
 
 import torch
+import torch.nn as nn
+from torch.nn.functional import pad
+from astropy.io import fits
 import torch.nn.functional as F
 from torch.distributions import Poisson
 
@@ -16,11 +19,101 @@ def get_mgrid(slen):
     return mgrid.type(torch.FloatTensor).to(device)
 
 
+def get_psf_params(psfield_fit_file, bands):
+    psfield = fits.open(psfield_fit_file)
+
+    psf_params = torch.zeros(len(bands), 6)
+
+    for i in range(len(bands)):
+        band = bands[i]
+
+        sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
+        sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
+        sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
+
+        beta = psfield[6].data["psf_beta"][0][band]
+        b = psfield[6].data["psf_b"][0][band]
+        p0 = psfield[6].data["psf_p0"][0][band]
+
+        psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
+
+    return psf_params
+
+
+class PowerLawPSF(nn.Module):
+    def __init__(self, init_psf_params, psf_slen=25, image_slen=101):
+
+        super(PowerLawPSF, self).__init__()
+        assert len(init_psf_params.shape) == 2
+        assert image_slen % 2 == 1, "image_slen must be odd"
+        assert psf_slen % 2 == 1, "psf_slen must be odd"
+
+        self.n_bands = init_psf_params.shape[0]
+
+        self.psf_slen = psf_slen
+        self.image_slen = image_slen
+
+        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+        self.cached_radii_grid = (grid ** 2).sum(2).sqrt().to(device)
+
+        # initial weights
+        self.params = nn.Parameter(init_psf_params.clone(), requires_grad=True)
+
+        # get normalization_constant
+        self.normalization_constant = torch.zeros(self.n_bands)
+        for i in range(self.n_bands):
+            psf_i = self.get_psf_single_band(init_psf_params[i])
+            self.normalization_constant[i] = 1 / psf_i.sum()
+        self.normalization_constant = self.normalization_constant.detach()
+
+        # initial psf norm
+        self.init_psf_sum = self._get_psf().sum(-1).sum(-1).detach()
+
+    @staticmethod
+    def psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
+        term1 = torch.exp(-(r ** 2) / (2 * sigma1))
+        term2 = b * torch.exp(-(r ** 2) / (2 * sigma2))
+        term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
+        return (term1 + term2 + term3) / (1 + b + p0)
+
+    def get_psf_single_band(self, psf_params):
+        _psf_params = torch.exp(psf_params)
+        return self.psf_fun(
+            self.cached_radii_grid,
+            _psf_params[0],
+            _psf_params[1],
+            _psf_params[2],
+            _psf_params[3],
+            _psf_params[4],
+            _psf_params[5],
+        )
+
+    def _get_psf(self):
+        # TODO make the psf function vectorized ...
+        psf = torch.tensor([]).to(device)
+        for i in range(self.n_bands):
+            _psf = self.get_psf_single_band(self.params[i])
+            _psf *= self.normalization_constant[i]
+            psf = torch.cat((psf, _psf.unsqueeze(0)))
+
+        assert (psf > 0).all()
+        return psf
+
+    def forward(self):
+        psf = self._get_psf()
+        norm = psf.sum(-1).sum(-1)
+        psf *= (self.init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
+        l_pad = (self.image_slen - self.psf_slen) // 2
+
+        # add padding so psf has length of image_slen
+        return pad(psf, (l_pad,) * 4)
+
+
 class ImageDecoder(object):
     def __init__(
         self,
         galaxy_decoder,
-        psf,
+        init_psf_params,
         background,
         n_bands=1,
         slen=50,
@@ -70,9 +163,11 @@ class ImageDecoder(object):
         assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
 
         self.cached_grid = get_mgrid(self.slen)
-        self.psf = psf
 
-    def _trim_psf(self):
+        ## load psf_params
+        self.power_law_psf = PowerLawPSF(init_psf_params.clone())
+
+    def _trim_psf(self, psf):
         """Crop the psf to length slen x slen,
         centered at the middle.
         """
@@ -81,7 +176,7 @@ class ImageDecoder(object):
         # otherwise, the psf won't have a peak in the center pixel.
         _slen = self.slen + ((self.slen % 2) == 0) * 1
 
-        psf_slen = self._psf.shape[2]
+        psf_slen = psf.shape[2]
         psf_center = (psf_slen - 1) / 2
 
         assert psf_slen >= _slen
@@ -90,46 +185,41 @@ class ImageDecoder(object):
         l_indx = int(psf_center - r)
         u_indx = int(psf_center + r + 1)
 
-        self._psf = self._psf[:, l_indx:u_indx, l_indx:u_indx]
+        return psf[:, l_indx:u_indx, l_indx:u_indx]
 
-    def _expand_psf(self):
+    def _expand_psf(self, psf):
         """Pad the psf with zeros so that it is size slen,
         """
 
         _slen = self.slen + ((self.slen % 2) == 0) * 1
-        n_bands = self._psf.shape[0]
-        psf_slen = self._psf.shape[2]
+        psf_slen = psf.shape[2]
 
         assert psf_slen <= _slen, "Should be using trim psf."
 
-        psf_expanded = torch.zeros(n_bands, _slen, _slen, device=device)
+        psf_expanded = torch.zeros(self.n_bands, _slen, _slen, device=device)
         offset = int((_slen - psf_slen) / 2)
 
         psf_expanded[
             :, offset : (offset + psf_slen), offset : (offset + psf_slen)
-        ] = self._psf
+        ] = psf
 
-        self._psf = psf_expanded
+        return psf_expanded
 
-    @property
-    def psf(self):
-        return self._psf
-
-    @psf.setter
-    def psf(self, psf):
+    def get_psf(self):
+        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
         # first dimension of psf is number of bands
         # dimension of the psf/slen should be odd
+        psf = self.power_law_psf.forward()
         psf_slen = psf.shape[2]
         assert len(psf.shape) == 3
         assert psf.shape[1] == psf_slen
         assert (psf_slen % 2) == 1
         assert self.background.shape[0] == psf.shape[0] == self.n_bands
 
-        self._psf = psf
         if self.slen >= psf.shape[-1]:
-            self._expand_psf()
+            return self._expand_psf(psf)
         else:
-            self._trim_psf()
+            return self._trim_psf(psf)
 
     def _sample_n_sources(self, batch_size):
         # always poisson distributed.
@@ -319,19 +409,21 @@ class ImageDecoder(object):
             fluxes: Is (batch_size x n_bands x max_stars)
 
         Returns:
+
         """
 
+        psf = self.get_psf()
         batch_size = locs.shape[0]
-        n_bands = self.psf.shape[0]
+        n_bands = psf.shape[0]
         scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)
 
-        assert len(self.psf.shape) == 3  # the shape is (n_bands, slen, slen)
+        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
         assert fluxes.shape[0] == locs.shape[0]
         assert fluxes.shape[1] == locs.shape[1]
         assert fluxes.shape[2] == n_bands
 
         # all stars are just the PSF so we copy it.
-        expanded_psf = self.psf.expand(batch_size, n_bands, -1, -1)
+        expanded_psf = psf.expand(batch_size, n_bands, -1, -1)
 
         # this loop plots each of the ith star in each of the (batch_size) images.
         max_n = locs.shape[1]
@@ -366,9 +458,7 @@ class ImageDecoder(object):
 
         return scene
 
-    def generate_images(
-        self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
-    ):
+    def render_images(self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes):
 
         galaxies = 0.0
         if not self.all_stars:

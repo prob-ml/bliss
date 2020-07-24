@@ -1,6 +1,7 @@
 import pytest
 import pathlib
 import torch
+import numpy as np
 import pytorch_lightning as pl
 
 from bliss import use_cuda, sleep
@@ -77,21 +78,18 @@ def galaxy_decoder(data_path, device):
 
 
 @pytest.fixture(scope="session")
-def fitted_psf(data_path):
+def fitted_psf_params(data_path, device):
     psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-    psf = SimulatedDataset.get_psf_from_file(psf_file)
-    assert psf.size(0) == 2
-    assert len(psf.shape) == 3
-    return psf
+    psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+    return psf_params
 
 
 @pytest.fixture(scope="session")
 def get_star_dataset(device):
     def star_dataset(
-        psf, batch_size=32, n_images=128, n_bands=1, slen=50, **dec_kwargs
+        init_psf_params, batch_size=32, n_images=128, n_bands=1, slen=50, **dec_kwargs
     ):
         assert 1 <= n_bands <= 2
-        assert len(psf.shape) == 3
 
         dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": n_bands, "slen": slen})
         background = torch.zeros(2, slen, slen, device=device)
@@ -100,9 +98,9 @@ def get_star_dataset(device):
 
         # slice if necessary.
         background = background[range(n_bands)]
-        psf = psf[range(n_bands)]
+        init_psf_params = init_psf_params[range(n_bands)]
 
-        dec_args = (None, psf, background)
+        dec_args = (None, init_psf_params, background)
 
         n_batches = int(n_images / batch_size)
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
@@ -111,7 +109,7 @@ def get_star_dataset(device):
 
 
 @pytest.fixture(scope="session")
-def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
+def get_galaxy_dataset(device, galaxy_decoder, fitted_psf_params):
     def galaxy_dataset(batch_size=32, n_images=128, slen=10, **dec_kwargs):
 
         n_bands = 1
@@ -119,8 +117,8 @@ def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
         # TODO: take background from test image.
         background = torch.zeros(n_bands, slen, slen, device=device)
         background[0] = 5000.0
-        psf = fitted_psf[range(n_bands)]
-        dec_args = (galaxy_decoder, psf, background)
+        psf_params = fitted_psf_params[range(n_bands)]
+        dec_args = (galaxy_decoder, psf_params, background)
 
         n_batches = int(n_images / batch_size)
 
