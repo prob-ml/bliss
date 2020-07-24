@@ -70,7 +70,7 @@ class SimulatedDataset(IterableDataset):
     @staticmethod
     def get_psf_from_file(psf_file):
         psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-        power_law_psf = psf_transform.PowerLawPSF(psf_params)
+        power_law_psf = PowerLawPSF(psf_params)
         psf = power_law_psf.forward().detach()
         assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
         return psf
