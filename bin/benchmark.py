@@ -3,7 +3,6 @@
 import pathlib
 import torch
 import timeit
-import gc
 
 from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
@@ -47,7 +46,7 @@ image_encoder = encoder.ImageEncoder(
 sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
 
 print(
-    timeit.Timer("sleep_net.train_dataloader", "gc.enable()", globals=globals()).repeat(
+    timeit.Timer("sleep_net.train_dataloader", globals=globals()).repeat(
         repeat=5, number=1
     )
 )
@@ -59,8 +58,4 @@ def single_forward():
             sleep_net.training_step(batch, batch_idx)
 
 
-print(
-    timeit.Timer("single_forward", "gc.enable()", globals=globals()).repeat(
-        repeat=5, number=1
-    )
-)
+print(timeit.Timer("single_forward", globals=globals()).repeat(repeat=5, number=1))
