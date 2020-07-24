@@ -6,7 +6,7 @@ from torch.utils.data import IterableDataset
 
 from bliss import device
 from bliss.models import galaxy_net
-from bliss.models.decoder import ImageDecoder
+from bliss.models.decoder import ImageDecoder, PowerLawPSF
 
 
 class SimulatedDataset(IterableDataset):
@@ -117,7 +117,13 @@ class SimulatedDataset(IterableDataset):
         args_dict = vars(args)
         parameters = inspect.signature(ImageDecoder).parameters
 
-        args_names = ["n_batches", "batch_size", "galaxy_decoder", "init_psf_params", "background"]
+        args_names = [
+            "n_batches",
+            "batch_size",
+            "galaxy_decoder",
+            "init_psf_params",
+            "background",
+        ]
         decoder_args = SimulatedDataset.decoder_args_from_args(args, paths)
         decoder_kwargs = {
             key: value

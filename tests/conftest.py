@@ -109,7 +109,7 @@ def get_star_dataset(device):
 
 
 @pytest.fixture(scope="session")
-def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
+def get_galaxy_dataset(device, galaxy_decoder, fitted_psf_params):
     def galaxy_dataset(batch_size=32, n_images=128, slen=10, **dec_kwargs):
 
         n_bands = 1
@@ -117,8 +117,8 @@ def get_galaxy_dataset(device, galaxy_decoder, fitted_psf):
         # TODO: take background from test image.
         background = torch.zeros(n_bands, slen, slen, device=device)
         background[0] = 5000.0
-        psf = fitted_psf[range(n_bands)]
-        dec_args = (galaxy_decoder, psf, background)
+        psf_params = fitted_psf_params[range(n_bands)]
+        dec_args = (galaxy_decoder, psf_params, background)
 
         n_batches = int(n_images / batch_size)
 
