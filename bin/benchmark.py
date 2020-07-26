@@ -3,6 +3,7 @@
 import pathlib
 import torch
 import timeit
+from line_profiler import LineProfiler
 
 from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
@@ -13,14 +14,13 @@ root_path = pathlib.Path(__file__).parent.parent.absolute()
 data_path = root_path.joinpath("data")
 
 psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
-psf = SimulatedDataset.get_psf_from_file(psf_file)
-psf = torch.unsqueeze(psf[0], 0)
+psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 background = torch.zeros(1, 50, 50, device=device)
 background[0] = 686.0
 
-dec_args = (None, psf, background)
+dec_args = (None, psf_params, background)
 
 dataset = SimulatedDataset(
     n_batches=1,
@@ -30,32 +30,29 @@ dataset = SimulatedDataset(
 )
 
 latent_dim = dataset.image_decoder.latent_dim
-image_encoder = encoder.ImageEncoder(
-    slen=50,
+
+encoder_kwargs = dict(
     ptile_slen=8,
     step=2,
     edge_padding=3,
-    n_bands=1,
-    max_detections=2,
-    n_galaxy_params=latent_dim,
     enc_conv_c=5,
     enc_kern=3,
     enc_hidden=64,
-).to(device)
-
-sleep_net = sleep.SleepPhase(dataset=dataset, image_encoder=image_encoder)
-
-print(
-    timeit.Timer("sleep_net.train_dataloader", globals=globals()).repeat(
-        repeat=5, number=1
-    )
+    max_detections=2,
+    slen=50,
+    n_bands=1,
+    n_galaxy_params=latent_dim,
 )
 
+sleep_net = sleep.SleepPhase(dataset, encoder_kwargs)
 
-def single_forward():
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
-            sleep_net.training_step(batch, batch_idx)
+profile = LineProfiler(sleep_net.train_dataloader)
+profile.runcall(sleep_net.train_dataloader)
+profile.print_stats()
 
 
-print(timeit.Timer("single_forward", globals=globals()).repeat(repeat=5, number=1))
+with torch.no_grad():
+    for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
+        profile.add_function(sleep_net.training_step)
+        profile.runcall(sleep_net.training_step, batch, batch_idx)
+        profile.print_stats()
