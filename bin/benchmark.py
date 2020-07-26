@@ -2,17 +2,17 @@
 
 import pathlib
 import torch
-import timeit
 from line_profiler import LineProfiler
 
 from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
-from bliss.models import encoder
 
 
+# set up path
 root_path = pathlib.Path(__file__).parent.parent.absolute()
 data_path = root_path.joinpath("data")
 
+# set up Training class
 psf_file = data_path.joinpath("fitted_powerlaw_psf_params.npy")
 psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)
 
@@ -20,7 +20,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 background = torch.zeros(1, 50, 50, device=device)
 background[0] = 686.0
 
-dec_args = (None, psf_params, background)
+dec_args = (None, psf_params[range(1)], background)
 
 dataset = SimulatedDataset(
     n_batches=1,
@@ -46,13 +46,18 @@ encoder_kwargs = dict(
 
 sleep_net = sleep.SleepPhase(dataset, encoder_kwargs)
 
+# profile the dataloader
 profile = LineProfiler(sleep_net.train_dataloader)
 profile.runcall(sleep_net.train_dataloader)
 profile.print_stats()
 
 
+# profile the forward step
 with torch.no_grad():
     for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
         profile.add_function(sleep_net.training_step)
         profile.runcall(sleep_net.training_step, batch, batch_idx)
         profile.print_stats()
+
+# save the profile
+profile.dump_stats("sleep_dataloader_and_forward")
