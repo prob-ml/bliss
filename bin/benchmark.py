@@ -15,9 +15,17 @@ from bliss.datasets.simulated import SimulatedDataset
 from bliss.models.decoder import get_mgrid
 
 
-# workaround for avoiding error of profile decorator
-if type(__builtins__) is not dict or "profile" not in __builtins__:
-    profile = lambda f: f
+# Benchmark:
+## Sleep-phase Dataloader: on GPU 748.68 ms, On CPU 1284.88 ms
+## Sleep-phase forward pass: on GPU 1.50 ms, On CPU 2.733 ms
+
+## Wake-phase Dataloader: on GPU 1459.682 ms, On CPU 2137.703 ms
+## Wake-phase forward pass: on GPU 4.737 ms, On CPU 5.38 ms
+
+
+# set up device
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else "cpu")
 
 # sleep phase set up
 ## set up path
@@ -25,9 +33,9 @@ data_path = path + "/data"
 
 ## set up Training class
 psf_file = data_path + "/fitted_powerlaw_psf_params.npy"
-psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)
+psf_params = SimulatedDataset.get_psf_params_from_file(psf_file).to(device)
 
-background = torch.zeros(1, 50, 50)
+background = torch.zeros(1, 50, 50, device=device)
 background[0] = 686.0
 
 dec_args = (None, psf_params[range(1)], background)
@@ -57,15 +65,15 @@ encoder_kwargs = dict(
 
 def benchamark_sleep_setup():
     sleep_net = SleepPhase(dataset, encoder_kwargs)
-    return sleep_net
+    return sleep_net.to(device)
 
 
 # wake phase set up
 test_star = torch.load(data_path + "/3_star_test.pt")
-test_image = test_star["images"]
+test_image = test_star["images"].to(device)
 test_slen = test_image.size(-1)
 
-init_background_params = torch.zeros(1, 3)
+init_background_params = torch.zeros(1, 3, device=device)
 init_background_params[0, 0] = 686.0
 
 n_samples = 100
@@ -84,7 +92,7 @@ def benchmark_wake_setup():
         init_background_params,
         hparams,
     )
-    return wake_phase_model
+    return wake_phase_model.to(device)
 
 
 # add --wake and --sleep argument for users to benchmark different phase
@@ -106,6 +114,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # if sleep is specified
     if args.sleep:
         sleep_net = benchamark_sleep_setup()
 
@@ -113,8 +122,6 @@ if __name__ == "__main__":
             with torch.no_grad():
                 for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
                     sleep_net.training_step(batch, batch_idx)
-
-        sleep_benchmark()
 
         print("Benchmark for the sleep phase training dataloader")
         runtimes = timeit.repeat(
@@ -130,6 +137,7 @@ if __name__ == "__main__":
         best_time = min(runtimes)
         print(best_time * 1e6, "milliseconds")
 
+    # if wake is specified
     if args.wake:
         wake_phase_model = benchmark_wake_setup()
 
@@ -137,8 +145,6 @@ if __name__ == "__main__":
             with torch.no_grad():
                 for batch_idx, batch in enumerate(wake_phase_model.train_dataloader()):
                     wake_phase_model.training_step(batch, batch_idx)
-
-        wake_benchmark()
 
         print("Benchmark for the wake phase training dataloader")
         runtimes = timeit.repeat(
@@ -150,7 +156,7 @@ if __name__ == "__main__":
         best_time = min(runtimes)
         print(best_time * 1e6, "milliseconds\n")
 
-        print("Benchmark for the wake phase training dataloader")
+        print("Benchmark for the wake phase training forward pass")
         runtimes = timeit.repeat(
             "wake_benchmark", repeat=10, number=200, globals=globals()
         )
