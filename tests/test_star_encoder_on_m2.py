@@ -3,7 +3,7 @@ import pytest
 import os
 import numpy as np
 
-from bliss import use_cuda, image_statistics
+from bliss import use_cuda
 from bliss.models import decoder
 
 torch.manual_seed(84)
@@ -35,6 +35,67 @@ def trained_star_encoder_m2(data_path, device, get_star_dataset, get_trained_enc
         star_dataset, n_epochs=n_epochs, enc_conv_c=20, enc_kern=3, enc_hidden=256,
     )
     return trained_encoder
+
+
+def filter_params(locs, fluxes, slen, pad=5):
+    assert len(locs.shape) == 2
+
+    if fluxes is not None:
+        assert len(fluxes.shape) == 1
+        assert len(fluxes) == len(locs)
+
+    _locs = locs * (slen - 1)
+    which_params = (
+        (_locs[:, 0] > pad)
+        & (_locs[:, 0] < (slen - pad))
+        & (_locs[:, 1] > pad)
+        & (_locs[:, 1] < (slen - pad))
+    )
+
+    if fluxes is not None:
+        return locs[which_params], fluxes[which_params]
+    else:
+        return locs[which_params], None
+
+
+def get_locs_error(locs, true_locs):
+    # get matrix of Linf error in locations
+    # truth x estimated
+    return torch.abs(locs.unsqueeze(0) - true_locs.unsqueeze(1)).max(2)[0]
+
+
+def get_fluxes_error(fluxes, true_fluxes):
+    # get matrix of l1 error in log flux
+    # truth x estimated
+    return torch.abs(
+        torch.log10(fluxes).unsqueeze(0) - torch.log10(true_fluxes).unsqueeze(1)
+    )
+
+
+def get_mag_error(mags, true_mags):
+    # get matrix of l1 error in magnitude
+    # truth x estimated
+    return torch.abs(mags.unsqueeze(0) - true_mags.unsqueeze(1))
+
+
+def convert_nmgy_to_mag(nmgy):
+    return 22.5 - 2.5 * torch.log10(nmgy)
+
+
+def get_summary_stats(
+    est_locs, true_locs, slen, est_fluxes, true_fluxes, nelec_per_nmgy, pad=5, slack=0.5
+):
+    est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
+    true_locs, true_fluxes = filter_params(true_locs, true_fluxes, slen, pad)
+
+    est_mags = convert_nmgy_to_mag(est_fluxes / nelec_per_nmgy)
+    true_mags = convert_nmgy_to_mag(true_fluxes / nelec_per_nmgy)
+    mag_error = get_mag_error(est_mags, true_mags)
+
+    locs_error = get_locs_error(est_locs * (slen - 1), true_locs * (slen - 1))
+    tpr_bool = torch.any((locs_error < slack) * (mag_error < slack), dim=1).float()
+    ppv_bool = torch.any((locs_error < slack) * (mag_error < slack), dim=0).float()
+    return tpr_bool.mean(), ppv_bool.mean(), tpr_bool, ppv_bool
 
 
 class TestStarSleepEncoderM2:
@@ -74,7 +135,7 @@ class TestStarSleepEncoderM2:
             return
 
         # summary statistics
-        sleep_tpr, sleep_ppv = image_statistics.get_summary_stats(
+        sleep_tpr, sleep_ppv = get_summary_stats(
             est_locs[0],
             true_locs,
             trained_star_encoder_m2.slen,
