@@ -109,7 +109,6 @@ if __name__ == "__main__":
     if args.sleep:
         sleep_net = benchamark_sleep_setup()
 
-        @profile
         def sleep_benchmark():
             with torch.no_grad():
                 for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
@@ -118,30 +117,22 @@ if __name__ == "__main__":
         sleep_benchmark()
 
         print("Benchmark for the sleep phase training dataloader")
-        print(
-            min(
-                timeit.repeat(
-                    "sleep_net.train_dataloader()",
-                    repeat=10,
-                    number=100,
-                    globals=globals(),
-                )
-            )
+        runtimes = timeit.repeat(
+            "sleep_net.train_dataloader()", repeat=10, number=100, globals=globals(),
         )
+        best_time = min(runtimes)
+        print(best_time * 1e6, "milliseconds\n")
 
         print("Benchmark for the sleep phase training forward pass")
-        print(
-            min(
-                timeit.repeat(
-                    "sleep_benchmark", repeat=10, number=100, globals=globals()
-                )
-            )
+        runtimes = timeit.repeat(
+            "sleep_benchmark", repeat=10, number=100, globals=globals(),
         )
+        best_time = min(runtimes)
+        print(best_time * 1e6, "milliseconds")
 
     if args.wake:
         wake_phase_model = benchmark_wake_setup()
 
-        @profile
         def wake_benchmark():
             with torch.no_grad():
                 for batch_idx, batch in enumerate(wake_phase_model.train_dataloader()):
@@ -149,22 +140,19 @@ if __name__ == "__main__":
 
         wake_benchmark()
 
-        print("Benchmark for the wake phase training forward pass")
-        print(
-            min(
-                timeit.repeat(
-                    "wake_phase_model.train_dataloader()",
-                    repeat=10,
-                    number=100,
-                    globals=globals(),
-                )
-            )
+        print("Benchmark for the wake phase training dataloader")
+        runtimes = timeit.repeat(
+            "wake_phase_model.train_dataloader()",
+            repeat=10,
+            number=200,
+            globals=globals(),
         )
+        best_time = min(runtimes)
+        print(best_time * 1e6, "milliseconds\n")
 
-        print(
-            min(
-                timeit.repeat(
-                    "wake_benchmark", repeat=10, number=200, globals=globals()
-                )
-            )
+        print("Benchmark for the wake phase training dataloader")
+        runtimes = timeit.repeat(
+            "wake_benchmark", repeat=10, number=200, globals=globals()
         )
+        best_time = min(runtimes)
+        print(best_time * 1e6, "milliseconds")

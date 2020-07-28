@@ -151,7 +151,6 @@ class SleepPhase(pl.LightningModule):
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder.forward(image_ptiles, n_sources)
 
-    @profile
     def get_loss(self, batch):
         """
 
@@ -285,7 +284,6 @@ class SleepPhase(pl.LightningModule):
     def val_dataloader(self):
         return DataLoader(self.dataset, batch_size=None)
 
-    @profile
     def training_step(self, batch, batch_idx):
         (
             loss,
