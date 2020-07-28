@@ -15,6 +15,10 @@ from bliss.datasets.simulated import SimulatedDataset
 from bliss.models.decoder import get_mgrid
 
 
+# workaround for avoiding error of profile decorator
+if type(__builtins__) is not dict or "profile" not in __builtins__:
+    profile = lambda f: f
+
 # sleep phase set up
 ## set up path
 data_path = path + "/data"
