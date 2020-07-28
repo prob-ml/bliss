@@ -9,8 +9,6 @@ def plot_image(
     estimated_locs=None,
     vmin=None,
     vmax=None,
-    add_colorbar=True,
-    global_fig=None,
     alpha=1,
     marker_size=1,
 ):
@@ -43,7 +41,3 @@ def plot_image(
             alpha=alpha,
             s=marker_size,
         )
-
-    if add_colorbar:
-        assert global_fig is not None
-        global_fig.colorbar(im, ax=fig)

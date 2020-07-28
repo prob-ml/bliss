@@ -37,12 +37,6 @@ def trained_star_encoder_m2(data_path, device, get_star_dataset, get_trained_enc
     return trained_encoder
 
 
-import torch
-import numpy as np
-
-from .datasets.sdss import convert_nmgy_to_mag
-
-
 def filter_params(locs, fluxes, slen, pad=5):
     assert len(locs.shape) == 2
 
@@ -82,6 +76,10 @@ def get_mag_error(mags, true_mags):
     # get matrix of l1 error in magnitude
     # truth x estimated
     return torch.abs(mags.unsqueeze(0) - true_mags.unsqueeze(1))
+
+
+def convert_nmgy_to_mag(nmgy):
+    return 22.5 - 2.5 * torch.log10(nmgy)
 
 
 def get_summary_stats(
