@@ -7,7 +7,7 @@ if path not in sys.path:
 
 import argparse
 import torch
-from line_profiler import LineProfiler
+import timeit
 
 from bliss.sleep import SleepPhase
 from bliss.wake import WakeNet
@@ -51,7 +51,7 @@ encoder_kwargs = dict(
 )
 
 
-def benchamark_sleep():
+def benchamark_sleep_setup():
     sleep_net = SleepPhase(dataset, encoder_kwargs)
     return sleep_net
 
@@ -68,11 +68,11 @@ n_samples = 100
 hparams = {"n_samples": n_samples, "lr": 0.001}
 
 
-def benchmark_wake():
+def benchmark_wake_setup():
     image_decoder = dataset.image_decoder
     image_decoder.slen = test_slen
     image_decoder.cached_grid = get_mgrid(test_slen)
-    sleep_net = benchamark_sleep()
+    sleep_net = benchamark_sleep_setup()
     wake_phase_model = WakeNet(
         sleep_net.image_encoder,
         image_decoder,
@@ -103,25 +103,58 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.sleep:
-        sleep_net = benchamark_sleep()
-        profile = LineProfiler(sleep_net.train_dataloader)
-        profile.runcall(sleep_net.train_dataloader)
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
-                profile.add_function(sleep_net.training_step)
-                profile.runcall(sleep_net.training_step, batch, batch_idx)
+        sleep_net = benchamark_sleep_setup()
 
-        print("Benchmark for the sleep phase training dataloader and forward")
-        profile.print_stats()
+        def sleep_benchmark():
+            with torch.no_grad():
+                for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
+                    sleep_net.training_step(batch, batch_idx)
+
+        print("Benchmark for the sleep phase training dataloader")
+        print(
+            min(
+                timeit.repeat(
+                    "sleep_net.train_dataloader()",
+                    repeat=10,
+                    number=100,
+                    globals=globals(),
+                )
+            )
+        )
+
+        print("Benchmark for the sleep phase training forward pass")
+        print(
+            min(
+                timeit.repeat(
+                    "sleep_benchmark", repeat=10, number=100, globals=globals()
+                )
+            )
+        )
 
     if args.wake:
-        wake_phase_model = benchmark_wake()
-        profile = LineProfiler(wake_phase_model.train_dataloader)
-        profile.runcall(wake_phase_model.train_dataloader)
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(wake_phase_model.train_dataloader()):
-                profile.add_function(wake_phase_model.training_step)
-                profile.runcall(wake_phase_model.training_step, batch, batch_idx)
+        wake_phase_model = benchmark_wake_setup()
 
-        print("Benchmark for the wake phase training dataloader and forward")
-        profile.print_stats()
+        def wake_benchmark():
+            with torch.no_grad():
+                for batch_idx, batch in enumerate(wake_phase_model.train_dataloader()):
+                    wake_phase_model.training_step(batch, batch_idx)
+
+        print("Benchmark for the wake phase training forward pass")
+        print(
+            min(
+                timeit.repeat(
+                    "wake_phase_model.train_dataloader()",
+                    repeat=10,
+                    number=100,
+                    globals=globals(),
+                )
+            )
+        )
+
+        print(
+            min(
+                timeit.repeat(
+                    "wake_benchmark", repeat=10, number=200, globals=globals()
+                )
+            )
+        )
