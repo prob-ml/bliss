@@ -14,11 +14,6 @@ from . import device, plotting
 from .models import encoder
 
 
-# workaround for avoiding error of profile decorator
-if type(__builtins__) is not dict or "profile" not in __builtins__:
-    profile = lambda f: f
-
-
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
     assert torch.all(n_source_log_probs <= 0)
     assert n_source_log_probs.shape == one_hot_encoding.shape

@@ -12,11 +12,6 @@ from .models.decoder import get_mgrid
 from . import device
 
 
-# workaround for avoiding error of profile decorator
-if type(__builtins__) is not dict or "profile" not in __builtins__:
-    profile = lambda f: f
-
-
 def _fit_plane_to_background(background):
     assert len(background.shape) == 3
     n_bands = background.shape[0]
