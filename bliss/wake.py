@@ -159,7 +159,6 @@ class WakeNet(pl.LightningModule):
     # ---------------
     # Training
     # ----------------
-
     def training_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
         recon_mean = self.forward(img)
