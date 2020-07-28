@@ -105,10 +105,13 @@ if __name__ == "__main__":
     if args.sleep:
         sleep_net = benchamark_sleep_setup()
 
+        @profile
         def sleep_benchmark():
             with torch.no_grad():
                 for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
                     sleep_net.training_step(batch, batch_idx)
+
+        sleep_benchmark()
 
         print("Benchmark for the sleep phase training dataloader")
         print(
@@ -134,10 +137,13 @@ if __name__ == "__main__":
     if args.wake:
         wake_phase_model = benchmark_wake_setup()
 
+        @profile
         def wake_benchmark():
             with torch.no_grad():
                 for batch_idx, batch in enumerate(wake_phase_model.train_dataloader()):
                     wake_phase_model.training_step(batch, batch_idx)
+
+        wake_benchmark()
 
         print("Benchmark for the wake phase training forward pass")
         print(

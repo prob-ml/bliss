@@ -106,6 +106,7 @@ class WakeNet(pl.LightningModule):
 
         # self.init_background = self.planar_background.forward()
 
+    @profile
     def forward(self, obs_img, run_map=False):
 
         with torch.no_grad():
@@ -159,7 +160,7 @@ class WakeNet(pl.LightningModule):
     # ---------------
     # Training
     # ----------------
-
+    @profile
     def training_step(self, batch, batch_idx):
         img = batch.unsqueeze(0)
         recon_mean = self.forward(img)
