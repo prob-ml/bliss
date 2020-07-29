@@ -123,13 +123,6 @@ if __name__ == "__main__":
                 for batch_idx, batch in enumerate(sleep_net.train_dataloader()):
                     sleep_net.training_step(batch, batch_idx)
 
-        print("Benchmark for the sleep phase training dataloader")
-        runtimes = timeit.repeat(
-            "sleep_net.train_dataloader()", repeat=10, number=100, globals=globals(),
-        )
-        best_time = min(runtimes)
-        print(best_time * 1e6, "milliseconds\n")
-
         print("Benchmark for the sleep phase training forward pass")
         runtimes = timeit.repeat(
             "sleep_benchmark", repeat=10, number=100, globals=globals(),
@@ -145,16 +138,6 @@ if __name__ == "__main__":
             with torch.no_grad():
                 for batch_idx, batch in enumerate(wake_phase_model.train_dataloader()):
                     wake_phase_model.training_step(batch, batch_idx)
-
-        print("Benchmark for the wake phase training dataloader")
-        runtimes = timeit.repeat(
-            "wake_phase_model.train_dataloader()",
-            repeat=10,
-            number=200,
-            globals=globals(),
-        )
-        best_time = min(runtimes)
-        print(best_time * 1e6, "milliseconds\n")
 
         print("Benchmark for the wake phase training forward pass")
         runtimes = timeit.repeat(
