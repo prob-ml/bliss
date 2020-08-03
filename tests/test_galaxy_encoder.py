@@ -7,9 +7,7 @@ from bliss import use_cuda
 
 class TestGalaxyEncoder:
     @pytest.fixture(scope="class")
-    def trained_encoder(
-        self, get_galaxy_dataset, get_trained_encoder,
-    ):
+    def trained_encoder(self, get_galaxy_dataset, get_trained_encoder, device):
 
         n_epochs = 100 if use_cuda else 1
         # draw galaxies only in 2x2 center tile

@@ -6,23 +6,20 @@ from bliss import use_cuda, wake
 from bliss.models.decoder import get_mgrid, PowerLawPSF
 
 
-class TestStarSleepEncoder:
-    @pytest.fixture(scope="class")
-    def trained_encoder(
-        self, fitted_psf_params, get_star_dataset, get_trained_encoder,
-    ):
-        star_dataset = get_star_dataset(
-            fitted_psf_params, n_bands=1, slen=50, batch_size=32
-        )
-        trained_encoder = get_trained_encoder(star_dataset, n_epochs=100)
-        return trained_encoder
+@pytest.fixture(scope="module")
+def trained_encoder(fitted_psf_params, get_star_dataset, get_trained_encoder, device):
+    star_dataset = get_star_dataset(
+        fitted_psf_params, n_bands=1, slen=50, batch_size=32
+    )
+    trained_encoder = get_trained_encoder(star_dataset, n_epochs=100)
+    return trained_encoder.to(device)
 
+
+class TestStarSleepEncoder:
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, data_path, device):
         test_star = torch.load(data_path.joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"]
-
-        trained_encoder = trained_encoder.to(device)
 
         with torch.no_grad():
             # get the estimated params
@@ -61,19 +58,9 @@ class TestStarSleepEncoder:
 
 
 class TestStarWakeNet:
-    @pytest.fixture(scope="class")
-    def init_psf_setup(self, fitted_psf_params, device):
-        # initialize psf params, just add 1 to each sigmas
-        init_psf_params = fitted_psf_params.clone()[None, 0]
-        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device)
-        init_psf = PowerLawPSF(init_psf_params).forward().detach()
-
-        return {"init_psf_params": init_psf_params, "init_psf": init_psf}
-
     def test_star_wake(
         self,
-        get_trained_encoder,
-        get_star_dataset,
+        trained_encoder,
         fitted_psf_params,
         init_psf_setup,
         test_3_stars,
