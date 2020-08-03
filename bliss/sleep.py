@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 from itertools import permutations
@@ -10,9 +11,28 @@ from torch.nn import functional
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
+from pytorch_lightning import Callback
 
 from . import device, plotting
 from .models import encoder
+
+import optuna
+from optuna.integration import PyTorchLightningPruningCallback
+
+
+DIR = os.getcwd()
+MODEL_DIR = os.path.join(DIR, "result")
+
+
+class MetricsCallback(Callback):
+    """PyTorch Lightning metric callback."""
+
+    def __init__(self):
+        super().__init__()
+        self.metrics = []
+
+    def on_validation_end(self, trainer, pl_module):
+        self.metrics.append(trainer.callback_metrics)
 
 
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
@@ -526,3 +546,34 @@ class SleepPhase(pl.LightningModule):
         }
 
         return cls(dataset, encoder_kwargs, **sleep_kwargs)
+
+
+class Objective(object):
+    def __init__(self, dataset, encoder_kwargs):
+        self.dataset = dataset
+        self.encoder_kwargs = encoder_kwargs
+
+    def __call__(self, trial):
+        # suggested hyperparameters
+        learning_rate = trial.loguniform("learning_rate", 1e-4, 1e-1)
+        weight_decay = trial.loguniform("learning_rate", 1e-4, 1e-1)
+
+        checkpoint_callback = pl.callbacks.ModelCheckpoint(
+            os.path.join(MODEL_DIR, "trial_{}".format(trial.number), "{epoch}"),
+            monitor="val_loss",
+        )
+
+        metrics_callback = MetricsCallback()
+        model = SleepPhase(
+            self.dataset, self.encoder_kwargs, learning_rate, weight_decay
+        )
+
+        trainer = pl.trainer(
+            checkpoint_callback=checkpoint_callback,
+            callbacks=[metrics_callback],
+            early_stop_callback=PyTorchLightningPruningCallback(
+                trial, monitor="val_loss"
+            ),
+        )
+
+        trainer.fit(model)
