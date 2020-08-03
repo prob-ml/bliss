@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from bliss import device
 from bliss import use_cuda
 
 
@@ -37,7 +38,7 @@ class TestGalaxyEncoder:
             step=2,
             edge_padding=edge_padding,
         )
-        return trained_encoder
+        return trained_encoder.to(device)
 
     @pytest.mark.parametrize("n_galaxies", ["2"])
     def test_n_sources_and_locs(self, n_galaxies, data_path, device, trained_encoder):
