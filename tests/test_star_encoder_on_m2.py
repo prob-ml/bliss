@@ -3,7 +3,6 @@ import pytest
 import os
 import numpy as np
 
-from bliss import use_cuda
 from bliss.models import decoder
 
 torch.manual_seed(84)
@@ -11,14 +10,16 @@ np.random.seed(43)
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(data_path, device, get_star_dataset, get_trained_encoder):
+def trained_star_encoder_m2(decoder_setup, encoder_setup, device_setup, paths):
+    device = device_setup.device
+    use_cuda = device_setup.use_cuda
 
     # load SDSS PSF
-    psf_file = os.path.join(data_path, "psField-002583-2-0136.fits")
+    psf_file = os.path.join(paths["data"], "psField-002583-2-0136.fits")
     init_psf_params = decoder.get_psf_params(psf_file, bands=[2, 3]).to(device)
     n_epochs = 200 if use_cuda else 1
 
-    star_dataset = get_star_dataset(
+    star_dataset = decoder_setup.get_star_dataset(
         init_psf_params,
         n_bands=2,
         slen=100,
@@ -31,7 +32,7 @@ def trained_star_encoder_m2(data_path, device, get_star_dataset, get_trained_enc
         f_max=1e6,
         alpha=0.5,
     )
-    trained_encoder = get_trained_encoder(
+    trained_encoder = encoder_setup.get_trained_encoder(
         star_dataset, n_epochs=n_epochs, enc_conv_c=20, enc_kern=3, enc_hidden=256,
     )
     return trained_encoder
@@ -99,13 +100,14 @@ def get_summary_stats(
 
 
 class TestStarSleepEncoderM2:
-    def test_star_sleep_m2(self, data_path, device, trained_star_encoder_m2):
+    def test_star_sleep_m2(self, trained_star_encoder_m2, device_setup, paths):
+        device = device_setup.device
 
         # the trained star encoder
         trained_star_encoder_m2.eval()
 
         # load hubble parameters and SDSS image
-        hubble_data = np.load(os.path.join(data_path, "true_hubble_m2.npy"))
+        hubble_data = np.load(os.path.join(paths["data"], "true_hubble_m2.npy"))
 
         # the SDSS image
         test_image = torch.from_numpy(hubble_data["sdss_image"]).unsqueeze(0).to(device)
@@ -131,7 +133,7 @@ class TestStarSleepEncoderM2:
         est_fluxes = est_log_fluxes.exp()
 
         # check metrics if cuda is true
-        if not use_cuda:
+        if not device_setup.use_cuda:
             return
 
         # summary statistics

@@ -1,18 +1,18 @@
 from itertools import permutations
-from copy import deepcopy
 
 import numpy as np
 import torch
 from torch.distributions import Normal
 
-from bliss import device, sleep
+from bliss import sleep
 from bliss.models import encoder
 
 
 class TestStarEncoderObjective:
-    def test_get_params_logprob_all_combs(self):
+    def test_get_params_logprob_all_combs(self, device_setup):
         # this checks that our function to return all combination of losses
         # is correct
+        device = device_setup.device
 
         n_ptiles = 10
         max_detections = 4
@@ -60,10 +60,12 @@ class TestStarEncoderObjective:
 
                     assert param_loglik_ij == param_log_probs_all[n, i, j]
 
-    def test_get_min_perm_loss(self):
+    def test_get_min_perm_loss(self, device_setup):
         """
         Same as previous function but checks that we can get the permutation with the minimum loss.
         """
+
+        device = device_setup.device
 
         # data parameters
         n_ptiles = 100
