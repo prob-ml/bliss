@@ -3,7 +3,6 @@ import pytest
 import os
 import numpy as np
 
-from bliss import use_cuda
 from bliss.models import decoder
 
 torch.manual_seed(84)
@@ -13,6 +12,7 @@ np.random.seed(43)
 @pytest.fixture(scope="module")
 def trained_star_encoder_m2(decoder_setup, encoder_setup, device_setup, paths):
     device = device_setup.device
+    use_cuda = device_setup.use_cuda
 
     # load SDSS PSF
     psf_file = os.path.join(paths["data"], "psField-002583-2-0136.fits")
