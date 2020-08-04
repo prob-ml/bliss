@@ -92,17 +92,19 @@ class DecoderSetup:
         n_batches = int(n_images / batch_size)
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 
-    @pytest.fixture(scope="session")
     def get_galaxy_dataset(self, batch_size=32, n_images=128, slen=10, **dec_kwargs):
 
         n_bands = 1
         galaxy_decoder = self.get_galaxy_decoder()
 
+        # psf params
+        psf_params = self.get_fitted_psf_params()[range(n_bands)]
+
         # TODO: take background from test image.
         background = torch.zeros(n_bands, slen, slen, device=self.device)
         background[0] = 5000.0
 
-        dec_args = (galaxy_decoder, None, background)
+        dec_args = (galaxy_decoder, psf_params, background)
 
         n_batches = int(n_images / batch_size)
 
@@ -180,10 +182,10 @@ def device_setup(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def decoder_setup(paths, device):
-    return DecoderSetup(paths, device)
+def decoder_setup(paths, device_setup):
+    return DecoderSetup(paths, device_setup.device)
 
 
 @pytest.fixture(scope="session")
-def encoder_setup(gpus, device):
-    return EncoderSetup(gpus, device)
+def encoder_setup(device_setup):
+    return EncoderSetup(device_setup.gpus, device_setup.device)

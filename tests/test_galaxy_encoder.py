@@ -7,7 +7,7 @@ from bliss import use_cuda
 
 class TestGalaxyEncoder:
     @pytest.fixture(scope="class")
-    def trained_encoder(self, get_galaxy_dataset, get_trained_encoder, device):
+    def trained_encoder(self, decoder_setup, encoder_setup, device_setup):
 
         n_epochs = 100 if use_cuda else 1
         # draw galaxies only in 2x2 center tile
@@ -18,7 +18,7 @@ class TestGalaxyEncoder:
         ptile_slen = 8
         edge_padding = 3
 
-        galaxy_dataset = get_galaxy_dataset(
+        galaxy_dataset = decoder_setup.get_galaxy_dataset(
             slen=50,
             batch_size=32 if use_cuda else 2,
             n_images=320 if use_cuda else 2,
@@ -28,7 +28,7 @@ class TestGalaxyEncoder:
             mean_sources=1,
             min_sources=1,
         )
-        trained_encoder = get_trained_encoder(
+        trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,
             n_epochs=n_epochs,
             max_detections=2,
@@ -36,11 +36,12 @@ class TestGalaxyEncoder:
             step=2,
             edge_padding=edge_padding,
         )
-        return trained_encoder.to(device)
+        return trained_encoder.to(device_setup.device)
 
     @pytest.mark.parametrize("n_galaxies", ["2"])
-    def test_n_sources_and_locs(self, n_galaxies, data_path, device, trained_encoder):
-        test_galaxy = torch.load(data_path.joinpath(f"{n_galaxies}_galaxy_test.pt"))
+    def test_n_sources_and_locs(self, trained_encoder, n_galaxies, paths, device_setup):
+        device = device_setup.device
+        test_galaxy = torch.load(paths["data"].joinpath(f"{n_galaxies}_galaxy_test.pt"))
         test_image = test_galaxy["images"]
 
         with torch.no_grad():
