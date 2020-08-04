@@ -1,17 +1,18 @@
 import torch
 import numpy as np
 
-from bliss import device
 from bliss.models import encoder
 
 
 class TestSourceEncoder:
-    def test_forward(self):
+    def test_forward(self, device_setup):
         """
         * Test that forward returns the correct pattern of zeros.
         * Test that variational parameters inside h agree with those returned from forward.
         * Test everything works with n_stars=None in forward.
         """
+        device = device_setup.device
+
         n_image_tiles = 30
         max_detections = 4
         ptile_slen = 9
@@ -124,9 +125,10 @@ class TestSourceEncoder:
                         == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
                     )
 
-    def test_forward_to_hidden2d(self):
+    def test_forward_to_hidden2d(self, device_setup):
         """Consistency check of using forward vs get_var_params
         """
+        device = device_setup.device
 
         n_image_tiles = 30
         max_detections = 4
