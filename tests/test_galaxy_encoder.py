@@ -1,13 +1,11 @@
 import pytest
 import torch
 
-from bliss import device
-from bliss import use_cuda
-
 
 class TestGalaxyEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(self, decoder_setup, encoder_setup, device_setup):
+        use_cuda = device_setup.use_cuda
 
         n_epochs = 100 if use_cuda else 1
         # draw galaxies only in 2x2 center tile
