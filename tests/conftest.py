@@ -7,7 +7,6 @@ import pytorch_lightning as pl
 from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
 
-use_cuda = torch.cuda.is_available()
 
 # command line arguments for tests
 def pytest_addoption(parser):
@@ -35,6 +34,21 @@ def pytest_generate_tests(metafunc):
         # @pytest.mark.parametrize('tmp_ct', range(count))
         # def test_foo(): pass
         metafunc.parametrize("tmp_ct", range(count))
+
+
+class DeviceSetup:
+    def __init__(self, gpus):
+        self.use_cuda = torch.cuda.is_available()
+        self.gpus = gpus if self.use_cuda else None
+
+        # setup device
+        self.device = torch.device("cpu")
+        if self.gpus and self.use_cuda:
+            device_id = self.gpus.split(",")
+            assert len(device_id) == 2 and device_id[1] == ""
+            device_id = int(self.gpus[0])
+            self.device = torch.device(f"cuda:{device_id}")
+            torch.cuda.set_device(self.device)
 
 
 class DecoderSetup:
@@ -146,7 +160,7 @@ class EncoderSetup:
 
         sleep_trainer.fit(sleep_net)
         sleep_net.image_encoder.eval()
-        return sleep_net.image_encoder
+        return sleep_net.image_encoder.to(self.device)
 
 
 # available fixtures
@@ -160,21 +174,9 @@ def paths():
 
 
 @pytest.fixture(scope="session")
-def gpus(pytestconfig):
-    return pytestconfig.getoption("gpus") if use_cuda else None
-
-
-@pytest.fixture(scope="session")
-def device(gpus):
-    new_device = torch.device("cpu")
-    if gpus:
-        device_id = gpus.split(",")
-        assert len(device_id) == 2 and device_id[1] == ""
-        device_id = int(gpus[0])
-        new_device = torch.device(f"cuda:{device_id}")
-        torch.cuda.set_device(new_device)
-
-    return new_device
+def device_setup(pytestconfig):
+    gpus = pytestconfig.getoption("gpus")
+    return DeviceSetup(gpus)
 
 
 @pytest.fixture(scope="session")

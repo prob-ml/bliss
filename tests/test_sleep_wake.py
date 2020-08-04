@@ -7,8 +7,8 @@ from bliss.models.decoder import get_mgrid, PowerLawPSF
 
 
 @pytest.fixture(scope="module")
-def trained_encoder(fitted_psf_params, get_star_dataset, get_trained_encoder, device):
-    star_dataset = get_star_dataset(
+def trained_encoder(decoder_setup, encoder_setup):
+    star_dataset = decoder_setup.get_star_dataset(
         fitted_psf_params, n_bands=1, slen=50, batch_size=32
     )
     trained_encoder = get_trained_encoder(star_dataset, n_epochs=100)
