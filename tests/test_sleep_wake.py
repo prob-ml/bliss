@@ -7,12 +7,13 @@ from bliss.models.decoder import get_mgrid, PowerLawPSF
 
 
 @pytest.fixture(scope="module")
-def trained_encoder(decoder_setup, encoder_setup):
+def trained_encoder(decoder_setup, encoder_setup, device_setup):
+    psf_params = decoder_setup.get_fitted_psf_params()
     star_dataset = decoder_setup.get_star_dataset(
-        fitted_psf_params, n_bands=1, slen=50, batch_size=32
+        psf_params, n_bands=1, slen=50, batch_size=32
     )
-    trained_encoder = get_trained_encoder(star_dataset, n_epochs=100)
-    return trained_encoder.to(device)
+    trained_encoder = encoder_setup.get_trained_encoder(star_dataset, n_epochs=100)
+    return trained_encoder.to(device_setup.device)
 
 
 class TestStarSleepEncoder:

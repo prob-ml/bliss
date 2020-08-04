@@ -38,7 +38,9 @@ class TestGalaxyEncoder:
 
     @pytest.mark.parametrize("n_galaxies", ["2"])
     def test_n_sources_and_locs(self, trained_encoder, n_galaxies, paths, device_setup):
+        use_cuda = device_setup.use_cuda
         device = device_setup.device
+
         test_galaxy = torch.load(paths["data"].joinpath(f"{n_galaxies}_galaxy_test.pt"))
         test_image = test_galaxy["images"]
 

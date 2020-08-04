@@ -11,6 +11,7 @@ class TestGalaxyVAE:
     @pytest.fixture(scope="module")
     def trained_galaxy_vae(self, paths, device_setup):
         use_cuda = device_setup.use_cuda
+
         h5_file = paths["data"].joinpath("catsim_single_galaxies.hdf5")
         dataset = galaxy_datasets.H5Catalog(h5_file, slen=51, n_bands=1)
         n_epochs = 100 if use_cuda else 1
@@ -58,7 +59,7 @@ class TestGalaxyVAE:
         residual = (galaxy_image - pred_image) / torch.sqrt(galaxy_image)
 
         # only expect tests to pass in cuda:
-        if not use_cuda:
+        if not device_setup.use_cuda:
             return
 
         # check residuals follow gaussian noise, most pixels are between 68%
