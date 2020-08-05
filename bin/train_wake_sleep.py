@@ -162,7 +162,6 @@ for iteration in range(0, n_iter):
         out_filename=outfolder + "iter" + str(iteration),
         lr=1e-3,
         n_epochs=100,
-        run_map=False,
     )
 
     print(list(model_params.planar_background.parameters())[0])
