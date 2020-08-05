@@ -591,7 +591,6 @@ class ImageEncoder(nn.Module):
 
     def forward(self, image_ptiles, n_sources):
         # image_ptiles shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
-
         # will unsqueeze and squeeze n_sources later, since used for indexing.
         assert len(n_sources.shape) == 1
         n_sources = n_sources.unsqueeze(0)
@@ -684,7 +683,7 @@ class ImageEncoder(nn.Module):
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
         # sample number of sources.
-        # tile_n_sources shape = (n_samples x n_ptiles)\
+        # tile_n_sources shape = (n_samples x n_ptiles)
         # tile_is_on_array shape = (n_samples x n_ptiles x max_detections)
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
         tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
@@ -747,9 +746,9 @@ class ImageEncoder(nn.Module):
 
         return self._get_full_params_from_sampled_params(
             slen,
-            tile_is_on_array,
+            tile_is_on_array.squeeze(-1),
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
-            tile_galaxy_bool.unsqueeze(-1),
+            tile_galaxy_bool,
         )
