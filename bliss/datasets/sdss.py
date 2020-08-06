@@ -1,82 +1,17 @@
 import pathlib
-import os
-
 import pickle
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
-import torch
 from torch.utils.data import Dataset
-
 from astropy.io import fits
-from astropy.wcs import WCS
-
-
-# Reconstruct the SDSS model PSF from KL basis functions.
-#   hdu: the psField hdu for the band you are looking at.
-#      eg, for r-band:
-# 	     psfield = pyfits.open('psField-%06i-%i-%04i.fit' % (run,camcol,field))
-#        bandnum = 'ugriz'.index('r')
-# 	     hdu = psfield[bandnum+1]
-#
-#   x,y can be scalars or 1-d numpy arrays.
-# Return value:
-#    if x,y are scalars: a PSF image
-#    if x,y are arrays:  a list of PSF images
-def psf_at_points(x, y, psf_fit_file):
-    psfield = fits.open(psf_fit_file)
-    hdu = psfield[3]
-    psf = hdu.data
-
-    rtnscalar = np.isscalar(x) and np.isscalar(y)
-    x = np.atleast_1d(x)
-    y = np.atleast_1d(y)
-
-    psfimgs = None
-    (outh, outw) = (None, None)
-
-    # From the IDL docs:
-    # http://photo.astro.princeton.edu/photoop_doc.html#SDSS_PSF_RECON
-    #   acoeff_k = SUM_i{ SUM_j{ (0.001*ROWC)^i * (0.001*COLC)^j * C_k_ij } }
-    #   psfimage = SUM_k{ acoeff_k * RROWS_k }
-    for k in range(len(psf)):
-        nrb = psf[k]["nrow_b"]
-        ncb = psf[k]["ncol_b"]
-
-        c = psf[k]["c"].reshape(5, 5)
-        c = c[:nrb, :ncb]
-
-        (gridi, gridj) = np.meshgrid(range(nrb), range(ncb))
-
-        if psfimgs is None:
-            psfimgs = [np.zeros_like(hdu["rrows"][k][0]) for xy in np.broadcast(x, y)]
-            (outh, outw) = (hdu["rnrow"][k][0], hdu["rncol"][k][0])
-
-        for i, (xi, yi) in enumerate(np.broadcast(x, y)):
-            acoeff_k = sum(((0.001 * xi) ** gridi * (0.001 * yi) ** gridj * c))
-            psfimgs[i] += acoeff_k * hdu["rrows"][k][0]
-
-    psfimgs = [img.reshape((outh, outw)) for img in psfimgs]
-
-    if rtnscalar:
-        return psfimgs[0]
-    return psfimgs
 
 
 class SloanDigitalSkySurvey(Dataset):
-
-    # this is adapted from
-    # https://github.com/jeff-regier/celeste_net/blob/935fbaa96d8da01dd7931600dee059bf6dd11292/datasets.py#L10
-    # to run on a specified run, camcol, field, and band
-    # returns one 1 x 1489 x 2048 image
-    def __init__(
-        self, sdssdir="../sdss_stage_dir/", run=3900, camcol=6, field=269, bands=[2]
-    ):
-
+    def __init__(self, sdss_dir, run=3900, camcol=6, field=269, bands=[2]):
         super(SloanDigitalSkySurvey, self).__init__()
-        self.sdss_path = pathlib.Path(sdssdir)
 
+        self.sdss_path = pathlib.Path(sdss_dir)
         self.rcfgs = []
-
         self.bands = bands
 
         # meta data for the run + camcol
@@ -130,12 +65,12 @@ class SloanDigitalSkySurvey(Dataset):
             print("loading sdss image from", frame_path)
             frame = fits.open(frame_path)
 
-            calibration = frame[1].read()
+            calibration = frame[1].data
             nelec_per_nmgy = gain[b] / calibration
 
-            (sky_small,) = frame[2]["ALLSKY"].read()
-            (sky_x,) = frame[2]["XINTERP"].read()
-            (sky_y,) = frame[2]["YINTERP"].read()
+            (sky_small,) = frame[2].data["ALLSKY"]
+            (sky_x,) = frame[2].data["XINTERP"]
+            (sky_y,) = frame[2].data["YINTERP"]
 
             small_rows = np.mgrid[0 : sky_small.shape[0]]
             small_cols = np.mgrid[0 : sky_small.shape[1]]
@@ -149,7 +84,7 @@ class SloanDigitalSkySurvey(Dataset):
             large_sky = sky_interp(large_points)
             large_sky_nelec = large_sky * gain[b]
 
-            pixels_ss_nmgy = frame[0].read()
+            pixels_ss_nmgy = frame[0].data
             pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
             pixels_nelec = pixels_ss_nelec + large_sky_nelec
 
