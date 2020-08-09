@@ -684,7 +684,7 @@ class ImageEncoder(nn.Module):
 
         # sample number of sources.
         # tile_n_sources shape = (n_samples x n_ptiles)
-        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections)
+        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
         tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
         tile_n_sources = tile_n_sources.view(n_samples, -1)
@@ -695,6 +695,7 @@ class ImageEncoder(nn.Module):
         pred = self._get_var_params_for_n_sources(h, tile_n_sources)
 
         # other quantities based on var_params
+        # shape = (n_samples x n_ptiles x max_detections x 1)
         tile_galaxy_bool = torch.bernoulli(pred["prob_galaxy"]).float()
         tile_galaxy_bool *= tile_is_on_array
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
@@ -705,9 +706,10 @@ class ImageEncoder(nn.Module):
             pred, tile_is_on_array, tile_galaxy_bool
         )
 
+        tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
         return self._get_full_params_from_sampled_params(
             slen,
-            tile_is_on_array,
+            tile_is_on_array.squeeze(-1),
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
@@ -724,6 +726,8 @@ class ImageEncoder(nn.Module):
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
         # get best estimate for n_sources in each tile.
+        # tile_n_sources shape = (1 x n_ptiles)
+        # tile_is_on_array shape = (1 x n_ptiles x max_detections)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
         tile_n_sources = tile_n_sources.view(1, -1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
@@ -744,11 +748,12 @@ class ImageEncoder(nn.Module):
             pred, tile_is_on_array, tile_galaxy_bool
         )
 
+        tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
         return self._get_full_params_from_sampled_params(
             slen,
             tile_is_on_array.squeeze(-1),
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
-            tile_galaxy_bool,
+            tile_galaxy_bool.unsqueeze(-1),
         )
