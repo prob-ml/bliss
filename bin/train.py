@@ -40,9 +40,7 @@ def setup_profiler(args, paths):
 def setup_logger(args, paths):
     logger = False
     if args.logger:
-        logger = TensorBoardLogger(
-            save_dir=paths["output"], version=1, name="lightning_logs"
-        )
+        logger = TensorBoardLogger(save_dir=paths["output"], name="lightning_logs")
     return logger
 
 
