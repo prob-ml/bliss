@@ -27,10 +27,10 @@ def plot_image(
     cax = divider.append_axes("right", size="5%", pad=0.05)
     im = ax.matshow(image, vmin=vmin, vmax=vmax)
 
-    if true_locs:
+    if true_locs is not None:
         plot_locs(ax, slen, true_locs, color="r", marker="x", s=s)
 
-    if estimated_locs:
+    if estimated_locs is not None:
         plot_locs(ax, slen, estimated_locs, color="b", marker="o", s=s)
 
     fig.colorbar(im, cax=cax, orientation="vertical")

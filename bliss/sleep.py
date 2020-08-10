@@ -1,4 +1,5 @@
 import math
+import numpy as np
 from itertools import permutations
 import inspect
 import matplotlib.pyplot as plt
@@ -360,16 +361,23 @@ class SleepPhase(pl.LightningModule):
                     galaxy_bool,
                 ) = self.image_encoder.map_estimate(image.unsqueeze(0))
 
+            # TODO: works only for galaxy images for now.
             # reconstructed image from MAP estimate
-            recon_image = self.dataset.image_decoder.render_multiple_galaxies(
-                n_sources, locs, galaxy_params
+
+            single_galaxies, _ = self.dataset.image_decoder.galaxy_decoder.forward(
+                galaxy_params
             )
-            recon_image = recon_image.cpu().numpy()
-            res_image = (image - recon_image) / image.sqrt()
+            single_galaxies = single_galaxies.unsqueeze(0)
+            recon_image = self.dataset.image_decoder.render_multiple_galaxies(
+                n_sources, locs, single_galaxies
+            )
 
             assert len(image.shape) == 3
             assert len(locs.shape) == 3 and locs.size(0) == 1
             image = image[0].cpu().numpy()  # first band.
+            recon_image = recon_image[0, 0].cpu().numpy()
+            res_image = (image - recon_image) / np.sqrt(image)
+
             loc = locs[0].cpu().numpy()
             true_loc = true_loc.cpu().numpy()
 
@@ -382,7 +390,7 @@ class SleepPhase(pl.LightningModule):
             true_ax.set_xlabel(
                 f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
             )
-        plt.subplots_adjust(hspace=-0.8, wspace=0.7)
+        plt.subplots_adjust(hspace=0.25, wspace=-0.2)
 
         if self.logger:
             self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
