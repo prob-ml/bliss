@@ -81,7 +81,7 @@ class SimulatedDataset(IterableDataset):
         background = SimulatedDataset.get_background_from_file(
             background_file, slen, n_bands
         )
-        psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)
+        psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)[range(n_bands)]
 
         return dec, psf_params, background
 
