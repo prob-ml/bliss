@@ -362,6 +362,7 @@ class SleepPhase(pl.LightningModule):
                 ) = self.image_encoder.map_estimate(image.unsqueeze(0))
 
             # TODO: works only for galaxy images for now.
+            # TODO: need to add background to recon_image
             # reconstructed image from MAP estimate
 
             single_galaxies, _ = self.dataset.image_decoder.galaxy_decoder.forward(
