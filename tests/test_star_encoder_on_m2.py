@@ -124,12 +124,7 @@ class TestStarSleepEncoderM2:
             galaxy_params,
             est_log_fluxes,
             galaxy_bool,
-        ) = trained_star_encoder_m2.sample_encoder(
-            test_image.to(device),
-            n_samples=1,
-            return_map_n_sources=True,
-            return_map_source_params=True,
-        )
+        ) = trained_star_encoder_m2.map_estimate(test_image.to(device))
         est_fluxes = est_log_fluxes.exp()
 
         # check metrics if cuda is true

@@ -25,7 +25,7 @@ class TestStarSleepEncoder:
         device = device_setup.device
 
         test_star = torch.load(paths["data"].joinpath(f"{n_stars}_star_test.pt"))
-        test_image = test_star["images"]
+        test_image = test_star["images"].to(device)
 
         with torch.no_grad():
             # get the estimated params
@@ -36,12 +36,7 @@ class TestStarSleepEncoder:
                 galaxy_params,
                 log_fluxes,
                 galaxy_bool,
-            ) = trained_encoder.sample_encoder(
-                test_image,
-                n_samples=1,
-                return_map_n_sources=True,
-                return_map_source_params=True,
-            )
+            ) = trained_encoder.map_estimate(test_image)
 
         # we only expect our assert statements to be true
         # when the model is trained in full, which requires cuda

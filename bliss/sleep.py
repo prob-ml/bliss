@@ -378,12 +378,7 @@ class SleepPhase(pl.LightningModule):
                     galaxy_params,
                     log_fluxes,
                     galaxy_bool,
-                ) = self.image_encoder.sample_encoder(
-                    image.unsqueeze(0),
-                    n_samples=1,
-                    return_map_n_sources=True,
-                    return_map_source_params=True,
-                )
+                ) = self.image_encoder.map_estimate(image.unsqueeze(0))
 
             assert len(image.shape) == 3
             assert len(locs.shape) == 3 and locs.size(0) == 1

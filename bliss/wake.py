@@ -106,7 +106,7 @@ class WakeNet(pl.LightningModule):
 
         # self.init_background = self.planar_background.forward()
 
-    def forward(self, obs_img, run_map=False):
+    def forward(self, obs_img):
 
         with torch.no_grad():
             self.star_encoder.eval()
@@ -116,12 +116,7 @@ class WakeNet(pl.LightningModule):
                 galaxy_params_sampled,
                 log_fluxes_sampled,
                 galaxy_bool_sampled,
-            ) = self.star_encoder.sample_encoder(
-                obs_img,
-                n_samples=self.n_samples,
-                return_map_n_sources=run_map,
-                return_map_source_params=run_map,
-            )
+            ) = self.star_encoder.sample_encoder(obs_img, self.n_samples)
 
         max_stars = log_fluxes_sampled.shape[1]
         is_on_array = encoder.get_is_on_from_n_sources(n_stars_sampled, max_stars)

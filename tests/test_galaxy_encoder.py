@@ -53,12 +53,7 @@ class TestGalaxyEncoder:
                 galaxy_params,
                 log_fluxes,
                 galaxy_bool,
-            ) = trained_encoder.sample_encoder(
-                test_image.to(device),
-                n_samples=1,
-                return_map_n_sources=True,
-                return_map_source_params=True,
-            )
+            ) = trained_encoder.map_estimate(test_image.to(device))
 
         if not use_cuda:
             return

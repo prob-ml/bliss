@@ -162,25 +162,23 @@ class TestSourceEncoder:
             )
 
             h = star_encoder._get_var_params_all(image_ptiles).detach()
-            (
-                loc_mean,
-                loc_logvar,
-                galaxy_param_mean,
-                galaxy_param_logvar,
-                log_flux_mean,
-                log_flux_logvar,
-                prob_galaxy,
-            ) = star_encoder._get_var_params_for_n_sources(h, n_star_per_tile_sampled)
+            pred = star_encoder._get_var_params_for_n_sources(
+                h, n_star_per_tile_sampled
+            )
 
             #  test prediction matches tile by tile
             for i in range(n_samples):
                 pred_i = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 
-                assert (pred_i["loc_mean"] - loc_mean[i]).abs().max() < 1e-6
-                assert torch.all(pred_i["loc_logvar"] == loc_logvar[i])
-                assert torch.all(pred_i["log_flux_mean"] == log_flux_mean[i])
-                assert torch.all(pred_i["log_flux_logvar"] == log_flux_logvar[i])
-                assert torch.all(pred_i["galaxy_param_mean"] == galaxy_param_mean[i])
+                assert (pred_i["loc_mean"] - pred["loc_mean"][i]).abs().max() < 1e-6
+                assert torch.all(pred_i["loc_logvar"] == pred["loc_logvar"][i])
+                assert torch.all(pred_i["log_flux_mean"] == pred["log_flux_mean"][i])
                 assert torch.all(
-                    pred_i["galaxy_param_logvar"] == galaxy_param_logvar[i]
+                    pred_i["log_flux_logvar"] == pred["log_flux_logvar"][i]
+                )
+                assert torch.all(
+                    pred_i["galaxy_param_mean"] == pred["galaxy_param_mean"][i]
+                )
+                assert torch.all(
+                    pred_i["galaxy_param_logvar"] == pred["galaxy_param_logvar"][i]
                 )
