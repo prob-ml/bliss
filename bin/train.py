@@ -64,7 +64,7 @@ def setup_checkpoint_callback(args, paths):
 def main(args):
 
     # setup.
-    paths = setup_paths(args, enforce_overwrite=True)
+    paths = setup_paths(args, enforce_overwrite=False)
     setup_seed(args)
 
     # setup dataset.
