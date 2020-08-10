@@ -143,6 +143,20 @@ class SleepPhase(pl.LightningModule):
 
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
 
+        self.hparams = {
+            "lr": self.lr,
+            "weight_decay": self.weight_decay,
+            "batch_size": self.dataset.batch_size,
+            "n_batches": self.dataset.n_batches,
+            "n_bands": self.dataset.n_bands,
+            "max_sources": self.dataset.image_decoder.max_sources,
+            "mean_sources": self.dataset.image_decoder.mean_sources,
+            "min_sources": self.dataset.image_decoder.min_sources,
+            "loc_min": self.dataset.image_decoder.loc_min,
+            "loc_max": self.dataset.image_decoder.loc_max,
+            "prob_galaxy": self.dataset.image_decoder.prob_galaxy,
+        }
+
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder.forward(image_ptiles, n_sources)
 
@@ -278,24 +292,6 @@ class SleepPhase(pl.LightningModule):
 
     def val_dataloader(self):
         return DataLoader(self.dataset, batch_size=None)
-
-    def on_train_start(self):
-        if self.logger:
-            # log hyper-parameters
-            hparams = {
-                "lr": self.lr,
-                "weight_decay": self.weight_decay,
-                "batch_size": self.dataset.batch_size,
-                "n_batches": self.dataset.n_batches,
-                "n_bands": self.dataset.n_bands,
-                "max_sources": self.dataset.image_decoder.max_sources,
-                "mean_sources": self.dataset.image_decoder.mean_sources,
-                "min_sources": self.dataset.image_decoder.min_sources,
-                "loc_min": self.dataset.image_decoder.loc_min,
-                "loc_max": self.dataset.image_decoder.loc_max,
-                "prob_galaxy": self.dataset.image_decoder.prob_galaxy,
-            }
-            self.logger.log_hyperparams(hparams)
 
     def training_step(self, batch, batch_idx):
         (
