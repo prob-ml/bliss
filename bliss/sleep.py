@@ -332,8 +332,68 @@ class SleepPhase(pl.LightningModule):
 
         return output
 
+    def make_validation_plots(self, outputs):
+        # add some images to tensorboard for validating location/counts.
+        # Only use 5 images in the last batch
+        true_n_sources = outputs[-1]["log"]["n_sources"][:5]
+        true_locs = outputs[-1]["log"]["locs"][:5]
+        images = outputs[-1]["log"]["images"][:5]
+        fig, axes = plt.subplots(nrows=5, ncols=3, figsize=(20, 20,))
+
+        for i in range(5):
+            true_ax = axes[i, 0]
+            recon_ax = axes[i, 1]
+            res_ax = axes[i, 2]
+
+            image = images[i]
+            true_loc = true_locs[i]
+            true_n_source = true_n_sources[i]
+
+            with torch.no_grad():
+                # get the estimated params
+                self.image_encoder.eval()
+                (
+                    n_sources,
+                    locs,
+                    galaxy_params,
+                    log_fluxes,
+                    galaxy_bool,
+                ) = self.image_encoder.map_estimate(image.unsqueeze(0))
+
+            # reconstructed image from MAP estimate
+            recon_image = self.dataset.image_decoder.render_multiple_galaxies(
+                n_sources, locs, galaxy_params
+            )
+            recon_image = recon_image.cpu().numpy()
+            res_image = (image - recon_image) / image.sqrt()
+
+            assert len(image.shape) == 3
+            assert len(locs.shape) == 3 and locs.size(0) == 1
+            image = image[0].cpu().numpy()  # first band.
+            loc = locs[0].cpu().numpy()
+            true_loc = true_loc.cpu().numpy()
+
+            # plot
+            plotting.plot_image(fig, true_ax, image, true_loc, loc)
+            plotting.plot_image(fig, recon_ax, recon_image, loc)
+            plotting.plot_image(fig, res_ax, res_image)
+
+            # add n_sources info
+            true_ax.set_xlabel(
+                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
+            )
+        plt.subplots_adjust(hspace=-0.8, wspace=0.7)
+
+        if self.logger:
+            self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
+        plt.close(fig)
+
     def validation_epoch_end(self, outputs):
 
+        # images for validation
+        self.make_validation_plots(outputs)
+
+        # log other losses
         # first we log some of the important losses and average over all batches.
         avg_loss = 0
         avg_counter_loss = 0
@@ -369,48 +429,7 @@ class SleepPhase(pl.LightningModule):
             "star_params_loss": avg_star_params_loss,
             "galaxy_bool_loss": avg_galaxy_bool_loss,
         }
-
         results = {"val_loss": avg_loss, "log": logs}
-
-        # add some images to tensorboard for validating location/counts.
-        # Only use 10 images in the last batch
-        true_n_sources = outputs[-1]["log"]["n_sources"][:10]
-        true_locs = outputs[-1]["log"]["locs"][:10]
-        images = outputs[-1]["log"]["images"][:10]
-        fig, axes = plt.subplots(nrows=2, ncols=5, figsize=(20, 20,))
-
-        # TODO: Is this ok or should we use the one obtained above? (mean)
-        for ax, image, true_loc, true_n_source in zip(
-            axes.flatten(), images, true_locs, true_n_sources
-        ):
-            with torch.no_grad():
-                # get the estimated params
-                self.image_encoder.eval()
-                (
-                    n_sources,
-                    locs,
-                    galaxy_params,
-                    log_fluxes,
-                    galaxy_bool,
-                ) = self.image_encoder.map_estimate(image.unsqueeze(0))
-
-            assert len(image.shape) == 3
-            assert len(locs.shape) == 3 and locs.size(0) == 1
-            image = image[0].cpu().numpy()  # first band.
-            loc = locs[0].cpu().numpy()
-            true_loc = true_loc.cpu().numpy()
-            plotting.plot_image(ax, image, true_loc, loc, marker_size=5)
-
-            # add n_sources info
-            ax.set_xlabel(
-                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
-            )
-        plt.subplots_adjust(hspace=-0.8, wspace=0.7)
-
-        if self.logger:
-            self.logger.experiment.add_figure(f"Validation {self.current_epoch}", fig)
-        plt.close(fig)
-
         return results
 
     @staticmethod
