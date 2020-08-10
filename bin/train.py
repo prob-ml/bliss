@@ -44,11 +44,13 @@ def setup_logger(args, paths):
     return logger
 
 
-def setup_checkpoint_callback(args, paths):
+def setup_checkpoint_callback(args, paths, logger):
     checkpoint_callback = False
     if args.checkpoint_callback:
+        checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
+        checkpoint_dir = paths["output"].joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
-            filepath=paths["output"],
+            filepath=checkpoint_dir,
             save_top_k=True,
             verbose=True,
             monitor="val_loss",
@@ -75,7 +77,7 @@ def main(args):
     # setup trainer
     profiler = setup_profiler(args, paths)
     logger = setup_logger(args, paths)
-    checkpoint_callback = setup_checkpoint_callback(args, paths)
+    checkpoint_callback = setup_checkpoint_callback(args, paths, logger)
     trainer = pl.Trainer.from_argparse_args(
         args, logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback
     )
