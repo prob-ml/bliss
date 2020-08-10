@@ -50,12 +50,8 @@ class SimulatedDataset(IterableDataset):
         return dec
 
     @staticmethod
-    def get_psf_from_file(psf_file):
-        psf_params = torch.from_numpy(np.load(psf_file)).to(device)
-        power_law_psf = PowerLawPSF(psf_params)
-        psf = power_law_psf.forward().detach()
-        assert psf.size(0) == 2 and psf.size(1) == psf.size(2) == 101
-        return psf
+    def get_psf_params_from_file(psf_file):
+        return torch.from_numpy(np.load(psf_file)).to(device)
 
     @staticmethod
     def get_background_from_file(background_file, slen, n_bands):
@@ -72,10 +68,6 @@ class SimulatedDataset(IterableDataset):
         return background
 
     @staticmethod
-    def get_psf_params_from_file(psf_file):
-        return torch.from_numpy(np.load(psf_file)).to(device)
-
-    @staticmethod
     def decoder_args_from_args(args, paths: dict):
         slen, latent_dim, n_bands = args.slen, args.latent_dim, args.n_bands
         gal_slen = args.gal_slen
@@ -89,8 +81,7 @@ class SimulatedDataset(IterableDataset):
         background = SimulatedDataset.get_background_from_file(
             background_file, slen, n_bands
         )
-
-        psf_params = SimulatedDataset.get_psf_from_file(psf_file)
+        psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)
 
         return dec, psf_params, background
 
