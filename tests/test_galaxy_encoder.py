@@ -14,7 +14,7 @@ class TestGalaxyEncoder:
 
         # encoder looks at 10x10 padded tile, and detects galaxies in 2x2 tile.
         ptile_slen = 8
-        edge_padding = 3
+        tile_slen = 2
 
         galaxy_dataset = decoder_setup.get_galaxy_dataset(
             slen=50,
@@ -31,8 +31,7 @@ class TestGalaxyEncoder:
             n_epochs=n_epochs,
             max_detections=2,
             ptile_slen=ptile_slen,
-            step=2,
-            edge_padding=edge_padding,
+            tile_slen=tile_slen,
         )
         return trained_encoder.to(device_setup.device)
 

@@ -51,8 +51,7 @@ latent_dim = dataset.image_decoder.latent_dim
 
 encoder_kwargs = dict(
     ptile_slen=8,
-    step=2,
-    edge_padding=3,
+    tile_slen=2,
     enc_conv_c=5,
     enc_kern=3,
     enc_hidden=64,

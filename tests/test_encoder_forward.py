@@ -15,15 +15,15 @@ class TestSourceEncoder:
 
         n_image_tiles = 30
         max_detections = 4
-        ptile_slen = 9
+        ptile_slen = 8
         n_bands = 2
+        tile_slen = 2
 
         # get encoder
         star_encoder = encoder.ImageEncoder(
             slen=101,
             ptile_slen=ptile_slen,
-            step=2,
-            edge_padding=3,
+            tile_slen=tile_slen,
             n_bands=n_bands,
             max_detections=max_detections,
             n_galaxy_params=8,
@@ -132,7 +132,8 @@ class TestSourceEncoder:
 
         n_image_tiles = 30
         max_detections = 4
-        ptile_slen = 9
+        ptile_slen = 8
+        tile_slen = 2
         n_bands = 2
         n_samples = 10
 
@@ -140,8 +141,7 @@ class TestSourceEncoder:
         star_encoder = encoder.ImageEncoder(
             slen=101,
             ptile_slen=ptile_slen,
-            step=2,
-            edge_padding=3,
+            tile_slen=tile_slen,
             n_bands=n_bands,
             max_detections=max_detections,
             n_galaxy_params=8,
