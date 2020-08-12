@@ -86,8 +86,9 @@ class DecoderSetup:
         # slice if necessary.
         background = background[range(n_bands)]
         init_psf_params = init_psf_params[range(n_bands)]
+        galaxy_decoder = self.get_galaxy_decoder()
 
-        dec_args = (None, init_psf_params, background)
+        dec_args = (galaxy_decoder, init_psf_params, background)
 
         n_batches = int(n_images / batch_size)
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)

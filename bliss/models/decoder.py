@@ -141,17 +141,13 @@ class ImageDecoder(object):
         self.mean_sources = mean_sources
         self.min_sources = min_sources
         self.prob_galaxy = float(prob_galaxy)
-        self.all_stars = self.prob_galaxy == 0.0
-
         self.add_noise = add_noise
 
-        self.galaxy_decoder = None
         self.latent_dim = 8
-        if not self.all_stars:
-            self.galaxy_decoder = galaxy_decoder
-            self.gal_slen = self.galaxy_decoder.slen
-            self.latent_dim = self.galaxy_decoder.latent_dim
-            assert self.galaxy_decoder.n_bands == self.n_bands
+        self.galaxy_decoder = galaxy_decoder
+        self.gal_slen = self.galaxy_decoder.slen
+        self.latent_dim = self.galaxy_decoder.latent_dim
+        assert self.galaxy_decoder.n_bands == self.n_bands
 
         # prior parameters
         self.f_min = f_min
@@ -379,11 +375,8 @@ class ImageDecoder(object):
         return source_rendered
 
     def render_multiple_stars(self, locs, fluxes, star_bool):
-        """
-        Args:
-            locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
-            fluxes: Is (batch_size x n_bands x max_stars)
-        """
+        # locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
+        # fluxes: Is (batch_size x n_bands x max_stars)
 
         psf = self.get_psf()
         batch_size = locs.shape[0]
