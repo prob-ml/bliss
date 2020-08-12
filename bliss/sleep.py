@@ -410,17 +410,12 @@ class SleepPhase(pl.LightningModule):
             help="Side length of the padded tile in pixels.",
         )
         parser.add_argument(
-            "--step",
+            "--tile-slen",
             type=int,
-            default=1,
+            default=2,
             help="Distance between tile centers in pixels.",
         )
-        parser.add_argument(
-            "--edge-padding",
-            type=int,
-            default=3,
-            help="Padding around each tile in pixels.",
-        )
+
         parser.add_argument(
             "--max-detections",
             type=int,
