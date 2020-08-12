@@ -41,23 +41,22 @@ def _sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).squeeze()
 
 
-def _get_tile_coords(image_xlen, image_ylen, ptile_slen, step):
+def _get_tile_coords(image_xlen, image_ylen, ptile_slen, tile_slen):
     """
     This records (x0, x1) indices each image padded tile comes from.
 
     :param image_xlen: The x side length of the image in pixels.
     :param image_ylen: The y side length of the image in pixels.
     :param ptile_slen: The side length of the padded tile in pixels.
-    :param step: pixels by which to shift every padded tile.
     :return: tile_coords, a torch.LongTensor
     """
 
-    nx_ptiles = ((image_xlen - ptile_slen) // step) + 1
-    ny_ptiles = ((image_ylen - ptile_slen) // step) + 1
+    nx_ptiles = ((image_xlen - ptile_slen) // tile_slen) + 1
+    ny_ptiles = ((image_ylen - ptile_slen) // tile_slen) + 1
     n_ptiles = nx_ptiles * ny_ptiles
 
     def return_coords(i):
-        return [(i // ny_ptiles) * step, (i % ny_ptiles) * step]
+        return [(i // ny_ptiles) * tile_slen, (i % ny_ptiles) * tile_slen]
 
     tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
     tile_coords = tile_coords.long().to(device)
@@ -286,11 +285,10 @@ def _tile_images(images, ptile_slen, step):
     Each tile has size ptile_slen x ptile_slen, where
     the number of padded tiles per image  is (slen - ptile_slen / step)**2.
 
-    NOTE: input and output are torch tensors, not numpy arrays.
+    NOTE: input and output are torch tensors.
 
     :param images: A tensor of size (batch_size x n_bands x slen x slen)
     :param ptile_slen: The side length of each padded tile.
-    :param step:
     :return: image_ptiles, output tensor of shape:
              (batch_size * ptiles per image) x n_bands x ptile_slen x ptile_slen
     :rtype: class:`torch.Tensor`
@@ -331,8 +329,7 @@ class ImageEncoder(nn.Module):
         self,
         slen=101,
         ptile_slen=8,
-        step=1,
-        edge_padding=3,
+        tile_slen=2,
         n_bands=1,
         max_detections=2,
         n_galaxy_params=8,
@@ -348,14 +345,9 @@ class ImageEncoder(nn.Module):
 
         * NOTE: Should have (n_bands == n_source_params) in the case of stars.
 
-        * EXAMPLE on padding: If the ptile_slen=8, edge_padding=3, then the size of a tile will be
-        8-2*3=2
-
         :param slen: dimension of full image, we assume its square for now
         :param ptile_slen: dimension (in pixels) of the individual
                            image padded tiles (usually 8 for stars, and _ for galaxies).
-        :param step: number of pixels to shift every padded tile.
-        :param edge_padding: length of padding (in pixels).
         :param n_bands : number of bands
         :param max_detections:
         * For fluxes this should equal number of bands, for galaxies it will be the number of latent
@@ -365,13 +357,15 @@ class ImageEncoder(nn.Module):
 
         # image parameters
         self.slen = slen
-        self.ptile_slen = ptile_slen
-        self.step = step
         self.n_bands = n_bands
 
-        self.edge_padding = edge_padding
+        # padding
+        assert (ptile_slen - tile_slen) % 2 == 0
+        self.ptile_slen = ptile_slen
+        self.tile_slen = tile_slen
+        self.edge_padding = (ptile_slen - tile_slen) / 2
 
-        self.tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.step)
+        self.tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.tile_slen)
         self.n_tiles = self.tile_coords.size(0)
 
         # max number of detections
@@ -616,7 +610,7 @@ class ImageEncoder(nn.Module):
 
         # handle cases where images passed in are not of original size.
         if not (slen == self.slen):
-            tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.step)
+            tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.tile_slen)
         return tile_coords
 
     def get_params_in_tiles(self, slen, locs, *params):
@@ -639,7 +633,7 @@ class ImageEncoder(nn.Module):
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
 
-        image_ptiles = _tile_images(images, self.ptile_slen, self.step)
+        image_ptiles = _tile_images(images, self.ptile_slen, self.tile_slen)
         return image_ptiles
 
     def _get_full_params_from_sampled_params(

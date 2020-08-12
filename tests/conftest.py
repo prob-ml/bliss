@@ -123,8 +123,7 @@ class EncoderSetup:
         dataset,
         n_epochs=100,
         ptile_slen=8,
-        step=2,
-        edge_padding=3,
+        tile_slen=2,
         enc_conv_c=5,
         enc_kern=3,
         enc_hidden=64,
@@ -137,8 +136,7 @@ class EncoderSetup:
         # setup Star Encoder
         encoder_kwargs = dict(
             ptile_slen=ptile_slen,
-            step=step,
-            edge_padding=edge_padding,
+            tile_slen=tile_slen,
             enc_conv_c=enc_conv_c,
             enc_kern=enc_kern,
             enc_hidden=enc_hidden,
