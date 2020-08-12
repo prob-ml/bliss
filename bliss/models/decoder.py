@@ -306,27 +306,18 @@ class ImageDecoder(object):
 
         return fluxes
 
-    def _sample_galaxy_params_and_single_images(self, n_galaxies, galaxy_bool):
+    def _sample_galaxy_params(self, n_galaxies, galaxy_bool):
         assert len(n_galaxies.shape) == 1
 
         batch_size = n_galaxies.size(0)
         n_samples = batch_size * self.max_sources
-
-        # z has shape = (n_samples, latent_dim)
-        # galaxies has shape = (n_samples, n_bands, slen, slen)
         with torch.no_grad():
-            z, galaxies = self.galaxy_decoder.get_sample(n_samples)
-
-        galaxy_params = z.reshape(batch_size, -1, self.latent_dim)
-        single_galaxies = galaxies.reshape(
-            batch_size, -1, self.n_bands, self.gal_slen, self.gal_slen
-        )
+            z = self.galaxy_decoder.get_sample(n_samples)
+        galaxy_params = z.reshape(batch_size, self.max_sources, self.latent_dim)
 
         # zero out excess according to n_galaxies.
         galaxy_params *= galaxy_bool.unsqueeze(2)
-        single_galaxies *= galaxy_bool.unsqueeze(2).unsqueeze(3).unsqueeze(4)
-
-        return galaxy_params, single_galaxies
+        return galaxy_params
 
     def sample_parameters(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
@@ -337,32 +328,21 @@ class ImageDecoder(object):
             n_sources, is_on_array
         )
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
-
-        galaxy_params = torch.zeros(
-            batch_size, self.max_sources, self.latent_dim, device=device
-        )
-        single_galaxies = 0.0
-        if not self.all_stars:
-            (
-                galaxy_params,
-                single_galaxies,
-            ) = self._sample_galaxy_params_and_single_images(n_sources, galaxy_bool)
+        galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
 
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
         log_fluxes = self._get_log_fluxes(fluxes)
 
-        return (
-            n_sources,
-            n_galaxies,
-            n_stars,
-            locs,
-            galaxy_params,
-            single_galaxies,
-            fluxes,
-            log_fluxes,
-            galaxy_bool,
-            star_bool,
-        )
+        return {
+            "n_sources": n_sources,
+            "n_galaxies": n_galaxies,
+            "n_stars": n_stars,
+            "locs": locs,
+            "galaxy_params": galaxy_params,
+            "fluxes": fluxes,
+            "log_fluxes": log_fluxes,
+            "galaxy_bool": galaxy_bool,
+        }
 
     @staticmethod
     def _apply_noise(images_mean):
@@ -387,29 +367,22 @@ class ImageDecoder(object):
                         Or multiple galaxies in the case of galaxies.
         :return: shape = (batch_size x n_bands x slen x slen)
         """
-
         batch_size = locs.shape[0]
         assert locs.shape[1] == 2
         assert source.shape[0] == batch_size
 
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
-
         _grid = self.cached_grid.view(1, self.slen, self.slen, 2)
         grid_loc = _grid - locs[:, [1, 0]].view(batch_size, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
-    def render_multiple_stars(self, n_sources, locs, fluxes):
+    def render_multiple_stars(self, locs, fluxes, star_bool):
         """
-
         Args:
-            n_sources: has shape = (batch_size)
             locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
             fluxes: Is (batch_size x n_bands x max_stars)
-
-        Returns:
-
         """
 
         psf = self.get_psf()
@@ -426,47 +399,44 @@ class ImageDecoder(object):
         expanded_psf = psf.expand(batch_size, n_bands, -1, -1)
 
         # this loop plots each of the ith star in each of the (batch_size) images.
-        max_n = locs.shape[1]
-        for n in range(max_n):
-            is_on_n = (n < n_sources).float()
-            locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-            fluxes_n = fluxes[:, n, :]  # shape = (batch_size x n_bands)
+        for n in range(self.max_sources):
+            star_bool_n = star_bool[:, n]
+            locs_n = locs[:, n, :] * star_bool_n.unsqueeze(1)
+            fluxes_n = fluxes[:, n, :] * star_bool_n.unsqueeze(1)
+            fluxes_n = fluxes_n.view(batch_size, n_bands, 1, 1)
             one_star = self._render_one_source(locs_n, expanded_psf)
-            scene += one_star * (is_on_n.unsqueeze(1) * fluxes_n).view(
-                batch_size, n_bands, 1, 1
-            )
+            scene += one_star * fluxes_n
 
         return scene
 
-    def render_multiple_galaxies(self, n_sources, locs, single_galaxies):
+    def render_multiple_galaxies(self, locs, galaxy_params, galaxy_bool):
         batch_size = locs.shape[0]
-        n_bands = single_galaxies.shape[2]
 
-        assert single_galaxies.shape[0] == batch_size
-        assert single_galaxies.shape[1] == locs.shape[1]  # max_galaxies
+        assert galaxy_params.shape[0] == batch_size
+        assert galaxy_params.shape[1] == locs.shape[1]  # max_galaxies
 
-        scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)
-        max_n = locs.shape[1]
-        for n in range(max_n):
-            is_on_n = (n < n_sources).float()
-            locs_n = locs[:, n, :] * is_on_n.unsqueeze(1)
-
+        scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
+        scene = torch.zeros(scene_shape, device=device)
+        for n in range(self.max_sources):
+            galaxy_bool_n = galaxy_bool[:, n]
+            locs_n = locs[:, n, :] * galaxy_bool_n.unsqueeze(1)
+            galaxy_params_n = galaxy_params[:, n, :]
             # shape = (batch_size x n_bands x slen x slen)
-            galaxy = single_galaxies[:, n, :, :, :]
+            galaxy, _ = self.galaxy_decoder.forward(galaxy_params_n)
+            galaxy *= galaxy_bool_n.unsqueeze(1).unsqueeze(2).unsqueeze(3)
             one_galaxy = self._render_one_source(locs_n, galaxy)
             scene += one_galaxy
 
         return scene
 
-    def render_images(self, n_sources, galaxy_locs, star_locs, single_galaxies, fluxes):
+    def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
 
-        galaxies = 0.0
-        if not self.all_stars:
-            # need n_sources because *_locs are not necessarily ordered.
-            galaxies = self.render_multiple_galaxies(
-                n_sources, galaxy_locs, single_galaxies,
-            )
-        stars = self.render_multiple_stars(n_sources, star_locs, fluxes)
+        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
+        star_bool = (1 - galaxy_bool) * is_on_array
+
+        # need n_sources because `*_locs` are not necessarily ordered.
+        galaxies = self.render_multiple_galaxies(locs, galaxy_params, galaxy_bool)
+        stars = self.render_multiple_stars(locs, fluxes, star_bool)
 
         # shape = (n_images x n_bands x slen x slen)
         images = galaxies + stars
