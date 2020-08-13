@@ -247,6 +247,7 @@ class ImageDecoder(object):
         star_bool = (1 - galaxy_bool) * is_on_array
         n_galaxies = galaxy_bool.sum(1)
         n_stars = star_bool.sum(1)
+        assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
         return n_galaxies, n_stars, galaxy_bool, star_bool
 
@@ -311,7 +312,7 @@ class ImageDecoder(object):
             z = self.galaxy_decoder.get_sample(n_samples)
         galaxy_params = z.reshape(batch_size, self.max_sources, self.latent_dim)
 
-        # zero out excess according to n_galaxies.
+        # zero out excess according to galaxy_bool.
         galaxy_params *= galaxy_bool.unsqueeze(2)
         return galaxy_params
 
@@ -323,7 +324,6 @@ class ImageDecoder(object):
         n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
             n_sources, is_on_array
         )
-        assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
         galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
 
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
@@ -348,10 +348,9 @@ class ImageDecoder(object):
             warnings.warn("image mean less than 0")
             images_mean = images_mean.clamp(min=1.0)
 
-        images = (
-            torch.sqrt(images_mean) * torch.randn(*images_mean.shape, device=device)
-            + images_mean
-        )
+        images = torch.sqrt(images_mean)
+        images *= torch.randn(*images_mean.shape, device=device)
+        images += images_mean
 
         return images
 
@@ -380,23 +379,23 @@ class ImageDecoder(object):
 
         psf = self.get_psf()
         batch_size = locs.shape[0]
-        n_bands = psf.shape[0]
-        scene = torch.zeros(batch_size, n_bands, self.slen, self.slen, device=device)
+        scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
+        scene = torch.zeros(scene_shape, device=device)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
         assert fluxes.shape[0] == locs.shape[0]
-        assert fluxes.shape[1] == locs.shape[1]
-        assert fluxes.shape[2] == n_bands
+        assert fluxes.shape[1] == locs.shape[1] == self.max_sources
+        assert fluxes.shape[2] == psf.shape[0] == self.n_bands
 
         # all stars are just the PSF so we copy it.
-        expanded_psf = psf.expand(batch_size, n_bands, -1, -1)
+        expanded_psf = psf.expand(batch_size, self.n_bands, -1, -1)
 
         # this loop plots each of the ith star in each of the (batch_size) images.
         for n in range(self.max_sources):
             star_bool_n = star_bool[:, n]
             locs_n = locs[:, n, :] * star_bool_n.unsqueeze(1)
             fluxes_n = fluxes[:, n, :] * star_bool_n.unsqueeze(1)
-            fluxes_n = fluxes_n.view(batch_size, n_bands, 1, 1)
+            fluxes_n = fluxes_n.view(batch_size, self.n_bands, 1, 1)
             one_star = self._render_one_source(locs_n, expanded_psf)
             scene += one_star * fluxes_n
 
@@ -406,7 +405,7 @@ class ImageDecoder(object):
         batch_size = locs.shape[0]
 
         assert galaxy_params.shape[0] == batch_size
-        assert galaxy_params.shape[1] == locs.shape[1]  # max_galaxies
+        assert galaxy_params.shape[1] == locs.shape[1] == self.max_sources
 
         scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
         scene = torch.zeros(scene_shape, device=device)

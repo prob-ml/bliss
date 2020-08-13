@@ -154,25 +154,23 @@ class WakeNet(pl.LightningModule):
     # ---------------
     # Training
     # ----------------
-    def training_step(self, batch, batch_idx):
+
+    def get_loss(self, batch):
         img = batch.unsqueeze(0)
         recon_mean = self.forward(img)
         error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
         last = self.slen - self.pad
         loss = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
-        logs = {"train_loss": loss}
+        return loss
 
+    def training_step(self, batch, batch_idx):
+        loss = self.get_loss(batch)
+        logs = {"train_loss": loss}
         return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
-        img = batch.unsqueeze(0)
-        recon_mean = self.forward(img)
-        error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
-
-        last = self.slen - self.pad
-        loss_val = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
-
+        loss = self.get_loss(batch)
         return {"val_loss": loss_val}
 
     def validation_epoch_end(self, outputs):
