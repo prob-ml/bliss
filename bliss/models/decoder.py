@@ -348,9 +348,9 @@ class ImageDecoder(object):
             warnings.warn("image mean less than 0")
             images_mean = images_mean.clamp(min=1.0)
 
-        images = torch.sqrt(images_mean)
-        images *= torch.randn(*images_mean.shape, device=device)
-        images += images_mean
+        _images = torch.sqrt(images_mean)
+        images = _images * torch.randn(*images_mean.shape, device=device)
+        images = images + images_mean
 
         return images
 
@@ -376,6 +376,7 @@ class ImageDecoder(object):
     def render_multiple_stars(self, locs, fluxes, star_bool):
         # locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
         # fluxes: Is (batch_size x n_bands x max_stars)
+        # star_bool: Is (batch_size x max_stars)
 
         psf = self.get_psf()
         batch_size = locs.shape[0]
@@ -383,8 +384,9 @@ class ImageDecoder(object):
         scene = torch.zeros(scene_shape, device=device)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
-        assert fluxes.shape[0] == locs.shape[0]
+        assert fluxes.shape[0] == locs.shape[0] == star_bool.shape[0]
         assert fluxes.shape[1] == locs.shape[1] == self.max_sources
+        assert star_bool.shape[1] == self.max_sources
         assert fluxes.shape[2] == psf.shape[0] == self.n_bands
 
         # all stars are just the PSF so we copy it.
