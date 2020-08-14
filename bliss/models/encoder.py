@@ -245,9 +245,9 @@ class ImageEncoder(nn.Module):
     def __init__(
         self,
         trial,
-        enc_conv_c: List[int],
-        enc_kern: List[int],
-        enc_hidden: List[int],
+        enc_conv_c,
+        enc_kern,
+        enc_hidden,
         slen=101,
         ptile_slen=8,
         tile_slen=2,
@@ -293,15 +293,9 @@ class ImageEncoder(nn.Module):
         self.max_detections = max_detections
 
         # convolutional NN parameters
-        self.enc_conv_c = trial.suggest_int(
-            "enc_conv_c", enc_conv_c[0], enc_conv_c[1], enc_conv_c[2]
-        )
-        self.enc_kern = trial.suggest_int(
-            "enc_kern", enc_kern[0], enc_kern[1], enc_kern[2]
-        )
-        self.enc_hidden = trial.suggest_int(
-            "enc_hidden", enc_hidden[0], enc_hidden[1], enc_hidden[2]
-        )
+        self.enc_conv_c = enc_conv_c
+        self.enc_kern = enc_kern
+        self.enc_hidden = enc_hidden
 
         self.momentum = momentum
 
