@@ -154,6 +154,7 @@ def _get_min_perm_loss(
 class SleepPhase(pl.LightningModule):
     def __init__(
         self,
+        trial,
         dataset,
         encoder_kwargs,
         lr=1e-3,
@@ -164,6 +165,8 @@ class SleepPhase(pl.LightningModule):
 
         # assumes dataset is a IterableDataset class.
         self.dataset = dataset
+
+        encoder_kwargs["trial"] = trial
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
         # avoid calculating gradients of psf_transform
@@ -231,6 +234,7 @@ class SleepPhase(pl.LightningModule):
         # true_tile_locs has shape = (n_ptiles x max_detections x 2)
         # true_tile_n_sources has shape = (n_ptiles)
         slen = images.size(-1)
+        # print(images.size())
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         (
             true_tile_n_sources,
@@ -242,7 +246,7 @@ class SleepPhase(pl.LightningModule):
         ) = self.image_encoder.get_params_in_tiles(
             slen, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool
         )
-
+        # print(image_ptiles.size())
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)
 
@@ -549,31 +553,37 @@ class SleepPhase(pl.LightningModule):
 
 
 class Objective(object):
-    def __init__(self, dataset, encoder_kwargs):
+    def __init__(
+        self, dataset, encoder_kwargs, max_epochs, lr=1e-3, weight_decay=1e-5,
+    ):
         self.dataset = dataset
         self.encoder_kwargs = encoder_kwargs
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.max_epochs = max_epochs
 
     def __call__(self, trial):
-        # suggested hyperparameters
-        learning_rate = trial.loguniform("learning_rate", 1e-4, 1e-1)
-        weight_decay = trial.loguniform("learning_rate", 1e-4, 1e-1)
-
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             os.path.join(MODEL_DIR, "trial_{}".format(trial.number), "{epoch}"),
-            monitor="val_loss",
+            monitor="counter_loss",
         )
 
         metrics_callback = MetricsCallback()
         model = SleepPhase(
-            self.dataset, self.encoder_kwargs, learning_rate, weight_decay
-        )
+            trial, self.dataset, self.encoder_kwargs, self.lr, self.weight_decay
+        ).to(device)
 
-        trainer = pl.trainer(
+        trainer = pl.Trainer(
+            logger=False,
+            gpus=0,
             checkpoint_callback=checkpoint_callback,
+            max_epochs=self.max_epochs,
             callbacks=[metrics_callback],
             early_stop_callback=PyTorchLightningPruningCallback(
-                trial, monitor="val_loss"
+                trial, monitor="counter_loss"
             ),
         )
 
         trainer.fit(model)
+
+        return metrics_callback.metrics[-1]["val_loss"].item()

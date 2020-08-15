@@ -293,9 +293,19 @@ class ImageEncoder(nn.Module):
         self.max_detections = max_detections
 
         # convolutional NN parameters
-        self.enc_conv_c = enc_conv_c
-        self.enc_kern = enc_kern
-        self.enc_hidden = enc_hidden
+        assert type(enc_conv_c) is tuple
+        assert type(enc_kern) is tuple
+        assert type(enc_hidden) is tuple
+        assert len(enc_conv_c) == 3 and len(enc_kern) == 3 and len(enc_hidden) == 3
+        self.enc_conv_c = trial.suggest_int(
+            "enc_conv_c", enc_conv_c[0], enc_conv_c[1], enc_conv_c[2]
+        )
+        self.enc_kern = trial.suggest_int(
+            "enc_kern", enc_kern[0], enc_kern[1], enc_kern[2]
+        )
+        self.enc_hidden = trial.suggest_int(
+            "enc_hidden", enc_hidden[0], enc_hidden[1], enc_hidden[2]
+        )
 
         self.momentum = momentum
 
@@ -503,7 +513,9 @@ class ImageEncoder(nn.Module):
         """
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        # print(log_img.size())
         h = self.enc_conv(log_img)
+        # print(h.size())
 
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(h)
