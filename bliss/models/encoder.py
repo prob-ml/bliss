@@ -651,7 +651,7 @@ class ImageEncoder(nn.Module):
         )
 
     @staticmethod
-    def get_samples(pred, tile_is_on_array, tile_galaxy_bool):
+    def _get_samples(pred, tile_is_on_array, tile_galaxy_bool):
         # shape = (n_samples x n_ptiles x max_detections x param_dim)
         loc_mean, loc_sd = pred["loc_mean"], pred["loc_sd"]
         galaxy_param_mean = pred["galaxy_param_mean"]
@@ -696,7 +696,7 @@ class ImageEncoder(nn.Module):
         pred["galaxy_param_sd"] = torch.exp(0.5 * pred["galaxy_param_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
 
-        tile_locs, tile_galaxy_params, tile_log_fluxes = self.get_samples(
+        tile_locs, tile_galaxy_params, tile_log_fluxes = self._get_samples(
             pred, tile_is_on_array, tile_galaxy_bool
         )
 
@@ -738,7 +738,7 @@ class ImageEncoder(nn.Module):
         pred["galaxy_param_sd"] = torch.zeros_like(pred["galaxy_param_logvar"])
         pred["log_flux_sd"] = torch.zeros_like(pred["log_flux_logvar"])
 
-        tile_locs, tile_galaxy_params, tile_log_fluxes = self.get_samples(
+        tile_locs, tile_galaxy_params, tile_log_fluxes = self._get_samples(
             pred, tile_is_on_array, tile_galaxy_bool
         )
 

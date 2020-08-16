@@ -14,7 +14,7 @@ def star_dataset(decoder_setup):
 
 @pytest.fixture(scope="module")
 def trained_encoder(star_dataset, encoder_setup, device_setup):
-    n_epochs = 100 if device_setup.use_cuda else 1
+    n_epochs = 120 if device_setup.use_cuda else 1
     trained_encoder = encoder_setup.get_trained_encoder(star_dataset, n_epochs=n_epochs)
     return trained_encoder.to(device_setup.device)
 

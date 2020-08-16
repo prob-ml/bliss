@@ -29,36 +29,18 @@ class SimulatedDataset(IterableDataset):
             yield self.get_batch()
 
     def get_batch(self):
-        (
-            n_sources,
-            n_galaxies,
-            n_stars,
-            locs,
-            galaxy_params,
-            single_galaxies,
-            fluxes,
-            log_fluxes,
-            galaxy_bool,
-            star_bool,
-        ) = self.image_decoder.sample_parameters(batch_size=self.batch_size)
+        params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
 
-        galaxy_locs = locs * galaxy_bool.unsqueeze(2)
-        star_locs = locs * star_bool.unsqueeze(2)
         images = self.image_decoder.render_images(
-            n_sources, galaxy_locs, star_locs, single_galaxies, fluxes
+            params["n_sources"],
+            params["locs"],
+            params["galaxy_bool"],
+            params["galaxy_params"],
+            params["fluxes"],
         )
+        params.update({"images": images, "background": self.image_decoder.background})
 
-        return {
-            "n_sources": n_sources,
-            "n_galaxies": n_galaxies,
-            "n_stars": n_stars,
-            "locs": locs,
-            "galaxy_params": galaxy_params,
-            "log_fluxes": log_fluxes,
-            "galaxy_bool": galaxy_bool,
-            "images": images,
-            "background": self.image_decoder.background,
-        }
+        return params
 
     @staticmethod
     def get_gal_decoder_from_file(decoder_file, gal_slen=51, n_bands=1, latent_dim=8):
