@@ -404,7 +404,7 @@ class ImageDecoder(object):
         # this loop plots each of the ith star in each of the (batch_size) images.
         for n in range(self.max_sources):
             star_bool_n = star_bool[:, n]
-            locs_n = locs[:, n, :] * star_bool_n.unsqueeze(1)
+            locs_n = locs[:, n, :]
             fluxes_n = fluxes[:, n, :] * star_bool_n.unsqueeze(1)
             fluxes_n = fluxes_n.view(batch_size, self.n_bands, 1, 1)
             one_star = self._render_one_source(locs_n, expanded_psf)
@@ -429,7 +429,7 @@ class ImageDecoder(object):
             single_galaxies = gal.reshape(gal_shape)
             for n in range(self.max_sources):
                 galaxy_bool_n = galaxy_bool[:, n]
-                locs_n = locs[:, n, :] * galaxy_bool_n.unsqueeze(1)
+                locs_n = locs[:, n, :]
                 galaxy = single_galaxies[:, n, :, :, :]
                 galaxy = galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
                 one_galaxy = self._render_one_source(locs_n, galaxy)
