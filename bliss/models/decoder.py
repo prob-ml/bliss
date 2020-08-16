@@ -412,18 +412,23 @@ class ImageDecoder(object):
 
         assert galaxy_params.shape[0] == batch_size
         assert galaxy_params.shape[1] == locs.shape[1] == self.max_sources
+        assert galaxy_params.shape[2] == self.latent_dim
 
         scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
         scene = torch.zeros(scene_shape, device=device)
-        for n in range(self.max_sources):
-            galaxy_bool_n = galaxy_bool[:, n]
-            locs_n = locs[:, n, :] * galaxy_bool_n.unsqueeze(1)
-            galaxy_params_n = galaxy_params[:, n, :]
-            # shape = (batch_size x n_bands x slen x slen)
-            galaxy, _ = self.galaxy_decoder.forward(galaxy_params_n)
-            galaxy *= galaxy_bool_n.unsqueeze(1).unsqueeze(2).unsqueeze(3)
-            one_galaxy = self._render_one_source(locs_n, galaxy)
-            scene += one_galaxy
+
+        if galaxy_bool.sum() > 0:
+            z = galaxy_params.reshape(-1, self.latent_dim)
+            gal, _ = self.galaxy_decoder.forward(z)
+            gal_shape = (batch_size, -1, self.n_bands, self.gal_slen, self.gal_slen)
+            single_galaxies = gal.reshape(gal_shape)
+            for n in range(self.max_sources):
+                galaxy_bool_n = galaxy_bool[:, n]
+                locs_n = locs[:, n, :] * galaxy_bool_n.unsqueeze(1)
+                galaxy = single_galaxies[:, n, :, :, :]
+                galaxy *= galaxy_bool_n.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+                one_galaxy = self._render_one_source(locs_n, galaxy)
+                scene += one_galaxy
 
         return scene
 
