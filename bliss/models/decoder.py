@@ -145,6 +145,8 @@ class ImageDecoder(object):
         self.add_noise = add_noise
 
         self.galaxy_decoder = galaxy_decoder
+        self.latent_dim = 8
+        self.gal_slen = 51
         if self.prob_galaxy > 0:
             self.gal_slen = self.galaxy_decoder.slen
             self.latent_dim = self.galaxy_decoder.latent_dim
@@ -315,9 +317,12 @@ class ImageDecoder(object):
         p_z = Normal(mean, std)
         sample_shape = torch.tensor([batch_size, self.max_sources, self.latent_dim])
         galaxy_params = p_z.rsample(sample_shape)
+        galaxy_params = galaxy_params.reshape(
+            batch_size, self.max_sources, self.latent_dim
+        )
 
         # zero out excess according to galaxy_bool.
-        galaxy_params *= galaxy_bool.unsqueeze(2)
+        galaxy_params = galaxy_params * galaxy_bool.unsqueeze(2)
         return galaxy_params
 
     def sample_parameters(self, batch_size=1):
@@ -426,7 +431,7 @@ class ImageDecoder(object):
                 galaxy_bool_n = galaxy_bool[:, n]
                 locs_n = locs[:, n, :] * galaxy_bool_n.unsqueeze(1)
                 galaxy = single_galaxies[:, n, :, :, :]
-                galaxy *= galaxy_bool_n.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+                galaxy = galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
                 one_galaxy = self._render_one_source(locs_n, galaxy)
                 scene += one_galaxy
 
