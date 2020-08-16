@@ -118,14 +118,18 @@ class WakeNet(pl.LightningModule):
                 galaxy_bool_sampled,
             ) = self.star_encoder.sample_encoder(obs_img, self.n_samples)
 
-        max_stars = log_fluxes_sampled.shape[1]
-        is_on_array = encoder.get_is_on_from_n_sources(n_stars_sampled, max_stars)
+        max_sources = log_fluxes_sampled.shape[1]
+        is_on_array = encoder.get_is_on_from_n_sources(n_stars_sampled, max_sources)
         is_on_array = is_on_array.unsqueeze(-1).float()
+        star_bool_sampled = (1 - galaxy_bool_sampled) * is_on_array
         fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
+        # shapes = (1 x n_samples x param_dim)
+        star_bool_sampled = star_bool_sampled.view(1, -1)
 
         background = self.planar_background.forward().unsqueeze(0).detach()
+        self.image_decoder.max_sources = max_sources
         stars = self.image_decoder.render_multiple_stars(
-            n_stars_sampled, locs_sampled, fluxes_sampled,
+            locs_sampled, fluxes_sampled, star_bool_sampled
         )
 
         recon_mean = stars + background
@@ -154,26 +158,24 @@ class WakeNet(pl.LightningModule):
     # ---------------
     # Training
     # ----------------
-    def training_step(self, batch, batch_idx):
+
+    def get_loss(self, batch):
         img = batch.unsqueeze(0)
         recon_mean = self.forward(img)
         error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
         last = self.slen - self.pad
         loss = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
-        logs = {"train_loss": loss}
+        return loss
 
+    def training_step(self, batch, batch_idx):
+        loss = self.get_loss(batch)
+        logs = {"train_loss": loss}
         return {"loss": loss, "log": logs}
 
     def validation_step(self, batch, batch_idx):
-        img = batch.unsqueeze(0)
-        recon_mean = self.forward(img)
-        error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
-
-        last = self.slen - self.pad
-        loss_val = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
-
-        return {"val_loss": loss_val}
+        loss = self.get_loss(batch)
+        return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
         return {"val_loss": outputs[-1]["val_loss"]}

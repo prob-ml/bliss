@@ -12,8 +12,6 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 from torch.optim import Adam
 
-from .. import device
-
 plt.switch_backend("Agg")
 
 
@@ -117,20 +115,8 @@ class CenteredGalaxyDecoder(nn.Module):
         recon_var = 1e-4 + var_multiplier * recon_mean
 
         # reconstructed mean and variance, these are per pixel.
+        # recon_mean shape = (z.size(0), n_bands, slen, slen)
         return recon_mean, recon_var
-
-    def get_sample(self, num_samples):
-        p_z = Normal(
-            torch.zeros(1, dtype=torch.float, device=device),
-            torch.ones(1, dtype=torch.float, device=device),
-        )
-        z = p_z.rsample(torch.tensor([num_samples, self.latent_dim])).view(
-            num_samples, -1
-        )
-        samples, _ = self.forward(z)
-
-        # samples shape = (num_samples, n_bands, slen, slen)
-        return z, samples
 
 
 class OneCenteredGalaxy(pl.LightningModule):
