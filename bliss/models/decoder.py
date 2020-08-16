@@ -430,8 +430,8 @@ class ImageDecoder(object):
             for n in range(self.max_sources):
                 galaxy_bool_n = galaxy_bool[:, n]
                 locs_n = locs[:, n, :]
-                galaxy = single_galaxies[:, n, :, :, :]
-                galaxy = galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
+                _galaxy = single_galaxies[:, n, :, :, :]
+                galaxy = _galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
                 one_galaxy = self._render_one_source(locs_n, galaxy)
                 scene += one_galaxy
 
