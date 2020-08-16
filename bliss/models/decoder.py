@@ -393,7 +393,7 @@ class ImageDecoder(object):
         scene = torch.zeros(scene_shape, device=device)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
-        assert fluxes.shape[0] == locs.shape[0] == star_bool.shape[0]
+        assert fluxes.shape[0] == star_bool.shape[0] == batch_size
         assert fluxes.shape[1] == locs.shape[1] == self.max_sources
         assert star_bool.shape[1] == self.max_sources
         assert fluxes.shape[2] == psf.shape[0] == self.n_bands
@@ -415,8 +415,9 @@ class ImageDecoder(object):
     def render_multiple_galaxies(self, locs, galaxy_params, galaxy_bool):
         batch_size = locs.shape[0]
 
-        assert galaxy_params.shape[0] == batch_size
+        assert galaxy_params.shape[0] == galaxy_bool.shape[0] == batch_size
         assert galaxy_params.shape[1] == locs.shape[1] == self.max_sources
+        assert galaxy_bool.shape[1] == self.max_sources
         assert galaxy_params.shape[2] == self.latent_dim
 
         scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
