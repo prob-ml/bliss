@@ -1,12 +1,13 @@
 import numpy as np
 import warnings
+from astropy.io import fits
 
 import torch
 import torch.nn as nn
 from torch.nn.functional import pad
-from astropy.io import fits
 import torch.nn.functional as F
-from torch.distributions import Poisson
+from torch.distributions import Poisson, Normal
+
 
 from .. import device
 from .encoder import get_is_on_from_n_sources
@@ -304,13 +305,16 @@ class ImageDecoder(object):
         return fluxes
 
     def _sample_galaxy_params(self, n_galaxies, galaxy_bool):
-        assert len(n_galaxies.shape) == 1
+        # galaxy params are just Normal(0,1) variables.
 
+        assert len(n_galaxies.shape) == 1
         batch_size = n_galaxies.size(0)
-        n_samples = batch_size * self.max_sources
-        with torch.no_grad():
-            z = self.galaxy_decoder.get_sample(n_samples)
-        galaxy_params = z.reshape(batch_size, self.max_sources, self.latent_dim)
+
+        mean = torch.zeros(1, dtype=torch.float, device=device)
+        std = torch.ones(1, dtype=torch.float, device=device)
+        p_z = Normal(mean, std)
+        sample_shape = torch.tensor([batch_size, self.max_sources, self.latent_dim])
+        galaxy_params = p_z.rsample(sample_shape)
 
         # zero out excess according to galaxy_bool.
         galaxy_params *= galaxy_bool.unsqueeze(2)
