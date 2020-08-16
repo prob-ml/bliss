@@ -144,11 +144,11 @@ class ImageDecoder(object):
         self.prob_galaxy = float(prob_galaxy)
         self.add_noise = add_noise
 
-        self.latent_dim = 8
         self.galaxy_decoder = galaxy_decoder
-        self.gal_slen = self.galaxy_decoder.slen
-        self.latent_dim = self.galaxy_decoder.latent_dim
-        assert self.galaxy_decoder.n_bands == self.n_bands
+        if self.prob_galaxy > 0:
+            self.gal_slen = self.galaxy_decoder.slen
+            self.latent_dim = self.galaxy_decoder.latent_dim
+            assert self.galaxy_decoder.n_bands == self.n_bands
 
         # prior parameters
         self.f_min = f_min
