@@ -361,42 +361,39 @@ class SleepPhase(pl.LightningModule):
                     galaxy_bool,
                 ) = self.image_encoder.map_estimate(image.unsqueeze(0))
 
-            # draw reconstruction image.
-            # clamp at max_sources from dataset.
-            max_sources = self.dataset.image_decoder.max_sources
-            n_sources = n_sources.clamp(max=max_sources)
-            locs = locs[:, 0:max_sources, ...]
-            galaxy_params = galaxy_params[:, 0:max_sources, ...]
-            galaxy_bool = galaxy_bool[:, 0:max_sources]
-            log_fluxes = log_fluxes[:, 0:max_sources, ...]
-            is_on_array = encoder.get_is_on_from_n_sources(n_sources, max_sources)
-            star_bool = (1 - galaxy_bool) * is_on_array
-            fluxes = log_fluxes.exp() * star_bool.unsqueeze(2)
+            # only draw if at least 1 source.
+            max_sources = n_sources.max().item()
+            if max_sources > 0:
+                assert max_sources == locs.shape[1]
+                is_on_array = encoder.get_is_on_from_n_sources(n_sources, max_sources)
+                star_bool = (1 - galaxy_bool) * is_on_array
+                fluxes = log_fluxes.exp() * star_bool.unsqueeze(2)
 
-            recon_image = self.dataset.image_decoder.render_images(
-                n_sources, locs, galaxy_bool, galaxy_params, fluxes
-            )
+                # draw reconstruction image.
+                recon_image = self.dataset.image_decoder.render_images(
+                    max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes
+                )
 
-            assert len(image.shape) == 3
-            assert len(locs.shape) == 3 and locs.size(0) == 1
-            image = image[0].cpu().numpy()  # first band.
-            recon_image = recon_image[0, 0].cpu().numpy()
-            res_image = (image - recon_image) / np.sqrt(image)
+                assert len(image.shape) == 3
+                assert len(locs.shape) == 3 and locs.size(0) == 1
+                image = image[0].cpu().numpy()  # first band.
+                recon_image = recon_image[0, 0].cpu().numpy()
+                res_image = (image - recon_image) / np.sqrt(image)
 
-            loc = locs[0].cpu().numpy()
-            true_loc = true_loc.cpu().numpy()
+                loc = locs[0].cpu().numpy()
+                true_loc = true_loc.cpu().numpy()
 
-            # plot
-            plotting.plot_image(fig, true_ax, image, true_loc, loc)
-            plotting.plot_image(fig, recon_ax, recon_image, loc)
-            plotting.plot_image(fig, res_ax, res_image)
+                # plot
+                plotting.plot_image(fig, true_ax, image, true_loc, loc)
+                plotting.plot_image(fig, recon_ax, recon_image, loc)
+                plotting.plot_image(fig, res_ax, res_image)
 
-            # add n_sources info
-            true_ax.set_xlabel(
-                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
-            )
+                # add n_sources info
+                true_ax.set_xlabel(
+                    f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
+                )
+
         plt.subplots_adjust(hspace=0.25, wspace=-0.2)
-
         if self.logger:
             self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
         plt.close(fig)
