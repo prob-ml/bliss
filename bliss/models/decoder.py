@@ -382,7 +382,7 @@ class ImageDecoder(object):
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
-    def render_multiple_stars(self, locs, fluxes, star_bool):
+    def _render_multiple_stars(self, locs, fluxes, star_bool):
         # locs: is (batch_size x max_num_stars x len(x_loc, y_loc))
         # fluxes: Is (batch_size x n_bands x max_stars)
         # star_bool: Is (batch_size x max_stars)
@@ -393,10 +393,7 @@ class ImageDecoder(object):
         scene = torch.zeros(scene_shape, device=device)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
-        assert fluxes.shape[0] == star_bool.shape[0] == batch_size
-        assert fluxes.shape[1] == locs.shape[1] == self.max_sources
-        assert star_bool.shape[1] == self.max_sources
-        assert fluxes.shape[2] == psf.shape[0] == self.n_bands
+        assert psf.shape[0] == self.n_bands
 
         # all stars are just the PSF so we copy it.
         expanded_psf = psf.expand(batch_size, self.n_bands, -1, -1)
@@ -412,14 +409,8 @@ class ImageDecoder(object):
 
         return scene
 
-    def render_multiple_galaxies(self, locs, galaxy_params, galaxy_bool):
+    def _render_multiple_galaxies(self, locs, galaxy_params, galaxy_bool):
         batch_size = locs.shape[0]
-
-        assert galaxy_params.shape[0] == galaxy_bool.shape[0] == batch_size
-        assert galaxy_params.shape[1] == locs.shape[1] == self.max_sources
-        assert galaxy_bool.shape[1] == self.max_sources
-        assert galaxy_params.shape[2] == self.latent_dim
-
         scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
         scene = torch.zeros(scene_shape, device=device)
 
@@ -440,12 +431,23 @@ class ImageDecoder(object):
 
     def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
 
+        # explicit consistent shapes.
+        assert len(n_sources.shape) == 1
+        batch_size = n_sources.shape[0]
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
+
+        locs = locs.reshape(batch_size, self.max_sources, 2)
+        galaxy_bool = galaxy_bool.reshape(batch_size, self.max_sources)
         star_bool = (1 - galaxy_bool) * is_on_array
+        star_bool = star_bool.reshape(batch_size, self.max_sources)
+        galaxy_params = galaxy_params.reshape(
+            batch_size, self.max_sources, self.latent_dim
+        )
+        fluxes = fluxes.reshape(batch_size, self.max_sources, self.n_bands)
 
         # need n_sources because `*_locs` are not necessarily ordered.
-        galaxies = self.render_multiple_galaxies(locs, galaxy_params, galaxy_bool)
-        stars = self.render_multiple_stars(locs, fluxes, star_bool)
+        galaxies = self._render_multiple_galaxies(locs, galaxy_params, galaxy_bool)
+        stars = self._render_multiple_stars(locs, fluxes, star_bool)
 
         # shape = (n_images x n_bands x slen x slen)
         images = galaxies + stars

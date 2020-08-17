@@ -361,16 +361,13 @@ class SleepPhase(pl.LightningModule):
                     galaxy_bool,
                 ) = self.image_encoder.map_estimate(image.unsqueeze(0))
 
-            # TODO: works only for galaxy images for now.
-            # TODO: need to add background to recon_image
-            # reconstructed image from MAP estimate
-
-            single_galaxies, _ = self.dataset.image_decoder.galaxy_decoder.forward(
-                galaxy_params
-            )
-            single_galaxies = single_galaxies.unsqueeze(0)
-            recon_image = self.dataset.image_decoder.render_multiple_galaxies(
-                n_sources, locs, single_galaxies
+            # consistent shapes
+            max_sources = n_sources.max().int().item()
+            is_on_array = encoder.get_is_on_from_n_sources(n_sources, max_sources)
+            star_bool = (1 - galaxy_bool) * is_on_array
+            fluxes = log_fluxes.exp() * star_bool.unsqueeze(2)
+            recon_image = self.dataset.image_decoder.render_images(
+                n_sources, locs, galaxy_bool, galaxy_params, fluxes
             )
 
             assert len(image.shape) == 3
