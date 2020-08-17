@@ -361,11 +361,18 @@ class SleepPhase(pl.LightningModule):
                     galaxy_bool,
                 ) = self.image_encoder.map_estimate(image.unsqueeze(0))
 
-            # consistent shapes
-            max_sources = n_sources.max().int().item()
+            # draw reconstruction image.
+            # clamp at max_sources from dataset.
+            max_sources = self.dataset.image_decoder.max_sources
+            n_sources = n_sources.clamp(max=max_sources)
+            locs = locs[:, 0:max_sources, ...]
+            galaxy_params = galaxy_params[:, 0:max_sources, ...]
+            galaxy_bool = galaxy_bool[:, 0:max_sources]
+            log_fluxes = log_fluxes[:, 0:max_sources, ...]
             is_on_array = encoder.get_is_on_from_n_sources(n_sources, max_sources)
             star_bool = (1 - galaxy_bool) * is_on_array
             fluxes = log_fluxes.exp() * star_bool.unsqueeze(2)
+
             recon_image = self.dataset.image_decoder.render_images(
                 n_sources, locs, galaxy_bool, galaxy_params, fluxes
             )
