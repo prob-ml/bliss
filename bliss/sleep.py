@@ -345,6 +345,7 @@ class SleepPhase(pl.LightningModule):
         # add some images to tensorboard for validating location/counts.
         # Only use 5 images in the last batch
         n_samples = min(5, len(outputs[-1]["log"]["n_sources"]))
+        assert n_samples > 1
         true_n_sources = outputs[-1]["log"]["n_sources"][:n_samples]
         true_locs = outputs[-1]["log"]["locs"][:n_samples]
         images = outputs[-1]["log"]["images"][:n_samples]
