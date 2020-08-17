@@ -18,8 +18,8 @@ class TestGalaxyEncoder:
 
         galaxy_dataset = decoder_setup.get_galaxy_dataset(
             slen=50,
-            batch_size=32 if use_cuda else 5,
-            n_images=320 if use_cuda else 5,
+            batch_size=32 if use_cuda else 2,
+            n_images=320 if use_cuda else 2,
             loc_min=loc_min,
             loc_max=loc_max,
             max_sources=2,
@@ -32,6 +32,7 @@ class TestGalaxyEncoder:
             max_detections=2,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
+            validation_plots=True,
         )
         return trained_encoder.to(device_setup.device)
 

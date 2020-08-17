@@ -132,7 +132,14 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(self, dataset, encoder_kwargs, lr=1e-3, weight_decay=1e-5):
+    def __init__(
+        self,
+        dataset,
+        encoder_kwargs,
+        lr=1e-3,
+        weight_decay=1e-5,
+        validation_plots=False,
+    ):
         super(SleepPhase, self).__init__()
 
         # assumes dataset is a IterableDataset class.
@@ -142,6 +149,7 @@ class SleepPhase(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
+        self.validation_plots = validation_plots
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
 
         self.hparams = {
@@ -336,12 +344,13 @@ class SleepPhase(pl.LightningModule):
     def make_validation_plots(self, outputs):
         # add some images to tensorboard for validating location/counts.
         # Only use 5 images in the last batch
-        true_n_sources = outputs[-1]["log"]["n_sources"][:5]
-        true_locs = outputs[-1]["log"]["locs"][:5]
-        images = outputs[-1]["log"]["images"][:5]
-        fig, axes = plt.subplots(nrows=5, ncols=3, figsize=(20, 20,))
+        n_samples = min(5, len(outputs[-1]["log"]["n_sources"]))
+        true_n_sources = outputs[-1]["log"]["n_sources"][:n_samples]
+        true_locs = outputs[-1]["log"]["locs"][:n_samples]
+        images = outputs[-1]["log"]["images"][:n_samples]
+        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=(20, 20,))
 
-        for i in range(5):
+        for i in range(n_samples):
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
@@ -362,7 +371,7 @@ class SleepPhase(pl.LightningModule):
                 ) = self.image_encoder.map_estimate(image.unsqueeze(0))
 
             # only draw if at least 1 source.
-            max_sources = n_sources.max().item()
+            max_sources = n_sources.max().int().item()
             if max_sources > 0:
                 assert max_sources == locs.shape[1]
                 is_on_array = encoder.get_is_on_from_n_sources(n_sources, max_sources)
@@ -401,7 +410,8 @@ class SleepPhase(pl.LightningModule):
     def validation_epoch_end(self, outputs):
 
         # images for validation
-        self.make_validation_plots(outputs)
+        if self.validation_plots:
+            self.make_validation_plots(outputs)
 
         # log other losses
         # first we log some of the important losses and average over all batches.
