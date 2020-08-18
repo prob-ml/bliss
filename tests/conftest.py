@@ -128,6 +128,7 @@ class EncoderSetup:
         enc_kern=3,
         enc_hidden=64,
         max_detections=2,
+        validation_plot_start=100,
     ):
         slen = dataset.slen
         n_bands = dataset.n_bands
@@ -146,7 +147,9 @@ class EncoderSetup:
             n_galaxy_params=latent_dim,
         )
 
-        sleep_net = sleep.SleepPhase(dataset, encoder_kwargs)
+        sleep_net = sleep.SleepPhase(
+            dataset, encoder_kwargs, validation_plot_start=validation_plot_start
+        )
 
         sleep_trainer = pl.Trainer(
             gpus=self.gpus,
