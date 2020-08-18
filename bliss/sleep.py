@@ -402,6 +402,11 @@ class SleepPhase(pl.LightningModule):
                 plotting.plot_image(fig, recon_ax, recon_image, loc)
                 plotting.plot_image(fig, res_ax, res_image)
 
+            else:
+                slen = image.shape[0]
+                plotting.plot_image(fig, recon_ax, np.zeros((slen, slen)))
+                plotting.plot_image(fig, res_ax, np.zeros((slen, slen)))
+
         plt.subplots_adjust(hspace=0.25, wspace=-0.2)
         if self.logger:
             self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
