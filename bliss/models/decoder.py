@@ -63,7 +63,7 @@ class PowerLawPSF(nn.Module):
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = self.get_psf_single_band(init_psf_params[i])
+            psf_i = self._get_psf_single_band(init_psf_params[i])
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
@@ -71,15 +71,15 @@ class PowerLawPSF(nn.Module):
         self.init_psf_sum = self._get_psf().sum(-1).sum(-1).detach()
 
     @staticmethod
-    def psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
+    def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
         term1 = torch.exp(-(r ** 2) / (2 * sigma1))
         term2 = b * torch.exp(-(r ** 2) / (2 * sigma2))
         term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def get_psf_single_band(self, psf_params):
+    def _get_psf_single_band(self, psf_params):
         _psf_params = torch.exp(psf_params)
-        return self.psf_fun(
+        return self._psf_fun(
             self.cached_radii_grid,
             _psf_params[0],
             _psf_params[1],
@@ -93,7 +93,7 @@ class PowerLawPSF(nn.Module):
         # TODO make the psf function vectorized ...
         psf = torch.tensor([]).to(device)
         for i in range(self.n_bands):
-            _psf = self.get_psf_single_band(self.params[i])
+            _psf = self._get_psf_single_band(self.params[i])
             _psf *= self.normalization_constant[i]
             psf = torch.cat((psf, _psf.unsqueeze(0)))
 
@@ -204,7 +204,7 @@ class ImageDecoder(object):
 
         return psf_expanded
 
-    def get_psf(self):
+    def _get_psf(self):
         # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
         # first dimension of psf is number of bands
         # dimension of the psf/slen should be odd
@@ -388,7 +388,7 @@ class ImageDecoder(object):
         # star_bool: Is (batch_size x max_stars)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
-        psf = self.get_psf()
+        psf = self._get_psf()
         batch_size = locs.shape[0]
         max_sources = locs.shape[1]
         scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
