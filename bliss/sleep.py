@@ -138,7 +138,7 @@ class SleepPhase(pl.LightningModule):
         encoder_kwargs,
         lr=1e-3,
         weight_decay=1e-5,
-        validation_plots=False,
+        validation_plot_start=5,
     ):
         super(SleepPhase, self).__init__()
 
@@ -149,7 +149,7 @@ class SleepPhase(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
-        self.validation_plots = validation_plots
+        self.validation_plot_start = validation_plot_start
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
 
         self.hparams = {
@@ -411,7 +411,7 @@ class SleepPhase(pl.LightningModule):
     def validation_epoch_end(self, outputs):
 
         # images for validation
-        if self.validation_plots:
+        if self.current_epoch >= self.validation_plot_start:
             self.make_validation_plots(outputs)
 
         # log other losses

@@ -128,7 +128,7 @@ class EncoderSetup:
         enc_kern=3,
         enc_hidden=64,
         max_detections=2,
-        validation_plots=False,
+        validation_plot_start=100,
     ):
         slen = dataset.slen
         n_bands = dataset.n_bands
@@ -148,7 +148,7 @@ class EncoderSetup:
         )
 
         sleep_net = sleep.SleepPhase(
-            dataset, encoder_kwargs, validation_plots=validation_plots
+            dataset, encoder_kwargs, validation_plot_start=validation_plot_start
         )
 
         sleep_trainer = pl.Trainer(
