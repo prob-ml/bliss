@@ -1,4 +1,5 @@
 import math
+import numpy as np
 from itertools import permutations
 import inspect
 import matplotlib.pyplot as plt
@@ -131,7 +132,14 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(self, dataset, encoder_kwargs, lr=1e-3, weight_decay=1e-5):
+    def __init__(
+        self,
+        dataset,
+        encoder_kwargs,
+        lr=1e-3,
+        weight_decay=1e-5,
+        validation_plot_start=5,
+    ):
         super(SleepPhase, self).__init__()
 
         # assumes dataset is a IterableDataset class.
@@ -141,7 +149,22 @@ class SleepPhase(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
+        self.validation_plot_start = validation_plot_start
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
+
+        self.hparams = {
+            "lr": self.lr,
+            "weight_decay": self.weight_decay,
+            "batch_size": self.dataset.batch_size,
+            "n_batches": self.dataset.n_batches,
+            "n_bands": self.dataset.n_bands,
+            "max_sources": self.dataset.image_decoder.max_sources,
+            "mean_sources": self.dataset.image_decoder.mean_sources,
+            "min_sources": self.dataset.image_decoder.min_sources,
+            "loc_min": self.dataset.image_decoder.loc_min,
+            "loc_max": self.dataset.image_decoder.loc_max,
+            "prob_galaxy": self.dataset.image_decoder.prob_galaxy,
+        }
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder.forward(image_ptiles, n_sources)
@@ -318,8 +341,84 @@ class SleepPhase(pl.LightningModule):
 
         return output
 
+    def make_validation_plots(self, outputs):
+        # add some images to tensorboard for validating location/counts.
+        # Only use 5 images in the last batch
+        n_samples = min(5, len(outputs[-1]["log"]["n_sources"]))
+        assert n_samples > 1
+        true_n_sources = outputs[-1]["log"]["n_sources"][:n_samples]
+        true_locs = outputs[-1]["log"]["locs"][:n_samples]
+        images = outputs[-1]["log"]["images"][:n_samples]
+        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=(20, 20,))
+
+        for i in range(n_samples):
+            true_ax = axes[i, 0]
+            recon_ax = axes[i, 1]
+            res_ax = axes[i, 2]
+
+            image = images[i]
+            true_loc = true_locs[i]
+            true_n_source = true_n_sources[i]
+
+            with torch.no_grad():
+                # get the estimated params
+                self.image_encoder.eval()
+                (
+                    n_sources,
+                    locs,
+                    galaxy_params,
+                    log_fluxes,
+                    galaxy_bool,
+                ) = self.image_encoder.map_estimate(image.unsqueeze(0))
+
+            # draw true image
+            assert len(image.shape) == 3
+            image = image[0].cpu().numpy()  # first band.
+            loc = locs[0].cpu().numpy()
+            true_loc = true_loc.cpu().numpy()
+            plotting.plot_image(fig, true_ax, image, true_loc, loc)
+            true_ax.set_xlabel(
+                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
+            )
+
+            # only prediction/residual if at least 1 source.
+            max_sources = n_sources.max().int().item()
+            if max_sources > 0:
+                assert max_sources == locs.shape[1]
+                is_on_array = encoder.get_is_on_from_n_sources(n_sources, max_sources)
+                star_bool = (1 - galaxy_bool) * is_on_array
+                fluxes = log_fluxes.exp() * star_bool.unsqueeze(2)
+
+                # draw reconstruction image.
+                recon_image = self.dataset.image_decoder.render_images(
+                    max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes
+                )
+
+                assert len(locs.shape) == 3 and locs.size(0) == 1
+                recon_image = recon_image[0, 0].cpu().numpy()
+                res_image = (image - recon_image) / np.sqrt(image)
+
+                # plot
+                plotting.plot_image(fig, recon_ax, recon_image, loc)
+                plotting.plot_image(fig, res_ax, res_image)
+
+            else:
+                slen = image.shape[0]
+                plotting.plot_image(fig, recon_ax, np.zeros((slen, slen)))
+                plotting.plot_image(fig, res_ax, np.zeros((slen, slen)))
+
+        plt.subplots_adjust(hspace=0.25, wspace=-0.2)
+        if self.logger:
+            self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
+        plt.close(fig)
+
     def validation_epoch_end(self, outputs):
 
+        # images for validation
+        if self.current_epoch >= self.validation_plot_start:
+            self.make_validation_plots(outputs)
+
+        # log other losses
         # first we log some of the important losses and average over all batches.
         avg_loss = 0
         avg_counter_loss = 0
@@ -355,48 +454,7 @@ class SleepPhase(pl.LightningModule):
             "star_params_loss": avg_star_params_loss,
             "galaxy_bool_loss": avg_galaxy_bool_loss,
         }
-
         results = {"val_loss": avg_loss, "log": logs}
-
-        # add some images to tensorboard for validating location/counts.
-        # Only use 10 images in the last batch
-        true_n_sources = outputs[-1]["log"]["n_sources"][:10]
-        true_locs = outputs[-1]["log"]["locs"][:10]
-        images = outputs[-1]["log"]["images"][:10]
-        fig, axes = plt.subplots(nrows=2, ncols=5, figsize=(20, 20,))
-
-        # TODO: Is this ok or should we use the one obtained above? (mean)
-        for ax, image, true_loc, true_n_source in zip(
-            axes.flatten(), images, true_locs, true_n_sources
-        ):
-            with torch.no_grad():
-                # get the estimated params
-                self.image_encoder.eval()
-                (
-                    n_sources,
-                    locs,
-                    galaxy_params,
-                    log_fluxes,
-                    galaxy_bool,
-                ) = self.image_encoder.map_estimate(image.unsqueeze(0))
-
-            assert len(image.shape) == 3
-            assert len(locs.shape) == 3 and locs.size(0) == 1
-            image = image[0].cpu().numpy()  # first band.
-            loc = locs[0].cpu().numpy()
-            true_loc = true_loc.cpu().numpy()
-            plotting.plot_image(ax, image, true_loc, loc, marker_size=5)
-
-            # add n_sources info
-            ax.set_xlabel(
-                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
-            )
-        plt.subplots_adjust(hspace=-0.8, wspace=0.7)
-
-        if self.logger:
-            self.logger.experiment.add_figure(f"Validation {self.current_epoch}", fig)
-        plt.close(fig)
-
         return results
 
     @staticmethod

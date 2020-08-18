@@ -32,6 +32,7 @@ class TestGalaxyEncoder:
             max_detections=2,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
+            validation_plot_start=0,
         )
         return trained_encoder.to(device_setup.device)
 

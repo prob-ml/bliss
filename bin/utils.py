@@ -28,7 +28,7 @@ def add_path_args(parser):
     return parser
 
 
-def setup_paths(args):
+def setup_paths(args, enforce_overwrite=True):
     root_path = Path(args.root)
     paths = {
         "root": root_path,
@@ -37,10 +37,11 @@ def setup_paths(args):
         "output": root_path.joinpath(f"logs/{args.output}"),
     }
 
-    assert not paths["output"].exists() or args.overwrite, "Enforcing overwrite."
-    if args.overwrite and paths["output"].exists():
-        shutil.rmtree(paths["output"])
-    paths["output"].mkdir(parents=False)
+    if enforce_overwrite:
+        assert not paths["output"].exists() or args.overwrite, "Enforcing overwrite."
+        if args.overwrite and paths["output"].exists():
+            shutil.rmtree(paths["output"])
+    paths["output"].mkdir(parents=False, exist_ok=not enforce_overwrite)
 
     for p in paths.values():
         assert p.exists(), f"path {p.as_posix()} does not exist"

@@ -743,7 +743,14 @@ class ImageEncoder(nn.Module):
         )
 
         tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
-        return self._get_full_params_from_sampled_params(
+
+        (
+            n_sources,
+            locs,
+            galaxy_params,
+            log_fluxes,
+            galaxy_bool,
+        ) = self._get_full_params_from_sampled_params(
             slen,
             tile_is_on_array.squeeze(-1),
             tile_locs,
@@ -751,3 +758,6 @@ class ImageEncoder(nn.Module):
             tile_log_fluxes,
             tile_galaxy_bool.unsqueeze(-1),
         )
+
+        galaxy_bool = galaxy_bool.reshape(1, -1)
+        return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool
