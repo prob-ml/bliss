@@ -371,7 +371,17 @@ class SleepPhase(pl.LightningModule):
                     galaxy_bool,
                 ) = self.image_encoder.map_estimate(image.unsqueeze(0))
 
-            # only draw if at least 1 source.
+            # draw true image
+            assert len(image.shape) == 3
+            image = image[0].cpu().numpy()  # first band.
+            loc = locs[0].cpu().numpy()
+            true_loc = true_loc.cpu().numpy()
+            plotting.plot_image(fig, true_ax, image, true_loc, loc)
+            true_ax.set_xlabel(
+                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
+            )
+
+            # only prediction/residual if at least 1 source.
             max_sources = n_sources.max().int().item()
             if max_sources > 0:
                 assert max_sources == locs.shape[1]
@@ -384,24 +394,13 @@ class SleepPhase(pl.LightningModule):
                     max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes
                 )
 
-                assert len(image.shape) == 3
                 assert len(locs.shape) == 3 and locs.size(0) == 1
-                image = image[0].cpu().numpy()  # first band.
                 recon_image = recon_image[0, 0].cpu().numpy()
                 res_image = (image - recon_image) / np.sqrt(image)
 
-                loc = locs[0].cpu().numpy()
-                true_loc = true_loc.cpu().numpy()
-
                 # plot
-                plotting.plot_image(fig, true_ax, image, true_loc, loc)
                 plotting.plot_image(fig, recon_ax, recon_image, loc)
                 plotting.plot_image(fig, res_ax, res_image)
-
-                # add n_sources info
-                true_ax.set_xlabel(
-                    f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
-                )
 
         plt.subplots_adjust(hspace=0.25, wspace=-0.2)
         if self.logger:
