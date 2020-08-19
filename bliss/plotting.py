@@ -13,6 +13,7 @@ def plot_locs(ax, slen, locs, color="r", marker="x", s=1):
     )
 
 
+@profile
 def plot_image(
     fig, ax, image, true_locs=None, estimated_locs=None, vmin=None, vmax=None, s=5,
 ):

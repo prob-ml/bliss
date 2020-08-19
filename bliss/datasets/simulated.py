@@ -25,23 +25,28 @@ class SimulatedDataset(IterableDataset):
         return self.batch_generator()
 
     def batch_generator(self):
-        for i in range(self.n_batches):
-            yield self.get_batch()
+        with torch.no_grad():
+            for i in range(self.n_batches):
+                yield self.get_batch()
 
+    @profile
     def get_batch(self):
-        params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
+        with torch.no_grad():
+            params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
 
-        images = self.image_decoder.render_images(
-            self.image_decoder.max_sources,
-            params["n_sources"],
-            params["locs"],
-            params["galaxy_bool"],
-            params["galaxy_params"],
-            params["fluxes"],
-        )
-        params.update({"images": images, "background": self.image_decoder.background})
+            images = self.image_decoder.render_images(
+                self.image_decoder.max_sources,
+                params["n_sources"],
+                params["locs"],
+                params["galaxy_bool"],
+                params["galaxy_params"],
+                params["fluxes"],
+            )
+            params.update(
+                {"images": images, "background": self.image_decoder.background}
+            )
 
-        return params
+            return params
 
     @staticmethod
     def get_gal_decoder_from_file(decoder_file, gal_slen=51, n_bands=1, latent_dim=8):
