@@ -496,6 +496,9 @@ class SleepPhase(pl.LightningModule):
         parser.add_argument("--enc-hidden", type=int, default=256)
         parser.add_argument("--momentum", type=float, default=0.5)
 
+        # validation
+        parser.add_argument("--validation-plot-start", type=int, default=5)
+
     @classmethod
     def from_args(cls, args, dataset):
         args_dict = vars(args)
