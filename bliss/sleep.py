@@ -132,7 +132,6 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    @profile
     def __init__(
         self,
         dataset,
@@ -146,6 +145,9 @@ class SleepPhase(pl.LightningModule):
         # assumes dataset is a IterableDataset class.
         self.dataset = dataset
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
+
+        # avoid calculating gradients of psf_transform
+        self.dataset.image_decoder.power_law_psf.requires_grad_(False)
 
         self.lr = lr
         self.weight_decay = weight_decay
@@ -303,7 +305,6 @@ class SleepPhase(pl.LightningModule):
     def val_dataloader(self):
         return DataLoader(self.dataset, batch_size=None)
 
-    @profile
     def training_step(self, batch, batch_idx):
         (
             loss,
@@ -316,7 +317,6 @@ class SleepPhase(pl.LightningModule):
         log = {"train_loss": loss}
         return {"loss": loss, "log": log}
 
-    @profile
     def validation_step(self, batch, batch_indx):
         (
             loss,
@@ -344,7 +344,6 @@ class SleepPhase(pl.LightningModule):
 
         return output
 
-    @profile
     def make_validation_plots(self, outputs):
         # add some images to tensorboard for validating location/counts.
         # Only use 5 images in the last batch
@@ -416,7 +415,6 @@ class SleepPhase(pl.LightningModule):
             self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
         plt.close(fig)
 
-    @profile
     def validation_epoch_end(self, outputs):
 
         # images for validation

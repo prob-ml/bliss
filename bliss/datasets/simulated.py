@@ -6,7 +6,7 @@ from torch.utils.data import IterableDataset
 
 from bliss import device
 from bliss.models import galaxy_net
-from bliss.models.decoder import ImageDecoder, PowerLawPSF
+from bliss.models.decoder import ImageDecoder
 
 
 class SimulatedDataset(IterableDataset):
@@ -25,28 +25,23 @@ class SimulatedDataset(IterableDataset):
         return self.batch_generator()
 
     def batch_generator(self):
-        with torch.no_grad():
-            for i in range(self.n_batches):
-                yield self.get_batch()
+        for i in range(self.n_batches):
+            yield self.get_batch()
 
-    @profile
     def get_batch(self):
-        with torch.no_grad():
-            params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
+        params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
 
-            images = self.image_decoder.render_images(
-                self.image_decoder.max_sources,
-                params["n_sources"],
-                params["locs"],
-                params["galaxy_bool"],
-                params["galaxy_params"],
-                params["fluxes"],
-            )
-            params.update(
-                {"images": images, "background": self.image_decoder.background}
-            )
+        images = self.image_decoder.render_images(
+            self.image_decoder.max_sources,
+            params["n_sources"],
+            params["locs"],
+            params["galaxy_bool"],
+            params["galaxy_params"],
+            params["fluxes"],
+        )
+        params.update({"images": images, "background": self.image_decoder.background})
 
-            return params
+        return params
 
     @staticmethod
     def get_gal_decoder_from_file(decoder_file, gal_slen=51, n_bands=1, latent_dim=8):
