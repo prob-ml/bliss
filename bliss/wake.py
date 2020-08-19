@@ -83,6 +83,7 @@ class WakeNet(pl.LightningModule):
 
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder
+        self.image_decoder.power_law_psf.requires_grad_(True)
 
         # observed image is batch_size (or 1) x n_bands x slen x slen
         assert len(observed_img.shape) == 4
