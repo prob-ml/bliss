@@ -58,9 +58,7 @@ class DecoderSetup:
 
     def get_galaxy_decoder(self):
         dec_file = self.data_path.joinpath("galaxy_decoder_1_band.dat")
-        dec = SimulatedDataset.get_gal_decoder_from_file(
-            dec_file, gal_slen=51, n_bands=1, latent_dim=8
-        )
+        dec = SimulatedDataset.get_gal_decoder_from_file(dec_file)
         return dec
 
     def get_fitted_psf_params(self):
@@ -156,7 +154,6 @@ class EncoderSetup:
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             reload_dataloaders_every_epoch=True,
-            profiler=None,
             logger=False,
             checkpoint_callback=False,
         )

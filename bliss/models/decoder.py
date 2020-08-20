@@ -107,7 +107,7 @@ class PowerLawPSF(nn.Module):
         l_pad = (self.image_slen - self.psf_slen) // 2
 
         # add padding so psf has length of image_slen
-        return pad(psf, (l_pad,) * 4)
+        return pad(psf, [l_pad] * 4)
 
 
 class ImageDecoder(object):
@@ -163,7 +163,7 @@ class ImageDecoder(object):
 
         self.cached_grid = get_mgrid(self.slen)
 
-        ## load psf_params
+        # load psf_params
         self.power_law_psf = PowerLawPSF(init_psf_params.clone())
 
     def _trim_psf(self, psf):
