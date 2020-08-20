@@ -146,6 +146,9 @@ class SleepPhase(pl.LightningModule):
         self.dataset = dataset
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
+        # avoid calculating gradients of psf_transform
+        self.dataset.image_decoder.power_law_psf.requires_grad_(False)
+
         self.lr = lr
         self.weight_decay = weight_decay
 
@@ -492,6 +495,9 @@ class SleepPhase(pl.LightningModule):
         parser.add_argument("--enc-kern", type=int, default=3)
         parser.add_argument("--enc-hidden", type=int, default=256)
         parser.add_argument("--momentum", type=float, default=0.5)
+
+        # validation
+        parser.add_argument("--validation-plot-start", type=int, default=5)
 
     @classmethod
     def from_args(cls, args, dataset):
