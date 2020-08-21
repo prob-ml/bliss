@@ -246,8 +246,8 @@ class ImageEncoder(nn.Module):
         self,
         trial,
         enc_conv_c,
-        enc_kern,
         enc_hidden,
+        enc_kern=3,
         slen=101,
         ptile_slen=8,
         tile_slen=2,
@@ -294,15 +294,12 @@ class ImageEncoder(nn.Module):
 
         # convolutional NN parameters
         assert type(enc_conv_c) is tuple
-        assert type(enc_kern) is tuple
         assert type(enc_hidden) is tuple
-        assert len(enc_conv_c) == 3 and len(enc_kern) == 3 and len(enc_hidden) == 3
+        assert len(enc_conv_c) == 3 and len(enc_hidden) == 3
         self.enc_conv_c = trial.suggest_int(
             "enc_conv_c", enc_conv_c[0], enc_conv_c[1], enc_conv_c[2]
         )
-        self.enc_kern = trial.suggest_int(
-            "enc_kern", enc_kern[0], enc_kern[1], enc_kern[2]
-        )
+        self.enc_kern = enc_kern
         self.enc_hidden = trial.suggest_int(
             "enc_hidden", enc_hidden[0], enc_hidden[1], enc_hidden[2]
         )
