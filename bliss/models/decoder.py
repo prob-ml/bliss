@@ -12,6 +12,8 @@ from torch.distributions import Poisson, Normal
 from .. import device
 from .encoder import get_is_on_from_n_sources
 
+from pytorch_memlab import profile
+
 
 def get_mgrid(slen):
     offset = (slen - 1) / 2
@@ -325,6 +327,7 @@ class ImageDecoder(object):
         galaxy_params = galaxy_params * galaxy_bool.unsqueeze(2)
         return galaxy_params
 
+    @profile
     def sample_parameters(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)

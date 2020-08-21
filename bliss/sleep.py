@@ -13,6 +13,9 @@ import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder
+from .datasets import simulated
+
+from pytorch_memlab import profile
 
 
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
@@ -142,12 +145,14 @@ class SleepPhase(pl.LightningModule):
     ):
         super(SleepPhase, self).__init__()
 
-        # assumes dataset is a IterableDataset class.
+        assert type(dataset) is simulated.SimulatedDataset
         self.dataset = dataset
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
-        # avoid calculating gradients of psf_transform
+        # avoid calculating gradients of decoder (psf_transform)
         self.dataset.image_decoder.power_law_psf.requires_grad_(False)
+        if self.dataset.image_decoder.galaxy_decoder:
+            self.dataset.image_decoder.galaxy_decoder.requires_grad_(False)
 
         self.lr = lr
         self.weight_decay = weight_decay
@@ -172,6 +177,7 @@ class SleepPhase(pl.LightningModule):
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder.forward(image_ptiles, n_sources)
 
+    @profile
     def get_loss(self, batch):
         """
 

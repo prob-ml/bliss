@@ -8,6 +8,8 @@ from bliss import device
 from bliss.models import galaxy_net
 from bliss.models.decoder import ImageDecoder
 
+from pytorch_memlab import profile
+
 
 class SimulatedDataset(IterableDataset):
     def __init__(self, n_batches: int, batch_size: int, decoder_args, decoder_kwargs):
@@ -28,6 +30,7 @@ class SimulatedDataset(IterableDataset):
         for i in range(self.n_batches):
             yield self.get_batch()
 
+    @profile
     def get_batch(self):
         params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
 

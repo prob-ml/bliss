@@ -3,6 +3,8 @@ import torch.nn as nn
 from torch.distributions import categorical
 from .. import device
 
+from pytorch_memlab import profile
+
 
 def get_is_on_from_n_sources(n_sources, max_sources):
     """Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
@@ -124,6 +126,7 @@ def _tile_locs(tile_coords, slen, edge_padding, ptile_slen, locs):
     return tile_n_sources, tile_locs, tile_is_on_array, indx_sort
 
 
+@profile
 def _get_tile_params(tile_is_on_array, indx_sort, params):
     # NOTE: indx_sort is an array that can order tile_is_on_array in some way with torch.gather
 
@@ -583,6 +586,7 @@ class ImageEncoder(nn.Module):
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(h)
 
+    @profile
     def forward(self, image_ptiles, n_sources):
         # image_ptiles shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
         # will unsqueeze and squeeze n_sources later, since used for indexing.
