@@ -157,6 +157,7 @@ class SleepPhase(pl.LightningModule):
         trial,
         dataset,
         encoder_kwargs,
+        optuna=False,
         lr=1e-3,
         weight_decay=1e-5,
         validation_plot_start=5,
@@ -166,8 +167,12 @@ class SleepPhase(pl.LightningModule):
         # assumes dataset is a IterableDataset class.
         self.dataset = dataset
 
-        encoder_kwargs["trial"] = trial
-        self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
+        if not optuna:
+            encoder_kwargs["trial"] = None
+            self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
+        else:
+            encoder_kwargs["trial"] = trial
+            self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
         # avoid calculating gradients of psf_transform
         self.dataset.image_decoder.power_law_psf.requires_grad_(False)
