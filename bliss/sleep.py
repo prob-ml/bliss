@@ -154,9 +154,9 @@ def _get_min_perm_loss(
 class SleepPhase(pl.LightningModule):
     def __init__(
         self,
-        trial,
         dataset,
         encoder_kwargs,
+        trial=None,
         optuna=False,
         lr=1e-3,
         weight_decay=1e-5,

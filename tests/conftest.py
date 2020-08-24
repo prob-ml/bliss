@@ -134,6 +134,7 @@ class EncoderSetup:
 
         # setup Star Encoder
         encoder_kwargs = dict(
+            trial=None,
             tile_slen=tile_slen,
             enc_conv_c=enc_conv_c,
             enc_kern=enc_kern,
