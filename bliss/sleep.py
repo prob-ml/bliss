@@ -561,13 +561,14 @@ class SleepPhase(pl.LightningModule):
 
 class Objective(object):
     def __init__(
-        self, dataset, encoder_kwargs, max_epochs, lr=1e-3, weight_decay=1e-5,
+        self, dataset, encoder_kwargs, max_epochs, lr=1e-3, weight_decay=1e-5, gpus=0
     ):
         self.dataset = dataset
         self.encoder_kwargs = encoder_kwargs
         self.lr = lr
         self.weight_decay = weight_decay
         self.max_epochs = max_epochs
+        self.gpus = gpus
 
     def __call__(self, trial):
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -582,7 +583,7 @@ class Objective(object):
 
         trainer = pl.Trainer(
             logger=False,
-            gpus=0,
+            gpus=self.gpus,
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
             callbacks=[metrics_callback],
