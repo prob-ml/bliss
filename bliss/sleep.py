@@ -169,9 +169,11 @@ class SleepPhase(pl.LightningModule):
 
         if not optuna:
             encoder_kwargs["trial"] = None
+            encoder_kwargs["optuna"] = False
             self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
         else:
             encoder_kwargs["trial"] = trial
+            encoder_kwargs["optuna"] = True
             self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
         # avoid calculating gradients of psf_transform
@@ -575,7 +577,7 @@ class Objective(object):
 
         metrics_callback = MetricsCallback()
         model = SleepPhase(
-            trial, self.dataset, self.encoder_kwargs, self.lr, self.weight_decay
+            self.dataset, self.encoder_kwargs, trial, True, self.lr, self.weight_decay
         ).to(device)
 
         trainer = pl.Trainer(
