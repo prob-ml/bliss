@@ -489,6 +489,7 @@ class SleepPhase(pl.LightningModule):
         avg_galaxy_bool_loss /= tiles_per_epoch
 
         logs = {
+            "val_loss": avg_loss,
             "counter_loss": avg_counter_loss,
             "locs_loss": avg_locs_loss,
             "galaxy_params_loss": avg_galaxy_params_loss,
@@ -573,7 +574,7 @@ class Objective(object):
     def __call__(self, trial):
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             os.path.join(MODEL_DIR, "trial_{}".format(trial.number), "{epoch}"),
-            monitor="counter_loss",
+            monitor="val_loss",
         )
 
         metrics_callback = MetricsCallback()
@@ -588,7 +589,7 @@ class Objective(object):
             max_epochs=self.max_epochs,
             callbacks=[metrics_callback],
             early_stop_callback=PyTorchLightningPruningCallback(
-                trial, monitor="counter_loss"
+                trial, monitor="val_loss"
             ),
         )
 
