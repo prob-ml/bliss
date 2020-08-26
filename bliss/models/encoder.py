@@ -233,6 +233,7 @@ def _get_full_params_from_sampled_params(
 
     return (n_sources, locs, *params)
 
+
 class Flatten(nn.Module):
     def forward(self, tensor):
         return tensor.view(tensor.size(0), -1)
@@ -281,10 +282,10 @@ class ImageEncoder(nn.Module):
 
         self.tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.tile_slen)
         self.n_tiles = self.tile_coords.size(0)
-        
+
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
-        
+
         # max number of detections
         self.max_detections = max_detections
 
@@ -545,30 +546,32 @@ class ImageEncoder(nn.Module):
             locs,
             *params
         )
-    
-    def _cache_tiling_conv_weights(self): 
-        ptile_slen2 = self.ptile_slen**2
-        self.tile_conv_weights = torch.zeros(ptile_slen2 * self.n_bands,
-                                   self.n_bands,
-                                   self.ptile_slen,
-                                   self.ptile_slen, 
-                                   device = device)
-    
-        for b in range(self.n_bands): 
-            for i in range(ptile_slen2): 
-                self.tile_conv_weights[i + b * ptile_slen2,
-                             b, 
-                             i // self.ptile_slen, 
-                             i % self.ptile_slen] = 1
-        
+
+    def _cache_tiling_conv_weights(self):
+        ptile_slen2 = self.ptile_slen ** 2
+        self.tile_conv_weights = torch.zeros(
+            ptile_slen2 * self.n_bands,
+            self.n_bands,
+            self.ptile_slen,
+            self.ptile_slen,
+            device=device,
+        )
+
+        for b in range(self.n_bands):
+            for i in range(ptile_slen2):
+                self.tile_conv_weights[
+                    i + b * ptile_slen2, b, i // self.ptile_slen, i % self.ptile_slen
+                ] = 1
+
     def get_images_in_tiles(self, images):
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
-    
-        output = F.conv2d(images, self.tile_conv_weights, stride = self.tile_slen).permute([0, 2, 3, 1])
-    
-        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
 
+        output = F.conv2d(
+            images, self.tile_conv_weights, stride=self.tile_slen
+        ).permute([0, 2, 3, 1])
+
+        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
 
     def _get_full_params_from_sampled_params(
         self, slen, tile_is_on_array_sampled, tile_locs_sampled, *tile_params_sampled
