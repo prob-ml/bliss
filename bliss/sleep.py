@@ -156,8 +156,6 @@ class SleepPhase(pl.LightningModule):
         self,
         dataset,
         encoder_kwargs,
-        trial=None,
-        optuna=False,
         lr=1e-3,
         weight_decay=1e-5,
         validation_plot_start=5,
@@ -166,15 +164,7 @@ class SleepPhase(pl.LightningModule):
 
         # assumes dataset is a IterableDataset class.
         self.dataset = dataset
-
-        if not optuna:
-            encoder_kwargs["trial"] = None
-            encoder_kwargs["optuna"] = False
-            self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
-        else:
-            encoder_kwargs["trial"] = trial
-            encoder_kwargs["optuna"] = True
-            self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
+        self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
         # avoid calculating gradients of psf_transform
         self.dataset.image_decoder.power_law_psf.requires_grad_(False)
@@ -561,13 +551,23 @@ class SleepPhase(pl.LightningModule):
 
 
 class Objective(object):
-    def __init__(
-        self, dataset, encoder_kwargs, max_epochs, lr=1e-3, weight_decay=1e-5, gpus=0
-    ):
+    def __init__(self, dataset, encoder_kwargs, max_epochs, lr, weight_decay, gpus=0):
         self.dataset = dataset
+
+        assert type(encoder_kwargs["enc_conv_c"]) is tuple
+        assert type(encoder_kwargs["enc_hidden"]) is tuple
+        assert (
+            len(encoder_kwargs["enc_conv_c"]) == 3
+            and len(encoder_kwargs["enc_hidden"]) == 3
+        )
         self.encoder_kwargs = encoder_kwargs
+
+        assert type(lr) is tuple
+        assert type(weight_decay) is tuple
+        assert len(lr) == 2 and len(weight_decay) == 2
         self.lr = lr
         self.weight_decay = weight_decay
+
         self.max_epochs = max_epochs
         self.gpus = gpus
 
@@ -578,8 +578,28 @@ class Objective(object):
         )
 
         metrics_callback = MetricsCallback()
+
+        self.encoder_kwargs["enc_conv_c"] = trial.suggest_int(
+            "enc_conv_c",
+            self.encoder_kwargs["enc_conv_c"][0],
+            self.encoder_kwargs["enc_conv_c"][1],
+            self.encoder_kwargs["enc_conv_c"][2],
+        )
+
+        self.encoder_kwargs["enc_hidden"] = trial.suggest_int(
+            "enc_hidden",
+            self.encoder_kwargs["enc_hidden"][0],
+            self.encoder_kwargs["enc_hidden"][1],
+            self.encoder_kwargs["enc_hidden"][2],
+        )
+
+        lr = trial.suggest_loguniform("learning rate", self.lr[0], self.lr[1])
+        weight_decay = trial.suggest_loguniform(
+            "weight_decay", self.weight_decay[0], self.weight_decay[1]
+        )
+
         model = SleepPhase(
-            self.dataset, self.encoder_kwargs, trial, True, self.lr, self.weight_decay
+            self.dataset, self.encoder_kwargs, trial, True, lr, weight_decay
         ).to(device)
 
         trainer = pl.Trainer(

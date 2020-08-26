@@ -244,17 +244,15 @@ class Flatten(nn.Module):
 class ImageEncoder(nn.Module):
     def __init__(
         self,
-        trial,
-        enc_conv_c,
-        enc_hidden,
-        enc_kern=3,
-        optuna=False,
         slen=101,
         ptile_slen=8,
         tile_slen=2,
         n_bands=1,
         max_detections=2,
         n_galaxy_params=8,
+        enc_conv_c=20,
+        enc_kern=3,
+        enc_hidden=256,
         momentum=0.5,
     ):
         """
@@ -294,22 +292,10 @@ class ImageEncoder(nn.Module):
         self.max_detections = max_detections
 
         # convolutional NN parameters
-        if not optuna:
-            self.enc_conv_c = enc_conv_c
-            self.enc_hidden = enc_hidden
-        else:
-            assert type(enc_conv_c) is tuple
-            assert type(enc_hidden) is tuple
-            assert len(enc_conv_c) == 3 and len(enc_hidden) == 3
-            self.enc_conv_c = trial.suggest_int(
-                "enc_conv_c", enc_conv_c[0], enc_conv_c[1], enc_conv_c[2]
-            )
-
-            self.enc_hidden = trial.suggest_int(
-                "enc_hidden", enc_hidden[0], enc_hidden[1], enc_hidden[2]
-            )
-
+        self.enc_conv_c = enc_conv_c
         self.enc_kern = enc_kern
+        self.enc_hidden = enc_hidden
+
         self.momentum = momentum
 
         # convolutional NN
