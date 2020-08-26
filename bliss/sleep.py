@@ -20,10 +20,6 @@ import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 
 
-DIR = os.getcwd()
-MODEL_DIR = os.path.join(DIR, "result")
-
-
 class MetricsCallback(Callback):
     """PyTorch Lightning metric callback."""
 
@@ -231,7 +227,6 @@ class SleepPhase(pl.LightningModule):
         # true_tile_locs has shape = (n_ptiles x max_detections x 2)
         # true_tile_n_sources has shape = (n_ptiles)
         slen = images.size(-1)
-        # print(images.size())
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         (
             true_tile_n_sources,
@@ -243,7 +238,6 @@ class SleepPhase(pl.LightningModule):
         ) = self.image_encoder.get_params_in_tiles(
             slen, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool
         )
-        # print(image_ptiles.size())
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)
 
@@ -551,7 +545,9 @@ class SleepPhase(pl.LightningModule):
 
 
 class Objective(object):
-    def __init__(self, dataset, encoder_kwargs, max_epochs, lr, weight_decay, gpus=0):
+    def __init__(
+        self, dataset, encoder_kwargs, max_epochs, lr, weight_decay, model_dir, gpus=0
+    ):
         self.dataset = dataset
 
         assert type(encoder_kwargs["enc_conv_c"]) is tuple
@@ -576,11 +572,12 @@ class Objective(object):
         self.weight_decay = weight_decay
 
         self.max_epochs = max_epochs
+        self.model_dir = model_dir
         self.gpus = gpus
 
     def __call__(self, trial):
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            os.path.join(MODEL_DIR, "trial_{}".format(trial.number), "{epoch}"),
+            os.path.join(self.model_dir, "trial_{}".format(trial.number), "{epoch}"),
             monitor="val_loss",
         )
 

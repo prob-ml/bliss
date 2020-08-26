@@ -5,8 +5,6 @@ import torch.nn.functional as F
 from torch.distributions import categorical
 from .. import device
 
-from typing import List
-
 
 def get_is_on_from_n_sources(n_sources, max_sources):
     """Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
