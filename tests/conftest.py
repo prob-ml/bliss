@@ -134,12 +134,11 @@ class EncoderSetup:
 
         # setup Star Encoder
         encoder_kwargs = dict(
-            trial=None,
+            ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             enc_conv_c=enc_conv_c,
             enc_kern=enc_kern,
             enc_hidden=enc_hidden,
-            ptile_slen=ptile_slen,
             max_detections=max_detections,
             slen=slen,
             n_bands=n_bands,
