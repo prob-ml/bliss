@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
 from torch.distributions import categorical
 from .. import device
 
@@ -231,94 +233,6 @@ def _get_full_params_from_sampled_params(
 
     return (n_sources, locs, *params)
 
-
-def _extract_ptiles_2d(img, tile_shape, step, batch_first=False):
-    """
-    Take in an image (tensor) and the shape of the padded tile
-    we want to separate it into and
-    return the padded tiles also as a tensor.
-
-    Taken from: https://gist.github.com/dem123456789/23f18fd78ac8da9615c347905e64fc78
-    """
-
-    tile_H, tile_W = tile_shape[0], tile_shape[1]
-    if img.size(2) < tile_H:
-        num_padded_H_Top = (tile_H - img.size(2)) // 2
-        num_padded_H_Bottom = tile_H - img.size(2) - num_padded_H_Top
-        padding_H = nn.ConstantPad2d((0, 0, num_padded_H_Top, num_padded_H_Bottom), 0)
-        img = padding_H(img)
-    if img.size(3) < tile_W:
-        num_padded_W_Left = (tile_W - img.size(3)) // 2
-        num_padded_W_Right = tile_W - img.size(3) - num_padded_W_Left
-        padding_W = torch.nn.ConstantPad2d(
-            (num_padded_W_Left, num_padded_W_Right, 0, 0), 0
-        )
-        img = padding_W(img)
-    step_int = [0, 0]
-    step_int[0] = int(tile_H * step[0]) if (isinstance(step[0], float)) else step[0]
-    step_int[1] = int(tile_W * step[1]) if (isinstance(step[1], float)) else step[1]
-    ptiles_fold_H = img.unfold(2, tile_H, step_int[0])
-    if (img.size(2) - tile_H) % step_int[0] != 0:
-        ptiles_fold_H = torch.cat(
-            (ptiles_fold_H, img[:, :, -tile_H:,].permute(0, 1, 3, 2).unsqueeze(2)),
-            dim=2,
-        )
-    ptiles_fold_HW = ptiles_fold_H.unfold(3, tile_W, step_int[1])
-    if (img.size(3) - tile_W) % step_int[1] != 0:
-        ptiles_fold_HW = torch.cat(
-            (
-                ptiles_fold_HW,
-                ptiles_fold_H[:, :, :, -tile_W:, :].permute(0, 1, 2, 4, 3).unsqueeze(3),
-            ),
-            dim=3,
-        )
-    ptiles = ptiles_fold_HW.permute(2, 3, 0, 1, 4, 5)
-    ptiles = ptiles.reshape(-1, img.size(0), img.size(1), tile_H, tile_W)
-    if batch_first:
-        ptiles = ptiles.permute(1, 0, 2, 3, 4)
-    return ptiles
-
-
-def _tile_images(images, ptile_slen, step):
-    """
-    Breaks up a large image into smaller padded tiles.
-    Each tile has size ptile_slen x ptile_slen, where
-    the number of padded tiles per image  is (slen - ptile_slen / step)**2.
-
-    NOTE: input and output are torch tensors.
-
-    :param images: A tensor of size (batch_size x n_bands x slen x slen)
-    :param ptile_slen: The side length of each padded tile.
-    :return: image_ptiles, output tensor of shape:
-             (batch_size * ptiles per image) x n_bands x ptile_slen x ptile_slen
-    :rtype: class:`torch.Tensor`
-    """
-
-    assert len(images.shape) == 4
-
-    image_xlen = images.shape[2]
-    image_ylen = images.shape[3]
-
-    # My tile coords doesn't work otherwise ...
-    assert (image_xlen - ptile_slen) % step == 0
-    assert (image_ylen - ptile_slen) % step == 0
-
-    n_bands = images.shape[1]
-    image_ptiles = torch.tensor([], device=device)
-    for b in range(n_bands):
-        image_ptiles_b = _extract_ptiles_2d(
-            images[:, b : (b + 1), :, :],
-            tile_shape=[ptile_slen, ptile_slen],
-            step=[step, step],
-            batch_first=True,
-        ).reshape(-1, 1, ptile_slen, ptile_slen)
-
-        # torch.cat(...) works with empty tensors.
-        image_ptiles = torch.cat((image_ptiles, image_ptiles_b.to(device)), dim=1)
-
-    return image_ptiles
-
-
 class Flatten(nn.Module):
     def forward(self, tensor):
         return tensor.view(tensor.size(0), -1)
@@ -367,7 +281,10 @@ class ImageEncoder(nn.Module):
 
         self.tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.tile_slen)
         self.n_tiles = self.tile_coords.size(0)
-
+        
+        # cache the weights used for the tiling convolution
+        self._cache_tiling_conv_weights()
+        
         # max number of detections
         self.max_detections = max_detections
 
@@ -628,13 +545,30 @@ class ImageEncoder(nn.Module):
             locs,
             *params
         )
-
+    
+    def _cache_tiling_conv_weights(self): 
+        ptile_slen2 = self.ptile_slen**2
+        self.tile_conv_weights = torch.zeros(ptile_slen2 * self.n_bands,
+                                   self.n_bands,
+                                   self.ptile_slen,
+                                   self.ptile_slen, 
+                                   device = device)
+    
+        for b in range(self.n_bands): 
+            for i in range(ptile_slen2): 
+                self.tile_conv_weights[i + b * ptile_slen2,
+                             b, 
+                             i // self.ptile_slen, 
+                             i % self.ptile_slen] = 1
+        
     def get_images_in_tiles(self, images):
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
+    
+        output = F.conv2d(images, self.tile_conv_weights, stride = self.tile_slen).permute([0, 2, 3, 1])
+    
+        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
 
-        image_ptiles = _tile_images(images, self.ptile_slen, self.tile_slen)
-        return image_ptiles
 
     def _get_full_params_from_sampled_params(
         self, slen, tile_is_on_array_sampled, tile_locs_sampled, *tile_params_sampled
