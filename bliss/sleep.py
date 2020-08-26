@@ -561,6 +561,13 @@ class Objective(object):
             and len(encoder_kwargs["enc_hidden"]) == 3
         )
         self.encoder_kwargs = encoder_kwargs
+        self.enc_conv_c_min = self.encoder_kwargs["enc_conv_c"][0]
+        self.enc_conv_c_max = self.encoder_kwargs["enc_conv_c"][1]
+        self.enc_conv_c_int = self.encoder_kwargs["enc_conv_c"][2]
+
+        self.enc_hidden_min = self.encoder_kwargs["enc_hidden"][0]
+        self.enc_hidden_max = self.encoder_kwargs["enc_hidden"][1]
+        self.enc_hidden_int = self.encoder_kwargs["enc_hidden"][2]
 
         assert type(lr) is tuple
         assert type(weight_decay) is tuple
@@ -580,17 +587,11 @@ class Objective(object):
         metrics_callback = MetricsCallback()
 
         self.encoder_kwargs["enc_conv_c"] = trial.suggest_int(
-            "enc_conv_c",
-            self.encoder_kwargs["enc_conv_c"][0],
-            self.encoder_kwargs["enc_conv_c"][1],
-            self.encoder_kwargs["enc_conv_c"][2],
+            "enc_conv_c", self.enc_conv_c_min, self.enc_conv_c_max, self.enc_conv_c_int,
         )
 
         self.encoder_kwargs["enc_hidden"] = trial.suggest_int(
-            "enc_hidden",
-            self.encoder_kwargs["enc_hidden"][0],
-            self.encoder_kwargs["enc_hidden"][1],
-            self.encoder_kwargs["enc_hidden"][2],
+            "enc_hidden", self.enc_hidden_min, self.enc_hidden_max, self.enc_hidden_int,
         )
 
         lr = trial.suggest_loguniform("learning rate", self.lr[0], self.lr[1])
@@ -598,9 +599,9 @@ class Objective(object):
             "weight_decay", self.weight_decay[0], self.weight_decay[1]
         )
 
-        model = SleepPhase(
-            self.dataset, self.encoder_kwargs, trial, True, lr, weight_decay
-        ).to(device)
+        model = SleepPhase(self.dataset, self.encoder_kwargs, lr, weight_decay).to(
+            device
+        )
 
         trainer = pl.Trainer(
             logger=False,
