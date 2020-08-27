@@ -39,12 +39,7 @@ jobs:
 
     - name: Black Code Formatter
       uses: lgeiger/black-action@v1.0.1
-      paths:
-        - './bliss'
-        - './tests'
-        - './bin'
-
-
+      args: ". --check"
 
     - name: Run Tests
       run: |
