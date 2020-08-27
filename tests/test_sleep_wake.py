@@ -92,7 +92,11 @@ class TestStarWakeNet:
         image_decoder.slen = test_slen
         image_decoder.cached_grid = get_mgrid(test_slen)
         wake_phase_model = wake.WakeNet(
-            trained_encoder, image_decoder, test_image, init_background_params, hparams,
+            trained_encoder,
+            image_decoder,
+            test_image,
+            init_background_params,
+            hparams,
         )
 
         # run the wake-phase training
