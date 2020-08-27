@@ -17,6 +17,6 @@ class TestSDSS:
         assert np.all(super_star[2, 2] + 1e-4 >= super_star)
         print(super_star)
 
-        cache_file = sdss_dir.joinpath("2583/2/136/cache.pkl")
+        cache_file = sdss_dir.joinpath("3900/6/269/cache.pkl")
         if os.path.exists(cache_file):
             os.remove(cache_file)
