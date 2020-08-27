@@ -118,12 +118,12 @@ class ImageDecoder(object):
         background,
         n_bands=1,
         slen=50,
+        ptile_slen=8,
+        tile_slen=2,
         prob_galaxy=0.0,
-        max_sources=20,
-        mean_sources=15,
-        min_sources=5,
-        loc_min=0.0,
-        loc_max=1.0,
+        max_sources=2,
+        mean_sources=0.4,
+        min_sources=0,
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
@@ -131,12 +131,15 @@ class ImageDecoder(object):
     ):
 
         self.slen = slen
+        self.tile_slen = tile_slen
+        self.ptile_slen = ptile_slen
+        
         self.n_bands = n_bands
         self.background = background.to(device)
 
         assert len(background.shape) == 3
         assert self.background.shape[0] == self.n_bands
-        assert self.background.shape[1] == self.background.shape[2] == self.slen
+        # assert self.background.shape[1] == self.background.shape[2] == self.slen
 
         self.max_sources = max_sources
         self.mean_sources = mean_sources
@@ -157,23 +160,19 @@ class ImageDecoder(object):
         self.f_max = f_max
         self.alpha = alpha  # pareto parameter.
 
-        self.loc_min = loc_min
-        self.loc_max = loc_max
-        assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
-
-        self.cached_grid = get_mgrid(self.slen)
+        self.cached_grid = get_mgrid(self.ptile_slen)
 
         # load psf_params
         self.power_law_psf = PowerLawPSF(init_psf_params.clone())
 
     def _trim_psf(self, psf):
-        """Crop the psf to length slen x slen,
+        """Crop the psf to length ptile_slen x ptile_slen,
         centered at the middle.
         """
 
-        # if self.slen is even, we still make psf dimension odd.
+        # if self.ptile_slen is even, we still make psf dimension odd.
         # otherwise, the psf won't have a peak in the center pixel.
-        _slen = self.slen + ((self.slen % 2) == 0) * 1
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
         psf_slen = psf.shape[2]
         psf_center = (psf_slen - 1) / 2
@@ -187,10 +186,10 @@ class ImageDecoder(object):
         return psf[:, l_indx:u_indx, l_indx:u_indx]
 
     def _expand_psf(self, psf):
-        """Pad the psf with zeros so that it is size slen,
+        """Pad the psf with zeros so that it is size ptile_slen,
         """
 
-        _slen = self.slen + ((self.slen % 2) == 0) * 1
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
         psf_slen = psf.shape[2]
 
         assert psf_slen <= _slen, "Should be using trim psf."
@@ -215,7 +214,7 @@ class ImageDecoder(object):
         assert (psf_slen % 2) == 1
         assert self.background.shape[0] == psf.shape[0] == self.n_bands
 
-        if self.slen >= psf.shape[-1]:
+        if self.ptile_slen >= psf.shape[-1]:
             return self._expand_psf(psf)
         else:
             return self._trim_psf(psf)
@@ -237,7 +236,6 @@ class ImageDecoder(object):
 
         # 2 = (x,y)
         locs = torch.rand(batch_size, self.max_sources, 2, device=device)
-        locs = locs * (self.loc_max - self.loc_min) + self.loc_min
         locs *= is_on_array.unsqueeze(2)
 
         return locs
@@ -374,15 +372,18 @@ class ImageDecoder(object):
         batch_size = locs.shape[0]
         assert locs.shape[1] == 2
         assert source.shape[0] == batch_size
-
+        
+        # scale so that they land in the tile within the padded tile 
+        padding = (self.ptile_slen - self.tile_slen) / 2
+        locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
-        _grid = self.cached_grid.view(1, self.slen, self.slen, 2)
+        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
         grid_loc = _grid - locs[:, [1, 0]].view(batch_size, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
-    def render_multiple_stars(self, locs, fluxes, star_bool):
+    def render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
         # locs: is (batch_size x max_num_stars x 2)
         # fluxes: Is (batch_size x n_bands x max_stars)
         # star_bool: Is (batch_size x max_stars)
@@ -391,10 +392,10 @@ class ImageDecoder(object):
         psf = self._get_psf()
         batch_size = locs.shape[0]
         max_sources = locs.shape[1]
-        scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
-        scene = torch.zeros(scene_shape, device=device)
+        ptile_shape = (batch_size, self.n_bands, self.ptile_slen, self.ptile_slen)
+        ptile = torch.zeros(ptile_shape, device=device)
 
-        assert len(psf.shape) == 3  # the shape is (n_bands, slen, slen)
+        assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
         assert fluxes.shape[0] == star_bool.shape[0] == batch_size
         assert fluxes.shape[1] == star_bool.shape[1] == max_sources
@@ -410,16 +411,16 @@ class ImageDecoder(object):
             fluxes_n = fluxes[:, n, :] * star_bool_n.unsqueeze(1)
             fluxes_n = fluxes_n.view(batch_size, self.n_bands, 1, 1)
             one_star = self._render_one_source(locs_n, expanded_psf)
-            scene += one_star * fluxes_n
+            ptile += one_star * fluxes_n
 
-        return scene
+        return ptile
 
-    def render_multiple_galaxies(self, locs, galaxy_params, galaxy_bool):
+    def render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         batch_size = locs.shape[0]
         max_sources = locs.shape[1]
-        scene_shape = (batch_size, self.n_bands, self.slen, self.slen)
-        scene = torch.zeros(scene_shape, device=device)
+        ptile_shape = (batch_size, self.n_bands, self.ptile_slen, self.ptile_slen)
+        ptile = torch.zeros(ptile_shape, device=device)
 
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == batch_size
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
@@ -436,9 +437,9 @@ class ImageDecoder(object):
                 _galaxy = single_galaxies[:, n, :, :, :]
                 galaxy = _galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
                 one_galaxy = self._render_one_source(locs_n, galaxy)
-                scene += one_galaxy
+                ptile += one_galaxy
 
-        return scene
+        return ptile
 
     def render_images(
         self, max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes
@@ -457,8 +458,8 @@ class ImageDecoder(object):
         fluxes = fluxes.reshape(batch_size, max_sources, self.n_bands)
 
         # need n_sources because `*_locs` are not necessarily ordered.
-        galaxies = self.render_multiple_galaxies(locs, galaxy_params, galaxy_bool)
-        stars = self.render_multiple_stars(locs, fluxes, star_bool)
+        galaxies = self.render_multiple_galaxies_on_ptile(locs, galaxy_params, galaxy_bool)
+        stars = self.render_multiple_stars_on_ptile(locs, fluxes, star_bool)
 
         # shape = (n_images x n_bands x slen x slen)
         images = galaxies + stars
