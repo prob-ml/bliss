@@ -39,7 +39,7 @@ jobs:
 
     - name: Run Tests
       run: |
-        black --check bliss tests bin
+        black --check ./bliss ./tests ./bin
         pytest --cov=./bliss --cov-report=xml --durations=0
 
     - name: Upload coverage to Codecov
