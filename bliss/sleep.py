@@ -576,11 +576,17 @@ class SleepObjective(object):
 
     def __call__(self, trial):
         self.encoder_kwargs["enc_conv_c"] = trial.suggest_int(
-            "enc_conv_c", self.enc_conv_c_min, self.enc_conv_c_max, self.enc_conv_c_int,
+            "enc_conv_c",
+            self.enc_conv_c_min,
+            self.enc_conv_c_max,
+            self.enc_conv_c_int,
         )
 
         self.encoder_kwargs["enc_hidden"] = trial.suggest_int(
-            "enc_hidden", self.enc_hidden_min, self.enc_hidden_max, self.enc_hidden_int,
+            "enc_hidden",
+            self.enc_hidden_min,
+            self.enc_hidden_max,
+            self.enc_hidden_int,
         )
 
         lr = trial.suggest_loguniform("learning rate", self.lr[0], self.lr[1])
