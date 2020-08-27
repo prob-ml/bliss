@@ -11,24 +11,12 @@ from torch.nn import functional
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from pytorch_lightning import Callback
 
 from . import device, plotting
 from .models import encoder
 
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
-
-
-class MetricsCallback(Callback):
-    """PyTorch Lightning metric callback."""
-
-    def __init__(self):
-        super().__init__()
-        self.metrics = []
-
-    def on_validation_end(self, trainer, pl_module):
-        self.metrics.append(trainer.callback_metrics)
 
 
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
@@ -544,9 +532,18 @@ class SleepPhase(pl.LightningModule):
         return cls(dataset, encoder_kwargs, **sleep_kwargs)
 
 
-class Objective(object):
+class SleepObjective(object):
     def __init__(
-        self, dataset, encoder_kwargs, max_epochs, lr, weight_decay, model_dir, gpus=0
+        self,
+        dataset,
+        encoder_kwargs: dict,
+        max_epochs: int,
+        lr: tuple,
+        weight_decay: tuple,
+        model_dir: str,
+        metrics_callback,
+        monitor="val_loss",
+        gpus=0,
     ):
         self.dataset = dataset
 
@@ -573,16 +570,11 @@ class Objective(object):
 
         self.max_epochs = max_epochs
         self.model_dir = model_dir
+        self.metrics_callback = metrics_callback
+        self.monitor = monitor
         self.gpus = gpus
 
     def __call__(self, trial):
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            os.path.join(self.model_dir, "trial_{}".format(trial.number), "{epoch}"),
-            monitor="val_loss",
-        )
-
-        metrics_callback = MetricsCallback()
-
         self.encoder_kwargs["enc_conv_c"] = trial.suggest_int(
             "enc_conv_c", self.enc_conv_c_min, self.enc_conv_c_max, self.enc_conv_c_int,
         )
@@ -596,6 +588,11 @@ class Objective(object):
             "weight_decay", self.weight_decay[0], self.weight_decay[1]
         )
 
+        checkpoint_callback = pl.callbacks.ModelCheckpoint(
+            self.model_dir.joinpath("trial_{}".format(trial.number), "{epoch}"),
+            monitor="val_loss",
+        )
+
         model = SleepPhase(self.dataset, self.encoder_kwargs, lr, weight_decay).to(
             device
         )
@@ -605,12 +602,12 @@ class Objective(object):
             gpus=self.gpus,
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
-            callbacks=[metrics_callback],
+            callbacks=[self.metrics_callback],
             early_stop_callback=PyTorchLightningPruningCallback(
-                trial, monitor="val_loss"
+                trial, monitor=self.monitor
             ),
         )
 
         trainer.fit(model)
 
-        return metrics_callback.metrics[-1]["val_loss"].item()
+        return self.metrics_callback.metrics[-1][self.monitor].item()
