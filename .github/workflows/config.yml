@@ -37,9 +37,11 @@ jobs:
         pip install pytest pytest-cov
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+    - name: Black Code Formatter
+      uses: lgeiger/black-action@v1.0.1
+
     - name: Run Tests
       run: |
-        black --check ./bliss ./tests ./bin
         pytest --cov=./bliss --cov-report=xml --durations=0
 
     - name: Upload coverage to Codecov
