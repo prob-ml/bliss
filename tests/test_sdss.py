@@ -12,10 +12,10 @@ class TestSDSS:
         )
         assert sdss_obj[0]["gain"][3] == pytest.approx(4.76)
 
-        stars = sdss_obj.fetch_bright_stars()
-        assert len(stars) == 43
-        super_star = stars.sum(axis=0)
+        assert len(sdss_obj[0]["bright_stars"]) == 43
+        super_star = sdss_obj[0]["bright_stars"].sum(axis=0)
         assert np.all(super_star[2, 2] + 1e-4 >= super_star)
+        print(super_star)
 
         cache_file = sdss_dir.joinpath("2583/2/136/cache.pkl")
         if os.path.exists(cache_file):
