@@ -375,7 +375,10 @@ class ImageEncoder(nn.Module):
             param_dim = self.variational_params[i][1]
             shape = (self.max_detections + 1, param_dim * self.max_detections)
             indx_mat = torch.full(
-                shape, self.dim_out_all, dtype=torch.long, device=device,
+                shape,
+                self.dim_out_all,
+                dtype=torch.long,
+                device=device,
             )
             indx_mats.append(indx_mat)
         return indx_mats
@@ -395,8 +398,7 @@ class ImageEncoder(nn.Module):
         return indx_mats, curr_indx
 
     def _get_hidden_indices(self):
-        """Setup the indices corresponding to entries in h, these are cached since same for all h.
-        """
+        """Setup the indices corresponding to entries in h, these are cached since same for all h."""
 
         indx_mats = self._create_indx_mats()  # same order as self.variational_params
         prob_n_source_indx = torch.zeros(
@@ -447,7 +449,9 @@ class ImageEncoder(nn.Module):
 
         # select the indices from _h indicated by indx_mat.
         var_param = torch.gather(
-            _h, 1, indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
+            _h,
+            1,
+            indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
         )
 
         var_param = var_param.reshape(

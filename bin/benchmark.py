@@ -124,7 +124,10 @@ if __name__ == "__main__":
 
         print("Benchmark for the sleep phase training forward pass")
         runtimes = timeit.repeat(
-            "sleep_benchmark", repeat=10, number=100, globals=globals(),
+            "sleep_benchmark",
+            repeat=10,
+            number=100,
+            globals=globals(),
         )
         best_time = min(runtimes)
         print(best_time * 1e6, "milliseconds")
