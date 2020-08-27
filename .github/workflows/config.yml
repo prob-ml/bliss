@@ -39,7 +39,8 @@ jobs:
 
     - name: Black Code Formatter
       uses: lgeiger/black-action@v1.0.1
-      args: ". --check"
+      with:
+        args: ". --check"
 
     - name: Run Tests
       run: |
