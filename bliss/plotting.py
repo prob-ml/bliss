@@ -14,7 +14,14 @@ def plot_locs(ax, slen, locs, color="r", marker="x", s=1):
 
 
 def plot_image(
-    fig, ax, image, true_locs=None, estimated_locs=None, vmin=None, vmax=None, s=5,
+    fig,
+    ax,
+    image,
+    true_locs=None,
+    estimated_locs=None,
+    vmin=None,
+    vmax=None,
+    s=5,
 ):
 
     # locations are coordinates in the image, on scale from 0 to 1

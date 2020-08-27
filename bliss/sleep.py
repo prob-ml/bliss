@@ -352,7 +352,14 @@ class SleepPhase(pl.LightningModule):
         true_n_sources = outputs[-1]["log"]["n_sources"][:n_samples]
         true_locs = outputs[-1]["log"]["locs"][:n_samples]
         images = outputs[-1]["log"]["images"][:n_samples]
-        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=(20, 20,))
+        fig, axes = plt.subplots(
+            nrows=n_samples,
+            ncols=3,
+            figsize=(
+                20,
+                20,
+            ),
+        )
 
         for i in range(n_samples):
             true_ax = axes[i, 0]

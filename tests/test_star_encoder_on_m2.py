@@ -33,7 +33,11 @@ def trained_star_encoder_m2(decoder_setup, encoder_setup, device_setup, paths):
         alpha=0.5,
     )
     trained_encoder = encoder_setup.get_trained_encoder(
-        star_dataset, n_epochs=n_epochs, enc_conv_c=20, enc_kern=3, enc_hidden=256,
+        star_dataset,
+        n_epochs=n_epochs,
+        enc_conv_c=20,
+        enc_kern=3,
+        enc_hidden=256,
     )
     return trained_encoder
 

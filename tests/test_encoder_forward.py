@@ -95,13 +95,17 @@ class TestSourceEncoder:
                     assert torch.all(
                         pred["loc_mean"][i, :n_stars_i].flatten()
                         == torch.sigmoid(h_out)[
-                            i, locs_mean_indx_mat[n_stars_i][: (2 * n_stars_i)],
+                            i,
+                            locs_mean_indx_mat[n_stars_i][: (2 * n_stars_i)],
                         ]
                     )
 
                     assert torch.all(
                         pred["loc_logvar"][i, :n_stars_i].flatten()
-                        == h_out[i, locs_var_indx_mat[n_stars_i][: (2 * n_stars_i)],]
+                        == h_out[
+                            i,
+                            locs_var_indx_mat[n_stars_i][: (2 * n_stars_i)],
+                        ]
                     )
 
                     assert torch.all(
@@ -126,8 +130,7 @@ class TestSourceEncoder:
                     )
 
     def test_forward_to_hidden2d(self, device_setup):
-        """Consistency check of using forward vs get_var_params
-        """
+        """Consistency check of using forward vs get_var_params"""
         device = device_setup.device
 
         n_image_tiles = 30

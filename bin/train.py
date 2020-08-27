@@ -93,7 +93,10 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--seed", type=int, default=None, help="Random seed for pytorch, numpy, ...",
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for pytorch, numpy, ...",
     )
 
     # ---------------
@@ -144,7 +147,9 @@ if __name__ == "__main__":
     )
 
     general_dataset_group.add_argument(
-        "--n-batches", type=int, default=1,
+        "--n-batches",
+        type=int,
+        default=1,
     )
     general_dataset_group.add_argument(
         "--batch-size",

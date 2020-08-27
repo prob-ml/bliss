@@ -128,7 +128,9 @@ class WakeNet(pl.LightningModule):
 
         background = self.planar_background.forward().unsqueeze(0).detach()
         stars = self.image_decoder.render_multiple_stars(
-            locs_sampled, fluxes_sampled, star_bool_sampled,
+            locs_sampled,
+            fluxes_sampled,
+            star_bool_sampled,
         )
         recon_mean = stars + background
 

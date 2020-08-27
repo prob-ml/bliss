@@ -164,8 +164,7 @@ class CatsimRenderer(object):
         return image, self.background
 
     def single_band(self, entry, single_obs, band):
-        """Builds galaxy from a single entry in the catalog. With no background sky level added.
-        """
+        """Builds galaxy from a single entry in the catalog. With no background sky level added."""
 
         galaxy_builder = descwl.model.GalaxyBuilder(
             single_obs, no_disk=False, no_bulge=False, no_agn=False, verbose_model=False

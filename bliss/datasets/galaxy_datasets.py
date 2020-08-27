@@ -7,10 +7,11 @@ from torch.utils.data import Dataset
 
 
 def save_images(
-    dataset, file_path, n_images=1,
+    dataset,
+    file_path,
+    n_images=1,
 ):
-    """Generate images from dataset cls and save num_images into h5py file.
-    """
+    """Generate images from dataset cls and save num_images into h5py file."""
 
     with h5py.File(file_path, "w") as images_file:
         hds_shape = (n_images, dataset.n_bands, dataset.slen, dataset.slen)
@@ -26,8 +27,7 @@ def save_images(
 
 class H5Catalog(Dataset):
     def __init__(self, h5_file="images.hdf5", slen=51, n_bands=1):
-        """ A dataset created from single galaxy images in a h5py file.
-        """
+        """A dataset created from single galaxy images in a h5py file."""
         super().__init__()
 
         self.file = h5py.File(h5_file, "r")
@@ -48,8 +48,7 @@ class H5Catalog(Dataset):
         self.background = self.dset.attrs["background"]
 
     def __len__(self):
-        """Number of images saved in the file.
-        """
+        """Number of images saved in the file."""
         return self.dset.shape[0]
 
     def __getitem__(self, idx):
