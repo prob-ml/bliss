@@ -121,9 +121,9 @@ class ImageDecoder(object):
         ptile_slen=8,
         tile_slen=2,
         prob_galaxy=0.0,
-        max_sources=2,
-        mean_sources=0.4,
-        min_sources=0,
+        max_sources_per_tile=2,
+        mean_sources_per_tile=0.4,
+        min_sources_per_tile=0,
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
@@ -133,6 +133,8 @@ class ImageDecoder(object):
         self.slen = slen
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
+        self.n_tiles_per_image = ((self.slen - (self.ptile_slen - 1) - 1) / self.tile_slen + 1)**2
+        self.n_tiles_per_image = int(np.floor(self.n_tiles_per_image))
         
         self.n_bands = n_bands
         self.background = background.to(device)
@@ -141,9 +143,9 @@ class ImageDecoder(object):
         assert self.background.shape[0] == self.n_bands
         # assert self.background.shape[1] == self.background.shape[2] == self.slen
 
-        self.max_sources = max_sources
-        self.mean_sources = mean_sources
-        self.min_sources = min_sources
+        self.max_sources_per_tile = max_sources_per_tile
+        self.mean_sources_per_tile = mean_sources_per_tile
+        self.min_sources_per_tile = min_sources_per_tile
         self.prob_galaxy = float(prob_galaxy)
         self.add_noise = add_noise
 
@@ -223,31 +225,31 @@ class ImageDecoder(object):
         # always poisson distributed.
 
         m = Poisson(
-            torch.full((1,), self.mean_sources, dtype=torch.float, device=device)
+            torch.full((1,), self.mean_sources_per_tile, dtype=torch.float, device=device)
         )
-        n_sources = m.sample([batch_size])
+        n_sources = m.sample([batch_size, self.n_tiles_per_image])
 
         # long() here is necessary because used for indexing and one_hot encoding.
-        n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
-        n_sources = n_sources.long().squeeze(1)
+        n_sources = n_sources.clamp(max=self.max_sources_per_tile, min=self.min_sources_per_tile)
+        n_sources = n_sources.long().squeeze(-1)
         return n_sources
 
     def _sample_locs(self, is_on_array, batch_size):
 
         # 2 = (x,y)
-        locs = torch.rand(batch_size, self.max_sources, 2, device=device)
-        locs *= is_on_array.unsqueeze(2)
+        locs = torch.rand(batch_size, self.n_tiles_per_image, self.max_sources_per_tile, 2, device=device)
+        locs *= is_on_array.unsqueeze(-1)
 
         return locs
 
     def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
         batch_size = n_sources.size(0)
-        uniform = torch.rand(batch_size, self.max_sources, device=device)
+        uniform = torch.rand(batch_size, self.n_tiles_per_image, self.max_sources_per_tile, device=device)
         galaxy_bool = uniform < self.prob_galaxy
         galaxy_bool = (galaxy_bool * is_on_array).float()
         star_bool = (1 - galaxy_bool) * is_on_array
-        n_galaxies = galaxy_bool.sum(1)
-        n_stars = star_bool.sum(1)
+        n_galaxies = galaxy_bool.sum(-1)
+        n_stars = star_bool.sum(-1)
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
         return n_galaxies, n_stars, galaxy_bool, star_bool
@@ -284,48 +286,48 @@ class ImageDecoder(object):
         """
         assert n_stars.shape[0] == batch_size
 
-        shape = (batch_size, self.max_sources)
+        shape = (batch_size, self.n_tiles_per_image, self.max_sources_per_tile)
         base_fluxes = self._draw_pareto_maxed(shape)
 
         if self.n_bands > 1:
             colors = (
                 torch.rand(
-                    batch_size, self.max_sources, self.n_bands - 1, device=device
+                    batch_size, self.n_tiles_per_image, self.max_sources_per_tile, self.n_bands - 1, device=device
                 )
                 * 0.15
                 + 0.3
             )
-            _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(2)
+            _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(-1)
 
-            fluxes = torch.cat((base_fluxes.unsqueeze(2), _fluxes), dim=2)
-            fluxes *= star_bool.unsqueeze(2)
+            fluxes = torch.cat((base_fluxes.unsqueeze(-1), _fluxes), dim=3)
+            fluxes *= star_bool.unsqueeze(-1)
         else:
-            fluxes = (base_fluxes * star_bool.float()).unsqueeze(2)
+            fluxes = (base_fluxes * star_bool.float()).unsqueeze(-1)
 
         return fluxes
 
     def _sample_galaxy_params(self, n_galaxies, galaxy_bool):
         # galaxy params are just Normal(0,1) variables.
 
-        assert len(n_galaxies.shape) == 1
+        assert len(n_galaxies.shape) == 2
         batch_size = n_galaxies.size(0)
 
         mean = torch.zeros(1, dtype=torch.float, device=device)
         std = torch.ones(1, dtype=torch.float, device=device)
         p_z = Normal(mean, std)
-        sample_shape = torch.tensor([batch_size, self.max_sources, self.latent_dim])
+        sample_shape = torch.tensor([batch_size, self.n_tiles_per_image, self.max_sources_per_tile, self.latent_dim])
         galaxy_params = p_z.rsample(sample_shape)
         galaxy_params = galaxy_params.reshape(
-            batch_size, self.max_sources, self.latent_dim
+            batch_size, self.n_tiles_per_image, self.max_sources_per_tile, self.latent_dim
         )
 
         # zero out excess according to galaxy_bool.
-        galaxy_params = galaxy_params * galaxy_bool.unsqueeze(2)
+        galaxy_params = galaxy_params * galaxy_bool.unsqueeze(-1)
         return galaxy_params
 
     def sample_parameters(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
+        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources_per_tile)
         locs = self._sample_locs(is_on_array, batch_size)
 
         n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
