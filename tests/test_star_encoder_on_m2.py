@@ -24,7 +24,7 @@ def trained_star_encoder_m2(decoder_setup, encoder_setup, device_setup, paths):
         n_bands=2,
         slen=100,
         n_images=200 if use_cuda else 1,
-        batch_size=20 if use_cuda else 1,
+        batch_size=10 if use_cuda else 1,
         max_sources=2500,
         mean_sources=1200,
         min_sources=0,

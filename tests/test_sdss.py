@@ -1,16 +1,21 @@
 import pytest
 from bliss.datasets import sdss
 import os
+import numpy as np
 
 
 class TestSDSS:
     def test_sdss(self, paths):
         sdss_dir = paths["data"].joinpath("sdss")
         sdss_obj = sdss.SloanDigitalSkySurvey(
-            sdss_dir, run=2583, camcol=2, field=136, bands=range(5)
+            sdss_dir, run=3900, camcol=6, field=269, bands=range(5)
         )
+        assert sdss_obj[0]["gain"][3] == pytest.approx(4.76)
 
-        assert sdss_obj[0]["gain"][3] == pytest.approx(5.195)
+        stars = sdss_obj.fetch_bright_stars()
+        assert len(stars) == 43
+        super_star = stars.sum(axis=0)
+        assert np.all(super_star[2, 2] + 1e-4 >= super_star)
 
         cache_file = sdss_dir.joinpath("2583/2/136/cache.pkl")
         if os.path.exists(cache_file):
