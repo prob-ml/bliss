@@ -15,3 +15,4 @@ celeste.egg-info/
 .tox
 *lightning_logs
 bin/run.sh
+*.pkl
