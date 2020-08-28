@@ -365,15 +365,15 @@ class ImageDecoder(object):
 
     def _render_one_source(self, locs, source):
         """
-        :param locs: is batch_size x len((x,y))
-        :param source: is a (batch_size, n_bands, slen, slen) tensor, which could either be a
+        :param locs: is n_ptiles x len((x,y))
+        :param source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
                         `expanded_psf` (psf repeated multiple times) for the case of of stars.
                         Or multiple galaxies in the case of galaxies.
-        :return: shape = (batch_size x n_bands x slen x slen)
+        :return: shape = (n_ptiles x n_bands x slen x slen)
         """
-        batch_size = locs.shape[0]
+        n_ptiles = locs.shape[0]
         assert locs.shape[1] == 2
-        assert source.shape[0] == batch_size
+        assert source.shape[0] == n_ptiles
         
         # scale so that they land in the tile within the padded tile 
         padding = (self.ptile_slen - self.tile_slen) / 2
@@ -381,37 +381,37 @@ class ImageDecoder(object):
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
         _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
-        grid_loc = _grid - locs[:, [1, 0]].view(batch_size, 1, 1, 2)
+        grid_loc = _grid - locs[:, [1, 0]].view(n_ptiles, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
     def render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
-        # locs: is (batch_size x max_num_stars x 2)
-        # fluxes: Is (batch_size x n_bands x max_stars)
-        # star_bool: Is (batch_size x max_stars)
+        # locs: is (n_ptiles x max_num_stars x 2)
+        # fluxes: Is (n_ptiles x n_bands x max_stars)
+        # star_bool: Is (n_ptiles x max_stars)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
         psf = self._get_psf()
-        batch_size = locs.shape[0]
+        n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
-        ptile_shape = (batch_size, self.n_bands, self.ptile_slen, self.ptile_slen)
+        ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
         ptile = torch.zeros(ptile_shape, device=device)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
-        assert fluxes.shape[0] == star_bool.shape[0] == batch_size
+        assert fluxes.shape[0] == star_bool.shape[0] == n_ptiles
         assert fluxes.shape[1] == star_bool.shape[1] == max_sources
         assert fluxes.shape[2] == psf.shape[0] == self.n_bands
 
         # all stars are just the PSF so we copy it.
-        expanded_psf = psf.expand(batch_size, self.n_bands, -1, -1)
+        expanded_psf = psf.expand(n_ptiles, self.n_bands, -1, -1)
 
-        # this loop plots each of the ith star in each of the (batch_size) images.
+        # this loop plots each of the ith star in each of the (n_ptiles) images.
         for n in range(max_sources):
             star_bool_n = star_bool[:, n]
             locs_n = locs[:, n, :]
             fluxes_n = fluxes[:, n, :] * star_bool_n.unsqueeze(1)
-            fluxes_n = fluxes_n.view(batch_size, self.n_bands, 1, 1)
+            fluxes_n = fluxes_n.view(n_ptiles, self.n_bands, 1, 1)
             one_star = self._render_one_source(locs_n, expanded_psf)
             ptile += one_star * fluxes_n
 
@@ -419,19 +419,19 @@ class ImageDecoder(object):
 
     def render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
-        batch_size = locs.shape[0]
+        n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
-        ptile_shape = (batch_size, self.n_bands, self.ptile_slen, self.ptile_slen)
+        ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
         ptile = torch.zeros(ptile_shape, device=device)
 
-        assert galaxy_params.shape[0] == galaxy_bool.shape[0] == batch_size
+        assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
         assert galaxy_params.shape[2] == self.latent_dim
 
         if galaxy_bool.sum() > 0 and self.galaxy_decoder is not None:
             z = galaxy_params.reshape(-1, self.latent_dim)
             gal, _ = self.galaxy_decoder.forward(z)
-            gal_shape = (batch_size, -1, self.n_bands, self.gal_slen, self.gal_slen)
+            gal_shape = (n_ptiles, -1, self.n_bands, self.gal_slen, self.gal_slen)
             single_galaxies = gal.reshape(gal_shape)
             for n in range(max_sources):
                 galaxy_bool_n = galaxy_bool[:, n]
@@ -443,21 +443,28 @@ class ImageDecoder(object):
 
         return ptile
 
-    def render_images(
+    def _render_ptiles(
         self, max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes
     ):
+        # n_sources: is (n_ptiles)
+        # locs: is (n_ptiles x max_sources x 2)
+        # galaxy_bool: Is (n_ptiles x max_sources)
+        # galaxy_params : is (n_ptiles x max_sources x galaxy_decoder.latent_dim)
+        # fluxes: Is (n_ptiles x max_sources x 2)
+
+        
         # explicit consistent shapes.
         assert len(n_sources.shape) == 1
         assert (n_sources <= max_sources).all()
-        batch_size = n_sources.shape[0]
+        n_ptiles = n_sources.shape[0]
         is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
 
-        locs = locs.reshape(batch_size, max_sources, 2)
-        galaxy_bool = galaxy_bool.reshape(batch_size, max_sources)
+        locs = locs.reshape(n_ptiles, max_sources, 2)
+        galaxy_bool = galaxy_bool.reshape(n_ptiles, max_sources)
         star_bool = (1 - galaxy_bool) * is_on_array
-        star_bool = star_bool.reshape(batch_size, max_sources)
-        galaxy_params = galaxy_params.reshape(batch_size, max_sources, self.latent_dim)
-        fluxes = fluxes.reshape(batch_size, max_sources, self.n_bands)
+        star_bool = star_bool.reshape(n_ptiles, max_sources)
+        galaxy_params = galaxy_params.reshape(n_ptiles, max_sources, self.latent_dim)
+        fluxes = fluxes.reshape(n_ptiles, max_sources, self.n_bands)
 
         # need n_sources because `*_locs` are not necessarily ordered.
         galaxies = self.render_multiple_galaxies_on_ptile(locs, galaxy_params, galaxy_bool)
@@ -472,3 +479,31 @@ class ImageDecoder(object):
             images = self._apply_noise(images)
 
         return images
+    
+    def render_ptiles(self, max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes): 
+        # n_sources: is (batchsize x n_tiles_per_image)
+        # locs: is (batchsize x n_tiles_per_image x max_sources x 2)
+        # galaxy_bool: Is (batchsize x n_tiles_per_image x max_sources)
+        # galaxy_params : is (batchsize x n_tiles_per_image x max_sources x galaxy_decoder.latent_dim)
+        # fluxes: Is (batchsize x n_tiles_per_image x max_sources x 2)
+        
+        # returns the ptiles in shape batchsize x n_tiles_per_image x ptile_slen x ptile_slen
+        
+        batch_size = n_sources.shape[0]
+        n_ptiles = batch_size * self.n_tiles_per_image
+        
+        # reshape parameters
+        n_sources_flattened = n_sources.reshape(n_ptiles)
+        locs_flattened = locs.reshape(n_ptiles, self.max_sources_per_tile, 2)  
+        galaxy_bool_flattened = galaxy_bool.reshape(n_ptiles, self.max_sources_per_tile)
+        galaxy_params_flattened = galaxy_params.reshape(n_ptiles, self.max_sources_per_tile, self.latent_dim)
+        fluxes_flattened = fluxes.reshape(n_ptiles, self.max_sources_per_tile, self.n_bands)
+        
+        image_ptiles = self._render_ptiles(max_sources,
+                                           n_sources_flattened, 
+                                           locs_flattened,
+                                           galaxy_bool_flattened,
+                                           galaxy_params_flattened,
+                                           fluxes_flattened)
+        return image_ptiles.reshape(batch_size, self.n_tiles_per_image, 
+                                    self.n_bands, self.ptile_slen, self.ptile_slen)
