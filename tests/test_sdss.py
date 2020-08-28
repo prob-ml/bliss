@@ -15,7 +15,6 @@ class TestSDSS:
         assert len(sdss_obj[0]["bright_stars"]) == 43
         super_star = sdss_obj[0]["bright_stars"].sum(axis=0)
         assert np.all(super_star[2, 2] + 1e-4 >= super_star)
-        print(super_star)
 
         cache_file = sdss_dir.joinpath("3900/6/269/cache.pkl")
         if os.path.exists(cache_file):
