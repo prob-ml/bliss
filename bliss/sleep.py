@@ -366,8 +366,7 @@ class SleepPhase(pl.LightningModule):
 
     def make_validation_plots(self, outputs):
         # add some images to tensorboard for validating location/counts.
-        # Only use 5 images in the last batch
-        n_samples = min(5, len(outputs[-1]["log"]["n_sources"]))
+        n_samples = min(10, len(outputs[-1]["log"]["n_sources"]))
         assert n_samples > 1
 
         # these are per tile
@@ -383,19 +382,18 @@ class SleepPhase(pl.LightningModule):
         )
 
         images = outputs[-1]["log"]["images"][:n_samples]
-        fig, axes = plt.subplots(
-            nrows=n_samples,
-            ncols=3,
-            figsize=(
-                20,
-                20,
-            ),
-        )
+
+        figsize = (4 * n_samples, 12)
+        fig, axes = plt.subplots(nrows=3, ncols=n_samples, figsize=figsize)
 
         for i in range(n_samples):
-            true_ax = axes[i, 0]
-            recon_ax = axes[i, 1]
-            res_ax = axes[i, 2]
+            true_ax = axes[0, i]
+            recon_ax = axes[1, i]
+            res_ax = axes[2, i]
+
+            true_ax.set_aspect("equal")
+            recon_ax.set_aspect("equal")
+            res_ax.set_aspect("equal")
 
             image = images[i]
 
@@ -465,7 +463,8 @@ class SleepPhase(pl.LightningModule):
                 plotting.plot_image(fig, recon_ax, np.zeros((slen, slen)))
                 plotting.plot_image(fig, res_ax, np.zeros((slen, slen)))
 
-        plt.subplots_adjust(hspace=0.25, wspace=-0.2)
+        plt.subplots_adjust(hspace=0.15, wspace=0.2)
+        # plt.tight_layout(h_pad=-1 - 0.0)
         if self.logger:
             self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
         plt.close(fig)

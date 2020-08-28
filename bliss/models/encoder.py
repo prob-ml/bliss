@@ -286,7 +286,8 @@ class ImageEncoder(nn.Module):
         return indx_mats, curr_indx
 
     def _get_hidden_indices(self):
-        """Setup the indices corresponding to entries in h, these are cached since same for all h."""
+        """Setup the indices corresponding to entries in h, these are cached since
+        same for all h."""
 
         indx_mats = self._create_indx_mats()  # same order as self.variational_params
         prob_n_source_indx = torch.zeros(
