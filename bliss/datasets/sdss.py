@@ -4,44 +4,69 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
+from astropy.wcs import WCS
 
 
 class SloanDigitalSkySurvey(Dataset):
-    def __init__(self, sdss_dir, run=3900, camcol=6, field=269, bands=[2]):
+    def __init__(self, sdss_dir, run=3900, camcol=6, field=None, bands=[2]):
         super(SloanDigitalSkySurvey, self).__init__()
 
         self.sdss_path = pathlib.Path(sdss_dir)
-        self.rcfgs = []
+        self.rcfgcs = []
         self.bands = bands
 
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
         camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
         pf_path = camcol_path.joinpath(pf_file)
-        pf_fits = fits.getdata(pf_path)
+        self.pf_fits = fits.getdata(pf_path)
 
-        fieldnums = pf_fits["FIELD"]
-        fieldgains = pf_fits["GAIN"]
+        fieldnums = self.pf_fits["FIELD"]
+        fieldgains = self.pf_fits["GAIN"]
 
         # get desired field
         for i in range(len(fieldnums)):
             _field = fieldnums[i]
             gain = fieldgains[i]
-            if _field == field:
-                self.rcfgs.append((run, camcol, field, gain))
+            if (not field) or _field == field:
+                # load the catalog distributed with SDSS
+                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, field)
+                po_path = camcol_path.joinpath(str(field), po_file)
+                po_fits = fits.getdata(po_path)
 
-        self.items = [None] * len(self.rcfgs)
+                self.rcfgcs.append((run, camcol, field, gain, po_fits))
+
+        self.items = [None] * len(self.rcfgcs)
 
     def __len__(self):
-        return len(self.rcfgs)
+        return len(self.rcfgcs)
 
     def __getitem__(self, idx):
         if not self.items[idx]:
             self.items[idx] = self.get_from_disk(idx)
         return self.items[idx]
 
+    def fetch_bright_stars(self, po_fits, img, wcs):
+        is_star = po_fits["objc_type"] == 6
+        is_bright = po_fits["psfflux"].sum(axis=1) > 100
+        is_thing = po_fits["thing_id"] != -1
+        is_target = is_star & is_bright & is_thing
+        ras = po_fits["ra"][is_target]
+        decs = po_fits["dec"][is_target]
+
+        band = 2
+        stamps = []
+        for (ra, dec, f) in zip(ras, decs, po_fits["thing_id"][is_target]):
+            # pt = "time" in pixel coordinates
+            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
+            pt, pr = int(pt + 0.5), int(pr + 0.5)
+            stamp = img[(pr - 2) : (pr + 3), (pt - 2) : (pt + 3)]
+            stamps.append(stamp)
+
+        return np.asarray(stamps)
+
     def get_from_disk(self, idx):
-        run, camcol, field, gain = self.rcfgs[idx]
+        run, camcol, field, gain, po_fits = self.rcfgcs[idx]
 
         camcol_dir = self.sdss_path.joinpath(str(run), str(camcol))
         field_dir = camcol_dir.joinpath(str(field))
@@ -51,6 +76,7 @@ class SloanDigitalSkySurvey(Dataset):
         nelec_per_nmgy_list = []
         calibration_list = []
         gain_list = []
+        wcs_list = []
 
         cache_path = field_dir.joinpath("cache.pkl")
 
@@ -95,7 +121,12 @@ class SloanDigitalSkySurvey(Dataset):
             nelec_per_nmgy_list.append(nelec_per_nmgy)
             calibration_list.append(calibration)
 
+            wcs = WCS(frame[0])
+            wcs_list.append(wcs)
+
             frame.close()
+
+        stamps = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2])
 
         ret = {
             "image": np.stack(image_list),
@@ -103,6 +134,8 @@ class SloanDigitalSkySurvey(Dataset):
             "nelec_per_nmgy": np.stack(nelec_per_nmgy_list),
             "gain": np.stack(gain_list),
             "calibration": np.stack(calibration_list),
+            "wcs": wcs_list,
+            "bright_stars": stamps,
         }
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
