@@ -144,7 +144,7 @@ class ImageDecoder(object):
 
         assert len(background.shape) == 3
         assert self.background.shape[0] == self.n_bands
-        # assert self.background.shape[1] == self.background.shape[2] == self.slen
+        assert self.background.shape[1] == self.background.shape[2] == self.slen
 
         self.max_sources_per_tile = max_sources_per_tile
         self.mean_sources_per_tile = mean_sources_per_tile
@@ -476,11 +476,6 @@ class ImageDecoder(object):
         # shape = (n_images x n_bands x slen x slen)
         images = galaxies + stars
 
-        # add background and noise
-        images = images + self.background.unsqueeze(0)
-        if self.add_noise:
-            images = self._apply_noise(images)
-
         return images
     
     def render_ptiles(self, max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes): 
@@ -508,6 +503,7 @@ class ImageDecoder(object):
                                            galaxy_bool_flattened,
                                            galaxy_params_flattened,
                                            fluxes_flattened)
+        
         return image_ptiles.reshape(batch_size, self.n_tiles_per_image, 
                                     self.n_bands, self.ptile_slen, self.ptile_slen)
     
@@ -515,13 +511,21 @@ class ImageDecoder(object):
         self, max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes
     ):
         
-        image_ptiles = self.render_ptiles(self.tile_slen, max_sources, n_sources,
+        image_ptiles = self.render_ptiles(max_sources, n_sources,
                                           locs, galaxy_bool, galaxy_params, fluxes)
         
-        return construct_full_image_from_tiles(image_ptiles)
+        
+        images = construct_full_image_from_ptiles(image_ptiles)
+        
+        # add background and noise
+        images = images + self.background.unsqueeze(0)
+        if self.add_noise:
+            images = self._apply_noise(images)
+
+        return images
  
     
-def construct_full_image_from_tiles(image_ptiles): 
+def construct_full_image_from_ptiles(image_ptiles): 
     # image_tiles is (batchsize, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
     batchsize = image_ptiles.shape[0]
     n_tiles_per_image = image_ptiles.shape[1]
@@ -540,7 +544,7 @@ def construct_full_image_from_tiles(image_ptiles):
     # are divisible by 3. 
     n_tiles_pad = 3 - (n_tiles1 % 3)
     zero_pads1 = torch.zeros(batchsize, n_tiles_pad, n_tiles1, n_bands, ptile_slen, ptile_slen, device = device)
-    zero_pads2 = torch.zeros(batchsize, n_tiles1+1, n_tiles_pad, n_bands, ptile_slen, ptile_slen, device = device)
+    zero_pads2 = torch.zeros(batchsize, n_tiles1+n_tiles_pad, n_tiles_pad, n_bands, ptile_slen, ptile_slen, device = device)
     image_tiles_4d = torch.cat((image_tiles_4d, zero_pads1), dim = 1)
     image_tiles_4d = torch.cat((image_tiles_4d, zero_pads2), dim = 2)
     
@@ -566,4 +570,4 @@ def construct_full_image_from_tiles(image_ptiles):
                 image_tile_cols.permute(0, 3, 1, 4, 2, 5).reshape(batchsize, n_bands, canvas_len, canvas_len)
             
     # trim to original image size
-    return canvas[:, :, tile_slen:(n_tiles1 * tile_slen), tile_slen:(n_tiles1 * tile_slen)]
+    return canvas[:, :, tile_slen:((n_tiles1+1) * tile_slen), tile_slen:((n_tiles1+1) * tile_slen)]
