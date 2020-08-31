@@ -43,22 +43,18 @@ def _sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).squeeze()
 
 
-def _get_tile_coords(image_xlen, image_ylen, ptile_slen, tile_slen):
+def _get_tile_coords(slen, tile_slen):
     """
-    This records (x0, x1) indices each image padded tile comes from.
+    This records (x0, x1) indices each image tile comes from.
 
-    :param image_xlen: The x side length of the image in pixels.
-    :param image_ylen: The y side length of the image in pixels.
-    :param ptile_slen: The side length of the padded tile in pixels.
     :return: tile_coords, a torch.LongTensor
     """
 
-    nx_ptiles = ((image_xlen - ptile_slen) // tile_slen) + 1
-    ny_ptiles = ((image_ylen - ptile_slen) // tile_slen) + 1
-    n_ptiles = nx_ptiles * ny_ptiles
+    nptiles1 = int(slen / tile_slen)
+    n_ptiles = nptiles1**2
 
     def return_coords(i):
-        return [(i // ny_ptiles) * tile_slen, (i % ny_ptiles) * tile_slen]
+        return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
 
     tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
     tile_coords = tile_coords.long().to(device)
@@ -66,17 +62,17 @@ def _get_tile_coords(image_xlen, image_ylen, ptile_slen, tile_slen):
     return tile_coords
 
 def _get_full_params_from_sampled_params(
-    tile_coords,
     slen,
-    ptile_slen,
-    edge_padding,
+    tile_slen,
     tile_is_on_array_sampled,
     tile_locs_sampled,
     *tile_params_sampled
 ):
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
-
+    
+    tile_coords = _get_tile_coords(slen, tile_slen)
+    
     # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
     assert len(tile_locs_sampled.shape) == 4
     single_image_n_ptiles = tile_coords.shape[0]
@@ -92,9 +88,8 @@ def _get_full_params_from_sampled_params(
     # recenter and renormalize locations.
     tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
     tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)
-    scale = ptile_slen - 2 * edge_padding
-    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float() + edge_padding - 0.5
-    _locs = (tile_locs * scale + bias) / (slen - 1) * tile_is_on_array.unsqueeze(2)
+    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float() - 0.5
+    _locs = ((tile_locs * tile_slen + bias) / slen) * tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip
     locs = _locs.view(n_samples, -1, 2)
