@@ -542,7 +542,7 @@ class SleepObjective(object):
         weight_decay: tuple,
         model_dir: str,
         metrics_callback,
-        monitor="val_loss",
+        monitor,
         gpus=0,
     ):
         self.dataset = dataset

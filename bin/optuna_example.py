@@ -119,10 +119,17 @@ if __name__ == "__main__":
     parser = add_path_args(parser)
 
     # model_dir
-    parser.add_argument("--model_dir", type=str, required=True)
+    parser.add_argument(
+        "--model_dir", type=str, required=True, help="what path to store logs"
+    )
 
     # monitor
-    parser.add_argument("--monitor", type=str, required=True)
+    parser.add_argument(
+        "--monitor",
+        type=str,
+        required=True,
+        help="which value from validation logs to monitor for hyperparameter selection",
+    )
 
     pargs = parser.parse_args()
     main(pargs)
