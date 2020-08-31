@@ -21,6 +21,8 @@ class TestSourceEncoder:
 
         # get encoder
         star_encoder = encoder.ImageEncoder(
+            enc_conv_c=20,
+            enc_hidden=256,
             slen=101,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
@@ -142,6 +144,8 @@ class TestSourceEncoder:
 
         # get encoder
         star_encoder = encoder.ImageEncoder(
+            enc_conv_c=20,
+            enc_hidden=256,
             slen=101,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,

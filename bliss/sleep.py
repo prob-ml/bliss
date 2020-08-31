@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 from itertools import permutations
@@ -13,6 +14,9 @@ import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder
+
+import optuna
+from optuna.integration import PyTorchLightningPruningCallback
 
 
 def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
@@ -222,7 +226,6 @@ class SleepPhase(pl.LightningModule):
         ) = self.image_encoder.get_params_in_tiles(
             slen, true_locs, true_galaxy_params, true_log_fluxes, true_galaxy_bool
         )
-
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)
 
@@ -458,6 +461,7 @@ class SleepPhase(pl.LightningModule):
         avg_galaxy_bool_loss /= tiles_per_epoch
 
         logs = {
+            "val_loss": avg_loss,
             "counter_loss": avg_counter_loss,
             "locs_loss": avg_locs_loss,
             "galaxy_params_loss": avg_galaxy_params_loss,
@@ -526,3 +530,90 @@ class SleepPhase(pl.LightningModule):
         }
 
         return cls(dataset, encoder_kwargs, **sleep_kwargs)
+
+
+class SleepObjective(object):
+    def __init__(
+        self,
+        dataset,
+        encoder_kwargs: dict,
+        max_epochs: int,
+        lr: tuple,
+        weight_decay: tuple,
+        model_dir: str,
+        metrics_callback,
+        monitor,
+        gpus=0,
+    ):
+        self.dataset = dataset
+
+        assert type(encoder_kwargs["enc_conv_c"]) is tuple
+        assert type(encoder_kwargs["enc_hidden"]) is tuple
+        assert (
+            len(encoder_kwargs["enc_conv_c"]) == 3
+            and len(encoder_kwargs["enc_hidden"]) == 3
+        )
+        self.encoder_kwargs = encoder_kwargs
+        self.enc_conv_c_min = self.encoder_kwargs["enc_conv_c"][0]
+        self.enc_conv_c_max = self.encoder_kwargs["enc_conv_c"][1]
+        self.enc_conv_c_int = self.encoder_kwargs["enc_conv_c"][2]
+
+        self.enc_hidden_min = self.encoder_kwargs["enc_hidden"][0]
+        self.enc_hidden_max = self.encoder_kwargs["enc_hidden"][1]
+        self.enc_hidden_int = self.encoder_kwargs["enc_hidden"][2]
+
+        assert type(lr) is tuple
+        assert type(weight_decay) is tuple
+        assert len(lr) == 2 and len(weight_decay) == 2
+        self.lr = lr
+        self.weight_decay = weight_decay
+
+        self.max_epochs = max_epochs
+        self.model_dir = model_dir
+        self.metrics_callback = metrics_callback
+        self.monitor = monitor
+        self.gpus = gpus
+
+    def __call__(self, trial):
+        self.encoder_kwargs["enc_conv_c"] = trial.suggest_int(
+            "enc_conv_c",
+            self.enc_conv_c_min,
+            self.enc_conv_c_max,
+            self.enc_conv_c_int,
+        )
+
+        self.encoder_kwargs["enc_hidden"] = trial.suggest_int(
+            "enc_hidden",
+            self.enc_hidden_min,
+            self.enc_hidden_max,
+            self.enc_hidden_int,
+        )
+
+        lr = trial.suggest_loguniform("learning rate", self.lr[0], self.lr[1])
+        weight_decay = trial.suggest_loguniform(
+            "weight_decay", self.weight_decay[0], self.weight_decay[1]
+        )
+
+        checkpoint_callback = pl.callbacks.ModelCheckpoint(
+            self.model_dir.joinpath("trial_{}".format(trial.number), "{epoch}"),
+            monitor="val_loss",
+        )
+
+        model = SleepPhase(self.dataset, self.encoder_kwargs, lr, weight_decay).to(
+            device
+        )
+
+        trainer = pl.Trainer(
+            logger=False,
+            gpus=self.gpus,
+            checkpoint_callback=checkpoint_callback,
+            max_epochs=self.max_epochs,
+            callbacks=[self.metrics_callback],
+            early_stop_callback=PyTorchLightningPruningCallback(
+                trial, monitor=self.monitor
+            ),
+        )
+
+        trainer.fit(model)
+
+        return self.metrics_callback.metrics[-1][self.monitor].item()

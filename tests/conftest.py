@@ -170,6 +170,7 @@ def paths():
     return {
         "root": root_path,
         "data": root_path.joinpath("data"),
+        "model_dir": root_path.joinpath("trials_result"),
     }
 
 
