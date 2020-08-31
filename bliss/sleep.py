@@ -383,17 +383,13 @@ class SleepPhase(pl.LightningModule):
 
         images = outputs[-1]["log"]["images"][:n_samples]
 
-        figsize = (4 * n_samples, 12)
-        fig, axes = plt.subplots(nrows=3, ncols=n_samples, figsize=figsize)
+        figsize = (12, 4 * n_samples)
+        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
 
         for i in range(n_samples):
-            true_ax = axes[0, i]
-            recon_ax = axes[1, i]
-            res_ax = axes[2, i]
-
-            true_ax.set_aspect("equal")
-            recon_ax.set_aspect("equal")
-            res_ax.set_aspect("equal")
+            true_ax = axes[i, 0]
+            recon_ax = axes[i, 1]
+            res_ax = axes[i, 2]
 
             image = images[i]
 
@@ -463,8 +459,7 @@ class SleepPhase(pl.LightningModule):
                 plotting.plot_image(fig, recon_ax, np.zeros((slen, slen)))
                 plotting.plot_image(fig, res_ax, np.zeros((slen, slen)))
 
-        plt.subplots_adjust(hspace=0.15, wspace=0.2)
-        # plt.tight_layout(h_pad=-1 - 0.0)
+        plt.subplots_adjust(hspace=0.2, wspace=0.4)
         if self.logger:
             self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
         plt.close(fig)
