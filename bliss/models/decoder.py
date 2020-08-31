@@ -191,7 +191,8 @@ class ImageDecoder(object):
         return psf[:, l_indx:u_indx, l_indx:u_indx]
 
     def _expand_psf(self, psf):
-        """Pad the psf with zeros so that it is size ptile_slen,
+        """
+        Pad the psf with zeros so that it is size ptile_slen,
         """
 
         _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1

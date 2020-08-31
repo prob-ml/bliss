@@ -21,6 +21,8 @@ class TestSourceEncoder:
 
         # get encoder
         star_encoder = encoder.ImageEncoder(
+            enc_conv_c=20,
+            enc_hidden=256,
             slen=101,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
@@ -95,13 +97,17 @@ class TestSourceEncoder:
                     assert torch.all(
                         pred["loc_mean"][i, :n_stars_i].flatten()
                         == torch.sigmoid(h_out)[
-                            i, locs_mean_indx_mat[n_stars_i][: (2 * n_stars_i)],
+                            i,
+                            locs_mean_indx_mat[n_stars_i][: (2 * n_stars_i)],
                         ]
                     )
 
                     assert torch.all(
                         pred["loc_logvar"][i, :n_stars_i].flatten()
-                        == h_out[i, locs_var_indx_mat[n_stars_i][: (2 * n_stars_i)],]
+                        == h_out[
+                            i,
+                            locs_var_indx_mat[n_stars_i][: (2 * n_stars_i)],
+                        ]
                     )
 
                     assert torch.all(
@@ -126,8 +132,7 @@ class TestSourceEncoder:
                     )
 
     def test_forward_to_hidden2d(self, device_setup):
-        """Consistency check of using forward vs get_var_params
-        """
+        """Consistency check of using forward vs get_var_params"""
         device = device_setup.device
 
         n_image_tiles = 30
@@ -139,6 +144,8 @@ class TestSourceEncoder:
 
         # get encoder
         star_encoder = encoder.ImageEncoder(
+            enc_conv_c=20,
+            enc_hidden=256,
             slen=101,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
