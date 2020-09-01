@@ -433,6 +433,13 @@ class ImageEncoder(nn.Module):
         )
 
     def _cache_tiling_conv_weights(self):
+        # this function sets up weights for the "identity" convolution
+        # used to divide a full-image into padded tiles. 
+        # (see get_image_in_tiles). 
+        
+        # It has a for-loop, but only needs to be set up once. 
+        # These weights are set up and  cached during the __init__. 
+        
         ptile_slen2 = self.ptile_slen ** 2
         self.tile_conv_weights = torch.zeros(
             ptile_slen2 * self.n_bands,
@@ -449,6 +456,9 @@ class ImageEncoder(nn.Module):
                 ] = 1
 
     def get_images_in_tiles(self, images):
+        # divide a full-image into padded tiles using conv2d
+        # and weights cached in `_cache_tiling_conv_weights`. 
+        
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
 

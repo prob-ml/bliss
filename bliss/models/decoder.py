@@ -128,30 +128,41 @@ class ImageDecoder(object):
         alpha=0.5,
         add_noise=True,
     ):
-
-        self.slen = slen
+        
+        # side-length in pixels of an image (image is assumed to be square)
+        self.slen = slen 
+        
+        # side-length of an image tile. 
+        # latent variables (locations, fluxes, etc) are drawn per-tile
         self.tile_slen = tile_slen
-        self.ptile_slen = 3 * tile_slen
         assert (self.slen % self.tile_slen) == 0,\
             'we assume that the tiles paritition and cover the image.' + \
             ' So slen must be divisible by tile_slen'
         
+        # images are first rendered on *padded* tiles (aka ptiles). 
+        # the padded tile consists of the tile and its neighboring tiles
+        self.ptile_slen = 3 * tile_slen
+        
+        # number of tiles per image
         self.n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         self.n_tiles_per_image = int(self.n_tiles_per_image)
         
-        self.n_bands = n_bands
-        self.background = background.to(device)
+        self.n_bands = n_bands # number of bands
+        self.background = background.to(device) # sky background
 
         assert len(background.shape) == 3
         assert self.background.shape[0] == self.n_bands
         assert self.background.shape[1] == self.background.shape[2] == self.slen
-
+        
+        # per-tile prior parameters on number (and type) of sources
         self.max_sources_per_tile = max_sources_per_tile
         self.mean_sources_per_tile = mean_sources_per_tile
         self.min_sources_per_tile = min_sources_per_tile
         self.prob_galaxy = float(prob_galaxy)
+        
         self.add_noise = add_noise
-
+        
+        # galaxy decoder
         self.galaxy_decoder = galaxy_decoder
         self.latent_dim = 8
         self.gal_slen = 51
@@ -160,14 +171,16 @@ class ImageDecoder(object):
             self.latent_dim = self.galaxy_decoder.latent_dim
             assert self.galaxy_decoder.n_bands == self.n_bands
 
-        # prior parameters
+        # prior parameters on fluxes
         self.f_min = f_min
         self.f_max = f_max
         self.alpha = alpha  # pareto parameter.
-
+        
+        # caching the underlying 
+        # coordinates on which we simulate sources
         self.cached_grid = get_mgrid(self.ptile_slen)
 
-        # load psf_params
+        # load psf model
         self.power_law_psf = PowerLawPSF(init_psf_params.clone())
 
     def _trim_psf(self, psf):
@@ -226,8 +239,10 @@ class ImageDecoder(object):
             return self._trim_psf(psf)
 
     def _sample_n_sources(self, batch_size):
+        # returns number of sources for each batch x tile
+        # output dimension is batchsize x n_tiles_per_image
+        
         # always poisson distributed.
-
         m = Poisson(
             torch.full((1,), self.mean_sources_per_tile, dtype=torch.float, device=device)
         )
@@ -239,7 +254,8 @@ class ImageDecoder(object):
         return n_sources
 
     def _sample_locs(self, is_on_array, batch_size):
-
+        # output dimension is batchsize x n_tiles_per_image x max_sources_per_tile x 2
+        
         # 2 = (x,y)
         locs = torch.rand(batch_size, self.n_tiles_per_image, self.max_sources_per_tile, 2, device=device)
         locs *= is_on_array.unsqueeze(-1)
@@ -247,6 +263,9 @@ class ImageDecoder(object):
         return locs
 
     def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
+        # the counts returned (n_galaxies, n_stars) are of shape (batch_size x n_tiles_per_image)
+        # the booleans returned (galaxy_bool, star_bool) are of shape (batch_size x n_tiles_per_image x max_detections)
+        
         batch_size = n_sources.size(0)
         uniform = torch.rand(batch_size, self.n_tiles_per_image, self.max_sources_per_tile, device=device)
         galaxy_bool = uniform < self.prob_galaxy
@@ -286,7 +305,7 @@ class ImageDecoder(object):
     def _sample_fluxes(self, n_stars, star_bool, batch_size):
         """
 
-        :return: fluxes, a shape (batch_size x max_sources x n_bands) tensor
+        :return: fluxes, a shape (batch_size x self.max_sources_per_tile x max_sources x n_bands) tensor
         """
         assert n_stars.shape[0] == batch_size
 
@@ -456,7 +475,8 @@ class ImageDecoder(object):
         # galaxy_params : is (n_ptiles x max_sources x galaxy_decoder.latent_dim)
         # fluxes: Is (n_ptiles x max_sources x 2)
 
-        
+        # returns the ptiles in shape n_ptiles x n_bands x ptile_slen x ptile_slen
+
         # explicit consistent shapes.
         assert len(n_sources.shape) == 1
         assert (n_sources <= max_sources).all()
@@ -512,6 +532,7 @@ class ImageDecoder(object):
         self, max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes
     ):
         # constructs the full slen x slen image
+        
         # n_sources: is (batchsize x n_tiles_per_image)
         # locs: is (batchsize x n_tiles_per_image x max_sources x 2)
         # galaxy_bool: Is (batchsize x n_tiles_per_image x max_sources)
