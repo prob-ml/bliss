@@ -88,7 +88,7 @@ def _get_full_params_from_sampled_params(
     # recenter and renormalize locations.
     tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
     tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)
-    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float() - 0.5
+    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float() 
     _locs = ((tile_locs * tile_slen + bias) / slen) * tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip

@@ -474,7 +474,7 @@ class ImageDecoder(object):
         galaxies = self.render_multiple_galaxies_on_ptile(locs, galaxy_params, galaxy_bool)
         stars = self.render_multiple_stars_on_ptile(locs, fluxes, star_bool)
 
-        # shape = (n_images x n_bands x slen x slen)
+        # shape = (n_ptiles x n_bands x slen x slen)
         images = galaxies + stars
 
         return images
@@ -486,7 +486,7 @@ class ImageDecoder(object):
         # galaxy_params : is (batchsize x n_tiles_per_image x max_sources x galaxy_decoder.latent_dim)
         # fluxes: Is (batchsize x n_tiles_per_image x max_sources x 2)
         
-        # returns the ptiles in shape batchsize x n_tiles_per_image x ptile_slen x ptile_slen
+        # returns the ptiles in shape batchsize x n_tiles_per_image x n_bands x ptile_slen x ptile_slen
         
         batch_size = n_sources.shape[0]
         n_ptiles = batch_size * self.n_tiles_per_image
@@ -511,11 +511,21 @@ class ImageDecoder(object):
     def render_images(
         self, max_sources, n_sources, locs, galaxy_bool, galaxy_params, fluxes
     ):
+        # constructs the full slen x slen image
+        # n_sources: is (batchsize x n_tiles_per_image)
+        # locs: is (batchsize x n_tiles_per_image x max_sources x 2)
+        # galaxy_bool: Is (batchsize x n_tiles_per_image x max_sources)
+        # galaxy_params : is (batchsize x n_tiles_per_image x max_sources x galaxy_decoder.latent_dim)
+        # fluxes: Is (batchsize x n_tiles_per_image x max_sources x 2)
         
+        # returns the full image in shape batchsize x n_bands x ptile_slen x ptile_slen
+
+        # first render the padded tiles
         image_ptiles = self.render_ptiles(max_sources, n_sources,
                                           locs, galaxy_bool, galaxy_params, fluxes)
         
         
+        # render the image from padded tiles
         images = construct_full_image_from_ptiles(image_ptiles)
         
         # add background and noise
