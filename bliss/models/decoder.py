@@ -10,7 +10,7 @@ from torch.distributions import Poisson, Normal
 
 
 from .. import device
-from .encoder import get_is_on_from_n_sources
+from .encoder import ImageEncoder
 
 
 def get_mgrid(slen):
@@ -326,7 +326,9 @@ class ImageDecoder(object):
 
     def sample_parameters(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
+        is_on_array = ImageEncoder.get_is_on_from_n_sources(
+            n_sources, self.max_sources
+        ).to(device)
         locs = self._sample_locs(is_on_array, batch_size)
 
         n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
@@ -446,7 +448,9 @@ class ImageDecoder(object):
         assert len(n_sources.shape) == 1
         assert (n_sources <= max_sources).all()
         batch_size = n_sources.shape[0]
-        is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
+        is_on_array = ImageEncoder.get_is_on_from_n_sources(n_sources, max_sources).to(
+            device
+        )
 
         locs = locs.reshape(batch_size, max_sources, 2)
         galaxy_bool = galaxy_bool.reshape(batch_size, max_sources)

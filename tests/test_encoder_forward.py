@@ -5,13 +5,12 @@ from bliss.models import encoder
 
 
 class TestSourceEncoder:
-    def test_forward(self, device_setup):
+    def test_forward(self):
         """
         * Test that forward returns the correct pattern of zeros.
         * Test that variational parameters inside h agree with those returned from forward.
         * Test everything works with n_stars=None in forward.
         """
-        device = device_setup.device
 
         n_image_tiles = 30
         max_detections = 4
@@ -29,7 +28,7 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
             n_galaxy_params=8,
-        ).to(device)
+        )
 
         with torch.no_grad():
             star_encoder.eval()
@@ -37,13 +36,11 @@ class TestSourceEncoder:
             # simulate image padded tiles
             image_ptiles = (
                 torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0
-            ).to(device)
-
-            n_star_per_tile = (
-                torch.from_numpy(np.random.choice(max_detections, n_image_tiles))
-                .type(torch.LongTensor)
-                .to(device)
             )
+
+            n_star_per_tile = torch.from_numpy(
+                np.random.choice(max_detections, n_image_tiles)
+            ).type(torch.LongTensor)
 
             pred = star_encoder.forward(image_ptiles, n_star_per_tile)
 
@@ -66,7 +63,7 @@ class TestSourceEncoder:
                 ).all()
 
             # check pattern of zeros
-            is_on_array = encoder.get_is_on_from_n_sources(
+            is_on_array = star_encoder.get_is_on_from_n_sources(
                 n_star_per_tile, star_encoder.max_detections
             )
             _loc_mean = pred["loc_mean"] * is_on_array.unsqueeze(2).float()
@@ -131,9 +128,8 @@ class TestSourceEncoder:
                         == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
                     )
 
-    def test_forward_to_hidden2d(self, device_setup):
+    def test_forward_to_hidden2d(self):
         """Consistency check of using forward vs get_var_params"""
-        device = device_setup.device
 
         n_image_tiles = 30
         max_detections = 4
@@ -152,17 +148,14 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
             n_galaxy_params=8,
-        ).to(device)
+        )
 
         with torch.no_grad():
             star_encoder.eval()
 
             # simulate image padded tiles
             image_ptiles = (
-                torch.randn(
-                    n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device
-                )
-                + 10.0
+                torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0
             )
             n_star_per_tile_sampled = torch.from_numpy(
                 np.random.choice(max_detections, (n_samples, n_image_tiles))
