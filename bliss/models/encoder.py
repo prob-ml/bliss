@@ -160,9 +160,11 @@ class ImageEncoder(nn.Module):
         self.ptile_slen = ptile_slen
         self.tile_slen = tile_slen
         self.edge_padding = (ptile_slen - tile_slen) / 2
+        assert self.edge_padding % 1 == 0, 'amount of padding should be an integer'
+        self.edge_padding = int(self.edge_padding)
 
-        self.tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.tile_slen)
-        self.n_tiles = self.tile_coords.size(0)
+        self.tile_coords = _get_tile_coords(slen, self.tile_slen)
+        self.n_tiles_per_image = self.tile_coords.size(0)
 
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
@@ -408,30 +410,6 @@ class ImageEncoder(nn.Module):
 
         return var_params
 
-    def _get_tile_coords(self, slen):
-        tile_coords = self.tile_coords
-
-        # handle cases where images passed in are not of original size.
-        if not (slen == self.slen):
-            tile_coords = _get_tile_coords(slen, slen, self.ptile_slen, self.tile_slen)
-        return tile_coords
-
-    def get_params_in_tiles(self, slen, locs, *params):
-        max_sources = locs.size(1)
-        assert self.max_detections <= max_sources, "Wasteful, lower max_detections."
-
-        tile_coords = self._get_tile_coords(slen)
-
-        return _get_params_in_tiles(
-            tile_coords,
-            self.max_detections,
-            slen,
-            self.edge_padding,
-            self.ptile_slen,
-            locs,
-            *params
-        )
-
     def _cache_tiling_conv_weights(self):
         # this function sets up weights for the "identity" convolution
         # used to divide a full-image into padded tiles. 
@@ -463,7 +441,7 @@ class ImageEncoder(nn.Module):
         assert images.size(1) == self.n_bands
 
         output = F.conv2d(
-            images, self.tile_conv_weights, stride=self.tile_slen
+            images, self.tile_conv_weights, stride=self.tile_slen, padding=self.edge_padding
         ).permute([0, 2, 3, 1])
 
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)

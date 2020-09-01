@@ -32,7 +32,6 @@ class SimulatedDataset(IterableDataset):
         params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
 
         images = self.image_decoder.render_images(
-            self.image_decoder.max_sources,
             params["n_sources"],
             params["locs"],
             params["galaxy_bool"],
