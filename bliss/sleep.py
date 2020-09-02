@@ -369,11 +369,10 @@ class SleepPhase(pl.LightningModule):
         # add some images to tensorboard for validating location/counts.
         n_samples = min(10, len(outputs[-1]["log"]["n_sources"]))
         assert n_samples > 1
-
-        # these are per tile
         true_n_sources_on_tiles = outputs[-1]["log"]["n_sources"][:n_samples]
         true_locs_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
-        true_galaxy_bools_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
+        true_galaxy_bools_on_tiles = outputs[-1]["log"]["galaxy_bool"][:n_samples]
+        images = outputs[-1]["log"]["images"][:n_samples]
 
         # convert to full image
         true_n_sources, true_locs, true_galaxy_bools = encoder._get_full_params_from_sampled_params(
@@ -383,8 +382,6 @@ class SleepPhase(pl.LightningModule):
             true_locs_on_tiles,
             true_galaxy_bools_on_tiles
         )
-
-        images = outputs[-1]["log"]["images"][:n_samples]
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
@@ -429,22 +426,22 @@ class SleepPhase(pl.LightningModule):
                 tile_galaxy_bool,
             )
 
-            # round up true parameters.
-            max_sources = true_loc.shape[1]
-            is_on_array = encoder.get_is_on_from_n_sources(true_n_source, max_sources)
-            true_star_bool = (1 - true_galaxy_bool) * is_on_array
-            true_galaxy_loc = true_loc * true_galaxy_bool.unsqueeze(-1)
-            true_star_loc = true_loc * true_star_bool.unsqueeze(-1)
-
-            # round up estimated parameters.
             assert len(locs.shape) == 3 and locs.size(0) == 1
             assert locs.shape[1] == n_sources.max().int().item()
-            _max_sources = locs.shape[1]
-            _is_on_array = encoder.get_is_on_from_n_sources(n_sources, _max_sources)
-            star_bool = (1 - galaxy_bool) * _is_on_array
-            galaxy_loc = locs * galaxy_bool.unsqueeze(-1)
-            star_loc = locs * star_bool.unsqueeze(-1)
-            fluxes = log_fluxes.exp() * star_bool.unsqueeze(-1)
+
+            true_star_bool = self.image_decoder.get_star_bool(
+                true_n_sources, true_galaxy_bool
+            )
+            true_galaxy_loc = self.image_decoder.get_galaxy_locs(
+                true_locs, true_galaxy_bool
+            )
+            true_star_loc = self.image_decoder.get_star_locs(locs, true_star_bool)
+
+            # round up estimated parameters.
+            star_bool = self.image_decoder.get_star_bool(n_sources, galaxy_bool)
+            fluxes = self.image_decoder.get_fluxes_from_log(log_fluxes, star_bool)
+            galaxy_loc = self.image_decoder.get_galaxy_locs(locs, galaxy_bool)
+            star_loc = self.image_decoder.get_star_locs(locs, star_bool)
 
             # convert everything to numpy + cpu so matplotlib can use it.
             assert len(image.shape) == 4
@@ -453,8 +450,6 @@ class SleepPhase(pl.LightningModule):
             true_star_loc = true_star_loc.cpu().numpy()[0]
             galaxy_loc = galaxy_loc.cpu().numpy()[0]
             star_loc = star_loc.cpu().numpy()[0]
-            print("shape: ", true_galaxy_loc.shape)
-            print("shape: ", galaxy_loc.shape)
 
             plotting.plot_image(fig, true_ax, image)
             plotting.plot_image_locs(
@@ -468,6 +463,7 @@ class SleepPhase(pl.LightningModule):
             )
 
             # only prediction/residual if at least 1 true source.
+            max_sources = true_loc.shape[1]
             if max_sources > 0:
 
                 # draw reconstruction image.

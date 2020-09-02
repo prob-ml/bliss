@@ -343,21 +343,6 @@ class ImageDecoder(object):
         uniform_samples = torch.rand(*shape, device=device) * u_max
         return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
-    @staticmethod
-    def _get_log_fluxes(fluxes):
-        """
-        To obtain fluxes from log_fluxes.
-
-        >> is_on_array = get_is_on_from_n_stars(n_stars, max_sources)
-        >> fluxes = np.exp(log_fluxes) * is_on_array
-        """
-        log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(device)
-        )  # prevent log(0) errors.
-        log_fluxes = torch.log(log_fluxes)
-
-        return log_fluxes
-
     def _sample_fluxes(self, n_stars, star_bool, batch_size):
         """
 
@@ -429,7 +414,7 @@ class ImageDecoder(object):
         galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
 
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
-        log_fluxes = self._get_log_fluxes(fluxes)
+        log_fluxes = self.get_log_fluxes(fluxes)
 
         return {
             "n_sources": n_sources,
@@ -441,6 +426,47 @@ class ImageDecoder(object):
             "log_fluxes": log_fluxes,
             "galaxy_bool": galaxy_bool,
         }
+
+    @staticmethod
+    def get_star_bool(n_sources, galaxy_bool):
+        assert len(n_sources.shape) == 1
+        assert len(galaxy_bool.shape) == 2
+        max_sources = galaxy_bool.shape[1]
+        is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
+        star_bool = (1 - galaxy_bool) * is_on_array
+        return star_bool
+
+    @staticmethod
+    def get_galaxy_locs(locs, galaxy_bool):
+        assert len(locs.shape) == 3
+        galaxy_loc = locs * galaxy_bool.unsqueeze(-1)
+        return galaxy_loc
+
+    @staticmethod
+    def get_star_locs(locs, star_bool):
+        assert len(locs.shape) == 3
+        star_loc = locs * star_bool.unsqueeze(-1)
+        return star_loc
+
+    @staticmethod
+    def get_log_fluxes(fluxes):
+        """
+        To obtain fluxes from log_fluxes.
+
+        >> is_on_array = get_is_on_from_n_stars(n_stars, max_sources)
+        >> fluxes = np.exp(log_fluxes) * is_on_array
+        """
+        log_fluxes = torch.where(
+            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(device)
+        )  # prevent log(0) errors.
+        log_fluxes = torch.log(log_fluxes)
+
+        return log_fluxes
+
+    @staticmethod
+    def get_fluxes_from_log(log_fluxes, star_bool):
+        fluxes = log_fluxes.exp() * star_bool.unsqueeze(-1)
+        return fluxes
 
     @staticmethod
     def _apply_noise(images_mean):
