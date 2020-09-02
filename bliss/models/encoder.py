@@ -64,13 +64,14 @@ def _get_tile_coords(slen, tile_slen):
 def _get_full_params_from_sampled_params(
     slen,
     tile_slen,
-    tile_is_on_array_sampled,
+    tile_n_sources_sampled,
     tile_locs_sampled,
     *tile_params_sampled
 ):
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
-    
+        
+    # coordinates of the tiles
     tile_coords = _get_tile_coords(slen, tile_slen)
     
     # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
@@ -81,6 +82,10 @@ def _get_full_params_from_sampled_params(
     max_detections = tile_locs_sampled.shape[2]
     total_ptiles = n_samples * n_ptiles
     assert single_image_n_ptiles == n_ptiles, "Only single image is supported."
+    
+    # get is on array
+    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources_sampled, 
+                                                max_detections)
 
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
     max_sources = n_sources.max().int().item()
@@ -156,7 +161,6 @@ class ImageEncoder(nn.Module):
         self.n_bands = n_bands
 
         # padding
-        assert (ptile_slen - tile_slen) % 2 == 0
         self.ptile_slen = ptile_slen
         self.tile_slen = tile_slen
         self.edge_padding = (ptile_slen - tile_slen) / 2
@@ -164,7 +168,8 @@ class ImageEncoder(nn.Module):
         self.edge_padding = int(self.edge_padding)
 
         self.tile_coords = _get_tile_coords(slen, self.tile_slen)
-        self.n_tiles_per_image = self.tile_coords.size(0)
+        assert self.slen % self.tile_slen == 0
+        self.n_tiles_per_image = int((self.slen / self.tile_slen)**2)
 
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
@@ -390,6 +395,7 @@ class ImageEncoder(nn.Module):
 
     def forward(self, image_ptiles, n_sources):
         # image_ptiles shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
+        # n_sources shape = (n_ptiles)
         # will unsqueeze and squeeze n_sources later, since used for indexing.
         assert len(n_sources.shape) == 1
         n_sources = n_sources.unsqueeze(0)
@@ -447,15 +453,12 @@ class ImageEncoder(nn.Module):
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
 
     def _get_full_params_from_sampled_params(
-        self, slen, tile_is_on_array_sampled, tile_locs_sampled, *tile_params_sampled
+        self, slen, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
     ):
-        tile_coords = self._get_tile_coords(slen)
         return _get_full_params_from_sampled_params(
-            tile_coords,
             slen,
-            self.ptile_slen,
-            self.edge_padding,
-            tile_is_on_array_sampled,
+            self.tile_slen,
+            tile_n_sources_sampled,
             tile_locs_sampled,
             *tile_params_sampled
         )
@@ -513,7 +516,7 @@ class ImageEncoder(nn.Module):
         tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
         return self._get_full_params_from_sampled_params(
             slen,
-            tile_is_on_array.squeeze(-1),
+            tile_n_sources,
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
@@ -562,7 +565,7 @@ class ImageEncoder(nn.Module):
             galaxy_bool,
         ) = self._get_full_params_from_sampled_params(
             slen,
-            tile_is_on_array.squeeze(-1),
+            tile_n_sources,
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
