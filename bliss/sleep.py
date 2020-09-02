@@ -376,7 +376,7 @@ class SleepPhase(pl.LightningModule):
         true_galaxy_bools_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
 
         # convert to full image
-        true_n_sources, true_locs, true_galaxy_bool = encoder._get_full_params_from_sampled_params(
+        true_n_sources, true_locs, true_galaxy_bools = encoder._get_full_params_from_sampled_params(
             self.image_encoder.slen,
             self.image_encoder.tile_slen,
             true_n_sources_on_tiles,
@@ -411,7 +411,7 @@ class SleepPhase(pl.LightningModule):
                     tile_galaxy_params,
                     tile_log_fluxes,
                     tile_galaxy_bool,
-                ) = self.image_encoder.map_estimate(image.unsqueeze(0))
+                ) = self.image_encoder.map_estimate(image)
 
             # convert tile estimates to full parameterization
             # for plotting
@@ -431,7 +431,6 @@ class SleepPhase(pl.LightningModule):
 
             # round up true parameters.
             max_sources = true_loc.shape[1]
-            assert max_sources == n_sources.max().int().item()
             is_on_array = encoder.get_is_on_from_n_sources(true_n_source, max_sources)
             true_star_bool = (1 - true_galaxy_bool) * is_on_array
             true_galaxy_loc = true_loc * true_galaxy_bool.unsqueeze(-1)
@@ -439,6 +438,7 @@ class SleepPhase(pl.LightningModule):
 
             # round up estimated parameters.
             assert len(locs.shape) == 3 and locs.size(0) == 1
+            assert locs.shape[1] == n_sources.max().int().item()
             _max_sources = locs.shape[1]
             _is_on_array = encoder.get_is_on_from_n_sources(n_sources, _max_sources)
             star_bool = (1 - galaxy_bool) * _is_on_array
@@ -447,12 +447,14 @@ class SleepPhase(pl.LightningModule):
             fluxes = log_fluxes.exp() * star_bool.unsqueeze(-1)
 
             # convert everything to numpy + cpu so matplotlib can use it.
-            assert len(image.shape) == 3
+            assert len(image.shape) == 4
             image = image[0, 0].cpu().numpy()  # only first band.
             true_galaxy_loc = true_galaxy_loc.cpu().numpy()[0]
             true_star_loc = true_star_loc.cpu().numpy()[0]
             galaxy_loc = galaxy_loc.cpu().numpy()[0]
             star_loc = star_loc.cpu().numpy()[0]
+            print("shape: ", true_galaxy_loc.shape)
+            print("shape: ", galaxy_loc.shape)
 
             plotting.plot_image(fig, true_ax, image)
             plotting.plot_image_locs(
