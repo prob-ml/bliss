@@ -359,6 +359,7 @@ class SleepPhase(pl.LightningModule):
                 "images": batch["images"],
                 "locs": batch["locs"],
                 "n_sources": batch["n_sources"],
+                "galaxy_bool": batch["galaxy_bool"],
             },
         }
 
@@ -372,13 +373,15 @@ class SleepPhase(pl.LightningModule):
         # these are per tile
         true_n_sources_on_tiles = outputs[-1]["log"]["n_sources"][:n_samples]
         true_locs_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
+        true_galaxy_bools_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
 
         # convert to full image
-        true_n_sources, true_locs = encoder._get_full_params_from_sampled_params(
+        true_n_sources, true_locs, true_galaxy_bool = encoder._get_full_params_from_sampled_params(
             self.image_encoder.slen,
             self.image_encoder.tile_slen,
             true_n_sources_on_tiles,
             true_locs_on_tiles,
+            true_galaxy_bools_on_tiles
         )
 
         images = outputs[-1]["log"]["images"][:n_samples]
@@ -391,11 +394,13 @@ class SleepPhase(pl.LightningModule):
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
 
-            image = images[i]
+            image = images[None, i]
+            slen = image.shape[-1]
 
-            # true parameters (on full image)
-            true_loc = true_locs[i]
-            true_n_source = true_n_sources[i]
+            # true parameters on full image.
+            true_loc = true_locs[None, i]
+            true_n_source = true_n_sources[None, i]
+            true_galaxy_bool = true_galaxy_bools[None, i]
 
             with torch.no_grad():
                 # get the estimated params: these are *per tile*
@@ -424,18 +429,43 @@ class SleepPhase(pl.LightningModule):
                 tile_galaxy_bool,
             )
 
-            # draw true image
+            # round up true parameters.
+            max_sources = true_loc.shape[1]
+            assert max_sources == n_sources.max().int().item()
+            is_on_array = encoder.get_is_on_from_n_sources(true_n_source, max_sources)
+            true_star_bool = (1 - true_galaxy_bool) * is_on_array
+            true_galaxy_loc = true_loc * true_galaxy_bool.unsqueeze(-1)
+            true_star_loc = true_loc * true_star_bool.unsqueeze(-1)
+
+            # round up estimated parameters.
+            assert len(locs.shape) == 3 and locs.size(0) == 1
+            _max_sources = locs.shape[1]
+            _is_on_array = encoder.get_is_on_from_n_sources(n_sources, _max_sources)
+            star_bool = (1 - galaxy_bool) * _is_on_array
+            galaxy_loc = locs * galaxy_bool.unsqueeze(-1)
+            star_loc = locs * star_bool.unsqueeze(-1)
+            fluxes = log_fluxes.exp() * star_bool.unsqueeze(-1)
+
+            # convert everything to numpy + cpu so matplotlib can use it.
             assert len(image.shape) == 3
-            image = image[0].cpu().numpy()  # first band.
-            loc = locs[0].cpu().numpy()
-            true_loc = true_loc.cpu().numpy()
-            plotting.plot_image(fig, true_ax, image, true_loc, loc)
+            image = image[0, 0].cpu().numpy()  # only first band.
+            true_galaxy_loc = true_galaxy_loc.cpu().numpy()[0]
+            true_star_loc = true_star_loc.cpu().numpy()[0]
+            galaxy_loc = galaxy_loc.cpu().numpy()[0]
+            star_loc = star_loc.cpu().numpy()[0]
+
+            plotting.plot_image(fig, true_ax, image)
+            plotting.plot_image_locs(
+                true_ax, slen, true_galaxy_loc, galaxy_loc, colors=("r", "b")
+            )
+            plotting.plot_image_locs(
+                true_ax, slen, true_star_loc, star_loc, colors=("g", "m")
+            )
             true_ax.set_xlabel(
                 f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
             )
 
-            # only prediction/residual if at least 1 source.
-            max_sources = n_sources.max().int().item()
+            # only prediction/residual if at least 1 true source.
             if max_sources > 0:
 
                 # draw reconstruction image.
@@ -451,7 +481,10 @@ class SleepPhase(pl.LightningModule):
                 res_image = (image - recon_image) / np.sqrt(image)
 
                 # plot
-                plotting.plot_image(fig, recon_ax, recon_image, loc)
+                plotting.plot_image(fig, recon_ax, recon_image)
+                plotting.plot_image_locs(
+                    recon_ax, slen, galaxy_loc, star_loc, colors=("r", "b")
+                )
                 plotting.plot_image(fig, res_ax, res_image)
 
             else:

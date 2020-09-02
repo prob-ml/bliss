@@ -13,29 +13,25 @@ def plot_locs(ax, slen, locs, color="r", marker="x", s=1):
     )
 
 
+def plot_image_locs(
+    ax, slen, true_locs=None, estimated_locs=None, colors=("r", "b"), s=5
+):
+    if true_locs is not None:
+        plot_locs(ax, slen, true_locs, color=colors[0], marker="x", s=s)
+
+    if estimated_locs is not None:
+        plot_locs(ax, slen, estimated_locs, color=colors[1], marker="+", s=s)
+
+
 def plot_image(
     fig,
     ax,
     image,
-    true_locs=None,
-    estimated_locs=None,
     vmin=None,
     vmax=None,
-    s=5,
 ):
-
-    # locations are coordinates in the image, on scale from 0 to 1
-
-    slen = image.shape[-1]
 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
     im = ax.matshow(image, vmin=vmin, vmax=vmax)
-
-    if true_locs is not None:
-        plot_locs(ax, slen, true_locs, color="r", marker="x", s=s)
-
-    if estimated_locs is not None:
-        plot_locs(ax, slen, estimated_locs, color="b", marker="o", s=s)
-
     fig.colorbar(im, cax=cax, orientation="vertical")
