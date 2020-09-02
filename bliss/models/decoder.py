@@ -144,8 +144,8 @@ class ImageDecoder(object):
         self.ptile_slen = 3 * tile_slen
         
         # number of tiles per image
-        self.n_tiles_per_image = (self.slen / self.tile_slen) ** 2
-        self.n_tiles_per_image = int(self.n_tiles_per_image)
+        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
+        self.n_tiles_per_image = int(n_tiles_per_image)
         
         self.n_bands = n_bands # number of bands
         self.background = background.to(device) # sky background
@@ -539,7 +539,7 @@ class ImageDecoder(object):
         # galaxy_params : is (batchsize x n_tiles_per_image x max_sources x galaxy_decoder.latent_dim)
         # fluxes: Is (batchsize x n_tiles_per_image x max_sources x 2)
         
-        # returns the full image in shape batchsize x n_bands x ptile_slen x ptile_slen
+        # returns the **full** image in shape batchsize x n_bands x slen x slen
 
         # first render the padded tiles
         image_ptiles = self.render_ptiles(n_sources,
@@ -572,7 +572,7 @@ def construct_full_image_from_ptiles(image_ptiles):
     image_tiles_4d = image_ptiles.view(batchsize, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen)
     
     # zero pad tiles, so that the number of tiles in a row (and colmn)
-    # are divisible by 3. 
+    # are divisible by 3 (the number of tiles in a padded tile)
     n_tiles_pad = 3 - (n_tiles1 % 3)
     zero_pads1 = torch.zeros(batchsize, n_tiles_pad, n_tiles1, n_bands, ptile_slen, ptile_slen, device = device)
     zero_pads2 = torch.zeros(batchsize, n_tiles1+n_tiles_pad, n_tiles_pad, n_bands, ptile_slen, ptile_slen, device = device)
