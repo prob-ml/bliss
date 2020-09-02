@@ -140,8 +140,8 @@ class ImageDecoder(object):
             ' So slen must be divisible by tile_slen'
         
         # images are first rendered on *padded* tiles (aka ptiles). 
-        # the padded tile consists of the tile and its neighboring tiles
-        self.ptile_slen = 3 * tile_slen
+        # the padded tile consists of the tile and its two neighboring tiles
+        self.ptile_slen = 5 * tile_slen
         
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
@@ -572,21 +572,21 @@ def construct_full_image_from_ptiles(image_ptiles):
     image_tiles_4d = image_ptiles.view(batchsize, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen)
     
     # zero pad tiles, so that the number of tiles in a row (and colmn)
-    # are divisible by 3 (the number of tiles in a padded tile)
-    n_tiles_pad = 3 - (n_tiles1 % 3)
+    # are divisible by 5 (the number of tiles in a padded tile)
+    n_tiles_pad = 5 - (n_tiles1 % 5)
     zero_pads1 = torch.zeros(batchsize, n_tiles_pad, n_tiles1, n_bands, ptile_slen, ptile_slen, device = device)
     zero_pads2 = torch.zeros(batchsize, n_tiles1+n_tiles_pad, n_tiles_pad, n_bands, ptile_slen, ptile_slen, device = device)
     image_tiles_4d = torch.cat((image_tiles_4d, zero_pads1), dim = 1)
     image_tiles_4d = torch.cat((image_tiles_4d, zero_pads2), dim = 2)
     
     # construct the full image
-    tile_slen = int(ptile_slen / 3)
+    tile_slen = int(ptile_slen / 5)
     n_tiles = n_tiles1 + n_tiles_pad
-    canvas = torch.zeros(batchsize, n_bands, (n_tiles + 2) * tile_slen, (n_tiles + 2) * tile_slen, device = device)
-    for i in range(3): 
-        for j in range(3): 
-            indx_vec1 = torch.arange(start = i, end = n_tiles, step = 3)
-            indx_vec2 = torch.arange(start = j, end = n_tiles, step = 3)
+    canvas = torch.zeros(batchsize, n_bands, (n_tiles + 4) * tile_slen, (n_tiles + 4) * tile_slen, device = device)
+    for i in range(5): 
+        for j in range(5): 
+            indx_vec1 = torch.arange(start = i, end = n_tiles, step = 5)
+            indx_vec2 = torch.arange(start = j, end = n_tiles, step = 5)
             
             canvas_len = len(indx_vec1) * ptile_slen
             
@@ -601,4 +601,4 @@ def construct_full_image_from_ptiles(image_ptiles):
                 image_tile_cols.permute(0, 3, 1, 4, 2, 5).reshape(batchsize, n_bands, canvas_len, canvas_len)
             
     # trim to original image size
-    return canvas[:, :, tile_slen:((n_tiles1+1) * tile_slen), tile_slen:((n_tiles1+1) * tile_slen)]
+    return canvas[:, :, (2*tile_slen):((n_tiles1+2) * tile_slen), (2*tile_slen):((n_tiles1+2) * tile_slen)]
