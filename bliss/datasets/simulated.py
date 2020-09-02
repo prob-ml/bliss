@@ -4,7 +4,6 @@ import numpy as np
 import torch
 from torch.utils.data import IterableDataset
 
-from bliss import device
 from bliss.models import galaxy_net
 from bliss.models.decoder import ImageDecoder
 
@@ -45,14 +44,14 @@ class SimulatedDataset(IterableDataset):
 
     @staticmethod
     def get_gal_decoder_from_file(decoder_file, gal_slen=51, n_bands=1, latent_dim=8):
-        dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, latent_dim, n_bands).to(device)
-        dec.load_state_dict(torch.load(decoder_file, map_location=device))
+        dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, latent_dim, n_bands)
+        dec.load_state_dict(torch.load(decoder_file))
         dec.eval()
         return dec
 
     @staticmethod
     def get_psf_params_from_file(psf_file):
-        return torch.from_numpy(np.load(psf_file)).to(device)
+        return torch.from_numpy(np.load(psf_file))
 
     @staticmethod
     def get_background_from_file(background_file, slen, n_bands):

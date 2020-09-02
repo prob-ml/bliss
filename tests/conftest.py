@@ -63,7 +63,7 @@ class DecoderSetup:
 
     def get_fitted_psf_params(self):
         psf_file = self.data_path.joinpath("fitted_powerlaw_psf_params.npy")
-        psf_params = torch.from_numpy(np.load(psf_file)).to(self.device)
+        psf_params = torch.from_numpy(np.load(psf_file))
         return psf_params
 
     def get_star_dataset(
@@ -77,7 +77,7 @@ class DecoderSetup:
     ):
         assert 1 <= n_bands <= 2
         dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": n_bands, "slen": slen})
-        background = torch.zeros(2, slen, slen, device=self.device)
+        background = torch.zeros(2, slen, slen)
         background[0] = 686.0
         background[1] = 1123.0
 
@@ -99,7 +99,7 @@ class DecoderSetup:
         psf_params = self.get_fitted_psf_params()[range(n_bands)]
 
         # TODO: take background from test image.
-        background = torch.zeros(n_bands, slen, slen, device=self.device)
+        background = torch.zeros(n_bands, slen, slen)
         background[0] = 5000.0
 
         dec_args = (galaxy_decoder, psf_params, background)
@@ -160,7 +160,7 @@ class EncoderSetup:
 
         sleep_trainer.fit(sleep_net)
         sleep_net.image_encoder.eval()
-        return sleep_net.image_encoder.to(self.device)
+        return sleep_net.image_encoder
 
 
 # available fixtures

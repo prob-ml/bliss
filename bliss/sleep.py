@@ -37,15 +37,12 @@ class SleepPhase(pl.LightningModule):
         # avoid calculating gradients of psf_transform
         self.dataset.image_decoder.power_law_psf.requires_grad_(False)
 
-        self.lr = lr
-        self.weight_decay = weight_decay
-
         self.validation_plot_start = validation_plot_start
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
 
         self.hparams = {
-            "lr": self.lr,
-            "weight_decay": self.weight_decay,
+            "lr": lr,
+            "weight_decay": weight_decay,
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
@@ -216,7 +213,7 @@ class SleepPhase(pl.LightningModule):
         max_detections = galaxy_params_log_probs_all.size(-1)
 
         n_permutations = math.factorial(max_detections)
-        locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations)
+        locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations).to(self.device)
         galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
         star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
         galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
@@ -302,8 +299,8 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": self.lr}],
-            weight_decay=self.weight_decay,
+            [{"params": self.image_encoder.parameters(), "lr": self.hparams.lr}],
+            weight_decay=self.hparams.weight_decay,
         )
 
     def train_dataloader(self):

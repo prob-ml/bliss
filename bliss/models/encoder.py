@@ -1,17 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pytorch_lightning as pl
 
 from torch.distributions import categorical
 
 
-class Flatten(nn.Module):
-    def forward(self, tensor):
-        return tensor.view(tensor.size(0), -1)
-
-
-class ImageEncoder(pl.LightningModule):
+class ImageEncoder(nn.Module):
     def __init__(
         self,
         slen=101,
@@ -91,7 +85,7 @@ class ImageEncoder(pl.LightningModule):
             ),
             nn.BatchNorm2d(self.enc_conv_c, momentum=self.momentum),
             nn.ReLU(),
-            Flatten(),
+            nn.Flatten(1, -1),
             nn.Linear(conv_out_dim, self.enc_hidden),
             nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
             nn.ReLU(),
@@ -216,13 +210,13 @@ class ImageEncoder(pl.LightningModule):
         n_samples = n_sources.size(0)
 
         # append null column, return zero if indx_mat returns null index (dim_out_all)
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1)), dim=1)
+        _h = torch.cat((h, torch.zeros(n_ptiles, 1).to(h.device)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
         var_param = torch.gather(
             _h,
             1,
-            indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
+            indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1).to(h.device),
         )
 
         var_param = var_param.reshape(
@@ -338,11 +332,14 @@ class ImageEncoder(pl.LightningModule):
 
     def _cache_tiling_conv_weights(self):
         ptile_slen2 = self.ptile_slen ** 2
-        self.tile_conv_weights = torch.zeros(
-            ptile_slen2 * self.n_bands,
-            self.n_bands,
-            self.ptile_slen,
-            self.ptile_slen,
+        self.register_buffer(
+            "tile_conv_weights",
+            torch.zeros(
+                ptile_slen2 * self.n_bands,
+                self.n_bands,
+                self.ptile_slen,
+                self.ptile_slen,
+            ),
         )
 
         for b in range(self.n_bands):
@@ -389,6 +386,8 @@ class ImageEncoder(pl.LightningModule):
             + self.edge_padding
             - 0.5
         )
+        print(tile_locs.device)
+        print(tile_is_on_array.device)
         _locs = (tile_locs * scale + bias) / (slen - 1) * tile_is_on_array.unsqueeze(2)
 
         # sort locs and clip
@@ -493,7 +492,9 @@ class ImageEncoder(pl.LightningModule):
         tile_is_on_array = self.get_is_on_from_n_sources(
             tile_n_sources, self.max_detections
         )
-        tile_is_on_array = tile_is_on_array.unsqueeze(3).float()
+        tile_is_on_array = (
+            tile_is_on_array.unsqueeze(3).float().to(tile_n_sources.device)
+        )
 
         # get variational parameters: these are on image tiles
         # shape (all) = (n_samples x n_ptiles x max_detections x param_dim)
@@ -582,8 +583,10 @@ class ImageEncoder(pl.LightningModule):
 
         # _tile_coords shape = (1 x single_image_n_ptiles x 1 x 2)
         _tile_coords = tile_coords.unsqueeze(0).unsqueeze(2).float()
-        left_tile_edges = _tile_coords + edge_padding - 0.5
-        right_tile_edges = _tile_coords - 0.5 + ptile_slen - edge_padding
+        left_tile_edges = (_tile_coords + edge_padding - 0.5).to(locs.device)
+        right_tile_edges = (_tile_coords - 0.5 + ptile_slen - edge_padding).to(
+            locs.device
+        )
         locs = locs * (slen - 1)
 
         # indicator for each ptile, whether there is a loc there or not (loc order maintained)
@@ -608,8 +611,10 @@ class ImageEncoder(pl.LightningModule):
         _locs = locs.view(batch_size, 1, max_sources, 2)
         tile_locs = _tile_is_on_array * _locs
         tile_locs = tile_locs.view(total_ptiles, max_sources, 2)
-        _tile_coords = tile_coords.view(single_image_n_ptiles, 1, 2).repeat(
-            batch_size, 1, 1
+        _tile_coords = (
+            tile_coords.view(single_image_n_ptiles, 1, 2)
+            .repeat(batch_size, 1, 1)
+            .to(locs.device)
         )
         tile_locs -= _tile_coords + edge_padding - 0.5  # recenter
         tile_locs /= ptile_slen - 2 * edge_padding  # re-normalize
