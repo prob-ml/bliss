@@ -365,10 +365,10 @@ class SleepPhase(pl.LightningModule):
         # convert to full image 
         true_n_sources, true_locs = \
             encoder._get_full_params_from_sampled_params(
-                                                            self.image_encoder.slen,
-                                                            self.image_encoder.tile_slen,
-                                                            true_n_sources_on_tiles,
-                                                            true_locs_on_tiles)
+                                                        self.image_encoder.slen,
+                                                        self.image_encoder.tile_slen,
+                                                        true_n_sources_on_tiles,
+                                                        true_locs_on_tiles)
         
         images = outputs[-1]["log"]["images"][:n_samples]
         fig, axes = plt.subplots(
@@ -384,22 +384,33 @@ class SleepPhase(pl.LightningModule):
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
-
+            
             image = images[i]
+            
+            # true parameters (on full image)
             true_loc = true_locs[i]
             true_n_source = true_n_sources[i]
 
             with torch.no_grad():
-                # get the estimated params
+                # get the estimated params: these are *per tile*
                 self.image_encoder.eval()
                 (
-                    n_sources,
-                    locs,
-                    galaxy_params,
-                    log_fluxes,
-                    galaxy_bool,
+                    tile_n_sources,
+                    tile_locs,
+                    tile_galaxy_params,
+                    tile_log_fluxes,
+                    tile_galaxy_bool,
                 ) = self.image_encoder.map_estimate(image.unsqueeze(0))
-
+            
+            # convert tile estimates to full parameterization
+            # for plotting
+            n_sources, locs, galaxy_params, log_fluxes, galaxy_bool = \
+                self.image_encoder.get_full_params_from_sampled_params(tile_n_sources,
+                tile_locs,
+                tile_galaxy_params,
+                tile_log_fluxes,
+                tile_galaxy_bool)
+            
             # draw true image
             assert len(image.shape) == 3
             image = image[0].cpu().numpy()  # first band.
@@ -413,19 +424,17 @@ class SleepPhase(pl.LightningModule):
             # only prediction/residual if at least 1 source.
             max_sources = n_sources.max().int().item()
             if max_sources > 0:
-                assert max_sources == locs.shape[1]
-                is_on_array = encoder.get_is_on_from_n_sources(n_sources, max_sources)
-                star_bool = (1 - galaxy_bool) * is_on_array
-                fluxes = log_fluxes.exp() * star_bool.unsqueeze(2)
 
                 # draw reconstruction image.
-                # recon_image = self.dataset.image_decoder.render_images(
-                #     n_sources, locs, galaxy_bool, galaxy_params, fluxes
-                # )
-
+                recon_image = self.dataset.image_decoder.render_images(
+                        tile_n_sources,
+                        tile_locs,
+                        tile_galaxy_bool,
+                        tile_galaxy_params,
+                        tile_log_fluxes
+                    )
                 assert len(locs.shape) == 3 and locs.size(0) == 1
-                # recon_image = recon_image[0, 0].cpu().numpy()
-                recon_image = image * 0.0
+                recon_image = recon_image[0, 0].cpu().numpy()
                 res_image = (image - recon_image) / np.sqrt(image)
 
                 # plot

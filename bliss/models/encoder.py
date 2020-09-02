@@ -452,17 +452,6 @@ class ImageEncoder(nn.Module):
 
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
 
-    def _get_full_params_from_sampled_params(
-        self, slen, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
-    ):
-        return _get_full_params_from_sampled_params(
-            slen,
-            self.tile_slen,
-            tile_n_sources_sampled,
-            tile_locs_sampled,
-            *tile_params_sampled
-        )
-
     @staticmethod
     def _get_samples(pred, tile_is_on_array, tile_galaxy_bool):
         # shape = (n_samples x n_ptiles x max_detections x param_dim)
@@ -514,16 +503,10 @@ class ImageEncoder(nn.Module):
         )
 
         tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
-        return self._get_full_params_from_sampled_params(
-            slen,
-            tile_n_sources,
-            tile_locs,
-            tile_galaxy_params,
-            tile_log_fluxes,
-            tile_galaxy_bool.unsqueeze(-1),
-        )
-
-    def map_estimate(self, image):
+    
+        return tile_n_sources, tile_locs, tile_galaxy_params, tile_log_fluxes, tile_galaxy_bool
+    
+    def map_estimate(self, image, return_full_param = False):
         # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
         assert image.size(0) == 1, "Sampling only works for a single image."
         slen = image.shape[-1]
@@ -556,21 +539,31 @@ class ImageEncoder(nn.Module):
         )
 
         tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
-
+        
+        return tile_n_sources, tile_locs, tile_galaxy_params, tile_log_fluxes, tile_galaxy_bool
+    
+    def get_full_params_from_sampled_params(self, 
+                                            tile_n_sources,
+                                            tile_locs,
+                                            tile_galaxy_params,
+                                            tile_log_fluxes,
+                                            tile_galaxy_bool): 
         (
             n_sources,
             locs,
             galaxy_params,
             log_fluxes,
             galaxy_bool,
-        ) = self._get_full_params_from_sampled_params(
-            slen,
+        ) = _get_full_params_from_sampled_params(
+            self.slen,
+            self.tile_slen,
             tile_n_sources,
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
-            tile_galaxy_bool.unsqueeze(-1),
+            tile_galaxy_bool.unsqueeze(-1)
         )
 
-        galaxy_bool = galaxy_bool.reshape(1, -1)
+        galaxy_bool = galaxy_bool.squeeze(-1)
+        
         return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool
