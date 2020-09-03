@@ -51,7 +51,7 @@ def _get_tile_coords(slen, tile_slen):
     """
 
     nptiles1 = int(slen / tile_slen)
-    n_ptiles = nptiles1**2
+    n_ptiles = nptiles1 ** 2
 
     def return_coords(i):
         return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
@@ -61,19 +61,16 @@ def _get_tile_coords(slen, tile_slen):
 
     return tile_coords
 
+
 def _get_full_params_from_sampled_params(
-    slen,
-    tile_slen,
-    tile_n_sources_sampled,
-    tile_locs_sampled,
-    *tile_params_sampled
+    slen, tile_slen, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
 ):
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
-        
+
     # coordinates of the tiles
     tile_coords = _get_tile_coords(slen, tile_slen)
-    
+
     # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
     assert len(tile_locs_sampled.shape) == 4
     single_image_n_ptiles = tile_coords.shape[0]
@@ -82,10 +79,11 @@ def _get_full_params_from_sampled_params(
     max_detections = tile_locs_sampled.shape[2]
     total_ptiles = n_samples * n_ptiles
     assert single_image_n_ptiles == n_ptiles, "Only single image is supported."
-    
+
     # get is on array
-    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources_sampled, 
-                                                max_detections)
+    tile_is_on_array_sampled = get_is_on_from_n_sources(
+        tile_n_sources_sampled, max_detections
+    )
 
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
     max_sources = n_sources.max().int().item()
@@ -93,7 +91,7 @@ def _get_full_params_from_sampled_params(
     # recenter and renormalize locations.
     tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
     tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)
-    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float() 
+    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
     _locs = ((tile_locs * tile_slen + bias) / slen) * tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip
@@ -164,12 +162,12 @@ class ImageEncoder(nn.Module):
         self.ptile_slen = ptile_slen
         self.tile_slen = tile_slen
         self.edge_padding = (ptile_slen - tile_slen) / 2
-        assert self.edge_padding % 1 == 0, 'amount of padding should be an integer'
+        assert self.edge_padding % 1 == 0, "amount of padding should be an integer"
         self.edge_padding = int(self.edge_padding)
 
         self.tile_coords = _get_tile_coords(slen, self.tile_slen)
         assert self.slen % self.tile_slen == 0
-        self.n_tiles_per_image = int((self.slen / self.tile_slen)**2)
+        self.n_tiles_per_image = int((self.slen / self.tile_slen) ** 2)
 
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
@@ -418,12 +416,12 @@ class ImageEncoder(nn.Module):
 
     def _cache_tiling_conv_weights(self):
         # this function sets up weights for the "identity" convolution
-        # used to divide a full-image into padded tiles. 
-        # (see get_image_in_tiles). 
-        
-        # It has a for-loop, but only needs to be set up once. 
-        # These weights are set up and  cached during the __init__. 
-        
+        # used to divide a full-image into padded tiles.
+        # (see get_image_in_tiles).
+
+        # It has a for-loop, but only needs to be set up once.
+        # These weights are set up and  cached during the __init__.
+
         ptile_slen2 = self.ptile_slen ** 2
         self.tile_conv_weights = torch.zeros(
             ptile_slen2 * self.n_bands,
@@ -441,13 +439,16 @@ class ImageEncoder(nn.Module):
 
     def get_images_in_tiles(self, images):
         # divide a full-image into padded tiles using conv2d
-        # and weights cached in `_cache_tiling_conv_weights`. 
-        
+        # and weights cached in `_cache_tiling_conv_weights`.
+
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
 
         output = F.conv2d(
-            images, self.tile_conv_weights, stride=self.tile_slen, padding=self.edge_padding
+            images,
+            self.tile_conv_weights,
+            stride=self.tile_slen,
+            padding=self.edge_padding,
         ).permute([0, 2, 3, 1])
 
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
@@ -503,10 +504,16 @@ class ImageEncoder(nn.Module):
         )
 
         tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
-    
-        return tile_n_sources, tile_locs, tile_galaxy_params, tile_log_fluxes, tile_galaxy_bool
-    
-    def map_estimate(self, image, return_full_param = False):
+
+        return (
+            tile_n_sources,
+            tile_locs,
+            tile_galaxy_params,
+            tile_log_fluxes,
+            tile_galaxy_bool,
+        )
+
+    def map_estimate(self, image, return_full_param=False):
         # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
         assert image.size(0) == 1, "Sampling only works for a single image."
         slen = image.shape[-1]
@@ -539,15 +546,23 @@ class ImageEncoder(nn.Module):
         )
 
         tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
-        
-        return tile_n_sources, tile_locs, tile_galaxy_params, tile_log_fluxes, tile_galaxy_bool
-    
-    def get_full_params_from_sampled_params(self, 
-                                            tile_n_sources,
-                                            tile_locs,
-                                            tile_galaxy_params,
-                                            tile_log_fluxes,
-                                            tile_galaxy_bool): 
+
+        return (
+            tile_n_sources,
+            tile_locs,
+            tile_galaxy_params,
+            tile_log_fluxes,
+            tile_galaxy_bool,
+        )
+
+    def get_full_params_from_sampled_params(
+        self,
+        tile_n_sources,
+        tile_locs,
+        tile_galaxy_params,
+        tile_log_fluxes,
+        tile_galaxy_bool,
+    ):
         (
             n_sources,
             locs,
@@ -561,9 +576,9 @@ class ImageEncoder(nn.Module):
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
-            tile_galaxy_bool.unsqueeze(-1)
+            tile_galaxy_bool.unsqueeze(-1),
         )
 
         galaxy_bool = galaxy_bool.squeeze(-1)
-        
+
         return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool
