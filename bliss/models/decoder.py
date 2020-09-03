@@ -403,7 +403,7 @@ class ImageDecoder(object):
         locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
-        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
+        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2) * (self.ptile_slen - 1) / self.ptile_slen
         grid_loc = _grid - locs[:, [1, 0]].view(n_ptiles, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
