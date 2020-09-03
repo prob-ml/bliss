@@ -17,11 +17,13 @@ class TestGalaxyEncoder:
         galaxy_dataset = decoder_setup.get_galaxy_dataset(
             slen=slen,
             tile_slen=tile_slen,
-            batch_size=32 if use_cuda else 2,
-            n_images=320 if use_cuda else 2,
+            batch_size=64 if use_cuda else 2,
+            n_images=640 if use_cuda else 2,
             max_sources_per_tile=2,
-            mean_sources_per_tile=1,
             min_sources_per_tile=1,
+            # this is so that prob(n_source = 1) \approx prob(n_source = 2) \approx = 0.5
+            # under the poisson prior
+            mean_sources_per_tile=1.67
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,
@@ -51,6 +53,10 @@ class TestGalaxyEncoder:
                 log_fluxes,
                 galaxy_bool,
             ) = trained_encoder.map_estimate(test_image.to(device))
+            
+            # dim = 1 is the n_tiles dimension. 
+            # there is just one tile, so remove this dimension. 
+            locs = locs.squeeze(1)
 
         if not use_cuda:
             return
