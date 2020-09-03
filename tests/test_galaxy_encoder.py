@@ -8,29 +8,26 @@ class TestGalaxyEncoder:
         use_cuda = device_setup.use_cuda
 
         n_epochs = 100 if use_cuda else 1
-        # draw galaxies only in 2x2 center tile
-        loc_min = 0.2
-        loc_max = 0.8
-
-        # encoder looks at 10x10 padded tile, and detects galaxies in 2x2 tile.
-        ptile_slen = 8
-        tile_slen = 2
+        
+        # simulates either 1 or 2 galaxies in a 50 x 50 image
+        # the input to the encoder is the 50 x 50 image
+        slen = 50
+        tile_slen = slen
 
         galaxy_dataset = decoder_setup.get_galaxy_dataset(
-            slen=50,
+            slen=slen,
+            tile_slen=tile_slen,
             batch_size=32 if use_cuda else 2,
             n_images=320 if use_cuda else 2,
-            loc_min=loc_min,
-            loc_max=loc_max,
-            max_sources=2,
-            mean_sources=1,
-            min_sources=1,
+            max_sources_per_tile=2,
+            mean_sources_per_tile=1,
+            min_sources_per_tile=1,
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,
             n_epochs=n_epochs,
             max_detections=2,
-            ptile_slen=ptile_slen,
+            ptile_slen=tile_slen,
             tile_slen=tile_slen,
             validation_plot_start=0,
         )

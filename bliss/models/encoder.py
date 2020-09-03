@@ -126,7 +126,7 @@ class Flatten(nn.Module):
 class ImageEncoder(nn.Module):
     def __init__(
         self,
-        slen=101,
+        slen=100,
         ptile_slen=8,
         tile_slen=2,
         n_bands=1,

@@ -238,7 +238,7 @@ class ImageDecoder(object):
         assert self.background.shape[0] == psf.shape[0] == self.n_bands
 
         if self.ptile_slen >= psf.shape[-1]:
-            return self._expand_psf(psf)
+            return self._expand_source(psf)
         else:
             return self._trim_source(psf)
 
