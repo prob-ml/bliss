@@ -17,7 +17,7 @@ def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
-    return mgrid.type(torch.FloatTensor).to(device)
+    return mgrid.type(torch.FloatTensor).to(device) * (slen - 1) / slen
 
 
 def get_psf_params(psfield_fit_file, bands):
@@ -164,7 +164,7 @@ class ImageDecoder(object):
         # get grid: between -1 and 1,
         # then scale slightly because of the way f.grid_sample
         # parameterizes the edges: (0, 0) is center of edge pixel
-        self.cached_grid = get_mgrid(self.slen) * (self.slen - 1) / self.slen
+        self.cached_grid = get_mgrid(self.slen)
 
         # load psf_params
         self.power_law_psf = PowerLawPSF(init_psf_params.clone())
