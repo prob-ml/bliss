@@ -182,7 +182,7 @@ class ImageDecoder(object):
         # grid: between -1 and 1,
         # then scale slightly because of the way f.grid_sample
         # parameterizes the edges: (0, 0) is center of edge pixel
-        self.cached_grid = get_mgrid(self.slen)
+        self.cached_grid = get_mgrid(self.ptile_slen)
 
         # load psf_params
         self.power_law_psf = PowerLawPSF(init_psf_params.clone())
@@ -217,7 +217,7 @@ class ImageDecoder(object):
 
         assert source_slen <= _slen, "Should be using trim source."
 
-        source_expanded = torch.zeros(self.n_bands, _slen, _slen, device=device)
+        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=device)
         offset = int((_slen - source_slen) / 2)
 
         source_expanded[
@@ -253,7 +253,7 @@ class ImageDecoder(object):
         galaxy_slen = galaxy.shape[3]
         galaxy = galaxy.reshape(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
 
-        if self.slen >= galaxy.shape[-1]:
+        if self.ptile_slen >= galaxy.shape[-1]:
             sized_galaxy = self._expand_source(galaxy)
         else:
             sized_galaxy = self._trim_source(galaxy)
@@ -452,11 +452,7 @@ class ImageDecoder(object):
         locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
-        _grid = (
-            self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
-            * (self.ptile_slen - 1)
-            / self.ptile_slen
-        )
+        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
         grid_loc = _grid - locs[:, [1, 0]].view(n_ptiles, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
