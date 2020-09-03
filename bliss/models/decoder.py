@@ -199,7 +199,7 @@ class ImageDecoder(object):
 
         assert source_slen <= _slen, "Should be using trim source."
 
-        source_expanded = torch.zeros(self.n_bands, _slen, _slen, device=device)
+        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=device)
         offset = int((_slen - source_slen) / 2)
 
         source_expanded[
