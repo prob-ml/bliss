@@ -8,7 +8,7 @@ class TestGalaxyEncoder:
         use_cuda = device_setup.use_cuda
 
         n_epochs = 100 if use_cuda else 1
-        
+
         # simulates either 1 or 2 galaxies in a 50 x 50 image
         # the input to the encoder is the 50 x 50 image
         slen = 50
@@ -23,7 +23,7 @@ class TestGalaxyEncoder:
             min_sources_per_tile=1,
             # this is so that prob(n_source = 1) \approx prob(n_source = 2) \approx = 0.5
             # under the poisson prior
-            mean_sources_per_tile=1.67
+            mean_sources_per_tile=1.67,
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,
@@ -53,9 +53,9 @@ class TestGalaxyEncoder:
                 log_fluxes,
                 galaxy_bool,
             ) = trained_encoder.map_estimate(test_image.to(device))
-            
-            # dim = 1 is the n_tiles dimension. 
-            # there is just one tile, so remove this dimension. 
+
+            # dim = 1 is the n_tiles dimension.
+            # there is just one tile, so remove this dimension.
             locs = locs.squeeze(1)
 
         if not use_cuda:

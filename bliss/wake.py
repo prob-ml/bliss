@@ -119,19 +119,15 @@ class WakeNet(pl.LightningModule):
                 galaxy_bool_sampled,
             ) = self.star_encoder.sample_encoder(obs_img, self.n_samples)
 
-        max_sources = log_fluxes_sampled.shape[1]
-        is_on_array = encoder.get_is_on_from_n_sources(n_stars_sampled, max_sources)
-        is_on_array = is_on_array.unsqueeze(-1).float()
-        star_bool_sampled = (1 - galaxy_bool_sampled) * is_on_array
-        fluxes_sampled = log_fluxes_sampled.exp() * is_on_array
-        star_bool_sampled = star_bool_sampled.view(1, -1)
-
         background = self.planar_background.forward().unsqueeze(0).detach()
-        stars = self.image_decoder.render_multiple_stars(
+        stars = self.image_decoder.render_images(
+            n_stars_sampled,
             locs_sampled,
-            fluxes_sampled,
-            star_bool_sampled,
+            galaxy_bool_sampled,
+            galaxy_params_sampled,
+            log_fluxes_sampled.exp(),
         )
+
         recon_mean = stars + background
 
         return recon_mean
