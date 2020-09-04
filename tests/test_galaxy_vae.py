@@ -48,7 +48,7 @@ class TestGalaxyVAE:
         galaxy_image = torch.load(paths["data"].joinpath("1_catsim_galaxy.pt"))
         background = torch.from_numpy(
             np.load(paths["data"].joinpath("background_galaxy_single_band_i.npy"))
-        )
+        ).to(device_setup.device)
 
         galaxy_image = galaxy_image.to(device_setup.device)
         galaxy_image = galaxy_image.reshape(1, 1, galaxy_image.size(-1), -1)
