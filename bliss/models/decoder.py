@@ -17,6 +17,9 @@ def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
+    # mgrid is between -1 and 1
+    # then scale slightly because of the way f.grid_sample
+    # parameterizes the edges: (0, 0) is center of edge pixel
     return mgrid.type(torch.FloatTensor).to(device) * (slen - 1) / slen
 
 
@@ -161,9 +164,7 @@ class ImageDecoder(object):
         self.loc_max = loc_max
         assert 0.0 <= self.loc_min <= self.loc_max <= 1.0
 
-        # get grid: between -1 and 1,
-        # then scale slightly because of the way f.grid_sample
-        # parameterizes the edges: (0, 0) is center of edge pixel
+        # get grid on which we render sources
         self.cached_grid = get_mgrid(self.slen)
 
         # load psf_params
