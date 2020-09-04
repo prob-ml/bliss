@@ -14,7 +14,7 @@ def plot_locs(ax, slen, locs, color="r", marker="x", s=1):
 
 
 def plot_image_locs(
-    ax, slen, true_locs=None, estimated_locs=None, colors=("r", "b"), s=5
+    ax, slen, true_locs=None, estimated_locs=None, colors=("r", "b"), s=20
 ):
     if true_locs is not None:
         plot_locs(ax, slen, true_locs, color=colors[0], marker="x", s=s)

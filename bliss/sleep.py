@@ -399,6 +399,7 @@ class SleepPhase(pl.LightningModule):
             true_n_source = true_n_sources[None, i]
             true_galaxy_bool = true_galaxy_bools[None, i]
 
+            assert len(image.shape) == 4
             with torch.no_grad():
                 # get the estimated params: these are *per tile*
                 self.image_encoder.eval()
@@ -429,27 +430,38 @@ class SleepPhase(pl.LightningModule):
             assert len(locs.shape) == 3 and locs.size(0) == 1
             assert locs.shape[1] == n_sources.max().int().item()
 
-            true_star_bool = self.image_decoder.get_star_bool(
-                true_n_sources, true_galaxy_bool
-            )
-            true_galaxy_loc = self.image_decoder.get_galaxy_locs(
-                true_locs, true_galaxy_bool
-            )
-            true_star_loc = self.image_decoder.get_star_locs(true_locs, true_star_bool)
-
-            # round up estimated parameters.
-            star_bool = self.image_decoder.get_star_bool(n_sources, galaxy_bool)
-            fluxes = self.image_decoder.get_fluxes_from_log(log_fluxes, star_bool)
-            galaxy_loc = self.image_decoder.get_galaxy_locs(locs, galaxy_bool)
-            star_loc = self.image_decoder.get_star_locs(locs, star_bool)
-
-            # convert everything to numpy + cpu so matplotlib can use it.
-            assert len(image.shape) == 4
+            # plot true image + number of sources first.
             image = image[0, 0].cpu().numpy()  # only first band.
-            true_galaxy_loc = true_galaxy_loc.cpu().numpy()[0]
-            true_star_loc = true_star_loc.cpu().numpy()[0]
-            galaxy_loc = galaxy_loc.cpu().numpy()[0]
-            star_loc = star_loc.cpu().numpy()[0]
+            plotting.plot_image(fig, true_ax, image)
+            true_ax.set_xlabel(
+                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
+            )
+
+            # continue only if at least one true source and predicted source.
+            max_sources = true_loc.shape[1]
+            if max_sources > 0 and n_sources.item() > 0:
+                true_star_bool = self.image_decoder.get_star_bool(
+                    true_n_source, true_galaxy_bool
+                )
+                true_galaxy_loc = self.image_decoder.get_galaxy_locs(
+                    true_loc, true_galaxy_bool
+                )
+                true_star_loc = self.image_decoder.get_star_locs(
+                    true_loc, true_star_bool
+                )
+
+                # round up estimated parameters.
+                _max_sources = locs.shape[1]
+                star_bool = self.image_decoder.get_star_bool(n_sources, galaxy_bool)
+                fluxes = self.image_decoder.get_fluxes_from_log(log_fluxes, star_bool)
+                galaxy_loc = self.image_decoder.get_galaxy_locs(locs, galaxy_bool)
+                star_loc = self.image_decoder.get_star_locs(locs, star_bool)
+
+                # convert everything to numpy + cpu so matplotlib can use it.
+                true_galaxy_loc = true_galaxy_loc.cpu().numpy()[0]
+                true_star_loc = true_star_loc.cpu().numpy()[0]
+                galaxy_loc = galaxy_loc.cpu().numpy()[0]
+                star_loc = star_loc.cpu().numpy()[0]
 
             plotting.plot_image(fig, true_ax, image)
             plotting.plot_image_locs(
@@ -478,7 +490,14 @@ class SleepPhase(pl.LightningModule):
                 recon_image = recon_image[0, 0].cpu().numpy()
                 res_image = (image - recon_image) / np.sqrt(image)
 
-                # plot
+                # plot and add locations.
+                plotting.plot_image_locs(
+                    true_ax, slen, true_galaxy_loc, galaxy_loc, colors=("r", "b")
+                )
+                plotting.plot_image_locs(
+                    true_ax, slen, true_star_loc, star_loc, colors=("g", "m")
+                )
+
                 plotting.plot_image(fig, recon_ax, recon_image)
                 plotting.plot_image_locs(
                     recon_ax, slen, galaxy_loc, star_loc, colors=("r", "b")
