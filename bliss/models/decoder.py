@@ -17,6 +17,9 @@ def get_mgrid(slen):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
+    # mgrid is between -1 and 1
+    # then scale slightly because of the way f.grid_sample
+    # parameterizes the edges: (0, 0) is center of edge pixel
     return mgrid.type(torch.FloatTensor).to(device) * (slen - 1) / slen
 
 
@@ -213,6 +216,9 @@ class ImageDecoder(object):
         assert len(source.shape) == 3
 
         _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        """Pad the source with zeros so that it is size slen,"""
+        assert len(source.shape) == 3
+
         source_slen = source.shape[2]
 
         assert source_slen <= _slen, "Should be using trim source."
