@@ -435,7 +435,7 @@ class SleepPhase(pl.LightningModule):
             true_galaxy_loc = self.image_decoder.get_galaxy_locs(
                 true_locs, true_galaxy_bool
             )
-            true_star_loc = self.image_decoder.get_star_locs(locs, true_star_bool)
+            true_star_loc = self.image_decoder.get_star_locs(true_locs, true_star_bool)
 
             # round up estimated parameters.
             star_bool = self.image_decoder.get_star_bool(n_sources, galaxy_bool)

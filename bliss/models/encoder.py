@@ -33,8 +33,7 @@ def _argfront(is_on_array, dim):
 
 
 def _sample_class_weights(class_weights, n_samples=1):
-    """
-    Draw a sample from Categorical variable with
+    """Draw a sample from Categorical variable with
     probabilities class_weights.
     """
 
