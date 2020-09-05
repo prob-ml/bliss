@@ -20,7 +20,7 @@ def plot_image_locs(
         plot_locs(ax, slen, true_locs, color=colors[0], marker="x", s=s)
 
     if estimated_locs is not None:
-        plot_locs(ax, slen, estimated_locs, color=colors[1], marker="+", s=s)
+        plot_locs(ax, slen, estimated_locs, color=colors[1], marker="+", s=s * 2)
 
 
 def plot_image(
