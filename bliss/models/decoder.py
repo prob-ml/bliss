@@ -558,13 +558,14 @@ class ImageDecoder(object):
         return images
 
     def render_ptiles(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
-        # n_sources: is (batchsize x n_tiles_per_image)
-        # locs: is (batchsize x n_tiles_per_image x max_sources x 2)
-        # galaxy_bool: Is (batchsize x n_tiles_per_image x max_sources)
-        # galaxy_params : is (batchsize x n_tiles_per_image x max_sources x galaxy_decoder.latent_dim)
-        # fluxes: Is (batchsize x n_tiles_per_image x max_sources x 2)
+        # n_sources: is (batch_size x n_tiles_per_image)
+        # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
+        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources)
+        # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
+        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x 2)
 
-        # returns the ptiles in shape batchsize x n_tiles_per_image x n_bands x ptile_slen x ptile_slen
+        # returns the ptiles in
+        # shape = (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
 
         batch_size = n_sources.shape[0]
         n_ptiles = batch_size * self.n_tiles_per_image
@@ -599,13 +600,13 @@ class ImageDecoder(object):
     def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
         # constructs the full slen x slen image
 
-        # n_sources: is (batchsize x n_tiles_per_image)
-        # locs: is (batchsize x n_tiles_per_image x max_sources x 2)
-        # galaxy_bool: Is (batchsize x n_tiles_per_image x max_sources)
-        # galaxy_params : is (batchsize x n_tiles_per_image x max_sources x galaxy_decoder.latent_dim)
-        # fluxes: Is (batchsize x n_tiles_per_image x max_sources x 2)
+        # n_sources: is (batch_size x n_tiles_per_image)
+        # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
+        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources)
+        # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
+        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x 2)
 
-        # returns the **full** image in shape batchsize x n_bands x slen x slen
+        # returns the **full** image in shape batch_size x n_bands x slen x slen
 
         # first render the padded tiles
         image_ptiles = self.render_ptiles(
@@ -624,8 +625,8 @@ class ImageDecoder(object):
 
 
 def construct_full_image_from_ptiles(image_ptiles):
-    # image_tiles is (batchsize, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
-    batchsize = image_ptiles.shape[0]
+    # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
+    batch_size = image_ptiles.shape[0]
     n_tiles_per_image = image_ptiles.shape[1]
     n_bands = image_ptiles.shape[2]
     ptile_slen = image_ptiles.shape[3]
@@ -637,17 +638,23 @@ def construct_full_image_from_ptiles(image_ptiles):
     n_tiles1 = int(n_tiles1)
 
     image_tiles_4d = image_ptiles.view(
-        batchsize, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
+        batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
     )
 
-    # zero pad tiles, so that the number of tiles in a row (and colmn)
+    # zero pad tiles, so that the number of tiles in a row (and column)
     # are divisible by 5 (the number of tiles in a padded tile)
     n_tiles_pad = 5 - (n_tiles1 % 5)
     zero_pads1 = torch.zeros(
-        batchsize, n_tiles_pad, n_tiles1, n_bands, ptile_slen, ptile_slen, device=device
+        batch_size,
+        n_tiles_pad,
+        n_tiles1,
+        n_bands,
+        ptile_slen,
+        ptile_slen,
+        device=device,
     )
     zero_pads2 = torch.zeros(
-        batchsize,
+        batch_size,
         n_tiles1 + n_tiles_pad,
         n_tiles_pad,
         n_bands,
@@ -662,7 +669,7 @@ def construct_full_image_from_ptiles(image_ptiles):
     tile_slen = int(ptile_slen / 5)
     n_tiles = n_tiles1 + n_tiles_pad
     canvas = torch.zeros(
-        batchsize,
+        batch_size,
         n_bands,
         (n_tiles + 4) * tile_slen,
         (n_tiles + 4) * tile_slen,
@@ -686,7 +693,7 @@ def construct_full_image_from_ptiles(image_ptiles):
                 (i * tile_slen) : (i * tile_slen + canvas_len),
                 (j * tile_slen) : (j * tile_slen + canvas_len),
             ] += image_tile_cols.permute(0, 3, 1, 4, 2, 5).reshape(
-                batchsize, n_bands, canvas_len, canvas_len
+                batch_size, n_bands, canvas_len, canvas_len
             )
 
     # trim to original image size

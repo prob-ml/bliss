@@ -1,4 +1,3 @@
-import os
 import math
 import numpy as np
 from itertools import permutations
@@ -15,7 +14,6 @@ import pytorch_lightning as pl
 from . import device, plotting
 from .models import encoder
 
-import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 
 
@@ -218,9 +216,9 @@ class SleepPhase(pl.LightningModule):
         )
 
         # flatten so first dimension is ptile
-        batchsize = images.shape[0]
+        batch_size = images.shape[0]
         n_tiles_per_image = self.dataset.image_decoder.n_tiles_per_image
-        n_tiles = batchsize * n_tiles_per_image
+        n_tiles = batch_size * n_tiles_per_image
         max_sources_per_tile = self.dataset.image_decoder.max_sources_per_tile
         n_bands = self.dataset.image_decoder.n_bands
         latent_dim = self.dataset.image_decoder.latent_dim
@@ -587,7 +585,7 @@ class SleepObjective(object):
         max_epochs: int,
         lr: tuple,
         weight_decay: tuple,
-        model_dir: str,
+        model_dir,
         metrics_callback,
         monitor,
         gpus=0,
