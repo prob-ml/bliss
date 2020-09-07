@@ -2,8 +2,7 @@ import pytest
 import torch
 
 
-@pytest.mark.skip
-class TestGalaxyEncoder:
+class TestBinaryEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(self, decoder_setup, encoder_setup, device_setup):
         use_cuda = device_setup.use_cuda
@@ -27,6 +26,9 @@ class TestGalaxyEncoder:
             max_sources=2,
             mean_sources=1.5,
             min_sources=0,
+            f_min=1e4,
+            f_max=1e6,
+            prob_galaxy=0.5,
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             binary_dataset,
@@ -64,7 +66,7 @@ class TestGalaxyEncoder:
         assert test_batch["n_galaxies"].item() == galaxy_bool.sum()
         assert test_batch["n_stars"].item() == (1 - galaxy_bool).sum()
 
-        # check detections are accurate.
+        # check predicted locations are accurate.
         diff_locs = test_batch["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
         diff_locs *= test_image.size(-1)
         assert diff_locs.abs().max() <= 0.5
