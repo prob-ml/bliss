@@ -21,11 +21,11 @@ class TestGalaxyEncoder:
             n_images=640 if use_cuda else 2,
             max_sources_per_tile=2,
             min_sources_per_tile=1,
-            loc_max_per_tile = 0.8,
-            loc_min_per_tile = 0.2,
+            loc_max_per_tile=0.8,
+            loc_min_per_tile=0.2,
             # this is so that prob(n_source = 1) \approx prob(n_source = 2) \approx = 0.5
             # under the poisson prior
-            mean_sources_per_tile=1.67
+            mean_sources_per_tile=1.67,
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,

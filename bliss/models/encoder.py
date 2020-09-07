@@ -136,7 +136,7 @@ class ImageEncoder(nn.Module):
         enc_kern=3,
         enc_hidden=256,
         momentum=0.5,
-        background_pad_value = 686.
+        background_pad_value=686.0,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -158,7 +158,7 @@ class ImageEncoder(nn.Module):
         # image parameters
         self.slen = slen
         self.n_bands = n_bands
-        self.background_pad_value = 686.
+        self.background_pad_value = 686.0
 
         # padding
         self.ptile_slen = ptile_slen
@@ -445,9 +445,11 @@ class ImageEncoder(nn.Module):
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
-        
-        images = F.pad(images, pad = (self.edge_padding, ) * 4, value = self.background_pad_value)
-        
+
+        images = F.pad(
+            images, pad=(self.edge_padding,) * 4, value=self.background_pad_value
+        )
+
         output = F.conv2d(
             images,
             self.tile_conv_weights,

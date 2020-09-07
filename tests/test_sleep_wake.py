@@ -40,7 +40,7 @@ def trained_encoder(star_dataset, encoder_setup, device_setup):
         tile_slen=star_dataset.tile_slen,
         max_detections=star_dataset.max_sources_per_tile,
     )
-    
+
     return trained_encoder.to(device_setup.device)
 
 
@@ -51,7 +51,7 @@ class TestStarSleepEncoder:
 
         test_star = torch.load(paths["data"].joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"].to(device)
-        
+
         with torch.no_grad():
             # get the estimated params
             trained_encoder.eval()
@@ -81,7 +81,7 @@ class TestStarSleepEncoder:
         # when the model is trained in full, which requires cuda
         if not device_setup.use_cuda:
             return
-                
+
         # test n_sources and locs
         assert n_sources == test_star["n_sources"].to(device)
 
@@ -95,6 +95,7 @@ class TestStarSleepEncoder:
         assert torch.all(
             diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs().to(device) * 0.10
         )
+
 
 class TestStarWakeNet:
     @pytest.fixture(scope="class")
