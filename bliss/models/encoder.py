@@ -50,11 +50,11 @@ def _get_tile_coords(slen, tile_slen):
     :return: tile_coords, a torch.LongTensor
     """
 
-    nptiles1 = int(slen / tile_slen)
-    n_ptiles = nptiles1 ** 2
+    n_ptiles1 = int(slen / tile_slen)
+    n_ptiles = n_ptiles1 ** 2
 
     def return_coords(i):
-        return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
+        return [(i // n_ptiles1) * tile_slen, (i % n_ptiles1) * tile_slen]
 
     tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
     tile_coords = tile_coords.long().to(device)
