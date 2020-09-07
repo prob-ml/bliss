@@ -82,7 +82,7 @@ class DecoderSetup:
         background[1] = 1123.0
 
         # slice if necessary.
-        background = background[range(n_bands)]
+        background = background[list(range(n_bands))]
         init_psf_params = init_psf_params[range(n_bands)]
 
         dec_args = (None, init_psf_params, background)
@@ -90,7 +90,9 @@ class DecoderSetup:
         n_batches = int(n_images / batch_size)
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 
-    def get_galaxy_dataset(self, batch_size=32, n_images=128, slen=10, **dec_kwargs):
+    def get_binary_dataset(
+        self, batch_size=32, n_batches=4, slen=20, prob_galaxy=1.0, **dec_kwargs
+    ):
 
         n_bands = 1
         galaxy_decoder = self.get_galaxy_decoder()
@@ -104,9 +106,9 @@ class DecoderSetup:
 
         dec_args = (galaxy_decoder, psf_params, background)
 
-        n_batches = int(n_images / batch_size)
-
-        dec_kwargs.update({"prob_galaxy": 1.0, "n_bands": n_bands, "slen": slen})
+        dec_kwargs.update(
+            {"n_bands": n_bands, "slen": slen, "prob_galaxy": prob_galaxy}
+        )
 
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 

@@ -14,11 +14,11 @@ class TestGalaxyEncoder:
         slen = 50
         tile_slen = slen
 
-        galaxy_dataset = decoder_setup.get_galaxy_dataset(
+        galaxy_dataset = decoder_setup.get_binary_dataset(
             slen=slen,
             tile_slen=tile_slen,
             batch_size=64 if use_cuda else 2,
-            n_images=640 if use_cuda else 2,
+            n_batches=10 if use_cuda else 2,
             max_sources_per_tile=2,
             min_sources_per_tile=1,
             loc_max_per_tile=0.8,
@@ -26,6 +26,7 @@ class TestGalaxyEncoder:
             # this is so that prob(n_source = 1) \approx prob(n_source = 2) \approx = 0.5
             # under the poisson prior
             mean_sources_per_tile=1.67,
+            prob_galaxy=1.0,
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,
