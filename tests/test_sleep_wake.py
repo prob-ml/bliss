@@ -13,7 +13,7 @@ def star_dataset(decoder_setup, device_setup):
     n_images = 1280 if device_setup.use_cuda else 1
 
     slen = 30
-    tile_slen = 5
+    tile_slen = 2
 
     return decoder_setup.get_star_dataset(
         psf_params,
@@ -24,7 +24,7 @@ def star_dataset(decoder_setup, device_setup):
         min_sources_per_tile=0,
         # this is so that the avg. number of sources
         # a 30 x 30 image is 3
-        mean_sources_per_tile=0.0833,
+        mean_sources_per_tile=0.004,
         batch_size=batch_size,
         n_images=n_images,
     )
@@ -32,14 +32,16 @@ def star_dataset(decoder_setup, device_setup):
 
 @pytest.fixture(scope="module")
 def trained_encoder(star_dataset, encoder_setup, device_setup):
-    n_epochs = 200 if device_setup.use_cuda else 1
+    n_epochs = 120 if device_setup.use_cuda else 1
     trained_encoder = encoder_setup.get_trained_encoder(
         star_dataset,
         n_epochs=n_epochs,
-        ptile_slen=star_dataset.tile_slen,
+        ptile_slen=star_dataset.tile_slen + 6,
         tile_slen=star_dataset.tile_slen,
         max_detections=star_dataset.max_sources_per_tile,
     )
+    
+    torch.save(trained_encoder.state_dict(), './star_encoder')
 
     return trained_encoder.to(device_setup.device)
 
@@ -51,7 +53,7 @@ class TestStarSleepEncoder:
 
         test_star = torch.load(paths["data"].joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"].to(device)
-
+        
         with torch.no_grad():
             # get the estimated params
             trained_encoder.eval()
@@ -81,7 +83,7 @@ class TestStarSleepEncoder:
         # when the model is trained in full, which requires cuda
         if not device_setup.use_cuda:
             return
-
+                
         # test n_sources and locs
         assert n_sources == test_star["n_sources"].to(device)
 
@@ -97,53 +99,53 @@ class TestStarSleepEncoder:
         )
 
 
-class TestStarWakeNet:
-    @pytest.fixture(scope="class")
-    def init_psf_setup(self, decoder_setup, device_setup):
-        # initialize psf params, just add 1 to each sigmas
-        fitted_psf_params = decoder_setup.get_fitted_psf_params()
-        init_psf_params = fitted_psf_params.clone()[None, 0]
-        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device_setup.device)
-        init_psf = PowerLawPSF(init_psf_params).forward().detach()
-        return {"init_psf_params": init_psf_params, "init_psf": init_psf}
+# class TestStarWakeNet:
+#     @pytest.fixture(scope="class")
+#     def init_psf_setup(self, decoder_setup, device_setup):
+#         # initialize psf params, just add 1 to each sigmas
+#         fitted_psf_params = decoder_setup.get_fitted_psf_params()
+#         init_psf_params = fitted_psf_params.clone()[None, 0]
+#         init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device_setup.device)
+#         init_psf = PowerLawPSF(init_psf_params).forward().detach()
+#         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 
-    def test_star_wake(
-        self, trained_encoder, star_dataset, init_psf_setup, paths, device_setup
-    ):
-        # load the test image
-        # 3-stars 30*30 pixels.
-        test_star = torch.load(paths["data"].joinpath("3_star_test.pt"))
-        test_image = test_star["images"]
-        test_slen = test_image.size(-1)
+#     def test_star_wake(
+#         self, trained_encoder, star_dataset, init_psf_setup, paths, device_setup
+#     ):
+#         # load the test image
+#         # 3-stars 30*30 pixels.
+#         test_star = torch.load(paths["data"].joinpath("3_star_test.pt"))
+#         test_image = test_star["images"]
+#         test_slen = test_image.size(-1)
 
-        # TODO: Reuse these when creating the background in the fixture
-        # initialize background params, which will create the true background
-        init_background_params = torch.zeros(1, 3, device=device_setup.device)
-        init_background_params[0, 0] = 686.0
+#         # TODO: Reuse these when creating the background in the fixture
+#         # initialize background params, which will create the true background
+#         init_background_params = torch.zeros(1, 3, device=device_setup.device)
+#         init_background_params[0, 0] = 686.0
 
-        n_samples = 1
-        hparams = {"n_samples": n_samples, "lr": 0.001}
-        image_decoder = star_dataset.image_decoder
-        assert image_decoder.slen == test_slen
-        wake_phase_model = wake.WakeNet(
-            trained_encoder,
-            image_decoder,
-            test_image,
-            init_background_params,
-            hparams,
-        )
+#         n_samples = 1
+#         hparams = {"n_samples": n_samples, "lr": 0.001}
+#         image_decoder = star_dataset.image_decoder
+#         assert image_decoder.slen == test_slen
+#         wake_phase_model = wake.WakeNet(
+#             trained_encoder,
+#             image_decoder,
+#             test_image,
+#             init_background_params,
+#             hparams,
+#         )
 
-        # run the wake-phase training
-        n_epochs = 1
+#         # run the wake-phase training
+#         n_epochs = 1
 
-        wake_trainer = pl.Trainer(
-            gpus=device_setup.gpus,
-            profiler=None,
-            logger=False,
-            checkpoint_callback=False,
-            min_epochs=n_epochs,
-            max_epochs=n_epochs,
-            reload_dataloaders_every_epoch=True,
-        )
+#         wake_trainer = pl.Trainer(
+#             gpus=device_setup.gpus,
+#             profiler=None,
+#             logger=False,
+#             checkpoint_callback=False,
+#             min_epochs=n_epochs,
+#             max_epochs=n_epochs,
+#             reload_dataloaders_every_epoch=True,
+#         )
 
-        wake_trainer.fit(wake_phase_model)
+#         wake_trainer.fit(wake_phase_model)
