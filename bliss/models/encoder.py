@@ -50,11 +50,11 @@ def _get_tile_coords(slen, tile_slen):
     :return: tile_coords, a torch.LongTensor
     """
 
-    n_ptiles1 = int(slen / tile_slen)
-    n_ptiles = n_ptiles1 ** 2
+    nptiles1 = int(slen / tile_slen)
+    n_ptiles = nptiles1 ** 2
 
     def return_coords(i):
-        return [(i // n_ptiles1) * tile_slen, (i % n_ptiles1) * tile_slen]
+        return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
 
     tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
     tile_coords = tile_coords.long().to(device)
@@ -136,6 +136,7 @@ class ImageEncoder(nn.Module):
         enc_kern=3,
         enc_hidden=256,
         momentum=0.5,
+        background_pad_value = 686.
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -157,6 +158,7 @@ class ImageEncoder(nn.Module):
         # image parameters
         self.slen = slen
         self.n_bands = n_bands
+        self.background_pad_value = 686.
 
         # padding
         self.ptile_slen = ptile_slen
@@ -443,12 +445,14 @@ class ImageEncoder(nn.Module):
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
-
+        
+        images = F.pad(images, pad = (self.edge_padding, ) * 4, value = self.background_pad_value)
+        
         output = F.conv2d(
             images,
             self.tile_conv_weights,
             stride=self.tile_slen,
-            padding=self.edge_padding,
+            padding=0,
         ).permute([0, 2, 3, 1])
 
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)

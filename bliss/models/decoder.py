@@ -126,6 +126,8 @@ class ImageDecoder(object):
         max_sources_per_tile=2,
         mean_sources_per_tile=0.4,
         min_sources_per_tile=0,
+        loc_min_per_tile = 0., 
+        loc_max_per_tile = 1.,
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
@@ -163,7 +165,11 @@ class ImageDecoder(object):
         self.mean_sources_per_tile = mean_sources_per_tile
         self.min_sources_per_tile = min_sources_per_tile
         self.prob_galaxy = float(prob_galaxy)
-
+        
+        # per-tile constraints on the location of sources
+        self.loc_min_per_tile = loc_min_per_tile
+        self.loc_max_per_tile = loc_max_per_tile
+        
         self.add_noise = add_noise
 
         # galaxy decoder
@@ -296,7 +302,7 @@ class ImageDecoder(object):
             self.max_sources_per_tile,
             2,
             device=device,
-        )
+        ) * (self.loc_max_per_tile - self.loc_min_per_tile) + self.loc_min_per_tile
         locs *= is_on_array.unsqueeze(-1)
 
         return locs

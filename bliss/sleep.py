@@ -163,9 +163,9 @@ class SleepPhase(pl.LightningModule):
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
-            "max_sources": self.dataset.image_decoder.max_sources_per_tile,
-            "mean_sources": self.dataset.image_decoder.mean_sources_per_tile,
-            "min_sources": self.dataset.image_decoder.min_sources_per_tile,
+            "max_sources_per_tile": self.dataset.image_decoder.max_sources_per_tile,
+            "mean_sources_per_tile": self.dataset.image_decoder.mean_sources_per_tile,
+            "min_sources_per_tile": self.dataset.image_decoder.min_sources_per_tile,
             "prob_galaxy": self.dataset.image_decoder.prob_galaxy,
         }
 
