@@ -9,17 +9,38 @@ from bliss.models.decoder import get_mgrid, PowerLawPSF
 @pytest.fixture(scope="module")
 def star_dataset(decoder_setup, device_setup):
     psf_params = decoder_setup.get_fitted_psf_params()
-    batch_size = 32 if device_setup.use_cuda else 1
-    n_images = 128 if device_setup.use_cuda else 1
+    batch_size = 128 if device_setup.use_cuda else 1
+    n_images = 1280 if device_setup.use_cuda else 1
+
+    slen = 30
+    tile_slen = 2
+
     return decoder_setup.get_star_dataset(
-        psf_params, n_bands=1, slen=50, batch_size=batch_size, n_images=n_images
+        psf_params,
+        n_bands=1,
+        slen=slen,
+        tile_slen=tile_slen,
+        max_sources_per_tile=2,
+        min_sources_per_tile=0,
+        # this is so that the avg. number of sources
+        # a 30 x 30 image is 3
+        mean_sources_per_tile=0.004,
+        batch_size=batch_size,
+        n_images=n_images,
     )
 
 
 @pytest.fixture(scope="module")
 def trained_encoder(star_dataset, encoder_setup, device_setup):
     n_epochs = 120 if device_setup.use_cuda else 1
-    trained_encoder = encoder_setup.get_trained_encoder(star_dataset, n_epochs=n_epochs)
+    trained_encoder = encoder_setup.get_trained_encoder(
+        star_dataset,
+        n_epochs=n_epochs,
+        ptile_slen=star_dataset.tile_slen + 6,
+        tile_slen=star_dataset.tile_slen,
+        max_detections=star_dataset.max_sources_per_tile,
+    )
+
     return trained_encoder.to(device_setup.device)
 
 
@@ -35,12 +56,26 @@ class TestStarSleepEncoder:
             # get the estimated params
             trained_encoder.eval()
             (
+                n_sources_per_tile,
+                locs_per_tile,
+                galaxy_params_per_tile,
+                log_fluxes_per_tile,
+                galaxy_bool_per_tile,
+            ) = trained_encoder.map_estimate(test_image)
+
+            (
                 n_sources,
                 locs,
                 galaxy_params,
                 log_fluxes,
                 galaxy_bool,
-            ) = trained_encoder.map_estimate(test_image)
+            ) = trained_encoder.get_full_params_from_sampled_params(
+                n_sources_per_tile,
+                locs_per_tile,
+                galaxy_params_per_tile,
+                log_fluxes_per_tile,
+                galaxy_bool_per_tile,
+            )
 
         # we only expect our assert statements to be true
         # when the model is trained in full, which requires cuda
@@ -89,8 +124,7 @@ class TestStarWakeNet:
         n_samples = 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
         image_decoder = star_dataset.image_decoder
-        image_decoder.slen = test_slen
-        image_decoder.cached_grid = get_mgrid(test_slen)
+        assert image_decoder.slen == test_slen
         wake_phase_model = wake.WakeNet(
             trained_encoder,
             image_decoder,
