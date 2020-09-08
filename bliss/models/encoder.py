@@ -61,7 +61,7 @@ def _get_tile_coords(slen, tile_slen):
     return tile_coords
 
 
-def _get_full_params_from_sampled_params(
+def get_full_params_from_sampled_params(
     slen, tile_slen, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
 ):
     # NOTE: off sources should have tile_locs == 0.
@@ -575,7 +575,7 @@ class ImageEncoder(nn.Module):
             galaxy_params,
             log_fluxes,
             galaxy_bool,
-        ) = _get_full_params_from_sampled_params(
+        ) = get_full_params_from_sampled_params(
             self.slen,
             self.tile_slen,
             tile_n_sources,

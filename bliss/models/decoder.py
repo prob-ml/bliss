@@ -44,6 +44,87 @@ def get_psf_params(psfield_fit_file, bands):
     return psf_params
 
 
+def construct_full_image_from_ptiles(image_ptiles):
+    # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
+    batch_size = image_ptiles.shape[0]
+    n_tiles_per_image = image_ptiles.shape[1]
+    n_bands = image_ptiles.shape[2]
+    ptile_slen = image_ptiles.shape[3]
+    assert image_ptiles.shape[4] == ptile_slen
+
+    n_tiles1 = np.sqrt(n_tiles_per_image)
+    # check it is an integer
+    assert n_tiles1 % 1 == 0
+    n_tiles1 = int(n_tiles1)
+
+    image_tiles_4d = image_ptiles.view(
+        batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
+    )
+
+    # zero pad tiles, so that the number of tiles in a row (and column)
+    # are divisible by 5 (the number of tiles in a padded tile)
+    n_tiles_pad = 5 - (n_tiles1 % 5)
+    zero_pads1 = torch.zeros(
+        batch_size,
+        n_tiles_pad,
+        n_tiles1,
+        n_bands,
+        ptile_slen,
+        ptile_slen,
+        device=device,
+    )
+    zero_pads2 = torch.zeros(
+        batch_size,
+        n_tiles1 + n_tiles_pad,
+        n_tiles_pad,
+        n_bands,
+        ptile_slen,
+        ptile_slen,
+        device=device,
+    )
+    image_tiles_4d = torch.cat((image_tiles_4d, zero_pads1), dim=1)
+    image_tiles_4d = torch.cat((image_tiles_4d, zero_pads2), dim=2)
+
+    # construct the full image
+    tile_slen = int(ptile_slen / 5)
+    n_tiles = n_tiles1 + n_tiles_pad
+    canvas = torch.zeros(
+        batch_size,
+        n_bands,
+        (n_tiles + 4) * tile_slen,
+        (n_tiles + 4) * tile_slen,
+        device=device,
+    )
+    for i in range(5):
+        for j in range(5):
+            indx_vec1 = torch.arange(start=i, end=n_tiles, step=5)
+            indx_vec2 = torch.arange(start=j, end=n_tiles, step=5)
+
+            canvas_len = len(indx_vec1) * ptile_slen
+
+            image_tile_rows = image_tiles_4d[:, indx_vec1]
+            image_tile_cols = image_tile_rows[:, :, indx_vec2]
+
+            # get canvas
+            start_x = i * tile_slen
+            canvas[
+                :,
+                :,
+                (i * tile_slen) : (i * tile_slen + canvas_len),
+                (j * tile_slen) : (j * tile_slen + canvas_len),
+            ] += image_tile_cols.permute(0, 3, 1, 4, 2, 5).reshape(
+                batch_size, n_bands, canvas_len, canvas_len
+            )
+
+    # trim to original image size
+    return canvas[
+        :,
+        :,
+        (2 * tile_slen) : ((n_tiles1 + 2) * tile_slen),
+        (2 * tile_slen) : ((n_tiles1 + 2) * tile_slen),
+    ]
+
+
 class PowerLawPSF(nn.Module):
     def __init__(self, init_psf_params, psf_slen=25, image_slen=101):
 
@@ -504,7 +585,7 @@ class ImageDecoder(object):
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
-    def render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
+    def _render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x n_bands x max_stars)
         # star_bool: Is (n_ptiles x max_stars)
@@ -536,7 +617,7 @@ class ImageDecoder(object):
 
         return ptile
 
-    def render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
+    def _render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
@@ -588,10 +669,10 @@ class ImageDecoder(object):
         fluxes = fluxes.reshape(n_ptiles, self.max_sources_per_tile, self.n_bands)
 
         # need n_sources because `*_locs` are not necessarily ordered.
-        galaxies = self.render_multiple_galaxies_on_ptile(
+        galaxies = self._render_multiple_galaxies_on_ptile(
             locs, galaxy_params, galaxy_bool
         )
-        stars = self.render_multiple_stars_on_ptile(locs, fluxes, star_bool)
+        stars = self._render_multiple_stars_on_ptile(locs, fluxes, star_bool)
 
         # shape = (n_ptiles x n_bands x slen x slen)
         images = galaxies + stars

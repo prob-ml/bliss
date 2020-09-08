@@ -375,12 +375,16 @@ class SleepPhase(pl.LightningModule):
         images = outputs[-1]["log"]["images"][:n_samples]
 
         # convert to full image
-        true_n_sources, true_locs, true_galaxy_bools = encoder._get_full_params_from_sampled_params(
+        (
+            true_n_sources,
+            true_locs,
+            true_galaxy_bools,
+        ) = encoder.get_full_params_from_sampled_params(
             self.image_encoder.slen,
             self.image_encoder.tile_slen,
             true_n_sources_on_tiles,
             true_locs_on_tiles,
-            true_galaxy_bools_on_tiles
+            true_galaxy_bools_on_tiles,
         )
 
         figsize = (12, 4 * n_samples)
@@ -440,6 +444,17 @@ class SleepPhase(pl.LightningModule):
             # continue only if at least one true source and predicted source.
             max_sources = true_loc.shape[1]
             if max_sources > 0 and n_sources.item() > 0:
+
+                # draw reconstruction image.
+                recon_image = self.dataset.image_decoder.render_images(
+                    tile_n_sources,
+                    tile_locs,
+                    tile_galaxy_bool,
+                    tile_galaxy_params,
+                    tile_log_fluxes,
+                )
+
+                # round up true parameters.
                 true_star_bool = self.image_decoder.get_star_bool(
                     true_n_source, true_galaxy_bool
                 )
@@ -451,9 +466,7 @@ class SleepPhase(pl.LightningModule):
                 )
 
                 # round up estimated parameters.
-                _max_sources = locs.shape[1]
                 star_bool = self.image_decoder.get_star_bool(n_sources, galaxy_bool)
-                fluxes = self.image_decoder.get_fluxes_from_log(log_fluxes, star_bool)
                 galaxy_loc = self.image_decoder.get_galaxy_locs(locs, galaxy_bool)
                 star_loc = self.image_decoder.get_star_locs(locs, star_bool)
 
@@ -463,30 +476,6 @@ class SleepPhase(pl.LightningModule):
                 galaxy_loc = galaxy_loc.cpu().numpy()[0]
                 star_loc = star_loc.cpu().numpy()[0]
 
-            plotting.plot_image(fig, true_ax, image)
-            plotting.plot_image_locs(
-                true_ax, slen, true_galaxy_loc, galaxy_loc, colors=("r", "b")
-            )
-            plotting.plot_image_locs(
-                true_ax, slen, true_star_loc, star_loc, colors=("g", "m")
-            )
-            true_ax.set_xlabel(
-                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
-            )
-
-            # only prediction/residual if at least 1 true source.
-            max_sources = true_loc.shape[1]
-            if max_sources > 0:
-
-                # draw reconstruction image.
-                recon_image = self.dataset.image_decoder.render_images(
-                    tile_n_sources,
-                    tile_locs,
-                    tile_galaxy_bool,
-                    tile_galaxy_params,
-                    tile_log_fluxes,
-                )
-                assert len(locs.shape) == 3 and locs.size(0) == 1
                 recon_image = recon_image[0, 0].cpu().numpy()
                 res_image = (image - recon_image) / np.sqrt(image)
 
