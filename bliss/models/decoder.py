@@ -9,7 +9,6 @@ import torch.nn.functional as F
 from torch.distributions import Poisson, Normal
 
 
-from .. import device
 from .encoder import get_is_on_from_n_sources
 
 
@@ -20,7 +19,7 @@ def get_mgrid(slen):
     # mgrid is between -1 and 1
     # then scale slightly because of the way f.grid_sample
     # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.type(torch.FloatTensor).to(device) * (slen - 1) / slen
+    return mgrid.type(torch.FloatTensor) * (slen - 1) / slen
 
 
 def get_psf_params(psfield_fit_file, bands):
@@ -58,7 +57,7 @@ class PowerLawPSF(nn.Module):
         self.image_slen = image_slen
 
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        self.cached_radii_grid = (grid ** 2).sum(2).sqrt().to(device)
+        self.cached_radii_grid = (grid ** 2).sum(2).sqrt()
 
         # initial weights
         self.params = nn.Parameter(init_psf_params.clone(), requires_grad=True)
@@ -94,7 +93,7 @@ class PowerLawPSF(nn.Module):
 
     def _get_psf(self):
         # TODO make the psf function vectorized ...
-        psf = torch.tensor([]).to(device)
+        psf = torch.tensor([])
         for i in range(self.n_bands):
             _psf = self._get_psf_single_band(self.params[i])
             _psf *= self.normalization_constant[i]
@@ -154,7 +153,7 @@ class ImageDecoder(object):
         self.n_tiles_per_image = int(n_tiles_per_image)
 
         self.n_bands = n_bands  # number of bands
-        self.background = background.to(device)  # sky background
+        self.background = background  # sky background
 
         assert len(background.shape) == 3
         assert self.background.shape[0] == self.n_bands
@@ -229,7 +228,7 @@ class ImageDecoder(object):
 
         assert source_slen <= _slen, "Should be using trim source."
 
-        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=device)
+        source_expanded = torch.zeros(source.shape[0], _slen, _slen)
         offset = int((_slen - source_slen) / 2)
 
         source_expanded[
@@ -278,11 +277,7 @@ class ImageDecoder(object):
         # output dimension is batchsize x n_tiles_per_image
 
         # always poisson distributed.
-        m = Poisson(
-            torch.full(
-                (1,), self.mean_sources_per_tile, dtype=torch.float, device=device
-            )
-        )
+        m = Poisson(torch.full((1,), self.mean_sources_per_tile, dtype=torch.float))
         n_sources = m.sample([batch_size, self.n_tiles_per_image])
 
         # long() here is necessary because used for indexing and one_hot encoding.
@@ -302,7 +297,6 @@ class ImageDecoder(object):
                 self.n_tiles_per_image,
                 self.max_sources_per_tile,
                 2,
-                device=device,
             )
             * (self.loc_max_per_tile - self.loc_min_per_tile)
             + self.loc_min_per_tile
@@ -317,7 +311,7 @@ class ImageDecoder(object):
 
         batch_size = n_sources.size(0)
         uniform = torch.rand(
-            batch_size, self.n_tiles_per_image, self.max_sources_per_tile, device=device
+            batch_size, self.n_tiles_per_image, self.max_sources_per_tile
         )
         galaxy_bool = uniform < self.prob_galaxy
         galaxy_bool = (galaxy_bool * is_on_array).float()
@@ -335,7 +329,7 @@ class ImageDecoder(object):
         # draw pareto conditioned on being less than f_max
 
         u_max = self._pareto_cdf(self.f_max)
-        uniform_samples = torch.rand(*shape, device=device) * u_max
+        uniform_samples = torch.rand(*shape) * u_max
         return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     @staticmethod
@@ -347,7 +341,7 @@ class ImageDecoder(object):
         >> fluxes = np.exp(log_fluxes) * is_on_array
         """
         log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(device)
+            fluxes > 0, fluxes, torch.ones(*fluxes.shape)
         )  # prevent log(0) errors.
         log_fluxes = torch.log(log_fluxes)
 
@@ -370,7 +364,6 @@ class ImageDecoder(object):
                     self.n_tiles_per_image,
                     self.max_sources_per_tile,
                     self.n_bands - 1,
-                    device=device,
                 )
                 * 0.15
                 + 0.3
@@ -390,8 +383,8 @@ class ImageDecoder(object):
         assert len(n_galaxies.shape) == 2
         batch_size = n_galaxies.size(0)
 
-        mean = torch.zeros(1, dtype=torch.float, device=device)
-        std = torch.ones(1, dtype=torch.float, device=device)
+        mean = torch.zeros(1, dtype=torch.float)
+        std = torch.ones(1, dtype=torch.float)
         p_z = Normal(mean, std)
         sample_shape = torch.tensor(
             [
@@ -446,7 +439,7 @@ class ImageDecoder(object):
             images_mean = images_mean.clamp(min=1.0)
 
         _images = torch.sqrt(images_mean)
-        images = _images * torch.randn(*images_mean.shape, device=device)
+        images = _images * torch.randn(*images_mean.shape)
         images = images + images_mean
 
         return images
@@ -483,7 +476,7 @@ class ImageDecoder(object):
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=device)
+        ptile = torch.zeros(ptile_shape)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
@@ -510,7 +503,7 @@ class ImageDecoder(object):
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=device)
+        ptile = torch.zeros(ptile_shape)
 
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
@@ -661,7 +654,6 @@ def construct_full_image_from_ptiles(image_ptiles):
         n_bands,
         ptile_slen,
         ptile_slen,
-        device=device,
     )
     zero_pads2 = torch.zeros(
         batch_size,
@@ -670,7 +662,6 @@ def construct_full_image_from_ptiles(image_ptiles):
         n_bands,
         ptile_slen,
         ptile_slen,
-        device=device,
     )
     image_tiles_4d = torch.cat((image_tiles_4d, zero_pads1), dim=1)
     image_tiles_4d = torch.cat((image_tiles_4d, zero_pads2), dim=2)
@@ -683,7 +674,6 @@ def construct_full_image_from_ptiles(image_ptiles):
         n_bands,
         (n_tiles + 4) * tile_slen,
         (n_tiles + 4) * tile_slen,
-        device=device,
     )
     for i in range(5):
         for j in range(5):

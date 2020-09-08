@@ -11,7 +11,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 
-from . import device, plotting
+from . import plotting
 from .models import encoder
 
 from optuna.integration import PyTorchLightningPruningCallback
@@ -54,7 +54,7 @@ def _get_log_probs_all_perms(
     max_detections = galaxy_params_log_probs_all.size(-1)
 
     n_permutations = math.factorial(max_detections)
-    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations, device=device)
+    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations)
     galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
@@ -241,7 +241,6 @@ class SleepPhase(pl.LightningModule):
         # extract image tiles
         # true_tile_locs has shape = (n_ptiles x max_detections x 2)
         # true_tile_n_sources has shape = (n_ptiles)
-        slen = images.size(-1)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)
@@ -315,8 +314,8 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": self.lr}],
-            weight_decay=self.weight_decay,
+            [{"params": self.image_encoder.parameters(), "lr": self.hparams.lr}],
+            weight_decay=self.hparams.weight_decay,
         )
 
     def train_dataloader(self):

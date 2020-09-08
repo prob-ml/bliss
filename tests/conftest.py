@@ -52,8 +52,7 @@ class DeviceSetup:
 
 
 class DecoderSetup:
-    def __init__(self, paths, device):
-        self.device = device
+    def __init__(self, paths):
         self.data_path = paths["data"]
 
     def get_galaxy_decoder(self):
@@ -63,7 +62,7 @@ class DecoderSetup:
 
     def get_fitted_psf_params(self):
         psf_file = self.data_path.joinpath("fitted_powerlaw_psf_params.npy")
-        psf_params = torch.from_numpy(np.load(psf_file)).to(self.device)
+        psf_params = torch.from_numpy(np.load(psf_file))
         return psf_params
 
     def get_star_dataset(
@@ -77,7 +76,7 @@ class DecoderSetup:
     ):
         assert 1 <= n_bands <= 2
         dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": n_bands, "slen": slen})
-        background = torch.zeros(2, slen, slen, device=self.device)
+        background = torch.zeros(2, slen, slen)
         background[0] = 686.0
         background[1] = 1123.0
 
@@ -99,7 +98,7 @@ class DecoderSetup:
         psf_params = self.get_fitted_psf_params()[range(n_bands)]
 
         # TODO: take background from test image.
-        background = torch.zeros(n_bands, slen, slen, device=self.device)
+        background = torch.zeros(n_bands, slen, slen)
         background[0] = 5000.0
 
         dec_args = (galaxy_decoder, psf_params, background)
@@ -112,9 +111,8 @@ class DecoderSetup:
 
 
 class EncoderSetup:
-    def __init__(self, gpus, device):
+    def __init__(self, gpus):
         self.gpus = gpus
-        self.device = device
 
     def get_trained_encoder(
         self,
@@ -160,7 +158,7 @@ class EncoderSetup:
 
         sleep_trainer.fit(sleep_net)
         sleep_net.image_encoder.eval()
-        return sleep_net.image_encoder.to(self.device)
+        return sleep_net.image_encoder
 
 
 # available fixtures
@@ -182,9 +180,9 @@ def device_setup(pytestconfig):
 
 @pytest.fixture(scope="session")
 def decoder_setup(paths, device_setup):
-    return DecoderSetup(paths, device_setup.device)
+    return DecoderSetup(paths)
 
 
 @pytest.fixture(scope="session")
 def encoder_setup(device_setup):
-    return EncoderSetup(device_setup.gpus, device_setup.device)
+    return EncoderSetup(device_setup.gpus)

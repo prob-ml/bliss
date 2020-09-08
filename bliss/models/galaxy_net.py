@@ -15,12 +15,6 @@ from torch.optim import Adam
 plt.switch_backend("Agg")
 
 
-class Flatten(nn.Module):
-    @staticmethod
-    def forward(tensor):
-        return tensor.view(tensor.size(0), -1)
-
-
 class CenteredGalaxyEncoder(nn.Module):
     def __init__(self, slen, latent_dim, n_bands, hidden=256):
         super(CenteredGalaxyEncoder, self).__init__()
@@ -36,7 +30,7 @@ class CenteredGalaxyEncoder(nn.Module):
             nn.ReLU(),
             nn.Conv2d(16, 16, 3, padding=1),
             nn.ReLU(),
-            Flatten(),
+            nn.Flatten(1, -1),
             nn.Linear(16 * self.slen ** 2, hidden),
             nn.ReLU(),
             nn.Linear(hidden, hidden),
