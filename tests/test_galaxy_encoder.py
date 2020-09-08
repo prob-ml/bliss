@@ -7,30 +7,31 @@ class TestGalaxyEncoder:
     def trained_encoder(self, decoder_setup, encoder_setup, device_setup):
         use_cuda = device_setup.use_cuda
 
-        n_epochs = 100 if use_cuda else 1
-        # draw galaxies only in 2x2 center tile
-        loc_min = 0.2
-        loc_max = 0.8
+        n_epochs = 200 if use_cuda else 1
 
-        # encoder looks at 10x10 padded tile, and detects galaxies in 2x2 tile.
-        ptile_slen = 8
-        tile_slen = 2
+        # simulates either 1 or 2 galaxies in a 50 x 50 image
+        # the input to the encoder is the 50 x 50 image
+        slen = 50
+        tile_slen = slen
 
         galaxy_dataset = decoder_setup.get_galaxy_dataset(
-            slen=50,
-            batch_size=32 if use_cuda else 2,
-            n_images=320 if use_cuda else 2,
-            loc_min=loc_min,
-            loc_max=loc_max,
-            max_sources=2,
-            mean_sources=1,
-            min_sources=1,
+            slen=slen,
+            tile_slen=tile_slen,
+            batch_size=64 if use_cuda else 2,
+            n_images=640 if use_cuda else 2,
+            max_sources_per_tile=2,
+            min_sources_per_tile=1,
+            loc_max_per_tile=0.8,
+            loc_min_per_tile=0.2,
+            # this is so that prob(n_source = 1) \approx prob(n_source = 2) \approx = 0.5
+            # under the poisson prior
+            mean_sources_per_tile=1.67,
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,
             n_epochs=n_epochs,
             max_detections=2,
-            ptile_slen=ptile_slen,
+            ptile_slen=tile_slen,
             tile_slen=tile_slen,
             validation_plot_start=0,
         )
@@ -55,6 +56,10 @@ class TestGalaxyEncoder:
                 galaxy_bool,
             ) = trained_encoder.map_estimate(test_image.to(device))
 
+            # dim = 1 is the n_tiles dimension.
+            # there is just one tile, so remove this dimension.
+            locs = locs.squeeze(1)
+
         if not use_cuda:
             return
 
@@ -64,4 +69,4 @@ class TestGalaxyEncoder:
         # check locations are accurate.
         diff_locs = test_galaxy["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
         diff_locs *= test_image.size(-1)
-        assert diff_locs.abs().max() <= 0.5
+        assert diff_locs.abs().max() <= 2.5
