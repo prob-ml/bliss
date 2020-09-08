@@ -98,7 +98,7 @@ class DecoderSetup:
         galaxy_decoder = self.get_galaxy_decoder()
 
         # psf params
-        psf_params = self.get_fitted_psf_params()[range(n_bands)]
+        psf_params = self.get_fitted_psf_params()[list(range(n_bands))]
 
         # TODO: take background from test image.
         background = torch.zeros(n_bands, slen, slen, device=self.device)
@@ -124,10 +124,10 @@ class EncoderSetup:
         n_epochs=100,
         ptile_slen=8,
         tile_slen=2,
-        enc_conv_c=5,
-        enc_kern=3,
-        enc_hidden=64,
         max_detections=2,
+        enc_hidden=256,
+        enc_kern=3,
+        enc_conv_c=20,
         validation_plot_start=100,
     ):
         slen = dataset.slen

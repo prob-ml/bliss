@@ -39,6 +39,9 @@ def trained_encoder(star_dataset, encoder_setup, device_setup):
         ptile_slen=star_dataset.tile_slen + 6,
         tile_slen=star_dataset.tile_slen,
         max_detections=star_dataset.max_sources_per_tile,
+        enc_conv_c=5,
+        enc_kern=3,
+        enc_hidden=64,
     )
 
     return trained_encoder.to(device_setup.device)

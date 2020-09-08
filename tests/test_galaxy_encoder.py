@@ -35,6 +35,9 @@ class TestGalaxyEncoder:
             ptile_slen=tile_slen,
             tile_slen=tile_slen,
             validation_plot_start=0,
+            enc_conv_c=5,
+            enc_kern=3,
+            enc_hidden=64,
         )
         return trained_encoder.to(device_setup.device)
 

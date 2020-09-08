@@ -7,7 +7,7 @@ class TestBinaryEncoder:
     def trained_encoder(self, decoder_setup, encoder_setup, device_setup):
         use_cuda = device_setup.use_cuda
 
-        n_epochs = 120 if use_cuda else 1
+        n_epochs = 150 if use_cuda else 1
 
         # draw galaxies + stars only in 10x10 center tile
         loc_min = 0.25
@@ -36,6 +36,9 @@ class TestBinaryEncoder:
             max_detections=2,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
+            enc_hidden=256,
+            enc_kern=3,
+            enc_conv_c=20,
             validation_plot_start=1000,  # do not create validation plots.
         )
         return trained_encoder.to(device_setup.device)
