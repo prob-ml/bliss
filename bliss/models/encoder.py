@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.distributions import categorical
-from .. import device
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -14,9 +13,7 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert torch.all(n_sources >= 0)
     assert torch.all(n_sources <= max_sources)
 
-    is_on_array = torch.zeros(
-        *n_sources.shape, max_sources, device=device, dtype=torch.float
-    )
+    is_on_array = torch.zeros(*n_sources.shape, max_sources, dtype=torch.float)
 
     for i in range(max_sources):
         is_on_array[..., i] = n_sources > i
@@ -57,7 +54,7 @@ def _get_tile_coords(slen, tile_slen):
         return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
 
     tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
-    tile_coords = tile_coords.long().to(device)
+    tile_coords = tile_coords.long()
 
     return tile_coords
 
@@ -116,11 +113,6 @@ def _get_full_params_from_sampled_params(
         params.append(param)
 
     return (n_sources, locs, *params)
-
-
-class Flatten(nn.Module):
-    def forward(self, tensor):
-        return tensor.view(tensor.size(0), -1)
 
 
 class ImageEncoder(nn.Module):
@@ -205,7 +197,7 @@ class ImageEncoder(nn.Module):
             ),
             nn.BatchNorm2d(self.enc_conv_c, momentum=self.momentum),
             nn.ReLU(),
-            Flatten(),
+            nn.Flatten(1, -1),
             nn.Linear(conv_out_dim, self.enc_hidden),
             nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
             nn.ReLU(),
@@ -266,7 +258,6 @@ class ImageEncoder(nn.Module):
                 shape,
                 self.dim_out_all,
                 dtype=torch.long,
-                device=device,
             )
             indx_mats.append(indx_mat)
         return indx_mats
@@ -289,9 +280,7 @@ class ImageEncoder(nn.Module):
         """Setup the indices corresponding to entries in h, these are cached since same for all h."""
 
         indx_mats = self._create_indx_mats()  # same order as self.variational_params
-        prob_n_source_indx = torch.zeros(
-            self.max_detections + 1, dtype=torch.long, device=device
-        )
+        prob_n_source_indx = torch.zeros(self.max_detections + 1, dtype=torch.long)
 
         for n_detections in range(1, self.max_detections + 1):
             # index corresponding to where we left off in last iteration.
@@ -333,7 +322,7 @@ class ImageEncoder(nn.Module):
         n_samples = n_sources.size(0)
 
         # append null column, return zero if indx_mat returns null index (dim_out_all)
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=device)), dim=1)
+        _h = torch.cat((h, torch.zeros(n_ptiles, 1)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
         var_param = torch.gather(
@@ -430,7 +419,6 @@ class ImageEncoder(nn.Module):
             self.n_bands,
             self.ptile_slen,
             self.ptile_slen,
-            device=device,
         )
 
         for b in range(self.n_bands):
@@ -491,7 +479,9 @@ class ImageEncoder(nn.Module):
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
         tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
         tile_n_sources = tile_n_sources.view(n_samples, -1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = self.get_is_on_from_n_sources(
+            tile_n_sources, self.max_detections
+        )
         tile_is_on_array = tile_is_on_array.unsqueeze(3).float()
 
         # get var_params conditioned on n_sources
@@ -533,7 +523,9 @@ class ImageEncoder(nn.Module):
         # tile_is_on_array shape = (1 x n_ptiles x max_detections)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
         tile_n_sources = tile_n_sources.view(1, -1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = self.get_is_on_from_n_sources(
+            tile_n_sources, self.max_detections
+        )
         tile_is_on_array = tile_is_on_array.unsqueeze(3).float()
 
         # get variational parameters: these are on image tiles
