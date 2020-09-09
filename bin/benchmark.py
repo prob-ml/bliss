@@ -31,11 +31,11 @@ from bliss.models.decoder import get_mgrid
 ## Wake-phase forward pass: on GPU 4.737 ms, On CPU 4.74 ms
 
 # Benchmark for refactor PR
-## Sleep-phase Dataloader: on GPU 2931 ms
+## Sleep-phase Dataloader: on GPU 1680 ms
 ## Sleep-phase forward pass: on GPU 2 ms
 
-## Wake-phase Dataloader: on GPU 2667 ms
-## Wake-phase forward pass: on GPU 8 ms
+## Wake-phase Dataloader: on GPU 1480 ms
+## Wake-phase forward pass: on GPU 4 ms
 
 
 # set up device
@@ -48,7 +48,7 @@ data_path = path + "/data"
 
 ## set up Training class
 psf_file = data_path + "/fitted_powerlaw_psf_params.npy"
-psf_params = SimulatedDataset.get_psf_params_from_file(psf_file).to(device)
+psf_params = SimulatedDataset.get_psf_params_from_file(psf_file, device)
 
 background = torch.zeros(1, 50, 50, device=device)
 background[0] = 686.0

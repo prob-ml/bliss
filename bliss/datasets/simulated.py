@@ -22,6 +22,7 @@ class SimulatedDataset(IterableDataset):
         self.latent_dim = self.image_decoder.latent_dim
 
         self.max_sources_per_tile = self.image_decoder.max_sources_per_tile
+        self.device = torch.device("cpu")
 
     def __iter__(self):
         return self.batch_generator()
@@ -31,9 +32,7 @@ class SimulatedDataset(IterableDataset):
             yield self.get_batch()
 
     def get_batch(self):
-        if self.device is not None:
-            self.image_decoder.device = self.device
-
+        self.image_decoder.device = self.device
         params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
 
         images = self.image_decoder.render_images(
@@ -48,15 +47,17 @@ class SimulatedDataset(IterableDataset):
         return params
 
     @staticmethod
-    def get_gal_decoder_from_file(decoder_file, gal_slen=51, n_bands=1, latent_dim=8):
-        dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, latent_dim, n_bands)
-        dec.load_state_dict(torch.load(decoder_file))
+    def get_gal_decoder_from_file(
+        decoder_file, device, gal_slen=51, n_bands=1, latent_dim=8
+    ):
+        dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, latent_dim, n_bands).to(device)
+        dec.load_state_dict(torch.load(decoder_file, map_location=device))
         dec.eval()
         return dec
 
     @staticmethod
-    def get_psf_params_from_file(psf_file):
-        return torch.from_numpy(np.load(psf_file))
+    def get_psf_params_from_file(psf_file, device):
+        return torch.from_numpy(np.load(psf_file)).to(device)
 
     @staticmethod
     def get_background_from_file(background_file, slen, n_bands):
@@ -73,7 +74,7 @@ class SimulatedDataset(IterableDataset):
         return background
 
     @staticmethod
-    def decoder_args_from_args(args, paths: dict):
+    def decoder_args_from_args(args, paths: dict, device):
         slen, latent_dim, n_bands = args.slen, args.latent_dim, args.n_bands
         gal_slen = args.gal_slen
         decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
@@ -81,17 +82,19 @@ class SimulatedDataset(IterableDataset):
         psf_file = paths["data"].joinpath(args.psf_file)
 
         dec = SimulatedDataset.get_gal_decoder_from_file(
-            decoder_file, gal_slen, n_bands, latent_dim
+            decoder_file, gal_slen, n_bands, latent_dim, device
         )
         background = SimulatedDataset.get_background_from_file(
             background_file, slen, n_bands
         )
-        psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)[range(n_bands)]
+        psf_params = SimulatedDataset.get_psf_params_from_file(psf_file, device)[
+            range(n_bands)
+        ]
 
         return dec, psf_params, background
 
     @classmethod
-    def from_args(cls, args, paths: dict):
+    def from_args(cls, args, paths: dict, device):
         args_dict = vars(args)
         parameters = inspect.signature(ImageDecoder).parameters
 
@@ -102,7 +105,7 @@ class SimulatedDataset(IterableDataset):
             "init_psf_params",
             "background",
         ]
-        decoder_args = SimulatedDataset.decoder_args_from_args(args, paths)
+        decoder_args = SimulatedDataset.decoder_args_from_args(args, paths, device)
         decoder_kwargs = {
             key: value
             for key, value in args_dict.items()
