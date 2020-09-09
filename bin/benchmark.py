@@ -30,6 +30,13 @@ from bliss.models.decoder import get_mgrid
 ## Wake-phase Dataloader: on GPU 1557 ms, On CPU 2163.016 ms
 ## Wake-phase forward pass: on GPU 4.737 ms, On CPU 4.74 ms
 
+# Benchmark for refactor PR
+## Sleep-phase Dataloader: on GPU 2931 ms
+## Sleep-phase forward pass: on GPU 2 ms
+
+## Wake-phase Dataloader: on GPU 2667 ms
+## Wake-phase forward pass: on GPU 8 ms
+
 
 # set up device
 use_cuda = torch.cuda.is_available()
