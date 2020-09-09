@@ -1,6 +1,5 @@
 import pytest
 from pytorch_lightning import Callback
-import optuna
 from optuna.trial import FixedTrial
 
 from bliss.sleep import SleepObjective
@@ -25,10 +24,9 @@ def metrics_callback_setup(device_setup):
 @pytest.fixture(scope="module")
 def star_dataset(decoder_setup, device_setup):
     psf_params = decoder_setup.get_fitted_psf_params()
-    batch_size = 1
-    n_images = 1
+
     return decoder_setup.get_star_dataset(
-        psf_params, n_bands=1, slen=50, batch_size=batch_size, n_images=n_images
+        psf_params, n_bands=1, slen=50, batch_size=1, n_batches=1
     )
 
 

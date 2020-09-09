@@ -12,14 +12,11 @@ def star_dataset(decoder_setup, device_setup):
     batch_size = 128 if device_setup.use_cuda else 1
     n_batches = 10 if device_setup.use_cuda else 1
 
-    slen = 30
-    tile_slen = 2
-
     return decoder_setup.get_star_dataset(
         psf_params,
         n_bands=1,
-        slen=slen,
-        tile_slen=tile_slen,
+        slen=30,
+        tile_slen=2,
         max_sources_per_tile=2,
         min_sources_per_tile=0,
         # this is so that the avg. number of sources
