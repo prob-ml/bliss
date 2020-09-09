@@ -13,12 +13,13 @@ class TestGalaxyEncoder:
         # the input to the encoder is the 50 x 50 image
         # the encoder looks at 8x8 padded tile, and detects galaxies in 2x2 tile.
         slen = 50
-        tile_slen = slen
+        ptile_slen = 8
+        tile_slen = 2
 
         galaxy_dataset = decoder_setup.get_binary_dataset(
             slen=slen,
             tile_slen=tile_slen,
-            batch_size=64 if use_cuda else 2,
+            batch_size=32 if use_cuda else 2,
             n_batches=10 if use_cuda else 2,
             max_sources_per_tile=2,
             min_sources_per_tile=1,
@@ -33,7 +34,7 @@ class TestGalaxyEncoder:
             galaxy_dataset,
             n_epochs=n_epochs,
             max_detections=2,
-            ptile_slen=tile_slen,
+            ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             validation_plot_start=0,
             enc_conv_c=5,
@@ -60,10 +61,6 @@ class TestGalaxyEncoder:
                 log_fluxes,
                 galaxy_bool,
             ) = trained_encoder.map_estimate(test_image.to(device))
-
-            # dim = 1 is the n_tiles dimension.
-            # there is just one tile, so remove this dimension.
-            locs = locs.squeeze(1)
 
         if not use_cuda:
             return
