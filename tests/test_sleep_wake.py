@@ -59,26 +59,12 @@ class TestStarSleepEncoder:
             # get the estimated params
             trained_encoder.eval()
             (
-                n_sources_per_tile,
-                locs_per_tile,
-                galaxy_params_per_tile,
-                log_fluxes_per_tile,
-                galaxy_bool_per_tile,
-            ) = trained_encoder.map_estimate(test_image)
-
-            (
                 n_sources,
                 locs,
                 galaxy_params,
                 log_fluxes,
                 galaxy_bool,
-            ) = trained_encoder.get_full_params_from_sampled_params(
-                n_sources_per_tile,
-                locs_per_tile,
-                galaxy_params_per_tile,
-                log_fluxes_per_tile,
-                galaxy_bool_per_tile,
-            )
+            ) = trained_encoder.map_estimate(test_image)
 
         # we only expect our assert statements to be true
         # when the model is trained in full, which requires cuda

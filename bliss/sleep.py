@@ -378,9 +378,7 @@ class SleepPhase(pl.LightningModule):
             true_n_sources,
             true_locs,
             true_galaxy_bools,
-        ) = encoder.get_full_params_from_sampled_params(
-            self.image_encoder.slen,
-            self.image_encoder.tile_slen,
+        ) = self.image_encoder.get_full_params_from_sampled_params(
             true_n_sources_on_tiles,
             true_locs_on_tiles,
             true_galaxy_bools_on_tiles,
@@ -404,7 +402,7 @@ class SleepPhase(pl.LightningModule):
 
             assert len(image.shape) == 4
             with torch.no_grad():
-                # get the estimated params: these are *per tile*
+                # get the estimated params, these are *per tile*.
                 self.image_encoder.eval()
                 (
                     tile_n_sources,
