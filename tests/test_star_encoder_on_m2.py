@@ -106,6 +106,7 @@ def get_summary_stats(
     return tpr_bool.mean(), ppv_bool.mean(), tpr_bool, ppv_bool
 
 
+@pytest.mark.slow
 class TestStarSleepEncoderM2:
     def test_star_sleep_m2(self, trained_star_encoder_m2, device_setup, paths):
         device = device_setup.device
