@@ -223,7 +223,7 @@ class ImageDecoder(object):
         # latent variables (locations, fluxes, etc) are drawn per-tile
         self.tile_slen = tile_slen
         assert (self.slen % self.tile_slen) == 0, (
-            "we assume that the tiles paritition and cover the image."
+            "We assume that the tiles cover the image."
             + " So slen must be divisible by tile_slen"
         )
 
@@ -497,6 +497,7 @@ class ImageDecoder(object):
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
         log_fluxes = self.get_log_fluxes(fluxes)
 
+        # per tile quantities.
         return {
             "n_sources": n_sources,
             "n_galaxies": n_galaxies,
@@ -728,7 +729,7 @@ class ImageDecoder(object):
         # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
         # fluxes: Is (batch_size x n_tiles_per_image x max_sources x 2)
 
-        # returns the **full** image in shape batch_size x n_bands x slen x slen
+        # returns the **full** image in shape (batch_size x n_bands x slen x slen)
 
         # first render the padded tiles
         image_ptiles = self.render_ptiles(

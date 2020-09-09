@@ -241,7 +241,6 @@ class SleepPhase(pl.LightningModule):
         # extract image tiles
         # true_tile_locs has shape = (n_ptiles x max_detections x 2)
         # true_tile_n_sources has shape = (n_ptiles)
-        slen = images.size(-1)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)

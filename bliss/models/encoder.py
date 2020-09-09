@@ -139,25 +139,23 @@ class ImageEncoder(nn.Module):
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
-        size slen * slen
-        and returns a NN latent variable representation of this image.
+        size slen * slen and returns a NN latent variable representation of this image.
 
-        * NOTE: Should have (n_bands == n_source_params) in the case of stars.
-
-        :param slen: dimension of full image, we assume its square for now
-        :param ptile_slen: dimension (in pixels) of the individual
+        Args:
+        slen (int): dimension of full image, we assume its square for now
+        ptile_slen (int): dimension (in pixels) of the individual
                            image padded tiles (usually 8 for stars, and _ for galaxies).
-        :param n_bands : number of bands
-        :param max_detections:
-        * For fluxes this should equal number of bands, for galaxies it will be the number of latent
-        dimensions in the network.
+        n_bands (int): number of bands
+        max_detections (int): Number of maximum detections in a single tile.
+        n_galaxy_params (int): Number of latent dimensions in the galaxy VAE network.
+
         """
         super(ImageEncoder, self).__init__()
 
         # image parameters
         self.slen = slen
         self.n_bands = n_bands
-        self.background_pad_value = 686.0
+        self.background_pad_value = background_pad_value
 
         # padding
         self.ptile_slen = ptile_slen
@@ -480,7 +478,6 @@ class ImageEncoder(nn.Module):
 
     def sample_encoder(self, image, n_samples):
         assert image.size(0) == 1, "Sampling only works for a single image."
-        slen = image.shape[-1]
         image_ptiles = self.get_images_in_tiles(image)
         h = self._get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
@@ -519,10 +516,9 @@ class ImageEncoder(nn.Module):
             tile_galaxy_bool,
         )
 
-    def map_estimate(self, image, return_full_param=False):
+    def map_estimate(self, image):
         # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
         assert image.size(0) == 1, "Sampling only works for a single image."
-        slen = image.shape[-1]
 
         image_ptiles = self.get_images_in_tiles(image)
         h = self._get_var_params_all(image_ptiles)
@@ -586,5 +582,4 @@ class ImageEncoder(nn.Module):
         )
 
         galaxy_bool = galaxy_bool.squeeze(-1)
-
         return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool

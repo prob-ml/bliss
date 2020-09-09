@@ -11,6 +11,7 @@ class TestGalaxyEncoder:
 
         # simulates either 1 or 2 galaxies in a 50 x 50 image
         # the input to the encoder is the 50 x 50 image
+        # the encoder looks at 8x8 padded tile, and detects galaxies in 2x2 tile.
         slen = 50
         tile_slen = slen
 

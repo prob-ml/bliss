@@ -3,14 +3,14 @@ import torch
 import pytorch_lightning as pl
 
 from bliss import wake
-from bliss.models.decoder import get_mgrid, PowerLawPSF
+from bliss.models.decoder import PowerLawPSF
 
 
 @pytest.fixture(scope="module")
 def star_dataset(decoder_setup, device_setup):
     psf_params = decoder_setup.get_fitted_psf_params()
     batch_size = 128 if device_setup.use_cuda else 1
-    n_images = 1280 if device_setup.use_cuda else 1
+    n_batches = 10 if device_setup.use_cuda else 1
 
     slen = 30
     tile_slen = 2
@@ -26,7 +26,7 @@ def star_dataset(decoder_setup, device_setup):
         # a 30 x 30 image is 3
         mean_sources_per_tile=0.004,
         batch_size=batch_size,
-        n_images=n_images,
+        n_batches=n_batches,
     )
 
 

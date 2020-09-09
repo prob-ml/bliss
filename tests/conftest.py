@@ -70,7 +70,7 @@ class DecoderSetup:
         self,
         init_psf_params,
         batch_size=32,
-        n_images=128,
+        n_batches=4,
         n_bands=1,
         slen=50,
         **dec_kwargs,
@@ -87,7 +87,6 @@ class DecoderSetup:
 
         dec_args = (None, init_psf_params, background)
 
-        n_batches = int(n_images / batch_size)
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 
     def get_binary_dataset(
