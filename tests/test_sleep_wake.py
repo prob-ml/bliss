@@ -41,7 +41,7 @@ def trained_encoder(star_dataset, encoder_setup, device_setup):
         max_detections=star_dataset.max_sources_per_tile,
     )
 
-    return trained_encoder.to(device_setup.device)
+    return trained_encoder
 
 
 class TestStarSleepEncoder:
@@ -50,7 +50,7 @@ class TestStarSleepEncoder:
         device = device_setup.device
 
         test_star = torch.load(paths["data"].joinpath(f"{n_stars}_star_test.pt"))
-        test_image = test_star["images"].to(device)
+        test_image = test_star["images"]
 
         with torch.no_grad():
             # get the estimated params
@@ -83,18 +83,16 @@ class TestStarSleepEncoder:
             return
 
         # test n_sources and locs
-        assert n_sources == test_star["n_sources"].to(device)
+        assert n_sources == test_star["n_sources"]
 
-        diff_locs = test_star["locs"].sort(1)[0].to(device) - locs.sort(1)[0]
+        diff_locs = test_star["locs"].sort(1)[0] - locs.sort(1)[0]
         diff_locs *= test_image.size(-1)
         assert diff_locs.abs().max() <= 0.5
 
         # test fluxes
-        diff = test_star["log_fluxes"].sort(1)[0].to(device) - log_fluxes.sort(1)[0]
+        diff = test_star["log_fluxes"].sort(1)[0] - log_fluxes.sort(1)[0]
         assert torch.all(diff.abs() <= log_fluxes.sort(1)[0].abs() * 0.10)
-        assert torch.all(
-            diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs().to(device) * 0.10
-        )
+        assert torch.all(diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs() * 0.10)
 
 
 class TestStarWakeNet:
@@ -103,7 +101,7 @@ class TestStarWakeNet:
         # initialize psf params, just add 1 to each sigmas
         fitted_psf_params = decoder_setup.get_fitted_psf_params()
         init_psf_params = fitted_psf_params.clone()[None, 0]
-        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device_setup.device)
+        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0])
         init_psf = PowerLawPSF(init_psf_params).forward().detach()
         return {"init_psf_params": init_psf_params, "init_psf": init_psf}
 

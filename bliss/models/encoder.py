@@ -13,7 +13,9 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert torch.all(n_sources >= 0)
     assert torch.all(n_sources <= max_sources)
 
-    is_on_array = torch.zeros(*n_sources.shape, max_sources, dtype=torch.float)
+    is_on_array = torch.zeros(*n_sources.shape, max_sources, dtype=torch.float).to(
+        n_sources.device
+    )
 
     for i in range(max_sources):
         is_on_array[..., i] = n_sources > i
@@ -66,7 +68,7 @@ def _get_full_params_from_sampled_params(
     # NOTE: assume that each param in each tile is already pushed to the front.
 
     # coordinates of the tiles
-    tile_coords = _get_tile_coords(slen, tile_slen)
+    tile_coords = _get_tile_coords(slen, tile_slen).to(tile_locs_sampled.device)
 
     # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
     assert len(tile_locs_sampled.shape) == 4
@@ -322,7 +324,7 @@ class ImageEncoder(nn.Module):
         n_samples = n_sources.size(0)
 
         # append null column, return zero if indx_mat returns null index (dim_out_all)
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1)), dim=1)
+        _h = torch.cat((h, torch.zeros(n_ptiles, 1).to(h.device)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
         var_param = torch.gather(
@@ -354,10 +356,9 @@ class ImageEncoder(nn.Module):
             loc_mean.shape = (n_samples x n_ptiles x max_detections x len(x,y))
             source_param_mean.shape = (n_samples x n_ptiles x max_detections x n_source_params)
         """
-
         estimated_params = {}
         for i in range(self.n_variational_params):
-            indx_mat = self.indx_mats[i]
+            indx_mat = self.indx_mats[i].to(h.device)
             param_info = self.variational_params[i]
             param_name = param_info[0]
             param_dim = param_info[1]
@@ -440,7 +441,7 @@ class ImageEncoder(nn.Module):
 
         output = F.conv2d(
             images,
-            self.tile_conv_weights,
+            self.tile_conv_weights.to(images.device),
             stride=self.tile_slen,
             padding=0,
         ).permute([0, 2, 3, 1])
@@ -479,9 +480,7 @@ class ImageEncoder(nn.Module):
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
         tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
         tile_n_sources = tile_n_sources.view(n_samples, -1)
-        tile_is_on_array = self.get_is_on_from_n_sources(
-            tile_n_sources, self.max_detections
-        )
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(3).float()
 
         # get var_params conditioned on n_sources
@@ -523,9 +522,7 @@ class ImageEncoder(nn.Module):
         # tile_is_on_array shape = (1 x n_ptiles x max_detections)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
         tile_n_sources = tile_n_sources.view(1, -1)
-        tile_is_on_array = self.get_is_on_from_n_sources(
-            tile_n_sources, self.max_detections
-        )
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(3).float()
 
         # get variational parameters: these are on image tiles

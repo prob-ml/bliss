@@ -511,7 +511,7 @@ class ImageDecoder(object):
         assert fluxes.shape[2] == psf.shape[0] == self.n_bands
 
         # all stars are just the PSF so we copy it.
-        expanded_psf = psf.expand(n_ptiles, self.n_bands, -1, -1)
+        expanded_psf = psf.expand(n_ptiles, self.n_bands, -1, -1).to(locs.device)
 
         # this loop plots each of the ith star in each of the (n_ptiles) images.
         for n in range(max_sources):

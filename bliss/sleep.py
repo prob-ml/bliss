@@ -54,7 +54,9 @@ def _get_log_probs_all_perms(
     max_detections = galaxy_params_log_probs_all.size(-1)
 
     n_permutations = math.factorial(max_detections)
-    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations)
+    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations).to(
+        locs_log_probs_all.device
+    )
     galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
@@ -236,7 +238,7 @@ class SleepPhase(pl.LightningModule):
         true_tile_n_sources = true_tile_n_sources.flatten()
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(
             true_tile_n_sources, max_sources_per_tile
-        )
+        ).to(self.device)
 
         # extract image tiles
         # true_tile_locs has shape = (n_ptiles x max_detections x 2)
@@ -292,7 +294,6 @@ class SleepPhase(pl.LightningModule):
             true_tile_galaxy_bool,
             true_tile_is_on_array,
         )
-
         loss_vec = (
             locs_loss * (locs_loss.detach() < 1e6).float()
             + counter_loss
