@@ -12,10 +12,9 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert not torch.any(torch.isnan(n_sources))
     assert torch.all(n_sources >= 0)
     assert torch.all(n_sources <= max_sources)
+    print(n_sources.dtype)
 
-    is_on_array = torch.zeros(*n_sources.shape, max_sources, dtype=torch.float).to(
-        n_sources.device
-    )
+    is_on_array = torch.zeros(*n_sources.shape, max_sources).type_as(n_sources).float()
 
     for i in range(max_sources):
         is_on_array[..., i] = n_sources > i
@@ -56,7 +55,7 @@ def _get_tile_coords(slen, tile_slen):
         return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
 
     tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
-    tile_coords = tile_coords.long()
+    # tile_coords = tile_coords.long()
 
     return tile_coords
 
@@ -68,7 +67,7 @@ def _get_full_params_from_sampled_params(
     # NOTE: assume that each param in each tile is already pushed to the front.
 
     # coordinates of the tiles
-    tile_coords = _get_tile_coords(slen, tile_slen).to(tile_locs_sampled.device)
+    tile_coords = _get_tile_coords(slen, tile_slen).type_as(tile_locs_sampled)
 
     # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
     assert len(tile_locs_sampled.shape) == 4
@@ -130,7 +129,6 @@ class ImageEncoder(nn.Module):
         enc_kern=3,
         enc_hidden=256,
         momentum=0.5,
-        background_pad_value=686.0,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -161,7 +159,6 @@ class ImageEncoder(nn.Module):
         assert self.edge_padding % 1 == 0, "amount of padding should be an integer"
         self.edge_padding = int(self.edge_padding)
 
-        self.tile_coords = _get_tile_coords(slen, self.tile_slen)
         assert self.slen % self.tile_slen == 0
         self.n_tiles_per_image = int((self.slen / self.tile_slen) ** 2)
 
@@ -256,11 +253,7 @@ class ImageEncoder(nn.Module):
         for i in range(self.n_variational_params):
             param_dim = self.variational_params[i][1]
             shape = (self.max_detections + 1, param_dim * self.max_detections)
-            indx_mat = torch.full(
-                shape,
-                self.dim_out_all,
-                dtype=torch.long,
-            )
+            indx_mat = torch.full(shape, self.dim_out_all, dtype=torch.long)
             indx_mats.append(indx_mat)
         return indx_mats
 
@@ -324,7 +317,7 @@ class ImageEncoder(nn.Module):
         n_samples = n_sources.size(0)
 
         # append null column, return zero if indx_mat returns null index (dim_out_all)
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1).to(h.device)), dim=1)
+        _h = torch.cat((h, torch.zeros(n_ptiles, 1).type_as(h)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
         var_param = torch.gather(
@@ -347,7 +340,7 @@ class ImageEncoder(nn.Module):
         * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
         probability of having 0,1,2 stars.
         """
-        free_probs = h[:, self.prob_n_source_indx]
+        free_probs = h[:, self.prob_n_source_indx.type_as(h).long()]
         return self.log_softmax(free_probs)
 
     def _get_var_params_for_n_sources(self, h, n_sources):
@@ -358,7 +351,7 @@ class ImageEncoder(nn.Module):
         """
         estimated_params = {}
         for i in range(self.n_variational_params):
-            indx_mat = self.indx_mats[i].to(h.device)
+            indx_mat = self.indx_mats[i].type_as(h).long()
             param_info = self.variational_params[i]
             param_name = param_info[0]
             param_dim = param_info[1]
@@ -415,11 +408,14 @@ class ImageEncoder(nn.Module):
         # These weights are set up and  cached during the __init__.
 
         ptile_slen2 = self.ptile_slen ** 2
-        self.tile_conv_weights = torch.zeros(
-            ptile_slen2 * self.n_bands,
-            self.n_bands,
-            self.ptile_slen,
-            self.ptile_slen,
+        self.register_buffer(
+            "tile_conv_weights",
+            torch.zeros(
+                ptile_slen2 * self.n_bands,
+                self.n_bands,
+                self.ptile_slen,
+                self.ptile_slen,
+            ),
         )
 
         for b in range(self.n_bands):
@@ -441,7 +437,7 @@ class ImageEncoder(nn.Module):
 
         output = F.conv2d(
             images,
-            self.tile_conv_weights.to(images.device),
+            self.tile_conv_weights,
             stride=self.tile_slen,
             padding=0,
         ).permute([0, 2, 3, 1])
@@ -469,7 +465,6 @@ class ImageEncoder(nn.Module):
 
     def sample_encoder(self, image, n_samples):
         assert image.size(0) == 1, "Sampling only works for a single image."
-        slen = image.shape[-1]
         image_ptiles = self.get_images_in_tiles(image)
         h = self._get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
