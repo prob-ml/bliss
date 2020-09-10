@@ -12,7 +12,6 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert not torch.any(torch.isnan(n_sources))
     assert torch.all(n_sources >= 0)
     assert torch.all(n_sources <= max_sources)
-    print(n_sources.dtype)
 
     is_on_array = torch.zeros(*n_sources.shape, max_sources).type_as(n_sources).float()
 

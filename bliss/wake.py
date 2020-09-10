@@ -7,33 +7,7 @@ import pytorch_lightning as pl
 
 import numpy as np
 
-from .models import encoder
 from .models.decoder import get_mgrid
-from . import device
-
-
-def _fit_plane_to_background(background):
-    assert len(background.shape) == 3
-    n_bands = background.shape[0]
-    slen = background.shape[-1]
-
-    planar_params = np.zeros((n_bands, 3))
-    for i in range(n_bands):
-        # can we make numpy to torch?
-        y = background[i].flatten().detach().cpu().numpy()
-        grid = get_mgrid(slen).detach().cpu().numpy()
-
-        x = np.ones((slen ** 2, 3))
-        x[:, 1:] = np.array(
-            [grid[:, :, 0].flatten(), grid[:, :, 1].flatten()]
-        ).transpose()
-
-        xtx = np.einsum("ki, kj -> ij", x, x)
-        xty = np.einsum("ki, k -> i", x, y)
-
-        planar_params[i, :] = np.linalg.solve(xtx, xty)
-
-    return planar_params
 
 
 class PlanarBackground(nn.Module):
@@ -49,8 +23,10 @@ class PlanarBackground(nn.Module):
 
         # get grid
         # can we use cached grid to replace?
-        _mgrid = get_mgrid(image_slen).to(device)
-        self.mgrid = torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
+        _mgrid = get_mgrid(image_slen)
+        self.register_buffer(
+            "mgrid", torch.stack([_mgrid for _ in range(self.n_bands)], dim=0)
+        )
 
         # initial weights
         # why do we clone the parameter here?
@@ -83,7 +59,7 @@ class WakeNet(pl.LightningModule):
 
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder
-        self.image_decoder.power_law_psf.requires_grad_(True)
+        self.image_decoder.requires_grad_(True)
 
         # observed image is batch_size (or 1) x n_bands x slen x slen
         assert len(observed_img.shape) == 4
@@ -147,9 +123,7 @@ class WakeNet(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        return optim.Adam(
-            [{"params": self.image_decoder.power_law_psf.parameters(), "lr": self.lr}]
-        )
+        return optim.Adam([{"params": self.image_decoder.parameters(), "lr": self.lr}])
 
     # ---------------
     # Training
@@ -179,8 +153,8 @@ class WakeNet(pl.LightningModule):
     def _get_init_background(self, sample_every=25):
         sampled_background = self._sample_image(sample_every)
         self.init_background_params = torch.tensor(
-            _fit_plane_to_background(sampled_background)
-        ).to(device)
+            self._fit_plane_to_background(sampled_background)
+        ).to(self.device)
         self.planar_background = PlanarBackground(
             self.init_background_params, self.slen
         )
@@ -210,3 +184,26 @@ class WakeNet(pl.LightningModule):
                 )
 
         return samples
+
+    def _fit_plane_to_background(self, background):
+        assert len(background.shape) == 3
+        n_bands = background.shape[0]
+        slen = background.shape[-1]
+
+        planar_params = np.zeros((n_bands, 3))
+        for i in range(n_bands):
+            # can we make numpy to torch?
+            y = background[i].flatten().detach().numpy()
+            grid = get_mgrid(slen).detach().numpy()
+
+            x = np.ones((slen ** 2, 3))
+            x[:, 1:] = np.array(
+                [grid[:, :, 0].flatten(), grid[:, :, 1].flatten()]
+            ).transpose()
+
+            xtx = np.einsum("ki, kj -> ij", x, x)
+            xty = np.einsum("ki, k -> i", x, y)
+
+            planar_params[i, :] = np.linalg.solve(xtx, xty)
+
+        return planar_params
