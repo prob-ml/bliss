@@ -115,6 +115,14 @@ def _get_full_params_from_sampled_params(
     return (n_sources, locs, *params)
 
 
+def pickble_loc_mean_func(x):
+    return torch.sigmoid(x) * (x != 0).float()
+
+
+def pickble_prob_galaxy_func(x):
+    return torch.sigmoid(x).clamp(1e-4, 1 - 1e-4)
+
+
 class ImageEncoder(nn.Module):
     def __init__(
         self,
@@ -232,13 +240,13 @@ class ImageEncoder(nn.Module):
         )
 
         self.variational_params = [
-            ("loc_mean", 2, lambda x: torch.sigmoid(x) * (x != 0).float()),
+            ("loc_mean", 2, pickble_loc_mean_func),
             ("loc_logvar", 2),
             ("galaxy_param_mean", self.n_galaxy_params),
             ("galaxy_param_logvar", self.n_galaxy_params),
             ("log_flux_mean", self.n_star_params),
             ("log_flux_logvar", self.n_star_params),
-            ("prob_galaxy", 1, lambda x: torch.sigmoid(x).clamp(1e-4, 1 - 1e-4)),
+            ("prob_galaxy", 1, pickble_prob_galaxy_func),
         ]
         self.n_variational_params = len(self.variational_params)
 
@@ -502,10 +510,9 @@ class ImageEncoder(nn.Module):
             tile_galaxy_bool,
         )
 
-    def map_estimate(self, image, return_full_param=False):
+    def map_estimate(self, image):
         # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
         assert image.size(0) == 1, "Sampling only works for a single image."
-        slen = image.shape[-1]
 
         image_ptiles = self.get_images_in_tiles(image)
         h = self._get_var_params_all(image_ptiles)
