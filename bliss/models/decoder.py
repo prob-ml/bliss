@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import pad
 import torch.nn.functional as F
+from torch.distributions import Poisson, Normal
 
 
 from .encoder import get_is_on_from_n_sources
@@ -456,6 +457,166 @@ class ImageDecoder(nn.Module):
             images = self._apply_noise(images)
 
         return images
+
+    def sample_prior(self, batch_size=1):
+        n_sources = self._sample_n_sources(batch_size)
+        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources_per_tile)
+        locs = self._sample_locs(is_on_array, batch_size)
+
+        n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
+            n_sources, is_on_array
+        )
+        galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
+
+        fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
+        log_fluxes = self._get_log_fluxes(fluxes)
+
+        return {
+            "n_sources": n_sources,
+            "n_galaxies": n_galaxies,
+            "n_stars": n_stars,
+            "locs": locs,
+            "galaxy_params": galaxy_params,
+            "fluxes": fluxes,
+            "log_fluxes": log_fluxes,
+            "galaxy_bool": galaxy_bool,
+        }
+
+    def _sample_n_sources(self, batch_size):
+        # returns number of sources for each batch x tile
+        # output dimension is batchsize x n_tiles_per_image
+
+        # always poisson distributed.
+        m = Poisson(torch.full((1,), self.mean_sources_per_tile, dtype=torch.float))
+        n_sources = m.sample([batch_size, self.n_tiles_per_image])
+
+        # long() here is necessary because used for indexing and one_hot encoding.
+        n_sources = n_sources.clamp(
+            max=self.max_sources_per_tile, min=self.min_sources_per_tile
+        )
+        n_sources = n_sources.long().squeeze(-1)
+        return n_sources
+
+    def _sample_locs(self, is_on_array, batch_size):
+        # output dimension is batchsize x n_tiles_per_image x max_sources_per_tile x 2
+
+        # 2 = (x,y)
+        locs = (
+            torch.rand(
+                batch_size,
+                self.n_tiles_per_image,
+                self.max_sources_per_tile,
+                2,
+            )
+            * (self.loc_max_per_tile - self.loc_min_per_tile)
+            + self.loc_min_per_tile
+        )
+        locs *= is_on_array.unsqueeze(-1)
+
+        return locs
+
+    def _sample_galaxy_params(self, n_galaxies, galaxy_bool):
+        # galaxy params are just Normal(0,1) variables.
+
+        assert len(n_galaxies.shape) == 2
+        batch_size = n_galaxies.size(0)
+
+        mean = torch.zeros(1, dtype=torch.float)
+        std = torch.ones(1, dtype=torch.float)
+        p_z = Normal(mean, std)
+        sample_shape = torch.tensor(
+            [
+                batch_size,
+                self.n_tiles_per_image,
+                self.max_sources_per_tile,
+                self.latent_dim,
+            ]
+        )
+        galaxy_params = p_z.rsample(sample_shape)
+        galaxy_params = galaxy_params.reshape(
+            batch_size,
+            self.n_tiles_per_image,
+            self.max_sources_per_tile,
+            self.latent_dim,
+        )
+
+        # zero out excess according to galaxy_bool.
+        galaxy_params = galaxy_params * galaxy_bool.unsqueeze(-1)
+        return galaxy_params
+
+    def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
+        # the counts returned (n_galaxies, n_stars) are of shape (batch_size x n_tiles_per_image)
+        # the booleans returned (galaxy_bool, star_bool) are of shape (batch_size x n_tiles_per_image x max_detections)
+
+        batch_size = n_sources.size(0)
+        uniform = torch.rand(
+            batch_size,
+            self.n_tiles_per_image,
+            self.max_sources_per_tile,
+        )
+        galaxy_bool = uniform < self.prob_galaxy
+        galaxy_bool = (galaxy_bool * is_on_array).float()
+        star_bool = (1 - galaxy_bool) * is_on_array
+        n_galaxies = galaxy_bool.sum(-1)
+        n_stars = star_bool.sum(-1)
+        assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
+
+        return n_galaxies, n_stars, galaxy_bool, star_bool
+
+    def _sample_fluxes(self, n_stars, star_bool, batch_size):
+        """
+
+        :return: fluxes, a shape (batch_size x self.max_sources_per_tile x max_sources x n_bands) tensor
+        """
+        assert n_stars.shape[0] == batch_size
+
+        shape = (batch_size, self.n_tiles_per_image, self.max_sources_per_tile)
+        base_fluxes = self._draw_pareto_maxed(shape)
+
+        if self.n_bands > 1:
+            colors = (
+                torch.rand(
+                    batch_size,
+                    self.n_tiles_per_image,
+                    self.max_sources_per_tile,
+                    self.n_bands - 1,
+                )
+                * 0.15
+                + 0.3
+            )
+            _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(-1)
+
+            fluxes = torch.cat((base_fluxes.unsqueeze(-1), _fluxes), dim=3)
+            fluxes *= star_bool.unsqueeze(-1)
+        else:
+            fluxes = (base_fluxes * star_bool.float()).unsqueeze(-1)
+
+        return fluxes
+
+    def _draw_pareto_maxed(self, shape):
+        # draw pareto conditioned on being less than f_max
+
+        u_max = self._pareto_cdf(self.f_max)
+        uniform_samples = torch.rand(*shape) * u_max
+        return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
+
+    def _pareto_cdf(self, x):
+        return 1 - (self.f_min / x) ** self.alpha
+
+    @staticmethod
+    def _get_log_fluxes(fluxes):
+        """
+        To obtain fluxes from log_fluxes.
+
+        >> is_on_array = get_is_on_from_n_stars(n_stars, max_sources)
+        >> fluxes = np.exp(log_fluxes) * is_on_array
+        """
+        ones = torch.ones(*fluxes.shape).type_as(fluxes)
+
+        log_fluxes = torch.where(fluxes > 0, fluxes, ones)  # prevent log(0) errors.
+        log_fluxes = torch.log(log_fluxes)
+
+        return log_fluxes
 
     def construct_full_image_from_ptiles(self, image_ptiles):
         # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
