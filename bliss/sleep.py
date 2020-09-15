@@ -202,10 +202,14 @@ class SleepPhase(pl.LightningModule):
         )
 
     def train_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None, num_workers=self.num_worker)
+        return DataLoader(
+            self.dataset, batch_size=None, num_workers=self.num_worker, pin_memory=True
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None, num_workers=self.num_worker)
+        return DataLoader(
+            self.dataset, batch_size=None, num_workers=self.num_worker, pin_memory=True
+        )
 
     def training_step(self, batch, batch_idx):
         (
