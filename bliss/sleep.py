@@ -401,7 +401,7 @@ class SleepPhase(pl.LightningModule):
             # true parameters on full image.
             true_loc = true_locs[None, i]
             true_n_source = true_n_sources[None, i]
-            true_galaxy_bool = true_galaxy_bools[None, i]
+            true_galaxy_bool = true_galaxy_bools[None, i].squeeze(-1)
 
             assert len(image.shape) == 4
             with torch.no_grad():
@@ -429,6 +429,7 @@ class SleepPhase(pl.LightningModule):
                 tile_log_fluxes,
                 tile_galaxy_bool.unsqueeze(-1),
             )
+            galaxy_bool = galaxy_bool.squeeze(-1)
 
             assert len(locs.shape) == 3 and locs.size(0) == 1
             assert locs.shape[1] == n_sources.max().int().item()
