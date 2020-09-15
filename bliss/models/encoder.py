@@ -33,9 +33,7 @@ def _argfront(is_on_array, dim):
 
 
 def _sample_class_weights(class_weights, n_samples=1):
-    """Draw a sample from Categorical variable with
-    probabilities class_weights.
-    """
+    """Draw a sample from Categorical variable with probabilities class_weights."""
 
     assert not torch.any(torch.isnan(class_weights))
     cat_rv = categorical.Categorical(probs=class_weights)
@@ -46,7 +44,8 @@ def _get_tile_coords(slen, tile_slen):
     """
     This records (x0, x1) indices each image tile comes from.
 
-    :return: tile_coords, a torch.LongTensor
+    Returns:
+        tile_coords (torch.LongTensor):
     """
 
     nptiles1 = int(slen / tile_slen)
