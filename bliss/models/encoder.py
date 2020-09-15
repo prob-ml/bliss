@@ -546,14 +546,12 @@ class ImageEncoder(nn.Module):
             pred, tile_is_on_array, tile_galaxy_bool
         )
 
-        tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
-
         return (
             tile_n_sources,
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
-            tile_galaxy_bool,
+            tile_galaxy_bool.squeeze(-1),
         )
 
     def map_estimate(self, image):
@@ -576,7 +574,7 @@ class ImageEncoder(nn.Module):
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
-            tile_galaxy_bool.unsqueeze(-1),  # shape len is same as other two
+            tile_galaxy_bool.unsqueeze(-1),  # shape len should be == 4
         )
 
         galaxy_bool = galaxy_bool.squeeze(-1)

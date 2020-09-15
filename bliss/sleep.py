@@ -373,7 +373,7 @@ class SleepPhase(pl.LightningModule):
         true_galaxy_bools_on_tiles = outputs[-1]["log"]["galaxy_bool"][:n_samples]
         images = outputs[-1]["log"]["images"][:n_samples]
 
-        # convert to full image
+        # convert to full image parameters for plotting purposes.
         (
             true_n_sources,
             true_locs,
@@ -381,7 +381,7 @@ class SleepPhase(pl.LightningModule):
         ) = self.image_encoder.get_full_params_from_sampled_params(
             true_n_sources_on_tiles,
             true_locs_on_tiles,
-            true_galaxy_bools_on_tiles,
+            true_galaxy_bools_on_tiles.unsqueeze(-1),
         )
 
         figsize = (12, 4 * n_samples)
@@ -410,10 +410,9 @@ class SleepPhase(pl.LightningModule):
                     tile_galaxy_params,
                     tile_log_fluxes,
                     tile_galaxy_bool,
-                ) = self.image_encoder.map_estimate(image)
+                ) = self.image_encoder.tiled_map_estimate(image)
 
-            # convert tile estimates to full parameterization
-            # for plotting
+            # convert tile estimates to full parameterization for plotting
             (
                 n_sources,
                 locs,
@@ -425,7 +424,7 @@ class SleepPhase(pl.LightningModule):
                 tile_locs,
                 tile_galaxy_params,
                 tile_log_fluxes,
-                tile_galaxy_bool,
+                tile_galaxy_bool.unsqueeze(-1),
             )
 
             assert len(locs.shape) == 3 and locs.size(0) == 1

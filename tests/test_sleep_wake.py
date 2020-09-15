@@ -20,8 +20,8 @@ def star_dataset(decoder_setup, device_setup):
         max_sources_per_tile=2,
         min_sources_per_tile=0,
         # this is so that the avg. number of sources
-        # a 30 x 30 image is 3
-        mean_sources_per_tile=0.004,
+        # a 30 x 30 image is (approx) 3
+        mean_sources_per_tile=0.014,
         batch_size=batch_size,
         n_batches=n_batches,
     )

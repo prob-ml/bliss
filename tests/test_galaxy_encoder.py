@@ -7,8 +7,6 @@ class TestGalaxyEncoder:
     def trained_encoder(self, decoder_setup, encoder_setup, device_setup):
         use_cuda = device_setup.use_cuda
 
-        n_epochs = 200 if use_cuda else 1
-
         # simulates either 1 or 2 galaxies in a 50 x 50 image
         # the input to the encoder is the 50 x 50 image
         # the encoder looks at 8x8 padded tile, and detects galaxies in 2x2 tile.
@@ -32,14 +30,14 @@ class TestGalaxyEncoder:
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,
-            n_epochs=n_epochs,
+            n_epochs=120 if use_cuda else 1,
             max_detections=2,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
-            validation_plot_start=0,
             enc_conv_c=5,
             enc_kern=3,
             enc_hidden=64,
+            validation_plot_start=0,
         )
         return trained_encoder.to(device_setup.device)
 

@@ -145,7 +145,7 @@ class EncoderSetup:
         enc_hidden=256,
         enc_kern=3,
         enc_conv_c=20,
-        validation_plot_start=100,
+        validation_plot_start=1000,
     ):
         slen = dataset.slen
         n_bands = dataset.n_bands
@@ -175,6 +175,7 @@ class EncoderSetup:
             reload_dataloaders_every_epoch=True,
             logger=False,
             checkpoint_callback=False,
+            check_val_every_n_epoch=50,
         )
 
         sleep_trainer.fit(sleep_net)
