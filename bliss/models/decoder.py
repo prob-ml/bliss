@@ -453,15 +453,15 @@ class ImageDecoder(object):
         mean = torch.zeros(1, dtype=torch.float, device=device)
         std = torch.ones(1, dtype=torch.float, device=device)
         p_z = Normal(mean, std)
-        sample_shape = torch.tensor(
-            [
-                batch_size,
-                self.n_tiles_per_image,
-                self.max_sources_per_tile,
-                self.latent_dim,
-            ]
+        shape = (
+            batch_size,
+            self.n_tiles_per_image,
+            self.max_sources_per_tile,
+            self.latent_dim,
         )
+        sample_shape = torch.tensor(shape)
         galaxy_params = p_z.rsample(sample_shape)
+        galaxy_params = galaxy_params.reshape(*shape)
 
         # zero out excess according to galaxy_bool.
         galaxy_params = galaxy_params * galaxy_bool.unsqueeze(-1)
