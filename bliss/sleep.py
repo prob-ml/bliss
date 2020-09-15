@@ -368,6 +368,8 @@ class SleepPhase(pl.LightningModule):
         # add some images to tensorboard for validating location/counts.
         n_samples = min(10, len(outputs[-1]["log"]["n_sources"]))
         assert n_samples > 1
+
+        # these are per tile
         true_n_sources_on_tiles = outputs[-1]["log"]["n_sources"][:n_samples]
         true_locs_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
         true_galaxy_bools_on_tiles = outputs[-1]["log"]["galaxy_bool"][:n_samples]
