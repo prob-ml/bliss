@@ -122,6 +122,7 @@ class ImageDecoder(object):
         n_bands=1,
         slen=50,
         tile_slen=2,
+        ptile_padding=2,
         prob_galaxy=0.0,
         max_sources_per_tile=2,
         mean_sources_per_tile=0.4,
@@ -145,9 +146,13 @@ class ImageDecoder(object):
             + " So slen must be divisible by tile_slen"
         )
 
-        # images are first rendered on *padded* tiles (aka ptiles).
-        # the padded tile consists of the tile and its two neighboring tiles
-        self.ptile_slen = 5 * tile_slen
+        # Images are first rendered on *padded* tiles (aka ptiles).
+        # The padded tile consists of the tile and neighboring tiles
+        # The width of the padding (in number of tiles) is given by ptile padding.
+        # e.g. if ptile_padding is 1, then each ptile consists of 9 tiles:
+        # the center tile, surrounded one tile on each side.
+        self.ptile_padding = ptile_padding
+        self.ptile_slen = int((self.ptile_padding * 2 + 1) * tile_slen)
 
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
@@ -624,7 +629,7 @@ class ImageDecoder(object):
         )
 
         # render the image from padded tiles
-        images = construct_full_image_from_ptiles(image_ptiles)
+        images = construct_full_image_from_ptiles(image_ptiles, self.tile_slen)
 
         # add background and noise
         images = images + self.background.unsqueeze(0)
@@ -634,7 +639,7 @@ class ImageDecoder(object):
         return images
 
 
-def construct_full_image_from_ptiles(image_ptiles):
+def construct_full_image_from_ptiles(image_ptiles, tile_slen):
     # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
     batch_size = image_ptiles.shape[0]
     n_tiles_per_image = image_ptiles.shape[1]
@@ -647,13 +652,26 @@ def construct_full_image_from_ptiles(image_ptiles):
     assert n_tiles1 % 1 == 0
     n_tiles1 = int(n_tiles1)
 
+    # the number of tiles in ptile row
+    # i.e the slen of a ptile but in units of tile_slen
+    n_tiles1_in_ptile = ptile_slen / tile_slen
+    ptile_padding = (n_tiles1_in_ptile - 1) / 2
+    assert (
+        n_tiles1_in_ptile % 1 == 0
+    ), "tile_slen and ptile_slen are not compatable. check tile_slen argument"
+    assert (
+        ptile_padding % 1 == 0
+    ), "tile_slen and ptile_slen are not compatable. check tile_slen argument"
+    n_tiles1_in_ptile = int(n_tiles1_in_ptile)
+    ptile_padding = int(ptile_padding)
+
     image_tiles_4d = image_ptiles.view(
         batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
     )
 
     # zero pad tiles, so that the number of tiles in a row (and column)
-    # are divisible by 5 (the number of tiles in a padded tile)
-    n_tiles_pad = 5 - (n_tiles1 % 5)
+    # are divisible by n_tiles1_in_ptile
+    n_tiles_pad = n_tiles1_in_ptile - (n_tiles1 % n_tiles1_in_ptile)
     zero_pads1 = torch.zeros(
         batch_size,
         n_tiles_pad,
@@ -676,19 +694,20 @@ def construct_full_image_from_ptiles(image_ptiles):
     image_tiles_4d = torch.cat((image_tiles_4d, zero_pads2), dim=2)
 
     # construct the full image
-    tile_slen = int(ptile_slen / 5)
     n_tiles = n_tiles1 + n_tiles_pad
     canvas = torch.zeros(
         batch_size,
         n_bands,
-        (n_tiles + 4) * tile_slen,
-        (n_tiles + 4) * tile_slen,
+        (n_tiles + n_tiles1_in_ptile - 1) * tile_slen,
+        (n_tiles + n_tiles1_in_ptile - 1) * tile_slen,
         device=device,
     )
-    for i in range(5):
-        for j in range(5):
-            indx_vec1 = torch.arange(start=i, end=n_tiles, step=5)
-            indx_vec2 = torch.arange(start=j, end=n_tiles, step=5)
+
+    # loop through all tiles in a ptile
+    for i in range(n_tiles1_in_ptile):
+        for j in range(n_tiles1_in_ptile):
+            indx_vec1 = torch.arange(start=i, end=n_tiles, step=n_tiles1_in_ptile)
+            indx_vec2 = torch.arange(start=j, end=n_tiles, step=n_tiles1_in_ptile)
 
             canvas_len = len(indx_vec1) * ptile_slen
 
@@ -696,7 +715,6 @@ def construct_full_image_from_ptiles(image_ptiles):
             image_tile_cols = image_tile_rows[:, :, indx_vec2]
 
             # get canvas
-            start_x = i * tile_slen
             canvas[
                 :,
                 :,
@@ -710,6 +728,6 @@ def construct_full_image_from_ptiles(image_ptiles):
     return canvas[
         :,
         :,
-        (2 * tile_slen) : ((n_tiles1 + 2) * tile_slen),
-        (2 * tile_slen) : ((n_tiles1 + 2) * tile_slen),
+        (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
+        (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
     ]
