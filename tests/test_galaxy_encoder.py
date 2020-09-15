@@ -27,6 +27,7 @@ class TestGalaxyEncoder:
             # under the poisson prior
             mean_sources_per_tile=1.67,
             prob_galaxy=1.0,
+            ptile_padding=0,
         )
         trained_encoder = encoder_setup.get_trained_encoder(
             galaxy_dataset,

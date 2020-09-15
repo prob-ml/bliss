@@ -146,10 +146,11 @@ class SleepPhase(pl.LightningModule):
 
         # assumes dataset is a IterableDataset class.
         self.dataset = dataset
+        self.image_decoder = self.dataset.image_decoder
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
         # avoid calculating gradients of psf_transform
-        self.dataset.image_decoder.power_law_psf.requires_grad_(False)
+        self.image_decoder.power_law_psf.requires_grad_(False)
 
         self.lr = lr
         self.weight_decay = weight_decay
@@ -163,10 +164,10 @@ class SleepPhase(pl.LightningModule):
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
-            "max_sources_per_tile": self.dataset.image_decoder.max_sources_per_tile,
-            "mean_sources_per_tile": self.dataset.image_decoder.mean_sources_per_tile,
-            "min_sources_per_tile": self.dataset.image_decoder.min_sources_per_tile,
-            "prob_galaxy": self.dataset.image_decoder.prob_galaxy,
+            "max_sources_per_tile": self.image_decoder.max_sources_per_tile,
+            "mean_sources_per_tile": self.image_decoder.mean_sources_per_tile,
+            "min_sources_per_tile": self.image_decoder.min_sources_per_tile,
+            "prob_galaxy": self.image_decoder.prob_galaxy,
         }
 
     def forward(self, image_ptiles, n_sources):
@@ -217,11 +218,11 @@ class SleepPhase(pl.LightningModule):
 
         # flatten so first dimension is ptile
         batch_size = images.shape[0]
-        n_tiles_per_image = self.dataset.image_decoder.n_tiles_per_image
+        n_tiles_per_image = self.image_decoder.n_tiles_per_image
         n_tiles = batch_size * n_tiles_per_image
-        max_sources_per_tile = self.dataset.image_decoder.max_sources_per_tile
-        n_bands = self.dataset.image_decoder.n_bands
-        latent_dim = self.dataset.image_decoder.latent_dim
+        max_sources_per_tile = self.image_decoder.max_sources_per_tile
+        n_bands = self.image_decoder.n_bands
+        latent_dim = self.image_decoder.latent_dim
 
         true_tile_locs = true_tile_locs.view(n_tiles, max_sources_per_tile, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.view(
@@ -444,7 +445,7 @@ class SleepPhase(pl.LightningModule):
             if max_sources > 0 and n_sources.item() > 0:
 
                 # draw reconstruction image.
-                recon_image = self.dataset.image_decoder.render_images(
+                recon_image = self.image_decoder.render_images(
                     tile_n_sources,
                     tile_locs,
                     tile_galaxy_bool,
