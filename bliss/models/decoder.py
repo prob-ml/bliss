@@ -106,7 +106,6 @@ def construct_full_image_from_ptiles(image_ptiles):
             image_tile_cols = image_tile_rows[:, :, indx_vec2]
 
             # get canvas
-            start_x = i * tile_slen
             canvas[
                 :,
                 :,
@@ -361,14 +360,11 @@ class ImageDecoder(object):
 
     def _sample_n_sources(self, batch_size):
         # returns number of sources for each batch x tile
-        # output dimension is batchsize x n_tiles_per_image
+        # output dimension is batch_size x n_tiles_per_image
 
         # always poisson distributed.
-        m = Poisson(
-            torch.full(
-                (1,), self.mean_sources_per_tile, dtype=torch.float, device=device
-            )
-        )
+        p = torch.full((1,), self.mean_sources_per_tile, device=device).float()
+        m = Poisson(p)
         n_sources = m.sample([batch_size, self.n_tiles_per_image])
 
         # long() here is necessary because used for indexing and one_hot encoding.
@@ -379,27 +375,26 @@ class ImageDecoder(object):
         return n_sources
 
     def _sample_locs(self, is_on_array, batch_size):
-        # output dimension is batchsize x n_tiles_per_image x max_sources_per_tile x 2
+        # output dimension is batch_size x n_tiles_per_image x max_sources_per_tile x 2
 
         # 2 = (x,y)
-        locs = (
-            torch.rand(
-                batch_size,
-                self.n_tiles_per_image,
-                self.max_sources_per_tile,
-                2,
-                device=device,
-            )
-            * (self.loc_max_per_tile - self.loc_min_per_tile)
-            + self.loc_min_per_tile
+        shape = (
+            batch_size,
+            self.n_tiles_per_image,
+            self.max_sources_per_tile,
+            2,
         )
+        locs = torch.rand(*shape, device=device)
+        locs *= self.loc_max_per_tile - self.loc_min_per_tile
+        locs += self.loc_min_per_tile
         locs *= is_on_array.unsqueeze(-1)
 
         return locs
 
     def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
         # the counts returned (n_galaxies, n_stars) are of shape (batch_size x n_tiles_per_image)
-        # the booleans returned (galaxy_bool, star_bool) are of shape (batch_size x n_tiles_per_image x max_detections)
+        # the booleans returned (galaxy_bool, star_bool) are of shape
+        # (batch_size x n_tiles_per_image x max_detections)
 
         batch_size = n_sources.size(0)
         uniform = torch.rand(
@@ -435,19 +430,14 @@ class ImageDecoder(object):
         base_fluxes = self._draw_pareto_maxed(shape)
 
         if self.n_bands > 1:
-            colors = (
-                torch.rand(
-                    batch_size,
-                    self.n_tiles_per_image,
-                    self.max_sources_per_tile,
-                    self.n_bands - 1,
-                    device=device,
-                )
-                * 0.15
-                + 0.3
+            shape = (
+                batch_size,
+                self.n_tiles_per_image,
+                self.max_sources_per_tile,
+                self.n_bands - 1,
             )
+            colors = torch.rand(*shape, device=device) * 0.15 + 0.3
             _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(-1)
-
             fluxes = torch.cat((base_fluxes.unsqueeze(-1), _fluxes), dim=3)
             fluxes *= star_bool.unsqueeze(-1)
         else:
@@ -460,7 +450,6 @@ class ImageDecoder(object):
 
         assert len(n_galaxies.shape) == 2
         batch_size = n_galaxies.size(0)
-
         mean = torch.zeros(1, dtype=torch.float, device=device)
         std = torch.ones(1, dtype=torch.float, device=device)
         p_z = Normal(mean, std)
@@ -473,12 +462,6 @@ class ImageDecoder(object):
             ]
         )
         galaxy_params = p_z.rsample(sample_shape)
-        galaxy_params = galaxy_params.reshape(
-            batch_size,
-            self.n_tiles_per_image,
-            self.max_sources_per_tile,
-            self.latent_dim,
-        )
 
         # zero out excess according to galaxy_bool.
         galaxy_params = galaxy_params * galaxy_bool.unsqueeze(-1)
