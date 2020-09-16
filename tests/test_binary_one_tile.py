@@ -7,25 +7,23 @@ class TestBinaryEncoder:
     def trained_encoder(self, decoder_setup, encoder_setup, device_setup):
         use_cuda = device_setup.use_cuda
 
-        n_epochs = 150 if use_cuda else 1
+        n_epochs = 120 if use_cuda else 1
 
         # draw galaxies + stars only in 10x10 center tile
-        loc_min = 0.25
-        loc_max = 0.75
-
         # encoder looks at 20x20 padded image, and detects galaxies/stars in 10x10 tile.
-        ptile_slen = 20
-        tile_slen = 10
+        slen = 20
 
         binary_dataset = decoder_setup.get_binary_dataset(
-            slen=20,
+            slen=slen,
+            tile_slen=slen,
+            ptile_padding=0,
             batch_size=128 if use_cuda else 2,
             n_batches=10 if use_cuda else 2,
-            loc_min=loc_min,
-            loc_max=loc_max,
-            max_sources=2,
-            mean_sources=1.5,
-            min_sources=0,
+            loc_min_per_tile=0.25,
+            loc_max_per_tile=0.75,
+            max_sources_per_tile=2,
+            mean_sources_per_tile=1.5,
+            min_sources_per_tile=0,
             f_min=1e4,
             f_max=1e6,
             prob_galaxy=0.5,
@@ -34,8 +32,8 @@ class TestBinaryEncoder:
             binary_dataset,
             n_epochs=n_epochs,
             max_detections=2,
-            ptile_slen=ptile_slen,
-            tile_slen=tile_slen,
+            ptile_slen=slen,  # ensure 1 tile/ 1 padded tile only.
+            tile_slen=slen,
             enc_hidden=256,
             enc_kern=3,
             enc_conv_c=20,

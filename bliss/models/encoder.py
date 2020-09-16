@@ -258,7 +258,7 @@ class ImageEncoder(nn.Module):
         variational parameters for n_sources.
         Args:
             h: shape = (n_ptiles x dim_out_all)
-            n_sources: n_samples x n_tiles
+            n_sources: (n_samples x n_tiles)
             param_dim: the dimension of the parameter you are indexing h for. e.g. for locs,
                             dim_per_source = 2, for galaxy params we usually have
                             dim_per_source = 8.
@@ -266,6 +266,7 @@ class ImageEncoder(nn.Module):
             var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
         """
 
+        # n_samples = (1 x n_ptiles) if this function was called from forward.
         assert len(n_sources.shape) == 2, "Shape: (n_samples x n_ptiles)"
         assert h.size(0) == n_sources.size(1)  # = n_ptiles
         assert h.size(1) == self.dim_out_all
