@@ -430,13 +430,15 @@ class SleepPhase(pl.LightningModule):
         results = {"val_loss": avg_loss, "log": logs}
         return results
 
-    def _get_categorical_loss(self, n_source_log_probs, one_hot_encoding):
+    @staticmethod
+    def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
         assert torch.all(n_source_log_probs <= 0)
         assert n_source_log_probs.shape == one_hot_encoding.shape
 
         return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
 
-    def _get_params_logprob_all_combs(self, true_params, param_mean, param_logvar):
+    @staticmethod
+    def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
         assert true_params.shape == param_mean.shape == param_logvar.shape
 
         n_ptiles = true_params.size(0)

@@ -32,7 +32,7 @@ class TestStarEncoderObjective:
         )
 
         # get all losses
-        param_log_probs_all = sleep._get_params_logprob_all_combs(
+        param_log_probs_all = sleep.SleepPhase._get_params_logprob_all_combs(
             true_params, param_mean, param_logvar
         )
 
@@ -124,17 +124,17 @@ class TestStarEncoderObjective:
         prob_galaxy = torch.rand(n_ptiles, max_detections, device=device)
 
         # get loss for locations
-        locs_log_probs_all = sleep._get_params_logprob_all_combs(
+        locs_log_probs_all = sleep.SleepPhase._get_params_logprob_all_combs(
             true_locs, loc_mean, loc_logvar
         )
 
         # get loss for fluxes
-        star_params_log_probs_all = sleep._get_params_logprob_all_combs(
+        star_params_log_probs_all = sleep.SleepPhase._get_params_logprob_all_combs(
             true_log_fluxes, log_flux_mean, log_flux_logvar
         )
 
         # loss for galaxy parameters
-        galaxy_params_log_probs_all = sleep._get_params_logprob_all_combs(
+        galaxy_params_log_probs_all = sleep.SleepPhase._get_params_logprob_all_combs(
             true_galaxy_params, galaxy_params_mean, galaxy_params_logvar
         )
 
@@ -143,7 +143,7 @@ class TestStarEncoderObjective:
             galaxy_params_loss,
             star_params_loss,
             galaxy_bool_loss,
-        ) = sleep._get_min_perm_loss(
+        ) = sleep.SleepPhase._get_min_perm_loss(
             locs_log_probs_all,
             galaxy_params_log_probs_all,
             star_params_log_probs_all,
