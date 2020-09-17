@@ -17,6 +17,98 @@ from .models import encoder
 from optuna.integration import PyTorchLightningPruningCallback
 
 
+def _get_log_probs_all_perms(
+    locs_log_probs_all,
+    galaxy_params_log_probs_all,
+    star_params_log_probs_all,
+    prob_galaxy,
+    true_galaxy_bool,
+    is_on_array,
+):
+    # get log-probability under every possible matching of estimated source to true source
+    n_ptiles = galaxy_params_log_probs_all.size(0)
+    max_detections = galaxy_params_log_probs_all.size(-1)
+
+    n_permutations = math.factorial(max_detections)
+    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations, device=device)
+    galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
+    star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
+    galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
+
+    for i, perm in enumerate(permutations(range(max_detections))):
+        # note that we multiply is_on_array, we only evaluate the loss if the source is on.
+        locs_log_probs_all_perm[:, i] = (
+            locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
+        ).sum(1)
+
+        # if galaxy, evaluate the galaxy parameters,
+        # hence the multiplication by (true_galaxy_bool)
+        # the diagonal is a clever way of selecting the elements of each permutation (first index
+        # of mean/var with second index of true_param etc.)
+        galaxy_params_log_probs_all_perm[:, i] = (
+            galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
+            * is_on_array
+            * true_galaxy_bool
+        ).sum(1)
+
+        # similarly for stars
+        star_params_log_probs_all_perm[:, i] = (
+            star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
+            * is_on_array
+            * (1 - true_galaxy_bool)
+        ).sum(1)
+
+        _prob_galaxy = prob_galaxy[:, perm]
+        galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
+        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - _prob_galaxy)
+        galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
+
+    return (
+        locs_log_probs_all_perm,
+        galaxy_params_log_probs_all_perm,
+        star_params_log_probs_all_perm,
+        galaxy_bool_log_probs_all_perm,
+    )
+
+
+def _get_min_perm_loss(
+    locs_log_probs_all,
+    galaxy_params_log_probs_all,
+    star_params_log_probs_all,
+    prob_galaxy,
+    true_galaxy_bool,
+    is_on_array,
+):
+    # get log-probability under every possible matching of estimated star to true star
+    (
+        locs_log_probs_all_perm,
+        galaxy_params_log_probs_all_perm,
+        star_params_log_probs_all_perm,
+        galaxy_bool_log_probs_all_perm,
+    ) = _get_log_probs_all_perms(
+        locs_log_probs_all,
+        galaxy_params_log_probs_all,
+        star_params_log_probs_all,
+        prob_galaxy,
+        true_galaxy_bool,
+        is_on_array,
+    )
+
+    # TODO: Why do we select it based on the location losses only?
+    # find the permutation that minimizes the location losses
+    locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
+
+    # get the star & galaxy losses according to the found permutation
+    _indx = indx.unsqueeze(1)
+    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, _indx).squeeze()
+    galaxy_params_loss = -torch.gather(
+        galaxy_params_log_probs_all_perm, 1, _indx
+    ).squeeze()
+    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, _indx).squeeze()
+
+    return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
+
+
 class SleepPhase(pl.LightningModule):
     def __init__(
         self,
@@ -452,105 +544,6 @@ class SleepPhase(pl.LightningModule):
         _sd = (_param_logvar.exp() + 1e-5).sqrt()
         param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
         return param_log_probs_all
-
-    def _get_log_probs_all_perms(
-        self,
-        locs_log_probs_all,
-        galaxy_params_log_probs_all,
-        star_params_log_probs_all,
-        prob_galaxy,
-        true_galaxy_bool,
-        is_on_array,
-    ):
-
-        # get log-probability under every possible matching of estimated source to true source
-        n_ptiles = galaxy_params_log_probs_all.size(0)
-        max_detections = galaxy_params_log_probs_all.size(-1)
-
-        n_permutations = math.factorial(max_detections)
-        locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations, device=device)
-        galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
-        star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
-        galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
-
-        for i, perm in enumerate(permutations(range(max_detections))):
-            # note that we multiply is_on_array, we only evaluate the loss if the source is on.
-            locs_log_probs_all_perm[:, i] = (
-                locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
-            ).sum(1)
-
-            # if galaxy, evaluate the galaxy parameters,
-            # hence the multiplication by (true_galaxy_bool)
-            # the diagonal is a clever way of selecting the elements of each permutation (first index
-            # of mean/var with second index of true_param etc.)
-            galaxy_params_log_probs_all_perm[:, i] = (
-                galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
-                * is_on_array
-                * true_galaxy_bool
-            ).sum(1)
-
-            # similarly for stars
-            star_params_log_probs_all_perm[:, i] = (
-                star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
-                * is_on_array
-                * (1 - true_galaxy_bool)
-            ).sum(1)
-
-            _prob_galaxy = prob_galaxy[:, perm]
-            galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
-            galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - _prob_galaxy)
-            galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(
-                1
-            )
-
-        return (
-            locs_log_probs_all_perm,
-            galaxy_params_log_probs_all_perm,
-            star_params_log_probs_all_perm,
-            galaxy_bool_log_probs_all_perm,
-        )
-
-    def _get_min_perm_loss(
-        self,
-        locs_log_probs_all,
-        galaxy_params_log_probs_all,
-        star_params_log_probs_all,
-        prob_galaxy,
-        true_galaxy_bool,
-        is_on_array,
-    ):
-        # get log-probability under every possible matching of estimated star to true star
-        (
-            locs_log_probs_all_perm,
-            galaxy_params_log_probs_all_perm,
-            star_params_log_probs_all_perm,
-            galaxy_bool_log_probs_all_perm,
-        ) = self._get_log_probs_all_perms(
-            locs_log_probs_all,
-            galaxy_params_log_probs_all,
-            star_params_log_probs_all,
-            prob_galaxy,
-            true_galaxy_bool,
-            is_on_array,
-        )
-
-        # TODO: Why do we select it based on the location losses only?
-        # find the permutation that minimizes the location losses
-        locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
-
-        # get the star & galaxy losses according to the found permutation
-        _indx = indx.unsqueeze(1)
-        star_params_loss = -torch.gather(
-            star_params_log_probs_all_perm, 1, _indx
-        ).squeeze()
-        galaxy_params_loss = -torch.gather(
-            galaxy_params_log_probs_all_perm, 1, _indx
-        ).squeeze()
-        galaxy_bool_loss = -torch.gather(
-            galaxy_bool_log_probs_all_perm, 1, _indx
-        ).squeeze()
-
-        return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
 
     @staticmethod
     def add_args(parser):
