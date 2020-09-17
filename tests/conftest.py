@@ -146,6 +146,7 @@ class EncoderSetup:
         enc_kern=3,
         enc_conv_c=20,
         validation_plot_start=1000,
+        background_pad_value=686.0,
     ):
         slen = dataset.slen
         n_bands = dataset.n_bands
@@ -162,6 +163,7 @@ class EncoderSetup:
             slen=slen,
             n_bands=n_bands,
             n_galaxy_params=latent_dim,
+            background_pad_value=background_pad_value,
         )
 
         sleep_net = sleep.SleepPhase(

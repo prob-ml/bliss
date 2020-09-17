@@ -21,7 +21,7 @@ def star_dataset(decoder_setup, device_setup):
         min_sources_per_tile=0,
         # this is so that the avg. number of sources
         # a 30 x 30 image is (approx) 3
-        mean_sources_per_tile=0.014,
+        mean_sources_per_tile=0.050,
         batch_size=batch_size,
         n_batches=n_batches,
     )
@@ -36,9 +36,9 @@ def trained_encoder(star_dataset, encoder_setup, device_setup):
         ptile_slen=star_dataset.tile_slen + 6,
         tile_slen=star_dataset.tile_slen,
         max_detections=star_dataset.max_sources_per_tile,
-        enc_conv_c=5,
+        enc_hidden=256,
         enc_kern=3,
-        enc_hidden=64,
+        enc_conv_c=20,
     )
 
     return trained_encoder.to(device_setup.device)
