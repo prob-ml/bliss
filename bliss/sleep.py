@@ -17,122 +17,6 @@ from .models import encoder
 from optuna.integration import PyTorchLightningPruningCallback
 
 
-def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
-    assert torch.all(n_source_log_probs <= 0)
-    assert n_source_log_probs.shape == one_hot_encoding.shape
-
-    return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
-
-
-def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
-    assert true_params.shape == param_mean.shape == param_logvar.shape
-
-    n_ptiles = true_params.size(0)
-    max_detections = true_params.size(1)
-
-    # reshape to evaluate all combinations of log_prob.
-    _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
-    _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
-    _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
-
-    _sd = (_param_logvar.exp() + 1e-5).sqrt()
-    param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
-    return param_log_probs_all
-
-
-def _get_log_probs_all_perms(
-    locs_log_probs_all,
-    galaxy_params_log_probs_all,
-    star_params_log_probs_all,
-    prob_galaxy,
-    true_galaxy_bool,
-    is_on_array,
-):
-
-    # get log-probability under every possible matching of estimated source to true source
-    n_ptiles = galaxy_params_log_probs_all.size(0)
-    max_detections = galaxy_params_log_probs_all.size(-1)
-
-    n_permutations = math.factorial(max_detections)
-    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations, device=device)
-    galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
-    star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
-    galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
-
-    for i, perm in enumerate(permutations(range(max_detections))):
-        # note that we multiply is_on_array, we only evaluate the loss if the source is on.
-        locs_log_probs_all_perm[:, i] = (
-            locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
-        ).sum(1)
-
-        # if galaxy, evaluate the galaxy parameters,
-        # hence the multiplication by (true_galaxy_bool)
-        # the diagonal is a clever way of selecting the elements of each permutation (first index
-        # of mean/var with second index of true_param etc.)
-        galaxy_params_log_probs_all_perm[:, i] = (
-            galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
-            * is_on_array
-            * true_galaxy_bool
-        ).sum(1)
-
-        # similarly for stars
-        star_params_log_probs_all_perm[:, i] = (
-            star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
-            * is_on_array
-            * (1 - true_galaxy_bool)
-        ).sum(1)
-
-        _prob_galaxy = prob_galaxy[:, perm]
-        galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
-        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - _prob_galaxy)
-        galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
-
-    return (
-        locs_log_probs_all_perm,
-        galaxy_params_log_probs_all_perm,
-        star_params_log_probs_all_perm,
-        galaxy_bool_log_probs_all_perm,
-    )
-
-
-def _get_min_perm_loss(
-    locs_log_probs_all,
-    galaxy_params_log_probs_all,
-    star_params_log_probs_all,
-    prob_galaxy,
-    true_galaxy_bool,
-    is_on_array,
-):
-    # get log-probability under every possible matching of estimated star to true star
-    (
-        locs_log_probs_all_perm,
-        galaxy_params_log_probs_all_perm,
-        star_params_log_probs_all_perm,
-        galaxy_bool_log_probs_all_perm,
-    ) = _get_log_probs_all_perms(
-        locs_log_probs_all,
-        galaxy_params_log_probs_all,
-        star_params_log_probs_all,
-        prob_galaxy,
-        true_galaxy_bool,
-        is_on_array,
-    )
-
-    # TODO: Why do we select it based on the location losses only?
-    # find the permutation that minimizes the location losses
-    locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
-
-    # get the star & galaxy losses according to the found permutation
-    _indx = indx.unsqueeze(1)
-    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, _indx).squeeze()
-    galaxy_params_loss = -torch.gather(
-        galaxy_params_log_probs_all_perm, 1, _indx
-    ).squeeze()
-    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, _indx).squeeze()
-
-    return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
-
-
 class SleepPhase(pl.LightningModule):
     def __init__(
         self,
@@ -152,9 +36,6 @@ class SleepPhase(pl.LightningModule):
         # avoid calculating gradients of psf_transform
         self.image_decoder.power_law_psf.requires_grad_(False)
 
-        self.lr = lr
-        self.weight_decay = weight_decay
-
         self.validation_plot_start = validation_plot_start
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
 
@@ -171,7 +52,7 @@ class SleepPhase(pl.LightningModule):
         }
 
     def forward(self, image_ptiles, n_sources):
-        return self.image_encoder.forward(image_ptiles, n_sources)
+        return self.image_encoder(image_ptiles, n_sources)
 
     def get_loss(self, batch):
         """
@@ -246,7 +127,7 @@ class SleepPhase(pl.LightningModule):
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)
 
-        pred = self.forward(image_ptiles, true_tile_n_sources)
+        pred = self(image_ptiles, true_tile_n_sources)
 
         # TODO: make .forward() and .get_params_in_tiles() just return correct dimensions ?
         prob_galaxy = pred["prob_galaxy"].view(n_ptiles, max_detections)
@@ -256,7 +137,7 @@ class SleepPhase(pl.LightningModule):
         n_source_log_probs = pred["n_source_log_probs"]
         true_tile_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
         one_hot_encoding = functional.one_hot(true_tile_n_sources, max_detections + 1)
-        counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
+        counter_loss = self._get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
         # the following three functions computes the log-probability of parameters when
         # each estimated source i is matched with true source j for
@@ -266,15 +147,15 @@ class SleepPhase(pl.LightningModule):
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
-        locs_log_probs_all = _get_params_logprob_all_combs(
+        locs_log_probs_all = self._get_params_logprob_all_combs(
             true_tile_locs, loc_mean, loc_logvar
         )
-        galaxy_params_log_probs_all = _get_params_logprob_all_combs(
+        galaxy_params_log_probs_all = self._get_params_logprob_all_combs(
             true_tile_galaxy_params,
             pred["galaxy_param_mean"],
             pred["galaxy_param_logvar"],
         )
-        star_params_log_probs_all = _get_params_logprob_all_combs(
+        star_params_log_probs_all = self._get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
 
@@ -285,7 +166,7 @@ class SleepPhase(pl.LightningModule):
             galaxy_params_loss,
             star_params_loss,
             galaxy_bool_loss,
-        ) = _get_min_perm_loss(
+        ) = self._get_min_perm_loss(
             locs_log_probs_all,
             galaxy_params_log_probs_all,
             star_params_log_probs_all,
@@ -315,8 +196,8 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": self.lr}],
-            weight_decay=self.weight_decay,
+            [{"params": self.image_encoder.parameters(), "lr": self.hparams.lr}],
+            weight_decay=self.hparams.weight_decay,
         )
 
     def train_dataloader(self):
@@ -548,6 +429,126 @@ class SleepPhase(pl.LightningModule):
         }
         results = {"val_loss": avg_loss, "log": logs}
         return results
+
+    def _get_categorical_loss(self, n_source_log_probs, one_hot_encoding):
+        assert torch.all(n_source_log_probs <= 0)
+        assert n_source_log_probs.shape == one_hot_encoding.shape
+
+        return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
+
+    def _get_params_logprob_all_combs(self, true_params, param_mean, param_logvar):
+        assert true_params.shape == param_mean.shape == param_logvar.shape
+
+        n_ptiles = true_params.size(0)
+        max_detections = true_params.size(1)
+
+        # reshape to evaluate all combinations of log_prob.
+        _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+        _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+        _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+
+        _sd = (_param_logvar.exp() + 1e-5).sqrt()
+        param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
+        return param_log_probs_all
+
+    def _get_log_probs_all_perms(
+        self,
+        locs_log_probs_all,
+        galaxy_params_log_probs_all,
+        star_params_log_probs_all,
+        prob_galaxy,
+        true_galaxy_bool,
+        is_on_array,
+    ):
+
+        # get log-probability under every possible matching of estimated source to true source
+        n_ptiles = galaxy_params_log_probs_all.size(0)
+        max_detections = galaxy_params_log_probs_all.size(-1)
+
+        n_permutations = math.factorial(max_detections)
+        locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations, device=device)
+        galaxy_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
+        star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
+        galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
+
+        for i, perm in enumerate(permutations(range(max_detections))):
+            # note that we multiply is_on_array, we only evaluate the loss if the source is on.
+            locs_log_probs_all_perm[:, i] = (
+                locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
+            ).sum(1)
+
+            # if galaxy, evaluate the galaxy parameters,
+            # hence the multiplication by (true_galaxy_bool)
+            # the diagonal is a clever way of selecting the elements of each permutation (first index
+            # of mean/var with second index of true_param etc.)
+            galaxy_params_log_probs_all_perm[:, i] = (
+                galaxy_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
+                * is_on_array
+                * true_galaxy_bool
+            ).sum(1)
+
+            # similarly for stars
+            star_params_log_probs_all_perm[:, i] = (
+                star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
+                * is_on_array
+                * (1 - true_galaxy_bool)
+            ).sum(1)
+
+            _prob_galaxy = prob_galaxy[:, perm]
+            galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
+            galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - _prob_galaxy)
+            galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(
+                1
+            )
+
+        return (
+            locs_log_probs_all_perm,
+            galaxy_params_log_probs_all_perm,
+            star_params_log_probs_all_perm,
+            galaxy_bool_log_probs_all_perm,
+        )
+
+    def _get_min_perm_loss(
+        self,
+        locs_log_probs_all,
+        galaxy_params_log_probs_all,
+        star_params_log_probs_all,
+        prob_galaxy,
+        true_galaxy_bool,
+        is_on_array,
+    ):
+        # get log-probability under every possible matching of estimated star to true star
+        (
+            locs_log_probs_all_perm,
+            galaxy_params_log_probs_all_perm,
+            star_params_log_probs_all_perm,
+            galaxy_bool_log_probs_all_perm,
+        ) = self._get_log_probs_all_perms(
+            locs_log_probs_all,
+            galaxy_params_log_probs_all,
+            star_params_log_probs_all,
+            prob_galaxy,
+            true_galaxy_bool,
+            is_on_array,
+        )
+
+        # TODO: Why do we select it based on the location losses only?
+        # find the permutation that minimizes the location losses
+        locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
+
+        # get the star & galaxy losses according to the found permutation
+        _indx = indx.unsqueeze(1)
+        star_params_loss = -torch.gather(
+            star_params_log_probs_all_perm, 1, _indx
+        ).squeeze()
+        galaxy_params_loss = -torch.gather(
+            galaxy_params_log_probs_all_perm, 1, _indx
+        ).squeeze()
+        galaxy_bool_loss = -torch.gather(
+            galaxy_bool_log_probs_all_perm, 1, _indx
+        ).squeeze()
+
+        return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
 
     @staticmethod
     def add_args(parser):

@@ -369,12 +369,15 @@ class ImageEncoder(nn.Module):
         # These weights are set up and  cached during the __init__.
 
         ptile_slen2 = self.ptile_slen ** 2
-        self.tile_conv_weights = torch.zeros(
-            ptile_slen2 * self.n_bands,
-            self.n_bands,
-            self.ptile_slen,
-            self.ptile_slen,
-            device=device,
+        self.register_buffer(
+            "tile_conv_weights",
+            torch.zeros(
+                ptile_slen2 * self.n_bands,
+                self.n_bands,
+                self.ptile_slen,
+                self.ptile_slen,
+                device=device,
+            ),
         )
 
         for b in range(self.n_bands):
