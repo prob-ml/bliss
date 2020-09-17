@@ -40,15 +40,15 @@ class SleepPhase(pl.LightningModule):
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
 
         self.hparams = {
-            "lr": self.lr,
-            "weight_decay": self.weight_decay,
+            "lr": lr,
+            "weight_decay": weight_decay,
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
-            "max_sources_per_tile": self.image_decoder.max_sources_per_tile,
-            "mean_sources_per_tile": self.image_decoder.mean_sources_per_tile,
-            "min_sources_per_tile": self.image_decoder.min_sources_per_tile,
-            "prob_galaxy": self.image_decoder.prob_galaxy,
+            "max_sources_per_tile": self.dataset.image_decoder.max_sources_per_tile,
+            "mean_sources_per_tile": self.dataset.image_decoder.mean_sources_per_tile,
+            "min_sources_per_tile": self.dataset.image_decoder.min_sources_per_tile,
+            "prob_galaxy": self.dataset.image_decoder.prob_galaxy,
         }
 
     def forward(self, image_ptiles, n_sources):
