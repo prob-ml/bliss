@@ -59,10 +59,12 @@ def _get_tile_coords(slen, tile_slen):
 
     return tile_coords
 
+def pickble_loc_mean_func(x):
+    return torch.sigmoid(x) * (x != 0).float()
 
-class Flatten(nn.Module):
-    def forward(self, tensor):
-        return tensor.view(tensor.size(0), -1)
+
+def pickble_prob_galaxy_func(x):
+    return torch.sigmoid(x).clamp(1e-4, 1 - 1e-4)
 
 
 class ImageEncoder(nn.Module):
@@ -145,7 +147,7 @@ class ImageEncoder(nn.Module):
             ),
             nn.BatchNorm2d(self.enc_conv_c, momentum=self.momentum),
             nn.ReLU(),
-            Flatten(),
+            nn.Flatten(1, -1),
             nn.Linear(conv_out_dim, self.enc_hidden),
             nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
             nn.ReLU(),
@@ -182,13 +184,13 @@ class ImageEncoder(nn.Module):
         )
 
         self.variational_params = [
-            ("loc_mean", 2, lambda x: torch.sigmoid(x) * (x != 0).float()),
+            ("loc_mean", 2, pickble_loc_mean_func),
             ("loc_logvar", 2),
             ("galaxy_param_mean", self.n_galaxy_params),
             ("galaxy_param_logvar", self.n_galaxy_params),
             ("log_flux_mean", self.n_star_params),
             ("log_flux_logvar", self.n_star_params),
-            ("prob_galaxy", 1, lambda x: torch.sigmoid(x).clamp(1e-4, 1 - 1e-4)),
+            ("prob_galaxy", 1, pickble_prob_galaxy_func),
         ]
         self.n_variational_params = len(self.variational_params)
 
