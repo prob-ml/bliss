@@ -19,6 +19,24 @@ def pytest_addoption(parser):
         "--repeat", default=1, type=str, help="Number of times to repeat each test"
     )
 
+    parser.addoption(
+        "--runslow", action="store_true", default=False, help="run slow tests"
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: mark test as slow to run")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runslow"):
+        # --runslow given in cli: do not skip slow tests
+        return
+    skip_slow = pytest.mark.skip(reason="need --runslow option to run")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)
+
 
 # allows test repetition with --repeat flag.
 def pytest_generate_tests(metafunc):
@@ -70,7 +88,7 @@ class DecoderSetup:
         self,
         init_psf_params,
         batch_size=32,
-        n_images=128,
+        n_batches=4,
         n_bands=1,
         slen=50,
         **dec_kwargs,
@@ -82,21 +100,22 @@ class DecoderSetup:
         background[1] = 1123.0
 
         # slice if necessary.
-        background = background[range(n_bands)]
+        background = background[list(range(n_bands))]
         init_psf_params = init_psf_params[range(n_bands)]
 
         dec_args = (None, init_psf_params, background)
 
-        n_batches = int(n_images / batch_size)
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 
-    def get_galaxy_dataset(self, batch_size=32, n_images=128, slen=10, **dec_kwargs):
+    def get_binary_dataset(
+        self, batch_size=32, n_batches=4, slen=20, prob_galaxy=1.0, **dec_kwargs
+    ):
 
         n_bands = 1
         galaxy_decoder = self.get_galaxy_decoder()
 
         # psf params
-        psf_params = self.get_fitted_psf_params()[range(n_bands)]
+        psf_params = self.get_fitted_psf_params()[list(range(n_bands))]
 
         # TODO: take background from test image.
         background = torch.zeros(n_bands, slen, slen, device=self.device)
@@ -104,9 +123,9 @@ class DecoderSetup:
 
         dec_args = (galaxy_decoder, psf_params, background)
 
-        n_batches = int(n_images / batch_size)
-
-        dec_kwargs.update({"prob_galaxy": 1.0, "n_bands": n_bands, "slen": slen})
+        dec_kwargs.update(
+            {"n_bands": n_bands, "slen": slen, "prob_galaxy": prob_galaxy}
+        )
 
         return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 
@@ -122,11 +141,12 @@ class EncoderSetup:
         n_epochs=100,
         ptile_slen=8,
         tile_slen=2,
-        enc_conv_c=5,
-        enc_kern=3,
-        enc_hidden=64,
         max_detections=2,
-        validation_plot_start=100,
+        enc_hidden=256,
+        enc_kern=3,
+        enc_conv_c=20,
+        validation_plot_start=1000,
+        background_pad_value=686.0,
     ):
         slen = dataset.slen
         n_bands = dataset.n_bands
@@ -143,6 +163,7 @@ class EncoderSetup:
             slen=slen,
             n_bands=n_bands,
             n_galaxy_params=latent_dim,
+            background_pad_value=background_pad_value,
         )
 
         sleep_net = sleep.SleepPhase(
@@ -156,6 +177,7 @@ class EncoderSetup:
             reload_dataloaders_every_epoch=True,
             logger=False,
             checkpoint_callback=False,
+            check_val_every_n_epoch=50,
         )
 
         sleep_trainer.fit(sleep_net)

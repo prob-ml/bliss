@@ -115,7 +115,6 @@ class CatsimRenderer(object):
                 background[i, :, :] = single_obs.mean_sky_level
         return background
 
-    # noinspection DuplicatedCode
     def get_size(self, cat):
         """
         Return a astropy.Column with the size of each entry of the catalog given the current
@@ -137,10 +136,10 @@ class CatsimRenderer(object):
         return Column(size, name="size")
 
     def center_deviation(self, entry):
-        # random deviation from exactly in center of center pixel, in arcsecs.
+        # random deviation from exactly in center of center pixel, in arcseconds.
         deviation_ra = (np.random.rand() - 0.5) if self.deviate_center else 0.0
         deviation_dec = (np.random.rand() - 0.5) if self.deviate_center else 0.0
-        entry["ra"] = deviation_ra * self.pixel_scale  # arcsecs
+        entry["ra"] = deviation_ra * self.pixel_scale  # arcseconds
         entry["dec"] = deviation_dec * self.pixel_scale
         return entry
 
@@ -259,7 +258,7 @@ class CatsimGalaxies(Dataset):
 
         self.slen = slen
         self.pixel_scale = get_pixel_scale(self.survey_name)
-        self.stamp_size = self.pixel_scale * self.slen  # arcsecs.
+        self.stamp_size = self.pixel_scale * self.slen  # arcseconds
         self.preserve_flux = preserve_flux
         self.add_noise = add_noise
         self.deviate_center = deviate_center

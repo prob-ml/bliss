@@ -3,30 +3,27 @@ import torch
 import pytorch_lightning as pl
 
 from bliss import wake
-from bliss.models.decoder import get_mgrid, PowerLawPSF
+from bliss.models.decoder import PowerLawPSF
 
 
 @pytest.fixture(scope="module")
 def star_dataset(decoder_setup, device_setup):
     psf_params = decoder_setup.get_fitted_psf_params()
     batch_size = 128 if device_setup.use_cuda else 1
-    n_images = 1280 if device_setup.use_cuda else 1
-
-    slen = 30
-    tile_slen = 2
+    n_batches = 10 if device_setup.use_cuda else 1
 
     return decoder_setup.get_star_dataset(
         psf_params,
         n_bands=1,
-        slen=slen,
-        tile_slen=tile_slen,
+        slen=30,
+        tile_slen=2,
         max_sources_per_tile=2,
         min_sources_per_tile=0,
         # this is so that the avg. number of sources
-        # a 30 x 30 image is 3
+        # a 30 x 30 image is (approx) 3
         mean_sources_per_tile=0.004,
         batch_size=batch_size,
-        n_images=n_images,
+        n_batches=n_batches,
     )
 
 
@@ -39,11 +36,15 @@ def trained_encoder(star_dataset, encoder_setup, device_setup):
         ptile_slen=star_dataset.tile_slen + 6,
         tile_slen=star_dataset.tile_slen,
         max_detections=star_dataset.max_sources_per_tile,
+        enc_hidden=256,
+        enc_kern=3,
+        enc_conv_c=20,
     )
 
     return trained_encoder.to(device_setup.device)
 
 
+# TODO: Test unstable in GPU
 class TestStarSleepEncoder:
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, paths, device_setup):
@@ -56,26 +57,12 @@ class TestStarSleepEncoder:
             # get the estimated params
             trained_encoder.eval()
             (
-                n_sources_per_tile,
-                locs_per_tile,
-                galaxy_params_per_tile,
-                log_fluxes_per_tile,
-                galaxy_bool_per_tile,
-            ) = trained_encoder.map_estimate(test_image)
-
-            (
                 n_sources,
                 locs,
                 galaxy_params,
                 log_fluxes,
                 galaxy_bool,
-            ) = trained_encoder.get_full_params_from_sampled_params(
-                n_sources_per_tile,
-                locs_per_tile,
-                galaxy_params_per_tile,
-                log_fluxes_per_tile,
-                galaxy_bool_per_tile,
-            )
+            ) = trained_encoder.map_estimate(test_image)
 
         # we only expect our assert statements to be true
         # when the model is trained in full, which requires cuda

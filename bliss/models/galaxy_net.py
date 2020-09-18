@@ -4,7 +4,6 @@ import numpy as np
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 
-
 import torch
 from torch.utils.data import DataLoader, SubsetRandomSampler
 import torch.nn as nn
