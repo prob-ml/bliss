@@ -37,7 +37,7 @@ class TestBinaryEncoder:
             enc_hidden=256,
             enc_kern=3,
             enc_conv_c=20,
-            validation_plot_start=1000,  # do not create validation plots.
+            validation_plot_start=0,
             background_pad_value=5000.0,
         )
         return trained_encoder.to(device_setup.device)
