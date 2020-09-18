@@ -32,7 +32,7 @@ class SimulatedDataset(IterableDataset):
             yield self.get_batch()
 
     def get_batch(self):
-        params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
+        params = self.image_decoder.sample_prior(batch_size=self.batch_size)
 
         images = self.image_decoder.render_images(
             params["n_sources"],
