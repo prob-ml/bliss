@@ -24,7 +24,7 @@ def trained_star_encoder_m2(decoder_setup, encoder_setup, device_setup, paths):
         n_bands=2,
         slen=100,
         tile_slen=2,
-        n_images=200 if use_cuda else 1,
+        n_batches=10 if use_cuda else 1,
         batch_size=20 if use_cuda else 1,
         max_sources_per_tile=2,
         mean_sources_per_tile=0.48,
@@ -106,6 +106,7 @@ def get_summary_stats(
     return tpr_bool.mean(), ppv_bool.mean(), tpr_bool, ppv_bool
 
 
+@pytest.mark.slow
 class TestStarSleepEncoderM2:
     def test_star_sleep_m2(self, trained_star_encoder_m2, device_setup, paths):
         device = device_setup.device

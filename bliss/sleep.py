@@ -146,10 +146,11 @@ class SleepPhase(pl.LightningModule):
 
         # assumes dataset is a IterableDataset class.
         self.dataset = dataset
+        self.image_decoder = self.dataset.image_decoder
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
         # avoid calculating gradients of psf_transform
-        self.dataset.image_decoder.power_law_psf.requires_grad_(False)
+        self.image_decoder.power_law_psf.requires_grad_(False)
 
         self.lr = lr
         self.weight_decay = weight_decay
@@ -163,10 +164,10 @@ class SleepPhase(pl.LightningModule):
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
-            "max_sources_per_tile": self.dataset.image_decoder.max_sources_per_tile,
-            "mean_sources_per_tile": self.dataset.image_decoder.mean_sources_per_tile,
-            "min_sources_per_tile": self.dataset.image_decoder.min_sources_per_tile,
-            "prob_galaxy": self.dataset.image_decoder.prob_galaxy,
+            "max_sources_per_tile": self.image_decoder.max_sources_per_tile,
+            "mean_sources_per_tile": self.image_decoder.mean_sources_per_tile,
+            "min_sources_per_tile": self.image_decoder.min_sources_per_tile,
+            "prob_galaxy": self.image_decoder.prob_galaxy,
         }
 
     def forward(self, image_ptiles, n_sources):
@@ -217,11 +218,11 @@ class SleepPhase(pl.LightningModule):
 
         # flatten so first dimension is ptile
         batch_size = images.shape[0]
-        n_tiles_per_image = self.dataset.image_decoder.n_tiles_per_image
+        n_tiles_per_image = self.image_decoder.n_tiles_per_image
         n_tiles = batch_size * n_tiles_per_image
-        max_sources_per_tile = self.dataset.image_decoder.max_sources_per_tile
-        n_bands = self.dataset.image_decoder.n_bands
-        latent_dim = self.dataset.image_decoder.latent_dim
+        max_sources_per_tile = self.image_decoder.max_sources_per_tile
+        n_bands = self.image_decoder.n_bands
+        latent_dim = self.image_decoder.latent_dim
 
         true_tile_locs = true_tile_locs.view(n_tiles, max_sources_per_tile, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.view(
@@ -241,7 +242,6 @@ class SleepPhase(pl.LightningModule):
         # extract image tiles
         # true_tile_locs has shape = (n_ptiles x max_detections x 2)
         # true_tile_n_sources has shape = (n_ptiles)
-        slen = images.size(-1)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)
@@ -359,6 +359,7 @@ class SleepPhase(pl.LightningModule):
                 "images": batch["images"],
                 "locs": batch["locs"],
                 "n_sources": batch["n_sources"],
+                "galaxy_bool": batch["galaxy_bool"],
             },
         }
 
@@ -366,45 +367,45 @@ class SleepPhase(pl.LightningModule):
 
     def make_validation_plots(self, outputs):
         # add some images to tensorboard for validating location/counts.
-        # Only use 5 images in the last batch
-        n_samples = min(5, len(outputs[-1]["log"]["n_sources"]))
+        n_samples = min(10, len(outputs[-1]["log"]["n_sources"]))
         assert n_samples > 1
 
         # these are per tile
         true_n_sources_on_tiles = outputs[-1]["log"]["n_sources"][:n_samples]
         true_locs_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
+        true_galaxy_bools_on_tiles = outputs[-1]["log"]["galaxy_bool"][:n_samples]
+        images = outputs[-1]["log"]["images"][:n_samples]
 
-        # convert to full image
-        true_n_sources, true_locs = encoder._get_full_params_from_sampled_params(
-            self.image_encoder.slen,
-            self.image_encoder.tile_slen,
+        # convert to full image parameters for plotting purposes.
+        (
+            true_n_sources,
+            true_locs,
+            true_galaxy_bools,
+        ) = self.image_encoder.get_full_params_from_sampled_params(
             true_n_sources_on_tiles,
             true_locs_on_tiles,
+            true_galaxy_bools_on_tiles.unsqueeze(-1),
         )
 
-        images = outputs[-1]["log"]["images"][:n_samples]
-        fig, axes = plt.subplots(
-            nrows=n_samples,
-            ncols=3,
-            figsize=(
-                20,
-                20,
-            ),
-        )
+        figsize = (12, 4 * n_samples)
+        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
 
         for i in range(n_samples):
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
 
-            image = images[i]
+            image = images[None, i]
+            slen = image.shape[-1]
 
-            # true parameters (on full image)
-            true_loc = true_locs[i]
-            true_n_source = true_n_sources[i]
+            # true parameters on full image.
+            true_loc = true_locs[None, i]
+            true_n_source = true_n_sources[None, i]
+            true_galaxy_bool = true_galaxy_bools[None, i].squeeze(-1)
 
+            assert len(image.shape) == 4
             with torch.no_grad():
-                # get the estimated params: these are *per tile*
+                # get the estimated params, these are *per tile*.
                 self.image_encoder.eval()
                 (
                     tile_n_sources,
@@ -412,10 +413,9 @@ class SleepPhase(pl.LightningModule):
                     tile_galaxy_params,
                     tile_log_fluxes,
                     tile_galaxy_bool,
-                ) = self.image_encoder.map_estimate(image.unsqueeze(0))
+                ) = self.image_encoder.tiled_map_estimate(image)
 
-            # convert tile estimates to full parameterization
-            # for plotting
+            # convert tile estimates to full parameterization for plotting
             (
                 n_sources,
                 locs,
@@ -427,37 +427,70 @@ class SleepPhase(pl.LightningModule):
                 tile_locs,
                 tile_galaxy_params,
                 tile_log_fluxes,
-                tile_galaxy_bool,
+                tile_galaxy_bool.unsqueeze(-1),
             )
+            galaxy_bool = galaxy_bool.squeeze(-1)
 
-            # draw true image
-            assert len(image.shape) == 3
-            image = image[0].cpu().numpy()  # first band.
-            loc = locs[0].cpu().numpy()
-            true_loc = true_loc.cpu().numpy()
-            plotting.plot_image(fig, true_ax, image, true_loc, loc)
+            assert len(locs.shape) == 3 and locs.size(0) == 1
+            assert locs.shape[1] == n_sources.max().int().item()
+
+            # plot true image + number of sources first.
+            image = image[0, 0].cpu().numpy()  # only first band.
+            plotting.plot_image(fig, true_ax, image)
             true_ax.set_xlabel(
                 f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
             )
 
-            # only prediction/residual if at least 1 source.
-            max_sources = n_sources.max().int().item()
-            if max_sources > 0:
+            # continue only if at least one true source and predicted source.
+            max_sources = true_loc.shape[1]
+            if max_sources > 0 and n_sources.item() > 0:
 
                 # draw reconstruction image.
-                recon_image = self.dataset.image_decoder.render_images(
+                recon_image = self.image_decoder.render_images(
                     tile_n_sources,
                     tile_locs,
                     tile_galaxy_bool,
                     tile_galaxy_params,
                     tile_log_fluxes,
                 )
-                assert len(locs.shape) == 3 and locs.size(0) == 1
+
+                # round up true parameters.
+                true_star_bool = self.image_decoder.get_star_bool(
+                    true_n_source, true_galaxy_bool
+                )
+                true_galaxy_loc = self.image_decoder.get_galaxy_locs(
+                    true_loc, true_galaxy_bool
+                )
+                true_star_loc = self.image_decoder.get_star_locs(
+                    true_loc, true_star_bool
+                )
+
+                # round up estimated parameters.
+                star_bool = self.image_decoder.get_star_bool(n_sources, galaxy_bool)
+                galaxy_loc = self.image_decoder.get_galaxy_locs(locs, galaxy_bool)
+                star_loc = self.image_decoder.get_star_locs(locs, star_bool)
+
+                # convert everything to numpy + cpu so matplotlib can use it.
+                true_galaxy_loc = true_galaxy_loc.cpu().numpy()[0]
+                true_star_loc = true_star_loc.cpu().numpy()[0]
+                galaxy_loc = galaxy_loc.cpu().numpy()[0]
+                star_loc = star_loc.cpu().numpy()[0]
+
                 recon_image = recon_image[0, 0].cpu().numpy()
                 res_image = (image - recon_image) / np.sqrt(image)
 
-                # plot
-                plotting.plot_image(fig, recon_ax, recon_image, loc)
+                # plot and add locations.
+                plotting.plot_image_locs(
+                    true_ax, slen, true_galaxy_loc, galaxy_loc, colors=("r", "b")
+                )
+                plotting.plot_image_locs(
+                    true_ax, slen, true_star_loc, star_loc, colors=("g", "m")
+                )
+
+                plotting.plot_image(fig, recon_ax, recon_image)
+                plotting.plot_image_locs(
+                    recon_ax, slen, galaxy_loc, star_loc, colors=("r", "b")
+                )
                 plotting.plot_image(fig, res_ax, res_image)
 
             else:
@@ -465,7 +498,7 @@ class SleepPhase(pl.LightningModule):
                 plotting.plot_image(fig, recon_ax, np.zeros((slen, slen)))
                 plotting.plot_image(fig, res_ax, np.zeros((slen, slen)))
 
-        plt.subplots_adjust(hspace=0.25, wspace=-0.2)
+        plt.subplots_adjust(hspace=0.2, wspace=0.4)
         if self.logger:
             self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
         plt.close(fig)

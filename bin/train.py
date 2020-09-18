@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -62,6 +63,14 @@ def setup_checkpoint_callback(args, paths, logger):
 
 
 def main(args):
+
+    # setup gpus
+    if args.gpus:
+        assert args.gpus[1] == "," and len(args.gpus) == 2, "Format accepted: 'Y,' "
+        device_str = args.gpus[0]
+        device_id = int(device_str)
+        device = torch.device(f"cuda:{device_id}")
+        torch.cuda.set_device(device)
 
     # setup.
     paths = setup_paths(args, enforce_overwrite=False)
