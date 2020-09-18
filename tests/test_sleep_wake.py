@@ -84,7 +84,9 @@ class TestStarSleepEncoder:
 
 
 class TestStarWakeNet:
-    def test_star_wake(self, trained_encoder, star_dataset, paths, device_setup):
+    def test_star_wake(
+        self, trained_encoder, star_dataset, init_psf_setup, paths, device_setup
+    ):
         # load the test image
         # 3-stars 30*30 pixels.
         test_star = torch.load(paths["data"].joinpath("3_star_test.pt"))

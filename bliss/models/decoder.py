@@ -647,18 +647,18 @@ class ImageDecoder(nn.Module):
         assert n_tiles1 % 1 == 0
         n_tiles1 = int(n_tiles1)
 
-    # the number of tiles in ptile row
-    # i.e the slen of a ptile but in units of tile_slen
-    n_tiles1_in_ptile = ptile_slen / tile_slen
-    ptile_padding = (n_tiles1_in_ptile - 1) / 2
-    assert (
-        n_tiles1_in_ptile % 1 == 0
-    ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
-    assert (
-        ptile_padding % 1 == 0
-    ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
-    n_tiles1_in_ptile = int(n_tiles1_in_ptile)
-    ptile_padding = int(ptile_padding)
+        # the number of tiles in ptile row
+        # i.e the slen of a ptile but in units of tile_slen
+        n_tiles1_in_ptile = ptile_slen / tile_slen
+        ptile_padding = (n_tiles1_in_ptile - 1) / 2
+        assert (
+            n_tiles1_in_ptile % 1 == 0
+        ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
+        assert (
+            ptile_padding % 1 == 0
+        ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
+        n_tiles1_in_ptile = int(n_tiles1_in_ptile)
+        ptile_padding = int(ptile_padding)
 
         image_tiles_4d = image_ptiles.view(
             batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
