@@ -11,30 +11,6 @@ from .models.decoder import get_mgrid
 from . import device
 
 
-def _fit_plane_to_background(background):
-    assert len(background.shape) == 3
-    n_bands = background.shape[0]
-    slen = background.shape[-1]
-
-    planar_params = np.zeros((n_bands, 3))
-    for i in range(n_bands):
-        # can we make numpy to torch?
-        y = background[i].flatten().detach().cpu().numpy()
-        grid = get_mgrid(slen).detach().cpu().numpy()
-
-        x = np.ones((slen ** 2, 3))
-        x[:, 1:] = np.array(
-            [grid[:, :, 0].flatten(), grid[:, :, 1].flatten()]
-        ).transpose()
-
-        xtx = np.einsum("ki, kj -> ij", x, x)
-        xty = np.einsum("ki, k -> i", x, y)
-
-        planar_params[i, :] = np.linalg.solve(xtx, xty)
-
-    return planar_params
-
-
 class PlanarBackground(nn.Module):
     def __init__(self, init_background_params, image_slen=101):
         super(PlanarBackground, self).__init__()
@@ -176,7 +152,7 @@ class WakeNet(pl.LightningModule):
     def _get_init_background(self, sample_every=25):
         sampled_background = self._sample_image(sample_every)
         self.init_background_params = torch.tensor(
-            _fit_plane_to_background(sampled_background)
+            self._fit_plane_to_background(sampled_background)
         ).to(device)
         self.planar_background = PlanarBackground(
             self.init_background_params, self.slen
@@ -207,3 +183,26 @@ class WakeNet(pl.LightningModule):
                 )
 
         return samples
+
+    def _fit_plane_to_background(self, background):
+        assert len(background.shape) == 3
+        n_bands = background.shape[0]
+        slen = background.shape[-1]
+
+        planar_params = np.zeros((n_bands, 3))
+        for i in range(n_bands):
+            # can we make numpy to torch?
+            y = background[i].flatten().detach().numpy()
+            grid = get_mgrid(slen).detach().numpy()
+
+            x = np.ones((slen ** 2, 3))
+            x[:, 1:] = np.array(
+                [grid[:, :, 0].flatten(), grid[:, :, 1].flatten()]
+            ).transpose()
+
+            xtx = np.einsum("ki, kj -> ij", x, x)
+            xty = np.einsum("ki, k -> i", x, y)
+
+            planar_params[i, :] = np.linalg.solve(xtx, xty)
+
+        return planar_params
