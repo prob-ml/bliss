@@ -18,7 +18,7 @@ from .utils import setup_paths, add_path_args
 
 from pytorch_lightning import Callback
 from bliss.datasets.simulated import SimulatedDataset
-from bliss.sleep import SleepObjective
+from bliss.hyperparameter import SleepObjective
 
 
 class MetricsCallback(Callback):

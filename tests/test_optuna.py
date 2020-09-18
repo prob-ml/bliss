@@ -2,7 +2,7 @@ import pytest
 from pytorch_lightning import Callback
 from optuna.trial import FixedTrial
 
-from bliss.sleep import SleepObjective
+from bliss.hyperparameter import SleepObjective
 
 
 class MetricsCallback(Callback):
@@ -55,7 +55,7 @@ class TestOptunaSleep:
             model_dir=paths["model_dir"],
             metrics_callback=metrics_callback_setup,
             monitor="val_loss",
-            gpus=device_setup.gpus,
+            single_gpu_id=device_setup.gpus,
         )
 
         # set up study object
