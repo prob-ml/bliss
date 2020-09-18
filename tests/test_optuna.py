@@ -2,8 +2,8 @@ from pytorch_lightning import Callback
 from optuna.trial import FixedTrial
 from hydra.experimental import initialize, compose
 
-from bliss.sleep import SleepObjective
-from bliss.datasets.simulated import SimulatedModule
+from bliss.hyperparameter import SleepObjective
+from bliss.datasets.simulated import SimulatedDataset
 
 
 class MetricsCallback(Callback):

@@ -14,8 +14,6 @@ from . import device, plotting
 from .models import encoder, decoder
 from .models.encoder import get_star_bool, get_full_params
 
-from optuna.integration import PyTorchLightningPruningCallback
-
 
 def sort_locs(locs):
     # sort according to x location
