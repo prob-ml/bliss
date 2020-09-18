@@ -7,7 +7,6 @@ import pytorch_lightning as pl
 
 import numpy as np
 
-from .models import encoder
 from .models.decoder import get_mgrid
 from . import device
 
@@ -83,7 +82,7 @@ class WakeNet(pl.LightningModule):
 
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder
-        self.image_decoder.power_law_psf.requires_grad_(True)
+        self.image_decoder.requires_grad_(True)
 
         # observed image is batch_size (or 1) x n_bands x slen x slen
         assert len(observed_img.shape) == 4
@@ -147,9 +146,7 @@ class WakeNet(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        return optim.Adam(
-            [{"params": self.image_decoder.power_law_psf.parameters(), "lr": self.lr}]
-        )
+        return optim.Adam([{"params": self.image_decoder.parameters(), "lr": self.lr}])
 
     # ---------------
     # Training
