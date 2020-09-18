@@ -126,7 +126,7 @@ class SleepPhase(pl.LightningModule):
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
         # avoid calculating gradients of psf_transform
-        self.image_decoder.power_law_psf.requires_grad_(False)
+        self.image_decoder.requires_grad_(False)
 
         self.validation_plot_start = validation_plot_start
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
