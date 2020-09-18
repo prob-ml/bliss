@@ -143,7 +143,7 @@ class TestStarEncoderObjective:
             galaxy_params_loss,
             star_params_loss,
             galaxy_bool_loss,
-        ) = sleep.SleepPhase._get_min_perm_loss(
+        ) = sleep._get_min_perm_loss(
             locs_log_probs_all,
             galaxy_params_log_probs_all,
             star_params_log_probs_all,
