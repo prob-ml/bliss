@@ -258,7 +258,7 @@ class SleepPhase(pl.LightningModule):
             galaxy_params_loss,
             star_params_loss,
             galaxy_bool_loss,
-        ) = self._get_min_perm_loss(
+        ) = _get_min_perm_loss(
             locs_log_probs_all,
             galaxy_params_log_probs_all,
             star_params_log_probs_all,
