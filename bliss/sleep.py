@@ -137,9 +137,9 @@ class SleepPhase(pl.LightningModule):
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
-            "max_sources_per_tile": self.image_decoder.max_sources_per_tile,
-            "mean_sources_per_tile": self.image_decoder.mean_sources_per_tile,
-            "min_sources_per_tile": self.image_decoder.min_sources_per_tile,
+            "max_sources": self.image_decoder.max_sources,
+            "mean_sources": self.image_decoder.mean_sources,
+            "min_sources": self.image_decoder.min_sources,
             "prob_galaxy": self.image_decoder.prob_galaxy,
         }
 
@@ -193,23 +193,19 @@ class SleepPhase(pl.LightningModule):
         batch_size = images.shape[0]
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
         n_tiles = batch_size * n_tiles_per_image
-        max_sources_per_tile = self.image_decoder.max_sources_per_tile
+        max_sources = self.image_decoder.max_sources
         n_bands = self.image_decoder.n_bands
         latent_dim = self.image_decoder.latent_dim
 
-        true_tile_locs = true_tile_locs.view(n_tiles, max_sources_per_tile, 2)
+        true_tile_locs = true_tile_locs.view(n_tiles, max_sources, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.view(
-            n_tiles, max_sources_per_tile, latent_dim
+            n_tiles, max_sources, latent_dim
         )
-        true_tile_log_fluxes = true_tile_log_fluxes.view(
-            n_tiles, max_sources_per_tile, n_bands
-        )
-        true_tile_galaxy_bool = true_tile_galaxy_bool.view(
-            n_tiles, max_sources_per_tile
-        )
+        true_tile_log_fluxes = true_tile_log_fluxes.view(n_tiles, max_sources, n_bands)
+        true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_tiles, max_sources)
         true_tile_n_sources = true_tile_n_sources.flatten()
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(
-            true_tile_n_sources, max_sources_per_tile
+            true_tile_n_sources, max_sources
         )
 
         # extract image tiles

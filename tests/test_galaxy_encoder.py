@@ -18,13 +18,13 @@ class TestGalaxyEncoder:
             tile_slen=tile_slen,
             batch_size=32 if use_cuda else 2,
             n_batches=10 if use_cuda else 2,
-            max_sources_per_tile=2,
-            min_sources_per_tile=1,
+            max_sources=2,
+            min_sources=1,
             loc_max_per_tile=0.8,
             loc_min_per_tile=0.2,
             # this is so that prob(n_source = 1) \approx prob(n_source = 2) \approx = 0.5
             # under the poisson prior
-            mean_sources_per_tile=1.67,
+            mean_sources=1.67,
             prob_galaxy=1.0,
             ptile_padding=0,
         )
