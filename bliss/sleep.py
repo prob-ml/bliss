@@ -224,8 +224,8 @@ class SleepPhase(pl.LightningModule):
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"]
         true_tile_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
-        one_hot_encoding = functional.one_hot(true_tile_n_sources, max_detections + 1)
-        counter_loss = self._get_categorical_loss(n_source_log_probs, one_hot_encoding)
+        cross_entropy = torch.nn.CrossEntropyLoss().requires_grad_(False)
+        counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
 
         # the following three functions computes the log-probability of parameters when
         # each estimated source i is matched with true source j for
@@ -517,13 +517,6 @@ class SleepPhase(pl.LightningModule):
         }
         results = {"val_loss": avg_loss, "log": logs}
         return results
-
-    @staticmethod
-    def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
-        assert torch.all(n_source_log_probs <= 0)
-        assert n_source_log_probs.shape == one_hot_encoding.shape
-
-        return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
 
     @staticmethod
     def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
