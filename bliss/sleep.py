@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 
 import torch
 from torch.distributions import Normal
-from torch.nn import functional
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
