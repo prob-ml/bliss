@@ -326,8 +326,8 @@ class ImageDecoder(nn.Module):
 
     def _sample_fluxes(self, n_stars, star_bool, batch_size):
         """
-
-        :return: fluxes, a shape (batch_size x self.max_sources_per_tile x max_sources x n_bands) tensor
+        Returns:
+            fluxes, a shape (batch_size x self.max_sources_per_tile x max_sources x n_bands) tensor
         """
         assert n_stars.shape[0] == batch_size
 
@@ -634,7 +634,8 @@ class ImageDecoder(nn.Module):
 
         return images
 
-    def construct_full_image_from_ptiles(self, image_ptiles, tile_slen):
+    @staticmethod
+    def construct_full_image_from_ptiles(image_ptiles, tile_slen):
         # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
         batch_size = image_ptiles.shape[0]
         n_tiles_per_image = image_ptiles.shape[1]

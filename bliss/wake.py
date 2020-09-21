@@ -184,7 +184,8 @@ class WakeNet(pl.LightningModule):
 
         return samples
 
-    def _fit_plane_to_background(self, background):
+    @staticmethod
+    def _fit_plane_to_background(background):
         assert len(background.shape) == 3
         n_bands = background.shape[0]
         slen = background.shape[-1]

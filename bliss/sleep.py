@@ -125,7 +125,7 @@ class SleepPhase(pl.LightningModule):
         self.image_decoder = self.dataset.image_decoder
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
-        # avoid calculating gradients of psf_transform
+        # avoid calculating gradients of decoder.
         self.image_decoder.requires_grad_(False)
 
         self.validation_plot_start = validation_plot_start
@@ -137,10 +137,10 @@ class SleepPhase(pl.LightningModule):
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
-            "max_sources_per_tile": self.dataset.image_decoder.max_sources_per_tile,
-            "mean_sources_per_tile": self.dataset.image_decoder.mean_sources_per_tile,
-            "min_sources_per_tile": self.dataset.image_decoder.min_sources_per_tile,
-            "prob_galaxy": self.dataset.image_decoder.prob_galaxy,
+            "max_sources_per_tile": self.image_decoder.max_sources_per_tile,
+            "mean_sources_per_tile": self.image_decoder.mean_sources_per_tile,
+            "min_sources_per_tile": self.image_decoder.min_sources_per_tile,
+            "prob_galaxy": self.image_decoder.prob_galaxy,
         }
 
     def forward(self, image_ptiles, n_sources):
