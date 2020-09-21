@@ -17,29 +17,6 @@ from .models import encoder
 from optuna.integration import PyTorchLightningPruningCallback
 
 
-def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
-    assert torch.all(n_source_log_probs <= 0)
-    assert n_source_log_probs.shape == one_hot_encoding.shape
-
-    return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
-
-
-def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
-    assert true_params.shape == param_mean.shape == param_logvar.shape
-
-    n_ptiles = true_params.size(0)
-    max_detections = true_params.size(1)
-
-    # reshape to evaluate all combinations of log_prob.
-    _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
-    _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
-    _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
-
-    _sd = (_param_logvar.exp() + 1e-5).sqrt()
-    param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
-    return param_log_probs_all
-
-
 def _get_log_probs_all_perms(
     locs_log_probs_all,
     galaxy_params_log_probs_all,
@@ -48,7 +25,6 @@ def _get_log_probs_all_perms(
     true_galaxy_bool,
     is_on_array,
 ):
-
     # get log-probability under every possible matching of estimated source to true source
     n_ptiles = galaxy_params_log_probs_all.size(0)
     max_detections = galaxy_params_log_probs_all.size(-1)
@@ -149,18 +125,15 @@ class SleepPhase(pl.LightningModule):
         self.image_decoder = self.dataset.image_decoder
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
 
-        # avoid calculating gradients of psf_transform
-        self.image_decoder.power_law_psf.requires_grad_(False)
-
-        self.lr = lr
-        self.weight_decay = weight_decay
+        # avoid calculating gradients of decoder.
+        self.image_decoder.requires_grad_(False)
 
         self.validation_plot_start = validation_plot_start
         assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
 
         self.hparams = {
-            "lr": self.lr,
-            "weight_decay": self.weight_decay,
+            "lr": lr,
+            "weight_decay": weight_decay,
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
@@ -171,7 +144,7 @@ class SleepPhase(pl.LightningModule):
         }
 
     def forward(self, image_ptiles, n_sources):
-        return self.image_encoder.forward(image_ptiles, n_sources)
+        return self.image_encoder(image_ptiles, n_sources)
 
     def get_loss(self, batch):
         """
@@ -246,7 +219,7 @@ class SleepPhase(pl.LightningModule):
         n_ptiles = true_tile_is_on_array.size(0)
         max_detections = true_tile_is_on_array.size(1)
 
-        pred = self.forward(image_ptiles, true_tile_n_sources)
+        pred = self(image_ptiles, true_tile_n_sources)
 
         # TODO: make .forward() and .get_params_in_tiles() just return correct dimensions ?
         prob_galaxy = pred["prob_galaxy"].view(n_ptiles, max_detections)
@@ -256,7 +229,7 @@ class SleepPhase(pl.LightningModule):
         n_source_log_probs = pred["n_source_log_probs"]
         true_tile_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
         one_hot_encoding = functional.one_hot(true_tile_n_sources, max_detections + 1)
-        counter_loss = _get_categorical_loss(n_source_log_probs, one_hot_encoding)
+        counter_loss = self._get_categorical_loss(n_source_log_probs, one_hot_encoding)
 
         # the following three functions computes the log-probability of parameters when
         # each estimated source i is matched with true source j for
@@ -266,15 +239,15 @@ class SleepPhase(pl.LightningModule):
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
-        locs_log_probs_all = _get_params_logprob_all_combs(
+        locs_log_probs_all = self._get_params_logprob_all_combs(
             true_tile_locs, loc_mean, loc_logvar
         )
-        galaxy_params_log_probs_all = _get_params_logprob_all_combs(
+        galaxy_params_log_probs_all = self._get_params_logprob_all_combs(
             true_tile_galaxy_params,
             pred["galaxy_param_mean"],
             pred["galaxy_param_logvar"],
         )
-        star_params_log_probs_all = _get_params_logprob_all_combs(
+        star_params_log_probs_all = self._get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
 
@@ -315,8 +288,8 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": self.lr}],
-            weight_decay=self.weight_decay,
+            [{"params": self.image_encoder.parameters(), "lr": self.hparams.lr}],
+            weight_decay=self.hparams.weight_decay,
         )
 
     def train_dataloader(self):
@@ -548,6 +521,29 @@ class SleepPhase(pl.LightningModule):
         }
         results = {"val_loss": avg_loss, "log": logs}
         return results
+
+    @staticmethod
+    def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
+        assert torch.all(n_source_log_probs <= 0)
+        assert n_source_log_probs.shape == one_hot_encoding.shape
+
+        return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
+
+    @staticmethod
+    def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+        assert true_params.shape == param_mean.shape == param_logvar.shape
+
+        n_ptiles = true_params.size(0)
+        max_detections = true_params.size(1)
+
+        # reshape to evaluate all combinations of log_prob.
+        _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+        _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+        _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+
+        _sd = (_param_logvar.exp() + 1e-5).sqrt()
+        param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
+        return param_log_probs_all
 
     @staticmethod
     def add_args(parser):

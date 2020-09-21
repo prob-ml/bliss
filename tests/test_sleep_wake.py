@@ -3,7 +3,6 @@ import torch
 import pytorch_lightning as pl
 
 from bliss import wake
-from bliss.models.decoder import PowerLawPSF
 
 
 @pytest.fixture(scope="module")
@@ -45,6 +44,7 @@ def trained_encoder(star_dataset, encoder_setup, device_setup):
 
 
 # TODO: Test unstable in GPU
+@pytest.mark.skip
 class TestStarSleepEncoder:
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, paths, device_setup):
@@ -85,18 +85,7 @@ class TestStarSleepEncoder:
 
 
 class TestStarWakeNet:
-    @pytest.fixture(scope="class")
-    def init_psf_setup(self, decoder_setup, device_setup):
-        # initialize psf params, just add 1 to each sigmas
-        fitted_psf_params = decoder_setup.get_fitted_psf_params()
-        init_psf_params = fitted_psf_params.clone()[None, 0]
-        init_psf_params[0, 1:3] += torch.tensor([1.0, 1.0]).to(device_setup.device)
-        init_psf = PowerLawPSF(init_psf_params).forward().detach()
-        return {"init_psf_params": init_psf_params, "init_psf": init_psf}
-
-    def test_star_wake(
-        self, trained_encoder, star_dataset, init_psf_setup, paths, device_setup
-    ):
+    def test_star_wake(self, trained_encoder, star_dataset, paths, device_setup):
         # load the test image
         # 3-stars 30*30 pixels.
         test_star = torch.load(paths["data"].joinpath("3_star_test.pt"))
