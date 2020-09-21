@@ -223,7 +223,9 @@ class SleepPhase(pl.LightningModule):
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"]
         true_tile_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
-        cross_entropy = torch.nn.CrossEntropyLoss().requires_grad_(False)
+        cross_entropy = torch.nn.CrossEntropyLoss(reduction="None").requires_grad_(
+            False
+        )
         counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
 
         # the following three functions computes the log-probability of parameters when
