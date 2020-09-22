@@ -372,6 +372,7 @@ class ImageDecoder(nn.Module):
         galaxy_params = galaxy_params * galaxy_bool.unsqueeze(-1)
         return galaxy_params
 
+    @profile
     def sample_prior(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources_per_tile)
@@ -452,6 +453,7 @@ class ImageDecoder(nn.Module):
 
         return images
 
+    @profile
     def _render_one_source(self, locs, source):
         """
         :param locs: is n_ptiles x len((x,y))
@@ -474,6 +476,7 @@ class ImageDecoder(nn.Module):
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
+    @profile
     def _render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x n_bands x max_stars)
@@ -506,6 +509,7 @@ class ImageDecoder(nn.Module):
 
         return ptile
 
+    @profile
     def _render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
@@ -533,6 +537,7 @@ class ImageDecoder(nn.Module):
 
         return ptile
 
+    @profile
     def _render_ptiles(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
         # n_sources: is (n_ptiles)
         # locs: is (n_ptiles x max_sources x 2)
@@ -568,6 +573,7 @@ class ImageDecoder(nn.Module):
 
         return images
 
+    @profile
     def render_ptiles(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
         # n_sources: is (batch_size x n_tiles_per_image)
         # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
@@ -608,6 +614,7 @@ class ImageDecoder(nn.Module):
             self.ptile_slen,
         )
 
+    @profile
     def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
         # constructs the full slen x slen image
 
