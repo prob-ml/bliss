@@ -17,10 +17,9 @@ data_path = root_path.joinpath("data")
 
 
 @profile
-def run_batch():
-    # generate batches of data
-    for i in range(2):
-        dataset.get_batch()
+def run_batch(ds):
+    for i in range(10):
+        ds.get_batch()
 
 
 def run_sleep(trainer, model):
@@ -50,11 +49,11 @@ dec_kwargs = {
     "ptile_padding": 0,
 }
 
-n_batches = 2
-batch_size = 2
+n_batches = 1  # doesn't matter.
+batch_size = 10
 dataset = simulated.SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 
-run_batch()
+run_batch(dataset)
 
 #
 # # setup sleep phase
