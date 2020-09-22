@@ -546,6 +546,10 @@ class SleepPhase(pl.LightningModule):
         return param_log_probs_all
 
     @staticmethod
+    def _get_kl_qp_galaxy_params(image_ptiles, galaxy_param_mean, galaxy_param_logvar):
+        pass
+
+    @staticmethod
     def add_args(parser):
 
         # encoder parameters.
