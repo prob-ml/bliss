@@ -50,7 +50,7 @@ dec_kwargs = {
 }
 
 n_batches = 1  # doesn't matter.
-batch_size = 10
+batch_size = 1
 dataset = simulated.SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 
 run_batch(dataset)

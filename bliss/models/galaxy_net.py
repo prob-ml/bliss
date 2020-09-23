@@ -94,6 +94,7 @@ class CenteredGalaxyDecoder(nn.Module):
             ),  # why channels=2 * num bands?
         )
 
+    @profile
     def forward(self, z):
         z = self.fc(z)  # latent variable
 
