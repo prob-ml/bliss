@@ -53,17 +53,20 @@ class SloanDigitalSkySurvey(Dataset):
         is_target = is_star & is_bright & is_thing
         ras = po_fits["ra"][is_target]
         decs = po_fits["dec"][is_target]
+        fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
         band = 2
         stamps = []
+        pts = []
         for (ra, dec, f) in zip(ras, decs, po_fits["thing_id"][is_target]):
             # pt = "time" in pixel coordinates
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
             pt, pr = int(pt + 0.5), int(pr + 0.5)
             stamp = img[(pr - 2) : (pr + 3), (pt - 2) : (pt + 3)]
             stamps.append(stamp)
+            pts.append(pt)
 
-        return np.asarray(stamps)
+        return np.asarray(stamps), np.asarray(pts), fluxes
 
     def get_from_disk(self, idx):
         run, camcol, field, gain, po_fits = self.rcfgcs[idx]
@@ -126,7 +129,7 @@ class SloanDigitalSkySurvey(Dataset):
 
             frame.close()
 
-        stamps = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2])
+        stamps, pts, fluxes = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2])
 
         ret = {
             "image": np.stack(image_list),
@@ -136,6 +139,8 @@ class SloanDigitalSkySurvey(Dataset):
             "calibration": np.stack(calibration_list),
             "wcs": wcs_list,
             "bright_stars": stamps,
+            "pts": pts,
+            "fluxes": fluxes
         }
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
