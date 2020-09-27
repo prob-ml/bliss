@@ -1,16 +1,16 @@
+import os
+import torch
 import optuna
 import pytorch_lightning as pl
 from optuna.integration import PyTorchLightningPruningCallback
-from multiprocessing import Manager
-from joblib import parallel_backend
 
 from bliss.sleep import SleepPhase
+from bliss.datasets.simulated import SimulatedDataset
 
 
 class SleepObjective(object):
     def __init__(
         self,
-        dataset,
         encoder_kwargs: dict,
         max_epochs: int,
         lr: tuple,
@@ -18,10 +18,17 @@ class SleepObjective(object):
         model_dir,
         metrics_callback,
         monitor,
-        single_gpu_id,
+        n_batches,
+        batch_size,
+        dec_args,
+        dec_kwargs,
         gpu_queue=None,
     ):
-        self.dataset = dataset
+        # dataset set up
+        self.n_batches = n_batches
+        self.batch_size = batch_size
+        self.dec_args = dec_args
+        self.dec_kwargs = dec_kwargs
 
         assert type(encoder_kwargs["enc_conv_c"]) is tuple
         assert type(encoder_kwargs["enc_hidden"]) is tuple
@@ -52,12 +59,21 @@ class SleepObjective(object):
         # set up for multiple gpu
         self.gpu_queue = gpu_queue
 
-        # set up for single gpu
-        self.single_gpu_id = single_gpu_id
-
     def __call__(self, trial):
+
         if self.gpu_queue is not None:
             gpu_id = self.gpu_queue.get()
+            device = torch.device(f"cuda:{gpu_id}")
+            torch.cuda.set_device(device)
+
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
+        dec_args = list(self.dec_args)
+        dec_args[1] = dec_args[1].to(device)
+        dec_args = tuple(dec_args)
+        star_dataset = SimulatedDataset(
+            self.n_batches, self.batch_size, dec_args, self.dec_kwargs
+        )
 
         self.encoder_kwargs["enc_conv_c"] = trial.suggest_int(
             "enc_conv_c",
@@ -79,15 +95,15 @@ class SleepObjective(object):
         )
 
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            self.model_dir.joinpath("trial_{}".format(trial.number), "{epoch}"),
+            os.path.join(self.model_dir, "trial_{}".format(trial.number), "{epoch}"),
             monitor="val_loss",
         )
 
-        model = SleepPhase(self.dataset, self.encoder_kwargs, lr, weight_decay)
+        model = SleepPhase(star_dataset, self.encoder_kwargs, lr, weight_decay)
 
         trainer = pl.Trainer(
             logger=False,
-            gpus=[gpu_id] if self.gpu_queue is not None else self.single_gpu_id,
+            gpus=[gpu_id] if self.gpu_queue is not None else 0,
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
             callbacks=[self.metrics_callback],
@@ -102,17 +118,3 @@ class SleepObjective(object):
             self.gpu_queue.put(gpu_id)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()
-
-
-def multi_gpu_optuna(gpu_num, storage: str, direction: str, *sleepobjectiveargs):
-    gpu_queue = Manager().Queue()
-
-    study = optuna.create_study(storage=storage, direction=direction)
-    # set up queue of devices
-    for i in range(gpu_num):
-        gpu_queue.put(i)
-
-    sleepobjectiveargs.gpu_queue = gpu_queue
-
-    with parallel_backend("multiprocessing", n_jobs=gpu_num):
-        study.optimize(SleepObjective(*sleepobjectiveargs), n_trials=10, n_jobs=gpu_num)
