@@ -35,11 +35,12 @@ class SloanDigitalSkySurvey(Dataset):
                 try:
                     po_fits = fits.getdata(po_path)
                 except IndexError as e:
-                        print("Warning: IndexError while accessing field: {}. Setting as None.".format(_field))
+                        print("Warning: IndexError while accessing field: {}. This field will not be included.".format(_field))
                         print(e)
                         po_fits = None
 
-                self.rcfgcs.append((run, camcol, _field, gain, po_fits))
+                if po_fits is not None:
+                    self.rcfgcs.append((run, camcol, _field, gain, po_fits))
 
         self.items = [None] * len(self.rcfgcs)
 
