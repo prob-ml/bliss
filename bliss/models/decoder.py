@@ -468,7 +468,10 @@ class ImageDecoder(nn.Module):
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
         _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
-        grid_loc = _grid - locs[:, [1, 0]].view(n_ptiles, 1, 1, 2)
+
+        swap = torch.tensor([1, 0], device=device)
+        locs_swapped = locs.index_select(1, swap)
+        grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
