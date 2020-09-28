@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 
 import torch
 from torch.distributions import Normal
-from torch.nn import functional
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
@@ -137,9 +136,9 @@ class SleepPhase(pl.LightningModule):
             "batch_size": self.dataset.batch_size,
             "n_batches": self.dataset.n_batches,
             "n_bands": self.dataset.n_bands,
-            "max_sources_per_tile": self.image_decoder.max_sources_per_tile,
-            "mean_sources_per_tile": self.image_decoder.mean_sources_per_tile,
-            "min_sources_per_tile": self.image_decoder.min_sources_per_tile,
+            "max_sources": self.image_decoder.max_sources,
+            "mean_sources": self.image_decoder.mean_sources,
+            "min_sources": self.image_decoder.min_sources,
             "prob_galaxy": self.image_decoder.prob_galaxy,
         }
 
@@ -193,23 +192,19 @@ class SleepPhase(pl.LightningModule):
         batch_size = images.shape[0]
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
         n_tiles = batch_size * n_tiles_per_image
-        max_sources_per_tile = self.image_decoder.max_sources_per_tile
+        max_sources = self.image_decoder.max_sources
         n_bands = self.image_decoder.n_bands
         latent_dim = self.image_decoder.latent_dim
 
-        true_tile_locs = true_tile_locs.view(n_tiles, max_sources_per_tile, 2)
+        true_tile_locs = true_tile_locs.view(n_tiles, max_sources, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.view(
-            n_tiles, max_sources_per_tile, latent_dim
+            n_tiles, max_sources, latent_dim
         )
-        true_tile_log_fluxes = true_tile_log_fluxes.view(
-            n_tiles, max_sources_per_tile, n_bands
-        )
-        true_tile_galaxy_bool = true_tile_galaxy_bool.view(
-            n_tiles, max_sources_per_tile
-        )
+        true_tile_log_fluxes = true_tile_log_fluxes.view(n_tiles, max_sources, n_bands)
+        true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_tiles, max_sources)
         true_tile_n_sources = true_tile_n_sources.flatten()
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(
-            true_tile_n_sources, max_sources_per_tile
+            true_tile_n_sources, max_sources
         )
 
         # extract image tiles
@@ -228,8 +223,10 @@ class SleepPhase(pl.LightningModule):
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"]
         true_tile_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
-        one_hot_encoding = functional.one_hot(true_tile_n_sources, max_detections + 1)
-        counter_loss = self._get_categorical_loss(n_source_log_probs, one_hot_encoding)
+        cross_entropy = torch.nn.CrossEntropyLoss(reduction="none").requires_grad_(
+            False
+        )
+        counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
 
         # the following three functions computes the log-probability of parameters when
         # each estimated source i is matched with true source j for
@@ -521,13 +518,6 @@ class SleepPhase(pl.LightningModule):
         }
         results = {"val_loss": avg_loss, "log": logs}
         return results
-
-    @staticmethod
-    def _get_categorical_loss(n_source_log_probs, one_hot_encoding):
-        assert torch.all(n_source_log_probs <= 0)
-        assert n_source_log_probs.shape == one_hot_encoding.shape
-
-        return -torch.sum(n_source_log_probs * one_hot_encoding, dim=1)
 
     @staticmethod
     def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
