@@ -74,7 +74,7 @@ class SloanDigitalSkySurvey(Dataset):
 
         return np.asarray(stamps), np.asarray(pts), fluxes
 
-    def get_from_disk(self, idx):
+    def get_from_disk(self, idx, verbose=False):
         if self.rcfgcs[idx] is None:
             return None
         run, camcol, field, gain, po_fits = self.rcfgcs[idx]
@@ -99,7 +99,8 @@ class SloanDigitalSkySurvey(Dataset):
                 bl, run, camcol, field
             )
             frame_path = str(field_dir.joinpath(frame_name))
-            print("loading sdss image from", frame_path)
+            if verbose:
+                print("loading sdss image from", frame_path)
             frame = fits.open(frame_path)
 
             calibration = frame[1].data
