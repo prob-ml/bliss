@@ -59,8 +59,8 @@ class ImageDecoder(nn.Module):
         max_sources=2,
         mean_sources=0.4,
         min_sources=0,
-        loc_min_per_tile=0.0,
-        loc_max_per_tile=1.0,
+        loc_min=0.0,
+        loc_max=1.0,
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
@@ -105,8 +105,8 @@ class ImageDecoder(nn.Module):
         self.prob_galaxy = float(prob_galaxy)
 
         # per-tile constraints on the location of sources
-        self.loc_min_per_tile = loc_min_per_tile
-        self.loc_max_per_tile = loc_max_per_tile
+        self.loc_min = loc_min
+        self.loc_max = loc_max
 
         self.add_noise = add_noise
 
@@ -114,10 +114,10 @@ class ImageDecoder(nn.Module):
         self.galaxy_decoder = galaxy_decoder
         self.latent_dim = 8
         self.gal_slen = 51
-        if self.prob_galaxy > 0:
+        if self.galaxy_decoder is not None:
+            assert self.galaxy_decoder.n_bands == self.n_bands
             self.gal_slen = self.galaxy_decoder.slen
             self.latent_dim = self.galaxy_decoder.latent_dim
-            assert self.galaxy_decoder.n_bands == self.n_bands
 
         # prior parameters on fluxes
         self.f_min = f_min
@@ -288,8 +288,8 @@ class ImageDecoder(nn.Module):
             2,
         )
         locs = torch.rand(*shape, device=device)
-        locs *= self.loc_max_per_tile - self.loc_min_per_tile
-        locs += self.loc_min_per_tile
+        locs *= self.loc_max - self.loc_min
+        locs += self.loc_min
         locs *= is_on_array.unsqueeze(-1)
 
         return locs
