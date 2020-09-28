@@ -30,11 +30,16 @@ class SloanDigitalSkySurvey(Dataset):
             gain = fieldgains[i]
             if (not field) or _field == field:
                 # load the catalog distributed with SDSS
-                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, field)
-                po_path = camcol_path.joinpath(str(field), po_file)
-                po_fits = fits.getdata(po_path)
+                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
+                po_path = camcol_path.joinpath(str(_field), po_file)
+                try:
+                    po_fits = fits.getdata(po_path)
+                except IndexError as e:
+                        print("Warning: IndexError while accessing field: {}. Setting as None.".format(_field))
+                        print(e)
+                        po_fits = None
 
-                self.rcfgcs.append((run, camcol, field, gain, po_fits))
+                self.rcfgcs.append((run, camcol, _field, gain, po_fits))
 
         self.items = [None] * len(self.rcfgcs)
 
@@ -69,6 +74,8 @@ class SloanDigitalSkySurvey(Dataset):
         return np.asarray(stamps), np.asarray(pts), fluxes
 
     def get_from_disk(self, idx):
+        if self.rcfgcs[idx] is None:
+            return None
         run, camcol, field, gain, po_fits = self.rcfgcs[idx]
 
         camcol_dir = self.sdss_path.joinpath(str(run), str(camcol))
