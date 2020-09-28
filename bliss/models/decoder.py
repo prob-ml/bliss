@@ -459,8 +459,10 @@ class ImageDecoder(nn.Module):
         :return: shape = (n_ptiles x n_bands x slen x slen)
         """
         n_ptiles = locs.shape[0]
-        assert locs.shape[1] == 2
         assert source.shape[0] == n_ptiles
+        assert source.shape[1] == self.n_bands
+        assert source.shape[2] == source.shape[3] == self.slen
+        assert locs.shape[1] == 2
 
         # scale so that they land in the tile within the padded tile
         padding = (self.ptile_slen - self.tile_slen) / 2
@@ -514,23 +516,23 @@ class ImageDecoder(nn.Module):
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
         ptile = torch.zeros(ptile_shape, device=device)
 
+        assert self.galaxy_decoder is not None
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
         assert galaxy_params.shape[2] == self.latent_dim
 
-        if galaxy_bool.sum() > 0 and self.galaxy_decoder is not None:
-            z = galaxy_params.reshape(-1, self.latent_dim)
-            gal, _ = self.galaxy_decoder.forward(z)
-            gal = self._size_galaxy(gal)
-            gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
-            single_galaxies = gal.reshape(gal_shape)
-            for n in range(max_sources):
-                galaxy_bool_n = galaxy_bool[:, n]
-                locs_n = locs[:, n, :]
-                _galaxy = single_galaxies[:, n, :, :, :]
-                galaxy = _galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
-                one_galaxy = self._render_one_source(locs_n, galaxy)
-                ptile += one_galaxy
+        z = galaxy_params.reshape(-1, self.latent_dim)
+        gal, _ = self.galaxy_decoder.forward(z)
+        gal = self._size_galaxy(gal)
+        gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
+        single_galaxies = gal.reshape(gal_shape)
+        for n in range(max_sources):
+            galaxy_bool_n = galaxy_bool[:, n]
+            locs_n = locs[:, n, :]
+            _galaxy = single_galaxies[:, n, :, :, :]
+            galaxy = _galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
+            one_galaxy = self._render_one_source(locs_n, galaxy)
+            ptile += one_galaxy
 
         return ptile
 
@@ -558,11 +560,13 @@ class ImageDecoder(nn.Module):
         )
         fluxes = fluxes.reshape(n_ptiles, self.max_sources, self.n_bands)
 
-        # need n_sources because `*_locs` are not necessarily ordered.
-        galaxies = self._render_multiple_galaxies_on_ptile(
-            locs, galaxy_params, galaxy_bool
-        )
+        # draw stars and galaxies
         stars = self._render_multiple_stars_on_ptile(locs, fluxes, star_bool)
+        galaxies = 0.0
+        if self.galaxy_decoder is not None:
+            galaxies = self._render_multiple_galaxies_on_ptile(
+                locs, galaxy_params, galaxy_bool
+            )
 
         # shape = (n_ptiles x n_bands x slen x slen)
         images = galaxies + stars
