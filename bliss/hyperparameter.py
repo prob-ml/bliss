@@ -22,6 +22,7 @@ class SleepObjective(object):
         batch_size,
         dec_args,
         dec_kwargs,
+        single_gpu_id=1,
         gpu_queue=None,
     ):
         # dataset set up
@@ -56,6 +57,9 @@ class SleepObjective(object):
         self.metrics_callback = metrics_callback
         self.monitor = monitor
 
+        # set up for single gpu
+        self.single_gpu = single_gpu_id
+
         # set up for multiple gpu
         self.gpu_queue = gpu_queue
 
@@ -65,8 +69,9 @@ class SleepObjective(object):
             gpu_id = self.gpu_queue.get()
             device = torch.device(f"cuda:{gpu_id}")
             torch.cuda.set_device(device)
-
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        else:
+            device = torch.device(f"cuda:{self.single_gpu}")
+            torch.cuda.set_device(device)
 
         dec_args = list(self.dec_args)
         dec_args[1] = dec_args[1].to(device)
@@ -103,7 +108,7 @@ class SleepObjective(object):
 
         trainer = pl.Trainer(
             logger=False,
-            gpus=[gpu_id] if self.gpu_queue is not None else 0,
+            gpus=[gpu_id] if self.gpu_queue is not None else [self.single_gpu],
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
             callbacks=[self.metrics_callback],
