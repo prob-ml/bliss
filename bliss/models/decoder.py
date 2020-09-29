@@ -20,7 +20,7 @@ def get_mgrid(slen):
     # mgrid is between -1 and 1
     # then scale slightly because of the way f.grid_sample
     # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.type(torch.FloatTensor).to(device) * (slen - 1) / slen
+    return mgrid.float().to(device) * (slen - 1) / slen
 
 
 def get_psf_params(psfield_fit_file, bands):
@@ -185,83 +185,6 @@ class ImageDecoder(nn.Module):
             _psf_params[4],
             _psf_params[5],
         )
-
-    def _trim_source(self, source):
-        """Crop the source to length ptile_slen x ptile_slen,
-        centered at the middle.
-        """
-        assert len(source.shape) == 3
-
-        # if self.ptile_slen is even, we still make psf dimension odd.
-        # otherwise, the psf won't have a peak in the center pixel.
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-
-        source_slen = source.shape[2]
-        source_center = (source_slen - 1) / 2
-
-        assert source_slen >= _slen
-
-        r = np.floor(_slen / 2)
-        l_indx = int(source_center - r)
-        u_indx = int(source_center + r + 1)
-
-        return source[:, l_indx:u_indx, l_indx:u_indx]
-
-    def _expand_source(self, source):
-        """Pad the source with zeros so that it is size ptile_slen,"""
-        assert len(source.shape) == 3
-
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        """Pad the source with zeros so that it is size slen,"""
-        assert len(source.shape) == 3
-
-        source_slen = source.shape[2]
-
-        assert source_slen <= _slen, "Should be using trim source."
-
-        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=device)
-        offset = int((_slen - source_slen) / 2)
-
-        source_expanded[
-            :, offset : (offset + source_slen), offset : (offset + source_slen)
-        ] = source
-
-        return source_expanded
-
-    def _adjust_psf(self):
-        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
-        # first dimension of psf is number of bands
-        # dimension of the psf/slen should be odd
-        psf = self.forward()
-        psf_slen = psf.shape[2]
-        assert len(psf.shape) == 3
-        assert psf.shape[1] == psf_slen
-        assert (psf_slen % 2) == 1
-        assert self.background.shape[0] == psf.shape[0] == self.n_bands
-
-        if self.ptile_slen >= psf.shape[-1]:
-            return self._expand_source(psf)
-        else:
-            return self._trim_source(psf)
-
-    def _size_galaxy(self, galaxy):
-        # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen
-        assert len(galaxy.shape) == 4
-        assert galaxy.shape[2] == galaxy.shape[3]
-        assert (galaxy.shape[3] % 2) == 1, "dimension of galaxy image should be odd"
-        assert self.background.shape[0] == galaxy.shape[1] == self.n_bands
-
-        n_galaxies = galaxy.shape[0]
-        galaxy_slen = galaxy.shape[3]
-        galaxy = galaxy.reshape(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
-
-        if self.ptile_slen >= galaxy.shape[-1]:
-            sized_galaxy = self._expand_source(galaxy)
-        else:
-            sized_galaxy = self._trim_source(galaxy)
-
-        outsize = sized_galaxy.shape[-1]
-        return sized_galaxy.reshape(n_galaxies, self.n_bands, outsize, outsize)
 
     def _sample_n_sources(self, batch_size):
         # returns number of sources for each batch x tile
@@ -450,6 +373,82 @@ class ImageDecoder(nn.Module):
 
         return images
 
+    def _trim_source(self, source):
+        """Crop the source to length ptile_slen x ptile_slen,
+        centered at the middle.
+        """
+        assert len(source.shape) == 3
+
+        # if self.ptile_slen is even, we still make source dimension odd.
+        # otherwise, the source won't have a peak in the center pixel.
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+
+        source_slen = source.shape[2]
+        source_center = (source_slen - 1) / 2
+
+        assert source_slen >= _slen
+
+        r = np.floor(_slen / 2)
+        l_indx = int(source_center - r)
+        u_indx = int(source_center + r + 1)
+
+        return source[:, l_indx:u_indx, l_indx:u_indx]
+
+    def _expand_source(self, source):
+        """Pad the source with zeros so that it is size ptile_slen,"""
+        assert len(source.shape) == 3
+
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        assert len(source.shape) == 3
+
+        source_slen = source.shape[2]
+
+        assert source_slen <= _slen, "Should be using trim source."
+
+        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=device)
+        offset = int((_slen - source_slen) / 2)
+
+        source_expanded[
+            :, offset : (offset + source_slen), offset : (offset + source_slen)
+        ] = source
+
+        return source_expanded
+
+    def _adjust_psf(self):
+        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
+        # first dimension of psf is number of bands
+        # dimension of the psf/slen should be odd
+        psf = self.forward()
+        psf_slen = psf.shape[2]
+        assert len(psf.shape) == 3
+        assert psf.shape[1] == psf_slen
+        assert (psf_slen % 2) == 1
+        assert self.background.shape[0] == psf.shape[0] == self.n_bands
+
+        if self.ptile_slen >= psf.shape[-1]:
+            return self._expand_source(psf)
+        else:
+            return self._trim_source(psf)
+
+    def _size_galaxy(self, galaxy):
+        # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen
+        assert len(galaxy.shape) == 4
+        assert galaxy.shape[2] == galaxy.shape[3]
+        assert (galaxy.shape[3] % 2) == 1, "dimension of galaxy image should be odd"
+        assert self.background.shape[0] == galaxy.shape[1] == self.n_bands
+
+        n_galaxies = galaxy.shape[0]
+        galaxy_slen = galaxy.shape[3]
+        galaxy = galaxy.reshape(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
+
+        if self.ptile_slen >= galaxy.shape[-1]:
+            sized_galaxy = self._expand_source(galaxy)
+        else:
+            sized_galaxy = self._trim_source(galaxy)
+
+        outsize = sized_galaxy.shape[-1]
+        return sized_galaxy.reshape(n_galaxies, self.n_bands, outsize, outsize)
+
     def _render_one_source(self, locs, source):
         """
         :param locs: is n_ptiles x len((x,y))
@@ -461,7 +460,7 @@ class ImageDecoder(nn.Module):
         n_ptiles = locs.shape[0]
         assert source.shape[0] == n_ptiles
         assert source.shape[1] == self.n_bands
-        assert source.shape[2] == source.shape[3] == self.slen
+        assert source.shape[2] == source.shape[3]
         assert locs.shape[1] == 2
 
         # scale so that they land in the tile within the padded tile
