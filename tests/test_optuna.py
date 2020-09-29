@@ -1,4 +1,5 @@
 import pytest
+import torch
 from pytorch_lightning import Callback
 from optuna.trial import FixedTrial
 
@@ -21,17 +22,21 @@ def metrics_callback_setup(device_setup):
     return MetricsCallback()
 
 
-@pytest.fixture(scope="module")
-def star_dataset(decoder_setup, device_setup):
-    psf_params = decoder_setup.get_fitted_psf_params()
-
-    return decoder_setup.get_star_dataset(
-        psf_params, n_bands=1, slen=50, batch_size=1, n_batches=1
-    )
-
-
 class TestOptunaSleep:
-    def test_optuna(self, star_dataset, metrics_callback_setup, paths, device_setup):
+    def test_optuna(self, decoder_setup, metrics_callback_setup, paths, device_setup):
+
+        # psf
+        psf_params = decoder_setup.get_fitted_psf_params()
+
+        # background
+        background = torch.zeros(1, 50, 50)
+        background[0] = 686.0
+
+        # decoder arguments
+        dec_args = (None, psf_params, background)
+        dec_kwargs = {}
+        dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": 1, "slen": 50})
+
         # set up encoder
         encoder_kwargs = dict(
             enc_conv_c=(5, 25, 5),
@@ -39,15 +44,14 @@ class TestOptunaSleep:
             enc_hidden=(64, 128, 64),
             ptile_slen=8,
             max_detections=2,
-            slen=star_dataset.slen,
-            n_bands=star_dataset.n_bands,
-            n_galaxy_params=star_dataset.latent_dim,
+            slen=50,
+            n_bands=1,
+            n_galaxy_params=8,
         )
 
         n_epochs = 1
         # set up Object for optuna
         objects = SleepObjective(
-            star_dataset,
             encoder_kwargs,
             max_epochs=n_epochs,
             lr=(1e-4, 1e-2),
@@ -55,7 +59,10 @@ class TestOptunaSleep:
             model_dir=paths["model_dir"],
             metrics_callback=metrics_callback_setup,
             monitor="val_loss",
-            single_gpu_id=device_setup.gpus,
+            n_batches=4,
+            batch_size=32,
+            dec_args=dec_args,
+            dec_kwargs=dec_kwargs,
         )
 
         # set up study object
