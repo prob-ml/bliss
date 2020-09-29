@@ -74,7 +74,6 @@ class SleepObjective(object):
             torch.cuda.set_device(device)
         else:
             device = torch.device("cpu")
-            torch.cuda.set_device(device)
 
         dec_args = list(self.dec_args)
         dec_args[1] = dec_args[1].to(device)
