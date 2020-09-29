@@ -69,8 +69,11 @@ class SleepObjective(object):
             gpu_id = self.gpu_queue.get()
             device = torch.device(f"cuda:{gpu_id}")
             torch.cuda.set_device(device)
-        else:
+        elif self.gpu_queue is None and torch.cuda.is_available():
             device = torch.device(f"cuda:{self.single_gpu}")
+            torch.cuda.set_device(device)
+        else:
+            device = torch.device("cpu")
             torch.cuda.set_device(device)
 
         dec_args = list(self.dec_args)
@@ -106,9 +109,13 @@ class SleepObjective(object):
 
         model = SleepPhase(star_dataset, self.encoder_kwargs, lr, weight_decay)
 
+        # put correct device to model
+        use_gpu = [gpu_id] if self.gpu_queue is not None else [self.single_gpu]
+        use_cpu = 0
+
         trainer = pl.Trainer(
             logger=False,
-            gpus=[gpu_id] if self.gpu_queue is not None else [self.single_gpu],
+            gpus=[use_gpu] if torch.cuda.is_available() else use_cpu,
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
             callbacks=[self.metrics_callback],
