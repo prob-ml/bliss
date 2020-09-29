@@ -8,12 +8,13 @@ from astropy.wcs import WCS
 
 
 class SloanDigitalSkySurvey(Dataset):
-    def __init__(self, sdss_dir, run=3900, camcol=6, field=None, bands=[2]):
+    def __init__(self, sdss_dir, run=3900, camcol=6, fields=None, bands=[2], stampsize=5):
         super(SloanDigitalSkySurvey, self).__init__()
 
         self.sdss_path = pathlib.Path(sdss_dir)
         self.rcfgcs = []
         self.bands = bands
+        self.stampsize=stampsize
 
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
@@ -28,7 +29,7 @@ class SloanDigitalSkySurvey(Dataset):
         for i in range(len(fieldnums)):
             _field = fieldnums[i]
             gain = fieldgains[i]
-            if (not field) or _field == field:
+            if (not fields) or _field in fields:
                 # load the catalog distributed with SDSS
                 po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
                 po_path = camcol_path.joinpath(str(_field), po_file)
@@ -68,7 +69,25 @@ class SloanDigitalSkySurvey(Dataset):
             # pt = "time" in pixel coordinates
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
             pt, pr = int(pt + 0.5), int(pr + 0.5)
-            stamp = img[(pr - 2) : (pr + 3), (pt - 2) : (pt + 3)]
+
+            row_lower = pr - self.stampsize//2
+            row_upper =pr + self.stampsize//2 + 1
+            col_lower = pt - self.stampsize//2
+            col_upper = pt + self.stampsize//2 + 1
+
+            if row_lower < 0:
+                row_lower = 0
+                row_upper = self.stampsize
+            if row_upper > img.shape[0]:
+                row_lower = img.shape[0] - self.stampsize
+                row_upper = img.shape[0]
+            if col_lower < 0:
+                col_lower = 0
+                col_upper = self.stampsize
+            if col_upper > img.shape[1]:
+                col_lower = img.shape[1] - self.stampsize
+                col_upper = img.shape[1]
+            stamp = img[row_lower:row_upper, col_lower:col_upper]
             stamps.append(stamp)
             pts.append(pt)
 
