@@ -17,7 +17,6 @@ import numpy as np
 from .utils import setup_paths, add_path_args
 
 from pytorch_lightning import Callback
-from bliss.datasets.simulated import SimulatedDataset
 from bliss.hyperparameter import SleepObjective
 
 
@@ -42,25 +41,19 @@ def main(args):
     paths = setup_paths(args, enforce_overwrite=False)
     metrics_callback = MetricsCallback()
 
-    # setup device
-    device = torch.device("cuda:0")
-
     # get psf
     psf_file = paths["data"].joinpath("fitted_powerlaw_psf_params.npy")
-    psf_params = torch.from_numpy(np.load(psf_file)).to(device)
+    psf_params = torch.from_numpy(np.load(psf_file))
     psf_params = psf_params[range(1)]
 
     # background
-    background = torch.zeros(1, 50, 50, device=device)
+    background = torch.zeros(1, 50, 50)
     background[0] = 686.0
 
     # decoder arguments
     dec_args = (None, psf_params, background)
     dec_kwargs = {}
     dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": 1, "slen": 50})
-
-    # dataset
-    star_dataset = SimulatedDataset(4, 32, dec_args, dec_kwargs)
 
     # set up encoder
     encoder_kwargs = dict(
@@ -69,9 +62,9 @@ def main(args):
         enc_hidden=(64, 128, 64),
         ptile_slen=8,
         max_detections=2,
-        slen=star_dataset.slen,
-        n_bands=star_dataset.n_bands,
-        n_galaxy_params=star_dataset.latent_dim,
+        slen=50,
+        n_bands=1,
+        n_galaxy_params=8,
     )
 
     model_dir = setup_model_dir(args, paths["root"])
@@ -79,7 +72,6 @@ def main(args):
 
     # set up Object for optuna
     objects = SleepObjective(
-        star_dataset,
         encoder_kwargs,
         max_epochs=100,
         lr=(1e-4, 1e-2),
@@ -87,6 +79,10 @@ def main(args):
         model_dir=model_dir,
         metrics_callback=metrics_callback,
         monitor=monitor,
+        n_batches=4,
+        batch_size=32,
+        dec_args=dec_args,
+        dec_kwargs=dec_kwargs,
     )
 
     # use pruner
