@@ -8,7 +8,6 @@ from torch.nn.functional import pad
 import torch.nn.functional as F
 from torch.distributions import Poisson, Normal
 
-
 from .. import device
 from .encoder import get_is_on_from_n_sources
 
@@ -20,7 +19,7 @@ def get_mgrid(slen):
     # mgrid is between -1 and 1
     # then scale slightly because of the way f.grid_sample
     # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.type(torch.FloatTensor).to(device) * (slen - 1) / slen
+    return mgrid.float().to(device) * (slen - 1) / slen
 
 
 def get_psf_params(psfield_fit_file, bands):
@@ -59,8 +58,8 @@ class ImageDecoder(nn.Module):
         max_sources=2,
         mean_sources=0.4,
         min_sources=0,
-        loc_min_per_tile=0.0,
-        loc_max_per_tile=1.0,
+        loc_min=0.0,
+        loc_max=1.0,
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
@@ -105,19 +104,20 @@ class ImageDecoder(nn.Module):
         self.prob_galaxy = float(prob_galaxy)
 
         # per-tile constraints on the location of sources
-        self.loc_min_per_tile = loc_min_per_tile
-        self.loc_max_per_tile = loc_max_per_tile
+        self.loc_min = loc_min
+        self.loc_max = loc_max
 
         self.add_noise = add_noise
 
         # galaxy decoder
+        assert self.prob_galaxy > 0.0 or galaxy_decoder is None
         self.galaxy_decoder = galaxy_decoder
         self.latent_dim = 8
         self.gal_slen = 51
-        if self.prob_galaxy > 0:
+        if self.galaxy_decoder is not None:
+            assert self.galaxy_decoder.n_bands == self.n_bands
             self.gal_slen = self.galaxy_decoder.slen
             self.latent_dim = self.galaxy_decoder.latent_dim
-            assert self.galaxy_decoder.n_bands == self.n_bands
 
         # prior parameters on fluxes
         self.f_min = f_min
@@ -145,6 +145,9 @@ class ImageDecoder(nn.Module):
             psf_i = self._get_psf_single_band(init_psf_params[i])
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
+
+        # misc utility
+        self.swap = torch.tensor([1, 0], device=device)
 
     def forward(self):
         psf = self._get_psf()
@@ -186,83 +189,6 @@ class ImageDecoder(nn.Module):
             _psf_params[5],
         )
 
-    def _trim_source(self, source):
-        """Crop the source to length ptile_slen x ptile_slen,
-        centered at the middle.
-        """
-        assert len(source.shape) == 3
-
-        # if self.ptile_slen is even, we still make psf dimension odd.
-        # otherwise, the psf won't have a peak in the center pixel.
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-
-        source_slen = source.shape[2]
-        source_center = (source_slen - 1) / 2
-
-        assert source_slen >= _slen
-
-        r = np.floor(_slen / 2)
-        l_indx = int(source_center - r)
-        u_indx = int(source_center + r + 1)
-
-        return source[:, l_indx:u_indx, l_indx:u_indx]
-
-    def _expand_source(self, source):
-        """Pad the source with zeros so that it is size ptile_slen,"""
-        assert len(source.shape) == 3
-
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        """Pad the source with zeros so that it is size slen,"""
-        assert len(source.shape) == 3
-
-        source_slen = source.shape[2]
-
-        assert source_slen <= _slen, "Should be using trim source."
-
-        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=device)
-        offset = int((_slen - source_slen) / 2)
-
-        source_expanded[
-            :, offset : (offset + source_slen), offset : (offset + source_slen)
-        ] = source
-
-        return source_expanded
-
-    def _adjust_psf(self):
-        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
-        # first dimension of psf is number of bands
-        # dimension of the psf/slen should be odd
-        psf = self.forward()
-        psf_slen = psf.shape[2]
-        assert len(psf.shape) == 3
-        assert psf.shape[1] == psf_slen
-        assert (psf_slen % 2) == 1
-        assert self.background.shape[0] == psf.shape[0] == self.n_bands
-
-        if self.ptile_slen >= psf.shape[-1]:
-            return self._expand_source(psf)
-        else:
-            return self._trim_source(psf)
-
-    def _size_galaxy(self, galaxy):
-        # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen
-        assert len(galaxy.shape) == 4
-        assert galaxy.shape[2] == galaxy.shape[3]
-        assert (galaxy.shape[3] % 2) == 1, "dimension of galaxy image should be odd"
-        assert self.background.shape[0] == galaxy.shape[1] == self.n_bands
-
-        n_galaxies = galaxy.shape[0]
-        galaxy_slen = galaxy.shape[3]
-        galaxy = galaxy.reshape(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
-
-        if self.ptile_slen >= galaxy.shape[-1]:
-            sized_galaxy = self._expand_source(galaxy)
-        else:
-            sized_galaxy = self._trim_source(galaxy)
-
-        outsize = sized_galaxy.shape[-1]
-        return sized_galaxy.reshape(n_galaxies, self.n_bands, outsize, outsize)
-
     def _sample_n_sources(self, batch_size):
         # returns number of sources for each batch x tile
         # output dimension is batch_size x n_tiles_per_image
@@ -288,8 +214,8 @@ class ImageDecoder(nn.Module):
             2,
         )
         locs = torch.rand(*shape, device=device)
-        locs *= self.loc_max_per_tile - self.loc_min_per_tile
-        locs += self.loc_min_per_tile
+        locs *= self.loc_max - self.loc_min
+        locs += self.loc_min
         locs *= is_on_array.unsqueeze(-1)
 
         return locs
@@ -450,6 +376,82 @@ class ImageDecoder(nn.Module):
 
         return images
 
+    def _trim_source(self, source):
+        """Crop the source to length ptile_slen x ptile_slen,
+        centered at the middle.
+        """
+        assert len(source.shape) == 3
+
+        # if self.ptile_slen is even, we still make source dimension odd.
+        # otherwise, the source won't have a peak in the center pixel.
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+
+        source_slen = source.shape[2]
+        source_center = (source_slen - 1) / 2
+
+        assert source_slen >= _slen
+
+        r = np.floor(_slen / 2)
+        l_indx = int(source_center - r)
+        u_indx = int(source_center + r + 1)
+
+        return source[:, l_indx:u_indx, l_indx:u_indx]
+
+    def _expand_source(self, source):
+        """Pad the source with zeros so that it is size ptile_slen,"""
+        assert len(source.shape) == 3
+
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        assert len(source.shape) == 3
+
+        source_slen = source.shape[2]
+
+        assert source_slen <= _slen, "Should be using trim source."
+
+        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=device)
+        offset = int((_slen - source_slen) / 2)
+
+        source_expanded[
+            :, offset : (offset + source_slen), offset : (offset + source_slen)
+        ] = source
+
+        return source_expanded
+
+    def _adjust_psf(self):
+        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
+        # first dimension of psf is number of bands
+        # dimension of the psf/slen should be odd
+        psf = self.forward()
+        psf_slen = psf.shape[2]
+        assert len(psf.shape) == 3
+        assert psf.shape[1] == psf_slen
+        assert (psf_slen % 2) == 1
+        assert self.background.shape[0] == psf.shape[0] == self.n_bands
+
+        if self.ptile_slen >= psf.shape[-1]:
+            return self._expand_source(psf)
+        else:
+            return self._trim_source(psf)
+
+    def _size_galaxy(self, galaxy):
+        # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen
+        assert len(galaxy.shape) == 4
+        assert galaxy.shape[2] == galaxy.shape[3]
+        assert (galaxy.shape[3] % 2) == 1, "dimension of galaxy image should be odd"
+        assert self.background.shape[0] == galaxy.shape[1] == self.n_bands
+
+        n_galaxies = galaxy.shape[0]
+        galaxy_slen = galaxy.shape[3]
+        galaxy = galaxy.reshape(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
+
+        if self.ptile_slen >= galaxy.shape[-1]:
+            sized_galaxy = self._expand_source(galaxy)
+        else:
+            sized_galaxy = self._trim_source(galaxy)
+
+        outsize = sized_galaxy.shape[-1]
+        return sized_galaxy.reshape(n_galaxies, self.n_bands, outsize, outsize)
+
     def _render_one_source(self, locs, source):
         """
         :param locs: is n_ptiles x len((x,y))
@@ -459,8 +461,10 @@ class ImageDecoder(nn.Module):
         :return: shape = (n_ptiles x n_bands x slen x slen)
         """
         n_ptiles = locs.shape[0]
-        assert locs.shape[1] == 2
         assert source.shape[0] == n_ptiles
+        assert source.shape[1] == self.n_bands
+        assert source.shape[2] == source.shape[3]
+        assert locs.shape[1] == 2
 
         # scale so that they land in the tile within the padded tile
         padding = (self.ptile_slen - self.tile_slen) / 2
@@ -468,7 +472,9 @@ class ImageDecoder(nn.Module):
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
         _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
-        grid_loc = _grid - locs[:, [1, 0]].view(n_ptiles, 1, 1, 2)
+
+        locs_swapped = locs.index_select(1, self.swap)
+        grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
@@ -511,23 +517,23 @@ class ImageDecoder(nn.Module):
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
         ptile = torch.zeros(ptile_shape, device=device)
 
+        assert self.galaxy_decoder is not None
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
         assert galaxy_params.shape[2] == self.latent_dim
 
-        if galaxy_bool.sum() > 0 and self.galaxy_decoder is not None:
-            z = galaxy_params.reshape(-1, self.latent_dim)
-            gal, _ = self.galaxy_decoder.forward(z)
-            gal = self._size_galaxy(gal)
-            gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
-            single_galaxies = gal.reshape(gal_shape)
-            for n in range(max_sources):
-                galaxy_bool_n = galaxy_bool[:, n]
-                locs_n = locs[:, n, :]
-                _galaxy = single_galaxies[:, n, :, :, :]
-                galaxy = _galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
-                one_galaxy = self._render_one_source(locs_n, galaxy)
-                ptile += one_galaxy
+        z = galaxy_params.reshape(-1, self.latent_dim)
+        gal, _ = self.galaxy_decoder.forward(z)
+        gal = self._size_galaxy(gal)
+        gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
+        single_galaxies = gal.reshape(gal_shape)
+        for n in range(max_sources):
+            galaxy_bool_n = galaxy_bool[:, n]
+            locs_n = locs[:, n, :]
+            _galaxy = single_galaxies[:, n, :, :, :]
+            galaxy = _galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
+            one_galaxy = self._render_one_source(locs_n, galaxy)
+            ptile += one_galaxy
 
         return ptile
 
@@ -555,11 +561,13 @@ class ImageDecoder(nn.Module):
         )
         fluxes = fluxes.reshape(n_ptiles, self.max_sources, self.n_bands)
 
-        # need n_sources because `*_locs` are not necessarily ordered.
-        galaxies = self._render_multiple_galaxies_on_ptile(
-            locs, galaxy_params, galaxy_bool
-        )
+        # draw stars and galaxies
         stars = self._render_multiple_stars_on_ptile(locs, fluxes, star_bool)
+        galaxies = 0.0
+        if self.galaxy_decoder is not None:
+            galaxies = self._render_multiple_galaxies_on_ptile(
+                locs, galaxy_params, galaxy_bool
+            )
 
         # shape = (n_ptiles x n_bands x slen x slen)
         images = galaxies + stars
@@ -698,8 +706,12 @@ class ImageDecoder(nn.Module):
         # loop through all tiles in a ptile
         for i in range(n_tiles1_in_ptile):
             for j in range(n_tiles1_in_ptile):
-                indx_vec1 = torch.arange(start=i, end=n_tiles, step=n_tiles1_in_ptile)
-                indx_vec2 = torch.arange(start=j, end=n_tiles, step=n_tiles1_in_ptile)
+                indx_vec1 = torch.arange(
+                    start=i, end=n_tiles, step=n_tiles1_in_ptile, device=device
+                )
+                indx_vec2 = torch.arange(
+                    start=j, end=n_tiles, step=n_tiles1_in_ptile, device=device
+                )
 
                 canvas_len = len(indx_vec1) * ptile_slen
 
