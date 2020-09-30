@@ -8,7 +8,6 @@ from torch.nn.functional import pad
 import torch.nn.functional as F
 from torch.distributions import Poisson, Normal
 
-
 from .. import device
 from .encoder import get_is_on_from_n_sources
 
@@ -111,6 +110,7 @@ class ImageDecoder(nn.Module):
         self.add_noise = add_noise
 
         # galaxy decoder
+        assert self.prob_galaxy > 0.0 or self.galaxy_decoder is None
         self.galaxy_decoder = galaxy_decoder
         self.latent_dim = 8
         self.gal_slen = 51
