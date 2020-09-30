@@ -114,7 +114,7 @@ class SleepObjective(object):
 
         trainer = pl.Trainer(
             logger=False,
-            gpus=[use_gpu] if torch.cuda.is_available() else use_cpu,
+            gpus=use_gpu if torch.cuda.is_available() else use_cpu,
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
             callbacks=[self.metrics_callback],
