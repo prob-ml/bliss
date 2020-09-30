@@ -110,7 +110,7 @@ class ImageDecoder(nn.Module):
         self.add_noise = add_noise
 
         # galaxy decoder
-        assert self.prob_galaxy > 0.0 or self.galaxy_decoder is None
+        assert self.prob_galaxy > 0.0 or galaxy_decoder is None
         self.galaxy_decoder = galaxy_decoder
         self.latent_dim = 8
         self.gal_slen = 51
