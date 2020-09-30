@@ -706,8 +706,12 @@ class ImageDecoder(nn.Module):
         # loop through all tiles in a ptile
         for i in range(n_tiles1_in_ptile):
             for j in range(n_tiles1_in_ptile):
-                indx_vec1 = torch.arange(start=i, end=n_tiles, step=n_tiles1_in_ptile)
-                indx_vec2 = torch.arange(start=j, end=n_tiles, step=n_tiles1_in_ptile)
+                indx_vec1 = torch.arange(
+                    start=i, end=n_tiles, step=n_tiles1_in_ptile, device=device
+                )
+                indx_vec2 = torch.arange(
+                    start=j, end=n_tiles, step=n_tiles1_in_ptile, device=device
+                )
 
                 canvas_len = len(indx_vec1) * ptile_slen
 

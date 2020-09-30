@@ -18,7 +18,7 @@ data_path = root_path.joinpath("data")
 
 
 def run_batch(ds):
-    for i in range(1):
+    for i in range(100):
         ds.get_batch()
 
 
