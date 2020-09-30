@@ -510,6 +510,20 @@ class ImageDecoder(nn.Module):
 
         return ptile
 
+    def _forward_through_gal_decoder(self, galaxy_params, galaxy_bool):
+        z = galaxy_params.reshape(-1, self.latent_dim)
+        b = galaxy_bool.flatten()
+
+        gal = torch.zeros(z.shape[0], self.n_bands, self.gal_slen, self.gal_slen, device = device)
+
+        # forward only galaxies that are on!
+        gal_on, _ = self.galaxy_decoder.forward(z[b == 1])
+
+        gal[b == 1] = gal_on
+
+        return gal
+
+
     def _render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
