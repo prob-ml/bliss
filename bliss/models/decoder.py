@@ -146,6 +146,9 @@ class ImageDecoder(nn.Module):
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
+        # misc utility
+        self.swap = torch.tensor([1, 0], device=device)
+
     def forward(self):
         psf = self._get_psf()
         init_psf_sum = psf.sum(-1).sum(-1).detach()
@@ -470,8 +473,7 @@ class ImageDecoder(nn.Module):
         locs = (locs - 0.5) * 2
         _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
 
-        swap = torch.tensor([1, 0], device=device)
-        locs_swapped = locs.index_select(1, swap)
+        locs_swapped = locs.index_select(1, self.swap)
         grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
