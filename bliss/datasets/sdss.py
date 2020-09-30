@@ -53,7 +53,7 @@ class SloanDigitalSkySurvey(Dataset):
             self.items[idx] = self.get_from_disk(idx)
         return self.items[idx]
 
-    def fetch_bright_stars(self, po_fits, img, wcs):
+    def fetch_bright_stars(self, po_fits, img, wcs, bg):
         is_star = po_fits["objc_type"] == 6
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
         is_thing = po_fits["thing_id"] != -1
@@ -65,6 +65,7 @@ class SloanDigitalSkySurvey(Dataset):
         band = 2
         stamps = []
         pts = []
+        bgs = []
         for (ra, dec, f) in zip(ras, decs, po_fits["thing_id"][is_target]):
             # pt = "time" in pixel coordinates
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
@@ -91,7 +92,10 @@ class SloanDigitalSkySurvey(Dataset):
             stamps.append(stamp)
             pts.append(pt)
 
-        return np.asarray(stamps), np.asarray(pts), fluxes
+            stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
+            bgs.append(stamp_bg)
+
+        return np.asarray(stamps), np.asarray(pts), fluxes, np.asarray(bgs)
 
     def get_from_disk(self, idx, verbose=False):
         if self.rcfgcs[idx] is None:
@@ -157,10 +161,11 @@ class SloanDigitalSkySurvey(Dataset):
 
             frame.close()
 
-        stamps, pts, fluxes = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2])
+        stamps, pts, fluxes, stamp_bgs = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2], background_list[2])
 
         ret = {
             "image": np.stack(image_list),
+            "field": field,
             "background": np.stack(background_list),
             "nelec_per_nmgy": np.stack(nelec_per_nmgy_list),
             "gain": np.stack(gain_list),
@@ -168,7 +173,8 @@ class SloanDigitalSkySurvey(Dataset):
             "wcs": wcs_list,
             "bright_stars": stamps,
             "pts": pts,
-            "fluxes": fluxes
+            "fluxes": fluxes,
+            "bright_star_bgs": stamp_bgs
         }
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
