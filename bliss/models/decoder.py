@@ -510,6 +510,28 @@ class ImageDecoder(nn.Module):
 
         return ptile
 
+    def _render_single_galaxies(self, galaxy_params, galaxy_bool):
+
+        # flatten parameters
+        z = galaxy_params.reshape(-1, self.latent_dim)
+        b = galaxy_bool.flatten()
+
+        # allocate memory
+        gal = torch.zeros(
+            z.shape[0], self.n_bands, self.gal_slen, self.gal_slen, device=device
+        )
+
+        # forward only galaxies that are on!
+        gal_on, _ = self.galaxy_decoder.forward(z[b == 1])
+        gal[b == 1] = gal_on
+
+        # reshape
+        n_ptiles = galaxy_params.shape[0]
+        gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
+        single_galaxies = gal.reshape(gal_shape)
+
+        return single_galaxies
+
     def _render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
@@ -522,11 +544,7 @@ class ImageDecoder(nn.Module):
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
         assert galaxy_params.shape[2] == self.latent_dim
 
-        z = galaxy_params.reshape(-1, self.latent_dim)
-        gal, _ = self.galaxy_decoder.forward(z)
-        gal = self._size_galaxy(gal)
-        gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
-        single_galaxies = gal.reshape(gal_shape)
+        single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bool)
         for n in range(max_sources):
             galaxy_bool_n = galaxy_bool[:, n]
             locs_n = locs[:, n, :]
