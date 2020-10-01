@@ -523,7 +523,6 @@ class ImageDecoder(nn.Module):
 
         # forward only galaxies that are on!
         gal_on, _ = self.galaxy_decoder.forward(z[b == 1])
-
         gal[b == 1] = gal_on
 
         # reshape
