@@ -65,6 +65,8 @@ class SleepObjective(object):
 
     def __call__(self, trial):
 
+        torch.manual_seed(10)
+
         if self.gpu_queue is not None:
             gpu_id = self.gpu_queue.get()
             device = torch.device(f"cuda:{gpu_id}")
