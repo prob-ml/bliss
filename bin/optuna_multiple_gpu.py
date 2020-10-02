@@ -9,6 +9,7 @@ import torch
 import numpy as np
 
 import multiprocessing as mp
+from joblib import parallel_backend
 
 from pytorch_lightning import Callback
 
@@ -93,16 +94,17 @@ if __name__ == "__main__":
     n_gpu = (1, 4, 6)
 
     # set up queue of devices
-    mpspawn = mp.get_context("spawn")
-    gpu_queue = mpspawn.Manager().Queue()
+    mp.set_start_method("spawn")
+    gpu_queue = mp.Manager().Queue()
     for i in n_gpu:
         gpu_queue.put(i)
 
     sleepobjectiveargs["gpu_queue"] = gpu_queue
 
-    study.optimize(
-        SleepObjective(**sleepobjectiveargs),
-        n_trials=100,
-        n_jobs=len(n_gpu),
-        timeout=600,
-    )
+    with parallel_backend("multiprocessing", n_jobs=len(n_gpu)):
+        study.optimize(
+            SleepObjective(**sleepobjectiveargs),
+            n_trials=100,
+            n_jobs=len(n_gpu),
+            timeout=600,
+        )
