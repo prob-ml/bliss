@@ -75,23 +75,14 @@ sleepobjectiveargs = {
 }
 
 if __name__ == "__main__":
-    # grid search
-    search_space = {
-        "enc_conv_c": [5, 10],
-        "enc_hidden": [64, 128],
-        "learning rate": [0.001, 0.000492],
-        "weight_decay": [1e-6, 0.000003],
-    }
-
     pruner = optuna.pruners.MedianPruner(n_startup_trials=30)
     study = optuna.create_study(
         storage="sqlite:///zz.db",
         direction="minimize",
-        sampler=optuna.samplers.GridSampler(search_space),
         pruner=pruner,
     )
     processes = []
-    n_gpu = (1, 4, 6)
+    n_gpu = (1, 3, 4, 5, 6, 7)
 
     # set up queue of devices
     mp.set_start_method("spawn")
