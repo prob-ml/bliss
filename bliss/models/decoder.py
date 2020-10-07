@@ -654,7 +654,7 @@ class ImageDecoder(nn.Module):
         images = self.construct_full_image_from_ptiles(image_ptiles, self.tile_slen)
 
         # add background and noise
-        images = images + self.background.unsqueeze(0)
+        images += self.background.unsqueeze(0)
         if self.add_noise:
             images = self._apply_noise(images)
 
