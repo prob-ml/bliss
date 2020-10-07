@@ -9,8 +9,8 @@ class SimulatedDataset(IterableDataset):
     def __init__(self, cfg: DictConfig):
         super(SimulatedDataset, self).__init__()
 
-        self.n_batches = cfg.training.n_batches
-        self.batch_size = cfg.training.batch_size
+        self.n_batches = cfg.dataset.n_batches
+        self.batch_size = cfg.dataset.batch_size
         self.image_decoder = ImageDecoder(**cfg.model.decoder.params)
 
     def __iter__(self):

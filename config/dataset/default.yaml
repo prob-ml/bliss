@@ -1,0 +1,4 @@
+# @package _group_
+class_name: bliss.datasets.simulated
+n_batches: 10
+batch_size: 128
