@@ -773,4 +773,5 @@ class ImageDecoder(nn.Module):
             "psf_slen": self.psf_slen,
             "ptile_padding": self.ptile_padding,
             "slen": self.slen,
+            "tile_slen": self.tile_slen,
         }
