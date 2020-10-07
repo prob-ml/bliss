@@ -1,18 +1,18 @@
 # @package _group_
 decoder:
-  class_name: bliss.models.decoder.ImageDecoder
-  slen: ${images.slen}
-  tile_slen: 2
-  n_bands: ${images.n_bands}
-  latent_dim: ${galaxy_net.latent_dim}
-  max_sources: 2
-  background:
-    - 5000.0
+  params:
+    slen: ${images.slen}
+    tile_slen: 2
+    n_bands: ${images.n_bands}
+    latent_dim: ${galaxy_net.latent_dim}
+    max_sources: 2
+    background: 5000.0
 encoder:
-  slen: ${images.slen}
-  ptile_slen: ${decoder.tile_slen + 6}
-  tile_slen: ${decoder.tile_slen}
-  max_detections: ${decoder.max_sources}
-        max_detections=2,
-        n_galaxy_params=8,
-        background_pad_value=686.0,
+  params:
+    slen: ${images.slen}
+    ptile_slen: ${decoder.tile_slen + 6}
+    tile_slen: ${decoder.tile_slen}
+    max_detections: ${decoder.max_sources}
+          max_detections=2,
+          n_galaxy_params=8,
+          background_pad_value=686.0,

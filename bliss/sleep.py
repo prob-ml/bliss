@@ -3,6 +3,8 @@ import numpy as np
 from itertools import permutations
 import inspect
 import matplotlib.pyplot as plt
+from typing import Dict
+from omegaconf import DictConfig
 
 import torch
 from torch.nn import CrossEntropyLoss
@@ -13,6 +15,7 @@ import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder
+from .datasets import simulated
 
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -110,38 +113,20 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(
-        self,
-        dataset,
-        encoder_kwargs,
-        lr=1e-3,
-        weight_decay=1e-5,
-        validation_plot_start=5,
-    ):
+    def __init__(self, hparams: Dict[str, float], cfg: DictConfig):
         super(SleepPhase, self).__init__()
+        self.cfg = cfg
+        self.hparams: Dict[str, float] = hparams
 
-        # assumes dataset is a IterableDataset class.
-        self.dataset = dataset
+        self.dataset = simulated.SimulatedDataset(self.cfg)
         self.image_decoder = self.dataset.image_decoder
-        self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
+        self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
 
         # avoid calculating gradients of decoder.
         self.image_decoder.requires_grad_(False)
 
-        self.validation_plot_start = validation_plot_start
-        assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
-
-        self.hparams = {
-            "lr": lr,
-            "weight_decay": weight_decay,
-            "batch_size": self.dataset.batch_size,
-            "n_batches": self.dataset.n_batches,
-            "n_bands": self.dataset.n_bands,
-            "max_sources": self.image_decoder.max_sources,
-            "mean_sources": self.image_decoder.mean_sources,
-            "min_sources": self.image_decoder.min_sources,
-            "prob_galaxy": self.image_decoder.prob_galaxy,
-        }
+        self.validation_plot_start = cfg.training.validation_plot_start
+        assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder(image_ptiles, n_sources)
@@ -533,66 +518,6 @@ class SleepPhase(pl.LightningModule):
         _sd = (_param_logvar.exp() + 1e-5).sqrt()
         param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
         return param_log_probs_all
-
-    @staticmethod
-    def add_args(parser):
-
-        # encoder parameters.
-        parser.add_argument(
-            "--ptile-slen",
-            type=int,
-            default=8,
-            help="Side length of the padded tile in pixels.",
-        )
-        parser.add_argument(
-            "--tile-slen",
-            type=int,
-            default=2,
-            help="Distance between tile centers in pixels.",
-        )
-
-        parser.add_argument(
-            "--max-detections",
-            type=int,
-            default=2,
-            help="Number of max detections in each tile. ",
-        )
-        parser.add_argument(
-            "--n-galaxy-params",
-            type=int,
-            default=8,
-            help="Same as latent dim for galaxies.",
-        )
-
-        # network parameters.
-        parser.add_argument("--enc-conv-c", type=int, default=20)
-        parser.add_argument("--enc-kern", type=int, default=3)
-        parser.add_argument("--enc-hidden", type=int, default=256)
-        parser.add_argument("--momentum", type=float, default=0.5)
-
-        # validation
-        parser.add_argument("--validation-plot-start", type=int, default=5)
-
-    @classmethod
-    def from_args(cls, args, dataset):
-        args_dict = vars(args)
-        assert args_dict["latent_dim"] == args_dict["n_galaxy_params"]
-
-        encoder_params = inspect.signature(encoder.ImageEncoder).parameters
-        encoder_kwargs = {
-            param: value
-            for param, value in args_dict.items()
-            if param in encoder_params
-        }
-
-        sleep_params = list(inspect.signature(cls).parameters)
-        sleep_params.remove("dataset")
-        sleep_params.remove("encoder_kwargs")
-        sleep_kwargs = {
-            param: value for param, value in args_dict.items() if param in sleep_params
-        }
-
-        return cls(dataset, encoder_kwargs, **sleep_kwargs)
 
 
 class SleepObjective(object):

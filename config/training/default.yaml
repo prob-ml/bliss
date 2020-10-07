@@ -3,3 +3,4 @@ n_batches: 10
 batch_size: 128
 num_workers: 0
 seed: 42
+validation_plot_start: 5

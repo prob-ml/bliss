@@ -1,4 +1,4 @@
-from omegaconfg import DictConfig
+from omegaconf import DictConfig
 import torch
 from torch.utils.data import IterableDataset
 
@@ -11,8 +11,7 @@ class SimulatedDataset(IterableDataset):
 
         self.n_batches = cfg.training.n_batches
         self.batch_size = cfg.training.batch_size
-
-        self.image_decoder = ImageDecoder(**cfg.model.decoder)
+        self.image_decoder = ImageDecoder(**cfg.model.decoder.params)
 
     def __iter__(self):
         return self.batch_generator()
