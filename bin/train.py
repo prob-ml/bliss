@@ -92,14 +92,14 @@ def main(args):
     )
 
     if args.dry_run:
-        print(vars(dataset))
+        print("dataset params:", vars(dataset))
         print()
         if hasattr(dataset, "image_decoder"):
-            print(dataset.image_decoder.get_props())
+            print("decoder params:", dataset.image_decoder.get_props())
             print()
 
         if hasattr(model, "image_encoder"):
-            print(model.image_encoder.get_props())
+            print("encoder params:", model.image_encoder.get_props())
         return
 
     # train!
