@@ -1,0 +1,5 @@
+n_epochs: 101
+n_batches: 10
+batch_size: 128
+num_workers: 0
+seed: 42

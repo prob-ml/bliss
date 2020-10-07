@@ -1,0 +1,11 @@
+defaults:
+  - optimizer: adam
+  - model: simple_model
+
+general:
+  logs: logs
+  device: cuda
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d_%H-%M-%S}_${hydra.job.override_dirname}

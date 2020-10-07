@@ -10,6 +10,7 @@ from torch.distributions import Poisson, Normal
 
 from .. import device
 from .encoder import get_is_on_from_n_sources
+from . import galaxy_net
 
 
 def get_mgrid(slen):
@@ -46,15 +47,16 @@ def get_psf_params(psfield_fit_file, bands):
 class ImageDecoder(nn.Module):
     def __init__(
         self,
-        galaxy_decoder,
-        init_psf_params,
-        background,
-        psf_slen=25,
-        n_bands=1,
+        decoder_file="galaxy_decoder.pt",
+        psf_params_file="psf_params.pt",
         slen=50,
+        psf_slen=25,
+        gal_slen=51,
+        n_bands=1,
         tile_slen=2,
         ptile_padding=2,
         prob_galaxy=0.0,
+        n_galaxy_params=8,
         max_sources=2,
         mean_sources=0.4,
         min_sources=0,
@@ -63,6 +65,7 @@ class ImageDecoder(nn.Module):
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
+        background=5000.0,
         add_noise=True,
     ):
         super(ImageDecoder, self).__init__()
@@ -91,11 +94,6 @@ class ImageDecoder(nn.Module):
         self.n_tiles_per_image = int(n_tiles_per_image)
 
         self.n_bands = n_bands  # number of bands
-        self.background = background.to(device)  # sky background
-
-        assert len(background.shape) == 3
-        assert self.background.shape[0] == self.n_bands
-        assert self.background.shape[1] == self.background.shape[2] == self.slen
 
         # per-tile prior parameters on number (and type) of sources
         self.max_sources = max_sources
@@ -109,16 +107,6 @@ class ImageDecoder(nn.Module):
 
         self.add_noise = add_noise
 
-        # galaxy decoder
-        assert self.prob_galaxy > 0.0 or galaxy_decoder is None
-        self.galaxy_decoder = galaxy_decoder
-        self.latent_dim = 8
-        self.gal_slen = 51
-        if self.galaxy_decoder is not None:
-            assert self.galaxy_decoder.n_bands == self.n_bands
-            self.gal_slen = self.galaxy_decoder.slen
-            self.latent_dim = self.galaxy_decoder.latent_dim
-
         # prior parameters on fluxes
         self.f_min = f_min
         self.f_max = f_max
@@ -131,23 +119,39 @@ class ImageDecoder(nn.Module):
         # parameterizes the edges: (0, 0) is center of edge pixel
         self.cached_grid = get_mgrid(self.ptile_slen)
 
+        # misc
+        self.swap = torch.tensor([1, 0], device=device)
+
+        # background
+        self.background = torch.full((self.n_bands, self.slen, self.slen), background)
+
+        # galaxy decoder
+        self.gal_slen = gal_slen
+        self.n_galaxy_params = n_galaxy_params
+        assert self.prob_galaxy > 0.0 or decoder_file is None
+        if decoder_file is not None:
+            dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, n_galaxy_params, n_bands)
+            dec = dec.to(device)
+            dec.load_state_dict(torch.load(decoder_file, map_location=device))
+            dec.eval().requires_grad_(False)
+            self.galaxy_decoder = dec
+
         # load psf_params
         self.psf_slen = psf_slen
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
 
         # initial weights
-        self.params = nn.Parameter(init_psf_params.clone(), requires_grad=True)
+        psf_params = torch.from_numpy(np.load(psf_params_file)).to(device)
+        psf_params = psf_params[list(range(n_bands))]
+        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
 
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = self._get_psf_single_band(init_psf_params[i])
+            psf_i = self._get_psf_single_band(psf_params[i])
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
-
-        # misc utility
-        self.swap = torch.tensor([1, 0], device=device)
 
     def forward(self):
         psf = self._get_psf()
