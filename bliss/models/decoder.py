@@ -753,3 +753,24 @@ class ImageDecoder(nn.Module):
             (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
             (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
         ]
+
+    def get_props(self):
+        return {
+            "background": self.background.mean().item(),
+            "alpha": self.alpha,
+            "add_noise": self.add_noise,
+            "f_max": self.f_max,
+            "f_min": self.f_min,
+            "gal_slen": self.gal_slen,
+            "latent_dim": self.latent_dim,
+            "loc_max": self.loc_max,
+            "loc_min": self.loc_min,
+            "max_sources": self.max_sources,
+            "mean_sources": self.mean_sources,
+            "min_sources": self.min_sources,
+            "n_bands": self.n_bands,
+            "prob_galaxy": self.prob_galaxy,
+            "psf_slen": self.psf_slen,
+            "ptile_padding": self.ptile_padding,
+            "slen": self.slen,
+        }

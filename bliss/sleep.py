@@ -544,12 +544,6 @@ class SleepPhase(pl.LightningModule):
             default=8,
             help="Side length of the padded tile in pixels.",
         )
-        parser.add_argument(
-            "--tile-slen",
-            type=int,
-            default=2,
-            help="Distance between tile centers in pixels.",
-        )
 
         parser.add_argument(
             "--max-detections",
@@ -565,6 +559,7 @@ class SleepPhase(pl.LightningModule):
         )
 
         # network parameters.
+        parser.add_argument("-background-pad-value", type=float, default=5000.0)
         parser.add_argument("--enc-conv-c", type=int, default=20)
         parser.add_argument("--enc-kern", type=int, default=3)
         parser.add_argument("--enc-hidden", type=int, default=256)

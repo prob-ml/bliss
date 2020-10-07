@@ -16,13 +16,16 @@ def star_dataset(decoder_setup, device_setup):
         n_bands=1,
         slen=30,
         tile_slen=2,
-        max_sources=2,
+        max_sources=1,
         min_sources=0,
         # this is so that the avg. number of sources
-        # a 30 x 30 image is (approx) 3
-        mean_sources=0.004,
+        # a 30 x 30 image is (approx) 5
+        ptile_padding=1,
+        mean_sources=0.015,
         batch_size=batch_size,
         n_batches=n_batches,
+        f_min=1e5,
+        f_max=1e6,
     )
 
 
@@ -43,8 +46,6 @@ def trained_encoder(star_dataset, encoder_setup, device_setup):
     return trained_encoder.to(device_setup.device)
 
 
-# TODO: Test unstable in GPU
-@pytest.mark.skip
 class TestStarSleepEncoder:
     @pytest.mark.parametrize("n_stars", ["1", "3"])
     def test_star_sleep(self, trained_encoder, n_stars, paths, device_setup):
@@ -84,6 +85,7 @@ class TestStarSleepEncoder:
         )
 
 
+@pytest.mark.slow
 class TestStarWakeNet:
     def test_star_wake(self, trained_encoder, star_dataset, paths, device_setup):
         # load the test image

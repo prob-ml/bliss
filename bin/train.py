@@ -91,6 +91,17 @@ def main(args):
         args, logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback
     )
 
+    if args.dry_run:
+        print(vars(dataset))
+        print()
+        if hasattr(dataset, "image_decoder"):
+            print(dataset.image_decoder.get_props())
+            print()
+
+        if hasattr(model, "image_encoder"):
+            print(model.image_encoder.get_props())
+        return
+
     # train!
     trainer.fit(model)
 
@@ -106,6 +117,12 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help="Random seed for pytorch, numpy, ...",
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Check if parameters are correct " "and do nothing else.",
     )
 
     # ---------------
@@ -134,6 +151,12 @@ if __name__ == "__main__":
     models_group.add_argument("--slen", type=int, default=51)
     models_group.add_argument("--n-bands", type=int, default=1)
     models_group.add_argument("--latent-dim", type=int, default=8, help="For galaxies")
+    models_group.add_argument(
+        "--tile-slen",
+        type=int,
+        default=2,
+        help="Distance between tile centers in pixels.",
+    )
 
     # one centered galaxy
     one_centered_galaxy_group = parser.add_argument_group("[One Centered Galaxy Model]")

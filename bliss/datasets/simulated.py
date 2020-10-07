@@ -89,6 +89,7 @@ class SimulatedDataset(IterableDataset):
         )
         psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)[range(n_bands)]
 
+        dec = dec if args.prob_galaxy > 0 else None
         return dec, psf_params, background
 
     @classmethod
@@ -142,6 +143,8 @@ class SimulatedDataset(IterableDataset):
         parser.add_argument("--loc-max", type=float, default=1.0)
         parser.add_argument("--prob-galaxy", type=float, default=0.0)
         parser.add_argument("--gal-slen", type=int, default=51)
+        parser.add_argument("--psf-slen", type=int, default=25)
+        parser.add_argument("--ptile-padding", type=int, default=2)
 
         # stars.
         parser.add_argument("--f-min", type=float, default=1e4)

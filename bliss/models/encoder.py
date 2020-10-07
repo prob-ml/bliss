@@ -583,3 +583,22 @@ class ImageEncoder(nn.Module):
         galaxy_bool = galaxy_bool.squeeze(-1)
 
         return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool
+
+    def get_props(self):
+
+        return {
+            "background_pad_value": self.background_pad_value,
+            "edge_padding": self.edge_padding,
+            "enc_conv_c": self.enc_conv_c,
+            "enc_hidden": self.enc_hidden,
+            "enc_kern": self.enc_kern,
+            "max_detections": self.max_detections,
+            "momentum": self.momentum,
+            "n_bands": self.n_bands,
+            "n_galaxy_params": self.n_galaxy_params,
+            "n_star_params": self.n_star_params,
+            "n_tiles_per_image": self.n_tiles_per_image,
+            "ptile_slen": self.ptile_slen,
+            "slen": self.slen,
+            "tile_slen": self.tile_slen,
+        }
