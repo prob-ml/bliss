@@ -65,7 +65,7 @@ class ImageDecoder(nn.Module):
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
-        background=5000.0,
+        background_value=686.0,
         add_noise=True,
     ):
         super(ImageDecoder, self).__init__()
@@ -123,7 +123,8 @@ class ImageDecoder(nn.Module):
         self.swap = torch.tensor([1, 0], device=device)
 
         # background
-        self.background = torch.full((self.n_bands, self.slen, self.slen), background)
+        background_shape = (self.n_bands, self.slen, self.slen)
+        self.background = torch.full(background_shape, background_value)
 
         # galaxy decoder
         self.gal_slen = gal_slen
@@ -290,7 +291,7 @@ class ImageDecoder(nn.Module):
             batch_size,
             self.n_tiles_per_image,
             self.max_sources,
-            self.latent_dim,
+            self.n_galaxy_params,
         )
         sample_shape = torch.tensor(shape)
         galaxy_params = p_z.rsample(sample_shape)
@@ -517,7 +518,7 @@ class ImageDecoder(nn.Module):
     def _render_single_galaxies(self, galaxy_params, galaxy_bool):
 
         # flatten parameters
-        z = galaxy_params.reshape(-1, self.latent_dim)
+        z = galaxy_params.reshape(-1, self.n_galaxy_params)
         b = galaxy_bool.flatten()
 
         # allocate memory
@@ -546,7 +547,7 @@ class ImageDecoder(nn.Module):
         assert self.galaxy_decoder is not None
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
-        assert galaxy_params.shape[2] == self.latent_dim
+        assert galaxy_params.shape[2] == self.n_galaxy_params
 
         single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bool)
         for n in range(max_sources):
@@ -579,7 +580,7 @@ class ImageDecoder(nn.Module):
         star_bool = (1 - galaxy_bool) * is_on_array
         star_bool = star_bool.reshape(n_ptiles, self.max_sources)
         galaxy_params = galaxy_params.reshape(
-            n_ptiles, self.max_sources, self.latent_dim
+            n_ptiles, self.max_sources, self.n_galaxy_params
         )
         fluxes = fluxes.reshape(n_ptiles, self.max_sources, self.n_bands)
 
@@ -614,7 +615,7 @@ class ImageDecoder(nn.Module):
         locs_flattened = locs.reshape(n_ptiles, self.max_sources, 2)
         galaxy_bool_flattened = galaxy_bool.reshape(n_ptiles, self.max_sources)
         galaxy_params_flattened = galaxy_params.reshape(
-            n_ptiles, self.max_sources, self.latent_dim
+            n_ptiles, self.max_sources, self.n_galaxy_params
         )
         fluxes_flattened = fluxes.reshape(n_ptiles, self.max_sources, self.n_bands)
 

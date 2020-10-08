@@ -3,3 +3,4 @@ n_epochs: 101
 num_workers: 0
 seed: 42
 validation_plot_start: 5
+gpus: 2,

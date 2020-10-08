@@ -6,13 +6,13 @@ decoder:
     n_bands: ${image.n_bands}
     latent_dim: ${galaxy_net.latent_dim}
     max_sources: 2
-    background: 5000.0
+    n_galaxy_params: ${model.galaxy_net.latent_dim}
+    background_value: 686.0
 encoder:
   params:
     slen: ${image.slen}
     ptile_slen: ${decoder.tile_slen + 6}
     tile_slen: ${decoder.tile_slen}
     max_detections: ${decoder.max_sources}
-          max_detections=2,
-          n_galaxy_params=8,
-          background_pad_value=686.0,
+    n_galaxy_params: ${model.galaxy_net.latent_dim}
+    background_pad_value: 686.0

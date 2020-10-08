@@ -1,6 +1,4 @@
 # @package _group_
-images:
-  slen: 30
-  n_bands: 1
-  background:
-    - 0: 5000.0
+slen: 30
+n_bands: 1
+background: 5000.0

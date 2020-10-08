@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import hydra
+from omegaconf import DictConfig
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 
-from .utils import setup_paths, add_path_args
+from .utils import setup_paths
 
 from bliss import sleep
 from bliss.datasets import galaxy_datasets, catsim, simulated
@@ -63,7 +64,7 @@ def setup_checkpoint_callback(args, paths, logger):
 
 
 @hydra.main(config_path="config", config_name="config")
-def main():
+def main(cfg: DictConfig):
 
     # setup gpus
     if args.gpus:

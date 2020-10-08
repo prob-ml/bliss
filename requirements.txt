@@ -7,3 +7,4 @@ matplotlib
 pytorch-lightning
 pillow
 optuna
+omegaconf
