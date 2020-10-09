@@ -2,6 +2,7 @@
 
 import hydra
 from omegaconf import DictConfig
+
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
@@ -14,6 +15,7 @@ from bliss import sleep
 from bliss.datasets import galaxy_datasets, catsim, simulated
 from bliss.models import galaxy_net
 
+# compatible datasets and models.
 _datasets = [
     galaxy_datasets.H5Catalog,
     catsim.CatsimGalaxies,
@@ -25,30 +27,30 @@ _models = [galaxy_net.OneCenteredGalaxy, sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
 
 
-def setup_seed(args):
-    if args.deterministic:
-        assert args.seed is not None
-        pl.seed_everything(args.seed)
+def setup_seed(cfg):
+    if cfg.general.deterministic:
+        assert cfg.training.seed is not None
+        pl.seed_everything(cfg.seed)
 
 
-def setup_profiler(args, paths):
-    profiler = None
-    if args.profiler:
+def setup_profiler(cfg, paths):
+    profiler = False
+    if cfg.trainer.profiler:
         profile_file = paths["output"].joinpath("profile.txt")
         profiler = AdvancedProfiler(output_filename=profile_file)
     return profiler
 
 
-def setup_logger(args, paths):
+def setup_logger(cfg, paths):
     logger = False
-    if args.logger:
+    if cfg.logger:
         logger = TensorBoardLogger(save_dir=paths["output"], name="lightning_logs")
     return logger
 
 
-def setup_checkpoint_callback(args, paths, logger):
+def setup_checkpoint_callback(cfg, paths, logger):
     checkpoint_callback = False
-    if args.checkpoint_callback:
+    if cfg.checkpoint_callback:
         checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
         checkpoint_dir = paths["output"].joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
@@ -67,30 +69,32 @@ def setup_checkpoint_callback(args, paths, logger):
 def main(cfg: DictConfig):
 
     # setup gpus
-    if args.gpus:
-        assert args.gpus[1] == "," and len(args.gpus) == 2, "Format accepted: 'Y,' "
-        device_str = args.gpus[0]
-        device_id = int(device_str)
+    if cfg.gpus:
+        assert cfg.gpus[1] == "," and len(cfg.gpus) == 2, "Format accepted: 'Y,' "
+        device_id = cfg.gpus[0]
         device = torch.device(f"cuda:{device_id}")
         torch.cuda.set_device(device)
 
     # setup.
-    paths = setup_paths(args, enforce_overwrite=False)
-    setup_seed(args)
+    paths = setup_paths(cfg, enforce_overwrite=False)
+    setup_seed(cfg)
 
     # setup dataset.
-    dataset = datasets[args.dataset].from_args(args, paths)
+    dataset = datasets[cfg.dataset.class_name](cfg)
 
     # setup model
-    model_cls = models[args.model]
-    model = model_cls.from_args(args, dataset)
+    model = models[cfg.model.class_name](hparams={}, cfg=cfg, dataset=dataset)
 
     # setup trainer
-    profiler = setup_profiler(args, paths)
-    logger = setup_logger(args, paths)
-    checkpoint_callback = setup_checkpoint_callback(args, paths, logger)
+    profiler = setup_profiler(cfg, paths)
+    logger = setup_logger(cfg, paths)
+    checkpoint_callback = setup_checkpoint_callback(cfg, paths, logger)
+    cfg_trainer = dict(cfg.trainer)
+    cfg_trainer.update(
+        dict(logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback)
+    )
     trainer = pl.Trainer.from_argparse_args(
-        args, logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback
+        **cfg.trainer,
     )
 
     # train!

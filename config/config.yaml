@@ -3,12 +3,11 @@ defaults:
   - model: simple_model
 
 general:
-  device: cuda
-  root: .
-  logs: logs
+  root: "."
+  logs: "logs"
   overwrite: False
-  output: ???
-
+  output: "example"
+  gpus: "2,"
 
 hydra:
   run:

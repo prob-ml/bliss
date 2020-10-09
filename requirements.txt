@@ -8,3 +8,4 @@ pytorch-lightning
 pillow
 optuna
 omegaconf
+hydra

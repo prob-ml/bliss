@@ -1,0 +1,6 @@
+# @package _group_
+profiler: False
+logger: False
+checkpoint_callback: False
+max_epochs: 50
+min_epochs: 50

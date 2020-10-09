@@ -14,7 +14,6 @@ import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder
-from .datasets import simulated
 
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -112,12 +111,12 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(self, hparams: Dict[str, float], cfg: DictConfig):
+    def __init__(self, hparams: Dict[str, float], cfg: DictConfig, dataset):
         super(SleepPhase, self).__init__()
         self.cfg = cfg
         self.hparams: Dict[str, float] = hparams
 
-        self.dataset = simulated.SimulatedDataset(self.cfg)
+        self.dataset = dataset
         self.image_decoder = self.dataset.image_decoder
         self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
 
