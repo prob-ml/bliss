@@ -8,13 +8,14 @@ from astropy.wcs import WCS
 
 
 class SloanDigitalSkySurvey(Dataset):
-    def __init__(self, sdss_dir, run=3900, camcol=6, fields=None, bands=[2], stampsize=5):
+    def __init__(self, sdss_dir, run=3900, camcol=6, fields=None, bands=[2], stampsize=5, overwrite_cache=False):
         super(SloanDigitalSkySurvey, self).__init__()
 
         self.sdss_path = pathlib.Path(sdss_dir)
         self.rcfgcs = []
         self.bands = bands
         self.stampsize=stampsize
+        self.overwrite_cache = overwrite_cache
 
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
@@ -113,6 +114,9 @@ class SloanDigitalSkySurvey(Dataset):
         wcs_list = []
 
         cache_path = field_dir.joinpath("cache.pkl")
+        if cache_path.exists() and not self.overwrite_cache:
+            ret = pickle.load(cache_path.open("rb+"))
+            return ret
 
         for b, bl in enumerate("ugriz"):
             if not (b in self.bands):
@@ -176,6 +180,6 @@ class SloanDigitalSkySurvey(Dataset):
             "fluxes": fluxes,
             "bright_star_bgs": stamp_bgs
         }
-        pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
+        pickle.dump(ret, cache_path.open("wb+"))
 
         return ret
