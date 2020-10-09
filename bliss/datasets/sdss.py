@@ -54,7 +54,7 @@ class SloanDigitalSkySurvey(Dataset):
             self.items[idx] = self.get_from_disk(idx)
         return self.items[idx]
 
-    def fetch_bright_stars(self, po_fits, img, wcs, bg):
+    def fetch_bright_stars(self, po_fits, img, wcs, bg, allow_edge=False):
         is_star = po_fits["objc_type"] == 6
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
         is_thing = po_fits["thing_id"] != -1
@@ -67,36 +67,42 @@ class SloanDigitalSkySurvey(Dataset):
         stamps = []
         pts = []
         bgs = []
-        for (ra, dec, f) in zip(ras, decs, po_fits["thing_id"][is_target]):
+        flxs = []
+        for (ra, dec, f, flux) in zip(ras, decs, po_fits["thing_id"][is_target], fluxes):
             # pt = "time" in pixel coordinates
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
-            pt, pr = int(pt + 0.5), int(pr + 0.5)
+            pti, pri = int(pt + 0.5), int(pr + 0.5)
 
-            row_lower = pr - self.stampsize//2
-            row_upper =pr + self.stampsize//2 + 1
-            col_lower = pt - self.stampsize//2
-            col_upper = pt + self.stampsize//2 + 1
-
+            row_lower = pri - self.stampsize//2
+            row_upper = pri + self.stampsize//2 + 1
+            col_lower = pti - self.stampsize//2
+            col_upper = pti + self.stampsize//2 + 1
+            edge_stamp=False
             if row_lower < 0:
                 row_lower = 0
                 row_upper = self.stampsize
+                edge_stamp=True
             if row_upper > img.shape[0]:
                 row_lower = img.shape[0] - self.stampsize
                 row_upper = img.shape[0]
+                edge_stamp=True
             if col_lower < 0:
                 col_lower = 0
                 col_upper = self.stampsize
+                edge_stamp=True
             if col_upper > img.shape[1]:
                 col_lower = img.shape[1] - self.stampsize
                 col_upper = img.shape[1]
-            stamp = img[row_lower:row_upper, col_lower:col_upper]
-            stamps.append(stamp)
-            pts.append(pt)
+                edge_stamp=True
+            if (not edge_stamp) or allow_edge:
+                stamp = img[row_lower:row_upper, col_lower:col_upper]
+                stamps.append(stamp)
+                pts.append(pt)
+                stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
+                bgs.append(stamp_bg)
+                flxs.append(flux)
 
-            stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
-            bgs.append(stamp_bg)
-
-        return np.asarray(stamps), np.asarray(pts), fluxes, np.asarray(bgs)
+        return np.asarray(stamps), np.asarray(pts), np.asarray(flxs), np.asarray(bgs)
 
     def get_from_disk(self, idx, verbose=False):
         if self.rcfgcs[idx] is None:
