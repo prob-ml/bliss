@@ -1,5 +1,4 @@
 # @package _group_
-n_epochs: 101
 num_workers: 0
 deterministic: False
 seed: 42

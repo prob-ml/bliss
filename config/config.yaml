@@ -1,6 +1,7 @@
 defaults:
   - optimizer: adam
-  - model: simple_model
+  - model: basic_star_model
+
 
 general:
   root: "."

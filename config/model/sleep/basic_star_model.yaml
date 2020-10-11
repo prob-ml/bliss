@@ -1,10 +1,10 @@
 # @package _group_
+class_name: sleep.SleepPhase
 decoder:
   params:
-    slen: ${image.slen}
+    slen: 30
+    n_bands: 1
     tile_slen: 2
-    n_bands: ${image.n_bands}
-    latent_dim: ${galaxy_net.latent_dim}
     max_sources: 2
     n_galaxy_params: ${model.galaxy_net.latent_dim}
     background_value: 686.0
