@@ -97,7 +97,6 @@ class ImageEncoder(nn.Module):
 
         """
         super(ImageEncoder, self).__init__()
-
         # image parameters
         self.slen = slen
         self.n_bands = n_bands

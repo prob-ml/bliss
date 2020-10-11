@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from .utils import setup_paths
 
-from bliss import sleep
+from bliss import sleep, use_cuda
 from bliss.datasets import galaxy_datasets, catsim, simulated
 from bliss.models import galaxy_net
 
@@ -28,9 +28,9 @@ models = {cls.__name__: cls for cls in _models}
 
 
 def setup_seed(cfg):
-    if cfg.general.deterministic:
+    if cfg.training.deterministic:
         assert cfg.training.seed is not None
-        pl.seed_everything(cfg.seed)
+        pl.seed_everything(cfg.training.seed)
 
 
 def setup_profiler(cfg, paths):
@@ -43,14 +43,14 @@ def setup_profiler(cfg, paths):
 
 def setup_logger(cfg, paths):
     logger = False
-    if cfg.logger:
+    if cfg.trainer.logger:
         logger = TensorBoardLogger(save_dir=paths["output"], name="lightning_logs")
     return logger
 
 
 def setup_checkpoint_callback(cfg, paths, logger):
     checkpoint_callback = False
-    if cfg.checkpoint_callback:
+    if cfg.trainer.checkpoint_callback:
         checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
         checkpoint_dir = paths["output"].joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
@@ -65,13 +65,14 @@ def setup_checkpoint_callback(cfg, paths, logger):
     return checkpoint_callback
 
 
-@hydra.main(config_path="config", config_name="config")
+@hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig):
 
     # setup gpus
-    if cfg.gpus:
-        assert cfg.gpus[1] == "," and len(cfg.gpus) == 2, "Format accepted: 'Y,' "
-        device_id = cfg.gpus[0]
+    gpus = cfg.general.gpus
+    if gpus and use_cuda:
+        assert gpus[1] == "," and len(gpus) == 2, "Format accepted: 'Y,' "
+        device_id = gpus[0]
         device = torch.device(f"cuda:{device_id}")
         torch.cuda.set_device(device)
 
@@ -93,9 +94,7 @@ def main(cfg: DictConfig):
     cfg_trainer.update(
         dict(logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback)
     )
-    trainer = pl.Trainer.from_argparse_args(
-        **cfg.trainer,
-    )
+    trainer = pl.Trainer(**cfg.trainer)
 
     # train!
     trainer.fit(model)

@@ -5,6 +5,7 @@ from omegaconf import DictConfig
 
 def setup_paths(cfg: DictConfig, enforce_overwrite=True):
     root_path = Path(cfg.general.root)
+
     paths = {
         "root": root_path,
         "data": root_path.joinpath("data"),

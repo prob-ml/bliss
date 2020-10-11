@@ -47,7 +47,7 @@ def get_psf_params(psfield_fit_file, bands):
 class ImageDecoder(nn.Module):
     def __init__(
         self,
-        decoder_file="galaxy_decoder.pt",
+        decoder_file=None,
         psf_params_file="psf_params.pt",
         slen=50,
         psf_slen=25,

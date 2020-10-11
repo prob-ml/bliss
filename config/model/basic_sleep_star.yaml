@@ -1,0 +1,24 @@
+# @package _group_
+class_name: SleepPhase
+galaxies:
+  slen: 51
+  latent_dim: 8
+decoder:
+  params:
+    slen: 30
+    n_bands: 1
+    tile_slen: 2
+    max_sources: 2
+    n_galaxy_params: ${model.galaxies.latent_dim}
+    background_value: 686.0
+    prob_galaxy: 0.0
+    psf_params_file: ${general.root}/data/fitted_powerlaw_psf_params.npy
+    decoder_file:
+encoder:
+  params:
+    slen: ${model.decoder.params.slen}
+    tile_slen: ${model.decoder.params.tile_slen}
+    ptile_slen: 8
+    max_detections: ${model.decoder.params.max_sources}
+    n_galaxy_params: ${model.galaxies.latent_dim}
+    background_pad_value: 686.0
