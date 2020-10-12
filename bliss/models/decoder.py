@@ -47,12 +47,8 @@ def get_psf_params(psfield_fit_file, bands):
 class ImageDecoder(nn.Module):
     def __init__(
         self,
-        decoder_file=None,
-        psf_params_file="psf_params.pt",
-        slen=50,
-        psf_slen=25,
-        gal_slen=51,
         n_bands=1,
+        slen=50,
         tile_slen=2,
         ptile_padding=2,
         prob_galaxy=0.0,
@@ -60,12 +56,16 @@ class ImageDecoder(nn.Module):
         max_sources=2,
         mean_sources=0.4,
         min_sources=0,
-        loc_min=0.0,
-        loc_max=1.0,
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
+        gal_slen=51,
+        psf_slen=25,
+        decoder_file=None,
+        psf_params_file="psf_params.pt",
         background_value=686.0,
+        loc_min=0.0,
+        loc_max=1.0,
         add_noise=True,
     ):
         super(ImageDecoder, self).__init__()
