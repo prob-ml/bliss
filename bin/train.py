@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 import torch
 import pytorch_lightning as pl
@@ -90,11 +90,11 @@ def main(cfg: DictConfig):
     profiler = setup_profiler(cfg, paths)
     logger = setup_logger(cfg, paths)
     checkpoint_callback = setup_checkpoint_callback(cfg, paths, logger)
-    cfg_trainer = dict(cfg.trainer)
-    cfg_trainer.update(
+    trainer_dict = OmegaConf.to_container(cfg.trainer, resolve=True)
+    trainer_dict.update(
         dict(logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback)
     )
-    trainer = pl.Trainer(**cfg.trainer)
+    trainer = pl.Trainer(**trainer_dict)
 
     # train!
     trainer.fit(model)
