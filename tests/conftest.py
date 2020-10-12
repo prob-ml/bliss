@@ -1,7 +1,6 @@
 import pytest
 import pathlib
 import torch
-import numpy as np
 import pytorch_lightning as pl
 
 from bliss import sleep
@@ -67,57 +66,6 @@ class DeviceSetup:
             device_id = int(self.gpus[0])
             self.device = torch.device(f"cuda:{device_id}")
             torch.cuda.set_device(self.device)
-
-
-class DatasetSetup:
-    def __init__(self, paths, device):
-        self.device = device
-        self.data_path = paths["data"]
-
-    def get_star_dataset(
-        self,
-        init_psf_params,
-        batch_size=32,
-        n_batches=4,
-        n_bands=1,
-        slen=50,
-        **dec_kwargs,
-    ):
-        assert 1 <= n_bands <= 2
-        dec_kwargs.update({"prob_galaxy": 0.0, "n_bands": n_bands, "slen": slen})
-        background = torch.zeros(2, slen, slen, device=self.device)
-        background[0] = 686.0
-        background[1] = 1123.0
-
-        # slice if necessary.
-        background = background[list(range(n_bands))]
-        init_psf_params = init_psf_params[range(n_bands)]
-
-        dec_args = (None, init_psf_params, background)
-
-        return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
-
-    def get_binary_dataset(
-        self, batch_size=32, n_batches=4, slen=20, prob_galaxy=1.0, **dec_kwargs
-    ):
-
-        n_bands = 1
-        galaxy_decoder = self.get_galaxy_decoder()
-
-        # psf params
-        psf_params = self.get_fitted_psf_params()[list(range(n_bands))]
-
-        # TODO: take background from test image.
-        background = torch.zeros(n_bands, slen, slen, device=self.device)
-        background[0] = 5000.0
-
-        dec_args = (galaxy_decoder, psf_params, background)
-
-        dec_kwargs.update(
-            {"n_bands": n_bands, "slen": slen, "prob_galaxy": prob_galaxy}
-        )
-
-        return SimulatedDataset(n_batches, batch_size, dec_args, dec_kwargs)
 
 
 class EncoderSetup:

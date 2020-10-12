@@ -6,11 +6,13 @@ defaults:
   - dataset: default
 
 general:
-  root: ${env:HOME}/bliss
-  logs: "logs"
-  output: "example"
   overwrite: False
   gpus: "2,"
+
+paths:
+  root: ${env:HOME}/bliss
+  logs: ${general.root}/logs
+  output: ${general.logs}/example
 
 hydra:
   run:
