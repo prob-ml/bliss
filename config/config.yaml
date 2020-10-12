@@ -6,7 +6,7 @@ defaults:
   - dataset: default
 
 general:
-  root: "/home/imendoza/bliss"
+  root: "."
   logs: "logs"
   output: "example"
   overwrite: False

@@ -1,10 +1,11 @@
 from pathlib import Path
 import shutil
+import hydra
 from omegaconf import DictConfig
 
 
 def setup_paths(cfg: DictConfig, enforce_overwrite=True):
-    root_path = Path(cfg.general.root)
+    root_path = Path(hydra.utils.to_absolute_path(cfg.general.root))
 
     paths = {
         "root": root_path,
@@ -12,7 +13,6 @@ def setup_paths(cfg: DictConfig, enforce_overwrite=True):
         "logs": root_path.joinpath("logs"),
         "output": root_path.joinpath(f"logs/{cfg.general.output}"),
     }
-
     if enforce_overwrite:
         assert (
             not paths["output"].exists() or cfg.general.overwrite

@@ -76,7 +76,7 @@ def main(cfg: DictConfig):
         device = torch.device(f"cuda:{device_id}")
         torch.cuda.set_device(device)
 
-    # setup.
+    # setup paths and seed
     paths = setup_paths(cfg, enforce_overwrite=False)
     setup_seed(cfg)
 
