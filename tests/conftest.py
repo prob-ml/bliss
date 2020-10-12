@@ -69,20 +69,10 @@ class DeviceSetup:
             torch.cuda.set_device(self.device)
 
 
-class DecoderSetup:
+class DatasetSetup:
     def __init__(self, paths, device):
         self.device = device
         self.data_path = paths["data"]
-
-    def get_galaxy_decoder(self):
-        dec_file = self.data_path.joinpath("galaxy_decoder_1_band.dat")
-        dec = SimulatedDataset.get_gal_decoder_from_file(dec_file)
-        return dec
-
-    def get_fitted_psf_params(self):
-        psf_file = self.data_path.joinpath("fitted_powerlaw_psf_params.npy")
-        psf_params = torch.from_numpy(np.load(psf_file)).to(self.device)
-        return psf_params
 
     def get_star_dataset(
         self,

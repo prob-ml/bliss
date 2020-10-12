@@ -1,4 +1,5 @@
 # @package _group_
+class_name: SleepPhase
 image:
   slen: 30
   n_bands: 1

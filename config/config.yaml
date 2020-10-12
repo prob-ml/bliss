@@ -6,7 +6,7 @@ defaults:
   - dataset: default
 
 general:
-  root: "."
+  root: /home/${env:USER}/bliss
   logs: "logs"
   output: "example"
   overwrite: False
