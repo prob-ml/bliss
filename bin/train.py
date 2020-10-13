@@ -81,10 +81,10 @@ def main(cfg: DictConfig):
     setup_seed(cfg)
 
     # setup dataset.
-    dataset = datasets[cfg.dataset.class_name](cfg)
+    dataset = datasets[cfg.dataset.name](cfg)
 
     # setup model
-    model = models[cfg.model.class_name](hparams={}, cfg=cfg, dataset=dataset)
+    model = models[cfg.model.name](cfg, dataset)
 
     # setup trainer
     profiler = setup_profiler(cfg, paths)

@@ -11,7 +11,7 @@ class SimulatedDataset(IterableDataset):
 
         self.n_batches = cfg.dataset.params.n_batches
         self.batch_size = cfg.dataset.params.batch_size
-        self.image_decoder = ImageDecoder(**cfg.model.decoder.params)
+        self.image_decoder = ImageDecoder(**cfg.model.decoder)
 
     def __iter__(self):
         return self.batch_generator()

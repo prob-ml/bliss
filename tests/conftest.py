@@ -2,9 +2,10 @@ import pytest
 import pathlib
 import torch
 import pytorch_lightning as pl
+from hydra.experimental import initialize, compose
 
 from bliss import sleep
-from bliss.datasets.simulated import SimulatedDataset
+from bliss.datasets import simulated
 
 
 # command line arguments for tests
@@ -23,10 +24,12 @@ def pytest_addoption(parser):
     )
 
 
+# add slow marker.
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
 
 
+# make --runslow option work with the marker.
 def pytest_collection_modifyitems(config, items):
     if config.getoption("--runslow"):
         # --runslow given in cli: do not skip slow tests
@@ -68,62 +71,7 @@ class DeviceSetup:
             torch.cuda.set_device(self.device)
 
 
-class EncoderSetup:
-    def __init__(self, gpus, device):
-        self.gpus = gpus
-        self.device = device
-
-    def get_trained_encoder(
-        self,
-        dataset,
-        n_epochs=100,
-        ptile_slen=8,
-        tile_slen=2,
-        max_detections=2,
-        enc_hidden=256,
-        enc_kern=3,
-        enc_conv_c=20,
-        validation_plot_start=1000,
-        background_pad_value=686.0,
-    ):
-        slen = dataset.slen
-        n_bands = dataset.n_bands
-        latent_dim = dataset.image_decoder.latent_dim
-
-        # setup Star Encoder
-        encoder_kwargs = dict(
-            ptile_slen=ptile_slen,
-            tile_slen=tile_slen,
-            enc_conv_c=enc_conv_c,
-            enc_kern=enc_kern,
-            enc_hidden=enc_hidden,
-            max_detections=max_detections,
-            slen=slen,
-            n_bands=n_bands,
-            n_galaxy_params=latent_dim,
-            background_pad_value=background_pad_value,
-        )
-
-        sleep_net = sleep.SleepPhase(
-            dataset, encoder_kwargs, validation_plot_start=validation_plot_start
-        )
-
-        sleep_trainer = pl.Trainer(
-            gpus=self.gpus,
-            min_epochs=n_epochs,
-            max_epochs=n_epochs,
-            reload_dataloaders_every_epoch=True,
-            logger=False,
-            checkpoint_callback=False,
-            check_val_every_n_epoch=50,
-        )
-
-        sleep_trainer.fit(sleep_net)
-        sleep_net.image_encoder.eval()
-        return sleep_net.image_encoder.to(self.device)
-
-
-# available fixtures
+# available fixtures provided globally for all tests.
 @pytest.fixture(scope="session")
 def paths():
     root_path = pathlib.Path(__file__).parent.parent.absolute()
@@ -135,16 +83,36 @@ def paths():
 
 
 @pytest.fixture(scope="session")
-def device_setup(pytestconfig):
+def devices(pytestconfig):
     gpus = pytestconfig.getoption("gpus")
     return DeviceSetup(gpus)
 
 
 @pytest.fixture(scope="session")
-def decoder_setup(paths, device_setup):
-    return DecoderSetup(paths, device_setup.device)
+def get_dataset(paths):
+    config_path = paths["root"].joinpath("config")
+
+    def _dataset(overrides=None):
+        with initialize(config_path=config_path):
+            cfg = compose("config", overrides=overrides)
+            dataset = simulated.SimulatedDataset(cfg)
+        return dataset
+
+    return _dataset
 
 
 @pytest.fixture(scope="session")
-def encoder_setup(device_setup):
-    return EncoderSetup(device_setup.gpus, device_setup.device)
+def get_trained_encoder(paths, devices):
+    config_path = paths["root"].joinpath("config")
+
+    def _encoder(n_epochs, dataset, overrides=None):
+        with initialize(config_path=config_path):
+            cfg = compose("config", overrides=overrides)
+            cfg.trainer.update({"max_epochs": n_epochs, "min_epochs": n_epochs})
+            sleep_net = sleep.SleepPhase(cfg, dataset)
+            trainer = pl.Trainer(**cfg.trainer)
+            trainer.fit(sleep_net)
+            sleep_net.image_encoder.eval()
+            return sleep_net.image_encoder.to(devices.device)
+
+    return _encoder

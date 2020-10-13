@@ -2,7 +2,6 @@ import math
 import numpy as np
 from itertools import permutations
 import matplotlib.pyplot as plt
-from typing import Dict
 from omegaconf import DictConfig
 
 import torch
@@ -111,20 +110,21 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(self, hparams: Dict[str, float], cfg: DictConfig, dataset):
+    def __init__(self, cfg: DictConfig, dataset):
         super(SleepPhase, self).__init__()
         self.cfg = cfg
-        self.hparams: Dict[str, float] = hparams
 
         self.dataset = dataset
         self.image_decoder = self.dataset.image_decoder
-        self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
+        self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder)
 
         # avoid calculating gradients of decoder.
         self.image_decoder.requires_grad_(False)
 
         self.validation_plot_start = cfg.training.validation_plot_start
         assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
+
+        self.hparams = {**self.cfg.optimizer.params}
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder(image_ptiles, n_sources)
@@ -267,8 +267,8 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": self.hparams.lr}],
-            weight_decay=self.hparams.weight_decay,
+            [{"params": self.image_encoder.parameters(), "lr": self.hparams["lr"]}],
+            weight_decay=self.hparams["weight_decay"],
         )
 
     def train_dataloader(self):

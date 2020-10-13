@@ -1,5 +1,5 @@
 # @package _group_
-class_name: torch.optim.Adam
+name: torch.optim.Adam
 params:
   lr: 1e-4
   weight_decay: 1e-6
