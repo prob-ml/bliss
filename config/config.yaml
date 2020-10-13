@@ -7,10 +7,9 @@ defaults:
 
 general:
   overwrite: False
-  gpus: "2,"
 
 paths:
-  root: ${env:HOME}/bliss
+  root: ${env:BLISS}
   logs: ${paths.root}/logs
   output: ${paths.logs}/example
 

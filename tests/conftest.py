@@ -89,12 +89,11 @@ def devices(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def get_dataset(paths):
-    config_path = paths["root"].joinpath("config")
-
-    def _dataset(overrides=None):
-        with initialize(config_path=config_path):
+def get_dataset():
+    def _dataset(batch_size, n_batches, overrides=None):
+        with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
+            cfg.dataset.update({"n_batches": n_batches, "batch_size": batch_size})
             dataset = simulated.SimulatedDataset(cfg)
         return dataset
 
@@ -102,13 +101,13 @@ def get_dataset(paths):
 
 
 @pytest.fixture(scope="session")
-def get_trained_encoder(paths, devices):
-    config_path = paths["root"].joinpath("config")
-
+def get_trained_encoder(devices):
     def _encoder(n_epochs, dataset, overrides=None):
-        with initialize(config_path=config_path):
+        with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            cfg.trainer.update({"max_epochs": n_epochs, "min_epochs": n_epochs})
+            cfg.trainer.update(
+                {"max_epochs": n_epochs, "min_epochs": n_epochs, "gpus": devices.gpus}
+            )
             sleep_net = sleep.SleepPhase(cfg, dataset)
             trainer = pl.Trainer(**cfg.trainer)
             trainer.fit(sleep_net)

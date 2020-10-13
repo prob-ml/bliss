@@ -69,7 +69,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
 def main(cfg: DictConfig):
 
     # setup gpus
-    gpus = cfg.general.gpus
+    gpus = cfg.trainer.gpus
     if gpus and use_cuda:
         assert gpus[1] == "," and len(gpus) == 2, "Format accepted: 'Y,' "
         device_id = gpus[0]

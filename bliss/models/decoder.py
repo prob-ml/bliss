@@ -124,7 +124,7 @@ class ImageDecoder(nn.Module):
 
         # background
         background_shape = (self.n_bands, self.slen, self.slen)
-        self.background = torch.full(background_shape, background_value)
+        self.background = torch.full(background_shape, background_value, device=device)
 
         # galaxy decoder
         self.gal_slen = gal_slen

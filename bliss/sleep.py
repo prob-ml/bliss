@@ -178,11 +178,11 @@ class SleepPhase(pl.LightningModule):
         n_tiles = batch_size * n_tiles_per_image
         max_sources = self.image_decoder.max_sources
         n_bands = self.image_decoder.n_bands
-        latent_dim = self.image_decoder.latent_dim
+        n_galaxy_params = self.image_decoder.n_galaxy_params
 
         true_tile_locs = true_tile_locs.view(n_tiles, max_sources, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.view(
-            n_tiles, max_sources, latent_dim
+            n_tiles, max_sources, n_galaxy_params
         )
         true_tile_log_fluxes = true_tile_log_fluxes.view(n_tiles, max_sources, n_bands)
         true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_tiles, max_sources)
