@@ -43,7 +43,6 @@ def trained_encoder(star_dataset, encoder_setup, device_setup):
     return trained_encoder.to(device_setup.device)
 
 
-# TODO: Test unstable in GPU
 @pytest.mark.skip
 class TestStarSleepEncoder:
     @pytest.mark.parametrize("n_stars", ["1", "3"])

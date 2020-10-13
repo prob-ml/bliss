@@ -17,12 +17,12 @@ class MetricsCallback(Callback):
 
 
 @pytest.fixture(scope="module")
-def metrics_callback_setup(device_setup):
+def metrics_callback_setup(devices):
     return MetricsCallback()
 
 
 @pytest.fixture(scope="module")
-def star_dataset(decoder_setup, device_setup):
+def star_dataset(decoder_setup, devices):
     psf_params = decoder_setup.get_fitted_psf_params()
 
     return decoder_setup.get_star_dataset(

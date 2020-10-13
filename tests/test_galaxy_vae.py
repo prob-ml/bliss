@@ -9,15 +9,15 @@ from bliss.models import galaxy_net
 
 class TestGalaxyVAE:
     @pytest.fixture(scope="module")
-    def trained_galaxy_vae(self, paths, device_setup):
-        use_cuda = device_setup.use_cuda
+    def trained_galaxy_vae(self, paths, devices):
+        use_cuda = devices.use_cuda
 
         h5_file = paths["data"].joinpath("catsim_single_galaxies.hdf5")
         dataset = galaxy_datasets.H5Catalog(h5_file, slen=51, n_bands=1)
         n_epochs = 100 if use_cuda else 1
         check_val_every_n_epoch = 50 if use_cuda else 1
         trainer = pl.Trainer(
-            gpus=device_setup.gpus,
+            gpus=devices.gpus,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
             limit_train_batches=20,
@@ -42,7 +42,7 @@ class TestGalaxyVAE:
         trainer.fit(galaxy_vae)
         galaxy_vae.freeze()
         galaxy_vae.eval()
-        return galaxy_vae.to(device_setup.device)
+        return galaxy_vae.to(devices.device)
 
     def test_galaxy_vae(self, trained_galaxy_vae, paths, device_setup):
         galaxy_image = torch.load(paths["data"].joinpath("1_catsim_galaxy.pt"))
