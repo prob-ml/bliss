@@ -4,5 +4,5 @@ logger: False
 checkpoint_callback: False
 reload_dataloaders_every_epoch: True
 check_val_every_n_epoch: 50
-max_epochs: 50
-min_epochs: ${trainer.max_epochs}
+max_epochs: ${training.n_epochs}
+min_epochs: ${training.n_epochs}

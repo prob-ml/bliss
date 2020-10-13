@@ -129,6 +129,7 @@ class ImageDecoder(nn.Module):
         # galaxy decoder
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params
+        self.galaxy_decoder = None
         assert self.prob_galaxy > 0.0 or decoder_file is None
         if decoder_file is not None:
             dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, n_galaxy_params, n_bands)

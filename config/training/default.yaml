@@ -3,3 +3,4 @@ num_workers: 0
 deterministic: False
 seed: 42
 validation_plot_start: 5
+n_epochs: 50

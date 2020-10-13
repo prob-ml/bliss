@@ -11,8 +11,8 @@ general:
 
 paths:
   root: ${env:HOME}/bliss
-  logs: ${general.root}/logs
-  output: ${general.logs}/example
+  logs: ${paths.root}/logs
+  output: ${paths.logs}/example
 
 hydra:
   run:
