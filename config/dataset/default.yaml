@@ -1,4 +1,5 @@
 # @package _group_
 name: SimulatedDataset
-n_batches: 10
-batch_size: 128
+params:
+  n_batches: 10
+  batch_size: 128

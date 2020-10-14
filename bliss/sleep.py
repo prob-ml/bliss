@@ -116,7 +116,7 @@ class SleepPhase(pl.LightningModule):
 
         self.dataset = dataset
         self.image_decoder = self.dataset.image_decoder
-        self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder)
+        self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
 
         # avoid calculating gradients of decoder.
         self.image_decoder.requires_grad_(False)
@@ -531,7 +531,7 @@ class SleepObjective(object):
     ):
         self.dataset = dataset
         self.cfg = cfg
-        encoder_kwargs = cfg.model.encoder
+        encoder_kwargs = cfg.model.encoder.params
 
         assert (
             len(encoder_kwargs["enc_conv_c"]) == 3
@@ -558,14 +558,14 @@ class SleepObjective(object):
         self.gpus = gpus
 
     def __call__(self, trial):
-        self.cfg.model.encoder["enc_conv_c"] = trial.suggest_int(
+        self.cfg.model.encoder.params["enc_conv_c"] = trial.suggest_int(
             "enc_conv_c",
             self.enc_conv_c_min,
             self.enc_conv_c_max,
             self.enc_conv_c_int,
         )
 
-        self.cfg.model.encoder["enc_hidden"] = trial.suggest_int(
+        self.cfg.model.encoder.params["enc_hidden"] = trial.suggest_int(
             "enc_hidden",
             self.enc_hidden_min,
             self.enc_hidden_max,

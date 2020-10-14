@@ -23,9 +23,9 @@ class TestOptunaSleep:
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
             cfg.paths.update({"root": paths["root"].as_posix()})
-            cfg.dataset.update({"n_batches": 1, "batch_size": 1})
+            cfg.dataset.params.update({"n_batches": 1, "batch_size": 1})
             dataset = SimulatedDataset(cfg)
-            cfg.model.encoder.update(
+            cfg.model.encoder.params.update(
                 {
                     "enc_conv_c": (5, 25, 5),
                     "enc_kern": 3,

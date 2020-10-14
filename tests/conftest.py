@@ -95,7 +95,9 @@ def get_dataset(paths):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
             cfg.paths.update({"root": paths["root"].as_posix()})
-            cfg.dataset.update({"n_batches": n_batches, "batch_size": batch_size})
+            cfg.dataset.params.update(
+                {"n_batches": n_batches, "batch_size": batch_size}
+            )
             dataset = simulated.SimulatedDataset(cfg)
         return dataset
 
