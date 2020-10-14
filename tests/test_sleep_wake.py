@@ -22,10 +22,13 @@ def trained_encoder(dataset, get_trained_encoder, devices):
 
 
 @pytest.fixture(scope="module")
-def trained_plot_encoder(dataset, get_trained_encoder, devices):
+def trained_plot_encoder(get_dataset, get_trained_encoder, devices):
     # just to test plotting
     n_epochs = 1
+    batch_size = 2
+    n_batches = 1
     overrides = ["model=basic_sleep_star", "training=test_plotting"]
+    dataset = get_dataset(batch_size, n_batches, overrides=overrides)
     image_encoder = get_trained_encoder(n_epochs, dataset, overrides=overrides)
     return image_encoder
 
