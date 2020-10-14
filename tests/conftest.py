@@ -110,11 +110,11 @@ def get_trained_encoder(paths, devices):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
             cfg.paths.update({"root": paths["root"].as_posix()})
-            cfg.trainer.update(
+            cfg.training.trainer.update(
                 {"max_epochs": n_epochs, "min_epochs": n_epochs, "gpus": devices.gpus}
             )
             sleep_net = sleep.SleepPhase(cfg, dataset)
-            trainer = pl.Trainer(**cfg.trainer)
+            trainer = pl.Trainer(**cfg.training.trainer)
             trainer.fit(sleep_net)
             sleep_net.image_encoder.eval()
             return sleep_net.image_encoder.to(devices.device)

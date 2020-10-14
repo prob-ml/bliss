@@ -1,15 +1,14 @@
 # @package _group_
 num_workers: 0
 deterministic: False
-seed: 42
-validation_plot_start: 5
-n_epochs: 50
+validation_plot_start: 1001
+n_epochs: 101
 trainer:
   profiler: False
   logger: False
   checkpoint_callback: False
   reload_dataloaders_every_epoch: True
-  check_val_every_n_epoch: 50
+  check_val_every_n_epoch: 1001
   max_epochs: ${training.n_epochs}
   min_epochs: ${training.n_epochs}
   gpus: "2,"

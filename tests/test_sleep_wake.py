@@ -16,7 +16,16 @@ def dataset(get_dataset, devices):
 @pytest.fixture(scope="module")
 def trained_encoder(dataset, get_trained_encoder, devices):
     n_epochs = 120 if devices.use_cuda else 1
-    overrides = ["model=basic_sleep_star"]
+    overrides = ["model=basic_sleep_star", "training=tests"]
+    image_encoder = get_trained_encoder(n_epochs, dataset, overrides=overrides)
+    return image_encoder
+
+
+@pytest.fixture(scope="module")
+def trained_plot_encoder(dataset, get_trained_encoder, devices):
+    # just to test plotting
+    n_epochs = 1
+    overrides = ["model=basic_sleep_star", "training=test_plotting"]
     image_encoder = get_trained_encoder(n_epochs, dataset, overrides=overrides)
     return image_encoder
 
@@ -57,6 +66,9 @@ class TestStarSleepEncoder:
         assert torch.all(
             diff.abs() <= test_star["log_fluxes"].sort(1)[0].abs().to(device) * 0.10
         )
+
+    def test_plotting(self, trained_plot_encoder):
+        return
 
 
 class TestStarWakeNet:

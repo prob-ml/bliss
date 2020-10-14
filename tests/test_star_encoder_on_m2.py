@@ -16,7 +16,7 @@ def trained_star_encoder_m2(get_dataset, get_trained_encoder, paths, devices):
     n_epochs = 200 if use_cuda else 1
     n_batches = 10 if use_cuda else 1
     batch_size = 20 if use_cuda else 1
-    overrides = ["model=star_m2"]
+    overrides = ["model=star_m2", "training=tests"]
     dataset = get_dataset(batch_size, n_batches, overrides)
     trained_encoder = get_trained_encoder(n_epochs, dataset, overrides)
     return trained_encoder.to(device)

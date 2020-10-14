@@ -35,7 +35,7 @@ def setup_seed(cfg):
 
 def setup_profiler(cfg, paths):
     profiler = False
-    if cfg.trainer.profiler:
+    if cfg.training.trainer.profiler:
         profile_file = paths["output"].joinpath("profile.txt")
         profiler = AdvancedProfiler(output_filename=profile_file)
     return profiler
@@ -43,14 +43,14 @@ def setup_profiler(cfg, paths):
 
 def setup_logger(cfg, paths):
     logger = False
-    if cfg.trainer.logger:
+    if cfg.training.trainer.logger:
         logger = TensorBoardLogger(save_dir=paths["output"], name="lightning_logs")
     return logger
 
 
 def setup_checkpoint_callback(cfg, paths, logger):
     checkpoint_callback = False
-    if cfg.trainer.checkpoint_callback:
+    if cfg.training.trainer.checkpoint_callback:
         checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
         checkpoint_dir = paths["output"].joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
@@ -69,7 +69,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
 def main(cfg: DictConfig):
 
     # setup gpus
-    gpus = cfg.trainer.gpus
+    gpus = cfg.training.trainer.gpus
     if gpus and use_cuda:
         assert gpus[1] == "," and len(gpus) == 2, "Format accepted: 'Y,' "
         device_id = gpus[0]
@@ -90,7 +90,7 @@ def main(cfg: DictConfig):
     profiler = setup_profiler(cfg, paths)
     logger = setup_logger(cfg, paths)
     checkpoint_callback = setup_checkpoint_callback(cfg, paths, logger)
-    trainer_dict = OmegaConf.to_container(cfg.trainer, resolve=True)
+    trainer_dict = OmegaConf.to_container(cfg.training.trainer, resolve=True)
     trainer_dict.update(
         dict(logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback)
     )
