@@ -25,7 +25,7 @@ decoder:
   gal_slen: ${model.galaxy.slen}
   decoder_file:
   psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
-  background_value: ${model.image.background}
+  background_values: ${model.image.background}
 encoder:
   n_bands: ${model.image.n_bands}
   slen: ${model.image.slen}
