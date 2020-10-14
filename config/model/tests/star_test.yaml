@@ -1,5 +1,5 @@
 # @package _group_
-name: SleepPhase
+name: ImageDecoder
 image:
   slen: 30
   n_bands: 1
@@ -37,3 +37,6 @@ encoder:
     enc_conv_c: 20
     enc_kern: 3
     enc_hidden: 256
+data:
+  - ${paths.root}/data/1_star_test.npy
+  - ${paths.root}/data/3_star_test.npy
