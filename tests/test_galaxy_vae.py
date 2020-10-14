@@ -11,7 +11,6 @@ class TestGalaxyVAE:
     @pytest.fixture(scope="module")
     def trained_galaxy_vae(self, paths, devices):
         use_cuda = devices.use_cuda
-
         h5_file = paths["data"].joinpath("catsim_single_galaxies.hdf5")
         dataset = galaxy_datasets.H5Catalog(h5_file, slen=51, n_bands=1)
         n_epochs = 100 if use_cuda else 1
@@ -28,14 +27,14 @@ class TestGalaxyVAE:
             check_val_every_n_epoch=check_val_every_n_epoch,
         )
 
-        # TODO: Allow tt_split ==0 if no validation.
+        # TODO: Allow tt_split == 0 if no validation.
         galaxy_vae = galaxy_net.OneCenteredGalaxy(
             dataset,
             slen=51,
             n_bands=1,
             latent_dim=8,
             num_workers=0,
-            batch_size=64,
+            batch_size=64 if use_cuda else 5,
             tt_split=0.1,
         )
 
@@ -44,13 +43,14 @@ class TestGalaxyVAE:
         galaxy_vae.eval()
         return galaxy_vae.to(devices.device)
 
-    def test_galaxy_vae(self, trained_galaxy_vae, paths, device_setup):
+    def test_galaxy_vae(self, trained_galaxy_vae, paths, devices):
+        device = devices.device
         galaxy_image = torch.load(paths["data"].joinpath("1_catsim_galaxy.pt"))
         background = torch.from_numpy(
             np.load(paths["data"].joinpath("background_galaxy_single_band_i.npy"))
-        ).to(device_setup.device)
+        ).to(device)
 
-        galaxy_image = galaxy_image.to(device_setup.device)
+        galaxy_image = galaxy_image.to(device)
         galaxy_image = galaxy_image.reshape(1, 1, galaxy_image.size(-1), -1)
 
         with torch.no_grad():
@@ -59,7 +59,7 @@ class TestGalaxyVAE:
         residual = (galaxy_image - pred_image) / torch.sqrt(galaxy_image)
 
         # only expect tests to pass in cuda:
-        if not device_setup.use_cuda:
+        if not devices.use_cuda:
             return
 
         # check residuals follow gaussian noise, most pixels are between 68%

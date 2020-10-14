@@ -1,8 +1,9 @@
-import pytest
 from pytorch_lightning import Callback
 from optuna.trial import FixedTrial
+from hydra.experimental import initialize, compose
 
 from bliss.sleep import SleepObjective
+from bliss.datasets.simulated import SimulatedDataset
 
 
 class MetricsCallback(Callback):
@@ -16,56 +17,45 @@ class MetricsCallback(Callback):
         self.metrics.append(trainer.callback_metrics)
 
 
-@pytest.fixture(scope="module")
-def metrics_callback_setup(devices):
-    return MetricsCallback()
-
-
-@pytest.fixture(scope="module")
-def star_dataset(decoder_setup, devices):
-    psf_params = decoder_setup.get_fitted_psf_params()
-
-    return decoder_setup.get_star_dataset(
-        psf_params, n_bands=1, slen=50, batch_size=1, n_batches=1
-    )
-
-
 class TestOptunaSleep:
-    def test_optuna(self, star_dataset, metrics_callback_setup, paths, device_setup):
-        # set up encoder
-        encoder_kwargs = dict(
-            enc_conv_c=(5, 25, 5),
-            enc_kern=3,
-            enc_hidden=(64, 128, 64),
-            ptile_slen=8,
-            max_detections=2,
-            slen=star_dataset.slen,
-            n_bands=star_dataset.n_bands,
-            n_galaxy_params=star_dataset.latent_dim,
-        )
-
-        n_epochs = 1
-        # set up Object for optuna
-        objects = SleepObjective(
-            star_dataset,
-            encoder_kwargs,
-            max_epochs=n_epochs,
-            lr=(1e-4, 1e-2),
-            weight_decay=(1e-6, 1e-4),
-            model_dir=paths["model_dir"],
-            metrics_callback=metrics_callback_setup,
-            monitor="val_loss",
-            gpus=device_setup.gpus,
-        )
-
-        # set up study object
-        objects(
-            FixedTrial(
+    def test_optuna(self, paths, devices):
+        overrides = ["model=basic_sleep_star"]
+        with initialize(config_path="../config"):
+            cfg = compose("config", overrides=overrides)
+            cfg.dataset.update({"n_batches": 1, "batch_size": 1})
+            dataset = SimulatedDataset(cfg)
+            cfg.model.encoder.update(
                 {
-                    "enc_conv_c": 5,
-                    "enc_hidden": 64,
-                    "learning rate": 1e-3,
-                    "weight_decay": 1e-5,
+                    "enc_conv_c": (5, 25, 5),
+                    "enc_kern": 3,
+                    "enc_hidden": (64, 128, 64),
+                    "ptile_slen": 8,
+                    "max_detections": 2,
                 }
             )
-        )
+            cfg.optimizer.params.update(
+                {"lr": (1e-4, 1e-2), "weight_decay": (1e-6, 1e-4)}
+            )
+            n_epochs = 1
+            # set up Object for optuna
+            objects = SleepObjective(
+                dataset,
+                cfg,
+                max_epochs=n_epochs,
+                model_dir=paths["model_dir"],
+                metrics_callback=MetricsCallback(),
+                monitor="val_loss",
+                gpus=devices.gpus,
+            )
+
+            # set up study object
+            objects(
+                FixedTrial(
+                    {
+                        "enc_conv_c": 5,
+                        "enc_hidden": 64,
+                        "learning rate": 1e-3,
+                        "weight_decay": 1e-5,
+                    }
+                )
+            )

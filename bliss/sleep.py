@@ -522,19 +522,17 @@ class SleepObjective(object):
     def __init__(
         self,
         dataset,
-        encoder_kwargs: dict,
+        cfg: DictConfig,
         max_epochs: int,
-        lr: tuple,
-        weight_decay: tuple,
         model_dir,
         metrics_callback,
         monitor,
         gpus=0,
     ):
         self.dataset = dataset
+        self.cfg = cfg
+        encoder_kwargs = cfg.model.encoder
 
-        assert type(encoder_kwargs["enc_conv_c"]) is tuple
-        assert type(encoder_kwargs["enc_hidden"]) is tuple
         assert (
             len(encoder_kwargs["enc_conv_c"]) == 3
             and len(encoder_kwargs["enc_hidden"]) == 3
@@ -548,11 +546,10 @@ class SleepObjective(object):
         self.enc_hidden_max = self.encoder_kwargs["enc_hidden"][1]
         self.enc_hidden_int = self.encoder_kwargs["enc_hidden"][2]
 
-        assert type(lr) is tuple
-        assert type(weight_decay) is tuple
-        assert len(lr) == 2 and len(weight_decay) == 2
-        self.lr = lr
-        self.weight_decay = weight_decay
+        assert len(cfg.optimizer.params.lr) == 2
+        assert len(cfg.optimizer.params.weight_decay) == 2
+        self.lr = cfg.optimizer.params.lr
+        self.weight_decay = cfg.optimizer.params.weight_decay
 
         self.max_epochs = max_epochs
         self.model_dir = model_dir
@@ -561,14 +558,14 @@ class SleepObjective(object):
         self.gpus = gpus
 
     def __call__(self, trial):
-        self.encoder_kwargs["enc_conv_c"] = trial.suggest_int(
+        self.cfg.model.encoder["enc_conv_c"] = trial.suggest_int(
             "enc_conv_c",
             self.enc_conv_c_min,
             self.enc_conv_c_max,
             self.enc_conv_c_int,
         )
 
-        self.encoder_kwargs["enc_hidden"] = trial.suggest_int(
+        self.cfg.model.encoder["enc_hidden"] = trial.suggest_int(
             "enc_hidden",
             self.enc_hidden_min,
             self.enc_hidden_max,
@@ -579,16 +576,14 @@ class SleepObjective(object):
         weight_decay = trial.suggest_loguniform(
             "weight_decay", self.weight_decay[0], self.weight_decay[1]
         )
+        self.cfg.optimizer.params.update(dict(lr=lr, weight_decay=weight_decay))
 
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             self.model_dir.joinpath("trial_{}".format(trial.number), "{epoch}"),
             monitor="val_loss",
         )
 
-        model = SleepPhase(self.dataset, self.encoder_kwargs, lr, weight_decay).to(
-            device
-        )
-
+        model = SleepPhase(self.cfg, self.dataset).to(device)
         trainer = pl.Trainer(
             logger=False,
             gpus=self.gpus,
@@ -599,7 +594,6 @@ class SleepObjective(object):
                 trial, monitor=self.monitor
             ),
         )
-
         trainer.fit(model)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()

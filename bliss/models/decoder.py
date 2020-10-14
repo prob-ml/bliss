@@ -1,5 +1,6 @@
 import numpy as np
 import warnings
+from pathlib import Path
 from astropy.io import fits
 
 import torch
@@ -23,11 +24,9 @@ def get_mgrid(slen):
     return mgrid.float().to(device) * (slen - 1) / slen
 
 
-def get_psf_params(psfield_fit_file, bands):
-    psfield = fits.open(psfield_fit_file)
-
+def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
+    psfield = fits.open(psf_fit_file)
     psf_params = torch.zeros(len(bands), 6)
-
     for i in range(len(bands)):
         band = bands[i]
 
@@ -62,8 +61,8 @@ class ImageDecoder(nn.Module):
         gal_slen=51,
         psf_slen=25,
         decoder_file=None,
-        psf_params_file="psf_params.pt",
-        background_value=686.0,
+        psf_params_file="psf_params.npy",
+        background_values=(686.0, 1123.0),
         loc_min=0.0,
         loc_max=1.0,
         add_noise=True,
@@ -123,8 +122,11 @@ class ImageDecoder(nn.Module):
         self.swap = torch.tensor([1, 0], device=device)
 
         # background
+        assert len(background_values) == n_bands
         background_shape = (self.n_bands, self.slen, self.slen)
-        self.background = torch.full(background_shape, background_value, device=device)
+        self.background = torch.zeros(background_shape, device=device)
+        for i in range(n_bands):
+            self.background[i] = background_values[i]
 
         # galaxy decoder
         self.gal_slen = gal_slen
@@ -138,15 +140,24 @@ class ImageDecoder(nn.Module):
             dec.eval().requires_grad_(False)
             self.galaxy_decoder = dec
 
-        # load psf_params
+        # load psf params + grid
+        ext = Path(psf_params_file).suffix
+        if ext == ".npy":
+            psf_params = torch.from_numpy(np.load(psf_params_file)).to(device)
+            psf_params = psf_params[list(range(n_bands))]
+        elif ext == ".fits":
+            assert n_bands == 2, "only 2 band fits files are supported."
+            bands = (2, 3)
+            psf_params = get_fit_file_psf_params(psf_params_file, bands)
+        else:
+            raise NotImplementedError(
+                "Only .npy and .fits extensions are supported for PSF params files."
+            )
+
+        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
-
-        # initial weights
-        psf_params = torch.from_numpy(np.load(psf_params_file)).to(device)
-        psf_params = psf_params[list(range(n_bands))]
-        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
 
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)

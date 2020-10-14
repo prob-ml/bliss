@@ -66,15 +66,15 @@ class TestStarWakeNet:
         test_star = torch.load(paths["data"].joinpath("3_star_test.pt"))
         test_image = test_star["images"]
         test_slen = test_image.size(-1)
+        image_decoder = dataset.image_decoder
+        background_value = image_decoder.background.mean().item()
 
-        # TODO: Reuse these when creating the background in the fixture
         # initialize background params, which will create the true background
         init_background_params = torch.zeros(1, 3, device=devices.device)
-        init_background_params[0, 0] = 686.0
+        init_background_params[0, 0] = background_value
 
         n_samples = 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
-        image_decoder = dataset.image_decoder
         assert image_decoder.slen == test_slen
         wake_phase_model = wake.WakeNet(
             trained_encoder,
