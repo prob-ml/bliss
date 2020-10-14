@@ -1,54 +1,30 @@
 import pytest
 import torch
 import pytorch_lightning as pl
-
 from bliss import wake
 
 
 @pytest.fixture(scope="module")
-def star_dataset(decoder_setup, device_setup):
-    psf_params = decoder_setup.get_fitted_psf_params()
-    batch_size = 128 if device_setup.use_cuda else 1
-    n_batches = 10 if device_setup.use_cuda else 1
-
-    return decoder_setup.get_star_dataset(
-        psf_params,
-        n_bands=1,
-        slen=30,
-        tile_slen=2,
-        max_sources=2,
-        min_sources=0,
-        # this is so that the avg. number of sources
-        # a 30 x 30 image is (approx) 3
-        mean_sources=0.004,
-        batch_size=batch_size,
-        n_batches=n_batches,
-    )
+def dataset(get_dataset, devices):
+    batch_size = 128 if devices.use_cuda else 1
+    n_batches = 10 if devices.use_cuda else 1
+    overrides = ["model=basic_sleep_star"]
+    dataset = get_dataset(batch_size, n_batches, overrides=overrides)
+    return dataset
 
 
 @pytest.fixture(scope="module")
-def trained_encoder(star_dataset, encoder_setup, device_setup):
-    n_epochs = 120 if device_setup.use_cuda else 1
-    trained_encoder = encoder_setup.get_trained_encoder(
-        star_dataset,
-        n_epochs=n_epochs,
-        ptile_slen=star_dataset.tile_slen + 6,
-        tile_slen=star_dataset.tile_slen,
-        max_detections=star_dataset.max_sources,
-        enc_hidden=256,
-        enc_kern=3,
-        enc_conv_c=20,
-    )
-
-    return trained_encoder.to(device_setup.device)
+def trained_encoder(dataset, get_trained_encoder, devices):
+    n_epochs = 120 if devices.use_cuda else 1
+    overrides = ["model=basic_sleep_star"]
+    image_encoder = get_trained_encoder(n_epochs, dataset, overrides=overrides)
+    return image_encoder
 
 
-@pytest.mark.skip
 class TestStarSleepEncoder:
     @pytest.mark.parametrize("n_stars", ["1", "3"])
-    def test_star_sleep(self, trained_encoder, n_stars, paths, device_setup):
-        device = device_setup.device
-
+    def test_star_sleep(self, trained_encoder, n_stars, paths, devices):
+        device = devices.device
         test_star = torch.load(paths["data"].joinpath(f"{n_stars}_star_test.pt"))
         test_image = test_star["images"].to(device)
 
@@ -65,7 +41,7 @@ class TestStarSleepEncoder:
 
         # we only expect our assert statements to be true
         # when the model is trained in full, which requires cuda
-        if not device_setup.use_cuda:
+        if not devices.use_cuda:
             return
 
         # test n_sources and locs
@@ -84,7 +60,7 @@ class TestStarSleepEncoder:
 
 
 class TestStarWakeNet:
-    def test_star_wake(self, trained_encoder, star_dataset, paths, device_setup):
+    def test_star_wake(self, trained_encoder, dataset, paths, devices):
         # load the test image
         # 3-stars 30*30 pixels.
         test_star = torch.load(paths["data"].joinpath("3_star_test.pt"))
@@ -93,12 +69,12 @@ class TestStarWakeNet:
 
         # TODO: Reuse these when creating the background in the fixture
         # initialize background params, which will create the true background
-        init_background_params = torch.zeros(1, 3, device=device_setup.device)
+        init_background_params = torch.zeros(1, 3, device=devices.device)
         init_background_params[0, 0] = 686.0
 
         n_samples = 1
         hparams = {"n_samples": n_samples, "lr": 0.001}
-        image_decoder = star_dataset.image_decoder
+        image_decoder = dataset.image_decoder
         assert image_decoder.slen == test_slen
         wake_phase_model = wake.WakeNet(
             trained_encoder,
@@ -112,7 +88,7 @@ class TestStarWakeNet:
         n_epochs = 1
 
         wake_trainer = pl.Trainer(
-            gpus=device_setup.gpus,
+            gpus=devices.gpus,
             profiler=None,
             logger=False,
             checkpoint_callback=False,
