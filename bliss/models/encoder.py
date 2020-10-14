@@ -109,7 +109,7 @@ class ImageEncoder(nn.Module):
         assert self.edge_padding % 1 == 0, "amount of padding should be an integer"
         self.edge_padding = int(self.edge_padding)
 
-        self.tile_coords = _get_tile_coords(slen, self.tile_slen)
+        self.tile_coords = _get_tile_coords(self.slen, self.tile_slen)
         assert self.slen % self.tile_slen == 0
         self.n_tiles_per_image = int((self.slen / self.tile_slen) ** 2)
 
@@ -422,13 +422,13 @@ class ImageEncoder(nn.Module):
         return tile_locs, tile_galaxy_params, tile_log_fluxes
 
     def get_full_params_from_sampled_params(
-        self, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
+        self, slen, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
     ):
         # NOTE: off sources should have tile_locs == 0.
         # NOTE: assume that each param in each tile is already pushed to the front.
 
         # coordinates of the tiles
-        tile_coords = _get_tile_coords(self.slen, self.tile_slen)
+        tile_coords = _get_tile_coords(slen, self.tile_slen)
 
         # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
         assert len(tile_locs_sampled.shape) == 4
@@ -451,7 +451,7 @@ class ImageEncoder(nn.Module):
         tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
         tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)
         bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
-        _locs = (tile_locs * self.tile_slen + bias) / self.slen
+        _locs = (tile_locs * self.tile_slen + bias) / slen
         _locs *= tile_is_on_array.unsqueeze(2)
 
         # sort locs and clip
@@ -557,6 +557,8 @@ class ImageEncoder(nn.Module):
         )
 
     def map_estimate(self, image):
+
+        slen = image.shape[-1]
         (
             tile_n_sources,
             tile_locs,
@@ -572,6 +574,7 @@ class ImageEncoder(nn.Module):
             log_fluxes,
             galaxy_bool,
         ) = self.get_full_params_from_sampled_params(
+            slen,
             tile_n_sources,
             tile_locs,
             tile_galaxy_params,
