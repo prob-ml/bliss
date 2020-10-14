@@ -31,8 +31,8 @@ encoder:
   params:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
-    tile_slen: ${model.decoder.tile_slen}
+    tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: 8
-    max_detections: ${model.decoder.max_sources}
+    max_detections: ${model.decoder.params.max_sources}
     n_galaxy_params: ${model.galaxy.latent_dim}
     background_pad_value: ${model.image.background.0}
