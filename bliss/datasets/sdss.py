@@ -1,14 +1,41 @@
 import pathlib
 import pickle
 import numpy as np
+import torch
+import torch.nn.functional as F
 from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
 from astropy.wcs import WCS
 
 
+def construct_subpixel_grid_base(size_x, size_y):
+    grid_x = np.linspace(-1.0, 1.0, num=size_x)
+    grid_y = np.linspace(-1.0, 1.0, num=size_y)
+
+    G_x    = torch.stack([torch.from_numpy(grid_x)]*size_y, dim=0)
+    G_y    = torch.stack([torch.from_numpy(grid_y)]*size_x, dim=1)
+
+    G      = torch.stack([G_x, G_y], dim=2)
+
+    return G
+
+def construct_subpixel_grid(G, shift_x, shift_y):
+    G_shift = G.clone()
+    G_shift[:, :, 0] += shift_x
+    G_shift[:, :, 1] += shift_y
+    return G_shift
+
+def center_stamp_subpixel(stamp, pt, pr, G):
+    stamp_torch = torch.from_numpy(stamp)
+    size_y, size_x = stamp.shape
+    shift_x     = 2*(pt - int(pt + 0.5)) / size_x
+    shift_y     = 2*(pr - int(pr + 0.5)) / size_y
+    G_shift     = construct_subpixel_grid(G, shift_x, shift_y).float()
+    stamp_shifted = F.grid_sample(stamp_torch.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False)
+    return stamp_shifted.squeeze(0).squeeze(0).numpy()
 class SloanDigitalSkySurvey(Dataset):
-    def __init__(self, sdss_dir, run=3900, camcol=6, fields=None, bands=[2], stampsize=5, overwrite_cache=False):
+    def __init__(self, sdss_dir, run=3900, camcol=6, fields=None, bands=[2], stampsize=5, overwrite_cache=False, center_subpixel=True):
         super(SloanDigitalSkySurvey, self).__init__()
 
         self.sdss_path = pathlib.Path(sdss_dir)
@@ -16,6 +43,7 @@ class SloanDigitalSkySurvey(Dataset):
         self.bands = bands
         self.stampsize=stampsize
         self.overwrite_cache = overwrite_cache
+        self.center_subpixel = center_subpixel
 
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
@@ -76,6 +104,8 @@ class SloanDigitalSkySurvey(Dataset):
         pts = []
         bgs = []
         flxs = []
+
+        G = construct_subpixel_grid_base(self.stampsize, self.stampsize)
         for (ra, dec, f, flux) in zip(ras, decs, po_fits["thing_id"][is_target], fluxes):
             # pt = "time" in pixel coordinates
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
@@ -104,6 +134,8 @@ class SloanDigitalSkySurvey(Dataset):
                 edge_stamp=True
             if (not edge_stamp) or allow_edge:
                 stamp = img[row_lower:row_upper, col_lower:col_upper]
+                if self.center_subpixel:
+                    stamp = center_stamp_subpixel(stamp, pt, pr, G)
                 stamps.append(stamp)
                 pts.append(pt)
                 stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
