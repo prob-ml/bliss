@@ -9,7 +9,7 @@ general:
   overwrite: False
 
 paths:
-  root: ${env:BLISS}
+  root: ${env:HOME}/bliss
   logs: ${paths.root}/logs
   output: ${paths.logs}/example
 
