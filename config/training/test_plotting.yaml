@@ -2,7 +2,7 @@
 num_workers: 0
 deterministic: False
 validation_plot_start: 0
-n_epochs: 1
+n_epochs: 10
 trainer:
   profiler: False
   logger: False
