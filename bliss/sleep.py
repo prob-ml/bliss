@@ -589,10 +589,10 @@ class SleepObjective(object):
             gpus=self.gpus,
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
-            callbacks=[self.metrics_callback],
-            early_stop_callback=PyTorchLightningPruningCallback(
-                trial, monitor=self.monitor
-            ),
+            callbacks=[
+                self.metrics_callback,
+                PyTorchLightningPruningCallback(trial, monitor=self.monitor),
+            ],
         )
         trainer.fit(model)
 
