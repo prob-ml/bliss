@@ -2,6 +2,7 @@ import pytest
 import torch
 
 
+@pytest.mark.skip
 class TestBinaryEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(self, decoder_setup, encoder_setup, device_setup):

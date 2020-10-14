@@ -1,0 +1,17 @@
+defaults:
+  - optimizer: adam
+  - model: basic_sleep_star
+  - training: default
+  - dataset: default
+
+general:
+  overwrite: False
+
+paths:
+  root: ${env:HOME}/bliss
+  logs: ${paths.root}/logs
+  output: ${paths.logs}/example
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d_%H-%M-%S}_${hydra.job.override_dirname}

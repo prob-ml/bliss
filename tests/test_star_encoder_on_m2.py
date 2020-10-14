@@ -10,39 +10,16 @@ np.random.seed(43)
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(decoder_setup, encoder_setup, device_setup, paths):
-    device = device_setup.device
-    use_cuda = device_setup.use_cuda
-
-    # load SDSS PSF
-    psf_file = os.path.join(paths["data"], "psField-002583-2-0136.fits")
-    init_psf_params = decoder.get_psf_params(psf_file, bands=[2, 3]).to(device)
+def trained_star_encoder_m2(get_dataset, get_trained_encoder, paths, devices):
+    device = devices.device
+    use_cuda = devices.use_cuda
     n_epochs = 200 if use_cuda else 1
-
-    star_dataset = decoder_setup.get_star_dataset(
-        init_psf_params,
-        n_bands=2,
-        slen=100,
-        tile_slen=2,
-        n_batches=10 if use_cuda else 1,
-        batch_size=20 if use_cuda else 1,
-        max_sources=2,
-        mean_sources=0.48,
-        min_sources=0,
-        f_min=1e3,
-        f_max=1e6,
-        alpha=0.5,
-    )
-    trained_encoder = encoder_setup.get_trained_encoder(
-        star_dataset,
-        n_epochs=n_epochs,
-        ptile_slen=8,
-        tile_slen=2,
-        enc_conv_c=20,
-        enc_kern=3,
-        enc_hidden=256,
-    )
-    return trained_encoder
+    n_batches = 10 if use_cuda else 1
+    batch_size = 20 if use_cuda else 1
+    overrides = ["model=star_m2", "training=tests"]
+    dataset = get_dataset(batch_size, n_batches, overrides)
+    trained_encoder = get_trained_encoder(n_epochs, dataset, overrides)
+    return trained_encoder.to(device)
 
 
 def filter_params(locs, fluxes, slen, pad=5):
@@ -108,8 +85,8 @@ def get_summary_stats(
 
 @pytest.mark.slow
 class TestStarSleepEncoderM2:
-    def test_star_sleep_m2(self, trained_star_encoder_m2, device_setup, paths):
-        device = device_setup.device
+    def test_star_sleep_m2(self, trained_star_encoder_m2, devices, paths):
+        device = devices.device
 
         # the trained star encoder
         trained_star_encoder_m2.eval()
@@ -136,7 +113,7 @@ class TestStarSleepEncoderM2:
         est_fluxes = est_log_fluxes.exp()
 
         # check metrics if cuda is true
-        if not device_setup.use_cuda:
+        if not devices.use_cuda:
             return
 
         # summary statistics

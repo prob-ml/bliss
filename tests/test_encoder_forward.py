@@ -5,13 +5,13 @@ from bliss.models import encoder
 
 
 class TestSourceEncoder:
-    def test_forward(self, device_setup):
+    def test_forward(self, devices):
         """
         * Test that forward returns the correct pattern of zeros.
         * Test that variational parameters inside h agree with those returned from forward.
         * Test everything works with n_stars=None in forward.
         """
-        device = device_setup.device
+        device = devices.device
 
         n_image_tiles = 30
         max_detections = 4
@@ -131,9 +131,9 @@ class TestSourceEncoder:
                         == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
                     )
 
-    def test_forward_to_hidden2d(self, device_setup):
+    def test_forward_to_hidden2d(self, devices):
         """Consistency check of using forward vs get_var_params"""
-        device = device_setup.device
+        device = devices.device
 
         n_image_tiles = 30
         max_detections = 4
@@ -178,14 +178,14 @@ class TestSourceEncoder:
                 pred_i = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 
                 assert (pred_i["loc_mean"] - pred["loc_mean"][i]).abs().max() < 1e-6
-                assert torch.all(pred_i["loc_logvar"] == pred["loc_logvar"][i])
-                assert torch.all(pred_i["log_flux_mean"] == pred["log_flux_mean"][i])
+                assert torch.all(pred_i["loc_logvar"].eq(pred["loc_logvar"][i]))
+                assert torch.all(pred_i["log_flux_mean"].eq(pred["log_flux_mean"][i]))
                 assert torch.all(
-                    pred_i["log_flux_logvar"] == pred["log_flux_logvar"][i]
+                    pred_i["log_flux_logvar"].eq(pred["log_flux_logvar"][i])
                 )
                 assert torch.all(
-                    pred_i["galaxy_param_mean"] == pred["galaxy_param_mean"][i]
+                    pred_i["galaxy_param_mean"].eq(pred["galaxy_param_mean"][i])
                 )
                 assert torch.all(
-                    pred_i["galaxy_param_logvar"] == pred["galaxy_param_logvar"][i]
+                    pred_i["galaxy_param_logvar"].eq(pred["galaxy_param_logvar"][i])
                 )
