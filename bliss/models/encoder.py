@@ -71,17 +71,17 @@ def pickble_prob_galaxy_func(x):
 class ImageEncoder(nn.Module):
     def __init__(
         self,
-        slen=100,
-        ptile_slen=8,
-        tile_slen=2,
         n_bands=1,
+        slen=100,
+        tile_slen=2,
+        ptile_slen=8,
         max_detections=2,
         n_galaxy_params=8,
+        background_pad_value=686.0,
         enc_conv_c=20,
         enc_kern=3,
         enc_hidden=256,
         momentum=0.5,
-        background_pad_value=686.0,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -97,7 +97,6 @@ class ImageEncoder(nn.Module):
 
         """
         super(ImageEncoder, self).__init__()
-
         # image parameters
         self.slen = slen
         self.n_bands = n_bands

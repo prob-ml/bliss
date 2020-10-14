@@ -1,8 +1,8 @@
 import math
 import numpy as np
 from itertools import permutations
-import inspect
 import matplotlib.pyplot as plt
+from omegaconf import DictConfig
 
 import torch
 from torch.nn import CrossEntropyLoss
@@ -110,38 +110,21 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(
-        self,
-        dataset,
-        encoder_kwargs,
-        lr=1e-3,
-        weight_decay=1e-5,
-        validation_plot_start=5,
-    ):
+    def __init__(self, cfg: DictConfig, dataset):
         super(SleepPhase, self).__init__()
+        self.cfg = cfg
 
-        # assumes dataset is a IterableDataset class.
         self.dataset = dataset
         self.image_decoder = self.dataset.image_decoder
-        self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
+        self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
 
         # avoid calculating gradients of decoder.
         self.image_decoder.requires_grad_(False)
 
-        self.validation_plot_start = validation_plot_start
-        assert self.dataset.latent_dim == self.image_encoder.n_galaxy_params
+        self.validation_plot_start = cfg.training.validation_plot_start
+        assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
 
-        self.hparams = {
-            "lr": lr,
-            "weight_decay": weight_decay,
-            "batch_size": self.dataset.batch_size,
-            "n_batches": self.dataset.n_batches,
-            "n_bands": self.dataset.n_bands,
-            "max_sources": self.image_decoder.max_sources,
-            "mean_sources": self.image_decoder.mean_sources,
-            "min_sources": self.image_decoder.min_sources,
-            "prob_galaxy": self.image_decoder.prob_galaxy,
-        }
+        self.hparams = {**self.cfg.optimizer.params}
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder(image_ptiles, n_sources)
@@ -195,11 +178,11 @@ class SleepPhase(pl.LightningModule):
         n_tiles = batch_size * n_tiles_per_image
         max_sources = self.image_decoder.max_sources
         n_bands = self.image_decoder.n_bands
-        latent_dim = self.image_decoder.latent_dim
+        n_galaxy_params = self.image_decoder.n_galaxy_params
 
         true_tile_locs = true_tile_locs.view(n_tiles, max_sources, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.view(
-            n_tiles, max_sources, latent_dim
+            n_tiles, max_sources, n_galaxy_params
         )
         true_tile_log_fluxes = true_tile_log_fluxes.view(n_tiles, max_sources, n_bands)
         true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_tiles, max_sources)
@@ -284,8 +267,8 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": self.hparams.lr}],
-            weight_decay=self.hparams.weight_decay,
+            [{"params": self.image_encoder.parameters(), "lr": self.hparams["lr"]}],
+            weight_decay=self.hparams["weight_decay"],
         )
 
     def train_dataloader(self):
@@ -534,84 +517,22 @@ class SleepPhase(pl.LightningModule):
         param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
         return param_log_probs_all
 
-    @staticmethod
-    def add_args(parser):
-
-        # encoder parameters.
-        parser.add_argument(
-            "--ptile-slen",
-            type=int,
-            default=8,
-            help="Side length of the padded tile in pixels.",
-        )
-        parser.add_argument(
-            "--tile-slen",
-            type=int,
-            default=2,
-            help="Distance between tile centers in pixels.",
-        )
-
-        parser.add_argument(
-            "--max-detections",
-            type=int,
-            default=2,
-            help="Number of max detections in each tile. ",
-        )
-        parser.add_argument(
-            "--n-galaxy-params",
-            type=int,
-            default=8,
-            help="Same as latent dim for galaxies.",
-        )
-
-        # network parameters.
-        parser.add_argument("--enc-conv-c", type=int, default=20)
-        parser.add_argument("--enc-kern", type=int, default=3)
-        parser.add_argument("--enc-hidden", type=int, default=256)
-        parser.add_argument("--momentum", type=float, default=0.5)
-
-        # validation
-        parser.add_argument("--validation-plot-start", type=int, default=5)
-
-    @classmethod
-    def from_args(cls, args, dataset):
-        args_dict = vars(args)
-        assert args_dict["latent_dim"] == args_dict["n_galaxy_params"]
-
-        encoder_params = inspect.signature(encoder.ImageEncoder).parameters
-        encoder_kwargs = {
-            param: value
-            for param, value in args_dict.items()
-            if param in encoder_params
-        }
-
-        sleep_params = list(inspect.signature(cls).parameters)
-        sleep_params.remove("dataset")
-        sleep_params.remove("encoder_kwargs")
-        sleep_kwargs = {
-            param: value for param, value in args_dict.items() if param in sleep_params
-        }
-
-        return cls(dataset, encoder_kwargs, **sleep_kwargs)
-
 
 class SleepObjective(object):
     def __init__(
         self,
         dataset,
-        encoder_kwargs: dict,
+        cfg: DictConfig,
         max_epochs: int,
-        lr: tuple,
-        weight_decay: tuple,
         model_dir,
         metrics_callback,
         monitor,
         gpus=0,
     ):
         self.dataset = dataset
+        self.cfg = cfg
+        encoder_kwargs = cfg.model.encoder.params
 
-        assert type(encoder_kwargs["enc_conv_c"]) is tuple
-        assert type(encoder_kwargs["enc_hidden"]) is tuple
         assert (
             len(encoder_kwargs["enc_conv_c"]) == 3
             and len(encoder_kwargs["enc_hidden"]) == 3
@@ -625,11 +546,10 @@ class SleepObjective(object):
         self.enc_hidden_max = self.encoder_kwargs["enc_hidden"][1]
         self.enc_hidden_int = self.encoder_kwargs["enc_hidden"][2]
 
-        assert type(lr) is tuple
-        assert type(weight_decay) is tuple
-        assert len(lr) == 2 and len(weight_decay) == 2
-        self.lr = lr
-        self.weight_decay = weight_decay
+        assert len(cfg.optimizer.params.lr) == 2
+        assert len(cfg.optimizer.params.weight_decay) == 2
+        self.lr = cfg.optimizer.params.lr
+        self.weight_decay = cfg.optimizer.params.weight_decay
 
         self.max_epochs = max_epochs
         self.model_dir = model_dir
@@ -638,14 +558,14 @@ class SleepObjective(object):
         self.gpus = gpus
 
     def __call__(self, trial):
-        self.encoder_kwargs["enc_conv_c"] = trial.suggest_int(
+        self.cfg.model.encoder.params["enc_conv_c"] = trial.suggest_int(
             "enc_conv_c",
             self.enc_conv_c_min,
             self.enc_conv_c_max,
             self.enc_conv_c_int,
         )
 
-        self.encoder_kwargs["enc_hidden"] = trial.suggest_int(
+        self.cfg.model.encoder.params["enc_hidden"] = trial.suggest_int(
             "enc_hidden",
             self.enc_hidden_min,
             self.enc_hidden_max,
@@ -656,27 +576,24 @@ class SleepObjective(object):
         weight_decay = trial.suggest_loguniform(
             "weight_decay", self.weight_decay[0], self.weight_decay[1]
         )
+        self.cfg.optimizer.params.update(dict(lr=lr, weight_decay=weight_decay))
 
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             self.model_dir.joinpath("trial_{}".format(trial.number), "{epoch}"),
             monitor="val_loss",
         )
 
-        model = SleepPhase(self.dataset, self.encoder_kwargs, lr, weight_decay).to(
-            device
-        )
-
+        model = SleepPhase(self.cfg, self.dataset).to(device)
         trainer = pl.Trainer(
             logger=False,
             gpus=self.gpus,
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
-            callbacks=[self.metrics_callback],
-            early_stop_callback=PyTorchLightningPruningCallback(
-                trial, monitor=self.monitor
-            ),
+            callbacks=[
+                self.metrics_callback,
+                PyTorchLightningPruningCallback(trial, monitor=self.monitor),
+            ],
         )
-
         trainer.fit(model)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()

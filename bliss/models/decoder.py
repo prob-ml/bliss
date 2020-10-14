@@ -1,5 +1,6 @@
 import numpy as np
 import warnings
+from pathlib import Path
 from astropy.io import fits
 
 import torch
@@ -10,6 +11,7 @@ from torch.distributions import Poisson, Normal
 
 from .. import device
 from .encoder import get_is_on_from_n_sources
+from . import galaxy_net
 
 
 def get_mgrid(slen):
@@ -22,11 +24,9 @@ def get_mgrid(slen):
     return mgrid.float().to(device) * (slen - 1) / slen
 
 
-def get_psf_params(psfield_fit_file, bands):
-    psfield = fits.open(psfield_fit_file)
-
+def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
+    psfield = fits.open(psf_fit_file)
     psf_params = torch.zeros(len(bands), 6)
-
     for i in range(len(bands)):
         band = bands[i]
 
@@ -46,23 +46,25 @@ def get_psf_params(psfield_fit_file, bands):
 class ImageDecoder(nn.Module):
     def __init__(
         self,
-        galaxy_decoder,
-        init_psf_params,
-        background,
-        psf_slen=25,
         n_bands=1,
         slen=50,
         tile_slen=2,
         ptile_padding=2,
         prob_galaxy=0.0,
+        n_galaxy_params=8,
         max_sources=2,
         mean_sources=0.4,
         min_sources=0,
-        loc_min=0.0,
-        loc_max=1.0,
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
+        gal_slen=51,
+        psf_slen=25,
+        decoder_file=None,
+        psf_params_file="psf_params.npy",
+        background_values=(686.0, 1123.0),
+        loc_min=0.0,
+        loc_max=1.0,
         add_noise=True,
     ):
         super(ImageDecoder, self).__init__()
@@ -91,11 +93,6 @@ class ImageDecoder(nn.Module):
         self.n_tiles_per_image = int(n_tiles_per_image)
 
         self.n_bands = n_bands  # number of bands
-        self.background = background.to(device)  # sky background
-
-        assert len(background.shape) == 3
-        assert self.background.shape[0] == self.n_bands
-        assert self.background.shape[1] == self.background.shape[2] == self.slen
 
         # per-tile prior parameters on number (and type) of sources
         self.max_sources = max_sources
@@ -109,16 +106,6 @@ class ImageDecoder(nn.Module):
 
         self.add_noise = add_noise
 
-        # galaxy decoder
-        assert self.prob_galaxy > 0.0 or galaxy_decoder is None
-        self.galaxy_decoder = galaxy_decoder
-        self.latent_dim = 8
-        self.gal_slen = 51
-        if self.galaxy_decoder is not None:
-            assert self.galaxy_decoder.n_bands == self.n_bands
-            self.gal_slen = self.galaxy_decoder.slen
-            self.latent_dim = self.galaxy_decoder.latent_dim
-
         # prior parameters on fluxes
         self.f_min = f_min
         self.f_max = f_max
@@ -131,23 +118,53 @@ class ImageDecoder(nn.Module):
         # parameterizes the edges: (0, 0) is center of edge pixel
         self.cached_grid = get_mgrid(self.ptile_slen)
 
-        # load psf_params
+        # misc
+        self.swap = torch.tensor([1, 0], device=device)
+
+        # background
+        assert len(background_values) == n_bands
+        background_shape = (self.n_bands, self.slen, self.slen)
+        self.background = torch.zeros(background_shape, device=device)
+        for i in range(n_bands):
+            self.background[i] = background_values[i]
+
+        # galaxy decoder
+        self.gal_slen = gal_slen
+        self.n_galaxy_params = n_galaxy_params
+        self.galaxy_decoder = None
+        assert self.prob_galaxy > 0.0 or decoder_file is None
+        if decoder_file is not None:
+            dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, n_galaxy_params, n_bands)
+            dec = dec.to(device)
+            dec.load_state_dict(torch.load(decoder_file, map_location=device))
+            dec.eval().requires_grad_(False)
+            self.galaxy_decoder = dec
+
+        # load psf params + grid
+        ext = Path(psf_params_file).suffix
+        if ext == ".npy":
+            psf_params = torch.from_numpy(np.load(psf_params_file)).to(device)
+            psf_params = psf_params[list(range(n_bands))]
+        elif ext == ".fits":
+            assert n_bands == 2, "only 2 band fits files are supported."
+            bands = (2, 3)
+            psf_params = get_fit_file_psf_params(psf_params_file, bands)
+        else:
+            raise NotImplementedError(
+                "Only .npy and .fits extensions are supported for PSF params files."
+            )
+
+        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
 
-        # initial weights
-        self.params = nn.Parameter(init_psf_params.clone(), requires_grad=True)
-
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = self._get_psf_single_band(init_psf_params[i])
+            psf_i = self._get_psf_single_band(psf_params[i])
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
-
-        # misc utility
-        self.swap = torch.tensor([1, 0], device=device)
 
     def forward(self):
         psf = self._get_psf()
@@ -286,7 +303,7 @@ class ImageDecoder(nn.Module):
             batch_size,
             self.n_tiles_per_image,
             self.max_sources,
-            self.latent_dim,
+            self.n_galaxy_params,
         )
         sample_shape = torch.tensor(shape)
         galaxy_params = p_z.rsample(sample_shape)
@@ -513,7 +530,7 @@ class ImageDecoder(nn.Module):
     def _render_single_galaxies(self, galaxy_params, galaxy_bool):
 
         # flatten parameters
-        z = galaxy_params.reshape(-1, self.latent_dim)
+        z = galaxy_params.reshape(-1, self.n_galaxy_params)
         b = galaxy_bool.flatten()
 
         # allocate memory
@@ -542,7 +559,7 @@ class ImageDecoder(nn.Module):
         assert self.galaxy_decoder is not None
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
-        assert galaxy_params.shape[2] == self.latent_dim
+        assert galaxy_params.shape[2] == self.n_galaxy_params
 
         single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bool)
         for n in range(max_sources):
@@ -575,7 +592,7 @@ class ImageDecoder(nn.Module):
         star_bool = (1 - galaxy_bool) * is_on_array
         star_bool = star_bool.reshape(n_ptiles, self.max_sources)
         galaxy_params = galaxy_params.reshape(
-            n_ptiles, self.max_sources, self.latent_dim
+            n_ptiles, self.max_sources, self.n_galaxy_params
         )
         fluxes = fluxes.reshape(n_ptiles, self.max_sources, self.n_bands)
 
@@ -610,7 +627,7 @@ class ImageDecoder(nn.Module):
         locs_flattened = locs.reshape(n_ptiles, self.max_sources, 2)
         galaxy_bool_flattened = galaxy_bool.reshape(n_ptiles, self.max_sources)
         galaxy_params_flattened = galaxy_params.reshape(
-            n_ptiles, self.max_sources, self.latent_dim
+            n_ptiles, self.max_sources, self.n_galaxy_params
         )
         fluxes_flattened = fluxes.reshape(n_ptiles, self.max_sources, self.n_bands)
 
@@ -650,7 +667,7 @@ class ImageDecoder(nn.Module):
         images = self.construct_full_image_from_ptiles(image_ptiles, self.tile_slen)
 
         # add background and noise
-        images = images + self.background.unsqueeze(0)
+        images += self.background.unsqueeze(0)
         if self.add_noise:
             images = self._apply_noise(images)
 
