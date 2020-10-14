@@ -32,14 +32,22 @@ class SloanDigitalSkySurvey(Dataset):
             gain = fieldgains[i]
             if (not fields) or _field in fields:
                 # load the catalog distributed with SDSS
-                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
-                po_path = camcol_path.joinpath(str(_field), po_file)
-                try:
-                    po_fits = fits.getdata(po_path)
-                except IndexError as e:
-                        print("Warning: IndexError while accessing field: {}. This field will not be included.".format(_field))
-                        print(e)
-                        po_fits = None
+                po_file  = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
+                po_cache = "photoObj-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, _field)
+                po_path  = camcol_path.joinpath(str(_field), po_file)
+                po_cache_path = camcol_path.joinpath(str(_field), po_cache)
+                if not po_cache_path.exists():
+                    try:
+                        po_fits = fits.getdata(po_path)
+                    except IndexError as e:
+                            print("Warning: IndexError while accessing field: {}. This field will not be included.".format(_field))
+                            print(e)
+                            po_fits = None
+                    pickle.dump(po_fits, po_cache_path.open("wb+"))
+                else:
+                    po_fits = pickle.load(po_cache_path.open("rb+"))
+                    if po_fits is None:
+                        print("Warning: cached data for field {} is None. This field will not be included".format(_field))
 
                 if po_fits is not None:
                     self.rcfgcs.append((run, camcol, _field, gain, po_fits))
