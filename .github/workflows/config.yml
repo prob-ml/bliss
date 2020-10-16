@@ -18,6 +18,9 @@ jobs:
         python-version: [3.7]
 
     steps:
+    - name: setup environment variables
+      run: echo "BLISS_HOME=${{ secrets.BLISS_HOME }}" >> $GITHUB_ENV
+
     - name: Checkout github repo (+ download lfs dependencies)
       uses: actions/checkout@v2
       with:
