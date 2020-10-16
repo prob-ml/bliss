@@ -12,7 +12,7 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     """
     assert not torch.any(torch.isnan(n_sources))
     assert torch.all(n_sources >= 0)
-    assert torch.all(n_sources <= max_sources)
+    assert torch.all(n_sources.le(max_sources))
 
     is_on_array = torch.zeros(
         *n_sources.shape, max_sources, device=device, dtype=torch.float
@@ -72,7 +72,6 @@ class ImageEncoder(nn.Module):
     def __init__(
         self,
         n_bands=1,
-        slen=100,
         tile_slen=2,
         ptile_slen=8,
         max_detections=2,
@@ -98,7 +97,6 @@ class ImageEncoder(nn.Module):
         """
         super(ImageEncoder, self).__init__()
         # image parameters
-        self.slen = slen
         self.n_bands = n_bands
         self.background_pad_value = background_pad_value
 
@@ -108,10 +106,6 @@ class ImageEncoder(nn.Module):
         self.edge_padding = (ptile_slen - tile_slen) / 2
         assert self.edge_padding % 1 == 0, "amount of padding should be an integer"
         self.edge_padding = int(self.edge_padding)
-
-        self.tile_coords = _get_tile_coords(self.slen, self.tile_slen)
-        assert self.slen % self.tile_slen == 0
-        self.n_tiles_per_image = int((self.slen / self.tile_slen) ** 2)
 
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
