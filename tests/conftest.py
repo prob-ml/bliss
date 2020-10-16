@@ -94,7 +94,6 @@ def get_dataset(paths):
     def _dataset(batch_size, n_batches, overrides=None):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            cfg.paths.update({"root": paths["root"].as_posix()})
             cfg.dataset.params.update(
                 {"n_batches": n_batches, "batch_size": batch_size}
             )
@@ -109,7 +108,6 @@ def get_trained_encoder(paths, devices):
     def _encoder(n_epochs, dataset, overrides=None):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            cfg.paths.update({"root": paths["root"].as_posix()})
             cfg.training.trainer.update(
                 {"max_epochs": n_epochs, "min_epochs": n_epochs, "gpus": devices.gpus}
             )

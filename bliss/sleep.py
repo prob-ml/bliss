@@ -464,6 +464,8 @@ class SleepPhase(pl.LightningModule):
         if self.current_epoch >= self.validation_plot_start:
             self.make_validation_plots(outputs)
 
+        slen = outputs[-1]["log"]["images"].shape[-1]
+
         # log other losses
         # first we log some of the important losses and average over all batches.
         avg_loss = 0
@@ -473,7 +475,8 @@ class SleepPhase(pl.LightningModule):
         avg_star_params_loss = 0
         avg_galaxy_bool_loss = 0
 
-        tiles_per_batch = self.dataset.batch_size * self.image_encoder.n_tiles_per_image
+        n_tiles_per_image = int((slen / self.image_encoder.tile_slen) ** 2)
+        tiles_per_batch = self.dataset.batch_size * n_tiles_per_image
         tiles_per_epoch = tiles_per_batch * self.dataset.n_batches
 
         # len(output) == n_batches

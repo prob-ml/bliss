@@ -3,8 +3,6 @@ import pytest
 import os
 import numpy as np
 
-from bliss.models import decoder
-
 torch.manual_seed(84)
 np.random.seed(43)
 
