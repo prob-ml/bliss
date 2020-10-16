@@ -416,10 +416,11 @@ class ImageEncoder(nn.Module):
         return tile_locs, tile_galaxy_params, tile_log_fluxes
 
     def get_full_params_from_sampled_params(
-        self, slen, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
+        self, slen: int, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
     ):
         # NOTE: off sources should have tile_locs == 0.
         # NOTE: assume that each param in each tile is already pushed to the front.
+        assert type(slen) is int
 
         # coordinates of the tiles
         tile_coords = _get_tile_coords(slen, self.tile_slen)
