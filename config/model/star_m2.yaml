@@ -30,7 +30,6 @@ decoder:
 encoder:
   params:
     n_bands: ${model.image.n_bands}
-    slen: ${model.image.slen}
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: 8
     max_detections: ${model.decoder.params.max_sources}

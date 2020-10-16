@@ -26,7 +26,6 @@ decoder:
 encoder:
   params:
     n_bands: ${model.image.n_bands}
-    slen: ${model.image.slen}
     tile_slen: ${model.image.slen}
     ptile_slen: ${model.image.slen}
     max_detections: ${model.decoder.params.max_sources}
