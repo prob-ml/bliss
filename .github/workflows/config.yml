@@ -40,9 +40,7 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
     - name: Create environment variables
-      run: |
-        echo "BLISS_HOME=$GITHUB_WORKSPACE"
-        echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+      run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
     - name: Run Tests
       run: |
