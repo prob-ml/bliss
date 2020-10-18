@@ -41,8 +41,8 @@ jobs:
 
     - name: Create environment variables
       run: |
-        echo "BLISS_HOME=$HOME/bliss"
-        echo "BLISS_HOME=$HOME/bliss" >> $GITHUB_ENV
+        echo "BLISS_HOME=$GITHUB_WORKSPACE"
+        echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
     - name: Run Tests
       run: |
