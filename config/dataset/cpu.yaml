@@ -2,4 +2,4 @@
 name: SimulatedDataset
 params:
   n_batches: 1
-  batch_size: 1
+  batch_size: 2
