@@ -39,6 +39,7 @@ jobs:
 
     - name: Run Tests
       run: |
+        echo "BLISS_HOME=$HOME/bliss"
         echo "BLISS_HOME=$HOME/bliss" >> $GITHUB_ENV
         black --check .
         pytest --cov=./bliss --cov-report=xml --durations=0 --runslow
