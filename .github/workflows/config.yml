@@ -17,6 +17,8 @@ jobs:
       matrix:
         python-version: [3.7]
 
+    steps:
+
     - name: Checkout github repo (+ download lfs dependencies)
       uses: actions/checkout@v2
       with:
