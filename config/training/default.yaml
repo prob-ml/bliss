@@ -5,10 +5,10 @@ validation_plot_start: 5
 n_epochs: 101
 trainer:
   profiler: False
-  logger: False
+  logger: True
   checkpoint_callback: False
   reload_dataloaders_every_epoch: True
-  check_val_every_n_epoch: 50
+  check_val_every_n_epoch: 10
   max_epochs: ${training.n_epochs}
   min_epochs: ${training.n_epochs}
   gpus: "2,"
