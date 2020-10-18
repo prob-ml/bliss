@@ -5,13 +5,15 @@ import torch
 @pytest.mark.parametrize("n_stars", ["1", "3"])
 def test_star_sleep(n_stars, get_dataset, get_trained_encoder, paths, devices):
     # create trained encoder
-    overrides = ["model=basic_sleep_star", "training=tests"]
     device = devices.device
-    batch_size = 128 if devices.use_cuda else 1
-    n_batches = 10 if devices.use_cuda else 1
-    n_epochs = 120 if devices.use_cuda else 1
-    dataset = get_dataset(batch_size, n_batches, overrides=overrides)
-    trained_encoder = get_trained_encoder(n_epochs, dataset, overrides=overrides)
+    use_cuda = devices.use_cuda
+    overrides = dict(
+        model="basic_sleep_star",
+        dataset="default" if use_cuda else "cpu",
+        training="tests_default" if use_cuda else "cpu",
+    )
+    dataset = get_dataset(overrides)
+    trained_encoder = get_trained_encoder(dataset, overrides)
     test_star = torch.load(paths["data"].joinpath(f"{n_stars}_star_test.pt"))
     test_image = test_star["images"].to(device)
 
@@ -28,7 +30,7 @@ def test_star_sleep(n_stars, get_dataset, get_trained_encoder, paths, devices):
 
     # we only expect our assert statements to be true
     # when the model is trained in full, which requires cuda
-    if not devices.use_cuda:
+    if not use_cuda:
         return
 
     # test n_sources and locs

@@ -19,11 +19,10 @@ class MetricsCallback(Callback):
 
 class TestOptunaSleep:
     def test_optuna(self, paths, devices):
-        overrides = ["model=basic_sleep_star", "training=tests"]
+        overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
+        overrides = [f"{key}={value}" for key, value in overrides.items()]
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            cfg.paths.update({"root": paths["root"].as_posix()})
-            cfg.dataset.params.update({"n_batches": 1, "batch_size": 1})
             dataset = SimulatedDataset(cfg)
             cfg.model.encoder.params.update(
                 {

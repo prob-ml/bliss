@@ -5,12 +5,9 @@ import pytorch_lightning as pl
 
 def test_star_wake(get_dataset, get_trained_encoder, paths, devices):
 
-    overrides = ["model=basic_sleep_star", "training=tests"]
-    batch_size = 1
-    n_batches = 1
-    n_epochs = 1
-    dataset = get_dataset(batch_size, n_batches, overrides=overrides)
-    trained_encoder = get_trained_encoder(n_epochs, dataset, overrides=overrides)
+    overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
+    dataset = get_dataset(overrides)
+    trained_encoder = get_trained_encoder(dataset, overrides)
 
     # load the test image
     # 3-stars 30*30 pixels.

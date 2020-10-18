@@ -5,13 +5,13 @@ import torch
 class TestGalaxyEncoder:
     @pytest.fixture(scope="class")
     def trained_encoder(self, get_dataset, get_trained_encoder, devices):
-        overrides = ["model=basic_sleep_galaxy", "training=tests"]
-        use_cuda = devices.use_cuda
-        batch_size = 32 if use_cuda else 2
-        n_batches = 10 if use_cuda else 2
-        n_epochs = 120 if use_cuda else 1
-        dataset = get_dataset(batch_size, n_batches, overrides)
-        trained_encoder = get_trained_encoder(n_epochs, dataset, overrides)
+        overrides = dict(
+            model="basic_sleep_galaxy",
+            training="tests_default" if devices.use_cuda else "cpu",
+            dataset="default" if devices.use_cuda else "cpu",
+        )
+        dataset = get_dataset(overrides)
+        trained_encoder = get_trained_encoder(dataset, overrides)
         return trained_encoder.to(devices.device)
 
     @pytest.mark.parametrize("n_galaxies", ["2"])
