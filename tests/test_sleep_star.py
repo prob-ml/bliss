@@ -3,7 +3,7 @@ import torch
 
 
 @pytest.mark.parametrize("n_stars", ["1", "3"])
-def test_star_sleep(self, get_dataset, get_trained_encoder, n_stars, paths, devices):
+def test_star_sleep(n_stars, get_dataset, get_trained_encoder, paths, devices):
     # create trained encoder
     overrides = ["model=basic_sleep_star", "training=tests"]
     device = devices.device
