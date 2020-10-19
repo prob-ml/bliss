@@ -16,7 +16,7 @@ decoder:
     ptile_padding: 1
     prob_galaxy: 0.0
     n_galaxy_params: ${model.galaxy.latent_dim}
-    max_sources: 2
+    max_sources: 1
     mean_sources: 0.015
     min_sources: 0
     f_min: 1e4
