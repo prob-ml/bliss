@@ -2,12 +2,12 @@
 num_workers: 0
 deterministic: False
 validation_plot_start: 5
-n_epochs: 101
+n_epochs: 121
 trainer:
   profiler: False
   logger: True
   checkpoint_callback: False
-  reload_dataloaders_every_epoch: True
+  reload_dataloaders_every_epoch: False
   check_val_every_n_epoch: 10
   max_epochs: ${training.n_epochs}
   min_epochs: ${training.n_epochs}
