@@ -476,7 +476,7 @@ class ImageDecoder(nn.Module):
     def _render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x n_bands x max_stars)
-        # star_bool: Is (n_ptiles x max_stars)
+        # star_bool: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
         psf = self._adjust_psf()
@@ -490,7 +490,7 @@ class ImageDecoder(nn.Module):
         assert fluxes.shape[0] == star_bool.shape[0] == n_ptiles
         assert fluxes.shape[1] == star_bool.shape[1] == max_sources
         assert fluxes.shape[2] == psf.shape[0] == self.n_bands
-        assert star_bool[2] == 1
+        assert star_bool.shape[2] == 1
 
         # all stars are just the PSF so we copy it.
         expanded_psf = psf.expand(n_ptiles, self.n_bands, -1, -1)
@@ -577,7 +577,9 @@ class ImageDecoder(nn.Module):
 
         # draw stars and galaxies
         _is_on_array = get_is_on_from_n_sources(_n_sources, self.max_sources)
-        _star_bool = (1 - _galaxy_bool) * _is_on_array.reshape(n_ptiles, -1, 1)
+        _is_on_array = _is_on_array.reshape(n_ptiles, self.max_sources, 1)
+        _star_bool = (1 - _galaxy_bool) * _is_on_array
+        _star_bool = _star_bool.reshape(n_ptiles, self.max_sources, 1)
 
         # draw stars and galaxies
         stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
