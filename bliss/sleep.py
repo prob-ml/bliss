@@ -181,12 +181,14 @@ class SleepPhase(pl.LightningModule):
         n_galaxy_params = self.image_decoder.n_galaxy_params
         assert max_sources == self.image_encoder.max_detections
 
-        true_tile_locs = true_tile_locs.view(n_ptiles, max_sources, 2)
+        true_tile_locs = true_tile_locs.reshape(n_ptiles, max_sources, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.reshape(
             n_ptiles, max_sources, n_galaxy_params
         )
-        true_tile_log_fluxes = true_tile_log_fluxes.view(n_ptiles, max_sources, n_bands)
-        true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_sources)
+        true_tile_log_fluxes = true_tile_log_fluxes.reshape(
+            n_ptiles, max_sources, n_bands
+        )
+        true_tile_galaxy_bool = true_tile_galaxy_bool.reshape(n_ptiles, max_sources)
         true_tile_n_sources = true_tile_n_sources.reshape(n_ptiles)
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(
             true_tile_n_sources, max_sources

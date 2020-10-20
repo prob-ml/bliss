@@ -273,7 +273,7 @@ class ImageDecoder(nn.Module):
         """
         assert n_stars.shape[0] == batch_size
 
-        shape = (batch_size, self.n_tiles_per_image, self.max_sources)
+        shape = (batch_size, self.n_tiles_per_image, self.max_sources, 1)
         base_fluxes = self._draw_pareto_maxed(shape)
 
         if self.n_bands > 1:
@@ -284,11 +284,11 @@ class ImageDecoder(nn.Module):
                 self.n_bands - 1,
             )
             colors = torch.rand(*shape, device=device) * 0.15 + 0.3
-            _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(-1)
-            fluxes = torch.cat((base_fluxes.unsqueeze(-1), _fluxes), dim=3)
-            fluxes *= star_bool.unsqueeze(-1)
+            _fluxes = 10 ** (colors / 2.5) * base_fluxes
+            fluxes = torch.cat((base_fluxes, _fluxes), dim=3)
+            fluxes *= star_bool.float()
         else:
-            fluxes = (base_fluxes * star_bool.float()).unsqueeze(-1)
+            fluxes = base_fluxes * star_bool.float()
 
         return fluxes
 
