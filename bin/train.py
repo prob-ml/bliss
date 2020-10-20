@@ -2,14 +2,14 @@
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
+from pathlib import Path
+import shutil
 
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
-
-from .utils import setup_paths
 
 from bliss import sleep, use_cuda
 from bliss.datasets import galaxy_datasets, catsim, simulated
@@ -25,6 +25,22 @@ datasets = {cls.__name__: cls for cls in _datasets}
 
 _models = [galaxy_net.OneCenteredGalaxy, sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
+
+
+def setup_paths(cfg: DictConfig, enforce_overwrite=True):
+    paths = OmegaConf.to_container(cfg.paths, resolve=True)
+    output = Path(paths["output"])
+    if enforce_overwrite:
+        assert not output.exists() or cfg.general.overwrite, "Enforcing overwrite."
+        if cfg.general.overwrite and output.exists():
+            shutil.rmtree(output)
+
+    output.mkdir(parents=False, exist_ok=not enforce_overwrite)
+
+    for p in paths.values():
+        assert Path(p).exists(), f"path {p.as_posix()} does not exist"
+
+    return paths
 
 
 def setup_seed(cfg):
