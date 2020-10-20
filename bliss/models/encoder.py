@@ -399,6 +399,8 @@ class ImageEncoder(nn.Module):
     @staticmethod
     def _get_samples(pred, tile_is_on_array, tile_galaxy_bool):
         # shape = (n_samples x n_ptiles x max_detections x param_dim)
+        assert tile_is_on_array.shape[-1] == 1
+        assert tile_galaxy_bool.shape[-1] == 1
         loc_mean, loc_sd = pred["loc_mean"], pred["loc_sd"]
         galaxy_param_mean = pred["galaxy_param_mean"]
         galaxy_param_sd = pred["galaxy_param_sd"]
@@ -485,25 +487,21 @@ class ImageEncoder(nn.Module):
         tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
         tile_n_sources = tile_n_sources.view(n_samples, -1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(3).float()
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get var_params conditioned on n_sources
         pred = self._get_var_params_for_n_sources(h, tile_n_sources)
 
         # other quantities based on var_params
-        # shape = (n_samples x n_ptiles x max_detections x 1)
+        # tile_galaxy_bool shape = (n_samples x n_ptiles x max_detections x 1)
         tile_galaxy_bool = torch.bernoulli(pred["prob_galaxy"]).float()
         tile_galaxy_bool *= tile_is_on_array
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["galaxy_param_sd"] = torch.exp(0.5 * pred["galaxy_param_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
-
         tile_locs, tile_galaxy_params, tile_log_fluxes = self._get_samples(
             pred, tile_is_on_array, tile_galaxy_bool
         )
-
-        tile_galaxy_bool = tile_galaxy_bool.squeeze(-1)
-
         return (
             tile_n_sources,
             tile_locs,
@@ -522,11 +520,11 @@ class ImageEncoder(nn.Module):
 
         # get best estimate for n_sources in each tile.
         # tile_n_sources shape = (1 x n_ptiles)
-        # tile_is_on_array shape = (1 x n_ptiles x max_detections)
+        # tile_is_on_array shape = (1 x n_ptiles x max_detections x 1)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-        tile_n_sources = tile_n_sources.view(1, -1)
+        tile_n_sources = tile_n_sources.reshape(1, -1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(3).float()
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get variational parameters: these are on image tiles
         # shape (all) = (n_samples x n_ptiles x max_detections x param_dim)
@@ -548,7 +546,7 @@ class ImageEncoder(nn.Module):
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
-            tile_galaxy_bool.squeeze(-1),
+            tile_galaxy_bool,
         )
 
     def map_estimate(self, image):
@@ -574,9 +572,7 @@ class ImageEncoder(nn.Module):
             tile_locs,
             tile_galaxy_params,
             tile_log_fluxes,
-            tile_galaxy_bool.unsqueeze(-1),  # shape len should be == 4
+            tile_galaxy_bool,
         )
-
-        galaxy_bool = galaxy_bool.squeeze(-1)
 
         return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool
