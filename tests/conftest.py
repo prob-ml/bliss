@@ -76,7 +76,6 @@ class DeviceSetup:
 def paths():
     root_path = pathlib.Path(__file__).parent.parent.absolute()
     return {
-        "root": root_path,
         "data": root_path.joinpath("data"),
         "model_dir": root_path.joinpath("trials_result"),
     }

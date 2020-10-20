@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 
 from . import device, plotting
-from .models import encoder
+from .models import encoder, decoder
 
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -115,7 +115,7 @@ class SleepPhase(pl.LightningModule):
         self.cfg = cfg
 
         self.dataset = dataset
-        self.image_decoder = self.dataset.image_decoder
+        self.image_decoder: decoder.ImageDecoder = self.dataset.image_decoder
         self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
 
         # avoid calculating gradients of decoder.
