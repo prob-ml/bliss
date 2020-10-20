@@ -1,3 +1,4 @@
+import pytest
 from pytorch_lightning import Callback
 from optuna.trial import FixedTrial
 from hydra.experimental import initialize, compose
@@ -17,6 +18,7 @@ class MetricsCallback(Callback):
         self.metrics.append(trainer.callback_metrics)
 
 
+@pytest.mark.skip
 class TestOptunaSleep:
     def test_optuna(self, paths, devices):
         overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
