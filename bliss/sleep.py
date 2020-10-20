@@ -369,6 +369,13 @@ class SleepPhase(pl.LightningModule):
                     tile_galaxy_bool,
                 ) = self.image_encoder.tiled_map_estimate(image)
 
+            tile_star_bool = self.image_decoder.get_star_bool(
+                tile_n_sources, tile_galaxy_bool
+            )
+            tile_fluxes = self.image_decoder.get_fluxes_from_log(
+                tile_log_fluxes, tile_star_bool
+            )
+
             # convert tile estimates to full parameterization for plotting
             (
                 n_sources,
@@ -406,7 +413,7 @@ class SleepPhase(pl.LightningModule):
                     tile_locs,
                     tile_galaxy_bool,
                     tile_galaxy_params,
-                    tile_log_fluxes,
+                    tile_fluxes,
                 )
 
                 # round up true parameters.
