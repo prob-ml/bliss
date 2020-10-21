@@ -1,6 +1,6 @@
 def test_basic_configs(get_dataset, get_trained_encoder):
     # test creating star model using config files.
-    overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
+    overrides = dict(model="basic_sleep_star_one_tile", training="cpu", dataset="cpu")
     dataset = get_dataset(overrides)
     image_decoder = dataset.image_decoder
     image_encoder = get_trained_encoder(dataset, overrides)
