@@ -101,7 +101,6 @@ class SleepObjective(object):
         use_cpu = 0
 
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
             # code that produces a warning
             trainer = pl.Trainer(
                 logger=False,

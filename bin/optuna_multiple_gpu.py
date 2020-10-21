@@ -25,6 +25,13 @@ class MetricsCallback(Callback):
 
 @hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig):
+    # grid search
+    # search_space = {
+    #    "enc_conv_c": [5, 10],
+    #    "enc_hidden": [64, 128],
+    #    "learning rate": [0.001, 0.000492],
+    #    "weight_decay": [1e-6, 0.000003],
+    # }
 
     model_dir = os.getcwd()
 
@@ -34,12 +41,13 @@ def main(cfg: DictConfig):
     study = optuna.create_study(
         storage="sqlite:///zz.db",
         direction="minimize",
+        # sampler=optuna.samplers.GridSampler(search_space),
         pruner=pruner,
     )
     n_gpu = (1, 3, 5)
 
     # set up queue of devices
-    mp.set_start_method("spawn")
+    # mp.set_start_method("spawn")
     gpu_queue = mp.Manager().Queue()
     for i in n_gpu:
         gpu_queue.put(i)
@@ -66,8 +74,8 @@ def main(cfg: DictConfig):
         gpu_queue=gpu_queue,
     )
 
-    with parallel_backend("multiprocessing", n_jobs=len(n_gpu)):
-        warnings.simplefilter("error")
+    with parallel_backend("loky"):
+        # warnings.simplefilter("error")
         study.optimize(
             objects,
             n_trials=100,
