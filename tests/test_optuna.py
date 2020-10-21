@@ -18,7 +18,7 @@ class MetricsCallback(Callback):
         self.metrics.append(trainer.callback_metrics)
 
 
-@pytest.mark.skip
+@pytest.mark.slow
 class TestOptunaSleep:
     def test_optuna(self, paths, devices):
         overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
