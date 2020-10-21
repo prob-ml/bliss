@@ -29,7 +29,9 @@ models = {cls.__name__: cls for cls in _models}
 
 def setup_paths(cfg: DictConfig, enforce_overwrite=True):
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
-    output = Path(paths["output"])
+    output = Path(paths["root"]).joinpath(paths["output"])
+    paths["output"] = output.as_posix()
+
     if enforce_overwrite:
         assert not output.exists() or cfg.general.overwrite, "Enforcing overwrite."
         if cfg.general.overwrite and output.exists():
@@ -51,8 +53,9 @@ def setup_seed(cfg):
 
 def setup_profiler(cfg, paths):
     profiler = False
+    output = Path(paths["output"])
     if cfg.training.trainer.profiler:
-        profile_file = paths["output"].joinpath("profile.txt")
+        profile_file = output.joinpath("profile.txt")
         profiler = AdvancedProfiler(output_filename=profile_file)
     return profiler
 
@@ -66,9 +69,10 @@ def setup_logger(cfg, paths):
 
 def setup_checkpoint_callback(cfg, paths, logger):
     checkpoint_callback = False
+    output = Path(paths["output"])
     if cfg.training.trainer.checkpoint_callback:
         checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
-        checkpoint_dir = paths["output"].joinpath(checkpoint_dir)
+        checkpoint_dir = output.joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
             filepath=checkpoint_dir,
             save_top_k=True,
