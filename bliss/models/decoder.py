@@ -43,6 +43,17 @@ def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
     return psf_params
 
 
+def get_star_bool(n_sources, galaxy_bool):
+    assert n_sources.shape[0] == galaxy_bool.shape[0]
+    assert galaxy_bool.shape[-1] == 1
+    max_sources = galaxy_bool.shape[-2]
+    assert n_sources.le(max_sources).all()
+    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
+    is_on_array = is_on_array.reshape(*galaxy_bool.shape)
+    star_bool = (1 - galaxy_bool) * is_on_array
+    return star_bool
+
+
 class ImageDecoder(nn.Module):
     def __init__(
         self,
@@ -340,17 +351,6 @@ class ImageDecoder(nn.Module):
         }
 
     @staticmethod
-    def get_star_bool(n_sources, galaxy_bool):
-        assert n_sources.shape[0] == galaxy_bool.shape[0]
-        assert galaxy_bool.shape[-1] == 1
-        max_sources = galaxy_bool.shape[-2]
-        assert n_sources.le(max_sources).all()
-        is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-        is_on_array = is_on_array.reshape(*galaxy_bool.shape)
-        star_bool = (1 - galaxy_bool) * is_on_array
-        return star_bool
-
-    @staticmethod
     def _get_log_fluxes(fluxes):
         log_fluxes = torch.where(
             fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(device)
@@ -607,10 +607,12 @@ class ImageDecoder(nn.Module):
         # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
         # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources x 1)
         # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
-        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x 2)
+        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x n_bands)
 
         # returns the **full** image in shape (batch_size x n_bands x slen x slen)
 
+        assert n_sources.shape[0] == locs.shape[0]
+        assert n_sources.shape[1] == locs.shape[1]
         assert galaxy_bool.shape[-1] == 1
 
         # first render the padded tiles
@@ -619,7 +621,7 @@ class ImageDecoder(nn.Module):
         )
 
         # render the image from padded tiles
-        images = self.construct_full_image_from_ptiles(image_ptiles, self.tile_slen)
+        images = self._construct_full_image_from_ptiles(image_ptiles, self.tile_slen)
 
         # add background and noise
         images += self.background.unsqueeze(0)
@@ -629,7 +631,7 @@ class ImageDecoder(nn.Module):
         return images
 
     @staticmethod
-    def construct_full_image_from_ptiles(image_ptiles, tile_slen):
+    def _construct_full_image_from_ptiles(image_ptiles, tile_slen):
         # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
         batch_size = image_ptiles.shape[0]
         n_tiles_per_image = image_ptiles.shape[1]

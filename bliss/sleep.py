@@ -13,6 +13,7 @@ import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder, decoder
+from .models.decoder import get_star_bool
 
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -365,9 +366,7 @@ class SleepPhase(pl.LightningModule):
                     tile_galaxy_bool,
                 ) = self.image_encoder.tiled_map_estimate(image)
 
-            tile_star_bool = self.image_decoder.get_star_bool(
-                tile_n_sources, tile_galaxy_bool
-            )
+            tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
             tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
 
             # convert tile estimates to full parameterization for plotting
@@ -410,14 +409,12 @@ class SleepPhase(pl.LightningModule):
                 )
 
                 # round up true parameters.
-                true_star_bool = self.image_decoder.get_star_bool(
-                    true_n_source, true_galaxy_bool
-                )
+                true_star_bool = get_star_bool(true_n_source, true_galaxy_bool)
                 true_galaxy_loc = true_loc * true_galaxy_bool
                 true_star_loc = true_loc * true_star_bool
 
                 # round up estimated parameters.
-                star_bool = self.image_decoder.get_star_bool(n_sources, galaxy_bool)
+                star_bool = get_star_bool(n_sources, galaxy_bool)
                 galaxy_loc = locs * galaxy_bool
                 star_loc = locs * star_bool
 
