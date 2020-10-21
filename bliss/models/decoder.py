@@ -228,7 +228,7 @@ class ImageDecoder(nn.Module):
 
         # long() here is necessary because used for indexing and one_hot encoding.
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
-        n_sources = n_sources.long().squeeze(-1)
+        n_sources = n_sources.long().reshape(batch_size, self.n_tiles_per_image)
         return n_sources
 
     def _sample_locs(self, is_on_array, batch_size):
