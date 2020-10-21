@@ -199,11 +199,9 @@ class SleepPhase(pl.LightningModule):
         # true_tile_n_sources has shape = (n_ptiles)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         pred = self(image_ptiles, true_tile_n_sources)
-        prob_galaxy = pred["prob_galaxy"].reshape(n_ptiles, max_sources)
 
         # the loss for estimating the true number of sources
-        n_source_log_probs = pred["n_source_log_probs"]
-        true_tile_n_sources = true_tile_is_on_array.sum(1).long()  # per tile.
+        n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)
         cross_entropy = CrossEntropyLoss(reduction="none").requires_grad_(False)
         counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
 
@@ -229,6 +227,7 @@ class SleepPhase(pl.LightningModule):
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
+        prob_galaxy = pred["prob_galaxy"].reshape(n_ptiles, max_sources)
         (
             locs_loss,
             galaxy_params_loss,
