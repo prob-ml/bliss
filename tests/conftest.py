@@ -76,7 +76,6 @@ class DeviceSetup:
 def paths():
     root_path = pathlib.Path(__file__).parent.parent.absolute()
     return {
-        "root": root_path,
         "data": root_path.joinpath("data"),
         "model_dir": root_path.joinpath("trials_result"),
     }
@@ -88,16 +87,13 @@ def devices(pytestconfig):
     return DeviceSetup(gpus)
 
 
-# TODO: avoid having to update paths in cfg.
 @pytest.fixture(scope="session")
-def get_dataset(paths):
-    def _dataset(batch_size, n_batches, overrides=None):
+def get_dataset():
+    def _dataset(overrides: dict):
+        assert "model" in overrides
+        overrides = [f"{key}={value}" for key, value in overrides.items()]
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            cfg.paths.update({"root": paths["root"].as_posix()})
-            cfg.dataset.params.update(
-                {"n_batches": n_batches, "batch_size": batch_size}
-            )
             dataset = simulated.SimulatedDataset(cfg)
         return dataset
 
@@ -105,14 +101,13 @@ def get_dataset(paths):
 
 
 @pytest.fixture(scope="session")
-def get_trained_encoder(paths, devices):
-    def _encoder(n_epochs, dataset, overrides=None):
+def get_trained_encoder(devices):
+    def _encoder(dataset, overrides: dict):
+        assert "model" in overrides
+        overrides = [f"{key}={value}" for key, value in overrides.items()]
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            cfg.paths.update({"root": paths["root"].as_posix()})
-            cfg.training.trainer.update(
-                {"max_epochs": n_epochs, "min_epochs": n_epochs, "gpus": devices.gpus}
-            )
+            cfg.training.trainer.update({"gpus": devices.gpus})
             sleep_net = sleep.SleepPhase(cfg, dataset)
             trainer = pl.Trainer(**cfg.training.trainer)
             trainer.fit(sleep_net)

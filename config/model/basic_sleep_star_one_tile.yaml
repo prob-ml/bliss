@@ -1,11 +1,10 @@
 # @package _group_
 name: SleepPhase
 image:
-  slen: 100
-  n_bands: 2
+  slen: 30
+  n_bands: 1
   background:
     - 686.0
-    - 1123.0
 galaxy:
   slen: 51
   latent_dim: 8
@@ -13,26 +12,29 @@ decoder:
   params:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
-    tile_slen: 2
-    ptile_padding: 1
+    tile_slen: ${model.image.slen}
+    ptile_padding: 0
     prob_galaxy: 0.0
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 2
-    mean_sources: 0.48
+    mean_sources: 1.5
     min_sources: 0
-    f_min: 1e3
+    f_min: 1e5
     f_max: 1e6
-    alpha: 0.5
     gal_slen: ${model.galaxy.slen}
-    decoder_file:
-    psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
+    decoder_file: null
+    psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
     background_values: ${model.image.background}
+    loc_min: 0.
+    loc_max: 1.0
 encoder:
   params:
     n_bands: ${model.image.n_bands}
-    slen: ${model.image.slen}
     tile_slen: ${model.decoder.params.tile_slen}
-    ptile_slen: 8
+    ptile_slen: ${model.decoder.params.tile_slen}
     max_detections: ${model.decoder.params.max_sources}
     n_galaxy_params: ${model.galaxy.latent_dim}
     background_pad_value: ${model.image.background.0}
+    enc_conv_c: 20
+    enc_kern: 3
+    enc_hidden: 256

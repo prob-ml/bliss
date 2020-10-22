@@ -23,7 +23,6 @@ class SimulatedDataset(IterableDataset):
     def get_batch(self):
         with torch.no_grad():
             params = self.image_decoder.sample_prior(batch_size=self.batch_size)
-
             images = self.image_decoder.render_images(
                 params["n_sources"],
                 params["locs"],
