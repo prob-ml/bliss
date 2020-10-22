@@ -5,20 +5,22 @@ import pytorch_lightning as pl
 
 def test_star_wake(get_dataset, get_trained_encoder, paths, devices):
 
+    device = devices.device
     overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
     dataset = get_dataset(overrides)
     trained_encoder = get_trained_encoder(dataset, overrides)
 
     # load the test image
     # 3-stars 30*30 pixels.
-    test_star = torch.load(paths["data"].joinpath("3_star_test.pt"))
-    test_image = test_star["images"]
+    test_path = paths["data"].joinpath("3_star_test.pt")
+    test_star = torch.load(test_path, map_location="cpu")
+    test_image = test_star["images"].to(device)
     test_slen = test_image.size(-1)
-    image_decoder = dataset.image_decoder
+    image_decoder = dataset.image_decoder.to(device)
     background_value = image_decoder.background.mean().item()
 
     # initialize background params, which will create the true background
-    init_background_params = torch.zeros(1, 3, device=devices.device)
+    init_background_params = torch.zeros(1, 3, device=device)
     init_background_params[0, 0] = background_value
 
     n_samples = 1
