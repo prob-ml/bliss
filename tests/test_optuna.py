@@ -1,4 +1,3 @@
-import pytest
 from pytorch_lightning import Callback
 from optuna.trial import FixedTrial
 from hydra.experimental import initialize, compose
@@ -18,7 +17,6 @@ class MetricsCallback(Callback):
         self.metrics.append(trainer.callback_metrics)
 
 
-@pytest.mark.slow
 class TestOptunaSleep:
     def test_optuna(self, paths, devices):
         overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
@@ -32,7 +30,7 @@ class TestOptunaSleep:
                     "enc_kern": 3,
                     "enc_hidden": (64, 128, 64),
                     "ptile_slen": 8,
-                    "max_detections": 2,
+                    "max_detections": 1,
                 }
             )
             cfg.optimizer.params.update(

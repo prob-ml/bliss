@@ -17,7 +17,8 @@ class TestSleepStar:
     @pytest.mark.parametrize("n_stars", ["1", "2", "3"])
     def test_star_sleep(self, n_stars, trained_encoder, paths, devices):
         device = devices.device
-        test_star = torch.load(paths["data"].joinpath(f"{n_stars}_star_test.pt"))
+        test_path = paths["data"].joinpath(f"{n_stars}_star_test.pt")
+        test_star = torch.load(test_path, map_location="cpu")
         test_image = test_star["images"].to(device)
 
         with torch.no_grad():
@@ -37,7 +38,7 @@ class TestSleepStar:
             return
 
         # test n_sources
-        true_n_sources = test_star["n_sources"].to(device).int().item()
+        true_n_sources = test_star["n_sources"].int().item()
         n_sources = n_sources.int().item()
         assert n_sources == true_n_sources
 
