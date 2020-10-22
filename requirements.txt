@@ -4,8 +4,8 @@ astropy
 torch
 h5py
 matplotlib
-pytorch-lightning==1.0.1
+pytorch-lightning==1.0.2
 pillow
 optuna
 omegaconf
-hydra
+hydra-core

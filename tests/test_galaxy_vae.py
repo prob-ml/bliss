@@ -8,7 +8,7 @@ from bliss.models import galaxy_net
 
 
 class TestGalaxyVAE:
-    @pytest.fixture(scope="module")
+    @pytest.fixture(scope="class")
     def trained_galaxy_vae(self, paths, devices):
         use_cuda = devices.use_cuda
         h5_file = paths["data"].joinpath("catsim_single_galaxies.hdf5")

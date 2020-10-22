@@ -2,14 +2,14 @@
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
+from pathlib import Path
+import shutil
 
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
-
-from .utils import setup_paths
 
 from bliss import sleep, use_cuda
 from bliss.datasets import galaxy_datasets, catsim, simulated
@@ -27,6 +27,24 @@ _models = [galaxy_net.OneCenteredGalaxy, sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
 
 
+def setup_paths(cfg: DictConfig, enforce_overwrite=True):
+    paths = OmegaConf.to_container(cfg.paths, resolve=True)
+    output = Path(paths["root"]).joinpath(paths["output"])
+    paths["output"] = output.as_posix()
+
+    if enforce_overwrite:
+        assert not output.exists() or cfg.general.overwrite, "Enforcing overwrite."
+        if cfg.general.overwrite and output.exists():
+            shutil.rmtree(output)
+
+    output.mkdir(parents=False, exist_ok=not enforce_overwrite)
+
+    for p in paths.values():
+        assert Path(p).exists(), f"path {p.as_posix()} does not exist"
+
+    return paths
+
+
 def setup_seed(cfg):
     if cfg.training.deterministic:
         assert cfg.training.seed is not None
@@ -35,8 +53,9 @@ def setup_seed(cfg):
 
 def setup_profiler(cfg, paths):
     profiler = False
+    output = Path(paths["output"])
     if cfg.training.trainer.profiler:
-        profile_file = paths["output"].joinpath("profile.txt")
+        profile_file = output.joinpath("profile.txt")
         profiler = AdvancedProfiler(output_filename=profile_file)
     return profiler
 
@@ -50,9 +69,10 @@ def setup_logger(cfg, paths):
 
 def setup_checkpoint_callback(cfg, paths, logger):
     checkpoint_callback = False
+    output = Path(paths["output"])
     if cfg.training.trainer.checkpoint_callback:
         checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
-        checkpoint_dir = paths["output"].joinpath(checkpoint_dir)
+        checkpoint_dir = output.joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
             filepath=checkpoint_dir,
             save_top_k=True,

@@ -8,9 +8,8 @@ general:
   overwrite: False
 
 paths:
-  root: ${env:HOME}/bliss
-  logs: ${paths.root}/logs
-  output: ${paths.logs}/example
+  root: ${env:BLISS_HOME}
+  output: logs/example
 
 hydra:
   run:

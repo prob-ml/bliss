@@ -3,23 +3,20 @@ import pytest
 import os
 import numpy as np
 
-from bliss.models import decoder
-
 torch.manual_seed(84)
 np.random.seed(43)
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(get_dataset, get_trained_encoder, paths, devices):
-    device = devices.device
-    use_cuda = devices.use_cuda
-    n_epochs = 200 if use_cuda else 1
-    n_batches = 10 if use_cuda else 1
-    batch_size = 20 if use_cuda else 1
-    overrides = ["model=star_m2", "training=tests"]
-    dataset = get_dataset(batch_size, n_batches, overrides)
-    trained_encoder = get_trained_encoder(n_epochs, dataset, overrides)
-    return trained_encoder.to(device)
+def trained_star_encoder_m2(get_dataset, get_trained_encoder, devices):
+    overrides = dict(
+        model="m2",
+        dataset="m2" if devices.use_cuda else "cpu",
+        training="m2" if devices.use_cuda else "cpu",
+    )
+    dataset = get_dataset(overrides)
+    trained_encoder = get_trained_encoder(dataset, overrides)
+    return trained_encoder.to(devices.device)
 
 
 def filter_params(locs, fluxes, slen, pad=5):
