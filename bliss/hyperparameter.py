@@ -1,8 +1,8 @@
 import os
 import torch
 import pytorch_lightning as pl
-import warnings
 import gc
+import logging
 from omegaconf import DictConfig
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -51,6 +51,7 @@ class SleepObjective(object):
         self.gpu_queue = gpu_queue
 
     def __call__(self, trial):
+        gc.set_debug(gc.DEBUG_UNCOLLECTABLE | gc.DEBUG_COLLECTABLE)
 
         torch.manual_seed(10)
 
@@ -116,5 +117,13 @@ class SleepObjective(object):
 
         if self.gpu_queue is not None:
             self.gpu_queue.put(gpu_id)
+
+        gc.collect()
+
+        logger = logging.getLogger("objective_multi_gpu")
+        logger.debug("gc garbage: %r", gc.garbage)
+        for o in gc.garbage:
+            for r in gc.get_referrers(o):
+                logger.debug("ref for %r: %r", o, r)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()
