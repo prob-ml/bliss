@@ -1,7 +1,6 @@
 import os
 import optuna
 import hydra
-import warnings
 from omegaconf import DictConfig
 
 import multiprocessing as mp
@@ -37,7 +36,10 @@ def main(cfg: DictConfig):
 
     monitor = "val_loss"
 
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=30)
+    # set up pruner
+    pruner = optuna.pruners.MedianPruner(n_warmup_steps=10)
+
+    # initialize study object
     study = optuna.create_study(
         storage="sqlite:///zz.db",
         direction="minimize",
@@ -74,13 +76,10 @@ def main(cfg: DictConfig):
         gpu_queue=gpu_queue,
     )
 
-    with parallel_backend("loky"):
+    with parallel_backend("loky", n_jobs=len(n_gpu)):
         # warnings.simplefilter("error")
         study.optimize(
-            objects,
-            n_trials=100,
-            n_jobs=len(n_gpu),
-            timeout=600,
+            objects, n_trials=100, n_jobs=len(n_gpu), timeout=600, gc_after_trial=True
         )
 
 

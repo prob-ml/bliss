@@ -1,8 +1,9 @@
 import os
 import torch
 import pytorch_lightning as pl
-from omegaconf import DictConfig
 import warnings
+import gc
+from omegaconf import DictConfig
 from optuna.integration import PyTorchLightningPruningCallback
 
 from bliss.sleep import SleepPhase
@@ -100,20 +101,18 @@ class SleepObjective(object):
         use_gpu = [gpu_id] if self.gpu_queue is not None else [self.single_gpu]
         use_cpu = 0
 
-        with warnings.catch_warnings():
-            # code that produces a warning
-            trainer = pl.Trainer(
-                logger=False,
-                gpus=use_gpu if torch.cuda.is_available() else use_cpu,
-                checkpoint_callback=checkpoint_callback,
-                max_epochs=self.max_epochs,
-                callbacks=[self.metrics_callback],
-                early_stop_callback=PyTorchLightningPruningCallback(
-                    trial, monitor=self.monitor
-                ),
-            )
+        trainer = pl.Trainer(
+            logger=False,
+            gpus=use_gpu if torch.cuda.is_available() else use_cpu,
+            checkpoint_callback=checkpoint_callback,
+            max_epochs=self.max_epochs,
+            callbacks=[
+                self.metrics_callback,
+                PyTorchLightningPruningCallback(trial, monitor=self.monitor),
+            ],
+        )
 
-            trainer.fit(model)
+        trainer.fit(model)
 
         if self.gpu_queue is not None:
             self.gpu_queue.put(gpu_id)
