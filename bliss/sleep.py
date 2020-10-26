@@ -113,7 +113,7 @@ def _get_min_perm_loss(
 class SleepPhase(pl.LightningModule):
     def __init__(self, cfg: DictConfig, dataset):
         super(SleepPhase, self).__init__()
-        self.cfg = cfg
+        self.hparams = cfg
 
         self.dataset = dataset
         self.image_decoder: decoder.ImageDecoder = self.dataset.image_decoder
@@ -124,8 +124,6 @@ class SleepPhase(pl.LightningModule):
 
         self.plotting: bool = cfg.training.plotting
         assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
-
-        self.hparams = {**self.cfg.optimizer.params}
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder(image_ptiles, n_sources)
@@ -263,9 +261,10 @@ class SleepPhase(pl.LightningModule):
         )
 
     def configure_optimizers(self):
+        params = self.hparams.optimizer.params
         return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": self.hparams["lr"]}],
-            weight_decay=self.hparams["weight_decay"],
+            [{"params": self.image_encoder.parameters(), "lr": params["lr"]}],
+            weight_decay=params["weight_decay"],
         )
 
     def train_dataloader(self):
