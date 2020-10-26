@@ -122,7 +122,7 @@ class SleepPhase(pl.LightningModule):
         # avoid calculating gradients of decoder.
         self.image_decoder.requires_grad_(False)
 
-        self.validation_plot_start = cfg.training.validation_plot_start
+        self.plotting: bool = cfg.training.plotting
         assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
 
         self.hparams = {**self.cfg.optimizer.params}
@@ -283,8 +283,8 @@ class SleepPhase(pl.LightningModule):
             star_params_loss,
             galaxy_bool_loss,
         ) = self.get_loss(batch)
-        log = {"train_loss": loss}
-        return {"loss": loss, "log": log}
+        self.log("train_loss", loss)
+        return loss
 
     def validation_step(self, batch, batch_indx):
         (
@@ -296,34 +296,30 @@ class SleepPhase(pl.LightningModule):
             galaxy_bool_loss,
         ) = self.get_loss(batch)
 
-        output = {
-            "loss": loss,
-            "log": {
-                "loss": loss,
-                "counter_loss": counter_loss.sum(),
-                "locs_loss": locs_loss.sum(),
-                "galaxy_params_loss": galaxy_params_loss.sum(),
-                "star_params_loss": star_params_loss.sum(),
-                "galaxy_bool_loss": galaxy_bool_loss.sum(),
-                "images": batch["images"],
-                "locs": batch["locs"],
-                "n_sources": batch["n_sources"],
-                "galaxy_bool": batch["galaxy_bool"],
-            },
-        }
+        self.log("validation_loss", loss)
+        self.log("counter loss (val)", counter_loss.mean())
+        self.log("galaxy bool loss (val)", galaxy_bool_loss.mean())
+        self.log("star params loss (val)", star_params_loss.mean())
+        self.log("galaxy params loss (val)", galaxy_params_loss.mean())
 
-        return output
+        return batch
+
+    def validation_epoch_end(self, outputs):
+
+        # images for validation
+        if self.plotting:
+            self.make_validation_plots(outputs)
 
     def make_validation_plots(self, outputs):
         # add some images to tensorboard for validating location/counts.
-        n_samples = min(10, len(outputs[-1]["log"]["n_sources"]))
+        n_samples = min(10, len(outputs[-1]["n_sources"]))
         assert n_samples > 1
 
         # these are per tile
-        true_n_sources_on_tiles = outputs[-1]["log"]["n_sources"][:n_samples]
-        true_locs_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
-        true_galaxy_bools_on_tiles = outputs[-1]["log"]["galaxy_bool"][:n_samples]
-        images = outputs[-1]["log"]["images"][:n_samples]
+        true_n_sources_on_tiles = outputs[-1]["n_sources"][:n_samples]
+        true_locs_on_tiles = outputs[-1]["locs"][:n_samples]
+        true_galaxy_bools_on_tiles = outputs[-1]["galaxy_bool"][:n_samples]
+        images = outputs[-1]["images"][:n_samples]
         slen = images[-1].shape[-1]
 
         # convert to full image parameters for plotting purposes.
@@ -450,55 +446,6 @@ class SleepPhase(pl.LightningModule):
         if self.logger:
             self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
         plt.close(fig)
-
-    def validation_epoch_end(self, outputs):
-
-        # images for validation
-        if self.current_epoch >= self.validation_plot_start:
-            self.make_validation_plots(outputs)
-
-        slen = outputs[-1]["log"]["images"].shape[-1]
-
-        # log other losses
-        # first we log some of the important losses and average over all batches.
-        avg_loss = 0
-        avg_counter_loss = 0
-        avg_locs_loss = 0
-        avg_galaxy_params_loss = 0
-        avg_star_params_loss = 0
-        avg_galaxy_bool_loss = 0
-
-        n_tiles_per_image = int((slen / self.image_encoder.tile_slen) ** 2)
-        tiles_per_batch = self.dataset.batch_size * n_tiles_per_image
-        tiles_per_epoch = tiles_per_batch * self.dataset.n_batches
-
-        # len(output) == n_batches
-        # the sum below is over tiles_per_batch
-        for output in outputs:
-            avg_loss += output["loss"]
-            avg_counter_loss += torch.sum(output["log"]["counter_loss"])
-            avg_locs_loss += torch.sum(output["log"]["locs_loss"])
-            avg_galaxy_params_loss += torch.sum(output["log"]["galaxy_params_loss"])
-            avg_star_params_loss += torch.sum(output["log"]["star_params_loss"])
-            avg_galaxy_bool_loss += torch.sum(output["log"]["galaxy_bool_loss"])
-
-        avg_loss /= self.dataset.n_batches
-        avg_counter_loss /= tiles_per_epoch
-        avg_locs_loss /= tiles_per_epoch
-        avg_galaxy_params_loss /= tiles_per_epoch
-        avg_star_params_loss /= tiles_per_epoch
-        avg_galaxy_bool_loss /= tiles_per_epoch
-
-        logs = {
-            "val_loss": avg_loss,
-            "counter_loss": avg_counter_loss,
-            "locs_loss": avg_locs_loss,
-            "galaxy_params_loss": avg_galaxy_params_loss,
-            "star_params_loss": avg_star_params_loss,
-            "galaxy_bool_loss": avg_galaxy_bool_loss,
-        }
-        results = {"val_loss": avg_loss, "log": logs}
-        return results
 
     @staticmethod
     def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
