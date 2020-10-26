@@ -308,9 +308,9 @@ class SleepPhase(pl.LightningModule):
 
         # images for validation
         if self.plotting:
-            self.make_validation_plots(outputs[-1])
+            self.make_plots(outputs[-1])
 
-    def make_validation_plots(self, batch):
+    def make_plots(self, batch):
         # add some images to tensorboard for validating location/counts.
         n_samples = min(10, len(batch["n_sources"]))
         assert n_samples > 1
