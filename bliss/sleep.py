@@ -114,6 +114,7 @@ class SleepPhase(pl.LightningModule):
     def __init__(self, cfg: DictConfig, dataset):
         super(SleepPhase, self).__init__()
         self.hparams = cfg
+        self.save_hyperparameters(cfg)
 
         self.dataset = dataset
         self.image_decoder: decoder.ImageDecoder = self.dataset.image_decoder
