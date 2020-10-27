@@ -24,6 +24,17 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
+def get_star_bool(n_sources, galaxy_bool):
+    assert n_sources.shape[0] == galaxy_bool.shape[0]
+    assert galaxy_bool.shape[-1] == 1
+    max_sources = galaxy_bool.shape[-2]
+    assert n_sources.le(max_sources).all()
+    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
+    is_on_array = is_on_array.reshape(*galaxy_bool.shape)
+    star_bool = (1 - galaxy_bool) * is_on_array
+    return star_bool
+
+
 def _argfront(is_on_array, dim):
     # return indices that sort pushing all zeroes of tensor to the back.
     # dim is dimension along which do the ordering.
@@ -352,6 +363,7 @@ class ImageEncoder(nn.Module):
         var_params = {key: param.squeeze(0) for key, param in var_params.items()}
         var_params["n_source_log_probs"] = n_source_log_probs.squeeze(0)
 
+        # dictionary with names as in self.variational_params
         return var_params
 
     def _cache_tiling_conv_weights(self):
@@ -417,28 +429,34 @@ class ImageEncoder(nn.Module):
 
         return tile_locs, tile_galaxy_params, tile_log_fluxes
 
-    def get_full_params_from_sampled_params(
-        self, slen: int, tile_n_sources_sampled, tile_locs_sampled, *tile_params_sampled
-    ):
+    def get_full_params(self, slen: int, tile_batch: dict):
         # NOTE: off sources should have tile_locs == 0.
         # NOTE: assume that each param in each tile is already pushed to the front.
         assert type(slen) is int
+        assert type(tile_batch) is dict
+        assert "n_sources" in tile_batch
+        assert "locs" in tile_batch
+        include = ("galaxy_bool", "galaxy_params", "fluxes", "log_fluxes")
+        param_names = {key for key in tile_batch if key in include}
+
+        tile_n_sources = tile_batch["n_sources"]
+        tile_locs = tile_batch["locs"]
 
         # coordinates of the tiles
         tile_coords = _get_tile_coords(slen, self.tile_slen)
 
-        # tile_locs_sampled shape = (n_samples x n_ptiles x max_detections x 2)
-        assert len(tile_locs_sampled.shape) == 4
+        # tile_locs shape = (n_samples x n_ptiles x max_detections x 2)
+        assert len(tile_locs.shape) == 4
         single_image_n_ptiles = tile_coords.shape[0]
-        n_samples = tile_locs_sampled.shape[0]
-        n_ptiles = tile_locs_sampled.shape[1]
-        max_detections = tile_locs_sampled.shape[2]
+        n_samples = tile_locs.shape[0]
+        n_ptiles = tile_locs.shape[1]
+        max_detections = tile_locs.shape[2]
         total_ptiles = n_samples * n_ptiles
         assert single_image_n_ptiles == n_ptiles, "Only single image is supported."
 
         # get is on array
         tile_is_on_array_sampled = get_is_on_from_n_sources(
-            tile_n_sources_sampled, max_detections
+            tile_n_sources, max_detections
         )
 
         n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
@@ -446,9 +464,9 @@ class ImageEncoder(nn.Module):
 
         # recenter and renormalize locations.
         tile_is_on_array = tile_is_on_array_sampled.view(total_ptiles, -1)
-        tile_locs = tile_locs_sampled.view(total_ptiles, -1, 2)
+        _tile_locs = tile_locs.view(total_ptiles, -1, 2)
         bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
-        _locs = (tile_locs * self.tile_slen + bias) / slen
+        _locs = (_tile_locs * self.tile_slen + bias) / slen
         _locs *= tile_is_on_array.unsqueeze(2)
 
         # sort locs and clip
@@ -458,21 +476,23 @@ class ImageEncoder(nn.Module):
         locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
         locs = locs[:, 0:max_sources, ...]
 
+        batch = {"n_sources": n_sources, "locs": locs}
+
         # now do the same for the rest of the parameters (without scaling or biasing ofc)
         # for same reason no need to multiply times is_on_array
-        params = []
-        for tile_param_sampled in tile_params_sampled:
+        for param_name in param_names:
             # make sure works galaxy bool has same format as well.
-            assert len(tile_param_sampled.shape) == 4
-            _param = tile_param_sampled.reshape(n_samples, n_ptiles, max_detections, -1)
+            tile_param = tile_batch[param_name]
+            assert len(tile_param.shape) == 4
+            _param = tile_param.reshape(n_samples, n_ptiles, max_detections, -1)
             param_dim = _param.size(-1)
             param = _param.view(n_samples, -1, param_dim)
             param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
             param = param[:, 0:max_sources, ...]
 
-            params.append(param)
+            batch[param_name] = param
 
-        return (n_sources, locs, *params)
+        return batch
 
     def sample_encoder(self, image, n_samples):
         assert image.size(0) == 1, "Sampling only works for a single image."
@@ -541,38 +561,20 @@ class ImageEncoder(nn.Module):
             pred, tile_is_on_array, tile_galaxy_bool
         )
 
-        return (
-            tile_n_sources,
-            tile_locs,
-            tile_galaxy_params,
-            tile_log_fluxes,
-            tile_galaxy_bool,
-        )
+        tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
+        tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
+
+        return {
+            "n_sources": tile_n_sources,
+            "locs": tile_locs,
+            "galaxy_bool": tile_galaxy_bool,
+            "galaxy_params": tile_galaxy_params,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+        }
 
     def map_estimate(self, image):
-
         slen = image.shape[-1]
-        (
-            tile_n_sources,
-            tile_locs,
-            tile_galaxy_params,
-            tile_log_fluxes,
-            tile_galaxy_bool,
-        ) = self.tiled_map_estimate(image)
-
-        (
-            n_sources,
-            locs,
-            galaxy_params,
-            log_fluxes,
-            galaxy_bool,
-        ) = self.get_full_params_from_sampled_params(
-            slen,
-            tile_n_sources,
-            tile_locs,
-            tile_galaxy_params,
-            tile_log_fluxes,
-            tile_galaxy_bool,
-        )
-
-        return n_sources, locs, galaxy_params, log_fluxes, galaxy_bool
+        tile_estimate = self.tiled_map_estimate(image)
+        estimate = self.get_full_params(slen, tile_estimate)
+        return estimate

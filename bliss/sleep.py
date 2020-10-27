@@ -13,7 +13,7 @@ import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder, decoder
-from .models.decoder import get_star_bool
+from .models.encoder import get_star_bool
 
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -321,31 +321,17 @@ class SleepPhase(pl.LightningModule):
 
     def make_plots(self, batch):
         # add some images to tensorboard for validating location/counts.
+        # 'batch' is a batch from simulated dataset (all params are tiled)
         n_samples = min(10, len(batch["n_sources"]))
         assert n_samples > 1
-
-        # these are per tile
-        true_n_sources_on_tiles = batch["n_sources"][:n_samples]
-        true_locs_on_tiles = batch["locs"][:n_samples]
-        true_galaxy_bools_on_tiles = batch["galaxy_bool"][:n_samples]
-        images = batch["images"][:n_samples]
-        slen = images[-1].shape[-1]
+        images = batch["images"]
+        slen = images.shape[-1]
 
         # convert to full image parameters for plotting purposes.
-        (
-            true_n_sources,
-            true_locs,
-            true_galaxy_bools,
-        ) = self.image_encoder.get_full_params_from_sampled_params(
-            slen,
-            true_n_sources_on_tiles,
-            true_locs_on_tiles,
-            true_galaxy_bools_on_tiles,
-        )
+        true_params = self.image_encoder.get_full_params(slen, batch)
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
-
         for i in range(n_samples):
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
@@ -353,42 +339,23 @@ class SleepPhase(pl.LightningModule):
 
             image = images[None, i]
             assert image.shape[-1] == slen
+            assert len(image.shape) == 4
 
             # true parameters on full image.
-            true_loc = true_locs[None, i]
-            true_n_source = true_n_sources[None, i]
-            true_galaxy_bool = true_galaxy_bools[None, i]
+            true_n_sources = true_params["n_sources"][None, i]
+            true_locs = true_params["locs"][None, i]
+            true_galaxy_bool = true_params["galaxy_bool"][None, i]
 
-            assert len(image.shape) == 4
             with torch.no_grad():
                 # get the estimated params, these are *per tile*.
                 self.image_encoder.eval()
-                (
-                    tile_n_sources,
-                    tile_locs,
-                    tile_galaxy_params,
-                    tile_log_fluxes,
-                    tile_galaxy_bool,
-                ) = self.image_encoder.tiled_map_estimate(image)
-
-            tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
-            tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
+                tile_estimate = self.image_encoder.tiled_map_estimate(image)
 
             # convert tile estimates to full parameterization for plotting
-            (
-                n_sources,
-                locs,
-                galaxy_params,
-                log_fluxes,
-                galaxy_bool,
-            ) = self.image_encoder.get_full_params_from_sampled_params(
-                slen,
-                tile_n_sources,
-                tile_locs,
-                tile_galaxy_params,
-                tile_log_fluxes,
-                tile_galaxy_bool,
-            )
+            estimate = self.image_decoder.get_full_params(tile_estimate)
+            n_sources = estimate["n_sources"]
+            locs = estimate["locs"]
+            galaxy_bool = estimate["galaxy_bool"]
 
             assert len(locs.shape) == 3 and locs.size(0) == 1
             assert locs.shape[1] == n_sources.max().int().item()
@@ -397,52 +364,52 @@ class SleepPhase(pl.LightningModule):
             image = image[0, 0].cpu().numpy()  # only first band.
             plotting.plot_image(fig, true_ax, image)
             true_ax.set_xlabel(
-                f"True num: {true_n_source.item()}; Est num: {n_sources.item()}"
+                f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}"
             )
 
             # continue only if at least one true source and predicted source.
-            max_sources = true_loc.shape[1]
+            max_sources = true_locs.shape[1]
             if max_sources > 0 and n_sources.item() > 0:
 
                 # draw reconstruction image.
                 recon_image = self.image_decoder.render_images(
-                    tile_n_sources,
-                    tile_locs,
-                    tile_galaxy_bool,
-                    tile_galaxy_params,
-                    tile_fluxes,
+                    tile_estimate["n_sources"],
+                    tile_estimate["locs"],
+                    tile_estimate["galaxy_bool"],
+                    tile_estimate["galaxy_params"],
+                    tile_estimate["fluxes"],
                 )
 
                 # round up true parameters.
-                true_star_bool = get_star_bool(true_n_source, true_galaxy_bool)
-                true_galaxy_loc = true_loc * true_galaxy_bool
-                true_star_loc = true_loc * true_star_bool
+                true_star_bool = get_star_bool(true_n_sources, true_galaxy_bool)
+                true_galaxy_locs = true_locs * true_galaxy_bool
+                true_star_locs = true_locs * true_star_bool
 
                 # round up estimated parameters.
                 star_bool = get_star_bool(n_sources, galaxy_bool)
-                galaxy_loc = locs * galaxy_bool
-                star_loc = locs * star_bool
+                galaxy_locs = locs * galaxy_bool
+                star_locs = locs * star_bool
 
                 # convert everything to numpy + cpu so matplotlib can use it.
-                true_galaxy_loc = true_galaxy_loc.cpu().numpy()[0]
-                true_star_loc = true_star_loc.cpu().numpy()[0]
-                galaxy_loc = galaxy_loc.cpu().numpy()[0]
-                star_loc = star_loc.cpu().numpy()[0]
+                true_galaxy_locs = true_galaxy_locs.cpu().numpy()[0]
+                true_star_locs = true_star_locs.cpu().numpy()[0]
+                galaxy_locs = galaxy_locs.cpu().numpy()[0]
+                star_locs = star_locs.cpu().numpy()[0]
 
                 recon_image = recon_image[0, 0].cpu().numpy()
                 res_image = (image - recon_image) / np.sqrt(image)
 
                 # plot and add locations.
                 plotting.plot_image_locs(
-                    true_ax, slen, true_galaxy_loc, galaxy_loc, colors=("r", "b")
+                    true_ax, slen, true_galaxy_locs, galaxy_locs, colors=("r", "b")
                 )
                 plotting.plot_image_locs(
-                    true_ax, slen, true_star_loc, star_loc, colors=("g", "m")
+                    true_ax, slen, true_star_locs, star_locs, colors=("g", "m")
                 )
 
                 plotting.plot_image(fig, recon_ax, recon_image)
                 plotting.plot_image_locs(
-                    recon_ax, slen, galaxy_loc, star_loc, colors=("r", "b")
+                    recon_ax, slen, galaxy_locs, star_locs, colors=("r", "b")
                 )
                 plotting.plot_image(fig, res_ax, res_image)
 

@@ -43,17 +43,6 @@ def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
     return psf_params
 
 
-def get_star_bool(n_sources, galaxy_bool):
-    assert n_sources.shape[0] == galaxy_bool.shape[0]
-    assert galaxy_bool.shape[-1] == 1
-    max_sources = galaxy_bool.shape[-2]
-    assert n_sources.le(max_sources).all()
-    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-    is_on_array = is_on_array.reshape(*galaxy_bool.shape)
-    star_bool = (1 - galaxy_bool) * is_on_array
-    return star_bool
-
-
 class ImageDecoder(nn.Module):
     def __init__(
         self,
@@ -342,10 +331,10 @@ class ImageDecoder(nn.Module):
         return {
             "n_sources": n_sources,
             "locs": locs,
+            "galaxy_bool": galaxy_bool,
             "galaxy_params": galaxy_params,
             "fluxes": fluxes,
             "log_fluxes": log_fluxes,
-            "galaxy_bool": galaxy_bool,
         }
 
     @staticmethod
