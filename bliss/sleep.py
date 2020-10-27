@@ -305,6 +305,15 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def validation_epoch_end(self, outputs):
+        # outputs is a list containing the return value of validation_step for each batch.
+
+        # TODO: Obtain a predicted batch from the true one.
+
+        # TODO: Obtain full image batch params from tiled_batch.
+
+        # TODO: compute accuracy on counts using pl metric
+
+        # TODO: compute RMSE on locations using a metric. (Mean Absolute Error)
 
         # images for validation
         if self.plotting:

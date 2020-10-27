@@ -341,8 +341,6 @@ class ImageDecoder(nn.Module):
         # per tile quantities.
         return {
             "n_sources": n_sources,
-            "n_galaxies": n_galaxies,
-            "n_stars": n_stars,
             "locs": locs,
             "galaxy_params": galaxy_params,
             "fluxes": fluxes,
