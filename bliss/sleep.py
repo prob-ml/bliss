@@ -10,6 +10,7 @@ from torch.distributions import Normal
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
+from pytorch_lightning.metrics import Precision, Recall, MeanAbsoluteError
 
 from . import device, plotting
 from .models import encoder, decoder
@@ -307,9 +308,37 @@ class SleepPhase(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         # outputs is a list containing the return value of validation_step for each batch.
 
-        # TODO: Obtain a predicted batch from the true one.
+        # collect all true params
+        slen = outputs[-1]["images"].shape[-1]
+        true_n_sources = []
+        n_sources = []
+        true_locs = []
+        locs = []
+        for batch in outputs:
+            batch_size = batch["images"].shape[0]
+            true_params = self.image_encoder.get_full_params(slen, batch)
+            for i in range(batch_size):
+                image = batch["images"][None, i]
+                true_locs_i = true_params["locs"][i]
+                true_n_sources_i = true_params["n_sources"][i].item()
 
-        # TODO: Obtain full image batch params from tiled_batch.
+                estimate = self.image_encoder.map_estimate(image)
+                n_sources_i = estimate["n_sources"].item()
+                locs_i = estimate["locs"].view(-1, 2)
+
+                # add true and detected sources to check metrics on counts later.
+                true_n_sources.append(true_n_sources_i)
+                n_sources.append(n_sources_i)
+
+                # we only check other metrics if n_sources matched up.
+                if true_n_sources_i == n_sources_i:
+                    true_locs.append(true_locs_i)
+                    locs.append(locs_i)
+
+        # make them all correctly formatted tensors.
+
+        # logs on counts
+        self.log("precision counts", Precision())
 
         # TODO: compute accuracy on counts using pl metric
 
