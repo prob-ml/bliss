@@ -148,7 +148,7 @@ class ImageDecoder(nn.Module):
         elif ext == ".fits":
             assert n_bands == 2, "only 2 band fits files are supported."
             bands = (2, 3)
-            psf_params = get_fit_file_psf_params(psf_params_file, bands)
+            psf_params = get_fit_file_psf_params(psf_params_file, bands).to(device)
         else:
             raise NotImplementedError(
                 "Only .npy and .fits extensions are supported for PSF params files."
