@@ -156,13 +156,13 @@ class ImageDecoder(nn.Module):
         if ext == ".npy":
             psf_params = torch.from_numpy(np.load(psf_params_file)).to(device)
             psf_params = psf_params[list(range(n_bands))]
-        elif ext == ".fits":
-            assert n_bands == 2, "only 2 band fits files are supported."
+        elif ext == ".fit":
+            assert n_bands == 2, "only 2 band fit files are supported."
             bands = (2, 3)
             psf_params = get_fit_file_psf_params(psf_params_file, bands)
         else:
             raise NotImplementedError(
-                "Only .npy and .fits extensions are supported for PSF params files."
+                "Only .npy and .fit extensions are supported for PSF params files."
             )
 
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
