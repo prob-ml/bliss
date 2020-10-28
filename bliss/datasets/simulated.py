@@ -22,16 +22,16 @@ class SimulatedDataset(IterableDataset):
 
     def get_batch(self):
         with torch.no_grad():
-            params = self.image_decoder.sample_prior(batch_size=self.batch_size)
+            batch = self.image_decoder.sample_prior(batch_size=self.batch_size)
             images = self.image_decoder.render_images(
-                params["n_sources"],
-                params["locs"],
-                params["galaxy_bool"],
-                params["galaxy_params"],
-                params["fluxes"],
+                batch["n_sources"],
+                batch["locs"],
+                batch["galaxy_bool"],
+                batch["galaxy_params"],
+                batch["fluxes"],
             )
-            params.update(
+            batch.update(
                 {"images": images, "background": self.image_decoder.background}
             )
 
-        return params
+        return batch

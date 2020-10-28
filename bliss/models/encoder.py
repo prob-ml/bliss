@@ -429,18 +429,20 @@ class ImageEncoder(nn.Module):
 
         return tile_locs, tile_galaxy_params, tile_log_fluxes
 
-    def get_full_params(self, slen: int, tile_batch: dict):
+    def get_full_params(self, slen: int, tile_params: dict):
         # NOTE: off sources should have tile_locs == 0.
         # NOTE: assume that each param in each tile is already pushed to the front.
+        required = {"n_sources", "locs"}
+        optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes"}
         assert type(slen) is int
-        assert type(tile_batch) is dict
-        assert "n_sources" in tile_batch
-        assert "locs" in tile_batch
-        include = ("galaxy_bool", "galaxy_params", "fluxes", "log_fluxes")
-        param_names = {key for key in tile_batch if key in include}
+        assert type(tile_params) is dict
+        assert required.issubset(tile_params.keys())
+        # tile_params does not contain extraneous keys
+        for param_name in tile_params:
+            assert param_name in required or param_name in optional
 
-        tile_n_sources = tile_batch["n_sources"]
-        tile_locs = tile_batch["locs"]
+        tile_n_sources = tile_params["n_sources"]
+        tile_locs = tile_params["locs"]
 
         # coordinates of the tiles
         tile_coords = _get_tile_coords(slen, self.tile_slen)
@@ -476,23 +478,24 @@ class ImageEncoder(nn.Module):
         locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
         locs = locs[:, 0:max_sources, ...]
 
-        batch = {"n_sources": n_sources, "locs": locs}
+        params = {"n_sources": n_sources, "locs": locs}
 
         # now do the same for the rest of the parameters (without scaling or biasing ofc)
         # for same reason no need to multiply times is_on_array
-        for param_name in param_names:
-            # make sure works galaxy bool has same format as well.
-            tile_param = tile_batch[param_name]
-            assert len(tile_param.shape) == 4
-            _param = tile_param.reshape(n_samples, n_ptiles, max_detections, -1)
-            param_dim = _param.size(-1)
-            param = _param.view(n_samples, -1, param_dim)
-            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
-            param = param[:, 0:max_sources, ...]
+        for param_name in tile_params:
+            if param_name in optional:
+                # make sure works galaxy bool has same format as well.
+                tile_param = tile_params[param_name]
+                assert len(tile_param.shape) == 4
+                _param = tile_param.reshape(n_samples, n_ptiles, max_detections, -1)
+                param_dim = _param.size(-1)
+                param = _param.view(n_samples, -1, param_dim)
+                param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
+                param = param[:, 0:max_sources, ...]
 
-            batch[param_name] = param
+                params[param_name] = param
 
-        return batch
+        return params
 
     def sample_encoder(self, image, n_samples):
         assert image.size(0) == 1, "Sampling only works for a single image."
@@ -522,18 +525,21 @@ class ImageEncoder(nn.Module):
         tile_locs, tile_galaxy_params, tile_log_fluxes = self._get_samples(
             pred, tile_is_on_array, tile_galaxy_bool
         )
-        return (
-            tile_n_sources,
-            tile_locs,
-            tile_galaxy_params,
-            tile_log_fluxes,
-            tile_galaxy_bool,
-        )
+
+        tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
+        tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
+        return {
+            "n_sources": tile_n_sources,
+            "locs": tile_locs,
+            "galaxy_bool": tile_galaxy_bool,
+            "galaxy_params": tile_galaxy_params,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+        }
 
     def tiled_map_estimate(self, image):
         # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
         assert image.size(0) == 1, "Sampling only works for a single image."
-
         image_ptiles = self.get_images_in_tiles(image)
         h = self._get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)

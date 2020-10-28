@@ -312,8 +312,7 @@ class SleepPhase(pl.LightningModule):
         slen = outputs[-1]["images"].shape[-1]
         true_n_sources = []
         n_sources = []
-        true_locs = []
-        locs = []
+        locs_mse = []
         for batch in outputs:
             batch_size = batch["images"].shape[0]
             true_params = self.image_encoder.get_full_params(slen, batch)
@@ -345,7 +344,7 @@ class SleepPhase(pl.LightningModule):
         # TODO: compute RMSE on locations using a metric. (Mean Absolute Error)
 
         # images for validation
-        if self.plotting:
+        if self.plotting and self.current_epoch > 1:
             self.make_plots(outputs[-1])
 
     def make_plots(self, batch):
@@ -353,8 +352,11 @@ class SleepPhase(pl.LightningModule):
         # 'batch' is a batch from simulated dataset (all params are tiled)
         n_samples = min(10, len(batch["n_sources"]))
         assert n_samples > 1
-        images = batch["images"]
+
+        # extract non-params entries.
+        images = batch.pop("images", None)
         slen = images.shape[-1]
+        batch.pop("background", None)
 
         # convert to full image parameters for plotting purposes.
         true_params = self.image_encoder.get_full_params(slen, batch)
@@ -381,7 +383,7 @@ class SleepPhase(pl.LightningModule):
                 tile_estimate = self.image_encoder.tiled_map_estimate(image)
 
             # convert tile estimates to full parameterization for plotting
-            estimate = self.image_decoder.get_full_params(tile_estimate)
+            estimate = self.image_encoder.get_full_params(slen, tile_estimate)
             n_sources = estimate["n_sources"]
             locs = estimate["locs"]
             galaxy_bool = estimate["galaxy_bool"]
