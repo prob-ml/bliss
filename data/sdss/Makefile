@@ -1,7 +1,4 @@
 URLBASE := https://data.sdss.org/sas/dr12/boss
-RUN := 2583
-CAMCOL := 2
-FIELD := 136
 
 # strip leading zeros
 RUN_STRIPPED := $(shell echo $(RUN) | sed 's/^0*//')
