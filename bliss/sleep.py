@@ -20,6 +20,13 @@ from .models.encoder import get_star_bool
 from optuna.integration import PyTorchLightningPruningCallback
 
 
+def sort_locs(locs):
+    # sort according to x location
+    assert len(locs.shape) == 2
+    indx_sort = locs[:, 0].sort()[1]
+    return locs[indx_sort, :]
+
+
 def _get_log_probs_all_perms(
     locs_log_probs_all,
     galaxy_params_log_probs_all,
@@ -304,48 +311,61 @@ class SleepPhase(pl.LightningModule):
         self.log("star params loss (val)", star_params_loss.mean())
         self.log("galaxy params loss (val)", galaxy_params_loss.mean())
 
+        # calculate metrics for this batch
+        counts_acc, galaxy_counts_acc, locs_mse = self.get_metrics(batch)
+        self.log("accuracy counts (val)", counts_acc)
+        self.log("account galaxy counts (val)", galaxy_counts_acc)
+        self.log("locs mse (val)", locs_mse)
+
         return batch
 
     def validation_epoch_end(self, outputs):
-        # outputs is a list containing the return value of validation_step for each batch.
-
-        # collect all true params
-        slen = outputs[-1]["images"].shape[-1]
-        true_n_sources = []
-        n_sources = []
-        locs_mse = []
-        for batch in outputs:
-            batch_size = batch["images"].shape[0]
-            true_params = self.image_encoder.get_full_params(slen, batch)
-            for i in range(batch_size):
-                image = batch["images"][None, i]
-                true_locs_i = true_params["locs"][i]
-                true_n_sources_i = true_params["n_sources"][i].item()
-
-                estimate = self.image_encoder.map_estimate(image)
-                n_sources_i = estimate["n_sources"].item()
-                locs_i = estimate["locs"].view(-1, 2)
-
-                # add true and detected sources to check metrics on counts later.
-                true_n_sources.append(true_n_sources_i)
-                n_sources.append(n_sources_i)
-
-                # we only check other metrics if n_sources matched up.
-                if true_n_sources_i == n_sources_i:
-                    pass
-
-        # make them all correctly formatted tensors.
-
-        # logs on counts
-        # self.log("precision counts", Precision())
-
-        # TODO: compute accuracy on counts using pl metric
-
-        # TODO: compute RMSE on locations using a metric. (Mean Absolute Error)
-
-        # images for validation
+        # NOTE: outputs is a list containing all validation step batches.
+        # produce images for validation
         if self.plotting and self.current_epoch > 1:
             self.make_plots(outputs[-1])
+
+    def get_metrics(self, batch):
+        images = batch.pop("images")
+        batch.pop("background")
+        slen = images.shape[-1]
+        batch_size = images.shape[0]
+        true_params = self.image_encoder.get_full_params(slen, batch)
+
+        # to compute metrics at the end.
+        counts_acc = 0.0
+        galaxy_counts_acc = 0.0
+        locs_mse = 0.0
+        matches = 0.0
+        for i in range(batch_size):
+            image = images[None, i]
+            true_n_sources_i = true_params["n_sources"][i].item()
+            true_n_galaxies_i = true_params["galaxy_bool"][i].sum().item()
+
+            estimate = self.image_encoder.map_estimate(image)
+            n_sources_i = estimate["n_sources"].item()
+            n_galaxies_i = estimate["galaxy_bool"].sum().item()
+
+            # calculate accuracies
+            counts_acc += (true_n_sources_i == n_sources_i) / batch_size
+            galaxy_counts_acc += (true_n_galaxies_i == n_galaxies_i) / batch_size
+
+            # only compare locations for mse if counts match.
+            if true_n_sources_i == n_sources_i:
+                matches += 1
+                true_locs_i = true_params["locs"][i].view(true_n_sources_i, 2)
+                locs_i = estimate["locs"].view(n_sources_i, 2)
+
+                # sort each based on x location.
+                true_locs_i = sort_locs(true_locs_i)
+                locs_i = sort_locs(locs_i)
+
+                # now calculate mse
+                locs_mse += (true_locs_i - locs_i).pow(2).sum(1).pow(1.0 / 2).sum()
+
+        locs_mse /= matches
+
+        return counts_acc, galaxy_counts_acc, locs_mse
 
     def make_plots(self, batch):
         # add some images to tensorboard for validating location/counts.
