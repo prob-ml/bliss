@@ -302,7 +302,7 @@ class SleepPhase(pl.LightningModule):
         # calculate metrics for this batch
         counts_acc, galaxy_counts_acc, locs_mse = self.get_metrics(batch)
         self.log("accuracy counts (val)", counts_acc)
-        self.log("account galaxy counts (val)", galaxy_counts_acc)
+        self.log("accuracy galaxy counts (val)", galaxy_counts_acc)
         self.log("locs mse (val)", locs_mse)
 
         return batch
@@ -314,11 +314,15 @@ class SleepPhase(pl.LightningModule):
             self.make_plots(outputs[-1])
 
     def get_metrics(self, batch):
-        images = batch.pop("images")
-        batch.pop("background")
+        # get images and properties
+        images = batch["images"]
         slen = images.shape[-1]
         batch_size = images.shape[0]
-        true_params = self.image_encoder.get_full_params(slen, batch)
+
+        # obtain a params dictionary on tiles, then get on full image.
+        exclude = {"images", "background"}
+        params = {k: v for k, v in batch.items() if k not in exclude}
+        true_params = self.image_encoder.get_full_params(slen, params)
 
         # to compute metrics at the end.
         counts_acc = 0.0
@@ -341,8 +345,12 @@ class SleepPhase(pl.LightningModule):
             # only compare locations for mse if counts match.
             if true_n_sources_i == n_sources_i:
                 matches += 1
-                true_locs_i = true_params["locs"][i].view(true_n_sources_i, 2)
-                locs_i = estimate["locs"].view(n_sources_i, 2)
+
+                # prepare locs and get them in units of pixels.
+                true_locs_i = true_params["locs"][i].view(-1, 2)
+                true_locs_i = true_locs_i[: int(true_n_sources_i)] * slen
+
+                locs_i = estimate["locs"].view(-1, 2)[: int(n_sources_i)] * slen
 
                 # sort each based on x location.
                 true_locs_i = sort_locs(true_locs_i)
@@ -351,7 +359,8 @@ class SleepPhase(pl.LightningModule):
                 # now calculate mse
                 locs_mse += (true_locs_i - locs_i).pow(2).sum(1).pow(1.0 / 2).sum()
 
-        locs_mse /= matches
+        if matches > 0:
+            locs_mse /= matches
 
         return counts_acc, galaxy_counts_acc, locs_mse
 
