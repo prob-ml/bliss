@@ -7,7 +7,7 @@ def test_star_wake(get_dataset, get_trained_encoder, paths, devices):
 
     device = devices.device
     overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
-    dataset = get_dataset(overrides)
+    dataset = get_datamodule()
     trained_encoder = get_trained_encoder(dataset, overrides)
 
     # load the test image

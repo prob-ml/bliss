@@ -3,5 +3,5 @@ def test_plotting(get_dataset, get_trained_encoder):
     overrides = dict(
         model="basic_sleep_star", training="test_plotting", dataset="test_plotting"
     )
-    dataset = get_dataset(overrides)
+    dataset = get_datamodule()
     _ = get_trained_encoder(dataset, overrides)

@@ -4,15 +4,14 @@ import torch
 
 class TestSleepStar:
     @pytest.fixture(scope="class")
-    def trained_encoder(self, devices, get_dataset, get_trained_encoder):
+    def trained_encoder(self, devices, get_trained_encoder):
         use_cuda = devices.use_cuda
         overrides = dict(
             model="basic_sleep_star",
             dataset="default" if use_cuda else "cpu",
             training="tests_default" if use_cuda else "cpu",
         )
-        dataset = get_dataset(overrides)
-        return get_trained_encoder(dataset, overrides)
+        return get_trained_encoder(overrides)
 
     @pytest.mark.parametrize("n_stars", ["1", "2", "3"])
     def test_star_sleep(self, n_stars, trained_encoder, paths, devices):

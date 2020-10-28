@@ -102,15 +102,16 @@ def get_dataset():
 
 @pytest.fixture(scope="session")
 def get_trained_encoder(devices):
-    def _encoder(dataset, overrides: dict):
+    def _encoder(overrides: dict):
         assert "model" in overrides
         overrides = [f"{key}={value}" for key, value in overrides.items()]
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
             cfg.training.trainer.update({"gpus": devices.gpus})
-            sleep_net = sleep.SleepPhase(cfg, dataset)
+            datamodule = simulated.SimulatedModule(cfg)
+            sleep_net = sleep.SleepPhase(cfg)
             trainer = pl.Trainer(**cfg.training.trainer)
-            trainer.fit(sleep_net)
+            trainer.fit(sleep_net, datamodule=datamodule)
             sleep_net.image_encoder.eval()
             return sleep_net.image_encoder.to(devices.device)
 

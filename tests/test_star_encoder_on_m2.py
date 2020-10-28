@@ -14,7 +14,7 @@ def trained_star_encoder_m2(get_dataset, get_trained_encoder, devices):
         dataset="m2" if devices.use_cuda else "cpu",
         training="m2" if devices.use_cuda else "cpu",
     )
-    dataset = get_dataset(overrides)
+    dataset = get_datamodule()
     trained_encoder = get_trained_encoder(dataset, overrides)
     return trained_encoder.to(devices.device)
 

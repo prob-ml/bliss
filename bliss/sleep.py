@@ -8,7 +8,6 @@ import torch
 from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
 from torch.optim import Adam
-from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 
 from . import device, plotting
@@ -118,15 +117,13 @@ def _get_min_perm_loss(
 
 
 class SleepPhase(pl.LightningModule):
-    def __init__(self, cfg: DictConfig, dataset):
+    def __init__(self, cfg: DictConfig):
         super(SleepPhase, self).__init__()
         self.hparams = cfg
         self.save_hyperparameters(cfg)
 
         self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
-
-        self.dataset = dataset
-        self.image_decoder: decoder.ImageDecoder = self.dataset.image_decoder
+        self.image_decoder = decoder.ImageDecoder(**cfg.model.decoder.params)
         self.image_decoder.requires_grad_(False)
 
         self.plotting: bool = cfg.training.plotting
@@ -273,12 +270,6 @@ class SleepPhase(pl.LightningModule):
             [{"params": self.image_encoder.parameters(), "lr": params["lr"]}],
             weight_decay=params["weight_decay"],
         )
-
-    def train_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None)
-
-    def val_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None)
 
     def training_step(self, batch, batch_idx):
         (
@@ -553,7 +544,7 @@ class SleepObjective(object):
             monitor="val_loss",
         )
 
-        model = SleepPhase(self.cfg, self.dataset)
+        model = SleepPhase(self.cfg)
         trainer = pl.Trainer(
             logger=False,
             gpus=self.gpus,
