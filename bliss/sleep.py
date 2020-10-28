@@ -10,7 +10,8 @@ from torch.distributions import Normal
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from pytorch_lightning.metrics import Precision, Recall, MeanAbsoluteError
+
+# from pytorch_lightning.metrics import Accuracy
 
 from . import device, plotting
 from .models import encoder, decoder
@@ -331,13 +332,12 @@ class SleepPhase(pl.LightningModule):
 
                 # we only check other metrics if n_sources matched up.
                 if true_n_sources_i == n_sources_i:
-                    true_locs.append(true_locs_i)
-                    locs.append(locs_i)
+                    pass
 
         # make them all correctly formatted tensors.
 
         # logs on counts
-        self.log("precision counts", Precision())
+        # self.log("precision counts", Precision())
 
         # TODO: compute accuracy on counts using pl metric
 
