@@ -40,7 +40,7 @@ def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
 
         psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
 
-    return psf_params
+    return psf_params.to(device)
 
 
 def get_star_bool(n_sources, galaxy_bool):
@@ -294,7 +294,7 @@ class ImageDecoder(nn.Module):
                 self.max_sources,
                 self.n_bands - 1,
             )
-            colors = torch.rand(*shape, device=device) * 0.15 + 0.3
+            colors = torch.randn(*shape, device=device) 
             _fluxes = 10 ** (colors / 2.5) * base_fluxes
             fluxes = torch.cat((base_fluxes, _fluxes), dim=3)
             fluxes *= star_bool.float()
