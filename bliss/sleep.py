@@ -11,8 +11,6 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 
-# from pytorch_lightning.metrics import Accuracy
-
 from . import device, plotting
 from .models import encoder, decoder
 from .models.encoder import get_star_bool
@@ -125,11 +123,10 @@ class SleepPhase(pl.LightningModule):
         self.hparams = cfg
         self.save_hyperparameters(cfg)
 
-        self.dataset = dataset
-        self.image_decoder: decoder.ImageDecoder = self.dataset.image_decoder
         self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
 
-        # avoid calculating gradients of decoder.
+        self.dataset = dataset
+        self.image_decoder: decoder.ImageDecoder = self.dataset.image_decoder
         self.image_decoder.requires_grad_(False)
 
         self.plotting: bool = cfg.training.plotting
@@ -373,7 +370,7 @@ class SleepPhase(pl.LightningModule):
         n_samples = min(10, len(batch["n_sources"]))
         assert n_samples > 1
 
-        # extract non-params entries.
+        # extract non-params entries get_full_params works.
         images = batch.pop("images", None)
         slen = images.shape[-1]
         batch.pop("background", None)
@@ -556,7 +553,7 @@ class SleepObjective(object):
             monitor="val_loss",
         )
 
-        model = SleepPhase(self.cfg, self.dataset).to(device)
+        model = SleepPhase(self.cfg, self.dataset)
         trainer = pl.Trainer(
             logger=False,
             gpus=self.gpus,
