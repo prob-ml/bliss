@@ -173,15 +173,24 @@ class SleepPhase(pl.LightningModule):
             batch["n_sources"],
         )
 
-        # flatten so first dimension is ptile
+        # some constants
         batch_size = images.shape[0]
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
         n_ptiles = batch_size * n_tiles_per_image
-        max_sources = self.image_decoder.max_sources
+        max_sources_dec = self.image_decoder.max_sources
+        max_sources = self.image_encoder.max_detections
         n_bands = self.image_decoder.n_bands
         n_galaxy_params = self.image_decoder.n_galaxy_params
-        assert max_sources == self.image_encoder.max_detections
-
+        
+        # clip to max sources
+        if max_sources < max_sources_dec: 
+            true_tile_locs = true_tile_locs[:, :, 0:max_sources]
+            true_tile_galaxy_params = true_tile_galaxy_params[:, :, 0:max_sources]
+            true_tile_log_fluxes = true_tile_log_fluxes[:, :, 0:max_sources]
+            true_tile_galaxy_bool = true_tile_galaxy_bool[:, :, 0:max_sources]
+            true_tile_n_sources = true_tile_n_sources.clamp(max = max_sources)
+        
+        # flatten so first dimension is ptile
         true_tile_locs = true_tile_locs.reshape(n_ptiles, max_sources, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.reshape(
             n_ptiles, max_sources, n_galaxy_params

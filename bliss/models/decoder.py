@@ -475,6 +475,7 @@ class ImageDecoder(nn.Module):
 
         locs_swapped = locs.index_select(1, self.swap)
         grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
+        
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
@@ -566,25 +567,27 @@ class ImageDecoder(nn.Module):
 
         # returns the ptiles in
         # shape = (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
-
-        assert (n_sources <= self.max_sources).all()
+        
+        max_sources = locs.shape[2]
+        
+        assert (n_sources <= max_sources).all()
         batch_size = n_sources.shape[0]
         n_ptiles = batch_size * self.n_tiles_per_image
 
         # reshape parameters being explicit about shapes
         _n_sources = n_sources.reshape(n_ptiles)
-        _locs = locs.reshape(n_ptiles, self.max_sources, 2)
-        _galaxy_bool = galaxy_bool.reshape(n_ptiles, self.max_sources, 1)
+        _locs = locs.reshape(n_ptiles, max_sources, 2)
+        _galaxy_bool = galaxy_bool.reshape(n_ptiles, max_sources, 1)
         _galaxy_params = galaxy_params.reshape(
-            n_ptiles, self.max_sources, self.n_galaxy_params
+            n_ptiles, max_sources, self.n_galaxy_params
         )
-        _fluxes = fluxes.reshape(n_ptiles, self.max_sources, self.n_bands)
+        _fluxes = fluxes.reshape(n_ptiles, max_sources, self.n_bands)
 
         # draw stars and galaxies
-        _is_on_array = get_is_on_from_n_sources(_n_sources, self.max_sources)
-        _is_on_array = _is_on_array.reshape(n_ptiles, self.max_sources, 1)
+        _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)
+        _is_on_array = _is_on_array.reshape(n_ptiles, max_sources, 1)
         _star_bool = (1 - _galaxy_bool) * _is_on_array
-        _star_bool = _star_bool.reshape(n_ptiles, self.max_sources, 1)
+        _star_bool = _star_bool.reshape(n_ptiles, max_sources, 1)
 
         # draw stars and galaxies
         stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
