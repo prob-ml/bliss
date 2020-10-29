@@ -1,8 +1,10 @@
 import os
 import torch
 import pytorch_lightning as pl
-import gc
-import logging
+import optuna
+import GPUtil
+import warnings
+import time
 from omegaconf import DictConfig
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -51,7 +53,6 @@ class SleepObjective(object):
         self.gpu_queue = gpu_queue
 
     def __call__(self, trial):
-        gc.set_debug(gc.DEBUG_UNCOLLECTABLE | gc.DEBUG_COLLECTABLE)
 
         torch.manual_seed(10)
 
@@ -64,6 +65,15 @@ class SleepObjective(object):
             torch.cuda.set_device(device)
         else:
             device = torch.device("cpu")
+
+        # check if the GPU is released
+        gpu_object = GPUtil.getGPUs()[gpu_id]
+
+        # while loop
+        # for 1:4 times
+        while gpu_object.memoryUsed > 11:
+            print("wait for gpu to clean up memory")
+            time.sleep(5)
 
         self.cfg.dataset.params.update(
             {"n_batches": self.n_batches, "batch_size": self.batch_size}
@@ -113,17 +123,16 @@ class SleepObjective(object):
             ],
         )
 
-        trainer.fit(model)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            trainer.fit(model)
+        warnings.simplefilter("error")
+
+        # Handle pruning based on the intermediate value.
+        if trial.should_prune():
+            raise optuna.TrialPruned()
 
         if self.gpu_queue is not None:
             self.gpu_queue.put(gpu_id)
-
-        gc.collect()
-
-        logger = logging.getLogger("objective_multi_gpu")
-        logger.debug("gc garbage: %r", gc.garbage)
-        for o in gc.garbage:
-            for r in gc.get_referrers(o):
-                logger.debug("ref for %r: %r", o, r)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()
