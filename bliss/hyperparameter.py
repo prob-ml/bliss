@@ -2,11 +2,9 @@ import os
 import torch
 import pytorch_lightning as pl
 import optuna
-import GPUtil
-import warnings
+from optuna.integration import PyTorchLightningPruningCallback
 import time
 from omegaconf import DictConfig
-from optuna.integration import PyTorchLightningPruningCallback
 
 from bliss.sleep import SleepPhase
 from bliss.datasets.simulated import SimulatedDataset
@@ -66,15 +64,6 @@ class SleepObjective(object):
         else:
             device = torch.device("cpu")
 
-        # check if the GPU is released
-        gpu_object = GPUtil.getGPUs()[gpu_id]
-
-        # while loop
-        # for 1:4 times
-        while gpu_object.memoryUsed > 11:
-            print("wait for gpu to clean up memory")
-            time.sleep(5)
-
         self.cfg.dataset.params.update(
             {"n_batches": self.n_batches, "batch_size": self.batch_size}
         )
@@ -112,6 +101,9 @@ class SleepObjective(object):
         use_gpu = [gpu_id] if self.gpu_queue is not None else [self.single_gpu]
         use_cpu = 0
 
+        if self.gpu_queue is not None:
+            self.gpu_queue.put(gpu_id)
+
         trainer = pl.Trainer(
             logger=False,
             gpus=use_gpu if torch.cuda.is_available() else use_cpu,
@@ -123,16 +115,6 @@ class SleepObjective(object):
             ],
         )
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            trainer.fit(model)
-        warnings.simplefilter("error")
-
-        # Handle pruning based on the intermediate value.
-        if trial.should_prune():
-            raise optuna.TrialPruned()
-
-        if self.gpu_queue is not None:
-            self.gpu_queue.put(gpu_id)
+        trainer.fit(model)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()

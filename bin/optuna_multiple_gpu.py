@@ -37,7 +37,7 @@ def main(cfg: DictConfig):
     monitor = "val_loss"
 
     # set up pruner
-    pruner = optuna.pruners.MedianPruner(n_warmup_steps=10)
+    pruner = optuna.pruners.MedianPruner(n_warmup_steps=20)
 
     # initialize study object
     study = optuna.create_study(
@@ -46,7 +46,7 @@ def main(cfg: DictConfig):
         # sampler=optuna.samplers.GridSampler(search_space),
         pruner=pruner,
     )
-    n_gpu = (1, 3, 5)
+    n_gpu = (1, 4, 5)
 
     # set up queue of devices
     # mp.set_start_method("spawn")
