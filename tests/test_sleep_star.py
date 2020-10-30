@@ -13,7 +13,6 @@ class TestSleepStar:
         )
         return get_trained_encoder(overrides)
 
-    @pytest.mark.parametrize("n_stars", ["1", "2", "3"])
     def test_star_sleep(self, n_stars, trained_encoder, paths, devices):
         device = devices.device
         test_path = paths["data"].joinpath(f"{n_stars}_star_test.pt")

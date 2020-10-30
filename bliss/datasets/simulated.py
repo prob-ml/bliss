@@ -43,10 +43,14 @@ class SimulatedDataset(IterableDataset):
 class SimulatedModule(pl.LightningDataModule):
     def __init__(self, cfg: DictConfig):
         super(SimulatedModule, self).__init__()
+        self.cfg = cfg
         self.dataset = SimulatedDataset(cfg)
 
     def train_dataloader(self):
         return DataLoader(self.dataset, batch_size=None)
 
     def val_dataloader(self):
+        return DataLoader(self.dataset, batch_size=None)
+
+    def test_dataloader(self):
         return DataLoader(self.dataset, batch_size=None)

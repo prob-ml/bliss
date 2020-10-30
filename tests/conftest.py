@@ -101,7 +101,7 @@ def get_dataset():
 
 
 @pytest.fixture(scope="session")
-def get_trained_encoder(devices):
+def train_sleep(devices):
     def _encoder(overrides: dict):
         assert "model" in overrides
         overrides = [f"{key}={value}" for key, value in overrides.items()]
@@ -112,7 +112,6 @@ def get_trained_encoder(devices):
             sleep_net = sleep.SleepPhase(cfg)
             trainer = pl.Trainer(**cfg.training.trainer)
             trainer.fit(sleep_net, datamodule=datamodule)
-            sleep_net.image_encoder.eval()
-            return sleep_net.image_encoder.to(devices.device)
+            return sleep_net
 
     return _encoder
