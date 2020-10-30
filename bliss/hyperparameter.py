@@ -51,7 +51,7 @@ class SleepObjective(object):
         batch_size,
         data_seed: int = 10,
         single_gpu_id=1,
-        gpu_queue: Optional[SyncManager] = None,
+        gpu_queue: Optional = None,
     ):
 
         self.cfg = cfg
@@ -181,121 +181,130 @@ class SleepObjective(object):
         return self.metrics_callback.metrics[-1][self.monitor].item()
 
 
-class SleepTune(object):
-    def __init__(
-        self,
-        cfg: DictConfig,
-        max_epochs: int,
+def SleepTune(
+    cfg: DictConfig,
+    max_epochs: int,
+    model_dir,
+    monitor,
+    n_batches,
+    batch_size,
+    direction: str = "minimum",
+    data_seed: int = 10,
+    n_trials=100,
+    time_out=600,
+    gc_after_trial: bool = False,
+    sampler: Optional["samplers.BaseSampler"] = None,
+    pruner: Optional[pruners] = None,
+    num_gpu: int or list = 2,
+    storage: Optional[Union[str, storages.BaseStorage]] = None,
+):
+    """
+    :param cfg: DictConfig from hydra
+    :param max_epochs: in integer to indicate epochs of training
+    :param model_dir: where to save the model checkpoint of lightning
+    :param monitor: which metric to monitor for the hyperparameter selection
+    :param n_batches: how many batches per epoch
+    :param batch_size: the size of image simulated for each batch
+    :param direction: minimize or maximize the chosen metric
+    :param data_seed: set a seed for data simulation
+    :param n_trials: the maximum trials to run
+    :param time_out: the maximum time to run for each trial
+    :param gc_after_trial: enable garbage collection after each trial?
+    :param sampler: optuna.sampler
+    :param pruner: optuna.pruner
+    :param num_gpu: numer of GPUs to use. Could be an integer or a list of ids.
+                    CPU only: set this arugument to be zero
+                    Single GPU: either pass in 1 ot a list single id, e.g. [1]
+                    Multiple GPUs: either pass in an integer > 1 and SleepTune pick
+                                    available GPUS, or a list of ids.
+    :param storage: If using multiple GPUs, storage must be defined as optuna.RDBStorage
+
+    :return: an optuna.trial.FrozenTrial object
+    """
+
+    # set up number of gpu to use
+    single_gpu = 1
+    gpu_queue = None
+
+    if num_gpu == 1:
+        deviceID = GPUtil.getAvailable()
+        single_gpu = deviceID[0]
+    elif isinstance(num_gpu, list) and len(num_gpu) == 1:
+        single_gpu = num_gpu[0]
+    elif num_gpu > 1:
+        deviceID = GPUtil.getAvailable(limit=num_gpu)
+        # check if available GPUs are enough
+        if len(deviceID) < num_gpu:
+            raise Warning("Available GPU is less than gpu number specified")
+        gpu_queue = mp.Manager().Queue()
+        for i in deviceID:
+            gpu_queue.put(i)
+    elif isinstance(num_gpu, list) and len(num_gpu) > 1:
+        gpu_queue = mp.Manager().Queue()
+        for i in num_gpu:
+            gpu_queue.put(i)
+
+    # if using multiple GPU, storage must be define by optuna.RDBStorage
+    if gpu_queue is not None and storage is None:
+        raise AttributeError("storage must defined when using multiple gpu")
+
+    # set up object class
+    object = SleepObjective(
+        cfg,
+        max_epochs,
         model_dir,
+        MetricsCallback(),
         monitor,
         n_batches,
         batch_size,
-        direction: str = "minimum",
-        data_seed: int = 10,
-        n_trials=100,
-        time_out=600,
-        gc_after_trial: bool = False,
-        sampler: Optional["samplers.BaseSampler"] = None,
-        pruner: Optional[pruners] = None,
-        num_gpu: int or list = 2,
-        storage: Optional[Union[str, storages.BaseStorage]] = None,
-    ):
+        data_seed,
+        single_gpu_id=single_gpu,
+        gpu_queue=gpu_queue,
+    )
 
-        # set up number of gpu to use
-        single_gpu = 1
-        gpu_queue = None
+    if object.gpu_queue is None:
+        logger.info("Starting single GPU training")
 
-        if num_gpu == 1:
-            deviceID = GPUtil.getAvailable()
-            single_gpu = deviceID[0]
-        elif isinstance(num_gpu, list) and len(num_gpu) == 1:
-            single_gpu = num_gpu[0]
-        elif num_gpu > 1:
-            deviceID = GPUtil.getAvailable(limit=num_gpu)
-            # check if available GPUs are enough
-            if len(deviceID) < num_gpu:
-                raise Warning("Available GPU is less than gpu number specified")
-            gpu_queue = mp.Manager().Queue()
-            for i in deviceID:
-                gpu_queue.put(i)
-        elif isinstance(num_gpu, list) and len(num_gpu) > 1:
-            gpu_queue = mp.Manager().Queue()
-            for i in num_gpu:
-                gpu_queue.put(i)
-
-        # set up object class
-        self.object = SleepObjective(
-            cfg,
-            max_epochs,
-            model_dir,
-            MetricsCallback(),
-            monitor,
-            n_batches,
-            batch_size,
-            data_seed,
-            single_gpu_id=single_gpu,
-            gpu_queue=gpu_queue,
+        study = optuna.create_study(
+            direction=direction,
+            sampler=sampler,
+            pruner=pruner,
         )
 
-        # parameters for study object
-        self.sampler = sampler
-        self.pruner = pruner
-        self.direction = direction
+        study.optimize(
+            object,
+            n_trials=n_trials,
+            timeout=time_out,
+            gc_after_trial=gc_after_trial,
+        )
 
-        if gpu_queue is not None and storage is None:
-            raise AttributeError("storage must defined when using multiple gpu")
-        self.storage = storage
+    else:
+        logger.info("Starting multiple GPU training. One GPU per trial")
 
-        # parameters for study.optimize
-        self.n_trials = n_trials
-        self.time_out = time_out
-        self.gc_after_trial = gc_after_trial
+        study = optuna.create_study(
+            direction=direction,
+            storage=storage,
+            sampler=sampler,
+            pruner=pruner,
+        )
 
-    def run(self):
-        if self.object.gpu_queue is None:
-            logger.info("Starting single GPU training")
-
-            study = optuna.create_study(
-                direction=self.direction,
-                sampler=self.sampler,
-                pruner=self.pruner,
-            )
-
+        with parallel_backend("loky", n_jobs=len(object.gpu_queue)):
+            logger.info(f"Use loky backend and spawn {len(object.gpu_queue)} workers")
             study.optimize(
-                self.object,
-                n_trials=self.n_trials,
-                timeout=self.time_out,
-                gc_after_trial=self.gc_after_trial,
+                object,
+                n_jobs=len(object.gpu_queue),
+                n_trials=n_trials,
+                timeout=time_out,
+                gc_after_trial=gc_after_trial,
             )
 
-        else:
-            logger.info("Starting multiple GPU training. One GPU per trial")
+    # get the best trial
+    trial = study.best_trial
 
-            study = optuna.create_study(
-                direction=self.direction,
-                storage=self.storage,
-                sampler=self.sampler,
-                pruner=self.pruner,
-            )
+    logger.info("Number of finished trials: {}".format(len(study.trials)))
+    logger.info(f"Best trial: {trial.number} with value {trial.value}")
+    print("  The params for the best trial: ")
+    for key, value in trial.params.items():
+        print(f"    {key}: {value}")
 
-            with parallel_backend("loky", n_jobs=len(self.object.gpu_queue)):
-                logger.info(
-                    f"Use loky backend and spawn {len(self.object.gpu_queue)} workers"
-                )
-                study.optimize(
-                    self.object,
-                    n_jobs=len(self.object.gpu_queue),
-                    n_trials=self.n_trials,
-                    timeout=self.time_out,
-                    gc_after_trial=self.gc_after_trial,
-                )
-
-        trial = study.best_trial
-
-        logger.info("Number of finished trials: {}".format(len(study.trials)))
-        logger.info(f"Best trial: {trial.number} with value {trial.value}")
-        print("  The params for the best trial: ")
-        for key, value in trial.params.items():
-            print(f"    {key}: {value}")
-
-        return trial
+    return trial
