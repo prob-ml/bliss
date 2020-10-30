@@ -195,6 +195,9 @@ class ImageEncoder(nn.Module):
 
         # convolutional NN parameters
         self.enc_conv_c = enc_conv_c
+        ## make sure kernel size is odd number
+        if enc_kern % 2 == 0:
+            raise ValueError("kernel size must be odd number")
         self.enc_kern = enc_kern
         self.enc_hidden = enc_hidden
 
