@@ -111,7 +111,9 @@ def train_sleep(devices):
             datamodule = simulated.SimulatedModule(cfg)
             sleep_net = sleep.SleepPhase(cfg)
             trainer = pl.Trainer(**cfg.training.trainer)
+            # train and then test
             trainer.fit(sleep_net, datamodule=datamodule)
-            return sleep_net
+            results = trainer.test(sleep_net, datamodule=datamodule)
+            return sleep_net, results
 
     return _encoder

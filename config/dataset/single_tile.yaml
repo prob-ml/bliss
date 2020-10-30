@@ -1,0 +1,5 @@
+# @package _group_
+module_name: SimulatedModule
+params:
+  n_batches: 10
+  batch_size: 64

@@ -46,6 +46,11 @@ class SimulatedModule(pl.LightningDataModule):
         self.cfg = cfg
         self.dataset = SimulatedDataset(cfg)
 
+        # check datamodule is sensible for sleep training.
+        n_tiles_per_image = self.dataset.image_decoder.n_tiles_per_image
+        total_ptiles = n_tiles_per_image * self.dataset.batch_size
+        assert total_ptiles > 1, "Need at least 2 tiles in each batch."
+
     def train_dataloader(self):
         return DataLoader(self.dataset, batch_size=None)
 
