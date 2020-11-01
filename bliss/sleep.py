@@ -293,17 +293,17 @@ class SleepPhase(pl.LightningModule):
             galaxy_bool_loss,
         ) = self.get_loss(batch)
 
-        self.log("validation_loss", loss)
-        self.log("counter loss (val)", counter_loss.mean())
-        self.log("galaxy bool loss (val)", galaxy_bool_loss.mean())
-        self.log("star params loss (val)", star_params_loss.mean())
-        self.log("galaxy params loss (val)", galaxy_params_loss.mean())
+        self.log("val_loss", loss)
+        self.log("val_counter_loss", counter_loss.mean())
+        self.log("val_gal_bool_loss", galaxy_bool_loss.mean())
+        self.log("val_star_params_loss", star_params_loss.mean())
+        self.log("val_gal_params_loss", galaxy_params_loss.mean())
 
         # calculate metrics for this batch
         counts_acc, galaxy_counts_acc, locs_mse = self.get_metrics(batch)
-        self.log("accuracy counts (val)", counts_acc)
-        self.log("accuracy galaxy counts (val)", galaxy_counts_acc)
-        self.log("locs mse (val)", locs_mse)
+        self.log("val_acc_counts", counts_acc)
+        self.log("val_gal_counts", galaxy_counts_acc)
+        self.log("val_locs_mse", locs_mse)
 
         return batch
 
@@ -497,7 +497,7 @@ class SleepPhase(pl.LightningModule):
 class SleepObjective(object):
     def __init__(
         self,
-        dataset,
+        datamodule,
         cfg: DictConfig,
         max_epochs: int,
         model_dir,
@@ -505,7 +505,7 @@ class SleepObjective(object):
         monitor,
         gpus=0,
     ):
-        self.dataset = dataset
+        self.datamodule = datamodule
         self.cfg = cfg
         encoder_kwargs = cfg.model.encoder.params
 
@@ -570,6 +570,6 @@ class SleepObjective(object):
                 PyTorchLightningPruningCallback(trial, monitor=self.monitor),
             ],
         )
-        trainer.fit(model)
+        trainer.fit(model, datamodule=self.datamodule)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()
