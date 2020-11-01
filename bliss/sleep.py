@@ -313,6 +313,12 @@ class SleepPhase(pl.LightningModule):
         if self.plotting and self.current_epoch > 1:
             self.make_plots(outputs[-1])
 
+    def test_step(self, batch, batch_indx):
+        counts_acc, galaxy_counts_acc, locs_mse = self.get_metrics(batch)
+        self.log("acc_counts", counts_acc)
+        self.log("gal_counts", galaxy_counts_acc)
+        self.log("locs_mse", locs_mse)
+
     def get_metrics(self, batch):
         # get images and properties
         images = batch["images"]

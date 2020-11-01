@@ -2,7 +2,7 @@
 num_workers: 0
 deterministic: False
 plotting: False
-n_epochs: 121
+n_epochs: 151
 trainer:
   profiler: False
   logger: False

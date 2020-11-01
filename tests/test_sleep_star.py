@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_star_sleep_one_tile(train_sleep, devices):
     use_cuda = devices.use_cuda
     _ = devices.device
@@ -7,11 +10,14 @@ def test_star_sleep_one_tile(train_sleep, devices):
         "training": "tests_default" if use_cuda else "cpu",
     }
     _, test_results = train_sleep(overrides)
+    results = test_results[0]
 
     # check test results are sensible.
-    assert test_results is not None
+    assert results["acc_counts"] > 0.85
+    assert results["locs_mse"] < 0.75
 
 
+@pytest.mark.skip
 def test_star_sleep(train_sleep, devices):
     use_cuda = devices.use_cuda
     _ = devices.device
@@ -21,6 +27,8 @@ def test_star_sleep(train_sleep, devices):
         training="tests_default" if use_cuda else "cpu",
     )
     _, test_results = train_sleep(overrides)
+    results = test_results[0]
 
     # check test results are sensible.
-    assert test_results is not None
+    assert results["acc_counts"] > 0.85
+    assert results["locs_mse"] < 0.65
