@@ -9,4 +9,4 @@ general:
 
 paths:
   root: ${env:BLISS_HOME}
-  output: logs/example
+  output: ${paths.root}/logs/example
