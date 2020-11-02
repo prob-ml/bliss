@@ -1,6 +1,3 @@
-import pytest
-
-
 def test_star_sleep_one_tile(train_sleep, devices):
     use_cuda = devices.use_cuda
     _ = devices.device
