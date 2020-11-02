@@ -2,7 +2,7 @@
 num_workers: 0
 deterministic: False
 seed: 42
-validation_plot_start: 5
+plotting: False
 n_epochs: 200
 trainer:
   profiler: False

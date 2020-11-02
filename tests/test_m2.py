@@ -8,15 +8,14 @@ np.random.seed(43)
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(get_dataset, get_trained_encoder, devices):
+def trained_star_encoder_m2(train_sleep, devices):
     overrides = dict(
         model="m2",
         dataset="m2" if devices.use_cuda else "cpu",
         training="m2" if devices.use_cuda else "cpu",
     )
-    dataset = get_dataset(overrides)
-    trained_encoder = get_trained_encoder(dataset, overrides)
-    return trained_encoder.to(devices.device)
+    sleep_net, _ = train_sleep(overrides)
+    return sleep_net.image_encoder.to(devices.device)
 
 
 def filter_params(locs, fluxes, slen, pad=5):
@@ -93,6 +92,7 @@ class TestStarSleepEncoderM2:
 
         # the SDSS image
         test_image = torch.from_numpy(hubble_data["sdss_image"]).unsqueeze(0).to(device)
+        slen = test_image.shape[-1]
 
         # the true parameters
         true_locs = torch.from_numpy(hubble_data["true_locs"]).to(device)
@@ -100,14 +100,7 @@ class TestStarSleepEncoderM2:
         nelec_per_nmgy = torch.from_numpy(hubble_data["nelec_per_nmgy"]).to(device)
 
         # get estimated parameters
-        (
-            n_sources,
-            est_locs,
-            galaxy_params,
-            est_log_fluxes,
-            galaxy_bool,
-        ) = trained_star_encoder_m2.map_estimate(test_image.to(device))
-        est_fluxes = est_log_fluxes.exp()
+        estimate = trained_star_encoder_m2.map_estimate(test_image.to(device))
 
         # check metrics if cuda is true
         if not devices.use_cuda:
@@ -115,10 +108,10 @@ class TestStarSleepEncoderM2:
 
         # summary statistics
         sleep_tpr, sleep_ppv = get_summary_stats(
-            est_locs[0],
+            estimate["locs"][0],
             true_locs,
-            trained_star_encoder_m2.slen,
-            est_fluxes[0, :, 0],
+            slen,
+            estimate["fluxes"][0, :, 0],
             true_fluxes[:, 0],
             nelec_per_nmgy,
         )[0:2]

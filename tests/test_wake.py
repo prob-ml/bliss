@@ -3,12 +3,11 @@ from bliss import wake
 import pytorch_lightning as pl
 
 
-def test_star_wake(get_dataset, get_trained_encoder, paths, devices):
+def test_star_wake(train_sleep, paths, devices):
 
     device = devices.device
     overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
-    dataset = get_dataset(overrides)
-    trained_encoder = get_trained_encoder(dataset, overrides)
+    sleep_net, _ = train_sleep(overrides)
 
     # load the test image
     # 3-stars 30*30 pixels.
@@ -16,7 +15,7 @@ def test_star_wake(get_dataset, get_trained_encoder, paths, devices):
     test_star = torch.load(test_path, map_location="cpu")
     test_image = test_star["images"].to(device)
     test_slen = test_image.size(-1)
-    image_decoder = dataset.image_decoder.to(device)
+    image_decoder = sleep_net.image_decoder.to(device)
     background_value = image_decoder.background.mean().item()
 
     # initialize background params, which will create the true background
@@ -27,7 +26,7 @@ def test_star_wake(get_dataset, get_trained_encoder, paths, devices):
     hparams = {"n_samples": n_samples, "lr": 0.001}
     assert image_decoder.slen == test_slen
     wake_phase_model = wake.WakeNet(
-        trained_encoder,
+        sleep_net.image_encoder,
         image_decoder,
         test_image,
         init_background_params,

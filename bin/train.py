@@ -12,18 +12,13 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from bliss import sleep, use_cuda
-from bliss.datasets import galaxy_datasets, catsim, simulated
-from bliss.models import galaxy_net
+from bliss.datasets import simulated
 
 # compatible datasets and models.
-_datasets = [
-    galaxy_datasets.H5Catalog,
-    catsim.CatsimGalaxies,
-    simulated.SimulatedDataset,
-]
-datasets = {cls.__name__: cls for cls in _datasets}
+_datamodules = [simulated.SimulatedModule]
+datamodules = {cls.__name__: cls for cls in _datamodules}
 
-_models = [galaxy_net.OneCenteredGalaxy, sleep.SleepPhase]
+_models = [sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
 
 
@@ -101,10 +96,10 @@ def main(cfg: DictConfig):
     setup_seed(cfg)
 
     # setup dataset.
-    dataset = datasets[cfg.dataset.name](cfg)
+    datamodule = datamodules[cfg.dataset.module_name](cfg)
 
     # setup model
-    model = models[cfg.model.name](cfg, dataset)
+    model = models[cfg.model.name](cfg)
 
     # setup trainer
     profiler = setup_profiler(cfg, paths)
@@ -117,7 +112,7 @@ def main(cfg: DictConfig):
     trainer = pl.Trainer(**trainer_dict)
 
     # train!
-    trainer.fit(model)
+    trainer.fit(model, datamodule=datamodule)
 
 
 if __name__ == "__main__":

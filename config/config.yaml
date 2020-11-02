@@ -10,7 +10,3 @@ general:
 paths:
   root: ${env:BLISS_HOME}
   output: logs/example
-
-hydra:
-  run:
-    dir: outputs/${now:%Y-%m-%d_%H-%M-%S}_${hydra.job.override_dirname}
