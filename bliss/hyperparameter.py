@@ -1,4 +1,6 @@
 import os
+import re
+import shutil
 from typing import Optional
 import torch
 import pytorch_lightning as pl
@@ -311,5 +313,12 @@ def SleepTune(
     print("  The params for the best trial: ")
     for key, value in trial.params.items():
         print(f"    {key}: {value}")
+
+    # remove the trial folders created by optuna
+    trial_re = re.compile(r"trial_\d*")
+    for root, dirs, files in os.walk(model_dir):
+        for dir in dirs:
+            if trial_re.match(dir):
+                shutil.rmtree(os.path.join(root, dir))
 
     return trial

@@ -18,19 +18,14 @@ class MetricsCallback(Callback):
 
 
 class TestOptunaSleep:
-    @pytest.fixture(scope="class")
-    def overrides(self, devices):
+    def test_optuna_single_core(self, devices):
         use_cuda = devices.use_cuda
         overrides = dict(
             model="basic_sleep_star",
-            training="default" if use_cuda else "cpu",
-            dataset="default" if use_cuda else "cpu",
+            training="cpu",
+            dataset="cpu",
         )
         overrides = [f"{key}={value}" for key, value in overrides.items()]
-        return overrides
-
-    def test_optuna_single_core(self, overrides, devices):
-        use_cuda = devices.use_cuda
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
             cfg.optimizer.params.update({"lr": 1e-4, "weight_decay": 1e-6})
