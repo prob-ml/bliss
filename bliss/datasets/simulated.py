@@ -68,20 +68,17 @@ class SimulatedDataset(IterableDataset):
 
 class SavedSimulated(Dataset):
     def __init__(self, pt_file="example.pt"):
-        """A dataset created from simulated batches saved as a list of dicts from
-        SimulatedDataset."""
+        """A dataset created from simulated batches saved as a single dict created from
+        SimulatedDataset. Hint: Create a single big batch."""
         super().__init__()
 
-        self.batches = torch.load(pt_file)
-        assert isinstance(self.batches, list)
-        assert isinstance(self.batches[-1], dict)
-
-        self.n_batches = len(self.batches)
-        self.batch_size = self.batches[-1]["images"].shape[0]
+        self.data = torch.load(pt_file)
+        assert isinstance(self.data, dict)
+        self.size = self.data["images"].shape[0]
 
     def __len__(self):
         """Number of batches saved in the file."""
-        return len(self.batches)
+        return self.size
 
     def __getitem__(self, idx):
-        return self.batches[idx]
+        return {k: v[idx] for k, v in self.data.items()}
