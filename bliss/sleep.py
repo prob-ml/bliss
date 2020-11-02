@@ -316,7 +316,7 @@ class SleepPhase(pl.LightningModule):
     def test_step(self, batch, batch_indx):
         counts_acc, galaxy_counts_acc, locs_mse = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
-        self.log("gal_counts", galaxy_counts_acc)
+        self.log("acc_gal_counts", galaxy_counts_acc)
         self.log("locs_mse", locs_mse)
 
     def get_metrics(self, batch):
