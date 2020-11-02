@@ -27,6 +27,7 @@ def visualize(batch, path, n_samples=25, nrows=5, figsize=(12, 12)):
         image = images[i][0].cpu().numpy()
         plotting.plot_image(fig, ax, image)
 
+    plt.tight_layout()
     fig.savefig(path, bbox_inches="tight")
 
 
@@ -37,6 +38,7 @@ def main(cfg: DictConfig):
     imagepath = filepath.parent.joinpath(filepath.stem + "_images").with_suffix(".pdf")
     dataset = datasets[cfg.dataset.name](cfg)
     batch = dataset.get_batch()
+    batch = {k: v.cpu() for k, v in batch.items()}
 
     # save batch and images as pdf
     torch.save(batch, filepath)

@@ -211,7 +211,7 @@ class ImageDecoder(nn.Module):
         # output dimension is batch_size x n_tiles_per_image
 
         # always poisson distributed.
-        p = torch.full((1,), self.mean_sources, device=device).float()
+        p = torch.full((1,), self.mean_sources, device=device, dtype=torch.float)
         m = Poisson(p)
         n_sources = m.sample([batch_size, self.n_tiles_per_image])
 
