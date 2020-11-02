@@ -16,7 +16,7 @@ from omegaconf import DictConfig
 import logging
 
 from bliss.sleep import SleepPhase
-from bliss.datasets.simulated import SimulatedDataset
+from bliss.datasets.simulated import SimulatedModule
 
 
 logger = logging.getLogger()
@@ -94,7 +94,7 @@ class SleepObjective(object):
             {"n_batches": self.n_batches, "batch_size": self.batch_size}
         )
 
-        star_dataset = SimulatedDataset(cfg=self.cfg)
+        star_dataset = SimulatedModule(cfg=self.cfg)
 
         # update hydra config to be the search space
         self.cfg.model.encoder.params["enc_conv_c"] = (
@@ -153,7 +153,7 @@ class SleepObjective(object):
         )
 
         # Initiate the model
-        model = SleepPhase(self.cfg, star_dataset)
+        model = SleepPhase(self.cfg)
 
         # put correct device to model
         use_gpu = 0
@@ -180,7 +180,7 @@ class SleepObjective(object):
         )
 
         # start training
-        trainer.fit(model)
+        trainer.fit(model, datamodule=star_dataset)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()
 
