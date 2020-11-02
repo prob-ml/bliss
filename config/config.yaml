@@ -3,6 +3,7 @@ defaults:
   - model: basic_sleep_star
   - training: default
   - dataset: default
+  - testing: default
 
 general:
   overwrite: False
