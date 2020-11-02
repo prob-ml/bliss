@@ -1,10 +1,36 @@
 from omegaconf import DictConfig
 import torch
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, Dataset
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from bliss.models.decoder import ImageDecoder
+
+
+class SimulatedModule(pl.LightningDataModule):
+    def __init__(self, cfg: DictConfig):
+        super(SimulatedModule, self).__init__()
+        self.cfg = cfg
+        self.dataset = SimulatedDataset(cfg)
+
+        # check datamodule is sensible for sleep training.
+        n_tiles_per_image = self.dataset.image_decoder.n_tiles_per_image
+        total_ptiles = n_tiles_per_image * self.dataset.batch_size
+        assert total_ptiles > 1, "Need at least 2 tiles in each batch."
+
+    def train_dataloader(self):
+        return DataLoader(self.dataset, batch_size=None)
+
+    def val_dataloader(self):
+        return DataLoader(self.dataset, batch_size=None)
+
+    def test_dataloader(self):
+        if self.cfg.testing.file is None:
+            return DataLoader(self.dataset, batch_size=None)
+
+        else:
+            test_dataset = SavedSimulated(self.cfg.testing.file)
+            return DataLoader(test_dataset, batch_size=1, num_workers=0)
 
 
 class SimulatedDataset(IterableDataset):
@@ -40,22 +66,22 @@ class SimulatedDataset(IterableDataset):
         return batch
 
 
-class SimulatedModule(pl.LightningDataModule):
-    def __init__(self, cfg: DictConfig):
-        super(SimulatedModule, self).__init__()
-        self.cfg = cfg
-        self.dataset = SimulatedDataset(cfg)
+class SavedSimulated(Dataset):
+    def __init__(self, pt_file="example.pt"):
+        """A dataset created from simulated batches saved as a list of dicts from
+        SimulatedDataset."""
+        super().__init__()
 
-        # check datamodule is sensible for sleep training.
-        n_tiles_per_image = self.dataset.image_decoder.n_tiles_per_image
-        total_ptiles = n_tiles_per_image * self.dataset.batch_size
-        assert total_ptiles > 1, "Need at least 2 tiles in each batch."
+        self.batches = torch.load(pt_file)
+        assert isinstance(self.batches, list)
+        assert isinstance(self.batches[-1], dict)
 
-    def train_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None)
+        self.n_batches = len(self.batches)
+        self.batch_size = self.batches[-1]["images"].shape[0]
 
-    def val_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None)
+    def __len__(self):
+        """Number of batches saved in the file."""
+        return len(self.batches)
 
-    def test_dataloader(self):
-        return DataLoader(self.dataset, batch_size=None)
+    def __getitem__(self, idx):
+        return self.batches[idx]
