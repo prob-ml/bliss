@@ -31,13 +31,12 @@ def main(cfg: DictConfig):
 
     cfg.optimizer.params.update({"lr": (1e-4, 1e-2), "weight_decay": (1e-6, 1e-4)})
 
+    # start tuning
     SleepTune(
         cfg,
         max_epochs=100,
         model_dir=model_dir,
         monitor=monitor,
-        n_batches=4,
-        batch_size=32,
         direction="minimize",
         data_seed=10,
         n_trials=100,

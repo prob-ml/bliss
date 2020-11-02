@@ -1,6 +1,5 @@
 from pytorch_lightning import Callback
 import os
-import pytest
 from hydra.experimental import initialize, compose
 
 from bliss.hyperparameter import SleepTune
@@ -46,8 +45,6 @@ class TestOptunaSleep:
                     max_epochs=n_epochs,
                     model_dir=os.getcwd(),
                     monitor="val_loss",
-                    n_batches=4,
-                    batch_size=32,
                     n_trials=1,
                     num_gpu=1,
                 )
@@ -66,8 +63,6 @@ class TestOptunaSleep:
                     max_epochs=n_epochs,
                     model_dir=os.getcwd(),
                     monitor="val_loss",
-                    n_batches=4,
-                    batch_size=32,
                     n_trials=1,
                     num_gpu=0,
                 )
