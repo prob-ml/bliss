@@ -49,7 +49,7 @@ def main(cfg: DictConfig):
         storage="sqlite:///zz.db",
     )
 
-    print("Tunning is finished")
+    print("Tuning is finished")
 
 
 if __name__ == "__main__":

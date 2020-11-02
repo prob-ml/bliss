@@ -44,8 +44,6 @@ class SleepObjective(object):
         model_dir,
         metrics_callback,
         monitor,
-        n_batches,
-        batch_size,
         data_seed: int = 10,
         single_gpu=None,
         gpu_queue: Optional = None,
@@ -54,8 +52,6 @@ class SleepObjective(object):
         self.cfg = cfg
 
         # parameters for dataset simulation
-        self.n_batches = n_batches
-        self.batch_size = batch_size
         self.seed = data_seed  # user can pick a seed for data simulation
 
         # set up the encoder parameter search range
@@ -90,11 +86,6 @@ class SleepObjective(object):
         elif self.gpu_queue is None and self.single_gpu is not None:
             device = torch.device(f"cuda:{self.single_gpu}")
             torch.cuda.set_device(device)
-
-        # set up the dataset simulation
-        self.cfg.dataset.params.update(
-            {"n_batches": self.n_batches, "batch_size": self.batch_size}
-        )
 
         star_dataset = SimulatedModule(cfg=self.cfg)
 
@@ -169,7 +160,7 @@ class SleepObjective(object):
             self.gpu_queue.put(gpu_id)
 
         # set up the trainer
-        ## PyTorchLightningPruningCallback allow the pruner to stop early
+        # PyTorchLightningPruningCallback allow the pruner to stop early
         trainer = pl.Trainer(
             logger=False,
             gpus=use_gpu,
@@ -192,8 +183,6 @@ def SleepTune(
     max_epochs: int,
     model_dir,
     monitor,
-    n_batches,
-    batch_size,
     direction: str = "minimize",
     data_seed: int = 10,
     n_trials=100,
@@ -261,8 +250,6 @@ def SleepTune(
         model_dir,
         MetricsCallback(),
         monitor,
-        n_batches,
-        batch_size,
         data_seed,
         single_gpu=single_gpu,
         gpu_queue=gpu_queue,
