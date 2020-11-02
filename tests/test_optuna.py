@@ -1,9 +1,9 @@
 from pytorch_lightning import Callback
-from optuna.trial import FixedTrial
+import os
+import pytest
 from hydra.experimental import initialize, compose
 
-from bliss.hyperparameter import SleepObjective
-from bliss.datasets.simulated import SimulatedDataset
+from bliss.hyperparameter import SleepTune
 
 
 class MetricsCallback(Callback):
@@ -18,44 +18,61 @@ class MetricsCallback(Callback):
 
 
 class TestOptunaSleep:
-    def test_optuna(self, paths, devices):
-        overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
+    @pytest.fixture(scope="class")
+    def overrides(self, devices):
+        use_cuda = devices.use_cuda
+        overrides = dict(
+            model="basic_sleep_star",
+            training="default" if use_cuda else "cpu",
+            dataset="default" if use_cuda else "cpu",
+        )
         overrides = [f"{key}={value}" for key, value in overrides.items()]
+        return overrides
+
+    def test_optuna_single_core(self, overrides, devices):
+        use_cuda = devices.use_cuda
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            datamodule = SimulatedModule(cfg)
-            cfg.model.encoder.params.update(
-                {
-                    "enc_conv_c": (5, 25, 5),
-                    "enc_kern": 3,
-                    "enc_hidden": (64, 128, 64),
-                    "ptile_slen": 8,
-                    "max_detections": 1,
-                }
-            )
-            cfg.optimizer.params.update(
-                {"lr": (1e-4, 1e-2), "weight_decay": (1e-6, 1e-4)}
-            )
-            n_epochs = 1
-            # set up Object for optuna
-            objects = SleepObjective(
-                datamodule,
-                cfg,
-                max_epochs=n_epochs,
-                model_dir=paths["model_dir"],
-                metrics_callback=MetricsCallback(),
-                monitor="val_loss",
-                gpus=devices.gpus,
-            )
+            cfg.optimizer.params.update({"lr": 1e-4, "weight_decay": 1e-6})
 
-            # set up study object
-            objects(
-                FixedTrial(
+            if use_cuda:
+                # single gpu
+                cfg.model.encoder.params.update(
                     {
                         "enc_conv_c": 5,
+                        "enc_kern": 3,
                         "enc_hidden": 64,
-                        "learning rate": 1e-3,
-                        "weight_decay": 1e-5,
                     }
                 )
-            )
+                n_epochs = 1
+
+                SleepTune(
+                    cfg,
+                    max_epochs=n_epochs,
+                    model_dir=os.getcwd(),
+                    monitor="val_loss",
+                    n_batches=4,
+                    batch_size=32,
+                    n_trials=1,
+                    num_gpu=1,
+                )
+            else:
+                cfg.model.encoder.params.update(
+                    {
+                        "enc_conv_c": 5,
+                        "enc_kern": 3,
+                        "enc_hidden": 64,
+                    }
+                )
+                n_epochs = 1
+
+                SleepTune(
+                    cfg,
+                    max_epochs=n_epochs,
+                    model_dir=os.getcwd(),
+                    monitor="val_loss",
+                    n_batches=4,
+                    batch_size=32,
+                    n_trials=1,
+                    num_gpu=0,
+                )

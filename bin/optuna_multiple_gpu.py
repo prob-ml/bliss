@@ -57,10 +57,7 @@ def main(cfg: DictConfig):
     cfg.model.encoder.params.update(
         {
             "enc_conv_c": (5, 25, 5),
-            "enc_kern": 3,
             "enc_hidden": (64, 128, 64),
-            "ptile_slen": 8,
-            "max_detections": 2,
         }
     )
     print(cfg.model.encoder.params.enc_conv_c)

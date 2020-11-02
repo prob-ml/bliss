@@ -1,20 +1,15 @@
 import os
 from typing import Optional
-from typing import Union
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning import Callback
 import GPUtil
 
 import multiprocessing as mp
-from multiprocessing.managers import SyncManager
 from joblib import parallel_backend
 
 import optuna
 from optuna.integration import PyTorchLightningPruningCallback
-from optuna import storages
-from optuna import pruners
-from optuna import samplers
 
 from omegaconf import DictConfig
 
@@ -50,7 +45,7 @@ class SleepObjective(object):
         n_batches,
         batch_size,
         data_seed: int = 10,
-        single_gpu_id=1,
+        single_gpu=None,
         gpu_queue: Optional = None,
     ):
 
@@ -76,10 +71,8 @@ class SleepObjective(object):
         self.metrics_callback = metrics_callback
         self.monitor = monitor
 
-        # set up for single gpu
-        self.single_gpu = single_gpu_id
-
-        # set up for multiple gpu
+        # set up for gpu
+        self.single_gpu = single_gpu
         self.gpu_queue = gpu_queue
 
     def __call__(self, trial):
@@ -92,7 +85,7 @@ class SleepObjective(object):
             gpu_id = self.gpu_queue.get()
             device = torch.device(f"cuda:{gpu_id}")
             torch.cuda.set_device(device)
-        elif self.gpu_queue is None and torch.cuda.is_available():
+        elif self.gpu_queue is None and self.single_gpu is not None:
             device = torch.device(f"cuda:{self.single_gpu}")
             torch.cuda.set_device(device)
 
@@ -137,9 +130,17 @@ class SleepObjective(object):
             else self.enc_hidden
         )
 
-        lr = trial.suggest_loguniform("learning rate", self.lr[0], self.lr[1])
-        weight_decay = trial.suggest_loguniform(
-            "weight_decay", self.weight_decay[0], self.weight_decay[1]
+        lr = (
+            trial.suggest_loguniform("learning rate", self.lr[0], self.lr[1])
+            if type(self.lr) is not float
+            else self.lr
+        )
+        weight_decay = (
+            trial.suggest_loguniform(
+                "weight_decay", self.weight_decay[0], self.weight_decay[1]
+            )
+            if type(self.weight_decay) is not float
+            else self.weight_decay
         )
 
         # set up the optimizer base on learning rate and weight decay
@@ -155,8 +156,11 @@ class SleepObjective(object):
         model = SleepPhase(self.cfg, star_dataset)
 
         # put correct device to model
-        use_gpu = [gpu_id] if self.gpu_queue is not None else [self.single_gpu]
-        use_cpu = 0
+        use_gpu = 0
+        if self.gpu_queue is not None and self.single_gpu is None:
+            use_gpu = [gpu_id]
+        elif self.gpu_queue is None and self.single_gpu is not None:
+            use_gpu = [self.single_gpu]
 
         # put gpu id back to the queue
         if self.gpu_queue is not None:
@@ -166,7 +170,7 @@ class SleepObjective(object):
         ## PyTorchLightningPruningCallback allow the pruner to stop early
         trainer = pl.Trainer(
             logger=False,
-            gpus=use_gpu if torch.cuda.is_available() else use_cpu,
+            gpus=use_gpu,
             checkpoint_callback=checkpoint_callback,
             max_epochs=self.max_epochs,
             callbacks=[
@@ -188,15 +192,15 @@ def SleepTune(
     monitor,
     n_batches,
     batch_size,
-    direction: str = "minimum",
+    direction: str = "minimize",
     data_seed: int = 10,
     n_trials=100,
     time_out=600,
     gc_after_trial: bool = False,
-    sampler: Optional["samplers.BaseSampler"] = None,
-    pruner: Optional[pruners] = None,
+    sampler=None,
+    pruner=None,
     num_gpu: int or list = 2,
-    storage: Optional[Union[str, storages.BaseStorage]] = None,
+    storage=None,
 ):
     """
     :param cfg: DictConfig from hydra
@@ -223,7 +227,7 @@ def SleepTune(
     """
 
     # set up number of gpu to use
-    single_gpu = 1
+    single_gpu = None
     gpu_queue = None
 
     if num_gpu == 1:
@@ -258,7 +262,7 @@ def SleepTune(
         n_batches,
         batch_size,
         data_seed,
-        single_gpu_id=single_gpu,
+        single_gpu=single_gpu,
         gpu_queue=gpu_queue,
     )
 
@@ -288,11 +292,12 @@ def SleepTune(
             pruner=pruner,
         )
 
-        with parallel_backend("loky", n_jobs=len(object.gpu_queue)):
-            logger.info(f"Use loky backend and spawn {len(object.gpu_queue)} workers")
+        n_jobs = len(num_gpu) if type(num_gpu) is list else num_gpu
+        with parallel_backend("loky", n_jobs=n_jobs):
+            logger.info(f"Use loky backend and spawn {n_jobs} workers")
             study.optimize(
                 object,
-                n_jobs=len(object.gpu_queue),
+                n_jobs=n_jobs,
                 n_trials=n_trials,
                 timeout=time_out,
                 gc_after_trial=gc_after_trial,
