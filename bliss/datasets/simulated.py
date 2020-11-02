@@ -81,4 +81,10 @@ class SavedSimulated(Dataset):
         return self.size
 
     def __getitem__(self, idx):
-        return {k: v[idx] for k, v in self.data.items()}
+        batch = {}
+        for k, v in self.data.items():
+            if k == "background":
+                batch[k] = v
+            else:
+                batch[k] = v[idx]
+        return batch

@@ -311,13 +311,16 @@ class SleepPhase(pl.LightningModule):
         # NOTE: outputs is a list containing all validation step batches.
         # produce images for validation
         if self.plotting and self.current_epoch > 1:
-            self.make_plots(outputs[-1])
+            self.make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_indx):
         counts_acc, galaxy_counts_acc, locs_mse = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
         self.log("locs_mse", locs_mse)
+
+        if self.plotting:
+            self.make_plots(batch, kind="testing")
 
     def get_metrics(self, batch):
         # get images and properties
@@ -370,7 +373,7 @@ class SleepPhase(pl.LightningModule):
 
         return counts_acc, galaxy_counts_acc, locs_mse
 
-    def make_plots(self, batch):
+    def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
         # 'batch' is a batch from simulated dataset (all params are tiled)
         n_samples = min(10, len(batch["n_sources"]))
@@ -474,7 +477,13 @@ class SleepPhase(pl.LightningModule):
 
         plt.subplots_adjust(hspace=0.2, wspace=0.4)
         if self.logger:
-            self.logger.experiment.add_figure(f"Val Images {self.current_epoch}", fig)
+            if kind == "validation":
+                title = f"Val Images {self.current_epoch}"
+                self.logger.experiment.add_figure(title, fig)
+            elif kind == "testing":
+                self.logger.experiment.add_figure(f"Test Images", fig)
+            else:
+                raise NotImplementedError()
         plt.close(fig)
 
     @staticmethod
