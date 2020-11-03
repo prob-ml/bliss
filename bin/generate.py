@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import math
 import hydra
 import torch
 import matplotlib.pyplot as plt
@@ -12,10 +12,10 @@ from bliss import plotting
 datasets = {"SimulatedDataset": simulated.SimulatedDataset}
 
 
-def visualize(batch, path, n_samples=25, nrows=5, figsize=(12, 12)):
+def visualize(batch, path, n_samples, figsize=(12, 12)):
     # visualize in a pdf format 30 images from the batch
-    assert n_samples % nrows == 0
-    assert nrows ** 2 == n_samples
+    assert int(math.sqrt(n_samples)) == math.sqrt(n_samples)
+    nrows = int(math.sqrt(n_samples))
 
     fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
     axes = axes.flatten()
@@ -34,15 +34,15 @@ def visualize(batch, path, n_samples=25, nrows=5, figsize=(12, 12)):
 @hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig):
     # setup
-    filepath = Path(cfg.saving.file)
-    imagepath = filepath.parent.joinpath(filepath.stem + "_images").with_suffix(".pdf")
+    filepath = Path(cfg.generate.file)
+    imagepath = Path(cfg.paths.root).joinpath("temp", filepath.stem + "_images.pdf")
     dataset = datasets[cfg.dataset.name](cfg)
     batch = dataset.get_batch()
     batch = {k: v.cpu() for k, v in batch.items()}
 
     # save batch and images as pdf
     torch.save(batch, filepath)
-    visualize(batch, imagepath)
+    visualize(batch, imagepath, cfg.generate.n_plots)
 
 
 if __name__ == "__main__":

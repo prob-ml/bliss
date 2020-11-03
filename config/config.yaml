@@ -4,7 +4,7 @@ defaults:
   - training: default
   - dataset: default
   - testing: default
-  - saving: default
+  - generate: default
 
 general:
   overwrite: False

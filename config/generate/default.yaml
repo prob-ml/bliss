@@ -1,2 +1,3 @@
 # @package _group_
 file: ${paths.root}/data/example.pt
+n_plots: 25

@@ -13,7 +13,7 @@ decoder:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
     tile_slen: 4
-    ptile_padding: 3
+    ptile_padding: 5
     prob_galaxy: 1.0
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 1

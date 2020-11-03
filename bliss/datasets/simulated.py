@@ -75,6 +75,7 @@ class SavedSimulated(Dataset):
 
         self.data = torch.load(pt_file)
         assert isinstance(self.data, dict)
+        self.background = self.data.pop("background")
         self.size = self.data["images"].shape[0]
 
     def __len__(self):
@@ -82,10 +83,4 @@ class SavedSimulated(Dataset):
         return self.size
 
     def __getitem__(self, idx):
-        batch = {}
-        for k, v in self.data.items():
-            if k == "background":
-                batch[k] = v
-            else:
-                batch[k] = v[idx]
-        return batch
+        return {k: v[idx] for k, v in self.data.items()}
