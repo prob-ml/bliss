@@ -1,6 +1,8 @@
-def test_plotting(get_sleep_setup):
+def test_plotting(get_sleep_setup, get_datamodule):
     # just to test `make_validation_plots` works.
     overrides = dict(
-        model="basic_sleep_star", training="test_plotting", dataset="test_plotting"
+        model="basic_sleep_star", dataset="test_plotting", training="test_plotting"
     )
-    train_sleep(overrides)
+    datamodule = get_datamodule(overrides)
+    sleep_net, trainer = get_sleep_setup
+    trainer.fit(sleep_net, datamodule=datamodule)
