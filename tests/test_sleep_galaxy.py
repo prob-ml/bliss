@@ -2,7 +2,7 @@ def test_n_sources_and_locs(train_sleep, devices):
     use_cuda = devices.use_cuda
     overrides = dict(
         model="basic_sleep_galaxy",
-        training="testing_default" if devices.use_cuda else "cpu",
+        training="unittest" if devices.use_cuda else "cpu",
         dataset="default" if devices.use_cuda else "cpu",
     )
     _, test_results = train_sleep(overrides)
