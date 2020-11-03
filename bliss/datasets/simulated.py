@@ -29,8 +29,9 @@ class SimulatedModule(pl.LightningDataModule):
             return DataLoader(self.dataset, batch_size=None)
 
         else:
+            # TODO: modfiy batch_size?
             test_dataset = SavedSimulated(self.cfg.testing.file)
-            return DataLoader(test_dataset, batch_size=1, num_workers=0)
+            return DataLoader(test_dataset, batch_size=32, num_workers=0)
 
 
 class SimulatedDataset(IterableDataset):

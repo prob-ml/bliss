@@ -304,12 +304,10 @@ class SleepPhase(pl.LightningModule):
         self.log("val_acc_counts", counts_acc)
         self.log("val_gal_counts", galaxy_counts_acc)
         self.log("val_locs_mse", locs_mse)
-
         return batch
 
     def validation_epoch_end(self, outputs):
         # NOTE: outputs is a list containing all validation step batches.
-        # produce images for validation
         if self.plotting and self.current_epoch > 1:
             self.make_plots(outputs[-1], kind="validation")
 
@@ -318,7 +316,10 @@ class SleepPhase(pl.LightningModule):
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
         self.log("locs_mse", locs_mse)
+        return batch
 
+    def test_epoch_end(self, outputs):
+        batch = outputs[-1]
         if self.plotting:
             self.make_plots(batch, kind="testing")
 

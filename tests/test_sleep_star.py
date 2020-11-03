@@ -4,7 +4,7 @@ def test_star_sleep_one_tile(train_sleep, devices):
     overrides = {
         "model": "basic_sleep_star_one_tile",
         "dataset": "single_tile" if use_cuda else "cpu",
-        "training": "tests_default" if use_cuda else "cpu",
+        "training": "testing_default" if use_cuda else "cpu",
     }
     _, test_results = train_sleep(overrides)
     results = test_results[0]
@@ -24,7 +24,7 @@ def test_star_sleep(train_sleep, devices):
     overrides = dict(
         model="basic_sleep_star",
         dataset="default" if use_cuda else "cpu",
-        training="tests_default" if use_cuda else "cpu",
+        training="testing_default" if use_cuda else "cpu",
     )
     _, test_results = train_sleep(overrides)
     results = test_results[0]
