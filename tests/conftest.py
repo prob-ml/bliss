@@ -88,33 +88,28 @@ def devices(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def get_dataset():
-    def _dataset(overrides: dict):
+def get_datamodule():
+    def _datamodule(overrides: dict):
         assert "model" in overrides
         overrides = [f"{key}={value}" for key, value in overrides.items()]
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            dataset = simulated.SimulatedDataset(cfg)
-        return dataset
+            datamodule = simulated.SimulatedModule(cfg)
+        return datamodule
 
-    return _dataset
+    return _datamodule
 
 
 @pytest.fixture(scope="session")
-def train_sleep(devices):
-    def _encoder(overrides: dict):
+def get_sleep_setup(devices):
+    def _setup(overrides: dict):
         assert "model" in overrides
         overrides = [f"{key}={value}" for key, value in overrides.items()]
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
             cfg.training.trainer.update({"gpus": devices.gpus})
-            datamodule = simulated.SimulatedModule(cfg)
             sleep_net = sleep.SleepPhase(cfg)
             trainer = pl.Trainer(**cfg.training.trainer)
+            return sleep_net, trainer
 
-            # train and then test
-            trainer.fit(sleep_net, datamodule=datamodule)
-            results = trainer.test(sleep_net, datamodule=datamodule)
-            return sleep_net, results
-
-    return _encoder
+    return _setup

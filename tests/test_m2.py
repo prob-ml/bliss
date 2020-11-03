@@ -8,13 +8,15 @@ np.random.seed(43)
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(train_sleep, devices):
+def trained_star_encoder_m2(get_sleep_setup, get_datamodule, devices):
     overrides = dict(
         model="m2",
         dataset="m2" if devices.use_cuda else "cpu",
         training="m2" if devices.use_cuda else "cpu",
     )
-    sleep_net, _ = train_sleep(overrides)
+    datamodule = get_datamodule(overrides)
+    sleep_net, trainer = get_sleep_setup(overrides)
+    trainer.fit(sleep_net, datamodule=datamodule)
     return sleep_net.image_encoder.to(devices.device)
 
 
