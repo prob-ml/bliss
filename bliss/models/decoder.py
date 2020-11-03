@@ -61,6 +61,7 @@ class ImageDecoder(nn.Module):
         slen=50,
         tile_slen=2,
         ptile_padding=2,
+        border_padding=0,
         prob_galaxy=0.0,
         n_galaxy_params=8,
         max_sources=2,
@@ -98,6 +99,11 @@ class ImageDecoder(nn.Module):
         # the center tile, surrounded one tile on each side.
         self.ptile_padding = ptile_padding
         self.ptile_slen = int((self.ptile_padding * 2 + 1) * tile_slen)
+        
+        # the number of pixels that pads the full image
+        self.border_padding = border_padding
+        assert border_padding <= (ptile_padding * tile_slen), \
+            'Too much border padding. Make ptile_padding larger. '
 
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
@@ -134,7 +140,9 @@ class ImageDecoder(nn.Module):
 
         # background
         assert len(background_values) == n_bands
-        background_shape = (self.n_bands, self.slen, self.slen)
+        background_shape = (self.n_bands,
+                            self.slen + 2 * self.border_padding, 
+                            self.slen + 2 * self.border_padding)
         self.background = torch.zeros(background_shape, device=device)
         for i in range(n_bands):
             self.background[i] = background_values[i]
@@ -636,8 +644,7 @@ class ImageDecoder(nn.Module):
 
         return images
 
-    @staticmethod
-    def _construct_full_image_from_ptiles(image_ptiles, tile_slen):
+    def _construct_full_image_from_ptiles(self, image_ptiles, tile_slen):
         # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
         batch_size = image_ptiles.shape[0]
         n_tiles_per_image = image_ptiles.shape[1]
@@ -727,9 +734,11 @@ class ImageDecoder(nn.Module):
                 )
 
         # trim to original image size
+        x0 = ptile_padding * tile_slen - self.border_padding
+        x1 = (n_tiles1 + ptile_padding) * tile_slen + self.border_padding
         return canvas[
             :,
             :,
-            (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
-            (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
+            x0 : x1,
+            x0 : x1,
         ]

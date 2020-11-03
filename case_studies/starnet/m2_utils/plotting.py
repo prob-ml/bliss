@@ -19,9 +19,10 @@ def plot_image(axarr, image, x0 = 0, x1 = 0, slen0 = 100, slen1 = 100):
     
     return im
 
-def plot_locations(locs, slen, ax, marker = 'o', color = 'b'): 
-    ax.scatter(locs[:, 1].cpu() * slen - 0.5, 
-                locs[:, 0].cpu() * slen - 0.5, 
+def plot_locations(locs, slen, border_padding, 
+                   ax, marker = 'o', color = 'b'): 
+    ax.scatter(locs[:, 1].cpu() * slen - 0.5 + border_padding, 
+                locs[:, 0].cpu() * slen - 0.5 + border_padding, 
                 marker = marker, color = color)
 
 def get_params_in_tiles(tile_coords, locs, fluxes, slen, subimage_slen,

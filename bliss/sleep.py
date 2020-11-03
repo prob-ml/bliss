@@ -333,7 +333,7 @@ class SleepPhase(pl.LightningModule):
         true_locs_on_tiles = outputs[-1]["log"]["locs"][:n_samples]
         true_galaxy_bools_on_tiles = outputs[-1]["log"]["galaxy_bool"][:n_samples]
         images = outputs[-1]["log"]["images"][:n_samples]
-        slen = images[-1].shape[-1]
+        slen = self.image_decoder.slen # images[-1].shape[-1]
 
         # convert to full image parameters for plotting purposes.
         (
@@ -356,7 +356,7 @@ class SleepPhase(pl.LightningModule):
             res_ax = axes[i, 2]
 
             image = images[None, i]
-            assert image.shape[-1] == slen
+            assert image.shape[-1] == self.image_decoder.slen + 2 * self.image_decoder.border_padding
 
             # true parameters on full image.
             true_loc = true_locs[None, i]
@@ -466,7 +466,7 @@ class SleepPhase(pl.LightningModule):
         if self.current_epoch >= self.validation_plot_start:
             self.make_validation_plots(outputs)
 
-        slen = outputs[-1]["log"]["images"].shape[-1]
+        slen = self.image_decoder.slen # outputs[-1]["log"]["images"].shape[-1]
 
         # log other losses
         # first we log some of the important losses and average over all batches.

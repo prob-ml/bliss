@@ -139,7 +139,8 @@ def load_m2_data(sdss_dir = '../../sdss_stage_dir/',
                     slen = 100,
                     x0 = 630,
                     x1 = 310, 
-                    f_min = 1000.): 
+                    f_min = 1000., 
+                    border_padding = 0): 
     # returns the SDSS image of M2 in the r and i bands
     # along with the corresponding Hubble catalog
     
@@ -232,8 +233,12 @@ def load_m2_data(sdss_dir = '../../sdss_stage_dir/',
                 (hubble_locs_full_x1 > x1) & (hubble_locs_full_x1 < (x1 + slen - 1))
 
     # just a subset
-    sdss_image = sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)].to(device)
-    sdss_background = sdss_background_full[:, x0:(x0 + slen), x1:(x1 + slen)].to(device)
+    sdss_image = sdss_image_full[:, 
+                                 (x0 - border_padding):(x0 + slen + border_padding), 
+                                 (x1 - border_padding):(x1 + slen + border_padding)].to(device)
+    sdss_background = sdss_background_full[:, 
+                                           (x0 - border_padding):(x0 + slen + border_padding), 
+                                           (x1 - border_padding):(x1 + slen + border_padding)].to(device)
     
     locs = np.array([hubble_locs_full_x0[which_locs] - x0,
                         hubble_locs_full_x1[which_locs] - x1]).transpose()
