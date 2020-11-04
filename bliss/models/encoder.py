@@ -51,18 +51,18 @@ def get_full_params(slen: int, tile_params: dict):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
 
-    # coordinates of the tiles
-    tile_coords = _get_tile_coords(slen, self.tile_slen)
-
     # tile_locs shape = (n_samples x n_ptiles x max_detections x 2)
     assert len(tile_locs.shape) == 4
-    single_image_n_ptiles = tile_coords.shape[0]
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
     tile_slen = slen / math.sqrt(n_tiles_per_image)
-    n_ptiles = n_samples * n_tiles_per_image
     assert int(tile_slen) == tile_slen
+    tile_slen = int(tile_slen)
+
+    # coordinates on tiles.
+    tile_coords = _get_tile_coords(slen, tile_slen)
+    single_image_n_ptiles = tile_coords.shape[0]
     assert single_image_n_ptiles == n_tiles_per_image, "# tiles one image don't match"
 
     # get is on array
@@ -182,8 +182,8 @@ class ImageEncoder(nn.Module):
         self.background_pad_value = background_pad_value
 
         # padding
-        self.ptile_slen = ptile_slen
         self.tile_slen = tile_slen
+        self.ptile_slen = ptile_slen
         self.edge_padding = (ptile_slen - tile_slen) / 2
         assert self.edge_padding % 1 == 0, "amount of padding should be an integer"
         self.edge_padding = int(self.edge_padding)
@@ -584,5 +584,5 @@ class ImageEncoder(nn.Module):
     def map_estimate(self, image):
         slen = image.shape[-1]
         tile_estimate = self.tiled_map_estimate(image)
-        estimate = self.get_full_params(slen, tile_estimate)
+        estimate = get_full_params(slen, tile_estimate)
         return estimate

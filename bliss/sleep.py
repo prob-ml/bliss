@@ -12,7 +12,7 @@ import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder, decoder
-from .models.encoder import get_star_bool
+from .models.encoder import get_star_bool, get_full_params
 
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -330,9 +330,7 @@ class SleepPhase(pl.LightningModule):
         # obtain a params dictionary on tiles, then get on full image.
         exclude = {"images", "background"}
         true_params = {k: v for k, v in batch.items() if k not in exclude}
-
-        if true_params["locs"].shape[1] > 1:
-            true_params = self.image_encoder.get_full_params(slen, true_params)
+        true_params = get_full_params(slen, true_params)
 
         # to compute metrics at the end.
         counts_acc = 0.0
@@ -387,8 +385,7 @@ class SleepPhase(pl.LightningModule):
 
         # convert to full image parameters for plotting purposes.
         true_params = batch
-        if true_params["locs"].shape[1] > 1:
-            true_params = self.image_encoder.get_full_params(slen, true_params)
+        true_params = get_full_params(slen, true_params)
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
