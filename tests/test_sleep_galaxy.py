@@ -24,8 +24,8 @@ class TestGalaxyTiles:
             return
 
         # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.75
-        assert results["locs_mse"] < 0.85
+        assert results["acc_gal_counts"] > 0.70
+        assert results["locs_mse"] < 1.0
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices):
         overrides.update({"testing": "galaxy_test1"})
@@ -36,5 +36,5 @@ class TestGalaxyTiles:
             return
 
         # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.75
-        assert results["locs_mse"] < 0.85
+        assert results["acc_gal_counts"] > 0.70
+        assert results["locs_mse"] < 1.0

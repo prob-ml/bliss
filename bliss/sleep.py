@@ -331,8 +331,10 @@ class SleepPhase(pl.LightningModule):
 
         # obtain a params dictionary on tiles, then get on full image.
         exclude = {"images", "background"}
-        params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = self.image_encoder.get_full_params(slen, params)
+        true_params = {k: v for k, v in batch.items() if k not in exclude}
+
+        if true_params["locs"].shape[1] > 1:
+            true_params = self.image_encoder.get_full_params(slen, true_params)
 
         # to compute metrics at the end.
         counts_acc = 0.0
@@ -386,7 +388,9 @@ class SleepPhase(pl.LightningModule):
         batch.pop("background", None)
 
         # convert to full image parameters for plotting purposes.
-        true_params = self.image_encoder.get_full_params(slen, batch)
+        true_params = batch
+        if true_params["locs"].shape[1] > 1:
+            true_params = self.image_encoder.get_full_params(slen, true_params)
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)

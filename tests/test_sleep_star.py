@@ -23,8 +23,8 @@ class TestSleepStarOneTile:
         if not devices.use_cuda:
             return
 
-        assert results["acc_counts"] > 0.85
-        assert results["locs_mse"] < 0.75
+        assert results["acc_counts"] > 0.7
+        assert results["locs_mse"] < 1.0
 
 
 class TestSleepStarTiles:
@@ -49,8 +49,8 @@ class TestSleepStarTiles:
         if not devices.use_cuda:
             return
 
-        assert results["acc_counts"] > 0.80
-        assert results["locs_mse"] < 0.65
+        assert results["acc_counts"] > 0.7
+        assert results["locs_mse"] < 1.0
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices):
         overrides.update({"testing": "star_test1"})
@@ -60,5 +60,5 @@ class TestSleepStarTiles:
         if not devices.use_cuda:
             return
 
-        assert results["acc_counts"] > 0.80
-        assert results["locs_mse"] < 0.65
+        assert results["acc_counts"] > 0.7
+        assert results["locs_mse"] < 1.0
