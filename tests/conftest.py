@@ -91,6 +91,10 @@ class SleepSetup:
         cfg = self.get_cfg(overrides)
         return pl.Trainer(**cfg.training.trainer)
 
+    def get_sleep(self, overrides):
+        cfg = self.get_cfg(overrides)
+        return sleep.SleepPhase(cfg)
+
     def get_trained_sleep(self, overrides):
         cfg = self.get_cfg(overrides)
         datamodule = self.get_datamodule(overrides)
