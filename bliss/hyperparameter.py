@@ -298,9 +298,9 @@ def SleepTune(
 
     logger.info("Number of finished trials: {}".format(len(study.trials)))
     logger.info(f"Best trial: {trial.number} with value {trial.value}")
-    print("  The params for the best trial: ")
+    logger.info("  The params for the best trial: ")
     for key, value in trial.params.items():
-        print(f"    {key}: {value}")
+        logger.info(f"    {key}: {value}")
 
     # remove the trial folders created by optuna
     trial_re = re.compile(r"trial_\d*")
