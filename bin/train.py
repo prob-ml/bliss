@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
@@ -113,6 +112,10 @@ def main(cfg: DictConfig):
 
     # train!
     trainer.fit(model, datamodule=datamodule)
+
+    # test!
+    if cfg.testing.file is not None:
+        _ = trainer.test(model, datamodule=datamodule)
 
 
 if __name__ == "__main__":
