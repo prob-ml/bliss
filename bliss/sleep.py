@@ -409,7 +409,7 @@ class SleepPhase(pl.LightningModule):
                 tile_estimate = self.image_encoder.tiled_map_estimate(image)
 
             # convert tile estimates to full parameterization for plotting
-            estimate = self.image_encoder.get_full_params(slen, tile_estimate)
+            estimate = get_full_params(slen, tile_estimate)
             n_sources = estimate["n_sources"]
             locs = estimate["locs"]
             galaxy_bool = estimate["galaxy_bool"]
