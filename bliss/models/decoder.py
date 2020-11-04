@@ -217,7 +217,7 @@ class ImageDecoder(nn.Module):
 
         # long() here is necessary because used for indexing and one_hot encoding.
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
-        n_sources = n_sources.long().view(batch_size, self.n_tiles_per_image)
+        n_sources = n_sources.long().reshape(batch_size, self.n_tiles_per_image)
         return n_sources
 
     def _sample_locs(self, is_on_array, batch_size):
@@ -308,7 +308,7 @@ class ImageDecoder(nn.Module):
         )
         sample_shape = torch.tensor(shape)
         galaxy_params = p_z.rsample(sample_shape)
-        galaxy_params = galaxy_params.view(*shape)
+        galaxy_params = galaxy_params.reshape(*shape)
 
         # zero out excess according to galaxy_bool.
         galaxy_params = galaxy_params * galaxy_bool
@@ -426,7 +426,7 @@ class ImageDecoder(nn.Module):
 
         n_galaxies = galaxy.shape[0]
         galaxy_slen = galaxy.shape[3]
-        galaxy = galaxy.view(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
+        galaxy = galaxy.reshape(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
 
         if self.ptile_slen >= galaxy.shape[-1]:
             sized_galaxy = self._expand_source(galaxy)
@@ -434,7 +434,7 @@ class ImageDecoder(nn.Module):
             sized_galaxy = self._trim_source(galaxy)
 
         outsize = sized_galaxy.shape[-1]
-        return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
+        return sized_galaxy.reshape(n_galaxies, self.n_bands, outsize, outsize)
 
     def _render_one_source(self, locs, source):
         """
@@ -455,10 +455,10 @@ class ImageDecoder(nn.Module):
         locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
-        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
+        _grid = self.cached_grid.reshape(1, self.ptile_slen, self.ptile_slen, 2)
 
         locs_swapped = locs.index_select(1, self.swap)
-        grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
+        grid_loc = _grid - locs_swapped.reshape(n_ptiles, 1, 1, 2)
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
@@ -488,8 +488,8 @@ class ImageDecoder(nn.Module):
         for n in range(max_sources):
             star_bool_n = star_bool[:, n]
             locs_n = locs[:, n, :]
-            fluxes_n = fluxes[:, n, :] * star_bool_n.view(-1, 1)
-            fluxes_n = fluxes_n.view(n_ptiles, self.n_bands, 1, 1)
+            fluxes_n = fluxes[:, n, :] * star_bool_n.reshape(-1, 1)
+            fluxes_n = fluxes_n.reshape(n_ptiles, self.n_bands, 1, 1)
             one_star = self._render_one_source(locs_n, expanded_psf)
             ptile += one_star * fluxes_n
 
@@ -498,7 +498,7 @@ class ImageDecoder(nn.Module):
     def _render_single_galaxies(self, galaxy_params, galaxy_bool):
 
         # flatten parameters
-        z = galaxy_params.view(-1, self.n_galaxy_params)
+        z = galaxy_params.reshape(-1, self.n_galaxy_params)
         b = galaxy_bool.flatten()
 
         # allocate memory
@@ -510,10 +510,10 @@ class ImageDecoder(nn.Module):
         gal_on, _ = self.galaxy_decoder.forward(z[b == 1])
         gal[b == 1] = gal_on
 
-        # view
+        # reshape
         n_ptiles = galaxy_params.shape[0]
         gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
-        single_galaxies = gal.view(gal_shape)
+        single_galaxies = gal.reshape(gal_shape)
 
         return single_galaxies
 
@@ -535,7 +535,7 @@ class ImageDecoder(nn.Module):
             galaxy_bool_n = galaxy_bool[:, n]
             locs_n = locs[:, n, :]
             _galaxy = single_galaxies[:, n, :, :, :]
-            galaxy = _galaxy * galaxy_bool_n.view(-1, 1, 1, 1)
+            galaxy = _galaxy * galaxy_bool_n.reshape(-1, 1, 1, 1)
             one_galaxy = self._render_one_source(locs_n, galaxy)
             ptile += one_galaxy
 
@@ -555,20 +555,20 @@ class ImageDecoder(nn.Module):
         batch_size = n_sources.shape[0]
         n_ptiles = batch_size * self.n_tiles_per_image
 
-        # view parameters being explicit about shapes
-        _n_sources = n_sources.view(n_ptiles)
-        _locs = locs.view(n_ptiles, self.max_sources, 2)
-        _galaxy_bool = galaxy_bool.view(n_ptiles, self.max_sources, 1)
-        _galaxy_params = galaxy_params.view(
+        # reshape parameters being explicit about shapes
+        _n_sources = n_sources.reshape(n_ptiles)
+        _locs = locs.reshape(n_ptiles, self.max_sources, 2)
+        _galaxy_bool = galaxy_bool.reshape(n_ptiles, self.max_sources, 1)
+        _galaxy_params = galaxy_params.reshape(
             n_ptiles, self.max_sources, self.n_galaxy_params
         )
-        _fluxes = fluxes.view(n_ptiles, self.max_sources, self.n_bands)
+        _fluxes = fluxes.reshape(n_ptiles, self.max_sources, self.n_bands)
 
         # draw stars and galaxies
         _is_on_array = get_is_on_from_n_sources(_n_sources, self.max_sources)
-        _is_on_array = _is_on_array.view(n_ptiles, self.max_sources, 1)
+        _is_on_array = _is_on_array.reshape(n_ptiles, self.max_sources, 1)
         _star_bool = (1 - _galaxy_bool) * _is_on_array
-        _star_bool = _star_bool.view(n_ptiles, self.max_sources, 1)
+        _star_bool = _star_bool.reshape(n_ptiles, self.max_sources, 1)
 
         # draw stars and galaxies
         stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
@@ -579,7 +579,7 @@ class ImageDecoder(nn.Module):
             )
         images = galaxies + stars
 
-        return images.view(
+        return images.reshape(
             batch_size,
             self.n_tiles_per_image,
             self.n_bands,
@@ -644,7 +644,7 @@ class ImageDecoder(nn.Module):
         n_tiles1_in_ptile = int(n_tiles1_in_ptile)
         ptile_padding = int(ptile_padding)
 
-        image_tiles_4d = image_ptiles.view(
+        image_tiles_4d = image_ptiles.reshape(
             batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
         )
 
@@ -703,7 +703,7 @@ class ImageDecoder(nn.Module):
                     :,
                     (i * tile_slen) : (i * tile_slen + canvas_len),
                     (j * tile_slen) : (j * tile_slen + canvas_len),
-                ] += image_tile_cols.permute(0, 3, 1, 4, 2, 5).view(
+                ] += image_tile_cols.permute(0, 3, 1, 4, 2, 5).reshape(
                     batch_size, n_bands, canvas_len, canvas_len
                 )
 

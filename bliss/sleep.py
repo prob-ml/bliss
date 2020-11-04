@@ -184,13 +184,15 @@ class SleepPhase(pl.LightningModule):
         n_galaxy_params = self.image_decoder.n_galaxy_params
         assert max_sources == self.image_encoder.max_detections
 
-        true_tile_locs = true_tile_locs.view(n_ptiles, max_sources, 2)
-        true_tile_galaxy_params = true_tile_galaxy_params.view(
+        true_tile_locs = true_tile_locs.reshape(n_ptiles, max_sources, 2)
+        true_tile_galaxy_params = true_tile_galaxy_params.reshape(
             n_ptiles, max_sources, n_galaxy_params
         )
-        true_tile_log_fluxes = true_tile_log_fluxes.view(n_ptiles, max_sources, n_bands)
-        true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_sources)
-        true_tile_n_sources = true_tile_n_sources.view(n_ptiles)
+        true_tile_log_fluxes = true_tile_log_fluxes.reshape(
+            n_ptiles, max_sources, n_bands
+        )
+        true_tile_galaxy_bool = true_tile_galaxy_bool.reshape(n_ptiles, max_sources)
+        true_tile_n_sources = true_tile_n_sources.reshape(n_ptiles)
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(
             true_tile_n_sources, max_sources
         )
@@ -202,7 +204,9 @@ class SleepPhase(pl.LightningModule):
         pred = self(image_ptiles, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
-        n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)
+        n_source_log_probs = pred["n_source_log_probs"].reshape(
+            n_ptiles, max_sources + 1
+        )
         cross_entropy = CrossEntropyLoss(reduction="none").requires_grad_(False)
         counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
 
@@ -228,7 +232,7 @@ class SleepPhase(pl.LightningModule):
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
-        prob_galaxy = pred["prob_galaxy"].view(n_ptiles, max_sources)
+        prob_galaxy = pred["prob_galaxy"].reshape(n_ptiles, max_sources)
         (
             locs_loss,
             galaxy_params_loss,
@@ -355,10 +359,10 @@ class SleepPhase(pl.LightningModule):
                 matches += 1
 
                 # prepare locs and get them in units of pixels.
-                true_locs_i = true_params["locs"][i].view(-1, 2)
+                true_locs_i = true_params["locs"][i].reshape(-1, 2)
                 true_locs_i = true_locs_i[: int(true_n_sources_i)] * slen
 
-                locs_i = estimate["locs"].view(-1, 2)[: int(n_sources_i)] * slen
+                locs_i = estimate["locs"].reshape(-1, 2)[: int(n_sources_i)] * slen
 
                 # sort each based on x location.
                 true_locs_i = sort_locs(true_locs_i)
@@ -493,10 +497,10 @@ class SleepPhase(pl.LightningModule):
         n_ptiles = true_params.size(0)
         max_detections = true_params.size(1)
 
-        # view to evaluate all combinations of log_prob.
-        _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
-        _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
-        _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+        # reshape to evaluate all combinations of log_prob.
+        _true_params = true_params.reshape(n_ptiles, 1, max_detections, -1)
+        _param_mean = param_mean.reshape(n_ptiles, max_detections, 1, -1)
+        _param_logvar = param_logvar.reshape(n_ptiles, max_detections, 1, -1)
 
         _sd = (_param_logvar.exp() + 1e-5).sqrt()
         param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
