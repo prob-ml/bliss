@@ -3,11 +3,11 @@ from bliss import wake
 import pytorch_lightning as pl
 
 
-def test_star_wake(train_sleep, paths, devices):
+def test_star_wake(sleep_setup, paths, devices):
 
     device = devices.device
     overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
-    sleep_net, _ = train_sleep(overrides)
+    sleep_net = sleep_setup.get_trained_sleep(overrides)
 
     # load the test image
     # 3-stars 30*30 pixels.

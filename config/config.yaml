@@ -3,10 +3,12 @@ defaults:
   - model: basic_sleep_star
   - training: default
   - dataset: default
+  - testing: default
+  - generate: default
 
 general:
   overwrite: False
 
 paths:
   root: ${env:BLISS_HOME}
-  output: logs/example
+  output: ${paths.root}/logs/example

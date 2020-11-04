@@ -1,16 +1,40 @@
-def test_n_sources_and_locs(train_sleep, devices):
-    use_cuda = devices.use_cuda
-    overrides = dict(
-        model="basic_sleep_galaxy",
-        training="tests_default" if devices.use_cuda else "cpu",
-        dataset="default" if devices.use_cuda else "cpu",
-    )
-    _, test_results = train_sleep(overrides)
-    results = test_results[0]
+import pytest
 
-    if not use_cuda:
-        return
 
-    # check test results are sensible.
-    assert results["acc_gal_counts"] > 0.8
-    assert results["locs_mse"] < 0.5
+class TestGalaxyTiles:
+    @pytest.fixture(scope="class")
+    def overrides(self, devices):
+        overrides = dict(
+            model="basic_sleep_galaxy",
+            dataset="default" if devices.use_cuda else "cpu",
+            training="unittest" if devices.use_cuda else "cpu",
+        )
+        return overrides
+
+    @pytest.fixture(scope="class")
+    def trained_sleep(self, overrides, sleep_setup):
+        return sleep_setup.get_trained_sleep(overrides)
+
+    def test_simulated(self, overrides, trained_sleep, sleep_setup, devices):
+        overrides.update({"testing": "default"})
+        results = sleep_setup.test_sleep(overrides, trained_sleep)
+
+        # only check testing results if GPU available
+        if not devices.use_cuda:
+            return
+
+        # check testing results are sensible.
+        assert results["acc_gal_counts"] > 0.70
+        assert results["locs_mse"] < 1.0
+
+    def test_saved(self, overrides, trained_sleep, sleep_setup, devices):
+        overrides.update({"testing": "galaxy_test1"})
+        results = sleep_setup.test_sleep(overrides, trained_sleep)
+
+        # only check testing results if GPU available
+        if not devices.use_cuda:
+            return
+
+        # check testing results are sensible.
+        assert results["acc_gal_counts"] > 0.70
+        assert results["locs_mse"] < 1.0
