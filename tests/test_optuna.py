@@ -29,40 +29,20 @@ class TestOptunaSleep:
             cfg = compose("config", overrides=overrides)
             cfg.optimizer.params.update({"lr": 1e-4, "weight_decay": 1e-6})
 
-            if use_cuda:
-                # single gpu
-                cfg.model.encoder.params.update(
-                    {
-                        "enc_conv_c": 5,
-                        "enc_kern": 3,
-                        "enc_hidden": 64,
-                    }
-                )
-                n_epochs = 1
+            cfg.model.encoder.params.update(
+                {
+                    "enc_conv_c": 5,
+                    "enc_kern": 3,
+                    "enc_hidden": 64,
+                }
+            )
+            n_epochs = 1
 
-                SleepTune(
-                    cfg,
-                    max_epochs=n_epochs,
-                    model_dir=os.getcwd(),
-                    monitor="val_loss",
-                    n_trials=1,
-                    num_gpu=1,
-                )
-            else:
-                cfg.model.encoder.params.update(
-                    {
-                        "enc_conv_c": 5,
-                        "enc_kern": 3,
-                        "enc_hidden": 64,
-                    }
-                )
-                n_epochs = 1
-
-                SleepTune(
-                    cfg,
-                    max_epochs=n_epochs,
-                    model_dir=os.getcwd(),
-                    monitor="val_loss",
-                    n_trials=1,
-                    num_gpu=0,
-                )
+            SleepTune(
+                cfg,
+                max_epochs=n_epochs,
+                model_dir=os.getcwd(),
+                monitor="val_loss",
+                n_trials=1,
+                num_gpu=1 if use_cuda else 0,
+            )
