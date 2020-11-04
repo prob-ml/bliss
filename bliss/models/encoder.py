@@ -57,6 +57,7 @@ def get_full_params(slen: int, tile_params: dict):
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
     tile_slen = slen / math.sqrt(n_tiles_per_image)
+    n_ptiles = n_samples * n_tiles_per_image
     assert int(tile_slen) == tile_slen
     tile_slen = int(tile_slen)
 
@@ -72,8 +73,8 @@ def get_full_params(slen: int, tile_params: dict):
     max_sources = n_sources.max().int().item()
 
     # recenter and renormalize locations.
-    tile_is_on_array = tile_is_on_array_sampled.view(n_tiles_per_image, -1)
-    _tile_locs = tile_locs.view(n_tiles_per_image, -1, 2)
+    tile_is_on_array = tile_is_on_array_sampled.view(n_ptiles, -1)
+    _tile_locs = tile_locs.view(n_ptiles, -1, 2)
     bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
     _locs = (_tile_locs * tile_slen + bias) / slen
     _locs *= tile_is_on_array.unsqueeze(2)
