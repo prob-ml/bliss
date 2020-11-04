@@ -194,27 +194,28 @@ def SleepTune(
     storage=None,
 ):
     """
-    :param cfg: DictConfig from hydra
-    :param max_epochs: in integer to indicate epochs of training
-    :param model_dir: where to save the model checkpoint of lightning
-    :param monitor: which metric to monitor for the hyperparameter selection
-    :param n_batches: how many batches per epoch
-    :param batch_size: the size of image simulated for each batch
-    :param direction: minimize or maximize the chosen metric
-    :param data_seed: set a seed for data simulation
-    :param n_trials: the maximum trials to run
-    :param time_out: the maximum time to run for each trial
-    :param gc_after_trial: enable garbage collection after each trial?
-    :param sampler: optuna.sampler
-    :param pruner: optuna.pruner
-    :param num_gpu: numer of GPUs to use. Could be an integer or a list of ids.
+    Args:
+        cfg: DictConfig from hydra
+        max_epochs: integer to indicate epochs of training
+        model_dir: where to save the model checkpoint of lightning
+        monitor: which metric to monitor for the hyperparameter selection
+        direction: minimize or maximize the chosen metric
+        data_seed: set a seed for data simulation
+        n_trials: the maximum trials to run
+        time_out: the maximum time to run for each trial
+        gc_after_trial: enable garbage collection after each trial?
+        sampler: optuna.sampler
+        pruner: optuna.pruner
+        num_gpu: numer of GPUs to use. Could be an integer or a list of ids.
                     CPU only: set this arugument to be zero
                     Single GPU: either pass in 1 ot a list single id, e.g. [1]
                     Multiple GPUs: either pass in an integer > 1 and SleepTune pick
                                     available GPUS, or a list of ids.
-    :param storage: If using multiple GPUs, storage must be defined as optuna.RDBStorage
+        storage: If using multiple GPUs, storage must be defined as optuna.RDBStorage
 
-    :return: an optuna.trial.FrozenTrial object
+    Returns:
+        An optuna.trial.FrozenTrial object
+
     """
 
     # set up number of gpu to use
