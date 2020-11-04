@@ -75,14 +75,12 @@ class SleepSetup:
     def __init__(self, devices):
         self.devices = devices
 
-    @staticmethod
-    def get_cfg(overrides):
+    def get_cfg(self, overrides):
         assert "model" in overrides
         overrides = [f"{key}={value}" for key, value in overrides.items()]
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            cfg.training.trainer.update({"gpus": devices.gpus})
-            cfg = compose("config", overrides=overrides)
+            cfg.training.trainer.update({"gpus": self.devices.gpus})
         return cfg
 
     def get_datamodule(self, overrides):
@@ -102,8 +100,8 @@ class SleepSetup:
         return sleep_net
 
     def test_sleep(self, overrides, sleep_net):
-        test_module = sleep_setup.get_datamodule(overrides)
-        trainer = sleep_setup.get_trainer(overrides)
+        test_module = self.get_datamodule(overrides)
+        trainer = self.get_trainer(overrides)
         return trainer.test(sleep_net, datamodule=test_module)[0]
 
 

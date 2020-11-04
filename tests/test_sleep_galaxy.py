@@ -16,27 +16,25 @@ class TestGalaxyTiles:
         return sleep_setup.get_trained_sleep(overrides)
 
     def test_simulated(self, overrides, trained_sleep, sleep_setup, devices):
-        use_cuda = devices.use_cuda
         overrides.update({"testing": "default"})
         results = sleep_setup.test_sleep(overrides, trained_sleep)
 
         # only check testing results if GPU available
-        if not use_cuda:
+        if not devices.use_cuda:
             return
 
         # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.8
-        assert results["locs_mse"] < 0.5
+        assert results["acc_gal_counts"] > 0.75
+        assert results["locs_mse"] < 0.85
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices):
-        use_cuda = devices.use_cuda
-        overrides.update({"testing": "galaxy_test"})
+        overrides.update({"testing": "galaxy_test1"})
         results = sleep_setup.test_sleep(overrides, trained_sleep)
 
         # only check testing results if GPU available
-        if not use_cuda:
+        if not devices.use_cuda:
             return
 
         # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.8
-        assert results["locs_mse"] < 0.5
+        assert results["acc_gal_counts"] > 0.75
+        assert results["locs_mse"] < 0.85
