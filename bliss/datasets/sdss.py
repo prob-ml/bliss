@@ -102,6 +102,7 @@ class SloanDigitalSkySurvey(Dataset):
         band = 2
         stamps = []
         pts = []
+        prs = []
         bgs = []
         flxs = []
 
@@ -138,11 +139,12 @@ class SloanDigitalSkySurvey(Dataset):
                     stamp = center_stamp_subpixel(stamp, pt, pr, G)
                 stamps.append(stamp)
                 pts.append(pt)
+                prs.append(pr)
                 stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
                 bgs.append(stamp_bg)
                 flxs.append(flux)
 
-        return np.asarray(stamps), np.asarray(pts), np.asarray(flxs), np.asarray(bgs)
+        return np.asarray(stamps), np.asarray(pts), np.asarray(prs), np.asarray(flxs), np.asarray(bgs)
 
     def get_from_disk(self, idx, verbose=False):
         if self.rcfgcs[idx] is None:
@@ -211,7 +213,7 @@ class SloanDigitalSkySurvey(Dataset):
 
             frame.close()
 
-        stamps, pts, fluxes, stamp_bgs = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2], background_list[2])
+        stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2], background_list[2])
 
         ret = {
             "image": np.stack(image_list),
@@ -223,6 +225,7 @@ class SloanDigitalSkySurvey(Dataset):
             "wcs": wcs_list,
             "bright_stars": stamps,
             "pts": pts,
+            "prs": prs,
             "fluxes": fluxes,
             "bright_star_bgs": stamp_bgs
         }
