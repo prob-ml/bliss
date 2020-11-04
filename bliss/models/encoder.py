@@ -51,7 +51,7 @@ def get_full_params(slen: int, tile_params: dict):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
 
-    # tile_locs shape = (n_samples x n_ptiles x max_detections x 2)
+    # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
     assert len(tile_locs.shape) == 4
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
@@ -63,12 +63,10 @@ def get_full_params(slen: int, tile_params: dict):
 
     # coordinates on tiles.
     tile_coords = _get_tile_coords(slen, tile_slen)
-    single_image_n_ptiles = tile_coords.shape[0]
-    assert single_image_n_ptiles == n_tiles_per_image, "# tiles one image don't match"
+    assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
 
-    # get is on array
+    # get is_on_array
     tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
-
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
     max_sources = n_sources.max().int().item()
 
