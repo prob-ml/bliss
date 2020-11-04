@@ -40,7 +40,7 @@ def main(cfg: DictConfig):
     batch = dataset.get_batch()
     batch = {k: v.cpu() for k, v in batch.items()}
 
-    # save batch and images as pdf
+    # save batch and images as pdf for visualization purposes.
     torch.save(batch, filepath)
     visualize(batch, imagepath, cfg.generate.n_plots)
 

@@ -1,3 +1,4 @@
 # @package _group_
 name: SavedSimulated
 file: ${paths.root}/data/star_test.pt
+batch_size: 32
