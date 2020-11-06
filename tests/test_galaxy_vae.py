@@ -51,7 +51,7 @@ class TestGalaxyVAE:
         ).to(device)
 
         galaxy_image = galaxy_image.to(device)
-        galaxy_image = galaxy_image.reshape(1, 1, galaxy_image.size(-1), -1)
+        galaxy_image = galaxy_image.view(1, 1, galaxy_image.size(-1), -1)
 
         with torch.no_grad():
             pred_image, _, _ = trained_galaxy_vae(galaxy_image, background)

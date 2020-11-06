@@ -12,7 +12,7 @@ import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder, decoder
-from .models.encoder import get_star_bool
+from .models.encoder import get_star_bool, get_full_params
 
 from optuna.integration import PyTorchLightningPruningCallback
 
@@ -184,15 +184,13 @@ class SleepPhase(pl.LightningModule):
         n_galaxy_params = self.image_decoder.n_galaxy_params
         assert max_sources == self.image_encoder.max_detections
 
-        true_tile_locs = true_tile_locs.reshape(n_ptiles, max_sources, 2)
-        true_tile_galaxy_params = true_tile_galaxy_params.reshape(
+        true_tile_locs = true_tile_locs.view(n_ptiles, max_sources, 2)
+        true_tile_galaxy_params = true_tile_galaxy_params.view(
             n_ptiles, max_sources, n_galaxy_params
         )
-        true_tile_log_fluxes = true_tile_log_fluxes.reshape(
-            n_ptiles, max_sources, n_bands
-        )
-        true_tile_galaxy_bool = true_tile_galaxy_bool.reshape(n_ptiles, max_sources)
-        true_tile_n_sources = true_tile_n_sources.reshape(n_ptiles)
+        true_tile_log_fluxes = true_tile_log_fluxes.view(n_ptiles, max_sources, n_bands)
+        true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_sources)
+        true_tile_n_sources = true_tile_n_sources.view(n_ptiles)
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(
             true_tile_n_sources, max_sources
         )
@@ -230,7 +228,7 @@ class SleepPhase(pl.LightningModule):
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
-        prob_galaxy = pred["prob_galaxy"].reshape(n_ptiles, max_sources)
+        prob_galaxy = pred["prob_galaxy"].view(n_ptiles, max_sources)
         (
             locs_loss,
             galaxy_params_loss,
@@ -332,9 +330,7 @@ class SleepPhase(pl.LightningModule):
         # obtain a params dictionary on tiles, then get on full image.
         exclude = {"images", "background"}
         true_params = {k: v for k, v in batch.items() if k not in exclude}
-
-        if true_params["locs"].shape[1] > 1:
-            true_params = self.image_encoder.get_full_params(slen, true_params)
+        true_params = get_full_params(slen, true_params)
 
         # to compute metrics at the end.
         counts_acc = 0.0
@@ -389,8 +385,7 @@ class SleepPhase(pl.LightningModule):
 
         # convert to full image parameters for plotting purposes.
         true_params = batch
-        if true_params["locs"].shape[1] > 1:
-            true_params = self.image_encoder.get_full_params(slen, true_params)
+        true_params = get_full_params(slen, true_params)
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
@@ -414,7 +409,7 @@ class SleepPhase(pl.LightningModule):
                 tile_estimate = self.image_encoder.tiled_map_estimate(image)
 
             # convert tile estimates to full parameterization for plotting
-            estimate = self.image_encoder.get_full_params(slen, tile_estimate)
+            estimate = get_full_params(slen, tile_estimate)
             n_sources = estimate["n_sources"]
             locs = estimate["locs"]
             galaxy_bool = estimate["galaxy_bool"]
@@ -498,7 +493,7 @@ class SleepPhase(pl.LightningModule):
         n_ptiles = true_params.size(0)
         max_detections = true_params.size(1)
 
-        # reshape to evaluate all combinations of log_prob.
+        # view to evaluate all combinations of log_prob.
         _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
         _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
         _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
