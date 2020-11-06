@@ -17,7 +17,7 @@ plt.switch_backend("Agg")
 class Flatten(nn.Module):
     @staticmethod
     def forward(tensor):
-        return tensor.reshape(tensor.size(0), -1)
+        return tensor.view(tensor.size(0), -1)
 
 
 class CenteredGalaxyEncoder(nn.Module):
@@ -98,7 +98,7 @@ class CenteredGalaxyDecoder(nn.Module):
         z = self.fc(z)  # latent variable
 
         # This dimension is the number of samples.
-        z = z.reshape(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
+        z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
 
@@ -189,7 +189,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
 
         # image.size(0) = n_samples.
-        recon_losses = recon_losses.reshape(image.size(0), -1).sum(1)
+        recon_losses = recon_losses.view(image.size(0), -1).sum(1)
 
         # ELBO
         loss = (recon_losses + kl_z).sum()

@@ -31,7 +31,7 @@ def get_star_bool(n_sources, galaxy_bool):
     max_sources = galaxy_bool.shape[-2]
     assert n_sources.le(max_sources).all()
     is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-    is_on_array = is_on_array.reshape(*galaxy_bool.shape)
+    is_on_array = is_on_array.view(*galaxy_bool.shape)
     star_bool = (1 - galaxy_bool) * is_on_array
     return star_bool
 
@@ -71,14 +71,14 @@ def get_full_params(slen: int, tile_params: dict):
     max_sources = n_sources.max().int().item()
 
     # recenter and renormalize locations.
-    tile_is_on_array = tile_is_on_array_sampled.reshape(n_ptiles, -1)
-    _tile_locs = tile_locs.reshape(n_ptiles, -1, 2)
+    tile_is_on_array = tile_is_on_array_sampled.view(n_ptiles, -1)
+    _tile_locs = tile_locs.view(n_ptiles, -1, 2)
     bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
     _locs = (_tile_locs * tile_slen + bias) / slen
     _locs *= tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip
-    locs = _locs.reshape(n_samples, -1, 2)
+    locs = _locs.view(n_samples, -1, 2)
     _indx_sort = _argfront(locs[..., 0], dim=1)
     indx_sort = _indx_sort.unsqueeze(2)
     locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
@@ -93,11 +93,9 @@ def get_full_params(slen: int, tile_params: dict):
             # make sure works galaxy bool has same format as well.
             tile_param = tile_params[param_name]
             assert len(tile_param.shape) == 4
-            _param = tile_param.reshape(
-                n_samples, n_tiles_per_image, max_detections, -1
-            )
+            _param = tile_param.view(n_samples, n_tiles_per_image, max_detections, -1)
             param_dim = _param.size(-1)
-            param = _param.reshape(n_samples, -1, param_dim)
+            param = _param.view(n_samples, -1, param_dim)
             param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
             param = param[:, 0:max_sources, ...]
 
@@ -362,7 +360,7 @@ class ImageEncoder(nn.Module):
             indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
         )
 
-        var_param = var_param.reshape(
+        var_param = var_param.view(
             n_ptiles, n_samples, self.max_detections, param_dim
         ).transpose(0, 1)
 
@@ -511,7 +509,7 @@ class ImageEncoder(nn.Module):
         # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
         tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
-        tile_n_sources = tile_n_sources.reshape(n_samples, -1)
+        tile_n_sources = tile_n_sources.view(n_samples, -1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
@@ -551,7 +549,7 @@ class ImageEncoder(nn.Module):
         # tile_n_sources shape = (1 x n_ptiles)
         # tile_is_on_array shape = (1 x n_ptiles x max_detections x 1)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-        tile_n_sources = tile_n_sources.reshape(1, -1)
+        tile_n_sources = tile_n_sources.view(1, -1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 

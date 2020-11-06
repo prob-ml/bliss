@@ -171,7 +171,7 @@ class WakeNet(pl.LightningModule):
                     self.observed_image[
                         :, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)
                     ]
-                    .reshape(batch_size, n_bands, -1)
+                    .view(batch_size, n_bands, -1)
                     .min(2)[0]
                     .mean(0)
                 )
