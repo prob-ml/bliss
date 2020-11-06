@@ -510,7 +510,6 @@ class ImageDecoder(nn.Module):
         gal_on, _ = self.galaxy_decoder.forward(z[b == 1])
         gal[b == 1] = gal_on
 
-        # view
         n_ptiles = galaxy_params.shape[0]
         gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
         single_galaxies = gal.view(gal_shape)
