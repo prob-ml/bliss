@@ -19,7 +19,7 @@ BLISS uses state-of-the-art methods in variational inference including:
 ## Latest updates
 
 ### Galaxies 
-   - BLISS now includes a galaxy model based on a Variational AutoEncoder that was traind on CATSIM bulge+disk galaxies.
+   - BLISS now includes a galaxy model based on a Variational AutoEncoder that was trained on CATSIM bulge+disk galaxies.
    - We are working on testing galaxy detection functionality and developing galaxy shape measurement.
  
 ### Stars
