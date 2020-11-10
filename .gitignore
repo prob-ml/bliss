@@ -16,4 +16,4 @@ htmlcov/
 build/
 celeste.egg-info/
 temp/
-trials_results/
+trials_result/
