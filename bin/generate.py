@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from omegaconf import DictConfig
 from pathlib import Path
 
-
 from bliss.datasets import simulated
 from bliss import plotting
 
