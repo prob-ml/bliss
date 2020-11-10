@@ -21,7 +21,7 @@ def get_mgrid(slen):
     # mgrid is between -1 and 1
     # then scale slightly because of the way f.grid_sample
     # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float().to(device) * (slen - 1) / slen
+    return mgrid.float().to(device) # * (slen - 1) / slen
 
 
 def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
@@ -178,7 +178,7 @@ class ImageDecoder(nn.Module):
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2 
         # extra factor to be consisten with old repo 
         # but probably doesn't matter ... 
-        grid = grid * (self.psf_slen / (self.psf_slen - 1))
+        grid = grid # * (self.psf_slen / (self.psf_slen - 1))
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
 
         # get normalization_constant
