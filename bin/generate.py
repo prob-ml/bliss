@@ -37,12 +37,21 @@ def main(cfg: DictConfig):
     filepath = Path(cfg.generate.file)
     imagepath = Path(cfg.paths.root).joinpath("temp", filepath.stem + "_images.pdf")
     dataset = datasets[cfg.dataset.name](cfg)
-    batch = dataset.get_batch()
-    batch = {k: v.cpu() for k, v in batch.items()}
+
+    # get batches and combine them
+    fbatch = dict()
+    for batch in dataset.batch_generator():
+        if not bool(fbatch):  # dict is empty
+            fbatch = batch
+        else:
+            fbatch = {key: torch.vstack((fbatch[key], batch[key])) for key in fbatch}
+
+    # make sure in CPU by default.
+    fbatch = {k: v.cpu() for k, v in fbatch.items()}
 
     # save batch and images as pdf for visualization purposes.
-    torch.save(batch, filepath)
-    visualize(batch, imagepath, cfg.generate.n_plots)
+    torch.save(fbatch, filepath)
+    visualize(fbatch, imagepath, cfg.generate.n_plots)
 
 
 if __name__ == "__main__":
