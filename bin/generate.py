@@ -45,7 +45,7 @@ def main(cfg: DictConfig):
         if not bool(fbatch):  # dict is empty
             fbatch = batch
         else:
-            fbatch = {key: torch.vstack(fbatch[key], batch[key]) for key in fbatch}
+            fbatch = {key: torch.vstack((fbatch[key], batch[key])) for key in fbatch}
 
     # make sure in CPU by default.
     fbatch = {k: v.cpu() for k, v in fbatch.items()}
