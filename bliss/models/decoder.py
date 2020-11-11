@@ -88,11 +88,12 @@ class ImageDecoder(nn.Module):
         # the center tile, surrounded one tile on each side.
         self.ptile_padding = ptile_padding
         self.ptile_slen = int((self.ptile_padding * 2 + 1) * tile_slen)
-        
+
         # the number of pixels that pads the full image
         self.border_padding = border_padding
-        assert border_padding <= (ptile_padding * tile_slen), \
-            'Too much border padding. Make ptile_padding larger. '
+        assert border_padding <= (
+            ptile_padding * tile_slen
+        ), "Too much border padding. Make ptile_padding larger. "
 
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
@@ -129,9 +130,11 @@ class ImageDecoder(nn.Module):
 
         # background
         assert len(background_values) == n_bands
-        background_shape = (self.n_bands,
-                            self.slen + 2 * self.border_padding, 
-                            self.slen + 2 * self.border_padding)
+        background_shape = (
+            self.n_bands,
+            self.slen + 2 * self.border_padding,
+            self.slen + 2 * self.border_padding,
+        )
         self.background = torch.zeros(background_shape, device=device)
         for i in range(n_bands):
             self.background[i] = background_values[i]
@@ -164,9 +167,9 @@ class ImageDecoder(nn.Module):
 
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
-        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2 
-        # extra factor to be consisten with old repo 
-        # but probably doesn't matter ... 
+        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+        # extra factor to be consisten with old repo
+        # but probably doesn't matter ...
         grid = grid * (self.psf_slen / (self.psf_slen - 1))
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
 
@@ -294,7 +297,7 @@ class ImageDecoder(nn.Module):
                 self.max_sources,
                 self.n_bands - 1,
             )
-            colors = torch.randn(*shape, device=device) 
+            colors = torch.randn(*shape, device=device)
             _fluxes = 10 ** (colors / 2.5) * base_fluxes
             fluxes = torch.cat((base_fluxes, _fluxes), dim=3)
             fluxes *= star_bool.float()
@@ -470,7 +473,7 @@ class ImageDecoder(nn.Module):
 
         locs_swapped = locs.index_select(1, self.swap)
         grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
-        
+
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
@@ -561,9 +564,9 @@ class ImageDecoder(nn.Module):
 
         # returns the ptiles in
         # shape = (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
-        
+
         max_sources = locs.shape[2]
-        
+
         assert (n_sources <= max_sources).all()
         batch_size = n_sources.shape[0]
         n_ptiles = batch_size * self.n_tiles_per_image
@@ -572,9 +575,7 @@ class ImageDecoder(nn.Module):
         _n_sources = n_sources.view(n_ptiles)
         _locs = locs.view(n_ptiles, max_sources, 2)
         _galaxy_bool = galaxy_bool.view(n_ptiles, max_sources, 1)
-        _galaxy_params = galaxy_params.view(
-            n_ptiles, max_sources, self.n_galaxy_params
-        )
+        _galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
         _fluxes = fluxes.view(n_ptiles, max_sources, self.n_bands)
 
         # draw stars and galaxies
@@ -725,6 +726,6 @@ class ImageDecoder(nn.Module):
         return canvas[
             :,
             :,
-            x0 : x1,
-            x0 : x1,
+            x0:x1,
+            x0:x1,
         ]

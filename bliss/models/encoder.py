@@ -161,7 +161,7 @@ class ImageEncoder(nn.Module):
         enc_kern=3,
         enc_hidden=256,
         momentum=0.5,
-        pad_border = True
+        pad_border=True,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -466,8 +466,8 @@ class ImageEncoder(nn.Module):
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
-        
-        if self.pad_border: 
+
+        if self.pad_border:
             pad = [self.edge_padding] * 4
             images = F.pad(images, pad=pad, value=self.background_pad_value)
 
@@ -585,10 +585,10 @@ class ImageEncoder(nn.Module):
 
     def map_estimate(self, image):
         slen = image.shape[-1]
-        
-        if not self.pad_border: 
+
+        if not self.pad_border:
             slen = slen - 2 * self.edge_padding
-            
+
         tile_estimate = self.tiled_map_estimate(image)
         estimate = get_full_params(slen, tile_estimate)
         return estimate

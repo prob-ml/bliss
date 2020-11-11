@@ -185,13 +185,13 @@ class SleepPhase(pl.LightningModule):
         n_galaxy_params = self.image_decoder.n_galaxy_params
 
         # clip to max sources
-        if max_sources < max_sources_dec: 
+        if max_sources < max_sources_dec:
             true_tile_locs = true_tile_locs[:, :, 0:max_sources]
             true_tile_galaxy_params = true_tile_galaxy_params[:, :, 0:max_sources]
             true_tile_log_fluxes = true_tile_log_fluxes[:, :, 0:max_sources]
             true_tile_galaxy_bool = true_tile_galaxy_bool[:, :, 0:max_sources]
-            true_tile_n_sources = true_tile_n_sources.clamp(max = max_sources)
-        
+            true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
+
         # flatten so first dimension is ptile
         true_tile_locs = true_tile_locs.view(n_ptiles, max_sources, 2)
         true_tile_galaxy_params = true_tile_galaxy_params.view(
@@ -406,7 +406,10 @@ class SleepPhase(pl.LightningModule):
             res_ax = axes[i, 2]
 
             image = images[None, i]
-            assert image.shape[-1] == self.image_decoder.slen + 2 * self.image_decoder.border_padding
+            assert (
+                image.shape[-1]
+                == self.image_decoder.slen + 2 * self.image_decoder.border_padding
+            )
             assert image.shape[-1] == slen
             assert len(image.shape) == 4
 
