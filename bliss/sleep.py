@@ -257,7 +257,7 @@ class SleepPhase(pl.LightningModule):
             + counter_loss
             # + galaxy_params_loss
             + star_params_loss
-            # + galaxy_bool_loss
+            + galaxy_bool_loss
         )
 
         loss = loss_vec.mean()

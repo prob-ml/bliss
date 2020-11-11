@@ -534,8 +534,7 @@ class ImageEncoder(nn.Module):
         pred = self._get_var_params_for_n_sources(h, tile_n_sources)
 
         # set sd so we return map estimates.
-        # tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
-        tile_galaxy_bool = (pred["prob_galaxy"] > 1.5).float()
+        tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
         tile_galaxy_bool *= tile_is_on_array
         pred["loc_sd"] = torch.zeros_like(pred["loc_logvar"])
         pred["galaxy_param_sd"] = torch.zeros_like(pred["galaxy_param_logvar"])

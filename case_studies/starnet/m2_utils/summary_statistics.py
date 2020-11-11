@@ -61,19 +61,14 @@ def get_summary_stats(est_locs, true_locs, slen, est_fluxes, true_fluxes,
     return tpr_bool.mean(), ppv_bool.mean(), tpr_bool, ppv_bool
 
 def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
-                            nelec_per_nmgy,
-                            pad = 5, mag_vec = None):
+                nelec_per_nmgy, mag_vec,
+                pad = 5):
     
     est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
     true_locs, true_fluxes = filter_params(true_locs, true_fluxes, slen, pad)
 
     # convert to magnitude
     true_mags = convert_nmgy_to_mag(true_fluxes / nelec_per_nmgy)
-
-    if mag_vec is None:
-        percentiles = np.linspace(0, 1, 11) * 100
-        mag_vec = np.percentile(true_mags.cpu(), percentiles)
-        mag_vec = torch.Tensor(mag_vec).to(device)
 
     tpr_vec = np.zeros(len(mag_vec) - 1)
 
@@ -91,18 +86,13 @@ def get_tpr_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
     return tpr_vec, mag_vec, counts_vec
 
 def get_ppv_vec(est_locs, true_locs, slen, est_fluxes, true_fluxes,
-                nelec_per_nmgy,
-                pad = 5, mag_vec = None):
+                nelec_per_nmgy, mag_vec,
+                pad = 5):
 
     est_locs, est_fluxes = filter_params(est_locs, est_fluxes, slen, pad)
     true_locs, true_fluxes = filter_params(true_locs, true_fluxes, slen, pad)
 
     est_mags = convert_nmgy_to_mag(est_fluxes / nelec_per_nmgy)
-
-    if mag_vec is None:
-        percentiles = np.linspace(0, 1, 11) * 100
-        mag_vec = np.percentile(est_mags.cpu(), percentiles)
-        mag_vec = torch.Tensor(mag_vec).to(device)
 
     ppv_vec = np.zeros(len(mag_vec) - 1)
     counts_vec = np.zeros(len(mag_vec) - 1)
