@@ -585,6 +585,10 @@ class ImageEncoder(nn.Module):
 
     def map_estimate(self, image):
         slen = image.shape[-1]
+        
+        if not self.pad_border: 
+            slen = slen - 2 * self.edge_padding
+            
         tile_estimate = self.tiled_map_estimate(image)
         estimate = get_full_params(slen, tile_estimate)
         return estimate

@@ -333,7 +333,8 @@ class SleepPhase(pl.LightningModule):
     def get_metrics(self, batch):
         # get images and properties
         images = batch["images"]
-        slen = images.shape[-1]
+        slen = self.image_decoder.slen
+        assert images.shape[-1] == slen + 2 * self.image_decoder.border_padding
         batch_size = images.shape[0]
 
         # obtain a params dictionary on tiles, then get on full image.
@@ -390,6 +391,7 @@ class SleepPhase(pl.LightningModule):
         # extract non-params entries get_full_params works.
         images = batch.pop("images", None)
         slen = self.image_decoder.slen
+        assert images.shape[-1] == slen + 2 * self.image_decoder.border_padding
         batch.pop("background", None)
 
         # convert to full image parameters for plotting purposes.
