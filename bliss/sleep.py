@@ -3,12 +3,12 @@ import numpy as np
 from itertools import permutations
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig
+import pytorch_lightning as pl
 
 import torch
 from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
 from torch.optim import Adam
-import pytorch_lightning as pl
 
 from . import device, plotting
 from .models import encoder, decoder
@@ -255,10 +255,36 @@ class SleepPhase(pl.LightningModule):
             true_tile_is_on_array,
         )
 
+        # calculate kl_qp loss.
+        # TODO: Should I zero out with is_on_array?
+        q_z = Normal(
+            pred["galaxy_param_mean"], pred["galaxy_param_logvar"].exp().sqrt()
+        )
+        z = q_z.rsample()
+        log_q_z = q_z.log_prob(z).sum((1, 2))
+        p_z = Normal(torch.zeros(z.shape), torch.ones(z.shape))
+        log_p_z = p_z.log_prob(z).sum((1, 2))
+
+        # TODO: Are true_tile_locs matched with z? Does this matter or do we have to do
+        #  permutation stuff?
+        recon_mean, recon_var = self.image_decoder.render_images(
+            true_tile_n_sources,
+            true_tile_locs,
+            true_tile_galaxy_bool,
+            z,
+            true_tile_log_fluxes.exp(),
+        )
+
+        kl_z = log_q_z - log_p_z  # log q(z | x) - log p(z)
+        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
+        recon_losses = recon_losses.view(n_ptiles, -1).sum(1)
+
+        kl_qp = (recon_losses + kl_z).sum()
+
         loss_vec = (
             locs_loss * (locs_loss.detach() < 1e6).float()
             + counter_loss
-            + galaxy_params_loss
+            + kl_qp
             + star_params_loss
             + galaxy_bool_loss
         )
