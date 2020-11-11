@@ -25,7 +25,8 @@ def get_mgrid(slen):
 
 
 def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
-    psfield = fits.open(psf_fit_file)
+    psfield = fits.open(psf_fit_file, 
+                        ignore_missing_end=True)
     psf_params = torch.zeros(len(bands), 6)
     for i in range(len(bands)):
         band = bands[i]
@@ -156,13 +157,13 @@ class ImageDecoder(nn.Module):
         if ext == ".npy":
             psf_params = torch.from_numpy(np.load(psf_params_file)).to(device)
             psf_params = psf_params[list(range(n_bands))]
-        elif ext == ".fit":
+        elif ext == ".fits":
             assert n_bands == 2, "only 2 band fit files are supported."
             bands = (2, 3)
             psf_params = get_fit_file_psf_params(psf_params_file, bands).to(device)
         else:
             raise NotImplementedError(
-                "Only .npy and .fit extensions are supported for PSF params files."
+                "Only .npy and .fits extensions are supported for PSF params files."
             )
 
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
