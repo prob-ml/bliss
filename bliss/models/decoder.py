@@ -622,7 +622,7 @@ class ImageDecoder(nn.Module):
         )
 
         # render the image from padded tiles
-        images = self._construct_full_image_from_ptiles(image_ptiles, self.tile_slen)
+        images = self._construct_full_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
 
         # add background and noise
         images += self.background.unsqueeze(0)
@@ -630,8 +630,9 @@ class ImageDecoder(nn.Module):
             images = self._apply_noise(images)
 
         return images
-
-    def _construct_full_image_from_ptiles(self, image_ptiles, tile_slen):
+    
+    @staticmethod
+    def _construct_full_image_from_ptiles(image_ptiles, tile_slen, border_padding):
         # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
         batch_size = image_ptiles.shape[0]
         n_tiles_per_image = image_ptiles.shape[1]
@@ -721,8 +722,8 @@ class ImageDecoder(nn.Module):
                 )
 
         # trim to original image size
-        x0 = ptile_padding * tile_slen - self.border_padding
-        x1 = (n_tiles1 + ptile_padding) * tile_slen + self.border_padding
+        x0 = ptile_padding * tile_slen - border_padding
+        x1 = (n_tiles1 + ptile_padding) * tile_slen + border_padding
         return canvas[
             :,
             :,
