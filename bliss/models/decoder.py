@@ -1,5 +1,4 @@
 import numpy as np
-import warnings
 from pathlib import Path
 from astropy.io import fits
 
@@ -356,20 +355,6 @@ class ImageDecoder(nn.Module):
 
         return log_fluxes
 
-    @staticmethod
-    def _apply_noise(images_mean):
-        # add noise to images.
-
-        if torch.any(images_mean <= 0):
-            warnings.warn("image mean less than 0")
-            images_mean = images_mean.clamp(min=1.0)
-
-        _images = torch.sqrt(images_mean)
-        images = _images * torch.randn_like(images_mean)
-        images = images + images_mean
-
-        return images
-
     def _trim_source(self, source):
         """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
         assert len(source.shape) == 3
@@ -513,21 +498,25 @@ class ImageDecoder(nn.Module):
         # allocate memory
         _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
         gal = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=device)
+        var = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=device)
 
         # forward only galaxies that are on!
-        gal_on, _ = self.galaxy_decoder.forward(z[b == 1])
+        gal_on, var_on = self.galaxy_decoder.forward(z[b == 1])
 
         # size the galaxy (either trims or crops to the size of ptile)
         gal_on = self._size_galaxy(gal_on)
+        var_on = self._size_galaxy(var_on)
 
         # set galaxies
         gal[b == 1] = gal_on
+        var[b == 1] = var_on
 
         batchsize = galaxy_params.shape[0]
         gal_shape = (batchsize, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
         single_galaxies = gal.view(gal_shape)
+        single_vars = var.view(gal_shape)
 
-        return single_galaxies
+        return single_galaxies, single_vars
 
     def _render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
@@ -535,6 +524,7 @@ class ImageDecoder(nn.Module):
         max_sources = locs.shape[1]
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
         ptile = torch.zeros(ptile_shape, device=device)
+        var_ptile = torch.zeros(ptile_shape, device=device)
 
         assert self.galaxy_decoder is not None
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
@@ -542,16 +532,22 @@ class ImageDecoder(nn.Module):
         assert galaxy_params.shape[2] == self.n_galaxy_params
         assert galaxy_bool.shape[2] == 1
 
-        single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bool)
+        single_galaxies, single_vars = self._render_single_galaxies(
+            galaxy_params, galaxy_bool
+        )
         for n in range(max_sources):
             galaxy_bool_n = galaxy_bool[:, n]
             locs_n = locs[:, n, :]
             _galaxy = single_galaxies[:, n, :, :, :]
+            _var = single_vars[:, n, :, :, :]
             galaxy = _galaxy * galaxy_bool_n.view(-1, 1, 1, 1)
+            var = _var * galaxy_bool_n.view(-1, 1, 1, 1)
             one_galaxy = self._render_one_source(locs_n, galaxy)
+            one_var = self._render_one_source(locs_n, var)
             ptile += one_galaxy
+            var_ptile += one_var
 
-        return ptile
+        return ptile, var_ptile
 
     def _render_ptiles(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
         # n_sources: is (batch_size x n_tiles_per_image)
@@ -582,22 +578,28 @@ class ImageDecoder(nn.Module):
         _star_bool = (1 - _galaxy_bool) * _is_on_array
         _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
 
-        # draw stars and galaxies
-        stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
-        galaxies = 0.0
-        if self.galaxy_decoder is not None:
-            galaxies = self._render_multiple_galaxies_on_ptile(
-                _locs, _galaxy_params, _galaxy_bool
-            )
-        images = galaxies + stars
-
-        return images.view(
+        # final shapes of images.
+        img_shape = (
             batch_size,
             self.n_tiles_per_image,
             self.n_bands,
             self.ptile_slen,
             self.ptile_slen,
         )
+
+        # draw stars and galaxies
+        stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
+        galaxies = 0.0
+        var_images = torch.zeros(img_shape, device=device)
+        if self.galaxy_decoder is not None:
+            galaxies, var_images = self._render_multiple_galaxies_on_ptile(
+                _locs, _galaxy_params, _galaxy_bool
+            )
+
+        images = (galaxies + stars).view(img_shape)
+        var_images = var_images.view(img_shape)
+
+        return images, var_images
 
     def render_images(
         self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
@@ -617,7 +619,7 @@ class ImageDecoder(nn.Module):
         assert galaxy_bool.shape[-1] == 1
 
         # first render the padded tiles
-        image_ptiles = self._render_ptiles(
+        image_ptiles, var_ptiles = self._render_ptiles(
             n_sources, locs, galaxy_bool, galaxy_params, fluxes
         )
 
@@ -625,13 +627,15 @@ class ImageDecoder(nn.Module):
         images = self._construct_full_image_from_ptiles(
             image_ptiles, self.tile_slen, self.border_padding
         )
+        var_images = self._construct_full_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
 
-        # add background and noise
+        # add background
         images += self.background.unsqueeze(0)
+        var_images += self.background.unsqueeze(0)
         if add_noise:
             images = self._apply_noise(images)
 
-        return images
+        return images, var_images
 
     @staticmethod
     def _construct_full_image_from_ptiles(image_ptiles, tile_slen, border_padding):

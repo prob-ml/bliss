@@ -258,7 +258,7 @@ class SleepPhase(pl.LightningModule):
         loss_vec = (
             locs_loss * (locs_loss.detach() < 1e6).float()
             + counter_loss
-            # + galaxy_params_loss
+            + galaxy_params_loss
             + star_params_loss
             + galaxy_bool_loss
         )
@@ -483,7 +483,7 @@ class SleepPhase(pl.LightningModule):
             if max_sources > 0 and n_sources.item() > 0:
 
                 # draw reconstruction image.
-                recon_image = self.image_decoder.render_images(
+                recon_image, _ = self.image_decoder.render_images(
                     tile_estimate["n_sources"],
                     tile_estimate["locs"],
                     tile_estimate["galaxy_bool"],

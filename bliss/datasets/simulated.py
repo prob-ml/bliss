@@ -1,3 +1,4 @@
+import warnings
 from omegaconf import DictConfig
 import pytorch_lightning as pl
 import warnings
@@ -28,6 +29,18 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         total_ptiles = n_tiles_per_image * self.batch_size
         assert total_ptiles > 1, "Need at least 2 tiles over all batches."
 
+    @staticmethod
+    def _add_noise(images_mean):
+        if torch.any(images_mean <= 0):
+            warnings.warn("image mean less than 0")
+            images_mean = images_mean.clamp(min=1.0)
+
+        _images = torch.sqrt(images_mean)
+        images = _images * torch.randn_like(images_mean)
+        images = images + images_mean
+
+        return images
+
     def __iter__(self):
         return self.batch_generator()
 
@@ -38,13 +51,14 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def get_batch(self):
         with torch.no_grad():
             batch = self.image_decoder.sample_prior(batch_size=self.batch_size)
-            images = self.image_decoder.render_images(
+            images, _ = self.image_decoder.render_images(
                 batch["n_sources"],
                 batch["locs"],
                 batch["galaxy_bool"],
                 batch["galaxy_params"],
                 batch["fluxes"],
             )
+            images = self._add_noise(images)
             batch.update(
                 {
                     "images": images,
