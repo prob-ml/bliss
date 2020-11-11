@@ -197,7 +197,7 @@ class SleepObjective(object):
                 ),
             ]
             if use_gpu != 0
-            else self.metrics_callback,
+            else [self.metrics_callback],
         )
 
         # start training
