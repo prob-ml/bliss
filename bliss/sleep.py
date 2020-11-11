@@ -307,10 +307,10 @@ class SleepPhase(pl.LightningModule):
         self.log("val_gal_params_loss", galaxy_params_loss.mean())
 
         # calculate metrics for this batch
-        counts_acc, galaxy_counts_acc, locs_mse = self.get_metrics(batch)
+        counts_acc, galaxy_counts_acc, locs_median_mse = self.get_metrics(batch)
         self.log("val_acc_counts", counts_acc)
         self.log("val_gal_counts", galaxy_counts_acc)
-        self.log("val_locs_mse", locs_mse)
+        self.log("val_locs_median_mse", locs_median_mse)
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -319,10 +319,10 @@ class SleepPhase(pl.LightningModule):
             self.make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_indx):
-        counts_acc, galaxy_counts_acc, locs_mse = self.get_metrics(batch)
+        counts_acc, galaxy_counts_acc, locs_median_mse = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
-        self.log("locs_mse", locs_mse)
+        self.log("locs_median_mse", locs_median_mse)
         return batch
 
     def test_epoch_end(self, outputs):
@@ -345,8 +345,7 @@ class SleepPhase(pl.LightningModule):
         # to compute metrics at the end.
         counts_acc = 0.0
         galaxy_counts_acc = 0.0
-        locs_mse = 0.0
-        matches = 0.0
+        mses = []
         for i in range(batch_size):
             image = images[None, i]
             true_n_sources_i = true_params["n_sources"][i].item()
@@ -362,7 +361,6 @@ class SleepPhase(pl.LightningModule):
 
             # only compare locations for mse if counts match.
             if true_n_sources_i == n_sources_i:
-                matches += 1
 
                 # prepare locs and get them in units of pixels.
                 true_locs_i = true_params["locs"][i].view(-1, 2)
@@ -375,12 +373,16 @@ class SleepPhase(pl.LightningModule):
                 locs_i = sort_locs(locs_i)
 
                 # now calculate mse
-                locs_mse += (true_locs_i - locs_i).pow(2).sum(1).pow(1.0 / 2).sum()
+                locs_mse = (true_locs_i - locs_i).pow(2).sum(1).pow(1.0 / 2)
+                for mse in locs_mse:
+                    mses.append(mse.item())
 
-        if matches > 0:
-            locs_mse /= matches
-
-        return counts_acc, galaxy_counts_acc, locs_mse
+        # TODO: default value? Also not sure how to accumulate medians so we are actually taking an
+        #  average over the medians across batches.
+        locs_median_mse = 0.5
+        if len(mses) > 0:
+            locs_median_mse = np.median(mses)
+        return counts_acc, galaxy_counts_acc, locs_median_mse
 
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
