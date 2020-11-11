@@ -367,7 +367,11 @@ class SleepPhase(pl.LightningModule):
                 for mse in locs_mse:
                     mses.append(mse.item())
 
-        locs_median_mse = np.median(mses)
+        # TODO: default value? Also not sure how to accumulate medians so we are actually taking an
+        #  average over the medians across batches.
+        locs_median_mse = 0.5
+        if len(mses) > 0:
+            locs_median_mse = np.median(mses)
         return counts_acc, galaxy_counts_acc, locs_median_mse
 
     def make_plots(self, batch, kind="validation"):
