@@ -1,6 +1,5 @@
 # @package _group_
 module_name: SimulatedModule
-name: SimulatedDataset
 params:
   n_batches: 10
-  batch_size: 32
+  batch_size: 64

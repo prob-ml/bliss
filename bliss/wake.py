@@ -86,21 +86,15 @@ class WakeNet(pl.LightningModule):
 
         with torch.no_grad():
             self.star_encoder.eval()
-            (
-                n_stars_sampled,
-                locs_sampled,
-                galaxy_params_sampled,
-                log_fluxes_sampled,
-                galaxy_bool_sampled,
-            ) = self.star_encoder.sample_encoder(obs_img, self.n_samples)
+            sample = self.star_encoder.sample_encoder(obs_img, self.n_samples)
 
         background = self.planar_background.forward().unsqueeze(0).detach()
         stars = self.image_decoder.render_images(
-            n_stars_sampled,
-            locs_sampled,
-            galaxy_bool_sampled,
-            galaxy_params_sampled,
-            log_fluxes_sampled.exp(),
+            sample["n_sources"],
+            sample["locs"],
+            sample["galaxy_bool"],
+            sample["galaxy_params"],
+            sample["fluxes"],
         )
 
         recon_mean = stars + background
@@ -177,7 +171,7 @@ class WakeNet(pl.LightningModule):
                     self.observed_image[
                         :, :, x0 : (x0 + sample_every), x1 : (x1 + sample_every)
                     ]
-                    .reshape(batch_size, n_bands, -1)
+                    .view(batch_size, n_bands, -1)
                     .min(2)[0]
                     .mean(0)
                 )

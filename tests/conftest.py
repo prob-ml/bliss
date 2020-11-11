@@ -71,6 +71,44 @@ class DeviceSetup:
             torch.cuda.set_device(self.device)
 
 
+class SleepSetup:
+    def __init__(self, devices):
+        self.devices = devices
+
+    def get_cfg(self, overrides):
+        assert "model" in overrides
+        overrides = [f"{key}={value}" for key, value in overrides.items()]
+        with initialize(config_path="../config"):
+            cfg = compose("config", overrides=overrides)
+            cfg.training.trainer.update({"gpus": self.devices.gpus})
+        return cfg
+
+    def get_datamodule(self, overrides):
+        cfg = self.get_cfg(overrides)
+        return simulated.SimulatedModule(cfg)
+
+    def get_trainer(self, overrides):
+        cfg = self.get_cfg(overrides)
+        return pl.Trainer(**cfg.training.trainer)
+
+    def get_sleep(self, overrides):
+        cfg = self.get_cfg(overrides)
+        return sleep.SleepPhase(cfg)
+
+    def get_trained_sleep(self, overrides):
+        cfg = self.get_cfg(overrides)
+        datamodule = self.get_datamodule(overrides)
+        trainer = self.get_trainer(overrides)
+        sleep_net = sleep.SleepPhase(cfg)
+        trainer.fit(sleep_net, datamodule=datamodule)
+        return sleep_net
+
+    def test_sleep(self, overrides, sleep_net):
+        test_module = self.get_datamodule(overrides)
+        trainer = self.get_trainer(overrides)
+        return trainer.test(sleep_net, datamodule=test_module)[0]
+
+
 # available fixtures provided globally for all tests.
 @pytest.fixture(scope="session")
 def paths():
@@ -88,30 +126,5 @@ def devices(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def get_dataset():
-    def _dataset(overrides: dict):
-        assert "model" in overrides
-        overrides = [f"{key}={value}" for key, value in overrides.items()]
-        with initialize(config_path="../config"):
-            cfg = compose("config", overrides=overrides)
-            dataset = simulated.SimulatedDataset(cfg)
-        return dataset
-
-    return _dataset
-
-
-@pytest.fixture(scope="session")
-def get_trained_encoder(devices):
-    def _encoder(dataset, overrides: dict):
-        assert "model" in overrides
-        overrides = [f"{key}={value}" for key, value in overrides.items()]
-        with initialize(config_path="../config"):
-            cfg = compose("config", overrides=overrides)
-            cfg.training.trainer.update({"gpus": devices.gpus})
-            sleep_net = sleep.SleepPhase(cfg, dataset)
-            trainer = pl.Trainer(**cfg.training.trainer)
-            trainer.fit(sleep_net)
-            sleep_net.image_encoder.eval()
-            return sleep_net.image_encoder.to(devices.device)
-
-    return _encoder
+def sleep_setup(devices):
+    return SleepSetup(devices)

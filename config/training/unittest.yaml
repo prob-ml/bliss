@@ -1,8 +1,8 @@
 # @package _group_
 num_workers: 0
 deterministic: False
-validation_plot_start: 1001
-n_epochs: 121
+plotting: False
+n_epochs: 151
 trainer:
   profiler: False
   logger: False

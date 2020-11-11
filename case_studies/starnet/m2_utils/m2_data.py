@@ -17,7 +17,6 @@ def _get_mgrid2(slen0, slen1):
     offset0 = (slen0 - 1) / 2
     offset1 = (slen1 - 1) / 2
     x, y = np.mgrid[-offset0:(offset0 + 1), -offset1:(offset1 + 1)]
-    # return torch.Tensor(np.dstack((x, y))) / offset
     return torch.Tensor(np.dstack((y, x))) / torch.Tensor([[[offset1, offset0]]])
 
 class SloanDigitalSkySurvey(Dataset):
