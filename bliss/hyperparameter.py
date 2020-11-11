@@ -5,13 +5,13 @@ from typing import Optional
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning import Callback
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import GPUtil
 
 import multiprocessing as mp
 from joblib import parallel_backend
 
 import optuna
-from optuna.integration import PyTorchLightningPruningCallback
 
 from omegaconf import DictConfig
 
@@ -22,6 +22,30 @@ from bliss.datasets.simulated import SimulatedModule
 
 
 logger = logging.getLogger()
+
+
+class OptunaPruning(EarlyStopping):
+    def __init__(self, trial: optuna.trial.Trial, monitor: str, gpu_id, queue) -> None:
+
+        super(OptunaPruning, self).__init__(monitor=monitor)
+
+        self._trial = trial
+        self.gpu_id = gpu_id
+        self.queue = queue
+
+    def on_validation_end(self, trainer, pl_module) -> None:
+
+        logs = trainer.callback_metrics
+        epoch = pl_module.current_epoch
+        current_score = logs.get(self.monitor)
+        if current_score is None:
+            return
+        self._trial.report(current_score, step=epoch)
+        if self._trial.should_prune():
+            message = "Trial was pruned at epoch {}.".format(epoch)
+            self.queue.put(self.gpu_id)
+            raise optuna.TrialPruned(message)
+
 
 # define a callback to get matric from validation_end step
 #  idea is same for the early stopping
@@ -168,8 +192,12 @@ class SleepObjective(object):
             max_epochs=self.max_epochs,
             callbacks=[
                 self.metrics_callback,
-                PyTorchLightningPruningCallback(trial, monitor=self.monitor),
-            ],
+                OptunaPruning(
+                    trial, monitor=self.monitor, gpu_id=use_gpu[0], queue=self.gpu_queue
+                ),
+            ]
+            if use_gpu != 0
+            else self.metrics_callback,
         )
 
         # start training
