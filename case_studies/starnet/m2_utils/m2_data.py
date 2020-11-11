@@ -244,7 +244,9 @@ def load_m2_data(sdss_dir = '../../sdss_stage_dir/',
                         hubble_locs_full_x1[which_locs] - x1]).transpose()
     hubble_r_fluxes = torch.Tensor(hubble_r_fluxes_full[which_locs])
     
-    hubble_locs = torch.Tensor(locs) / (slen - 1)
+    # hubble_locs = torch.Tensor(locs) / (slen - 1)
+    # different from my old repo ... 
+    hubble_locs = (torch.Tensor(locs) + 0.5) / slen 
     hubble_fluxes = torch.stack([hubble_r_fluxes, 
                                  hubble_r_fluxes]).transpose(0, 1)
 
