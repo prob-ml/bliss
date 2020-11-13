@@ -25,8 +25,7 @@ def get_mgrid(slen):
 
 
 def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
-    psfield = fits.open(psf_fit_file, 
-                        ignore_missing_end=True)
+    psfield = fits.open(psf_fit_file, ignore_missing_end=True)
     psf_params = torch.zeros(len(bands), 6)
     for i in range(len(bands)):
         band = bands[i]
@@ -623,7 +622,9 @@ class ImageDecoder(nn.Module):
         )
 
         # render the image from padded tiles
-        images = self._construct_full_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
+        images = self._construct_full_image_from_ptiles(
+            image_ptiles, self.tile_slen, self.border_padding
+        )
 
         # add background and noise
         images += self.background.unsqueeze(0)
@@ -631,7 +632,7 @@ class ImageDecoder(nn.Module):
             images = self._apply_noise(images)
 
         return images
-    
+
     @staticmethod
     def _construct_full_image_from_ptiles(image_ptiles, tile_slen, border_padding):
         # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)

@@ -141,11 +141,13 @@ class SloanDigitalSkySurvey(Dataset):
 
         return ret
 
+
 def _get_mgrid2(slen0, slen1):
     offset0 = (slen0 - 1) / 2
     offset1 = (slen1 - 1) / 2
     x, y = np.mgrid[-offset0 : (offset0 + 1), -offset1 : (offset1 + 1)]
     return torch.Tensor(np.dstack((y, x))) / torch.Tensor([[[offset1, offset0]]])
+
 
 def convert_mag_to_nmgy(mag):
     return 10 ** ((22.5 - mag) / 2.5)
@@ -229,7 +231,7 @@ def load_m2_data(
     # using hubble locations,
     # align i-band with r-band
     # TODO: we don't actually need hubble locations ... random locations will do
-    # separate function to load data from function to load sdss ... 
+    # separate function to load data from function to load sdss ...
     # so that it is absolutely clear we do not use hubble data in the analysis
     #####################
     frame_name_i = "frame-{}-{:06d}-{:d}-{:04d}.fits".format("i", run, camcol, field)
