@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 def test_star_wake(sleep_setup, paths, devices):
 
     device = devices.device
-    overrides = dict(model="basic_sleep_star", training="cpu", dataset="cpu")
+    overrides = dict(model="sleep_star_basic", training="cpu", dataset="cpu")
     sleep_net = sleep_setup.get_trained_sleep(overrides)
 
     # load the test image

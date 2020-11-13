@@ -53,13 +53,17 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return DataLoader(self, batch_size=None)
 
     def test_dataloader(self):
-        if self.cfg.testing.file is None:
-            return DataLoader(self, batch_size=None)
+        dl = DataLoader(self, batch_size=None)
 
-        else:
+        if self.cfg.testing.file is not None:
             test_dataset = SavedDataset(self.cfg.testing.file)
             batch_size = self.cfg.testing.batch_size
-            return DataLoader(test_dataset, batch_size=batch_size, num_workers=0)
+            num_workers = self.cfg.testing.num_workers
+            dl = DataLoader(
+                test_dataset, batch_size=batch_size, num_workers=num_workers
+            )
+
+        return dl
 
 
 class SavedDataset(Dataset):
