@@ -1,10 +1,10 @@
 # @package _group_
 name: SleepPhase
 image:
-  slen: 40
+  slen: 20
   n_bands: 1
   background:
-    - 1000.0
+    - 686.0
 galaxy:
   slen: 51
   latent_dim: 8
