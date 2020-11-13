@@ -6,14 +6,15 @@ import numpy as np
 torch.manual_seed(84)
 np.random.seed(43)
 
-
 @pytest.fixture(scope="module")
 def trained_star_encoder_m2(sleep_setup, devices):
     overrides = dict(
         model="m2",
         dataset="m2" if devices.use_cuda else "cpu",
         training="m2" if devices.use_cuda else "cpu",
+        optimizer="m2"
     )
+    
     sleep_net = sleep_setup.get_trained_sleep(overrides)
     return sleep_net.image_encoder.to(devices.device)
 
@@ -79,7 +80,6 @@ def get_summary_stats(
     return tpr_bool.mean(), ppv_bool.mean(), tpr_bool, ppv_bool
 
 
-@pytest.mark.slow
 class TestStarSleepEncoderM2:
     def test_star_sleep_m2(self, trained_star_encoder_m2, devices, paths):
         device = devices.device
@@ -88,7 +88,7 @@ class TestStarSleepEncoderM2:
         trained_star_encoder_m2.eval()
 
         # load hubble parameters and SDSS image
-        hubble_data = np.load(os.path.join(paths["data"], "true_hubble_m2.npy"))
+        hubble_data = np.load(os.path.join(paths["data"], "true_hubble_m2.npz"))
 
         # the SDSS image
         test_image = torch.from_numpy(hubble_data["sdss_image"]).unsqueeze(0).to(device)
@@ -119,5 +119,5 @@ class TestStarSleepEncoderM2:
         print("Sleep phase TPR: ", sleep_tpr)
         print("Sleep phase PPV: ", sleep_ppv)
 
-        assert sleep_tpr > 0.45
-        assert sleep_ppv > 0.33
+        assert sleep_tpr > 0.4
+        assert sleep_ppv > 0.4
