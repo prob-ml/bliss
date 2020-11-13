@@ -25,7 +25,7 @@ decoder:
     alpha: 0.5
     gal_slen: ${model.galaxy.slen}
     decoder_file:
-    psf_params_file: ${paths.root}/data/sdss/2583/2/136/psField-002583-2-0136.fits
+    psf_params_file: ${paths.root}/data/sdss/2583/2/136/psField-002583-2-0136.fit
     background_values: ${model.image.background}
     border_padding: 3
 encoder:
