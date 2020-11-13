@@ -6,3 +6,4 @@
 *.pt filter=lfs diff=lfs merge=lfs -text
 *.hdf5 filter=lfs diff=lfs merge=lfs -text
 data/sdss/2583/* filter=lfs diff=lfs merge=lfs -text
+data/hubble/* filter=lfs diff=lfs merge=lfs -text

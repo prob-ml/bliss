@@ -1,8 +1,3 @@
-This folder contains the Hubble catalog for m2. To download the catalog, run 
-
-```
-wget https://archive.stsci.edu/pub/hlsp/acsggct/ngc7089/hlsp_acsggct_hst_acs-wfc_ngc7089_r.rdviq.cal.adj.zpt
-```
-
-For more information about the Hubble survey, see https://archive.stsci.edu/prepds/acsggct/ . 
-
+version https://git-lfs.github.com/spec/v1
+oid sha256:50a4e3d5c5882f78136646a10a5bb7197c628aa8bf258371813e346b4d96d879
+size 293
