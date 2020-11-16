@@ -156,7 +156,7 @@ class ImageDecoder(nn.Module):
         if ext == ".npy":
             psf_params = torch.from_numpy(np.load(psf_params_file)).to(device)
             psf_params = psf_params[list(range(n_bands))]
-        elif (ext == ".fits") or (ext == ".fit"):
+        elif (ext == ".fits"):
             assert n_bands == 2, "only 2 band fit files are supported."
             bands = (2, 3)
             psf_params = get_fit_file_psf_params(psf_params_file, bands).to(device)
