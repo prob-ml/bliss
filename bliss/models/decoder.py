@@ -726,9 +726,4 @@ class ImageDecoder(nn.Module):
         # trim to original image size
         x0 = ptile_padding * tile_slen - border_padding
         x1 = (n_tiles1 + ptile_padding) * tile_slen + border_padding
-        return canvas[
-            :,
-            :,
-            x0:x1,
-            x0:x1,
-        ]
+        return canvas[:, :, x0:x1, x0:x1]
