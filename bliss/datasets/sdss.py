@@ -143,7 +143,7 @@ class SloanDigitalSkySurvey(Dataset):
         return ret
 
 
-# functions to evaluate the SDSS detections against the 
+# functions to evaluate the SDSS detections against the
 # hubble catalog
 def convert_mag_to_nmgy(mag):
     return 10 ** ((22.5 - mag) / 2.5)

@@ -8,6 +8,7 @@ np.random.seed(43)
 
 from bliss.datasets import sdss
 
+
 @pytest.fixture(scope="module")
 def trained_star_encoder_m2(sleep_setup, devices):
     overrides = dict(
