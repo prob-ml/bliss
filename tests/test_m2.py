@@ -3,8 +3,8 @@ import pytest
 import os
 import numpy as np
 
-torch.manual_seed(84)
-np.random.seed(43)
+torch.manual_seed(841)
+np.random.seed(431)
 
 from bliss.datasets import sdss
 
