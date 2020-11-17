@@ -3,6 +3,7 @@ import hydra
 from omegaconf import DictConfig
 
 import torch
+import os
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 
@@ -37,7 +38,7 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
     num_epochs = num_epochs
     num_gpu = num_gpu
 
-    torch.cuda.set_device("cuda")
+    # gpu_id = os.environ["CUDA_VISIBLE_DEVICES"]
 
     # set up trainer
     trainer = pl.Trainer(
@@ -57,9 +58,10 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
 @hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"
     config = {
         "enc_conv_c": tune.choice([5, 15, 20]),
-        "enc_kern": tune.choice([3, 5, 7]),
+        "enc_kern": tune.choice([3]),
         "enc_hidden": tune.choice([64, 128]),
         "lr": tune.choice([1e-4, 1e-2]),
         "weight_decay": tune.choice([1e-6, 1e-4]),
@@ -85,16 +87,15 @@ def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
             SleepRayTune,
             cfg=cfg,
             num_epochs=num_epochs,
-            num_gpus=gpus_per_trial,
+            num_gpu=gpus_per_trial,
         ),
+        num_samples=100,
         resources_per_trial={"gpu": gpus_per_trial},
         config=config,
         scheduler=scheduler,
         progress_reporter=reporter,
         name="SleepRayTune",
     )
-
-    # shutil.rmtree(data_dir)
 
 
 if __name__ == "__main__":
