@@ -42,7 +42,7 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
     # set up trainer
     trainer = pl.Trainer(
         max_epochs=num_epochs,
-        gpus=num_gpu,
+        gpus=num_gpu,  # change to gpu_id
         logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
         callbacks=[
