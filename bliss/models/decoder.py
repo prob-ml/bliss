@@ -185,10 +185,7 @@ class ImageDecoder(nn.Module):
         init_psf_sum = psf.sum(-1).sum(-1).detach()
         norm = psf.sum(-1).sum(-1)
         psf *= (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
-        l_pad = (self.slen + ((self.slen % 2) == 0) * 1 - self.psf_slen) // 2
-
-        # add padding so psf has length of image_slen
-        return pad(psf, [l_pad] * 4)
+        return psf
 
     def _get_psf(self):
         # TODO make the psf function vectorized ...
@@ -517,16 +514,21 @@ class ImageDecoder(nn.Module):
         b = galaxy_bool.flatten()
 
         # allocate memory
-        gal = torch.zeros(
-            z.shape[0], self.n_bands, self.gal_slen, self.gal_slen, device=device
-        )
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        gal = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=device)
 
         # forward only galaxies that are on!
         gal_on, _ = self.galaxy_decoder.forward(z[b == 1])
+
+        # size the galaxy (either trims or crops to the
+        # size of ptile)
+        gal_on = self._size_galaxy(gal_on)
+
+        # set galaxies
         gal[b == 1] = gal_on
 
-        n_ptiles = galaxy_params.shape[0]
-        gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
+        batchsize = galaxy_params.shape[0]
+        gal_shape = (batchsize, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
         single_galaxies = gal.view(gal_shape)
 
         return single_galaxies
