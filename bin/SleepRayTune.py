@@ -3,6 +3,7 @@ import hydra
 from omegaconf import DictConfig
 
 import torch
+import logging
 import os
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -58,19 +59,27 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
 @hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"
+
+    logger = logging.getLogger()
+
+    # restrict the number for cuda
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1,4,3"
+
+    # define the parameter space
     config = {
-        "enc_conv_c": tune.choice([5, 15, 20]),
-        "enc_kern": tune.choice([3]),
-        "enc_hidden": tune.choice([64, 128]),
-        "lr": tune.choice([1e-4, 1e-2]),
-        "weight_decay": tune.choice([1e-6, 1e-4]),
+        "enc_conv_c": tune.grid_search([5, 15, 20]),
+        "enc_kern": tune.grid_search([3]),
+        "enc_hidden": tune.grid_search([64, 128]),
+        "lr": tune.grid_search([1e-4, 1e-2]),
+        "weight_decay": tune.grid_search([1e-6, 1e-4]),
     }
 
+    # pruner
     scheduler = ASHAScheduler(
         metric="loss", mode="min", max_t=num_epochs, grace_period=1
     )
 
+    # define how to report the results
     reporter = CLIReporter(
         parameter_columns=[
             "enc_conv_c",
@@ -82,20 +91,26 @@ def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
         metric_columns=["loss"],
     )
 
-    tune.run(
+    # run the trials
+    pl.trainer.seed_everything(10)
+    trials = tune.run(
         tune.with_parameters(
             SleepRayTune,
             cfg=cfg,
             num_epochs=num_epochs,
             num_gpu=gpus_per_trial,
         ),
-        num_samples=100,
+        num_samples=1,
         resources_per_trial={"gpu": gpus_per_trial},
+        verbose=1,
         config=config,
         scheduler=scheduler,
         progress_reporter=reporter,
         name="SleepRayTune",
     )
+
+    best_config = trials.get_best_config(metric="loss", mode="min")
+    logger.info(f"Best config: {best_config}")
 
 
 if __name__ == "__main__":
