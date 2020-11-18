@@ -25,7 +25,7 @@ def get_mgrid(slen):
 
 
 def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
-    psfield = fits.open(psf_fit_file)
+    psfield = fits.open(psf_fit_file, ignore_missing_end=True)
     psf_params = torch.zeros(len(bands), 6)
     for i in range(len(bands)):
         band = bands[i]
@@ -40,7 +40,7 @@ def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
 
         psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
 
-    return psf_params
+    return psf_params.to(device)
 
 
 class ImageDecoder(nn.Module):
@@ -50,6 +50,7 @@ class ImageDecoder(nn.Module):
         slen=50,
         tile_slen=2,
         ptile_padding=2,
+        border_padding=0,
         prob_galaxy=0.0,
         n_galaxy_params=8,
         max_sources=2,
@@ -88,6 +89,12 @@ class ImageDecoder(nn.Module):
         self.ptile_padding = ptile_padding
         self.ptile_slen = int((self.ptile_padding * 2 + 1) * tile_slen)
 
+        # the number of pixels that pads the full image
+        self.border_padding = border_padding
+        assert border_padding <= (
+            ptile_padding * tile_slen
+        ), "Too much border padding. Make ptile_padding larger. "
+
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
@@ -123,7 +130,11 @@ class ImageDecoder(nn.Module):
 
         # background
         assert len(background_values) == n_bands
-        background_shape = (self.n_bands, self.slen, self.slen)
+        background_shape = (
+            self.n_bands,
+            self.slen + 2 * self.border_padding,
+            self.slen + 2 * self.border_padding,
+        )
         self.background = torch.zeros(background_shape, device=device)
         for i in range(n_bands):
             self.background[i] = background_values[i]
@@ -146,7 +157,7 @@ class ImageDecoder(nn.Module):
             psf_params = torch.from_numpy(np.load(psf_params_file)).to(device)
             psf_params = psf_params[list(range(n_bands))]
         elif ext == ".fits":
-            assert n_bands == 2, "only 2 band fits files are supported."
+            assert n_bands == 2, "only 2 band fit files are supported."
             bands = (2, 3)
             psf_params = get_fit_file_psf_params(psf_params_file, bands).to(device)
         else:
@@ -157,6 +168,9 @@ class ImageDecoder(nn.Module):
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+        # extra factor to be consisten with old repo
+        # but probably doesn't matter ...
+        grid = grid * (self.psf_slen / (self.psf_slen - 1))
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
 
         # get normalization_constant
@@ -283,7 +297,7 @@ class ImageDecoder(nn.Module):
                 self.max_sources,
                 self.n_bands - 1,
             )
-            colors = torch.rand(*shape, device=device) * 0.15 + 0.3
+            colors = torch.randn(*shape, device=device)
             _fluxes = 10 ** (colors / 2.5) * base_fluxes
             fluxes = torch.cat((base_fluxes, _fluxes), dim=3)
             fluxes *= star_bool.float()
@@ -459,6 +473,7 @@ class ImageDecoder(nn.Module):
 
         locs_swapped = locs.index_select(1, self.swap)
         grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
+
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
@@ -550,24 +565,24 @@ class ImageDecoder(nn.Module):
         # returns the ptiles in
         # shape = (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
 
-        assert (n_sources <= self.max_sources).all()
+        max_sources = locs.shape[2]
+
+        assert (n_sources <= max_sources).all()
         batch_size = n_sources.shape[0]
         n_ptiles = batch_size * self.n_tiles_per_image
 
         # view parameters being explicit about shapes
         _n_sources = n_sources.view(n_ptiles)
-        _locs = locs.view(n_ptiles, self.max_sources, 2)
-        _galaxy_bool = galaxy_bool.view(n_ptiles, self.max_sources, 1)
-        _galaxy_params = galaxy_params.view(
-            n_ptiles, self.max_sources, self.n_galaxy_params
-        )
-        _fluxes = fluxes.view(n_ptiles, self.max_sources, self.n_bands)
+        _locs = locs.view(n_ptiles, max_sources, 2)
+        _galaxy_bool = galaxy_bool.view(n_ptiles, max_sources, 1)
+        _galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
+        _fluxes = fluxes.view(n_ptiles, max_sources, self.n_bands)
 
         # draw stars and galaxies
-        _is_on_array = get_is_on_from_n_sources(_n_sources, self.max_sources)
-        _is_on_array = _is_on_array.view(n_ptiles, self.max_sources, 1)
+        _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)
+        _is_on_array = _is_on_array.view(n_ptiles, max_sources, 1)
         _star_bool = (1 - _galaxy_bool) * _is_on_array
-        _star_bool = _star_bool.view(n_ptiles, self.max_sources, 1)
+        _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
 
         # draw stars and galaxies
         stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
@@ -607,7 +622,9 @@ class ImageDecoder(nn.Module):
         )
 
         # render the image from padded tiles
-        images = self._construct_full_image_from_ptiles(image_ptiles, self.tile_slen)
+        images = self._construct_full_image_from_ptiles(
+            image_ptiles, self.tile_slen, self.border_padding
+        )
 
         # add background and noise
         images += self.background.unsqueeze(0)
@@ -617,7 +634,7 @@ class ImageDecoder(nn.Module):
         return images
 
     @staticmethod
-    def _construct_full_image_from_ptiles(image_ptiles, tile_slen):
+    def _construct_full_image_from_ptiles(image_ptiles, tile_slen, border_padding):
         # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
         batch_size = image_ptiles.shape[0]
         n_tiles_per_image = image_ptiles.shape[1]
@@ -707,9 +724,6 @@ class ImageDecoder(nn.Module):
                 )
 
         # trim to original image size
-        return canvas[
-            :,
-            :,
-            (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
-            (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
-        ]
+        x0 = ptile_padding * tile_slen - border_padding
+        x1 = (n_tiles1 + ptile_padding) * tile_slen + border_padding
+        return canvas[:, :, x0:x1, x0:x1]

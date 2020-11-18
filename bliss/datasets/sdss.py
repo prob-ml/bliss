@@ -1,3 +1,4 @@
+import torch
 import pathlib
 import pickle
 import numpy as np
@@ -140,3 +141,46 @@ class SloanDigitalSkySurvey(Dataset):
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
         return ret
+
+
+# functions to evaluate the SDSS detections against the
+# hubble catalog
+def convert_mag_to_nmgy(mag):
+    return 10 ** ((22.5 - mag) / 2.5)
+
+
+def get_locs_error(locs, true_locs):
+    # get matrix of Linf error in locations
+    # truth x estimated
+    return torch.abs(locs.unsqueeze(0) - true_locs.unsqueeze(1)).max(2)[0]
+
+
+def get_fluxes_error(fluxes, true_fluxes):
+    # get matrix of l1 error in log flux
+    # truth x estimated
+    return torch.abs(
+        torch.log10(fluxes).unsqueeze(0) - torch.log10(true_fluxes).unsqueeze(1)
+    )
+
+
+def get_mag_error(mags, true_mags):
+    # get matrix of l1 error in magnitude
+    # truth x estimated
+    return torch.abs(mags.unsqueeze(0) - true_mags.unsqueeze(1))
+
+
+def convert_nmgy_to_mag(nmgy):
+    return 22.5 - 2.5 * torch.log10(nmgy)
+
+
+def get_summary_stats(
+    est_locs, true_locs, slen, est_fluxes, true_fluxes, nelec_per_nmgy, slack=0.5
+):
+    est_mags = convert_nmgy_to_mag(est_fluxes / nelec_per_nmgy)
+    true_mags = convert_nmgy_to_mag(true_fluxes / nelec_per_nmgy)
+    mag_error = get_mag_error(est_mags, true_mags)
+
+    locs_error = get_locs_error(est_locs * (slen - 1), true_locs * (slen - 1))
+    tpr_bool = torch.any((locs_error < slack) * (mag_error < slack), dim=1).float()
+    ppv_bool = torch.any((locs_error < slack) * (mag_error < slack), dim=0).float()
+    return tpr_bool.mean(), ppv_bool.mean(), tpr_bool, ppv_bool
