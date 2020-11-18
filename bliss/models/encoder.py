@@ -545,17 +545,18 @@ class ImageEncoder(nn.Module):
         # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
         
         batchsize = image.shape[0]
-        n_ptiles = image.shape[1]
         
         image_ptiles = self.get_images_in_tiles(image)
         h = self._get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+        
+        n_ptiles = int(image_ptiles.shape[0] / batchsize)
 
         # get map estimate for n_sources in each tile.
         # tile_n_sources shape = (batchsize x n_ptiles)
         # tile_is_on_array shape = (batchsize x n_ptiles x max_detections x 1)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-        tile_n_sources = tile_n_sources.view(batchsize, -1)
+        tile_n_sources = tile_n_sources.view(batchsize, n_ptiles)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
