@@ -543,13 +543,13 @@ class ImageEncoder(nn.Module):
 
     def tiled_map_estimate(self, image):
         # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
-        
+
         batchsize = image.shape[0]
-        
+
         image_ptiles = self.get_images_in_tiles(image)
         h = self._get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        
+
         n_ptiles = int(image_ptiles.shape[0] / batchsize)
 
         # get map estimate for n_sources in each tile.
@@ -562,11 +562,16 @@ class ImageEncoder(nn.Module):
 
         # get variational parameters: these are on image tiles
         # shape (all) = (1 x (batchsize x n_ptiles) x max_detections x param_dim)
-        pred = self._get_var_params_for_n_sources(h, tile_n_sources.flatten().unsqueeze(0))
-    
-        # now reshape 
-        pred = {key: param.view(batchsize, n_ptiles, param.shape[2], param.shape[3]) for key, param in pred.items()}
-    
+        pred = self._get_var_params_for_n_sources(
+            h, tile_n_sources.flatten().unsqueeze(0)
+        )
+
+        # now reshape
+        pred = {
+            key: param.view(batchsize, n_ptiles, param.shape[2], param.shape[3])
+            for key, param in pred.items()
+        }
+
         # set sd so we return map estimates.
         tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
         tile_galaxy_bool *= tile_is_on_array
