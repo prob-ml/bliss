@@ -339,26 +339,26 @@ class SleepPhase(pl.LightningModule):
         true_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params(slen, true_params)
 
-        # get map estimates 
+        # get map estimates
         estimates = self.image_encoder.map_estimate(images)
-        
+
         # accuracy of counts
-        counts_acc = (true_params["n_sources"] == estimates['n_sources']).float().mean()
-        
+        counts_acc = (true_params["n_sources"] == estimates["n_sources"]).float().mean()
+
         # acuraccy of galaxy counts
         est_n_gal = estimates["galaxy_bool"].view(batch_size, -1).sum(-1)
         true_n_gal = estimates["galaxy_bool"].view(batch_size, -1).sum(-1)
         galaxy_counts_acc = (est_n_gal == true_n_gal).float().mean()
-        
-        # accuracy of locations 
-        est_locs = estimates['locs']
-        true_locs = true_params['locs']
-        
+
+        # accuracy of locations
+        est_locs = estimates["locs"]
+        true_locs = true_params["locs"]
+
         mses = []
         for i in range(batch_size):
             true_n_sources_i = true_params["n_sources"][i]
-            n_sources_i = estimates['n_sources'][i]
-            
+            n_sources_i = estimates["n_sources"][i]
+
             # only compare locations for mse if counts match.
             if true_n_sources_i == n_sources_i:
 
@@ -381,7 +381,7 @@ class SleepPhase(pl.LightningModule):
         locs_median_mse = 0.5
         if len(mses) > 0:
             locs_median_mse = np.median(mses)
-            
+
         return counts_acc, galaxy_counts_acc, locs_median_mse
 
     def make_plots(self, batch, kind="validation"):
