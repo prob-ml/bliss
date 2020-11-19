@@ -5,7 +5,6 @@ from astropy.io import fits
 
 import torch
 import torch.nn as nn
-from torch.nn.functional import pad
 import torch.nn.functional as F
 from torch.distributions import Poisson, Normal
 
