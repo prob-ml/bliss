@@ -83,9 +83,9 @@ class SleepSetup:
             cfg.training.trainer.update({"gpus": self.devices.gpus})
         return cfg
 
-    def get_datamodule(self, overrides):
+    def get_dataset(self, overrides):
         cfg = self.get_cfg(overrides)
-        return simulated.SimulatedModule(cfg)
+        return simulated.SimulatedDataset(cfg)
 
     def get_trainer(self, overrides):
         cfg = self.get_cfg(overrides)
@@ -97,14 +97,14 @@ class SleepSetup:
 
     def get_trained_sleep(self, overrides):
         cfg = self.get_cfg(overrides)
-        datamodule = self.get_datamodule(overrides)
+        dataset = self.get_dataset(overrides)
         trainer = self.get_trainer(overrides)
         sleep_net = sleep.SleepPhase(cfg)
-        trainer.fit(sleep_net, datamodule=datamodule)
+        trainer.fit(sleep_net, datamodule=dataset)
         return sleep_net
 
     def test_sleep(self, overrides, sleep_net):
-        test_module = self.get_datamodule(overrides)
+        test_module = self.get_dataset(overrides)
         trainer = self.get_trainer(overrides)
         return trainer.test(sleep_net, datamodule=test_module)[0]
 

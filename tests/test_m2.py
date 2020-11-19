@@ -2,11 +2,10 @@ import torch
 import pytest
 import os
 import numpy as np
+from bliss.datasets import sdss
 
 torch.manual_seed(841)
 np.random.seed(431)
-
-from bliss.datasets import sdss
 
 
 @pytest.fixture(scope="module")

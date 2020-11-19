@@ -1,6 +1,6 @@
 defaults:
   - optimizer: adam
-  - model: basic_sleep_star
+  - model: sleep_star_basic
   - training: default
   - dataset: default
   - testing: default
