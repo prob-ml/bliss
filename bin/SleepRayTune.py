@@ -14,7 +14,7 @@ from ray.tune.schedulers import ASHAScheduler
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
 
 from bliss import sleep
-from bliss.datasets.simulated import SimulatedModule
+from bliss.datasets.simulated import SimulatedDataset
 
 
 # define the callback that monitors val_loss
@@ -33,7 +33,7 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
     model = sleep.SleepPhase(cfg)
 
     # data module
-    dataset = SimulatedModule(cfg=cfg)
+    dataset = SimulatedDataset(cfg=cfg)
 
     # parameters for trainer
     num_epochs = num_epochs
