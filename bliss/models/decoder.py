@@ -519,8 +519,7 @@ class ImageDecoder(nn.Module):
         # forward only galaxies that are on!
         gal_on, _ = self.galaxy_decoder.forward(z[b == 1])
 
-        # size the galaxy (either trims or crops to the
-        # size of ptile)
+        # size the galaxy (either trims or crops to the size of ptile)
         gal_on = self._size_galaxy(gal_on)
 
         # set galaxies
