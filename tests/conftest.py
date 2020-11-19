@@ -85,7 +85,7 @@ class SleepSetup:
 
     def get_datamodule(self, overrides):
         cfg = self.get_cfg(overrides)
-        return simulated.SimulatedModule(cfg)
+        return simulated.SimulatedDataset(cfg)
 
     def get_trainer(self, overrides):
         cfg = self.get_cfg(overrides)

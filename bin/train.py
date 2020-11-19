@@ -14,7 +14,7 @@ from bliss import sleep, use_cuda
 from bliss.datasets import simulated
 
 # compatible datasets and models.
-_datamodules = [simulated.SimulatedModule]
+_datamodules = [simulated.SimulatedDataset]
 datamodules = {cls.__name__: cls for cls in _datamodules}
 
 _models = [sleep.SleepPhase]

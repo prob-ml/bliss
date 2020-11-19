@@ -3,7 +3,7 @@ from optuna.trial import FixedTrial
 from hydra.experimental import initialize, compose
 
 from bliss.sleep import SleepObjective
-from bliss.datasets.simulated import SimulatedModule
+from bliss.datasets.simulated import SimulatedDataset
 
 
 class MetricsCallback(Callback):
@@ -23,7 +23,7 @@ class TestOptunaSleep:
         overrides = [f"{key}={value}" for key, value in overrides.items()]
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            datamodule = SimulatedModule(cfg)
+            datamodule = SimulatedDataset(cfg)
             cfg.model.encoder.params.update(
                 {
                     "enc_conv_c": (5, 25, 5),
