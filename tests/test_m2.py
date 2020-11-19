@@ -22,7 +22,6 @@ def trained_star_encoder_m2(sleep_setup, devices):
 
 
 class TestStarSleepEncoderM2:
-    @pytest.mark.slow
     def test_star_sleep_m2(self, trained_star_encoder_m2, devices, paths):
         device = devices.device
 

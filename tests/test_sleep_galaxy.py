@@ -59,5 +59,5 @@ def test_three_saved_galaxies(sleep_setup, devices, paths):
         return
 
     # check testing results are sensible.
-    assert results["acc_gal_counts"] > 0.75
+    assert results["acc_gal_counts"] > 0.70
     assert results["locs_median_mse"] < 0.5
