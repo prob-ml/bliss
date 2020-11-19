@@ -56,7 +56,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         dl = DataLoader(self, batch_size=None)
 
         if self.cfg.testing.file is not None:
-            test_dataset = SavedDataset(self.cfg.testing.file)
+            test_dataset = BlissDataset(self.cfg.testing.file)
             batch_size = self.cfg.testing.batch_size
             num_workers = self.cfg.testing.num_workers
             dl = DataLoader(
@@ -66,11 +66,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return dl
 
 
-class SavedDataset(Dataset):
+class BlissDataset(Dataset):
     def __init__(self, pt_file="example.pt"):
         """A dataset created from simulated batches saved as a single dict created from
         bin/generate.py"""
-        super(SavedDataset, self).__init__()
+        super(BlissDataset, self).__init__()
 
         data = torch.load(pt_file)
         assert isinstance(data, dict)
