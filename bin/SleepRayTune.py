@@ -58,6 +58,7 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
 
 @hydra.main(config_path="../config", config_name="config")
+# model=m2, dataset=m2, training=m2 in terminal
 def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
 
     logger = logging.getLogger()
@@ -75,6 +76,7 @@ def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
     }
 
     # pruner
+    # check this
     scheduler = ASHAScheduler(
         metric="loss", mode="min", max_t=num_epochs, grace_period=1
     )
