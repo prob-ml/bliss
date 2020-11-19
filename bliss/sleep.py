@@ -339,31 +339,33 @@ class SleepPhase(pl.LightningModule):
         true_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params(slen, true_params)
 
-        # to compute metrics at the end.
-        counts_acc = 0.0
-        galaxy_counts_acc = 0.0
+        # get map estimates
+        estimates = self.image_encoder.map_estimate(images)
+
+        # accuracy of counts
+        counts_acc = (true_params["n_sources"] == estimates["n_sources"]).float().mean()
+
+        # acuraccy of galaxy counts
+        est_n_gal = estimates["galaxy_bool"].view(batch_size, -1).sum(-1)
+        true_n_gal = estimates["galaxy_bool"].view(batch_size, -1).sum(-1)
+        galaxy_counts_acc = (est_n_gal == true_n_gal).float().mean()
+
+        # accuracy of locations
+        est_locs = estimates["locs"]
+        true_locs = true_params["locs"]
+
         mses = []
         for i in range(batch_size):
-            image = images[None, i]
-            true_n_sources_i = true_params["n_sources"][i].item()
-            true_n_galaxies_i = true_params["galaxy_bool"][i].sum().item()
-
-            estimate = self.image_encoder.map_estimate(image)
-            n_sources_i = estimate["n_sources"].item()
-            n_galaxies_i = estimate["galaxy_bool"].sum().item()
-
-            # calculate accuracies
-            counts_acc += (true_n_sources_i == n_sources_i) / batch_size
-            galaxy_counts_acc += (true_n_galaxies_i == n_galaxies_i) / batch_size
+            true_n_sources_i = true_params["n_sources"][i]
+            n_sources_i = estimates["n_sources"][i]
 
             # only compare locations for mse if counts match.
             if true_n_sources_i == n_sources_i:
 
                 # prepare locs and get them in units of pixels.
-                true_locs_i = true_params["locs"][i].view(-1, 2)
+                true_locs_i = true_locs[i].view(-1, 2)
                 true_locs_i = true_locs_i[: int(true_n_sources_i)] * slen
-
-                locs_i = estimate["locs"].view(-1, 2)[: int(n_sources_i)] * slen
+                locs_i = est_locs[i].view(-1, 2)[: int(n_sources_i)] * slen
 
                 # sort each based on x location.
                 true_locs_i = sort_locs(true_locs_i)
@@ -379,6 +381,7 @@ class SleepPhase(pl.LightningModule):
         locs_median_mse = 0.5
         if len(mses) > 0:
             locs_median_mse = np.median(mses)
+
         return counts_acc, galaxy_counts_acc, locs_median_mse
 
     def make_plots(self, batch, kind="validation"):
