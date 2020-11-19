@@ -1,4 +1,0 @@
-# @package _group_
-name: SavedSimulated
-file: ${paths.root}/data/0-3_galaxies.pt
-batch_size: 32

@@ -2,11 +2,10 @@ import torch
 import pytest
 import os
 import numpy as np
+from bliss.datasets import sdss
 
 torch.manual_seed(841)
 np.random.seed(431)
-
-from bliss.datasets import sdss
 
 
 @pytest.fixture(scope="module")
@@ -23,6 +22,7 @@ def trained_star_encoder_m2(sleep_setup, devices):
 
 
 class TestStarSleepEncoderM2:
+    @pytest.mark.slow
     def test_star_sleep_m2(self, trained_star_encoder_m2, devices, paths):
         device = devices.device
 

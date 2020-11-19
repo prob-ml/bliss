@@ -1,8 +1,8 @@
 def test_basic_configs(sleep_setup):
     # test creating star model using config files.
-    overrides = dict(model="basic_sleep_star_one_tile", training="cpu", dataset="cpu")
+    overrides = dict(model="sleep_star_basic", training="cpu", dataset="cpu")
     sleep_net = sleep_setup.get_sleep(overrides)
-    dataset = sleep_setup.get_datamodule(overrides).dataset
+    dataset = sleep_setup.get_dataset(overrides)
     image_decoder = sleep_net.image_decoder
     image_encoder = sleep_net.image_encoder
     assert image_encoder.n_bands == image_decoder.n_bands == 1

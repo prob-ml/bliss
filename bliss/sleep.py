@@ -273,10 +273,7 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         params = self.hparams.optimizer.params
-        return Adam(
-            [{"params": self.image_encoder.parameters(), "lr": params["lr"]}],
-            weight_decay=params["weight_decay"],
-        )
+        return Adam(self.image_encoder.parameters(), **params)
 
     def training_step(self, batch, batch_idx):
         (
@@ -523,7 +520,7 @@ class SleepPhase(pl.LightningModule):
 class SleepObjective(object):
     def __init__(
         self,
-        datamodule,
+        dataset,
         cfg: DictConfig,
         max_epochs: int,
         model_dir,
@@ -531,7 +528,7 @@ class SleepObjective(object):
         monitor,
         gpus=0,
     ):
-        self.datamodule = datamodule
+        self.dataset = dataset
         self.cfg = cfg
         encoder_kwargs = cfg.model.encoder.params
 
@@ -596,6 +593,6 @@ class SleepObjective(object):
                 PyTorchLightningPruningCallback(trial, monitor=self.monitor),
             ],
         )
-        trainer.fit(model, datamodule=self.datamodule)
+        trainer.fit(model, datamodule=self.dataset)
 
         return self.metrics_callback.metrics[-1][self.monitor].item()

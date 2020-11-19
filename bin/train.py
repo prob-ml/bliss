@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-import hydra
-from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
 import shutil
 
-import torch
+import hydra
+from omegaconf import DictConfig, OmegaConf
+
 import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
+import torch
 
-from bliss import sleep, use_cuda
+from bliss import use_cuda, sleep
 from bliss.datasets import simulated
 
 # compatible datasets and models.
-_datamodules = [simulated.SimulatedModule]
-datamodules = {cls.__name__: cls for cls in _datamodules}
+_datasets = [simulated.SimulatedDataset]
+datasets = {cls.__name__: cls for cls in _datasets}
 
 _models = [sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
@@ -95,7 +96,7 @@ def main(cfg: DictConfig):
     setup_seed(cfg)
 
     # setup dataset.
-    datamodule = datamodules[cfg.dataset.module_name](cfg)
+    dataset = datasets[cfg.dataset.module_name](cfg)
 
     # setup model
     model = models[cfg.model.name](cfg)
@@ -111,11 +112,11 @@ def main(cfg: DictConfig):
     trainer = pl.Trainer(**trainer_dict)
 
     # train!
-    trainer.fit(model, datamodule=datamodule)
+    trainer.fit(model, datamodule=dataset)
 
     # test!
     if cfg.testing.file is not None:
-        _ = trainer.test(model, datamodule=datamodule)
+        _ = trainer.test(model, datamodule=dataset)
 
 
 if __name__ == "__main__":

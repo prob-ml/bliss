@@ -5,7 +5,7 @@ class TestSleepStarOneTile:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
         overrides = dict(
-            model="basic_sleep_star_one_tile",
+            model="sleep_star_one_tile",
             dataset="single_tile" if devices.use_cuda else "cpu",
             training="unittest" if devices.use_cuda else "cpu",
         )
@@ -31,7 +31,7 @@ class TestSleepStarTiles:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
         overrides = dict(
-            model="basic_sleep_star",
+            model="sleep_star_basic",
             dataset="default" if devices.use_cuda else "cpu",
             training="unittest" if devices.use_cuda else "cpu",
         )
@@ -52,8 +52,9 @@ class TestSleepStarTiles:
         assert results["acc_counts"] > 0.7
         assert results["locs_median_mse"] < 0.5
 
-    def test_saved(self, overrides, trained_sleep, sleep_setup, devices):
-        overrides.update({"testing": "star_test1"})
+    def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
+        test_file = paths["data"].joinpath("star_test1.pt").as_posix()
+        overrides.update({"testing.file": test_file})
         results = sleep_setup.test_sleep(overrides, trained_sleep)
 
         # only expect tests to pass if gpu
