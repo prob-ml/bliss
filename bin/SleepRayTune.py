@@ -39,12 +39,10 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
     num_epochs = num_epochs
     num_gpu = num_gpu
 
-    # gpu_id = os.environ["CUDA_VISIBLE_DEVICES"]
-
     # set up trainer
     trainer = pl.Trainer(
         max_epochs=num_epochs,
-        gpus=num_gpu,  # change to gpu_id
+        gpus=num_gpu,
         logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
         callbacks=[
@@ -68,11 +66,11 @@ def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
 
     # define the parameter space
     config = {
-        "enc_conv_c": tune.grid_search([5, 15, 20]),
+        "enc_conv_c": tune.grid_search([5, 15, 20, 25]),
         "enc_kern": tune.grid_search([3]),
         "enc_hidden": tune.grid_search([64, 128]),
-        "lr": tune.grid_search([1e-4, 1e-2]),
-        "weight_decay": tune.grid_search([1e-6, 1e-4]),
+        "lr": tune.uniform([1e-5, 1e-2]),
+        "weight_decay": tune.uniform([1e-6, 1e-4]),
     }
 
     # pruner
