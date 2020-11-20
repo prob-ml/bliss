@@ -57,7 +57,7 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
 @hydra.main(config_path="../config", config_name="config")
 # model=m2, dataset=m2, training=m2 in terminal
-def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
+def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
 
     logger = logging.getLogger()
 
@@ -68,9 +68,9 @@ def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
     config = {
         "enc_conv_c": tune.grid_search([10, 15, 20, 25]),
         "enc_kern": tune.grid_search([3, 5]),
-        "enc_hidden": tune.grid_search([64, 128]),
-        "lr": tune.loguniform([1e-5, 1e-2]),
-        "weight_decay": tune.loguniform([1e-6, 1e-3]),
+        "enc_hidden": tune.grid_search([64, 128, 192, 256]),
+        "lr": tune.loguniform(1e-5, 1e-2),
+        "weight_decay": tune.loguniform(1e-6, 1e-3),
     }
 
     # pruner
