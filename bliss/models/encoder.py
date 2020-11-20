@@ -1,4 +1,5 @@
 import math
+from abc import abstractmethod, ABC
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -148,6 +149,191 @@ def _prob_galaxy_func(x):
     return torch.sigmoid(x).clamp(1e-4, 1 - 1e-4)
 
 
+class BaseEncoder(nn.Module, ABC):
+    def __init__(
+        self,
+        max_detections=1,
+        n_bands=1,
+        tile_slen=10,
+        ptile_slen=16,
+        enc_conv_c=20,
+        enc_kern=3,
+        enc_hidden=256,
+        momentum=0.5,
+    ):
+        self.n_bands = n_bands
+        self.tile_slen = tile_slen
+        self.ptile_slen = ptile_slen
+
+        # cache the weights used for the tiling convolution
+        self._cache_tiling_conv_weights()
+
+        conv_out_dim = self.enc_conv_c * ptile_slen ** 2
+        self.enc_conv = nn.Sequential(
+            nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
+            nn.ReLU(),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
+            nn.ReLU(),
+            nn.Flatten(1, -1),
+            nn.Linear(conv_out_dim, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
+            nn.ReLU(),
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
+            nn.ReLU(),
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
+            nn.ReLU(),
+        )
+
+    def _cache_tiling_conv_weights(self):
+        # this function sets up weights for the "identity" convolution
+        # used to divide a full-image into padded tiles.
+        # (see get_image_in_tiles).
+
+        # It has a for-loop, but only needs to be set up once.
+        # These weights are set up and  cached during the __init__.
+
+        ptile_slen2 = self.ptile_slen ** 2
+        self.tile_conv_weights = torch.zeros(
+            ptile_slen2 * self.n_bands,
+            self.n_bands,
+            self.ptile_slen,
+            self.ptile_slen,
+            device=device,
+        )
+
+        for b in range(self.n_bands):
+            for i in range(ptile_slen2):
+                self.tile_conv_weights[
+                    i + b * ptile_slen2, b, i // self.ptile_slen, i % self.ptile_slen
+                ] = 1
+
+    def _get_hidden_indices(self):
+        """Setup the indices corresponding to entries in h, these are cached since
+        same for all h."""
+
+        # initialize matrices containing the indices for each variational param.
+        # indx_mats follow the order set by the self.variational_params list.
+        indx_mats = []
+        for i in range(self.n_variational_params):
+            param_dim = self.variational_params[i][1]
+            shape = (self.max_detections + 1, param_dim * self.max_detections)
+            indx_mat = torch.full(
+                shape,
+                self.dim_out_all,
+                dtype=torch.long,
+                device=device,
+            )
+            indx_mats.append(indx_mat)
+
+        prob_n_source_indx = torch.zeros(
+            self.max_detections + 1, dtype=torch.long, device=device
+        )
+
+        for n_detections in range(1, self.max_detections + 1):
+            # index corresponding to where we left off in last iteration.
+            curr_indx = (
+                int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_source)
+                + (n_detections - 1)
+                + 1
+            )
+
+            # add corresponding indices to the index matrices of variational params
+            # for a given n_detection.
+            for i in range(self.n_variational_params):
+                param_dim = self.variational_params[i][1]
+                indx_mat = indx_mats[i]
+                new_indx = (param_dim * n_detections) + curr_indx
+                indx_mat[n_detections, 0 : (param_dim * n_detections)] = torch.arange(
+                    curr_indx, new_indx
+                )
+                indx_mats[i] = indx_mat
+                curr_indx = new_indx
+
+            # the categorical prob will go at the end of the rest.
+            prob_n_source_indx[n_detections] = curr_indx
+
+        return indx_mats, prob_n_source_indx
+
+    def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
+        """
+        Index into all possible combinations of variational parameters (h) to obtain actually
+        variational parameters for n_sources.
+        Args:
+            h: shape = (n_ptiles x dim_out_all)
+            n_sources: (n_samples x n_tiles)
+            param_dim: the dimension of the parameter you are indexing h for. e.g. for locs,
+                            dim_per_source = 2, for galaxy params we usually have
+                            dim_per_source = 8.
+        Returns:
+            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
+        """
+
+        # n_samples = (1 x n_ptiles) if this function was called from forward.
+        assert len(n_sources.shape) == 2, "Shape: (n_samples x n_ptiles)"
+        assert h.size(0) == n_sources.size(1)  # = n_ptiles
+        assert h.size(1) == self.dim_out_all
+
+        n_ptiles = h.size(0)
+        n_samples = n_sources.size(0)
+
+        # append null column, return zero if indx_mat returns null index (dim_out_all)
+        _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=device)), dim=1)
+
+        # select the indices from _h indicated by indx_mat.
+        var_param = torch.gather(
+            _h,
+            1,
+            indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
+        )
+
+        var_param = var_param.view(
+            n_ptiles, n_samples, self.max_detections, param_dim
+        ).transpose(0, 1)
+
+        # shape = (n_samples x n_ptiles x max_detections x dim_per_source)
+        return var_param
+
+    def get_images_in_tiles(self, images):
+        # divide a full-image into padded tiles using conv2d
+        # and weights cached in `_cache_tiling_conv_weights`.
+
+        assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
+        assert images.size(1) == self.n_bands
+
+        if self.pad_border_w_constant:
+            pad = [self.edge_padding] * 4
+            images = F.pad(images, pad=pad, value=self.background_pad_value)
+
+        output = F.conv2d(
+            images,
+            self.tile_conv_weights,
+            stride=self.tile_slen,
+            padding=0,
+        ).permute([0, 2, 3, 1])
+
+        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
+
+    def forward(self, ptiles, n_sources):
+        # conditioned on how many sources in a given image, returned an equivalent number of
+        # galaxy parameters.
+        # images should be padded tiles from encoder
+        pass
+
+    @abstractmethod
+    @property
+    def variational_params(self):
+        # return a list with the variational params that should be estimated.
+        pass
+
+
 class ImageEncoder(nn.Module):
     def __init__(
         self,
@@ -185,9 +371,6 @@ class ImageEncoder(nn.Module):
         border_padding = (ptile_slen - tile_slen) / 2
         assert border_padding % 1 == 0, "amount of padding should be an integer"
         self.border_padding = int(border_padding)
-
-        # cache the weights used for the tiling convolution
-        self._cache_tiling_conv_weights()
 
         # max number of detections
         self.max_detections = max_detections
@@ -244,8 +427,6 @@ class ImageEncoder(nn.Module):
         self.variational_params = [
             ("loc_mean", 2, _loc_mean_func),
             ("loc_logvar", 2),
-            ("galaxy_param_mean", self.n_galaxy_params),
-            ("galaxy_param_logvar", self.n_galaxy_params),
             ("log_flux_mean", self.n_star_params),
             ("log_flux_logvar", self.n_star_params),
             ("prob_galaxy", 1, _prob_galaxy_func),
@@ -256,100 +437,6 @@ class ImageEncoder(nn.Module):
 
         self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim=1)
-
-    def _create_indx_mats(self):
-        indx_mats = []
-        for i in range(self.n_variational_params):
-            param_dim = self.variational_params[i][1]
-            shape = (self.max_detections + 1, param_dim * self.max_detections)
-            indx_mat = torch.full(
-                shape,
-                self.dim_out_all,
-                dtype=torch.long,
-                device=device,
-            )
-            indx_mats.append(indx_mat)
-        return indx_mats
-
-    def _update_indx_mat_for_n_detections(self, indx_mats, curr_indx, n_detections):
-        # add corresponding indices to index matrices for n_detections.
-        for i in range(self.n_variational_params):
-            param_dim = self.variational_params[i][1]
-            indx_mat = indx_mats[i]
-            new_indx = (param_dim * n_detections) + curr_indx
-            indx_mat[n_detections, 0 : (param_dim * n_detections)] = torch.arange(
-                curr_indx, new_indx
-            )
-            indx_mats[i] = indx_mat
-            curr_indx = new_indx
-
-        return indx_mats, curr_indx
-
-    def _get_hidden_indices(self):
-        """Setup the indices corresponding to entries in h, these are cached since
-        same for all h."""
-
-        indx_mats = self._create_indx_mats()  # same order as self.variational_params
-        prob_n_source_indx = torch.zeros(
-            self.max_detections + 1, dtype=torch.long, device=device
-        )
-
-        for n_detections in range(1, self.max_detections + 1):
-            # index corresponding to where we left off in last iteration.
-            curr_indx = (
-                int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_source)
-                + (n_detections - 1)
-                + 1
-            )
-
-            # add corresponding indices to the index matrices of variational params.
-            indx_mats, curr_indx = self._update_indx_mat_for_n_detections(
-                indx_mats, curr_indx, n_detections
-            )
-
-            # the categorical prob will go at the end of the rest.
-            prob_n_source_indx[n_detections] = curr_indx
-
-        return indx_mats, prob_n_source_indx
-
-    def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
-        """
-        Index into all possible combinations of variational parameters (h) to obtain actually
-        variational parameters for n_sources.
-        Args:
-            h: shape = (n_ptiles x dim_out_all)
-            n_sources: (n_samples x n_tiles)
-            param_dim: the dimension of the parameter you are indexing h for. e.g. for locs,
-                            dim_per_source = 2, for galaxy params we usually have
-                            dim_per_source = 8.
-        Returns:
-            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
-        """
-
-        # n_samples = (1 x n_ptiles) if this function was called from forward.
-        assert len(n_sources.shape) == 2, "Shape: (n_samples x n_ptiles)"
-        assert h.size(0) == n_sources.size(1)  # = n_ptiles
-        assert h.size(1) == self.dim_out_all
-
-        n_ptiles = h.size(0)
-        n_samples = n_sources.size(0)
-
-        # append null column, return zero if indx_mat returns null index (dim_out_all)
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=device)), dim=1)
-
-        # select the indices from _h indicated by indx_mat.
-        var_param = torch.gather(
-            _h,
-            1,
-            indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
-        )
-
-        var_param = var_param.view(
-            n_ptiles, n_samples, self.max_detections, param_dim
-        ).transpose(0, 1)
-
-        # shape = (n_samples x n_ptiles x max_detections x dim_per_source)
-        return var_param
 
     def _get_logprob_n_from_var_params(self, h):
         """
@@ -448,7 +535,6 @@ class ImageEncoder(nn.Module):
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.shape[1] == self.n_bands
-        assert (images.shape[-1] - 2 * self.border_padding) % self.tile_slen == 0
 
         output = F.conv2d(
             images,
