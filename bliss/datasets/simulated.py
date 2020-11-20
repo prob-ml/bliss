@@ -50,7 +50,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 {
                     "images": images,
                     "background": self.image_decoder.background,
-                    "border_padding": self.image_decoder.border_padding,
                 }
             )
 
@@ -88,7 +87,6 @@ class BlissDataset(Dataset):
         self.data = data
         self.size = self.data["images"].shape[0]
         self.background = self.data.pop("background")
-        self.border_padding = self.data.pop("border_padding")
 
     def __len__(self):
         """Number of batches saved in the file."""

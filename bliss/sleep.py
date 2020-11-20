@@ -128,7 +128,7 @@ class SleepPhase(pl.LightningModule):
 
         # consistency
         assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
-        assert self.image_decoder.border_padding == self.image_encoder.edge_padding
+        assert self.image_decoder.border_padding == self.image_encoder.border_padding
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder(image_ptiles, n_sources)
@@ -331,16 +331,16 @@ class SleepPhase(pl.LightningModule):
     def get_metrics(self, batch):
         # get images and properties
         images = batch.pop("images")
-        border_padding = batch.pop("border_padding")
         batch.pop("background")
         batch_size = images.shape[0]
-        slen = images.shape[-1] - 2 * border_padding
 
         # get params on full image.
+        slen = images.shape[-1] - 2 * self.image_encoder.border_padding
+        assert slen % self.image_encoder.tile_slen == 0, "Border padding not compatible"
         true_params = get_full_params(slen, batch)
 
         # get map estimates
-        estimates = self.image_encoder.map_estimate(images, border_padding)
+        estimates = self.image_encoder.map_estimate(images)
 
         # accuracy of counts
         counts_acc = true_params["n_sources"].eq(estimates["n_sources"]).float().mean()
@@ -392,9 +392,9 @@ class SleepPhase(pl.LightningModule):
 
         # extract non-params entries get_full_params works.
         images = batch.pop("images")
-        border_padding = batch.pop("border_padding")
         batch.pop("background")
-        slen = images.shape[-1] - 2 * border_padding
+        slen = images.shape[-1] - 2 * self.image_encoder.border_padding
+        assert slen % self.image_encoder.tile_slen == 0, "Border padding not compatible"
 
         # convert to full image parameters for plotting purposes.
         true_params = get_full_params(slen, batch)

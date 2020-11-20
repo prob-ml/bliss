@@ -160,7 +160,6 @@ class ImageEncoder(nn.Module):
         enc_kern=3,
         enc_hidden=256,
         momentum=0.5,
-        background_pad_value=686.0,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -183,9 +182,9 @@ class ImageEncoder(nn.Module):
         # padding
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-        self.edge_padding = (ptile_slen - tile_slen) / 2
-        assert self.edge_padding % 1 == 0, "amount of padding should be an integer"
-        self.edge_padding = int(self.edge_padding)
+        border_padding = (ptile_slen - tile_slen) / 2
+        assert border_padding % 1 == 0, "amount of padding should be an integer"
+        self.border_padding = int(border_padding)
 
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
@@ -589,9 +588,9 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def map_estimate(self, image, border_padding):
-        assert border_padding == self.edge_padding
-        slen = image.shape[-1] - 2 * border_padding
+    def map_estimate(self, image):
+        # assume there is some padding in the image given the encoder padding.
+        slen = image.shape[-1] - 2 * self.border_padding
         tile_estimate = self.tiled_map_estimate(image)
         estimate = get_full_params(slen, tile_estimate)
         return estimate
