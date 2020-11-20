@@ -47,10 +47,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["fluxes"],
             )
             batch.update(
-                {
-                    "images": images,
-                    "background": self.image_decoder.background,
-                }
+                {"images": images, "background": self.image_decoder.background}
             )
 
         return batch
