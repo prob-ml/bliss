@@ -638,6 +638,7 @@ class ImageDecoder(nn.Module):
         if add_noise:
             images = self._apply_noise(images)
 
+        # final images have shape (batch_size, n_bands, slen+2*border_padding, "")
         return images, var_images
 
     @staticmethod
