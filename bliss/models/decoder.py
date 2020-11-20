@@ -590,7 +590,7 @@ class ImageDecoder(nn.Module):
 
         # draw stars and galaxies
         stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
-        galaxies = 0.0
+        galaxies = torch.zeros(img_shape, device=device)
         var_images = torch.zeros(img_shape, device=device)
         if self.galaxy_decoder is not None:
             galaxies, var_images = self._render_multiple_galaxies_on_ptile(
