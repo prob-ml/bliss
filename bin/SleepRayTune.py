@@ -66,15 +66,14 @@ def main(cfg: DictConfig, num_epochs=100, gpus_per_trial=1):
 
     # define the parameter space
     config = {
-        "enc_conv_c": tune.grid_search([5, 15, 20, 25]),
-        "enc_kern": tune.grid_search([3]),
+        "enc_conv_c": tune.grid_search([10, 15, 20, 25]),
+        "enc_kern": tune.grid_search([3, 5]),
         "enc_hidden": tune.grid_search([64, 128]),
         "lr": tune.loguniform([1e-5, 1e-2]),
-        "weight_decay": tune.uniform([1e-6, 1e-4]),
+        "weight_decay": tune.loguniform([1e-6, 1e-3]),
     }
 
     # pruner
-    # check this
     scheduler = ASHAScheduler(
         metric="loss", mode="min", max_t=num_epochs, grace_period=1
     )
