@@ -1,11 +1,17 @@
 from omegaconf import DictConfig
 import pytorch_lightning as pl
+import warnings
 
 import torch
 from torch.utils.data import IterableDataset, Dataset
 from torch.utils.data import DataLoader
 
 from bliss.models.decoder import ImageDecoder
+
+# prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
+warnings.filterwarnings(
+    "ignore", ".*does not have many workers which may be a bottleneck.*", UserWarning
+)
 
 
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
