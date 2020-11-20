@@ -341,14 +341,12 @@ class SleepPhase(pl.LightningModule):
         estimates = self.image_encoder.map_estimate(images)
 
         # accuracy of counts
-        counts_acc = (
-            torch.eq(true_params["n_sources"], estimates["n_sources"]).float().mean()
-        )
+        counts_acc = true_params["n_sources"].eq(estimates["n_sources"]).float().mean()
 
-        # acuraccy of galaxy counts
+        # accuracy of galaxy counts
         est_n_gal = estimates["galaxy_bool"].view(batch_size, -1).sum(-1)
         true_n_gal = estimates["galaxy_bool"].view(batch_size, -1).sum(-1)
-        galaxy_counts_acc = torch.eq(est_n_gal, true_n_gal).float().mean()
+        galaxy_counts_acc = est_n_gal.eq(true_n_gal).float().mean()
 
         # accuracy of locations
         est_locs = estimates["locs"]
