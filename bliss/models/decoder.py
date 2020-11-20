@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from pathlib import Path
 from astropy.io import fits
@@ -627,7 +628,9 @@ class ImageDecoder(nn.Module):
         images = self._construct_full_image_from_ptiles(
             image_ptiles, self.tile_slen, self.border_padding
         )
-        var_images = self._construct_full_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
+        var_images = self._construct_full_image_from_ptiles(
+            var_ptiles, self.tile_slen, self.border_padding
+        )
 
         # add background
         images += self.background.unsqueeze(0)
