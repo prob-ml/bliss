@@ -80,8 +80,6 @@ class WakeNet(pl.LightningModule):
         self.init_background_params = init_background_params
         self.planar_background = PlanarBackground(init_background_params, self.slen)
 
-        # self.init_background = self.planar_background.forward()
-
     def forward(self, obs_img):
 
         with torch.no_grad():
@@ -133,15 +131,12 @@ class WakeNet(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss = self.get_loss(batch)
-        logs = {"train_loss": loss}
-        return {"loss": loss, "log": logs}
+        self.log("train_loss", loss)
+        return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self.get_loss(batch)
-        return {"val_loss": loss}
-
-    def validation_epoch_end(self, outputs):
-        return {"val_loss": outputs[-1]["val_loss"]}
+        self.log("validation_loss", loss)
 
     def _get_init_background(self, sample_every=25):
         sampled_background = self._sample_image(sample_every)

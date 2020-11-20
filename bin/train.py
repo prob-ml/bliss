@@ -96,7 +96,7 @@ def main(cfg: DictConfig):
     setup_seed(cfg)
 
     # setup dataset.
-    dataset = datasets[cfg.dataset.module_name](cfg)
+    dataset = datasets[cfg.dataset.name](cfg)
 
     # setup model
     model = models[cfg.model.name](cfg)
