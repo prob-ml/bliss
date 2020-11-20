@@ -167,7 +167,7 @@ class ImageDecoder(nn.Module):
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        # extra factor to be consisten with old repo
+        # extra factor to be consistent with old repo
         # but probably doesn't matter ...
         grid *= self.psf_slen / (self.psf_slen - 1)
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
@@ -187,7 +187,6 @@ class ImageDecoder(nn.Module):
         return psf
 
     def _get_psf(self):
-        # TODO make the psf function vectorized ...
         psf = torch.tensor([])
         for i in range(self.n_bands):
             _psf = self._get_psf_single_band(self.params[i])

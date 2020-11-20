@@ -125,7 +125,10 @@ class SleepPhase(pl.LightningModule):
         self.image_decoder.requires_grad_(False)
 
         self.plotting: bool = cfg.training.plotting
+
+        # consistency
         assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
+        assert self.image_decoder.border_padding == self.image_encoder.edge_padding
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder(image_ptiles, n_sources)
@@ -327,18 +330,17 @@ class SleepPhase(pl.LightningModule):
 
     def get_metrics(self, batch):
         # get images and properties
-        images = batch["images"]
-        slen = self.image_decoder.slen
-        assert images.shape[-1] == slen + 2 * self.image_decoder.border_padding
+        images = batch.pop("images")
+        border_padding = batch.pop("border_padding")
+        batch.pop("background")
         batch_size = images.shape[0]
+        slen = images.shape[-1] - 2 * border_padding
 
-        # obtain a params dictionary on tiles, then get on full image.
-        exclude = {"images", "background"}
-        true_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(slen, true_params)
+        # get params on full image.
+        true_params = get_full_params(slen, batch)
 
         # get map estimates
-        estimates = self.image_encoder.map_estimate(images)
+        estimates = self.image_encoder.map_estimate(images, border_padding)
 
         # accuracy of counts
         counts_acc = true_params["n_sources"].eq(estimates["n_sources"]).float().mean()
@@ -389,14 +391,13 @@ class SleepPhase(pl.LightningModule):
         assert n_samples > 1
 
         # extract non-params entries get_full_params works.
-        images = batch.pop("images", None)
-        slen = self.image_decoder.slen
-        assert images.shape[-1] == slen + 2 * self.image_decoder.border_padding
-        batch.pop("background", None)
+        images = batch.pop("images")
+        border_padding = batch.pop("border_padding")
+        batch.pop("background")
+        slen = images.shape[-1] - 2 * border_padding
 
         # convert to full image parameters for plotting purposes.
-        true_params = batch
-        true_params = get_full_params(slen, true_params)
+        true_params = get_full_params(slen, batch)
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)

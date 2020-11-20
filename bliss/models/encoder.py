@@ -161,7 +161,6 @@ class ImageEncoder(nn.Module):
         enc_hidden=256,
         momentum=0.5,
         background_pad_value=686.0,
-        pad_border_w_constant=True,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -177,9 +176,9 @@ class ImageEncoder(nn.Module):
 
         """
         super(ImageEncoder, self).__init__()
+
         # image parameters
         self.n_bands = n_bands
-        self.background_pad_value = background_pad_value
 
         # padding
         self.tile_slen = tile_slen
@@ -187,7 +186,6 @@ class ImageEncoder(nn.Module):
         self.edge_padding = (ptile_slen - tile_slen) / 2
         assert self.edge_padding % 1 == 0, "amount of padding should be an integer"
         self.edge_padding = int(self.edge_padding)
-        self.pad_border_w_constant = pad_border_w_constant
 
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
@@ -443,7 +441,7 @@ class ImageEncoder(nn.Module):
         # (see get_image_in_tiles).
 
         # It has a for-loop, but only needs to be set up once.
-        # These weights are set up and  cached during the __init__.
+        # These weights are set up and cached during the __init__.
 
         ptile_slen2 = self.ptile_slen ** 2
         self.tile_conv_weights = torch.zeros(
@@ -466,10 +464,6 @@ class ImageEncoder(nn.Module):
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
         assert images.size(1) == self.n_bands
-
-        if self.pad_border_w_constant:
-            pad = [self.edge_padding] * 4
-            images = F.pad(images, pad=pad, value=self.background_pad_value)
 
         output = F.conv2d(
             images,
@@ -595,12 +589,9 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def map_estimate(self, image):
-        slen = image.shape[-1]
-
-        if not self.pad_border_w_constant:
-            slen = slen - 2 * self.edge_padding
-
+    def map_estimate(self, image, border_padding):
+        assert border_padding == self.edge_padding
+        slen = image.shape[-1] - 2 * border_padding
         tile_estimate = self.tiled_map_estimate(image)
         estimate = get_full_params(slen, tile_estimate)
         return estimate
