@@ -589,7 +589,8 @@ class ImageEncoder(nn.Module):
         }
 
     def map_estimate(self, image):
-        # assume there is some padding in the image given the encoder padding.
+        # NOTE: Assumes that the given image contains some border padding equal to the
+        # encoder.border_padding.
         slen = image.shape[-1] - 2 * self.border_padding
         tile_estimate = self.tiled_map_estimate(image)
         estimate = get_full_params(slen, tile_estimate)
