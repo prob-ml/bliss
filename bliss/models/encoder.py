@@ -462,7 +462,8 @@ class ImageEncoder(nn.Module):
         # and weights cached in `_cache_tiling_conv_weights`.
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
-        assert images.size(1) == self.n_bands
+        assert images.shape[1] == self.n_bands
+        assert (images.shape[-1] - 2 * self.border_padding) % self.tile_slen == 0
 
         output = F.conv2d(
             images,
