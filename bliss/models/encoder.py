@@ -192,43 +192,28 @@ class ImageEncoder(nn.Module):
         # max number of detections
         self.max_detections = max_detections
 
-        # convolutional NN parameters
-        self.enc_conv_c = enc_conv_c
-        self.enc_kern = enc_kern
-        self.enc_hidden = enc_hidden
-
-        self.momentum = momentum
-
         # convolutional NN
-        conv_out_dim = self.enc_conv_c * ptile_slen ** 2
+        conv_out_dim = enc_conv_c * ptile_slen ** 2
         self.enc_conv = nn.Sequential(
-            nn.Conv2d(
-                self.n_bands, self.enc_conv_c, self.enc_kern, stride=1, padding=1
-            ),
+            nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(
-                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
-            ),
-            nn.BatchNorm2d(self.enc_conv_c, momentum=self.momentum),
+            nn.Conv2d(self.enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
             nn.ReLU(),
-            nn.Conv2d(
-                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
-            ),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(
-                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
-            ),
-            nn.BatchNorm2d(self.enc_conv_c, momentum=self.momentum),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
             nn.ReLU(),
             nn.Flatten(1, -1),
-            nn.Linear(conv_out_dim, self.enc_hidden),
-            nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
+            nn.Linear(conv_out_dim, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
             nn.ReLU(),
-            nn.Linear(self.enc_hidden, self.enc_hidden),
-            nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
             nn.ReLU(),
-            nn.Linear(self.enc_hidden, self.enc_hidden),
-            nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
             nn.ReLU(),
         )
 
@@ -269,7 +254,7 @@ class ImageEncoder(nn.Module):
 
         self.indx_mats, self.prob_n_source_indx = self._get_hidden_indices()
 
-        self.enc_final = nn.Linear(self.enc_hidden, self.dim_out_all)
+        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim=1)
 
     def _create_indx_mats(self):

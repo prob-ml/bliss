@@ -49,7 +49,7 @@ class ImageDecoder(nn.Module):
         slen=50,
         tile_slen=2,
         ptile_slen=10,
-        border_padding=0,
+        border_padding=None,
         prob_galaxy=0.0,
         n_galaxy_params=8,
         max_sources=2,
@@ -83,8 +83,12 @@ class ImageDecoder(nn.Module):
         # Images are first rendered on *padded* tiles (aka ptiles).
         # The padded tile consists of the tile and neighboring tiles
         # The width of the padding is given by ptile_slen.
-        # border_padding is the amount of padding we leave in the final image. Useful to avoid
-        # sources too close to the edges.
+        # border_padding is the amount of padding we leave in the final image. Useful for
+        # avoiding sources getting too close to the edges.
+        if border_padding is None:
+            # default value matches encoder default.
+            border_padding = (ptile_slen - tile_slen) / 2
+
         ptile_padding = (ptile_slen / tile_slen - 1) / 2
         assert border_padding % 1 == 0, "amount of border padding must be an integer"
         assert ptile_padding % 1 == 0, "ptile_padding must be an integer."
