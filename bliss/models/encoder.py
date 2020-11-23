@@ -161,6 +161,8 @@ class BaseEncoder(nn.Module, ABC):
         enc_hidden=256,
         momentum=0.5,
     ):
+        super(BaseEncoder, self).__init__()
+        self.max_detections = max_detections
         self.n_bands = n_bands
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
@@ -331,6 +333,7 @@ class BaseEncoder(nn.Module, ABC):
     @property
     def variational_params(self):
         # return a list with the variational params that should be estimated.
+        # include their dimension and functions to apply after outputted from
         pass
 
 
@@ -471,10 +474,8 @@ class ImageEncoder(nn.Module):
         return estimated_params
 
     def _get_var_params_all(self, image_ptiles):
-        """get h matrix.
+        # image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
 
-        image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
-        """
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
         h = self.enc_conv(log_img)
