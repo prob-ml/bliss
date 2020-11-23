@@ -128,6 +128,7 @@ class SleepPhase(pl.LightningModule):
 
         # consistency
         assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
+        assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
         assert self.image_decoder.border_padding == self.image_encoder.border_padding
 
     def forward(self, image_ptiles, n_sources):

@@ -31,4 +31,3 @@ encoder:
     ptile_slen: 12
     max_detections: ${model.decoder.params.max_sources}
     n_galaxy_params: ${model.galaxy.latent_dim}
-    background_pad_value: ${model.image.background.0}
