@@ -48,7 +48,7 @@ class ImageDecoder(nn.Module):
         n_bands=1,
         slen=50,
         tile_slen=2,
-        ptile_padding=2,
+        ptile_slen=10,
         border_padding=0,
         prob_galaxy=0.0,
         n_galaxy_params=8,
@@ -82,17 +82,17 @@ class ImageDecoder(nn.Module):
 
         # Images are first rendered on *padded* tiles (aka ptiles).
         # The padded tile consists of the tile and neighboring tiles
-        # The width of the padding (in number of tiles) is given by ptile padding.
-        # e.g. if ptile_padding is 1, then each ptile consists of 9 tiles:
-        # the center tile, surrounded one tile on each side.
-        self.ptile_padding = ptile_padding
-        self.ptile_slen = int((self.ptile_padding * 2 + 1) * tile_slen)
-
-        # the number of pixels that pads the full image
-        self.border_padding = border_padding
+        # The width of the padding is given by ptile_slen.
+        # border_padding is the amount of padding we leave in the final image. Useful to avoid
+        # sources too close to the edges.
+        ptile_padding = (ptile_slen / tile_slen - 1) / 2
+        assert border_padding % 1 == 0, "amount of border padding must be an integer"
+        assert ptile_padding % 1 == 0, "ptile_padding must be an integer."
         assert border_padding <= (
             ptile_padding * tile_slen
         ), "Too much border padding. Make ptile_padding larger. "
+        self.border_padding = int(border_padding)
+        self.ptile_slen = ptile_slen
 
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2

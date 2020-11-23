@@ -534,12 +534,10 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def tiled_map_estimate(self, image):
-        # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
+    def tiled_map_estimate(self, images):
+        batchsize = images.shape[0]
 
-        batchsize = image.shape[0]
-
-        image_ptiles = self.get_images_in_tiles(image)
+        image_ptiles = self.get_images_in_tiles(images)
         h = self._get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
@@ -588,10 +586,11 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def map_estimate(self, image):
-        # NOTE: Assumes that the given image contains some border padding equal to the
-        # encoder.border_padding.
-        slen = image.shape[-1] - 2 * self.border_padding
-        tile_estimate = self.tiled_map_estimate(image)
+    def map_estimate(self, slen, images):
+        # slen is size of the image without border padding
+        border_padding = (images.shape[-1] - slen) / 2
+        assert slen % self.tile_slen == 0, "incompatible image"
+        assert border_padding == self.border_padding, "incompatible border"
+        tile_estimate = self.tiled_map_estimate(images)
         estimate = get_full_params(slen, tile_estimate)
         return estimate

@@ -330,17 +330,17 @@ class SleepPhase(pl.LightningModule):
 
     def get_metrics(self, batch):
         # get images and properties
-        images = batch.pop("images")
-        batch.pop("background")
+        exclude = {"images", "slen", "background"}
+        true_params = {k: v for k, v in batch.items() if k not in exclude}
+        images = batch["images"]
+        slen = batch["slen"]
         batch_size = images.shape[0]
 
         # get params on full image.
-        slen = images.shape[-1] - 2 * self.image_encoder.border_padding
-        assert slen % self.image_encoder.tile_slen == 0, "Border padding not compatible"
-        true_params = get_full_params(slen, batch)
+        true_params = get_full_params(slen, true_params)
 
         # get map estimates
-        estimates = self.image_encoder.map_estimate(images)
+        estimates = self.image_encoder.map_estimate(slen, images)
 
         # accuracy of counts
         counts_acc = true_params["n_sources"].eq(estimates["n_sources"]).float().mean()
@@ -391,13 +391,13 @@ class SleepPhase(pl.LightningModule):
         assert n_samples > 1
 
         # extract non-params entries get_full_params works.
-        images = batch.pop("images")
-        batch.pop("background")
-        slen = images.shape[-1] - 2 * self.image_encoder.border_padding
-        assert slen % self.image_encoder.tile_slen == 0, "Border padding not compatible"
+        exclude = {"images", "slen", "background"}
+        true_params = {k: v for k, v in batch.items() if k not in exclude}
+        images = batch["images"]
+        slen = batch["slen"]
 
         # convert to full image parameters for plotting purposes.
-        true_params = get_full_params(slen, batch)
+        true_params = get_full_params(slen, true_params)
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)

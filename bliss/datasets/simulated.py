@@ -27,7 +27,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         # check sleep training will work.
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
         total_ptiles = n_tiles_per_image * self.batch_size
-        assert total_ptiles > 1, "Need at least 2 tiles in each batch."
+        assert total_ptiles > 1, "Need at least 2 tiles over all batches."
 
     def __iter__(self):
         return self.batch_generator()
@@ -47,7 +47,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["fluxes"],
             )
             batch.update(
-                {"images": images, "background": self.image_decoder.background}
+                {
+                    "images": images,
+                    "background": self.image_decoder.background,
+                    "slen": self.image_decoder.slen,
+                }
             )
 
         return batch
@@ -74,7 +78,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
 class BlissDataset(Dataset):
     def __init__(self, pt_file="example.pt"):
-        """A dataset created from simulated batches saved as a single dict created from
+        """A dataset created from simulated batches saved as a single dict by
         bin/generate.py"""
         super(BlissDataset, self).__init__()
 
@@ -84,6 +88,7 @@ class BlissDataset(Dataset):
         self.data = data
         self.size = self.data["images"].shape[0]
         self.background = self.data.pop("background")
+        self.border_padding = self.data.pop("border_padding")
 
     def __len__(self):
         """Number of batches saved in the file."""
