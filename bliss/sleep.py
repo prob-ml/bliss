@@ -407,8 +407,9 @@ class SleepPhase(pl.LightningModule):
             res_ax = axes[i, 2]
 
             image = images[None, i]
-            assert image.shape[-1] == slen
             assert len(image.shape) == 4
+
+            border_padding = (image.shape[-1] - slen) / 2
 
             # true parameters on full image.
             true_n_sources = true_params["n_sources"][None, i]
@@ -470,10 +471,20 @@ class SleepPhase(pl.LightningModule):
 
                 # plot and add locations.
                 plotting.plot_image_locs(
-                    true_ax, slen, true_galaxy_locs, galaxy_locs, colors=("r", "b")
+                    true_ax,
+                    slen,
+                    border_padding,
+                    true_galaxy_locs,
+                    galaxy_locs,
+                    colors=("r", "b"),
                 )
                 plotting.plot_image_locs(
-                    true_ax, slen, true_star_locs, star_locs, colors=("g", "m")
+                    true_ax,
+                    slen,
+                    border_padding,
+                    true_star_locs,
+                    star_locs,
+                    colors=("g", "m"),
                 )
 
                 plotting.plot_image(fig, recon_ax, recon_image)
