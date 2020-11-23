@@ -52,7 +52,9 @@ def main(cfg: DictConfig):
                     fbatch[key] = torch.vstack((fbatch[key], batch[key]))
 
     # make sure in CPU by default.
-    fbatch = {k: v.cpu() for k, v in fbatch.items() if isinstance(v, torch.Tensor)}
+    for k, v in fbatch.items():
+        if isinstance(v, torch.Tensor):
+            fbatch[k] = v.cpu()
 
     # save batch and images as pdf for visualization purposes.
     torch.save(fbatch, filepath)
