@@ -331,10 +331,10 @@ class SleepPhase(pl.LightningModule):
     def get_metrics(self, batch):
         # get images and properties
         exclude = {"images", "slen", "background"}
-        true_params = {k: v for k, v in batch.items() if k not in exclude}
         images = batch["images"]
-        slen = batch["slen"]
+        slen = int(batch["slen"].unique().item())
         batch_size = images.shape[0]
+        true_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # get params on full image.
         true_params = get_full_params(slen, true_params)
@@ -392,9 +392,9 @@ class SleepPhase(pl.LightningModule):
 
         # extract non-params entries get_full_params works.
         exclude = {"images", "slen", "background"}
-        true_params = {k: v for k, v in batch.items() if k not in exclude}
         images = batch["images"]
-        slen = batch["slen"]
+        slen = int(batch["slen"].unique().item())
+        true_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # convert to full image parameters for plotting purposes.
         true_params = get_full_params(slen, true_params)
@@ -407,10 +407,6 @@ class SleepPhase(pl.LightningModule):
             res_ax = axes[i, 2]
 
             image = images[None, i]
-            assert (
-                image.shape[-1]
-                == self.image_decoder.slen + 2 * self.image_decoder.border_padding
-            )
             assert image.shape[-1] == slen
             assert len(image.shape) == 4
 

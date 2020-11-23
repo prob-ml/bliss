@@ -50,7 +50,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 {
                     "images": images,
                     "background": self.image_decoder.background,
-                    "slen": self.image_decoder.slen,
+                    "slen": torch.tensor([self.image_decoder.slen]),
                 }
             )
 
@@ -88,11 +88,13 @@ class BlissDataset(Dataset):
         self.data = data
         self.size = self.data["images"].shape[0]
         self.background = self.data.pop("background")
-        self.border_padding = self.data.pop("border_padding")
+        self.slen = self.data.pop("slen")
 
     def __len__(self):
         """Number of batches saved in the file."""
         return self.size
 
     def __getitem__(self, idx):
-        return {k: v[idx] for k, v in self.data.items()}
+        d = {k: v[idx] for k, v in self.data.items()}
+        d.update({"background": self.background, "slen": self.slen})
+        return d

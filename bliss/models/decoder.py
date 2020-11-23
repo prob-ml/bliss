@@ -70,7 +70,8 @@ class ImageDecoder(nn.Module):
         super(ImageDecoder, self).__init__()
 
         # side-length in pixels of an image (image is assumed to be square)
-        self.slen = slen
+        assert slen % 1 == 0, "slen must be an integer."
+        self.slen = int(slen)
 
         # side-length of an image tile.
         # latent variables (locations, fluxes, etc) are drawn per-tile
