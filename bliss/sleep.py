@@ -394,6 +394,7 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
+        border_padding = int((images.shape[-1] - slen) / 2)
         true_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # convert to full image parameters for plotting purposes.
@@ -408,8 +409,6 @@ class SleepPhase(pl.LightningModule):
 
             image = images[None, i]
             assert len(image.shape) == 4
-
-            border_padding = (image.shape[-1] - slen) / 2
 
             # true parameters on full image.
             true_n_sources = true_params["n_sources"][None, i]
@@ -474,23 +473,20 @@ class SleepPhase(pl.LightningModule):
                     true_ax,
                     slen,
                     border_padding,
-                    true_galaxy_locs,
-                    galaxy_locs,
+                    true_locs=true_galaxy_locs,
+                    est_locs=galaxy_locs,
                     colors=("r", "b"),
                 )
                 plotting.plot_image_locs(
                     true_ax,
                     slen,
                     border_padding,
-                    true_star_locs,
-                    star_locs,
+                    true_locs=true_star_locs,
+                    est_locs=star_locs,
                     colors=("g", "m"),
                 )
 
                 plotting.plot_image(fig, recon_ax, recon_image)
-                plotting.plot_image_locs(
-                    recon_ax, slen, galaxy_locs, star_locs, colors=("r", "b")
-                )
                 plotting.plot_image(fig, res_ax, res_image)
 
             else:

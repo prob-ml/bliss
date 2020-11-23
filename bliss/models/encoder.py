@@ -58,7 +58,7 @@ def get_full_params(slen: int, tile_params: dict):
     max_detections = tile_locs.shape[2]
     tile_slen = slen / math.sqrt(n_tiles_per_image)
     n_ptiles = n_samples * n_tiles_per_image
-    assert int(tile_slen) == tile_slen, "Image cannot be subdivided into tiles!"
+    assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
     tile_slen = int(tile_slen)
 
     # coordinates on tiles.
