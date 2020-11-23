@@ -14,7 +14,6 @@ decoder:
     slen: ${model.image.slen}
     tile_slen: 2
     ptile_slen: 6
-    border_padding: 2
     prob_galaxy: 0.0
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 1
@@ -33,7 +32,6 @@ encoder:
     ptile_slen: ${model.decoder.params.ptile_slen}
     max_detections: ${model.decoder.params.max_sources}
     n_galaxy_params: ${model.galaxy.latent_dim}
-    background_pad_value: ${model.image.background.0}
     enc_conv_c: 20
     enc_kern: 3
     enc_hidden: 256

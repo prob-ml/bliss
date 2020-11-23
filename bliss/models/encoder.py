@@ -197,7 +197,7 @@ class ImageEncoder(nn.Module):
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(self.enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
             nn.BatchNorm2d(enc_conv_c, momentum=momentum),
             nn.ReLU(),
             nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
