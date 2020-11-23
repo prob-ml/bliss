@@ -12,7 +12,7 @@ from bliss.datasets import simulated
 def pytest_addoption(parser):
 
     parser.addoption(
-        "--gpus", default="0,", type=str, help="--gpus option for trainer."
+        "--gpus", default="5,", type=str, help="--gpus option for trainer."
     )
 
     parser.addoption(
