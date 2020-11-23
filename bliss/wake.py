@@ -39,6 +39,7 @@ class PlanarBackground(nn.Module):
         )
 
 
+# TODO: Does not work with background padding.
 class WakeNet(pl.LightningModule):
 
     # ---------------
