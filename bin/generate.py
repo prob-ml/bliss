@@ -38,13 +38,18 @@ def main(cfg: DictConfig):
     imagepath = Path(cfg.paths.root).joinpath("temp", filepath.stem + "_images.pdf")
     dataset = datasets[cfg.dataset.name](cfg)
 
+    # params common to all batches (do not stack).
+    global_params = set(cfg.generate.common)
+
     # get batches and combine them
     fbatch = dict()
     for batch in dataset.batch_generator():
         if not bool(fbatch):  # dict is empty
             fbatch = batch
         else:
-            fbatch = {key: torch.vstack((fbatch[key], batch[key])) for key in fbatch}
+            for key in fbatch:
+                if key not in global_params:
+                    fbatch[key] = torch.vstack((fbatch[key], batch[key]))
 
     # make sure in CPU by default.
     fbatch = {k: v.cpu() for k, v in fbatch.items()}
