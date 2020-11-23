@@ -14,7 +14,8 @@ decoder:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
     tile_slen: 2
-    ptile_padding: 6
+    ptile_slen: 26
+    border_padding: 3
     prob_galaxy: 0.0
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 5
@@ -24,10 +25,9 @@ decoder:
     f_max: 1e6
     alpha: 0.5
     gal_slen: ${model.galaxy.slen}
-    decoder_file:
+    decoder_file: null
     psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
     background_values: ${model.image.background}
-    border_padding: 3
 encoder:
   params:
     n_bands: ${model.image.n_bands}
@@ -35,5 +35,3 @@ encoder:
     ptile_slen: 8
     max_detections: 2
     n_galaxy_params: ${model.galaxy.latent_dim}
-    background_pad_value: ${model.image.background.0}
-    pad_border_w_constant: False
