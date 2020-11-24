@@ -3,11 +3,11 @@ import pickle
 import numpy as np
 import torch
 import torch.nn.functional as F
+import fitsio
 from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
 from astropy.wcs import WCS
-
 
 def construct_subpixel_grid_base(size_x, size_y):
     grid_x = np.linspace(-1.0, 1.0, num=size_x)
@@ -34,8 +34,56 @@ def center_stamp_subpixel(stamp, pt, pr, G):
     G_shift     = construct_subpixel_grid(G, shift_x, shift_y).float()
     stamp_shifted = F.grid_sample(stamp_torch.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False)
     return stamp_shifted.squeeze(0).squeeze(0).numpy()
+
+def read_psf(psf_fit_file, band=2):
+    psfield = fitsio.FITS(psf_fit_file)
+    hdu     = psfield[band+1]
+    psf     = hdu.read()
+    return {'hdu': hdu, 'psf': psf}
+
+def psf_at_points(x, y, psf_data):
+    hdu = psf_data['hdu']
+    psf = psf_data['psf']
+    # psfield = fitsio.FITS(psf_fit_file)
+    # hdu = psfield[3]
+
+    rtnscalar = np.isscalar(x) and np.isscalar(y)
+    x = np.atleast_1d(x)
+    y = np.atleast_1d(y)
+
+    # psf = hdu.read()
+
+    psfimgs = None
+    (outh, outw) = (None, None)
+
+    # From the IDL docs:
+    # http://photo.astro.princeton.edu/photoop_doc.html#SDSS_PSF_RECON
+    #   acoeff_k = SUM_i{ SUM_j{ (0.001*ROWC)^i * (0.001*COLC)^j * C_k_ij } }
+    #   psfimage = SUM_k{ acoeff_k * RROWS_k }
+    for k in range(len(psf)):
+        nrb = psf[k]["nrow_b"]
+        ncb = psf[k]["ncol_b"]
+
+        c = psf[k]["c"].reshape(5, 5)
+        c = c[:nrb, :ncb]
+
+        (gridi, gridj) = np.meshgrid(range(nrb), range(ncb))
+
+        if psfimgs is None:
+            psfimgs = [np.zeros_like(hdu["rrows"].read()[k]) for xy in np.broadcast(x, y)]
+            (outh, outw) = (hdu["rnrow"].read()[k], hdu["rncol"].read()[k])
+
+        for i, (xi, yi) in enumerate(np.broadcast(x, y)):
+            acoeff_k = (((0.001 * xi) ** gridi * (0.001 * yi) ** gridj * c)).sum()
+            psfimgs[i] += acoeff_k * hdu["rrows"].read()[k]
+
+    psfimgs = [img.reshape((outh, outw)) for img in psfimgs]
+
+    if rtnscalar:
+        return psfimgs[0]
+    return psfimgs
 class SloanDigitalSkySurvey(Dataset):
-    def __init__(self, sdss_dir, run=3900, camcol=6, fields=None, bands=[2], stampsize=5, overwrite_cache=False, center_subpixel=True):
+    def __init__(self, sdss_dir, run=3900, camcol=6, fields=None, bands=[2], stampsize=5, overwrite_fits_cache=False, overwrite_psf_cache=True, overwrite_cache=False, center_subpixel=True):
         super(SloanDigitalSkySurvey, self).__init__()
 
         self.sdss_path = pathlib.Path(sdss_dir)
@@ -64,7 +112,7 @@ class SloanDigitalSkySurvey(Dataset):
                 po_cache = "photoObj-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, _field)
                 po_path  = camcol_path.joinpath(str(_field), po_file)
                 po_cache_path = camcol_path.joinpath(str(_field), po_cache)
-                if not po_cache_path.exists():
+                if (not po_cache_path.exists()) or (overwrite_fits_cache):
                     try:
                         po_fits = fits.getdata(po_path)
                     except IndexError as e:
@@ -77,9 +125,28 @@ class SloanDigitalSkySurvey(Dataset):
                     if po_fits is None:
                         print("Warning: cached data for field {} is None. This field will not be included".format(_field))
 
-                if po_fits is not None:
-                    self.rcfgcs.append((run, camcol, _field, gain, po_fits))
+                # Load the PSF produced by SDSS
+                psf_file  = "psField-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
+                psf_cache = "psField-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, _field)
 
+                psf_path       = camcol_path.joinpath(str(_field), psf_file)
+                psf_cache_path = camcol_path.joinpath(str(_field), psf_cache)
+                if (not psf_cache_path.exists()) or (overwrite_psf_cache):
+                    try:
+                        psf = [read_psf(psf_path.as_posix(), band) for band in bands]
+                    except IndexError as e:
+                            print("Warning: IndexError while accessing field: {}. This field will not be included.".format(_field))
+                            print(e)
+                            psf = None
+                    # pickle.dump(psf, psf_cache_path.open("wb+"))
+                else:
+                    raise(Exception("cannot currently use cache with PSF"))
+                    psf = pickle.load(psf_cache_path.open("rb+"))
+                    if psf is None:
+                        print("Warning: cached psf data for field {} is None.".format(_field))
+
+                if po_fits is not None:
+                    self.rcfgcs.append((run, camcol, _field, gain, po_fits, psf))
         self.items = [None] * len(self.rcfgcs)
 
     def __len__(self):
@@ -90,7 +157,7 @@ class SloanDigitalSkySurvey(Dataset):
             self.items[idx] = self.get_from_disk(idx)
         return self.items[idx]
 
-    def fetch_bright_stars(self, po_fits, img, wcs, bg, allow_edge=False):
+    def fetch_bright_stars(self, po_fits, img, wcs, bg, psf, allow_edge=False):
         is_star = po_fits["objc_type"] == 6
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
         is_thing = po_fits["thing_id"] != -1
@@ -149,7 +216,7 @@ class SloanDigitalSkySurvey(Dataset):
     def get_from_disk(self, idx, verbose=False):
         if self.rcfgcs[idx] is None:
             return None
-        run, camcol, field, gain, po_fits = self.rcfgcs[idx]
+        run, camcol, field, gain, po_fits, psf = self.rcfgcs[idx]
 
         camcol_dir = self.sdss_path.joinpath(str(run), str(camcol))
         field_dir = camcol_dir.joinpath(str(field))
@@ -213,7 +280,8 @@ class SloanDigitalSkySurvey(Dataset):
 
             frame.close()
 
-        stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2], background_list[2])
+        stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2], background_list[2], psf[2])
+        stamp_psfs = psf_at_points(pts, prs, psf[2])
 
         ret = {
             "image": np.stack(image_list),
@@ -227,7 +295,8 @@ class SloanDigitalSkySurvey(Dataset):
             "pts": pts,
             "prs": prs,
             "fluxes": fluxes,
-            "bright_star_bgs": stamp_bgs
+            "bright_star_bgs": stamp_bgs,
+            "sdss_psfs" : stamp_psfs
         }
         pickle.dump(ret, cache_path.open("wb+"))
 
