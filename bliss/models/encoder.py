@@ -149,6 +149,10 @@ def _prob_galaxy_func(x):
     return torch.sigmoid(x).clamp(1e-4, 1 - 1e-4)
 
 
+def _identity_func(x):
+    return x
+
+
 class BaseEncoder(nn.Module, ABC):
     def __init__(
         self,
@@ -161,11 +165,29 @@ class BaseEncoder(nn.Module, ABC):
         enc_hidden=256,
         momentum=0.5,
     ):
+        """
+        This class implements the source encoder, which is supposed to take in a synthetic image of
+        size slen * slen and returns a NN latent variable representation of this image.
+
+        Args:
+        slen (int): dimension of full image, we assume its square for now
+        ptile_slen (int): dimension (in pixels) of the individual
+                           image padded tiles (usually 8 for stars, and _ for galaxies).
+        n_bands (int): number of bands
+        max_detections (int): Number of maximum detections in a single tile.
+        n_galaxy_params (int): Number of latent dimensions in the galaxy VAE network.
+
+        """
+
         super(BaseEncoder, self).__init__()
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
+
+        border_padding = (ptile_slen - tile_slen) / 2
+        assert border_padding % 1 == 0, "amount of padding should be an integer"
+        self.border_padding = int(border_padding)
 
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
@@ -193,6 +215,34 @@ class BaseEncoder(nn.Module, ABC):
             nn.BatchNorm1d(enc_hidden, momentum=momentum),
             nn.ReLU(),
         )
+
+        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+
+        # TODO: use the variational params to calculate this.
+        # There are self.max_detections * (self.max_detections + 1)
+        #  total possible detections, and each detection has
+        #  4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for
+        #  n source_param's (flux per band or galaxy params.) + 1 for the Bernoulli variable
+        #  of whether the source is a star or galaxy.
+        self.n_params_per_source = (
+            4 + 2 * (self.n_star_params + self.n_galaxy_params) + 1
+        )
+
+        # The first term corresponds to: for each param, for each possible number of detection d,
+        # there are d ways of assigning that param.
+        # The second and third term accounts for categorical probability over # of objects.
+        # These dimensions correspond to the probabilities in ONE tile.
+        self.dim_out_all = int(
+            0.5
+            * self.max_detections
+            * (self.max_detections + 1)
+            * self.n_params_per_source
+            + 1
+            + self.max_detections
+        )
+
+        self.n_variational_params = len(self.variational_params)
+        self.indx_mats, self.prob_n_source_indx = self._get_hidden_indices()
 
     def _cache_tiling_conv_weights(self):
         # this function sets up weights for the "identity" convolution
@@ -303,154 +353,6 @@ class BaseEncoder(nn.Module, ABC):
         # shape = (n_samples x n_ptiles x max_detections x dim_per_source)
         return var_param
 
-    def get_images_in_tiles(self, images):
-        # divide a full-image into padded tiles using conv2d
-        # and weights cached in `_cache_tiling_conv_weights`.
-
-        assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
-        assert images.size(1) == self.n_bands
-
-        if self.pad_border_w_constant:
-            pad = [self.edge_padding] * 4
-            images = F.pad(images, pad=pad, value=self.background_pad_value)
-
-        output = F.conv2d(
-            images,
-            self.tile_conv_weights,
-            stride=self.tile_slen,
-            padding=0,
-        ).permute([0, 2, 3, 1])
-
-        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
-
-    def forward(self, ptiles, n_sources):
-        # conditioned on how many sources in a given image, returned an equivalent number of
-        # galaxy parameters.
-        # images should be padded tiles from encoder
-        pass
-
-    @abstractmethod
-    @property
-    def variational_params(self):
-        # return a list with the variational params that should be estimated.
-        # include their dimension and functions to apply after outputted from
-        pass
-
-
-class ImageEncoder(nn.Module):
-    def __init__(
-        self,
-        n_bands=1,
-        tile_slen=2,
-        ptile_slen=8,
-        max_detections=2,
-        n_galaxy_params=8,
-        enc_conv_c=20,
-        enc_kern=3,
-        enc_hidden=256,
-        momentum=0.5,
-    ):
-        """
-        This class implements the source encoder, which is supposed to take in a synthetic image of
-        size slen * slen and returns a NN latent variable representation of this image.
-
-        Args:
-        slen (int): dimension of full image, we assume its square for now
-        ptile_slen (int): dimension (in pixels) of the individual
-                           image padded tiles (usually 8 for stars, and _ for galaxies).
-        n_bands (int): number of bands
-        max_detections (int): Number of maximum detections in a single tile.
-        n_galaxy_params (int): Number of latent dimensions in the galaxy VAE network.
-
-        """
-        super(ImageEncoder, self).__init__()
-
-        # image parameters
-        self.n_bands = n_bands
-
-        # padding
-        self.tile_slen = tile_slen
-        self.ptile_slen = ptile_slen
-        border_padding = (ptile_slen - tile_slen) / 2
-        assert border_padding % 1 == 0, "amount of padding should be an integer"
-        self.border_padding = int(border_padding)
-
-        # max number of detections
-        self.max_detections = max_detections
-
-        # convolutional NN
-        conv_out_dim = enc_conv_c * ptile_slen ** 2
-        self.enc_conv = nn.Sequential(
-            nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
-            nn.ReLU(),
-            nn.Flatten(1, -1),
-            nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-        )
-
-        # There are self.max_detections * (self.max_detections + 1)
-        #  total possible detections, and each detection has
-        #  4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for
-        #  n source_param's (flux per band or galaxy params.) + 1 for the Bernoulli variable
-        #  of whether the source is a star or galaxy.
-        self.n_star_params = n_bands
-        self.n_galaxy_params = n_galaxy_params
-        self.n_params_per_source = (
-            4 + 2 * (self.n_star_params + self.n_galaxy_params) + 1
-        )
-
-        # The first term corresponds to: for each param, for each possible number of detection d,
-        # there are d ways of assigning that param.
-        # The second and third term accounts for categorical probability over # of objects.
-        # These dimensions correspond to the probabilities in ONE tile.
-        self.dim_out_all = int(
-            0.5
-            * self.max_detections
-            * (self.max_detections + 1)
-            * self.n_params_per_source
-            + 1
-            + self.max_detections
-        )
-
-        self.variational_params = [
-            ("loc_mean", 2, _loc_mean_func),
-            ("loc_logvar", 2),
-            ("log_flux_mean", self.n_star_params),
-            ("log_flux_logvar", self.n_star_params),
-            ("prob_galaxy", 1, _prob_galaxy_func),
-        ]
-        self.n_variational_params = len(self.variational_params)
-
-        self.indx_mats, self.prob_n_source_indx = self._get_hidden_indices()
-
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
-        self.log_softmax = nn.LogSoftmax(dim=1)
-
-    def _get_logprob_n_from_var_params(self, h):
-        """
-        Obtain log probability of number of n_sources.
-
-        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
-        probability of having 0,1,2 stars.
-        """
-        free_probs = h[:, self.prob_n_source_indx]
-        return self.log_softmax(free_probs)
-
     def _get_var_params_for_n_sources(self, h, n_sources):
         """
         Returns:
@@ -474,14 +376,110 @@ class ImageEncoder(nn.Module):
         return estimated_params
 
     def _get_var_params_all(self, image_ptiles):
-        # image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
+        """get h matrix.
 
+        image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
+        """
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
         h = self.enc_conv(log_img)
 
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(h)
+
+    @staticmethod
+    def _get_samples(pred, tile_is_on_array, tile_galaxy_bool):
+        # shape = (n_samples x n_ptiles x max_detections x param_dim)
+        assert tile_is_on_array.shape[-1] == 1
+        assert tile_galaxy_bool.shape[-1] == 1
+        loc_mean, loc_sd = pred["loc_mean"], pred["loc_sd"]
+        galaxy_param_mean = pred["galaxy_param_mean"]
+        galaxy_param_sd = pred["galaxy_param_sd"]
+        log_flux_mean, log_flux_sd = pred["log_flux_mean"], pred["log_flux_sd"]
+
+        tile_locs = torch.normal(loc_mean, loc_sd).clamp(0, 1)
+        tile_locs *= tile_is_on_array
+
+        tile_galaxy_params = torch.normal(galaxy_param_mean, galaxy_param_sd)
+        tile_galaxy_params *= tile_is_on_array * tile_galaxy_bool
+
+        tile_log_fluxes = torch.normal(log_flux_mean, log_flux_sd)
+        tile_log_fluxes *= tile_is_on_array * (1 - tile_galaxy_bool)
+
+        return tile_locs, tile_galaxy_params, tile_log_fluxes
+
+    def get_images_in_tiles(self, images):
+        # divide a full-image into padded tiles using conv2d
+        # and weights cached in `_cache_tiling_conv_weights`.
+
+        assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
+        assert images.shape[1] == self.n_bands
+
+        output = F.conv2d(
+            images,
+            self.tile_conv_weights,
+            stride=self.tile_slen,
+            padding=0,
+        ).permute([0, 2, 3, 1])
+
+        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
+
+    def forward(self, ptiles, n_sources):
+        # conditioned on how many sources in a given image, returned an equivalent number of
+        # galaxy parameters.
+        # images should be padded tiles from encoder
+        pass
+
+    @abstractmethod
+    @property
+    def variational_params(self):
+        # return a dict with the variational params that should be estimated.
+        pass
+
+
+class GalaxyEncoder(BaseEncoder):
+    def __init__(self, n_galaxy_params=8, **kwargs):
+        super(GalaxyEncoder, self).__init__(**kwargs)
+        self.n_galaxy_params = n_galaxy_params
+
+        pass
+
+    @property
+    def variational_params(self):
+        # transform is a function applied directly on NN output.
+        return {
+            "loc_mean": {"dim": 2, "transform": _loc_mean_func, "map": _identity_func},
+            "loc_logvar": {"dim": 2, "transform": _identity_func},
+            "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
+            "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
+            "prob_galaxy": {"dim": 1, "transform": _prob_galaxy_func},
+            "galaxy_param_mean": {
+                "dim": self.n_galaxy_params,
+                "transform": _identity_func,
+            },
+            "galaxy_param_logvar": {
+                "dim": self.n_galaxy_params,
+                "transform": _identity_func,
+            },
+        }
+
+
+class ImageEncoder(BaseEncoder):
+    def __init__(self, **kwargs):
+
+        super(ImageEncoder, self).__init__(**kwargs)
+        self.n_star_params = self.n_bands
+        self.log_softmax = nn.LogSoftmax(dim=1)
+
+    def _get_logprob_n_from_var_params(self, h):
+        """
+        Obtain log probability of number of n_sources.
+
+        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        probability of having 0,1,2 stars.
+        """
+        free_probs = h[:, self.prob_n_source_indx]
+        return self.log_softmax(free_probs)
 
     def forward(self, image_ptiles, n_sources):
         # image_ptiles shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
@@ -506,66 +504,6 @@ class ImageEncoder(nn.Module):
 
         # dictionary with names as in self.variational_params
         return var_params
-
-    def _cache_tiling_conv_weights(self):
-        # this function sets up weights for the "identity" convolution
-        # used to divide a full-image into padded tiles.
-        # (see get_image_in_tiles).
-
-        # It has a for-loop, but only needs to be set up once.
-        # These weights are set up and cached during the __init__.
-
-        ptile_slen2 = self.ptile_slen ** 2
-        self.tile_conv_weights = torch.zeros(
-            ptile_slen2 * self.n_bands,
-            self.n_bands,
-            self.ptile_slen,
-            self.ptile_slen,
-            device=device,
-        )
-
-        for b in range(self.n_bands):
-            for i in range(ptile_slen2):
-                self.tile_conv_weights[
-                    i + b * ptile_slen2, b, i // self.ptile_slen, i % self.ptile_slen
-                ] = 1
-
-    def get_images_in_tiles(self, images):
-        # divide a full-image into padded tiles using conv2d
-        # and weights cached in `_cache_tiling_conv_weights`.
-
-        assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
-        assert images.shape[1] == self.n_bands
-
-        output = F.conv2d(
-            images,
-            self.tile_conv_weights,
-            stride=self.tile_slen,
-            padding=0,
-        ).permute([0, 2, 3, 1])
-
-        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
-
-    @staticmethod
-    def _get_samples(pred, tile_is_on_array, tile_galaxy_bool):
-        # shape = (n_samples x n_ptiles x max_detections x param_dim)
-        assert tile_is_on_array.shape[-1] == 1
-        assert tile_galaxy_bool.shape[-1] == 1
-        loc_mean, loc_sd = pred["loc_mean"], pred["loc_sd"]
-        galaxy_param_mean = pred["galaxy_param_mean"]
-        galaxy_param_sd = pred["galaxy_param_sd"]
-        log_flux_mean, log_flux_sd = pred["log_flux_mean"], pred["log_flux_sd"]
-
-        tile_locs = torch.normal(loc_mean, loc_sd).clamp(0, 1)
-        tile_locs *= tile_is_on_array
-
-        tile_galaxy_params = torch.normal(galaxy_param_mean, galaxy_param_sd)
-        tile_galaxy_params *= tile_is_on_array * tile_galaxy_bool
-
-        tile_log_fluxes = torch.normal(log_flux_mean, log_flux_sd)
-        tile_log_fluxes *= tile_is_on_array * (1 - tile_galaxy_bool)
-
-        return tile_locs, tile_galaxy_params, tile_log_fluxes
 
     def sample_encoder(self, image, n_samples):
         assert image.size(0) == 1, "Sampling only works for a single image."
