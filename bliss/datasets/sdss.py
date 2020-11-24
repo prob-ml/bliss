@@ -296,7 +296,7 @@ class SloanDigitalSkySurvey(Dataset):
             frame.close()
 
         stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2], background_list[2], psf[2])
-        stamp_psfs = psf_at_points(pts, prs, psf[2])
+        stamp_psfs = np.asarray(psf_at_points(pts, prs, psf[2]))
 
         ret = {
             "image": np.stack(image_list),
