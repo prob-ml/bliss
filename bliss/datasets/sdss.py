@@ -8,6 +8,7 @@ from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
 from astropy.wcs import WCS
+from math import floor, ceil
 
 def construct_subpixel_grid_base(size_x, size_y):
     grid_x = np.linspace(-1.0, 1.0, num=size_x)
@@ -297,6 +298,11 @@ class SloanDigitalSkySurvey(Dataset):
 
         stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(po_fits, image_list[2], wcs_list[2], background_list[2], psf[2])
         stamp_psfs = np.asarray(psf_at_points(pts, prs, psf[2]))
+        if len(stamp_bgs) > 0:
+            psf_center = stamp_psfs.shape[-1] // 2
+            psf_lower  = psf_center - floor(self.stampsize/2)
+            psf_upper  = psf_center + ceil(self.stampsize/2)
+            stamp_psfs = stamp_psfs[:, psf_lower:psf_upper, psf_lower:psf_upper]
 
         ret = {
             "image": np.stack(image_list),
