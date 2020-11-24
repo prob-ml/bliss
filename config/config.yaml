@@ -9,6 +9,9 @@ defaults:
 general:
   overwrite: False
 
+gpus:
+  - 0
+
 paths:
   root: ${env:BLISS_HOME}
-  output: ${paths.root}/logs/example
+  output: ${paths.root}/temp/example

@@ -125,7 +125,11 @@ class SleepPhase(pl.LightningModule):
         self.image_decoder.requires_grad_(False)
 
         self.plotting: bool = cfg.training.plotting
+
+        # consistency
         assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
+        assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
+        assert self.image_decoder.border_padding == self.image_encoder.border_padding
 
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder(image_ptiles, n_sources)
@@ -327,18 +331,17 @@ class SleepPhase(pl.LightningModule):
 
     def get_metrics(self, batch):
         # get images and properties
+        exclude = {"images", "slen", "background"}
         images = batch["images"]
-        slen = self.image_decoder.slen
-        assert images.shape[-1] == slen + 2 * self.image_decoder.border_padding
+        slen = int(batch["slen"].unique().item())
         batch_size = images.shape[0]
-
-        # obtain a params dictionary on tiles, then get on full image.
-        exclude = {"images", "background"}
         true_params = {k: v for k, v in batch.items() if k not in exclude}
+
+        # get params on full image.
         true_params = get_full_params(slen, true_params)
 
         # get map estimates
-        estimates = self.image_encoder.map_estimate(images)
+        estimates = self.image_encoder.map_estimate(slen, images)
 
         # accuracy of counts
         counts_acc = true_params["n_sources"].eq(estimates["n_sources"]).float().mean()
@@ -389,28 +392,24 @@ class SleepPhase(pl.LightningModule):
         assert n_samples > 1
 
         # extract non-params entries get_full_params works.
-        images = batch.pop("images", None)
-        slen = self.image_decoder.slen
-        assert images.shape[-1] == slen + 2 * self.image_decoder.border_padding
-        batch.pop("background", None)
+        exclude = {"images", "slen", "background"}
+        images = batch["images"]
+        slen = int(batch["slen"].unique().item())
+        border_padding = int((images.shape[-1] - slen) / 2)
+        true_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # convert to full image parameters for plotting purposes.
-        true_params = batch
         true_params = get_full_params(slen, true_params)
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
+
         for i in range(n_samples):
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
 
             image = images[None, i]
-            assert (
-                image.shape[-1]
-                == self.image_decoder.slen + 2 * self.image_decoder.border_padding
-            )
-            assert image.shape[-1] == slen
             assert len(image.shape) == 4
 
             # true parameters on full image.
@@ -473,22 +472,29 @@ class SleepPhase(pl.LightningModule):
 
                 # plot and add locations.
                 plotting.plot_image_locs(
-                    true_ax, slen, true_galaxy_locs, galaxy_locs, colors=("r", "b")
+                    true_ax,
+                    slen,
+                    border_padding,
+                    true_locs=true_galaxy_locs,
+                    est_locs=galaxy_locs,
+                    colors=("r", "b"),
                 )
                 plotting.plot_image_locs(
-                    true_ax, slen, true_star_locs, star_locs, colors=("g", "m")
+                    true_ax,
+                    slen,
+                    border_padding,
+                    true_locs=true_star_locs,
+                    est_locs=star_locs,
+                    colors=("lightpink", "tab:orange"),
                 )
 
                 plotting.plot_image(fig, recon_ax, recon_image)
-                plotting.plot_image_locs(
-                    recon_ax, slen, galaxy_locs, star_locs, colors=("r", "b")
-                )
                 plotting.plot_image(fig, res_ax, res_image)
 
             else:
-                slen = image.shape[0]
-                plotting.plot_image(fig, recon_ax, np.zeros((slen, slen)))
-                plotting.plot_image(fig, res_ax, np.zeros((slen, slen)))
+                zero_image = np.zeros((images.shape[-1], images.shape[-1]))
+                plotting.plot_image(fig, recon_ax, zero_image)
+                plotting.plot_image(fig, res_ax, zero_image)
 
         plt.subplots_adjust(hspace=0.2, wspace=0.4)
         if self.logger:

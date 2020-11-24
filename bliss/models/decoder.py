@@ -48,8 +48,8 @@ class ImageDecoder(nn.Module):
         n_bands=1,
         slen=50,
         tile_slen=2,
-        ptile_padding=2,
-        border_padding=0,
+        ptile_slen=10,
+        border_padding=None,
         prob_galaxy=0.0,
         n_galaxy_params=8,
         max_sources=2,
@@ -70,7 +70,8 @@ class ImageDecoder(nn.Module):
         super(ImageDecoder, self).__init__()
 
         # side-length in pixels of an image (image is assumed to be square)
-        self.slen = slen
+        assert slen % 1 == 0, "slen must be an integer."
+        self.slen = int(slen)
 
         # side-length of an image tile.
         # latent variables (locations, fluxes, etc) are drawn per-tile
@@ -82,17 +83,20 @@ class ImageDecoder(nn.Module):
 
         # Images are first rendered on *padded* tiles (aka ptiles).
         # The padded tile consists of the tile and neighboring tiles
-        # The width of the padding (in number of tiles) is given by ptile padding.
-        # e.g. if ptile_padding is 1, then each ptile consists of 9 tiles:
-        # the center tile, surrounded one tile on each side.
-        self.ptile_padding = ptile_padding
-        self.ptile_slen = int((self.ptile_padding * 2 + 1) * tile_slen)
+        # The width of the padding is given by ptile_slen.
+        # border_padding is the amount of padding we leave in the final image. Useful for
+        # avoiding sources getting too close to the edges.
+        if border_padding is None:
+            # default value matches encoder default.
+            border_padding = (ptile_slen - tile_slen) / 2
 
-        # the number of pixels that pads the full image
-        self.border_padding = border_padding
-        assert border_padding <= (
-            ptile_padding * tile_slen
-        ), "Too much border padding. Make ptile_padding larger. "
+        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * tile_slen
+        assert border_padding % 1 == 0, "amount of border padding must be an integer"
+        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
+        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
+        self.border_padding = int(border_padding)
+        self.ptile_slen = ptile_slen
 
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
@@ -167,7 +171,7 @@ class ImageDecoder(nn.Module):
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        # extra factor to be consisten with old repo
+        # extra factor to be consistent with old repo
         # but probably doesn't matter ...
         grid *= self.psf_slen / (self.psf_slen - 1)
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
@@ -187,7 +191,6 @@ class ImageDecoder(nn.Module):
         return psf
 
     def _get_psf(self):
-        # TODO make the psf function vectorized ...
         psf = torch.tensor([])
         for i in range(self.n_bands):
             _psf = self._get_psf_single_band(self.params[i])
@@ -650,15 +653,15 @@ class ImageDecoder(nn.Module):
         # the number of tiles in ptile row
         # i.e the slen of a ptile but in units of tile_slen
         n_tiles1_in_ptile = ptile_slen / tile_slen
-        ptile_padding = (n_tiles1_in_ptile - 1) / 2
+        n_tiles_of_padding = (n_tiles1_in_ptile - 1) / 2
         assert (
             n_tiles1_in_ptile % 1 == 0
         ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
         assert (
-            ptile_padding % 1 == 0
+            n_tiles_of_padding % 1 == 0
         ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
         n_tiles1_in_ptile = int(n_tiles1_in_ptile)
-        ptile_padding = int(ptile_padding)
+        n_tiles_of_padding = int(n_tiles_of_padding)
 
         image_tiles_4d = image_ptiles.view(
             batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
@@ -724,6 +727,6 @@ class ImageDecoder(nn.Module):
                 )
 
         # trim to original image size
-        x0 = ptile_padding * tile_slen - border_padding
-        x1 = (n_tiles1 + ptile_padding) * tile_slen + border_padding
+        x0 = n_tiles_of_padding * tile_slen - border_padding
+        x1 = (n_tiles1 + n_tiles_of_padding) * tile_slen + border_padding
         return canvas[:, :, x0:x1, x0:x1]

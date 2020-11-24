@@ -58,7 +58,7 @@ def get_full_params(slen: int, tile_params: dict):
     max_detections = tile_locs.shape[2]
     tile_slen = slen / math.sqrt(n_tiles_per_image)
     n_ptiles = n_samples * n_tiles_per_image
-    assert int(tile_slen) == tile_slen, "Image cannot be subdivided into tiles!"
+    assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
     tile_slen = int(tile_slen)
 
     # coordinates on tiles.
@@ -160,8 +160,6 @@ class ImageEncoder(nn.Module):
         enc_kern=3,
         enc_hidden=256,
         momentum=0.5,
-        background_pad_value=686.0,
-        pad_border_w_constant=True,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -177,17 +175,16 @@ class ImageEncoder(nn.Module):
 
         """
         super(ImageEncoder, self).__init__()
+
         # image parameters
         self.n_bands = n_bands
-        self.background_pad_value = background_pad_value
 
         # padding
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-        self.edge_padding = (ptile_slen - tile_slen) / 2
-        assert self.edge_padding % 1 == 0, "amount of padding should be an integer"
-        self.edge_padding = int(self.edge_padding)
-        self.pad_border_w_constant = pad_border_w_constant
+        border_padding = (ptile_slen - tile_slen) / 2
+        assert border_padding % 1 == 0, "amount of padding should be an integer"
+        self.border_padding = int(border_padding)
 
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
@@ -195,43 +192,28 @@ class ImageEncoder(nn.Module):
         # max number of detections
         self.max_detections = max_detections
 
-        # convolutional NN parameters
-        self.enc_conv_c = enc_conv_c
-        self.enc_kern = enc_kern
-        self.enc_hidden = enc_hidden
-
-        self.momentum = momentum
-
         # convolutional NN
-        conv_out_dim = self.enc_conv_c * ptile_slen ** 2
+        conv_out_dim = enc_conv_c * ptile_slen ** 2
         self.enc_conv = nn.Sequential(
-            nn.Conv2d(
-                self.n_bands, self.enc_conv_c, self.enc_kern, stride=1, padding=1
-            ),
+            nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(
-                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
-            ),
-            nn.BatchNorm2d(self.enc_conv_c, momentum=self.momentum),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
             nn.ReLU(),
-            nn.Conv2d(
-                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
-            ),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(
-                self.enc_conv_c, self.enc_conv_c, self.enc_kern, stride=1, padding=1
-            ),
-            nn.BatchNorm2d(self.enc_conv_c, momentum=self.momentum),
+            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
+            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
             nn.ReLU(),
             nn.Flatten(1, -1),
-            nn.Linear(conv_out_dim, self.enc_hidden),
-            nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
+            nn.Linear(conv_out_dim, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
             nn.ReLU(),
-            nn.Linear(self.enc_hidden, self.enc_hidden),
-            nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
             nn.ReLU(),
-            nn.Linear(self.enc_hidden, self.enc_hidden),
-            nn.BatchNorm1d(self.enc_hidden, momentum=self.momentum),
+            nn.Linear(enc_hidden, enc_hidden),
+            nn.BatchNorm1d(enc_hidden, momentum=momentum),
             nn.ReLU(),
         )
 
@@ -272,7 +254,7 @@ class ImageEncoder(nn.Module):
 
         self.indx_mats, self.prob_n_source_indx = self._get_hidden_indices()
 
-        self.enc_final = nn.Linear(self.enc_hidden, self.dim_out_all)
+        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
         self.log_softmax = nn.LogSoftmax(dim=1)
 
     def _create_indx_mats(self):
@@ -443,7 +425,7 @@ class ImageEncoder(nn.Module):
         # (see get_image_in_tiles).
 
         # It has a for-loop, but only needs to be set up once.
-        # These weights are set up and  cached during the __init__.
+        # These weights are set up and cached during the __init__.
 
         ptile_slen2 = self.ptile_slen ** 2
         self.tile_conv_weights = torch.zeros(
@@ -465,11 +447,8 @@ class ImageEncoder(nn.Module):
         # and weights cached in `_cache_tiling_conv_weights`.
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
-        assert images.size(1) == self.n_bands
-
-        if self.pad_border_w_constant:
-            pad = [self.edge_padding] * 4
-            images = F.pad(images, pad=pad, value=self.background_pad_value)
+        assert images.shape[1] == self.n_bands
+        assert (images.shape[-1] - 2 * self.border_padding) % self.tile_slen == 0
 
         output = F.conv2d(
             images,
@@ -541,12 +520,10 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def tiled_map_estimate(self, image):
-        # NOTE: make sure to use inside a `with torch.no_grad()` and with .eval() if applicable.
+    def tiled_map_estimate(self, images):
+        batchsize = images.shape[0]
 
-        batchsize = image.shape[0]
-
-        image_ptiles = self.get_images_in_tiles(image)
+        image_ptiles = self.get_images_in_tiles(images)
         h = self._get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
@@ -595,12 +572,11 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def map_estimate(self, image):
-        slen = image.shape[-1]
-
-        if not self.pad_border_w_constant:
-            slen = slen - 2 * self.edge_padding
-
-        tile_estimate = self.tiled_map_estimate(image)
+    def map_estimate(self, slen, images):
+        # slen is size of the image without border padding
+        border_padding = (images.shape[-1] - slen) / 2
+        assert slen % self.tile_slen == 0, "incompatible image"
+        assert border_padding == self.border_padding, "incompatible border"
+        tile_estimate = self.tiled_map_estimate(images)
         estimate = get_full_params(slen, tile_estimate)
         return estimate

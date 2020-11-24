@@ -84,9 +84,10 @@ def setup_checkpoint_callback(cfg, paths, logger):
 def main(cfg: DictConfig):
 
     # setup gpus
-    gpus = cfg.training.trainer.gpus
+    gpus = list(cfg.training.trainer.gpus)
     if gpus and use_cuda:
-        assert gpus[1] == "," and len(gpus) == 2, "Format accepted: 'Y,' "
+        assert isinstance(gpus, list)
+        assert len(gpus) == 1 and isinstance(gpus[0], int), "Only one GPU is supported."
         device_id = gpus[0]
         device = torch.device(f"cuda:{device_id}")
         torch.cuda.set_device(device)
