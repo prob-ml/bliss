@@ -7,8 +7,8 @@ def plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=1):
     assert isinstance(slen, int)
     assert isinstance(border_padding, int)
     ax.scatter(
-        x=locs[:, 1] * (slen - 1) - 0.5 + border_padding,
-        y=locs[:, 0] * (slen - 1) - 0.5 + border_padding,
+        x=locs[:, 1] * slen - 0.5 + border_padding,
+        y=locs[:, 0] * slen - 0.5 + border_padding,
         color=color,
         marker=marker,
         s=s,
@@ -24,6 +24,12 @@ def plot_image_locs(
     colors=("r", "b"),
     s=20,
 ):
+
+    # mark border
+    ax.axvline(border_padding, color="w")
+    ax.axvline(border_padding + slen, color="w")
+    ax.axhline(border_padding, color="w")
+    ax.axhline(border_padding + slen, color="w")
 
     assert isinstance(border_padding, int)
     if true_locs is not None:
