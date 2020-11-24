@@ -11,9 +11,7 @@ from bliss.datasets import simulated
 # command line arguments for tests
 def pytest_addoption(parser):
 
-    parser.addoption(
-        "--gpus", default="0,", type=str, help="--gpus option for trainer."
-    )
+    parser.addoption("--gpus", default="0", type=str, help="--gpus option for trainer.")
 
     parser.addoption(
         "--repeat", default=1, type=str, help="Number of times to repeat each test"
@@ -64,8 +62,7 @@ class DeviceSetup:
         # setup device
         self.device = torch.device("cpu")
         if self.gpus and self.use_cuda:
-            device_id = self.gpus.split(",")
-            assert len(device_id) == 2 and device_id[1] == ""
+            assert isinstance(self.gpus, str) and len(self.gpus) == 1
             device_id = int(self.gpus[0])
             self.device = torch.device(f"cuda:{device_id}")
             torch.cuda.set_device(self.device)

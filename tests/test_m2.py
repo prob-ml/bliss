@@ -41,7 +41,7 @@ class TestStarSleepEncoderM2:
         nelec_per_nmgy = torch.from_numpy(hubble_data["nelec_per_nmgy"]).to(device)
 
         # get estimated parameters
-        estimate = trained_star_encoder_m2.map_estimate(test_image.to(device))
+        estimate = trained_star_encoder_m2.map_estimate(slen, test_image.to(device))
 
         # check metrics if cuda is true
         if not devices.use_cuda:

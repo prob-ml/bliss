@@ -19,7 +19,7 @@ class TestGalaxyVAE:
             gpus=devices.gpus,
             min_epochs=n_epochs,
             max_epochs=n_epochs,
-            limit_train_batches=20,
+            limit_train_batches=20 if use_cuda else 2,
             profiler=None,
             checkpoint_callback=False,
             logger=False,
