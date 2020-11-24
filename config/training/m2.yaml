@@ -12,4 +12,4 @@ trainer:
   check_val_every_n_epoch: 50
   max_epochs: ${training.n_epochs}
   min_epochs: ${training.n_epochs}
-  gpus: "0,"
+  gpus: ${gpus}

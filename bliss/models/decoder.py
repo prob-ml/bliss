@@ -90,12 +90,11 @@ class ImageDecoder(nn.Module):
             # default value matches encoder default.
             border_padding = (ptile_slen - tile_slen) / 2
 
-        ptile_padding = (ptile_slen / tile_slen - 1) / 2
+        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * tile_slen
         assert border_padding % 1 == 0, "amount of border padding must be an integer"
-        assert ptile_padding % 1 == 0, "ptile_padding must be an integer."
-        assert border_padding <= (
-            ptile_padding * tile_slen
-        ), "Too much border padding. Make ptile_padding larger. "
+        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
+        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
         self.border_padding = int(border_padding)
         self.ptile_slen = ptile_slen
 
@@ -654,15 +653,15 @@ class ImageDecoder(nn.Module):
         # the number of tiles in ptile row
         # i.e the slen of a ptile but in units of tile_slen
         n_tiles1_in_ptile = ptile_slen / tile_slen
-        ptile_padding = (n_tiles1_in_ptile - 1) / 2
+        n_tiles_of_padding = (n_tiles1_in_ptile - 1) / 2
         assert (
             n_tiles1_in_ptile % 1 == 0
         ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
         assert (
-            ptile_padding % 1 == 0
+            n_tiles_of_padding % 1 == 0
         ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
         n_tiles1_in_ptile = int(n_tiles1_in_ptile)
-        ptile_padding = int(ptile_padding)
+        n_tiles_of_padding = int(n_tiles_of_padding)
 
         image_tiles_4d = image_ptiles.view(
             batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
@@ -728,6 +727,6 @@ class ImageDecoder(nn.Module):
                 )
 
         # trim to original image size
-        x0 = ptile_padding * tile_slen - border_padding
-        x1 = (n_tiles1 + ptile_padding) * tile_slen + border_padding
+        x0 = n_tiles_of_padding * tile_slen - border_padding
+        x1 = (n_tiles1 + n_tiles_of_padding) * tile_slen + border_padding
         return canvas[:, :, x0:x1, x0:x1]
