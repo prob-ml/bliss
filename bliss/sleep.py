@@ -485,7 +485,7 @@ class SleepPhase(pl.LightningModule):
                     border_padding,
                     true_locs=true_star_locs,
                     est_locs=star_locs,
-                    colors=("g", "m"),
+                    colors=("c", "y"),
                 )
 
                 plotting.plot_image(fig, recon_ax, recon_image)
