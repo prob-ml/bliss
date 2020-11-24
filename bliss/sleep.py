@@ -403,6 +403,7 @@ class SleepPhase(pl.LightningModule):
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
+
         for i in range(n_samples):
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
@@ -491,9 +492,9 @@ class SleepPhase(pl.LightningModule):
                 plotting.plot_image(fig, res_ax, res_image)
 
             else:
-                slen = image.shape[0]
-                plotting.plot_image(fig, recon_ax, np.zeros((slen, slen)))
-                plotting.plot_image(fig, res_ax, np.zeros((slen, slen)))
+                zero_image = np.zeros((images.shape[-1], images.shape[-1]))
+                plotting.plot_image(fig, recon_ax, zero_image)
+                plotting.plot_image(fig, res_ax, zero_image)
 
         plt.subplots_adjust(hspace=0.2, wspace=0.4)
         if self.logger:
