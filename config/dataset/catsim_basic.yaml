@@ -1,0 +1,9 @@
+catalog_file: "OneDegSq.fits"
+survey_name: "LSST"
+slen: 51
+snr: 200
+n_bands: 6
+deviate_center: False
+preserve_flux: False
+add_noise: True
+batch_size: 320
