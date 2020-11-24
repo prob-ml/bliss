@@ -1,5 +1,3 @@
-import inspect
-
 import numpy as np
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
@@ -243,6 +241,10 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.log("train_loss", loss)
         return loss
 
+    # ---------------
+    # Validation
+    # ----------------
+
     def validation_step(self, batch, batch_idx):
         image, background = batch["image"], batch["background"]
         recon_mean, recon_var, kl_z = self(image, background)
@@ -299,19 +301,3 @@ class OneCenteredGalaxy(pl.LightningModule):
             plt.colorbar()
 
         return fig
-
-    @staticmethod
-    def add_args(parser):
-        parser.add_argument(
-            "--tt-split", type=float, default=0.1, help="train/test split"
-        )
-
-    @classmethod
-    def from_args(cls, args, dataset):
-        args_dict = vars(args)
-
-        parameters = list(inspect.signature(cls).parameters)
-        parameters.remove("dataset")
-
-        args_dict = {param: args_dict[param] for param in parameters}
-        return cls(dataset, **args_dict)
