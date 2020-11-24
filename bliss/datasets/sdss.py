@@ -41,6 +41,21 @@ def read_psf(psf_fit_file, band=2):
     psf     = hdu.read()
     return {'hdu': hdu, 'psf': psf}
 
+class SdssPSF:
+    def __init__(self, psf_fit_file, bands):
+        self.psf_fit_file = psf_fit_file
+        self.bands        = bands
+        self.init_cache()
+
+    def init_cache(self):
+        self.cache        = [None] * len(self.bands)
+
+    def __getitem__(self, idx):
+        if self.cache[idx] is None:
+            x = read_psf(self.psf_fit_file, band=self.bands[idx])
+            self.cache[idx] = x
+        return self.cache[idx]
+
 def psf_at_points(x, y, psf_data):
     hdu = psf_data['hdu']
     psf = psf_data['psf']
@@ -133,12 +148,12 @@ class SloanDigitalSkySurvey(Dataset):
                 psf_cache_path = camcol_path.joinpath(str(_field), psf_cache)
                 if (not psf_cache_path.exists()) or (overwrite_psf_cache):
                     try:
-                        psf = [read_psf(psf_path.as_posix(), band) for band in bands]
+                        psf = SdssPSF(psf_path.as_posix(), bands)
                     except IndexError as e:
                             print("Warning: IndexError while accessing field: {}. This field will not be included.".format(_field))
                             print(e)
                             psf = None
-                    # pickle.dump(psf, psf_cache_path.open("wb+"))
+                    pickle.dump(psf, psf_cache_path.open("wb+"))
                 else:
                     raise(Exception("cannot currently use cache with PSF"))
                     psf = pickle.load(psf_cache_path.open("rb+"))
