@@ -267,14 +267,30 @@ class BaseEncoder(nn.Module, ABC):
                     i + b * ptile_slen2, b, i // self.ptile_slen, i % self.ptile_slen
                 ] = 1
 
+    def get_images_in_tiles(self, images):
+        # divide a full-image into padded tiles using conv2d
+        # and weights cached in `_cache_tiling_conv_weights`.
+
+        assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
+        assert images.shape[1] == self.n_bands
+
+        output = F.conv2d(
+            images,
+            self.tile_conv_weights,
+            stride=self.tile_slen,
+            padding=0,
+        ).permute([0, 2, 3, 1])
+
+        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
+
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, these are cached since
         same for all h."""
 
         # initialize matrices containing the indices for each variational param.
-        # indx_mats follow the order set by the self.variational_params list.
+        # indx_mats follows order as self.variational_params dict (python 3.7+ dicts are ordered).
         indx_mats = []
-        for i in range(self.n_variational_params):
+        for k in self.variational_params:
             param_dim = self.variational_params[i][1]
             shape = (self.max_detections + 1, param_dim * self.max_detections)
             indx_mat = torch.full(
@@ -353,6 +369,18 @@ class BaseEncoder(nn.Module, ABC):
         # shape = (n_samples x n_ptiles x max_detections x dim_per_source)
         return var_param
 
+    def _get_var_params_all(self, image_ptiles):
+        """get h matrix.
+
+        image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
+        """
+        # Forward to the layer that is shared by all n_sources.
+        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        h = self.enc_conv(log_img)
+
+        # Concatenate all output parameters for all possible n_sources
+        return self.enc_final(h)
+
     def _get_var_params_for_n_sources(self, h, n_sources):
         """
         Returns:
@@ -375,54 +403,12 @@ class BaseEncoder(nn.Module, ABC):
 
         return estimated_params
 
-    def _get_var_params_all(self, image_ptiles):
-        """get h matrix.
-
-        image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
-        """
-        # Forward to the layer that is shared by all n_sources.
-        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
-        h = self.enc_conv(log_img)
-
-        # Concatenate all output parameters for all possible n_sources
-        return self.enc_final(h)
-
     @staticmethod
-    def _get_samples(pred, tile_is_on_array, tile_galaxy_bool):
-        # shape = (n_samples x n_ptiles x max_detections x param_dim)
+    def _get_normal_samples(mean, sd, tile_is_on_array):
+        # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bool'/'tile_star_bool'.
+        # return shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert tile_is_on_array.shape[-1] == 1
-        assert tile_galaxy_bool.shape[-1] == 1
-        loc_mean, loc_sd = pred["loc_mean"], pred["loc_sd"]
-        galaxy_param_mean = pred["galaxy_param_mean"]
-        galaxy_param_sd = pred["galaxy_param_sd"]
-        log_flux_mean, log_flux_sd = pred["log_flux_mean"], pred["log_flux_sd"]
-
-        tile_locs = torch.normal(loc_mean, loc_sd).clamp(0, 1)
-        tile_locs *= tile_is_on_array
-
-        tile_galaxy_params = torch.normal(galaxy_param_mean, galaxy_param_sd)
-        tile_galaxy_params *= tile_is_on_array * tile_galaxy_bool
-
-        tile_log_fluxes = torch.normal(log_flux_mean, log_flux_sd)
-        tile_log_fluxes *= tile_is_on_array * (1 - tile_galaxy_bool)
-
-        return tile_locs, tile_galaxy_params, tile_log_fluxes
-
-    def get_images_in_tiles(self, images):
-        # divide a full-image into padded tiles using conv2d
-        # and weights cached in `_cache_tiling_conv_weights`.
-
-        assert len(images.shape) == 4  # should be batch_size x n_bands x slen x slen
-        assert images.shape[1] == self.n_bands
-
-        output = F.conv2d(
-            images,
-            self.tile_conv_weights,
-            stride=self.tile_slen,
-            padding=0,
-        ).permute([0, 2, 3, 1])
-
-        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
+        return torch.normal(mean, sd) * tile_is_on_array
 
     def forward(self, ptiles, n_sources):
         # conditioned on how many sources in a given image, returned an equivalent number of
@@ -448,11 +434,6 @@ class GalaxyEncoder(BaseEncoder):
     def variational_params(self):
         # transform is a function applied directly on NN output.
         return {
-            "loc_mean": {"dim": 2, "transform": _loc_mean_func, "map": _identity_func},
-            "loc_logvar": {"dim": 2, "transform": _identity_func},
-            "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
-            "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
-            "prob_galaxy": {"dim": 1, "transform": _prob_galaxy_func},
             "galaxy_param_mean": {
                 "dim": self.n_galaxy_params,
                 "transform": _identity_func,
@@ -605,3 +586,15 @@ class ImageEncoder(BaseEncoder):
         tile_estimate = self.tiled_map_estimate(images)
         estimate = get_full_params(slen, tile_estimate)
         return estimate
+
+    @property
+    def variational_params(self):
+        # transform is a function applied directly on NN output.
+        return {
+            "loc_mean": {"dim": 2, "transform": _loc_mean_func, "map": _identity_func},
+            "loc_logvar": {"dim": 2, "transform": _identity_func},
+            "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
+            "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
+            "prob_galaxy": {"dim": 1, "transform": _prob_galaxy_func},
+            "prob_n_sources": {"dim": 1, "transform": _identity_func},
+        }
