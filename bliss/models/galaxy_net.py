@@ -218,22 +218,22 @@ class OneCenteredGalaxy(pl.LightningModule):
         # save images to tensorboard
 
         # get first 10 images, reconstruction means, variances. Add them as a grid.
-        image = outputs[-1]["images"][:5]
+        images = outputs[-1]["images"][:5]
         recon_mean = outputs[-1]["recon_mean"][:5]
         recon_var = outputs[-1]["recon_var"][:5]
 
-        fig = self.plot_reconstruction(image, recon_mean, recon_var)
+        fig = self.plot_reconstruction(images, recon_mean, recon_var)
 
         if self.logger:
             self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
 
-    def plot_reconstruction(self, image, recon_mean, recon_var):
-        assert image.size(0) >= 5
+    def plot_reconstruction(self, images, recon_mean, recon_var):
+        assert images.size(0) >= 5
         num_examples = 5
         num_cols = 4
         # only i band if available, otherwise the highest band.
         band_idx = min(2, self.n_bands - 1)
-        residuals = (image - recon_mean) / torch.sqrt(image)
+        residuals = (images - recon_mean) / torch.sqrt(images)
         plt.ioff()
 
         fig = plt.figure(figsize=(20, 20))
@@ -244,7 +244,7 @@ class OneCenteredGalaxy(pl.LightningModule):
 
             plt.subplot(num_examples, num_cols, num_cols * i + 1)
             plt.title("images")
-            plt.imshow(image[i, band_idx].data.cpu().numpy())
+            plt.imshow(images[i, band_idx].data.cpu().numpy())
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 2)
