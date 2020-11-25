@@ -62,12 +62,12 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
     logger = logging.getLogger()
 
     # restrict the number for cuda
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1,4,3"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1,4,3,2"
 
     # define the parameter space
     config = {
         "enc_conv_c": tune.grid_search([10, 15, 20, 25]),
-        "enc_kern": tune.grid_search([3, 5]),
+        "enc_kern": tune.grid_search([3]),
         "enc_hidden": tune.grid_search([64, 128, 192, 256]),
         "lr": tune.loguniform(1e-5, 1e-2),
         "weight_decay": tune.loguniform(1e-6, 1e-3),
@@ -99,7 +99,7 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
             num_epochs=num_epochs,
             num_gpu=gpus_per_trial,
         ),
-        num_samples=1,
+        num_samples=10,
         resources_per_trial={"gpu": gpus_per_trial},
         verbose=1,
         config=config,
