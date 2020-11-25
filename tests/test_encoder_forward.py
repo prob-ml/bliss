@@ -167,9 +167,7 @@ class TestSourceEncoder:
             )
 
             h = star_encoder._get_var_params_all(image_ptiles).detach()
-            pred = star_encoder._get_var_params_for_n_sources(
-                h, n_star_per_tile_sampled
-            )
+            pred = star_encoder.get_var_params_for_n_sources(h, n_star_per_tile_sampled)
 
             #  test prediction matches tile by tile
             for i in range(n_samples):

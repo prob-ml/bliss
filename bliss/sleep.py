@@ -12,7 +12,7 @@ from torch.optim import Adam
 
 from . import device, plotting
 from .models import encoder, decoder
-from .models.encoder import get_star_bool, get_full_params
+from .models.encoder import get_star_bool, get_full_params, get_is_on_from_n_sources
 
 plt.switch_backend("Agg")
 
@@ -136,11 +136,60 @@ class SleepPhase(pl.LightningModule):
         return self.image_encoder(image_ptiles, n_sources)
 
     def map_estimate(self, slen, images):
+        # NOTE: For now assume that image_encoder is always active.
+
+        # slen is size of the image without border padding
+        border_padding = (images.shape[-1] - slen) / 2
+        assert slen % self.tile_slen == 0, "incompatible image"
+        assert border_padding == self.border_padding, "incompatible border"
+
+        # first get estimate in tiles for n_sources
+        batchsize = images.shape[0]
+        ptiles = self.get_images_in_tiles(images)
+        n_ptiles = int(ptiles.shape[0] / batchsize)
+        h = self._get_var_params_all(ptiles)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+
+        # get map estimate for n_sources in each tile.
+        # tile_n_sources shape = (batchsize x n_ptiles)
+        # tile_is_on_array shape = (batchsize x n_ptiles x max_detections x 1)
+        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
+        tile_n_sources = tile_n_sources.view(batchsize, n_ptiles)
+
+        # get tiled predictions for both encoders.
+        _tile_n_sources = tile_n_sources.flatten().unsqueeze(0)
+        pred = {}
+        if self.image_encoder:
+            _pred = self.image_encoder.get_var_params_for_n_sources(h, _tile_n_sources)
+            pred.update(_pred)
+        if self.galaxy_encoder:
+            _pred = self.galaxy_encoder.get_var_params_for_n_sources(h, _tile_n_sources)
+            pred.update(_pred)
+
+        pred = {
+            key: param.view(batchsize, n_ptiles, param.shape[2], param.shape[3])
+            for key, param in pred.items()
+        }
+
+        est = {}
+
+        # get estimates for both encoders
+        output_params = self.image_encoder.output_params
+        for param in output_params:
+            mode = output_params[param]["mode"]
+            if mode == "normal":
+                pass
+            if mode == "bool":
+                pass
+
+        # adjust parameters that need to use galaxy_bool/star_bool
+        # also clamp locs between (0, 1)
+
         pass
         # # slen is size of the image without border padding
-        # border_padding = (images.shape[-1] - slen) / 2
-        # assert slen % self.tile_slen == 0, "incompatible image"
-        # assert border_padding == self.border_padding, "incompatible border"
         # tile_estimate = self.tiled_map_estimate(images)
         # estimate = get_full_params(slen, tile_estimate)
         # return estimate
