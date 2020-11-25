@@ -135,6 +135,16 @@ class SleepPhase(pl.LightningModule):
     def forward(self, image_ptiles, n_sources):
         return self.image_encoder(image_ptiles, n_sources)
 
+    def map_estimate(self, slen, images):
+        pass
+        # # slen is size of the image without border padding
+        # border_padding = (images.shape[-1] - slen) / 2
+        # assert slen % self.tile_slen == 0, "incompatible image"
+        # assert border_padding == self.border_padding, "incompatible border"
+        # tile_estimate = self.tiled_map_estimate(images)
+        # estimate = get_full_params(slen, tile_estimate)
+        # return estimate
+
     def get_loss(self, batch):
         """
 
@@ -172,7 +182,7 @@ class SleepPhase(pl.LightningModule):
         ) = (
             batch["images"],
             batch["locs"],
-            batch["galaxy_params"],
+            batch["galaxy_param"],
             batch["log_fluxes"],
             batch["galaxy_bool"],
             batch["n_sources"],
@@ -513,7 +523,7 @@ class SleepPhase(pl.LightningModule):
                     tile_estimate["n_sources"],
                     tile_estimate["locs"],
                     tile_estimate["galaxy_bool"],
-                    tile_estimate["galaxy_params"],
+                    tile_estimate["galaxy_param"],
                     tile_estimate["fluxes"],
                 )
 

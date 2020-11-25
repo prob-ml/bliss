@@ -342,7 +342,7 @@ class ImageDecoder(nn.Module):
             "n_sources": n_sources,
             "locs": locs,
             "galaxy_bool": galaxy_bool,
-            "galaxy_params": galaxy_params,
+            "galaxy_param": galaxy_params,
             "fluxes": fluxes,
             "log_fluxes": log_fluxes,
         }

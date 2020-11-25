@@ -41,7 +41,7 @@ def get_full_params(slen: int, tile_params: dict):
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
     required = {"n_sources", "locs"}
-    optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes"}
+    optional = {"galaxy_bool", "galaxy_param", "fluxes", "log_fluxes"}
     assert type(slen) is int
     assert type(tile_params) is dict
     assert required.issubset(tile_params.keys())
@@ -218,27 +218,20 @@ class BaseEncoder(nn.Module, ABC):
 
         self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
-        # TODO: use the variational params to calculate this.
-        # There are self.max_detections * (self.max_detections + 1)
-        #  total possible detections, and each detection has
-        #  4 + 2*n parameters (2 means and 2 variances for each loc + mean and variance for
-        #  n source_param's (flux per band or galaxy params.) + 1 for the Bernoulli variable
-        #  of whether the source is a star or galaxy.
-        self.n_params_per_source = (
-            4 + 2 * (self.n_star_params + self.n_galaxy_params) + 1
+        # Number of variational parameters used to characterize each source in an image.
+        self.n_params_per_source = sum(
+            self.variational_params[k]["dim"] for k in self.variational_params
         )
 
-        # The first term corresponds to: for each param, for each possible number of detection d,
-        # there are d ways of assigning that param.
-        # The second and third term accounts for categorical probability over # of objects.
-        # These dimensions correspond to the probabilities in ONE tile.
+        # There are self.max_detections * (self.max_detections + 1) total possible detections.
+        # For each param, for each possible number of detection d, there are d ways of
+        # assigning that param.
+        # NOTE: Dimensions correspond to the probabilities in ONE tile.
         self.dim_out_all = int(
             0.5
             * self.max_detections
             * (self.max_detections + 1)
             * self.n_params_per_source
-            + 1
-            + self.max_detections
         )
 
         self.n_variational_params = len(self.variational_params)
@@ -283,15 +276,15 @@ class BaseEncoder(nn.Module, ABC):
 
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
 
+    # TODO: Idea is there but need to play around with it to see if it is correct.
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, these are cached since
         same for all h."""
 
         # initialize matrices containing the indices for each variational param.
-        # indx_mats follows order as self.variational_params dict (python 3.7+ dicts are ordered).
-        indx_mats = []
+        indx_mats = {}
         for k in self.variational_params:
-            param_dim = self.variational_params[i][1]
+            param_dim = self.variational_params[k]["dim"]
             shape = (self.max_detections + 1, param_dim * self.max_detections)
             indx_mat = torch.full(
                 shape,
@@ -299,36 +292,21 @@ class BaseEncoder(nn.Module, ABC):
                 dtype=torch.long,
                 device=device,
             )
-            indx_mats.append(indx_mat)
+            indx_mats[k] = indx_mat
 
-        prob_n_source_indx = torch.zeros(
-            self.max_detections + 1, dtype=torch.long, device=device
-        )
-
+        # add corresponding indices to the index matrices of variational params
+        # for a given n_detection.
+        curr_indx = 0
         for n_detections in range(1, self.max_detections + 1):
-            # index corresponding to where we left off in last iteration.
-            curr_indx = (
-                int(0.5 * n_detections * (n_detections - 1) * self.n_params_per_source)
-                + (n_detections - 1)
-                + 1
-            )
-
-            # add corresponding indices to the index matrices of variational params
-            # for a given n_detection.
-            for i in range(self.n_variational_params):
-                param_dim = self.variational_params[i][1]
-                indx_mat = indx_mats[i]
+            for k in self.variational_params:
+                param_dim = self.variational_params[k]["dim"]
                 new_indx = (param_dim * n_detections) + curr_indx
-                indx_mat[n_detections, 0 : (param_dim * n_detections)] = torch.arange(
-                    curr_indx, new_indx
-                )
-                indx_mats[i] = indx_mat
+                indx_mats[k][
+                    n_detections, 0 : (param_dim * n_detections)
+                ] = torch.arange(curr_indx, new_indx)
                 curr_indx = new_indx
 
-            # the categorical prob will go at the end of the rest.
-            prob_n_source_indx[n_detections] = curr_indx
-
-        return indx_mats, prob_n_source_indx
+        return indx_mats
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
         """
@@ -370,10 +348,8 @@ class BaseEncoder(nn.Module, ABC):
         return var_param
 
     def _get_var_params_all(self, image_ptiles):
-        """get h matrix.
-
-        image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
-        """
+        # get h matrix.
+        # image_ptiles shape: (n_ptiles, n_bands, ptile_slen, ptile_slen)
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
         h = self.enc_conv(log_img)
@@ -388,20 +364,16 @@ class BaseEncoder(nn.Module, ABC):
             source_param_mean.shape = (n_samples x n_ptiles x max_detections x n_source_params)
         """
 
-        estimated_params = {}
-        for i in range(self.n_variational_params):
-            indx_mat = self.indx_mats[i]
-            param_info = self.variational_params[i]
-            param_name = param_info[0]
-            param_dim = param_info[1]
-
-            # obtain hidden function to apply if included, otherwise do nothing.
-            hidden_function = param_info[2] if len(param_info) > 2 else lambda x: x
+        est_params = {}
+        for k in self.variational_params:
+            indx_mat = self.indx_mats[k]
+            param_dim = self.variational_params[k]["dim"]
+            transform = self.variational_params[k]["transform"]
             _param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
-            param = hidden_function(_param)
-            estimated_params[param_name] = param
+            param = transform(_param)
+            est_params[k] = param
 
-        return estimated_params
+        return est_params
 
     @staticmethod
     def _get_normal_samples(mean, sd, tile_is_on_array):
@@ -410,10 +382,75 @@ class BaseEncoder(nn.Module, ABC):
         assert tile_is_on_array.shape[-1] == 1
         return torch.normal(mean, sd) * tile_is_on_array
 
+    def tiled_map_estimate(self, ptiles, tile_n_sources):
+        batchsize = ptiles.shape[0]
+        n_ptiles = int(ptiles.shape[0] / batchsize)
+        h = self._get_var_params_all(ptiles)
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+
+        # shape (all) = (1 x (batchsize x n_ptiles x max_detections x param_dim)
+        pred = self._get_var_params_for_n_sources(
+            h, tile_n_sources.flatten().unsqueeze(0)
+        )
+        pred = {
+            key: param.view(batchsize, n_ptiles, param.shape[2], param.shape[3])
+            for key, param in pred.items()
+        }
+
+        for param in self.output_params:
+            pass
+
+        # forward
+        image_ptiles = self.get_images_in_tiles(images)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+        n_ptiles = int(image_ptiles.shape[0] / batchsize)
+
+        # get map estimate for n_sources in each tile.
+        # tile_n_sources shape = (batchsize x n_ptiles)
+        # tile_is_on_array shape = (batchsize x n_ptiles x max_detections x 1)
+        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
+        tile_n_sources = tile_n_sources.view(batchsize, n_ptiles)
+
+        # get variational parameters: these are on image tiles
+        # shape (all) = (1 x (batchsize x n_ptiles) x max_detections x param_dim)
+        pred = self._get_var_params_for_n_sources(
+            h, tile_n_sources.flatten().unsqueeze(0)
+        )
+
+        # now reshape
+        pred = {
+            key: param.view(batchsize, n_ptiles, param.shape[2], param.shape[3])
+            for key, param in pred.items()
+        }
+
+        # set sd so we return map estimates.
+        tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
+        tile_galaxy_bool *= tile_is_on_array
+        pred["loc_sd"] = torch.zeros_like(pred["loc_logvar"])
+        pred["galaxy_param_sd"] = torch.zeros_like(pred["galaxy_param_logvar"])
+        pred["log_flux_sd"] = torch.zeros_like(pred["log_flux_logvar"])
+
+        tile_locs, tile_galaxy_params, tile_log_fluxes = self._get_samples(
+            pred, tile_is_on_array, tile_galaxy_bool
+        )
+
+        tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
+        tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
+
+        return {
+            "n_sources": tile_n_sources,
+            "locs": tile_locs,
+            "galaxy_bool": tile_galaxy_bool,
+            "galaxy_param": tile_galaxy_params,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+        }
+
+    @abstractmethod
     def forward(self, ptiles, n_sources):
-        # conditioned on how many sources in a given image, returned an equivalent number of
-        # galaxy parameters.
-        # images should be padded tiles from encoder
+        # conditioned on how many sources are in each of the padded tiles, returned a dict
+        # containing the variational parameters on each tile.
         pass
 
     @abstractmethod
@@ -422,27 +459,11 @@ class BaseEncoder(nn.Module, ABC):
         # return a dict with the variational params that should be estimated.
         pass
 
-
-class GalaxyEncoder(BaseEncoder):
-    def __init__(self, n_galaxy_params=8, **kwargs):
-        super(GalaxyEncoder, self).__init__(**kwargs)
-        self.n_galaxy_params = n_galaxy_params
-
-        pass
-
+    @abstractmethod
     @property
-    def variational_params(self):
-        # transform is a function applied directly on NN output.
-        return {
-            "galaxy_param_mean": {
-                "dim": self.n_galaxy_params,
-                "transform": _identity_func,
-            },
-            "galaxy_param_logvar": {
-                "dim": self.n_galaxy_params,
-                "transform": _identity_func,
-            },
-        }
+    def output_params(self):
+        # return a dict with names of estimated params.
+        pass
 
 
 class ImageEncoder(BaseEncoder):
@@ -451,6 +472,21 @@ class ImageEncoder(BaseEncoder):
         super(ImageEncoder, self).__init__(**kwargs)
         self.n_star_params = self.n_bands
         self.log_softmax = nn.LogSoftmax(dim=1)
+
+        # Accounts for categorical probability over # of objects.
+        self.dim_out_all += 1 + self.max_detections
+
+    def _get_prob_n_indexes(self):
+        # TODO: Assign it to the last indeces now that were not used up.
+
+        prob_n_source_indx = torch.zeros(
+            self.max_detections + 1, dtype=torch.long, device=device
+        )
+
+        # the categorical prob will go at the end of the rest.
+        prob_n_source_indx[n_detections] = curr_indx
+
+        return
 
     def _get_logprob_n_from_var_params(self, h):
         """
@@ -468,22 +504,21 @@ class ImageEncoder(BaseEncoder):
         # will unsqueeze and squeeze n_sources later, since used for indexing.
         assert len(n_sources.shape) == 1
         n_sources = n_sources.unsqueeze(0)
+        n_sources = n_sources.clamp(max=self.max_detections)
 
         # h.shape = (n_ptiles x self.dim_out_all)
         h = self._get_var_params_all(image_ptiles)
 
-        # get probability of n_sources
+        # get probability of n_sources and other params.
         # shape = (n_ptiles x (max_detections+1))
-        n_source_log_probs = self._get_logprob_n_from_var_params(h)
-
         # e.g. loc_mean has shape = (1 x n_ptiles x max_detections x len(x,y))
-        n_sources = n_sources.clamp(max=self.max_detections)
+        n_source_log_probs = self._get_logprob_n_from_var_params(h)
         var_params = self._get_var_params_for_n_sources(h, n_sources)
-        # squeeze if possible to account for non-sampling case.
-        var_params = {key: param.squeeze(0) for key, param in var_params.items()}
-        var_params["n_source_log_probs"] = n_source_log_probs.squeeze(0)
 
-        # dictionary with names as in self.variational_params
+        # squeeze to remove the 1 up front in the shape.
+        var_params["n_source_log_probs"] = n_source_log_probs.squeeze(0)
+        var_params = {key: param.squeeze(0) for key, param in var_params.items()}
+
         return var_params
 
     def sample_encoder(self, image, n_samples):
@@ -521,71 +556,10 @@ class ImageEncoder(BaseEncoder):
             "n_sources": tile_n_sources,
             "locs": tile_locs,
             "galaxy_bool": tile_galaxy_bool,
-            "galaxy_params": tile_galaxy_params,
+            "galaxy_param": tile_galaxy_params,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
         }
-
-    def tiled_map_estimate(self, images):
-        batchsize = images.shape[0]
-
-        image_ptiles = self.get_images_in_tiles(images)
-        h = self._get_var_params_all(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-
-        n_ptiles = int(image_ptiles.shape[0] / batchsize)
-
-        # get map estimate for n_sources in each tile.
-        # tile_n_sources shape = (batchsize x n_ptiles)
-        # tile_is_on_array shape = (batchsize x n_ptiles x max_detections x 1)
-        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-        tile_n_sources = tile_n_sources.view(batchsize, n_ptiles)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-
-        # get variational parameters: these are on image tiles
-        # shape (all) = (1 x (batchsize x n_ptiles) x max_detections x param_dim)
-        pred = self._get_var_params_for_n_sources(
-            h, tile_n_sources.flatten().unsqueeze(0)
-        )
-
-        # now reshape
-        pred = {
-            key: param.view(batchsize, n_ptiles, param.shape[2], param.shape[3])
-            for key, param in pred.items()
-        }
-
-        # set sd so we return map estimates.
-        tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
-        tile_galaxy_bool *= tile_is_on_array
-        pred["loc_sd"] = torch.zeros_like(pred["loc_logvar"])
-        pred["galaxy_param_sd"] = torch.zeros_like(pred["galaxy_param_logvar"])
-        pred["log_flux_sd"] = torch.zeros_like(pred["log_flux_logvar"])
-
-        tile_locs, tile_galaxy_params, tile_log_fluxes = self._get_samples(
-            pred, tile_is_on_array, tile_galaxy_bool
-        )
-
-        tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
-        tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
-
-        return {
-            "n_sources": tile_n_sources,
-            "locs": tile_locs,
-            "galaxy_bool": tile_galaxy_bool,
-            "galaxy_params": tile_galaxy_params,
-            "log_fluxes": tile_log_fluxes,
-            "fluxes": tile_fluxes,
-        }
-
-    def map_estimate(self, slen, images):
-        # slen is size of the image without border padding
-        border_padding = (images.shape[-1] - slen) / 2
-        assert slen % self.tile_slen == 0, "incompatible image"
-        assert border_padding == self.border_padding, "incompatible border"
-        tile_estimate = self.tiled_map_estimate(images)
-        estimate = get_full_params(slen, tile_estimate)
-        return estimate
 
     @property
     def variational_params(self):
@@ -596,5 +570,40 @@ class ImageEncoder(BaseEncoder):
             "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
             "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
             "prob_galaxy": {"dim": 1, "transform": _prob_galaxy_func},
-            "prob_n_sources": {"dim": 1, "transform": _identity_func},
+        }
+
+    @abstractmethod
+    @property
+    def output_params(self):
+        return {
+            "loc": {"method": "normal"},
+            "log_flux": {"method": "normal"},
+            "galaxy_bool": {"method": "bool"},
+        }
+
+
+class GalaxyEncoder(BaseEncoder):
+    def __init__(self, n_galaxy_params=8, **kwargs):
+        super(GalaxyEncoder, self).__init__(**kwargs)
+        self.n_galaxy_params = n_galaxy_params
+
+    @property
+    def variational_params(self):
+        # transform is a function applied directly on NN output.
+        return {
+            "galaxy_param_mean": {
+                "dim": self.n_galaxy_params,
+                "transform": _identity_func,
+            },
+            "galaxy_param_logvar": {
+                "dim": self.n_galaxy_params,
+                "transform": _identity_func,
+            },
+        }
+
+    @abstractmethod
+    @property
+    def output_params(self):
+        return {
+            "galaxy_param": {"method": "normal"},
         }
