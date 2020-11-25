@@ -116,6 +116,74 @@ def _get_min_perm_loss(
     return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
 
 
+def get_full_params(slen: int, tile_params: dict):
+    # NOTE: off sources should have tile_locs == 0.
+    # NOTE: assume that each param in each tile is already pushed to the front.
+    required = {"n_sources", "locs"}
+    optional = {"galaxy_bool", "galaxy_param", "fluxes", "log_fluxes"}
+    assert type(slen) is int
+    assert type(tile_params) is dict
+    assert required.issubset(tile_params.keys())
+    # tile_params does not contain extraneous keys
+    for param_name in tile_params:
+        assert param_name in required or param_name in optional
+
+    tile_n_sources = tile_params["n_sources"]
+    tile_locs = tile_params["locs"]
+
+    # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
+    assert len(tile_locs.shape) == 4
+    n_samples = tile_locs.shape[0]
+    n_tiles_per_image = tile_locs.shape[1]
+    max_detections = tile_locs.shape[2]
+    tile_slen = slen / math.sqrt(n_tiles_per_image)
+    n_ptiles = n_samples * n_tiles_per_image
+    assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
+    tile_slen = int(tile_slen)
+
+    # coordinates on tiles.
+    tile_coords = _get_tile_coords(slen, tile_slen)
+    assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
+
+    # get is_on_array
+    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
+    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
+    max_sources = n_sources.max().int().item()
+
+    # recenter and renormalize locations.
+    tile_is_on_array = tile_is_on_array_sampled.view(n_ptiles, -1)
+    _tile_locs = tile_locs.view(n_ptiles, -1, 2)
+    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
+    _locs = (_tile_locs * tile_slen + bias) / slen
+    _locs *= tile_is_on_array.unsqueeze(2)
+
+    # sort locs and clip
+    locs = _locs.view(n_samples, -1, 2)
+    _indx_sort = _argfront(locs[..., 0], dim=1)
+    indx_sort = _indx_sort.unsqueeze(2)
+    locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
+    locs = locs[:, 0:max_sources, ...]
+
+    params = {"n_sources": n_sources, "locs": locs}
+
+    # now do the same for the rest of the parameters (without scaling or biasing ofc)
+    # for same reason no need to multiply times is_on_array
+    for param_name in tile_params:
+        if param_name in optional:
+            # make sure works galaxy bool has same format as well.
+            tile_param = tile_params[param_name]
+            assert len(tile_param.shape) == 4
+            _param = tile_param.view(n_samples, n_tiles_per_image, max_detections, -1)
+            param_dim = _param.size(-1)
+            param = _param.view(n_samples, -1, param_dim)
+            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
+            param = param[:, 0:max_sources, ...]
+
+            params[param_name] = param
+
+    return params
+
+
 class SleepPhase(pl.LightningModule):
     def __init__(self, cfg: DictConfig):
         super(SleepPhase, self).__init__()
@@ -133,66 +201,29 @@ class SleepPhase(pl.LightningModule):
         assert self.image_decoder.border_padding == self.image_encoder.border_padding
 
     def forward(self, image_ptiles, n_sources):
-        return self.image_encoder(image_ptiles, n_sources)
+        raise NotImplementedError()
 
-    def map_estimate(self, slen, images):
-        # NOTE: For now assume that image_encoder is always active.
-
-        # slen is size of the image without border padding
-        border_padding = (images.shape[-1] - slen) / 2
-        assert slen % self.tile_slen == 0, "incompatible image"
-        assert border_padding == self.border_padding, "incompatible border"
-
-        # first get estimate in tiles for n_sources
-        batchsize = images.shape[0]
-        ptiles = self.get_images_in_tiles(images)
-        n_ptiles = int(ptiles.shape[0] / batchsize)
-        h = self._get_var_params_all(ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-
-        # get map estimate for n_sources in each tile.
-        # tile_n_sources shape = (batchsize x n_ptiles)
-        # tile_is_on_array shape = (batchsize x n_ptiles x max_detections x 1)
-        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-        tile_n_sources = tile_n_sources.view(batchsize, n_ptiles)
-
-        # get tiled predictions for both encoders.
-        _tile_n_sources = tile_n_sources.flatten().unsqueeze(0)
-        pred = {}
-        if self.image_encoder:
-            _pred = self.image_encoder.get_var_params_for_n_sources(h, _tile_n_sources)
-            pred.update(_pred)
-        if self.galaxy_encoder:
-            _pred = self.galaxy_encoder.get_var_params_for_n_sources(h, _tile_n_sources)
-            pred.update(_pred)
-
-        pred = {
-            key: param.view(batchsize, n_ptiles, param.shape[2], param.shape[3])
-            for key, param in pred.items()
+    def map_estimate(self, slen, images, batch):
+        # batch is per tile since it comes from image_decoder
+        tile_galaxy_params = {}
+        tile_params = {
+            "galaxy_bool": batch["galaxy_bool"],
+            "n_sources": batch["n_sources"],
         }
+        if self.image_encoder:
+            tile_n_sources = self.image_encoder.tile_map_n_sources(images)
+            tile_params = self.image_encoder.tile_map_estimate(images, tile_n_sources)
+            tile_params["n_sources"] = tile_n_sources
+            tile_params["galaxy_bool"] = tile_params["galaxy_bool"]
 
-        est = {}
+        if self.galaxy_encoder:
+            tile_galaxy_params = self.galaxy_encoder.tile_map_estimate(
+                images, tile_params["n_sources"], tile_params["galaxy_bool"]
+            )
 
-        # get estimates for both encoders
-        output_params = self.image_encoder.output_params
-        for param in output_params:
-            mode = output_params[param]["mode"]
-            if mode == "normal":
-                pass
-            if mode == "bool":
-                pass
-
-        # adjust parameters that need to use galaxy_bool/star_bool
-        # also clamp locs between (0, 1)
-
-        pass
-        # # slen is size of the image without border padding
-        # tile_estimate = self.tiled_map_estimate(images)
-        # estimate = get_full_params(slen, tile_estimate)
-        # return estimate
+        tile_est = {**tile_params, **tile_galaxy_params}
+        est = get_full_params(slen, tile_est)
+        return est
 
     def get_loss(self, batch):
         """
@@ -288,11 +319,7 @@ class SleepPhase(pl.LightningModule):
         locs_log_probs_all = self._get_params_logprob_all_combs(
             true_tile_locs, loc_mean, loc_logvar
         )
-        galaxy_params_log_probs_all = self._get_params_logprob_all_combs(
-            true_tile_galaxy_params,
-            pred["galaxy_param_mean"],
-            pred["galaxy_param_logvar"],
-        )
+
         star_params_log_probs_all = self._get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
@@ -361,19 +388,27 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         params = self.hparams.optimizer.params
-        return Adam(self.image_encoder.parameters(), **params)
+        image_opt = Adam(self.image_encoder.parameters(), **params)
+        galaxy_opt = Adam(self.galaxy_encoder.parameters(), **params)
+        return image_opt, galaxy_opt
 
-    def training_step(self, batch, batch_idx):
-        (
-            loss,
-            counter_loss,
-            locs_loss,
-            galaxy_params_loss,
-            star_params_loss,
-            galaxy_bool_loss,
-        ) = self.get_loss(batch)
-        self.log("train_loss", loss)
-        return loss
+    def training_step(self, batch, batch_idx, optimizer_idx):
+
+        if optimizer_idx == 0:  # image_encoder
+            (
+                loss,
+                counter_loss,
+                locs_loss,
+                galaxy_params_loss,
+                star_params_loss,
+                galaxy_bool_loss,
+            ) = self.get_loss(batch)
+            self.log("train_loss", loss)
+            return loss
+
+        if optimizer_idx == 1:  # galaxy_encoder:
+            loss = 0.0
+            return loss
 
     def validation_step(self, batch, batch_indx):
         (

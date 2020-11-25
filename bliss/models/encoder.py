@@ -37,74 +37,6 @@ def get_star_bool(n_sources, galaxy_bool):
     return star_bool
 
 
-def get_full_params(slen: int, tile_params: dict):
-    # NOTE: off sources should have tile_locs == 0.
-    # NOTE: assume that each param in each tile is already pushed to the front.
-    required = {"n_sources", "locs"}
-    optional = {"galaxy_bool", "galaxy_param", "fluxes", "log_fluxes"}
-    assert type(slen) is int
-    assert type(tile_params) is dict
-    assert required.issubset(tile_params.keys())
-    # tile_params does not contain extraneous keys
-    for param_name in tile_params:
-        assert param_name in required or param_name in optional
-
-    tile_n_sources = tile_params["n_sources"]
-    tile_locs = tile_params["locs"]
-
-    # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
-    assert len(tile_locs.shape) == 4
-    n_samples = tile_locs.shape[0]
-    n_tiles_per_image = tile_locs.shape[1]
-    max_detections = tile_locs.shape[2]
-    tile_slen = slen / math.sqrt(n_tiles_per_image)
-    n_ptiles = n_samples * n_tiles_per_image
-    assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
-    tile_slen = int(tile_slen)
-
-    # coordinates on tiles.
-    tile_coords = _get_tile_coords(slen, tile_slen)
-    assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
-
-    # get is_on_array
-    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
-    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
-    max_sources = n_sources.max().int().item()
-
-    # recenter and renormalize locations.
-    tile_is_on_array = tile_is_on_array_sampled.view(n_ptiles, -1)
-    _tile_locs = tile_locs.view(n_ptiles, -1, 2)
-    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
-    _locs = (_tile_locs * tile_slen + bias) / slen
-    _locs *= tile_is_on_array.unsqueeze(2)
-
-    # sort locs and clip
-    locs = _locs.view(n_samples, -1, 2)
-    _indx_sort = _argfront(locs[..., 0], dim=1)
-    indx_sort = _indx_sort.unsqueeze(2)
-    locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
-    locs = locs[:, 0:max_sources, ...]
-
-    params = {"n_sources": n_sources, "locs": locs}
-
-    # now do the same for the rest of the parameters (without scaling or biasing ofc)
-    # for same reason no need to multiply times is_on_array
-    for param_name in tile_params:
-        if param_name in optional:
-            # make sure works galaxy bool has same format as well.
-            tile_param = tile_params[param_name]
-            assert len(tile_param.shape) == 4
-            _param = tile_param.view(n_samples, n_tiles_per_image, max_detections, -1)
-            param_dim = _param.size(-1)
-            param = _param.view(n_samples, -1, param_dim)
-            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
-            param = param[:, 0:max_sources, ...]
-
-            params[param_name] = param
-
-    return params
-
-
 def _argfront(is_on_array, dim):
     # return indices that sort pushing all zeroes of tensor to the back.
     # dim is dimension along which do the ordering.
@@ -356,7 +288,7 @@ class BaseEncoder(nn.Module, ABC):
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(h)
 
-    def get_var_params_for_n_sources(self, h, n_sources):
+    def _get_var_params_for_n_sources(self, h, n_sources):
         """
         Returns:
             loc_mean.shape = (n_samples x n_ptiles x max_detections x len(x,y))
@@ -376,57 +308,20 @@ class BaseEncoder(nn.Module, ABC):
         return est_params
 
     @staticmethod
-    def get_normal_samples(mean, sd, tile_is_on_array):
+    def _get_normal_samples(mean, sd, tile_is_on_array):
         # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bool'/'tile_star_bool'.
         # return shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert tile_is_on_array.shape[-1] == 1
         return torch.normal(mean, sd) * tile_is_on_array
 
-    def tiled_map_estimate(self, ptiles, tile_n_sources):
-        n_ptiles = int(ptiles.shape[0] / batchsize)
-
-        # shape (all) = (1 x (batchsize x n_ptiles x max_detections x param_dim)
-
-        for param in self.output_params:
-            pass
-
-        # get variational parameters: these are on image tiles
-        # shape (all) = (1 x (batchsize x n_ptiles) x max_detections x param_dim)
-        pred = self.get_var_params_for_n_sources(
-            h, tile_n_sources.flatten().unsqueeze(0)
-        )
-
-        # now reshape
-        pred = {
-            key: param.view(batchsize, n_ptiles, param.shape[2], param.shape[3])
-            for key, param in pred.items()
-        }
-
-        # set sd so we return map estimates.
-        tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
-        tile_galaxy_bool *= tile_is_on_array
-        pred["loc_sd"] = torch.zeros_like(pred["loc_logvar"])
-        pred["galaxy_param_sd"] = torch.zeros_like(pred["galaxy_param_logvar"])
-        pred["log_flux_sd"] = torch.zeros_like(pred["log_flux_logvar"])
-
-        tile_locs, tile_galaxy_params, tile_log_fluxes = self._get_samples(
-            pred, tile_is_on_array, tile_galaxy_bool
-        )
-
-        tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
-        tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
-
-        return {
-            "n_sources": tile_n_sources,
-            "locs": tile_locs,
-            "galaxy_bool": tile_galaxy_bool,
-            "galaxy_param": tile_galaxy_params,
-            "log_fluxes": tile_log_fluxes,
-            "fluxes": tile_fluxes,
-        }
+    @abstractmethod
+    def tile_map_estimate(self, *args):
+        # conditioned on how many sources are in each of the padded tiles, returned a dict
+        # containing the variational parameters on each tile.
+        pass
 
     @abstractmethod
-    def forward(self, ptiles, n_sources):
+    def forward(self, images, tile_n_sources):
         # conditioned on how many sources are in each of the padded tiles, returned a dict
         # containing the variational parameters on each tile.
         pass
@@ -435,12 +330,6 @@ class BaseEncoder(nn.Module, ABC):
     @property
     def variational_params(self):
         # return a dict with the variational params that should be estimated.
-        pass
-
-    @abstractmethod
-    @property
-    def output_params(self):
-        # return a dict with names of estimated params.
         pass
 
 
@@ -455,17 +344,12 @@ class ImageEncoder(BaseEncoder):
         self.dim_out_all += 1 + self.max_detections
         self.indx_mats = self._get_hidden_indices()
 
-    def _get_prob_n_indexes(self):
-        # TODO: Assign it to the last indeces now that were not used up.
-
-        prob_n_source_indx = torch.zeros(
+        # TODO: Assign it to the last indices that were not used up.
+        # get index for prob_n_sources, assigned indices that were not used.
+        self.prob_n_source_indx = torch.zeros(
             self.max_detections + 1, dtype=torch.long, device=device
         )
-
-        # the categorical prob will go at the end of the rest.
-        prob_n_source_indx[n_detections] = curr_indx
-
-        return
+        self.prob_n_source_indx = torch.arange(1, 3)
 
     def _get_logprob_n_from_var_params(self, h):
         """
@@ -477,65 +361,77 @@ class ImageEncoder(BaseEncoder):
         free_probs = h[:, self.prob_n_source_indx]
         return self.log_softmax(free_probs)
 
-    def forward(self, image_ptiles, n_sources):
-        # image_ptiles shape = (n_ptiles x n_bands x ptile_slen x ptile_slen)
-        # n_sources shape = (n_ptiles)
+    def forward(self, images, tile_n_sources):
+        # images shape = (batch_size x n_bands x Slen x Slen)
+        # tile_n_sources shape = (batch_size x n_tiles)
         # will unsqueeze and squeeze n_sources later, since used for indexing.
-        assert len(n_sources.shape) == 1
-        n_sources = n_sources.unsqueeze(0)
-        n_sources = n_sources.clamp(max=self.max_detections)
+        assert len(tile_n_sources.shape) == 2
+        batch_size = images.shape[0]
+        n_sources = tile_n_sources.clamp(max=self.max_detections)
 
         # h.shape = (n_ptiles x self.dim_out_all)
-        h = self._get_var_params_all(image_ptiles)
+        ptiles = self.get_images_in_tiles(images)
+        h = self._get_var_params_all(ptiles)
 
         # get probability of n_sources and other params.
         # shape = (n_ptiles x (max_detections+1))
         # e.g. loc_mean has shape = (1 x n_ptiles x max_detections x len(x,y))
         n_source_log_probs = self._get_logprob_n_from_var_params(h)
-        var_params = self.get_var_params_for_n_sources(h, n_sources)
+        var_params = self._get_var_params_for_n_sources(h, n_sources)
 
         # squeeze to remove the 1 up front in the shape.
-        var_params["n_source_log_probs"] = n_source_log_probs.squeeze(0)
-        var_params = {key: param.squeeze(0) for key, param in var_params.items()}
+        var_params["n_source_log_probs"] = n_source_log_probs.view(batch_size, -1)
+        var_params = {
+            key: param.view(batch_size, -1, param.shape[2], param.shape[3])
+            for key, param in var_params.items()
+        }
 
         return var_params
 
-    def sample_encoder(self, image, n_samples):
-        assert image.size(0) == 1, "Sampling only works for a single image."
-        image_ptiles = self.get_images_in_tiles(image)
-        h = self._get_var_params_all(image_ptiles)
+    def tile_map_n_sources(self, images):
+        # get map estimate for n_sources in each tile, for each batch_size
+        batch_size = images.shape[0]
+        ptiles = self.get_images_in_tiles(images)
+        h = self._get_var_params_all(ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
+        tile_n_sources = tile_n_sources.view(batch_size, -1)
 
-        # sample number of sources.
-        # tile_n_sources shape = (n_samples x n_ptiles)
-        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
-        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
-        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
-        tile_n_sources = tile_n_sources.view(n_samples, -1)
+        return tile_n_sources
+
+    def tile_map_estimate(self, images, tile_n_sources):
+
+        # tile_is_on_array shape = (batchsize x n_tiles x max_detections)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
-        # get var_params conditioned on n_sources
-        pred = self.get_var_params_for_n_sources(h, tile_n_sources)
+        # get variational parameters: these are on image tiles
+        pred = self(images, tile_n_sources)
 
-        # other quantities based on var_params
-        # tile_galaxy_bool shape = (n_samples x n_ptiles x max_detections x 1)
-        tile_galaxy_bool = torch.bernoulli(pred["prob_galaxy"]).float()
+        # galaxy booleans
+        tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
         tile_galaxy_bool *= tile_is_on_array
-        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
-        pred["galaxy_param_sd"] = torch.exp(0.5 * pred["galaxy_param_logvar"])
-        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
-        tile_locs, tile_galaxy_params, tile_log_fluxes = self._get_samples(
-            pred, tile_is_on_array, tile_galaxy_bool
-        )
 
+        # set sd so we return map estimates.
+        # first locs
+        locs_sd = torch.zeros_like(pred["loc_logvar"])
+        tile_locs = self._get_normal_samples(
+            pred["loc_mean"], locs_sd, tile_is_on_array
+        )
+        tile_locs = tile_locs.clamp(0, 1)
+
+        # then log_fluxes
         tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
+        log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
+        tile_log_fluxes = self._get_normal_samples(
+            pred["log_flux_mean"], log_flux_sd, tile_is_on_array
+        )
+        tile_log_fluxes *= tile_star_bool
         tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
+
         return {
-            "n_sources": tile_n_sources,
             "locs": tile_locs,
             "galaxy_bool": tile_galaxy_bool,
-            "galaxy_param": tile_galaxy_params,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
         }
@@ -554,21 +450,34 @@ class ImageEncoder(BaseEncoder):
             },
         }
 
-    @abstractmethod
-    @property
-    def output_params(self):
-        return {
-            "loc": {"method": "normal"},
-            "log_flux": {"method": "normal"},
-            "galaxy_bool": {"method": "bool", "var_param": "prob_galaxy"},
-        }
-
 
 class GalaxyEncoder(BaseEncoder):
     def __init__(self, n_galaxy_params=8, **kwargs):
         super(GalaxyEncoder, self).__init__(**kwargs)
         self.n_galaxy_params = n_galaxy_params
         self.indx_mats = self._get_hidden_indices()
+
+    def tile_map_estimate(self, images, tile_n_sources, galaxy_bool):
+        pred = self(images, tile_n_sources)
+        sd = torch.zeros_like(pred["galaxy_param_logvar"])
+        tile_galaxy_param = self._get_normal_samples(pred["loc_mean"], sd, galaxy_bool)
+        return {"galaxy_param": tile_galaxy_param}
+
+    def forward(self, images, tile_n_sources):
+        assert len(tile_n_sources.shape) == 2
+        batch_size = images.shape[0]
+        n_sources = tile_n_sources.clamp(max=self.max_detections)
+
+        ptiles = self.get_images_in_tiles(images)
+        h = self._get_var_params_all(ptiles)
+        var_params = self._get_var_params_for_n_sources(h, n_sources)
+
+        var_params = {
+            key: param.view(batch_size, -1, param.shape[2], param.shape[3])
+            for key, param in var_params.items()
+        }
+
+        return var_params
 
     @property
     def variational_params(self):
@@ -582,11 +491,4 @@ class GalaxyEncoder(BaseEncoder):
                 "dim": self.n_galaxy_params,
                 "transform": _identity_func,
             },
-        }
-
-    @abstractmethod
-    @property
-    def output_params(self):
-        return {
-            "galaxy_param": {"method": "normal"},
         }
