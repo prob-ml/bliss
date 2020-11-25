@@ -3,8 +3,7 @@ import pytorch_lightning as pl
 import warnings
 
 import torch
-from torch.utils.data import IterableDataset, Dataset
-from torch.utils.data import DataLoader
+from torch.utils.data import IterableDataset, Dataset, DataLoader
 
 from bliss.models.decoder import ImageDecoder
 

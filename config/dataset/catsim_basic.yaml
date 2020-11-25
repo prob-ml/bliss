@@ -1,9 +1,15 @@
-catalog_file: "OneDegSq.fits"
-survey_name: "LSST"
-slen: 51
-snr: 200
-n_bands: 6
-deviate_center: False
-preserve_flux: False
-add_noise: True
+# @package _group_
+name: "CatsimGalaxies"
+catalog_file: ${paths.root}/data/OneDegSq.fits
+n_batches: 10
+num_workers: 4
 batch_size: 320
+renderer:
+  survey_name: "LSST"
+  slen: 51
+  snr: 200
+  bands:
+    - "i"
+  deviate_center: False
+  preserve_flux: False
+  add_noise: True

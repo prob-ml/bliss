@@ -1,14 +1,11 @@
 import numpy as np
+import torch
 import galsim
 import descwl
 from astropy.table import Table
-from torch.utils.data import Dataset
-
-
-bands_dict = {
-    1: ("i",),
-    6: ("y", "z", "i", "r", "g", "u"),
-}
+import pytorch_lightning as pl
+from torch.utils.data import Dataset, DataLoader, RandomSampler, SubsetRandomSampler
+from omegaconf import DictConfig
 
 
 def get_pixel_scale(survey_name):
@@ -66,18 +63,17 @@ class SurveyObs(object):
 class CatsimRenderer(object):
     def __init__(
         self,
-        survey_name,
-        bands,
-        stamp_size,
-        pixel_scale,
+        survey_name="LSST",
+        bands=("i",),
+        slen=41,
         snr=200,
-        dtype=np.float32,
         min_snr=0.05,
         truncate_radius=30,
         add_noise=True,
         preserve_flux=False,
         verbose=False,
         deviate_center=False,
+        dtype=np.float32,
     ):
         """
         Can draw a single entry in CATSIM in the given bands.
@@ -85,11 +81,20 @@ class CatsimRenderer(object):
         NOTE: Background is constant given the band, survey_name, image size, and default
         survey_dict, so it can be obtained in advance only once.
         """
+        # ToDo: Create a test/assertion to check that mean == variance approx.
+        assert survey_name == "LSST", "Only using default survey name for now is LSST."
+        assert len(bands) in [1, 6], "Only 1 or 6 bands are supported."
+        assert add_noise, "Are you sure?"
+        assert slen >= 51, "Galaxies won't fit."
+        assert slen % 2 == 1, "Odd number of pixels is preferred."
+        assert preserve_flux is False, "Otherwise variance of the noise will change."
+
+        self.slen = slen
         self.survey_name = survey_name
+        self.pixel_scale = get_pixel_scale(self.survey_name)
+        self.stamp_size = self.pixel_scale * self.slen  # arcseconds
         self.bands = bands
         self.n_bands = len(self.bands)
-        self.stamp_size = stamp_size  # arcsecs
-        self.pixel_scale = pixel_scale
         self.image_size = int(self.stamp_size / self.pixel_scale)  # pixels.
         self.snr = snr
         self.min_snr = min_snr
@@ -198,71 +203,42 @@ class CatsimRenderer(object):
         return image_temp.array
 
 
-class CatsimGalaxies(Dataset):
-    def __init__(
-        self,
-        catalog_file="OneDegSq.fits",
-        survey_name="LSST",
-        slen=51,
-        snr=200,
-        n_bands=6,
-        deviate_center=False,
-        preserve_flux=False,
-        add_noise=True,
-    ):
+class CatsimGalaxies(pl.LightningDataModule, Dataset):
+    def __init__(self, cfg: DictConfig):
         """This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)
-         and returns a galaxy drawn from the catalog with realistic seeing conditions using
-         functions from WeakLensingDeblending.
-
-        For now, only one galaxy can be returned at once.
-
-        Arguments:
-            snr (int): The SNR of the galaxy to draw, if None uses the actually seeing SNR from LSST
-                       survey.
-            catalog_file (str): full path to CATSIM-like catalog.
+        and returns a galaxy drawn from the catalog with realistic seeing conditions using
+        functions from WeakLensingDeblending.
         """
-        super().__init__()
-        assert survey_name == "LSST", "Only using default survey name for now is LSST."
-        assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
-        assert add_noise, "Are you sure?"
-        assert slen >= 51, "Galaxies won't fit."
-        assert slen % 2 == 1, "Odd number of pixels is preferred."
-        assert preserve_flux is False, "Otherwise variance of the noise will change."
-        # ToDo: Create a test/assertion to check that mean == variance approx.
-
-        self.survey_name = survey_name
-        self.n_bands = n_bands
-        self.bands = bands_dict[self.n_bands]
-        self.snr = snr
-
-        self.slen = slen
-        self.pixel_scale = get_pixel_scale(self.survey_name)
-        self.stamp_size = self.pixel_scale * self.slen  # arcseconds
-        self.preserve_flux = preserve_flux
-        self.add_noise = add_noise
-        self.deviate_center = deviate_center
-        self.dtype = np.float32
-
-        self.renderer = CatsimRenderer(
-            self.survey_name,
-            self.bands,
-            self.stamp_size,
-            self.pixel_scale,
-            snr=self.snr,
-            dtype=self.dtype,
-            preserve_flux=self.preserve_flux,
-            add_noise=self.add_noise,
-            deviate_center=deviate_center,
-        )
+        super(CatsimGalaxies, self).__init__()
+        self.renderer = CatsimRenderer(**cfg.dataset.renderer)
         self.background = self.renderer.background
 
         # prepare catalog table.
         # shuffle in case that order matters.
-        self.table = Table.read(catalog_file)
-        self.table = self.table[np.random.permutation(len(self.table))]
-
+        cat = Table.read(cfg.dataset.catalog_file)
+        cat = cat[np.random.permutation(len(cat))]
         self.filter_dict = self.get_default_filters()
-        self.cat = self.get_filtered_cat()
+        self.cat = self.get_filtered_cat(cat)
+
+        # data processing
+        self.num_workers = cfg.dataset.num_workers
+        self.batch_size = cfg.dataset.batch_size
+        self.n_batches = cfg.dataset.n_batches
+        n_samples = self.batch_size * self.n_batches
+        self.sampler = RandomSampler(self, replacement=True, num_samples=n_samples)
+
+    @staticmethod
+    def get_default_filters():
+        # cut on magnitude same as BTK does (gold sample)
+        filters = dict(i_ab=(-np.inf, 25.3))
+        return filters
+
+    def get_filtered_cat(self, cat):
+        _cat = cat.copy()
+        for param, bounds in self.filter_dict.items():
+            min_val, max_val = bounds
+            _cat = filter_bounds(_cat, param, min_val, max_val)
+        return _cat
 
     def __len__(self):
         return len(self.cat)
@@ -275,21 +251,65 @@ class CatsimGalaxies(Dataset):
                 image, background = self.renderer.render(entry)
                 break
 
+            # select some other random galaxy to return if we fail.
             except descwl.render.SourceNotVisible:
-                # select some other random galaxy to return.
                 idx = np.random.choice(np.arange(len(self)))
 
-        return {"image": image, "background": background, "num_galaxies": 1}
+        return {"images": image, "background": background}
 
-    def get_filtered_cat(self):
-        cat = self.table.copy()
-        for param, bounds in self.filter_dict.items():
-            min_val, max_val = bounds
-            cat = filter_bounds(cat, param, min_val, max_val)
-        return cat
+    def train_dataloader(self):
+        return DataLoader(
+            self,
+            batch_size=self.batch_size,
+            sampler=self.sampler,
+            num_workers=self.num_workers,
+        )
 
-    @staticmethod
-    def get_default_filters():
-        # cut on magnitude same as BTK does (gold sample)
-        filters = dict(i_ab=(-np.inf, 25.3))
-        return filters
+    def val_dataloader(self):
+        return DataLoader(
+            self,
+            batch_size=self.batch_size,
+            sampler=self.sampler,
+            num_workers=self.num_workers,
+        )
+
+
+class SavedCatsim(pl.LightningDataModule, Dataset):
+    def __init__(
+        self, filepath="catsim.pt", batch_size=32, num_workers=4, tt_split=0.1
+    ):
+        super(SavedCatsim, self).__init__()
+        self.data = torch.load(filepath)
+        self.background = self.data.pop("background")
+
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.tt_split = tt_split
+
+    def __getitem__(self, idx):
+        return {"images": self.data["images"][idx], "background": self.background}
+
+    def __len__(self):
+        return len(self.data)
+
+    def train_dataloader(self):
+        split = len(self) * self.tt_split
+        train_indices = np.arange(split, len(self))
+        return DataLoader(
+            self,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            sampler=SubsetRandomSampler(train_indices),
+        )
+
+    def val_dataloader(self):
+
+        test_indices = np.arange(len(self) * self.tt_split)
+        return DataLoader(
+            self,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            sampler=SubsetRandomSampler(test_indices),
+        )

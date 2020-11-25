@@ -1,21 +1,13 @@
-import numpy as np
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 
 import torch
-from torch.utils.data import DataLoader, SubsetRandomSampler
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
 from torch.optim import Adam
 
 plt.switch_backend("Agg")
-
-
-class Flatten(nn.Module):
-    @staticmethod
-    def forward(tensor):
-        return tensor.view(tensor.size(0), -1)
 
 
 class CenteredGalaxyEncoder(nn.Module):
@@ -33,7 +25,7 @@ class CenteredGalaxyEncoder(nn.Module):
             nn.ReLU(),
             nn.Conv2d(16, 16, 3, padding=1),
             nn.ReLU(),
-            Flatten(),
+            nn.Flatten(1, -1),
             nn.Linear(16 * self.slen ** 2, hidden),
             nn.ReLU(),
             nn.Linear(hidden, hidden),
@@ -128,8 +120,6 @@ class OneCenteredGalaxy(pl.LightningModule):
         slen=51,
         latent_dim=8,
         n_bands=1,
-        num_workers=2,
-        batch_size=64,
         tt_split=0.1,
         lr=1e-4,
         weight_decay=1e-6,
@@ -142,9 +132,7 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         self.lr = lr
         self.weight_decay = weight_decay
-        self.num_workers = num_workers
         self.tt_split = tt_split
-        self.batch_size = batch_size
 
         self.dataset = dataset
 
@@ -195,32 +183,6 @@ class OneCenteredGalaxy(pl.LightningModule):
         return loss
 
     # ---------------
-    # Data
-    # ----------------
-
-    def train_dataloader(self):
-        split = len(self.dataset) * self.tt_split
-        train_indices = np.arange(split, len(self.dataset))
-        return DataLoader(
-            self.dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            sampler=SubsetRandomSampler(train_indices),
-        )
-
-    def val_dataloader(self):
-
-        test_indices = np.arange(len(self.dataset) * self.tt_split)
-        return DataLoader(
-            self.dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            sampler=SubsetRandomSampler(test_indices),
-        )
-
-    # ---------------
     # Optimizer
     # ----------------
 
@@ -235,7 +197,7 @@ class OneCenteredGalaxy(pl.LightningModule):
     # ----------------
 
     def training_step(self, batch, batch_idx):
-        image, background = batch["image"], batch["background"]
+        image, background = batch["images"], batch["background"]
         recon_mean, recon_var, kl_z = self(image, background)
         loss = self.get_loss(image, recon_mean, recon_var, kl_z)
         self.log("train_loss", loss)
@@ -246,17 +208,17 @@ class OneCenteredGalaxy(pl.LightningModule):
     # ----------------
 
     def validation_step(self, batch, batch_idx):
-        image, background = batch["image"], batch["background"]
+        image, background = batch["images"], batch["background"]
         recon_mean, recon_var, kl_z = self(image, background)
         loss = self.get_loss(image, recon_mean, recon_var, kl_z)
         self.log("validation_loss", loss)
-        return {"image": image, "recon_mean": recon_mean, "recon_var": recon_var}
+        return {"images": image, "recon_mean": recon_mean, "recon_var": recon_var}
 
     def validation_epoch_end(self, outputs):
         # save images to tensorboard
 
         # get first 10 images, reconstruction means, variances. Add them as a grid.
-        image = outputs[-1]["image"][:5]
+        image = outputs[-1]["images"][:5]
         recon_mean = outputs[-1]["recon_mean"][:5]
         recon_var = outputs[-1]["recon_var"][:5]
 
@@ -281,7 +243,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         for i in range(num_examples):
 
             plt.subplot(num_examples, num_cols, num_cols * i + 1)
-            plt.title("image")
+            plt.title("images")
             plt.imshow(image[i, band_idx].data.cpu().numpy())
             plt.colorbar()
 
