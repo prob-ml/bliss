@@ -387,6 +387,7 @@ class SleepPhase(pl.LightningModule):
         )
 
     def configure_optimizers(self):
+        # TODO: use different learning rates
         params = self.hparams.optimizer.params
         image_opt = Adam(self.image_encoder.parameters(), **params)
         galaxy_opt = Adam(self.galaxy_encoder.parameters(), **params)
