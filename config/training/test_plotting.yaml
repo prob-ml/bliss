@@ -1,5 +1,4 @@
 # @package _group_
-num_workers: 0
 deterministic: False
 plotting: True
 n_epochs: 5

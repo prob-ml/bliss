@@ -2,14 +2,13 @@
 name: "CatsimGalaxies"
 catalog_file: ${paths.root}/data/OneDegSq.fits
 n_batches: 10
+batch_size: 32
 num_workers: 4
-batch_size: 320
 renderer:
   survey_name: "LSST"
   slen: 51
   snr: 200
-  bands:
-    - "i"
+  n_bands: 1
   deviate_center: False
   preserve_flux: False
   add_noise: True

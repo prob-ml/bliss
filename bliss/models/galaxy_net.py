@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
+from omegaconf import DictConfig
 
 import torch
 import torch.nn as nn
@@ -11,7 +12,7 @@ plt.switch_backend("Agg")
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen, latent_dim, n_bands, hidden=256):
+    def __init__(self, slen=51, latent_dim=8, n_bands=1, hidden=256):
         super(CenteredGalaxyEncoder, self).__init__()
 
         self.slen = slen
@@ -42,12 +43,6 @@ class CenteredGalaxyEncoder(nn.Module):
         self.fc_var = nn.Linear(hidden, self.latent_dim)
 
     def forward(self, subimage):
-        """
-        1e-4 here is to avoid NaNs, .exp gives you positive and variance increase quickly.
-        Exp is better matched for logs. (trial and error, but makes big difference)
-        :param subimage: image to be encoded.
-        :return:
-        """
         z = self.features(subimage)
         z_mean = self.fc_mean(z)
         z_var = 1e-4 + torch.exp(self.fc_var(z))
@@ -55,17 +50,17 @@ class CenteredGalaxyEncoder(nn.Module):
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen, latent_dim, n_bands, hidden=256):
+    def __init__(self, slen=51, latent_dim=8, n_bands=1, hidden=256):
         super(CenteredGalaxyDecoder, self).__init__()
 
-        self.slen = slen  # side-length.
+        self.slen = slen
         self.latent_dim = latent_dim
         self.n_bands = n_bands
 
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
             nn.ReLU(),
-            nn.Linear(hidden, 64 * (slen // 2 + 1) ** 2),  # shrink dimensions
+            nn.Linear(hidden, 64 * (slen // 2 + 1) ** 2),
             nn.ReLU(),
         )
 
@@ -76,35 +71,18 @@ class CenteredGalaxyDecoder(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(64, 64, 3, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(
-                64, 64, 3, padding=0, stride=2
-            ),  # this will increase size back to twice.
-            nn.ConvTranspose2d(
-                64, 2 * self.n_bands, 3, padding=0
-            ),  # why channels=2 * num bands?
+            nn.ConvTranspose2d(64, 64, 3, padding=0, stride=2),
+            nn.ConvTranspose2d(64, 2 * self.n_bands, 3, padding=0),
         )
 
     def forward(self, z):
-        z = self.fc(z)  # latent variable
-
-        # This dimension is the number of samples.
+        z = self.fc(z)
         z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
-
-        # first half of the bands is now used.
-        # expected number of photons has to be positive, this is why we use f.relu here.
         recon_mean = F.relu(z[:, : self.n_bands])
-
-        # sometimes nn can get variance to be really small, if sigma gets really small
-        # then small learning
-        # this is what the 1e-4 is for.
-        # We also want var >= mean because of the poisson noise, which is also imposed here.
         var_multiplier = 1 + 10 * torch.sigmoid(z[:, self.n_bands : (2 * self.n_bands)])
         recon_var = 1e-4 + var_multiplier * recon_mean
-
-        # reconstructed mean and variance, these are per pixel.
-        # recon_mean shape = (z.size(0), n_bands, slen, slen)
         return recon_mean, recon_var
 
 
@@ -114,30 +92,14 @@ class OneCenteredGalaxy(pl.LightningModule):
     # Model
     # ----------------
 
-    def __init__(
-        self,
-        dataset,
-        slen=51,
-        latent_dim=8,
-        n_bands=1,
-        tt_split=0.1,
-        lr=1e-4,
-        weight_decay=1e-6,
-    ):
+    def __init__(self, cfg: DictConfig):
         super(OneCenteredGalaxy, self).__init__()
+        self.cfg = cfg
+        self.hparams = cfg
+        self.save_hyperparameters(cfg)
 
-        self.slen = slen
-        self.latent_dim = latent_dim
-        self.n_bands = n_bands
-
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.tt_split = tt_split
-
-        self.dataset = dataset
-
-        self.enc = CenteredGalaxyEncoder(slen, latent_dim, n_bands)
-        self.dec = CenteredGalaxyDecoder(slen, latent_dim, n_bands)
+        self.enc = CenteredGalaxyEncoder(**cfg.model.params)
+        self.dec = CenteredGalaxyDecoder(**cfg.model.params)
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
@@ -168,16 +130,12 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     @staticmethod
     def get_loss(image, recon_mean, recon_var, kl_z):
+        # return ELBO
         # NOTE: image includes background.
-
-        # -log p(x | z), dimensions: torch.Size([ nsamples, n_bands, slen, slen])
-        # assuming covariance is diagonal.
+        # Covariance is diagonal in latent variables.
+        # recon_loss = -log p(x | z), shape: torch.Size([ nsamples, n_bands, slen, slen])
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
-
-        # image.size(0) = n_samples.
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
-
-        # ELBO
         loss = (recon_losses + kl_z).sum()
 
         return loss
@@ -187,19 +145,17 @@ class OneCenteredGalaxy(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        return Adam(
-            [{"params": self.parameters(), "lr": self.lr}],
-            weight_decay=self.weight_decay,
-        )
+        params = self.hparams.optimizer.params
+        return Adam(self.parameters(), **params)
 
     # ---------------
     # Training
     # ----------------
 
     def training_step(self, batch, batch_idx):
-        image, background = batch["images"], batch["background"]
-        recon_mean, recon_var, kl_z = self(image, background)
-        loss = self.get_loss(image, recon_mean, recon_var, kl_z)
+        images, background = batch["images"], batch["background"]
+        recon_mean, recon_var, kl_z = self(images, background)
+        loss = self.get_loss(images, recon_mean, recon_var, kl_z)
         self.log("train_loss", loss)
         return loss
 
@@ -208,31 +164,28 @@ class OneCenteredGalaxy(pl.LightningModule):
     # ----------------
 
     def validation_step(self, batch, batch_idx):
-        image, background = batch["images"], batch["background"]
-        recon_mean, recon_var, kl_z = self(image, background)
-        loss = self.get_loss(image, recon_mean, recon_var, kl_z)
+        images, background = batch["images"], batch["background"]
+        recon_mean, recon_var, kl_z = self(images, background)
+        loss = self.get_loss(images, recon_mean, recon_var, kl_z)
         self.log("validation_loss", loss)
-        return {"images": image, "recon_mean": recon_mean, "recon_var": recon_var}
+        return {"images": images, "recon_mean": recon_mean, "recon_var": recon_var}
 
     def validation_epoch_end(self, outputs):
-        # save images to tensorboard
-
-        # get first 10 images, reconstruction means, variances. Add them as a grid.
         images = outputs[-1]["images"][:5]
         recon_mean = outputs[-1]["recon_mean"][:5]
         recon_var = outputs[-1]["recon_var"][:5]
-
         fig = self.plot_reconstruction(images, recon_mean, recon_var)
-
         if self.logger:
             self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
 
     def plot_reconstruction(self, images, recon_mean, recon_var):
+        # only plot i band if available, otherwise the highest band given.
         assert images.size(0) >= 5
+        assert self.enc.n_bands == self.dec.n_bands
+        n_bands = self.enc.n_bands
         num_examples = 5
         num_cols = 4
-        # only i band if available, otherwise the highest band.
-        band_idx = min(2, self.n_bands - 1)
+        band_idx = min(2, n_bands - 1)
         residuals = (images - recon_mean) / torch.sqrt(images)
         plt.ioff()
 

@@ -12,13 +12,14 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 import torch
 
 from bliss import use_cuda, sleep
-from bliss.datasets import simulated
+from bliss.datasets import simulated, catsim
+from bliss.models import galaxy_net
 
 # compatible datasets and models.
-_datasets = [simulated.SimulatedDataset]
+_datasets = [simulated.SimulatedDataset, catsim.CatsimGalaxies]
 datasets = {cls.__name__: cls for cls in _datasets}
 
-_models = [sleep.SleepPhase]
+_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxy]
 models = {cls.__name__: cls for cls in _models}
 
 

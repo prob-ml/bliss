@@ -7,6 +7,8 @@ import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SubsetRandomSampler
 from omegaconf import DictConfig
 
+n_bands_dict = {1: ("i",), 6: ("y", "z", "i", "r", "g", "u")}
+
 
 def get_pixel_scale(survey_name):
     return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
@@ -22,27 +24,24 @@ class SurveyObs(object):
         where images are written to by iso_render_engine.render_galaxy.
         """
         self.pixel_scale = renderer.pixel_scale
-        self.bands = renderer.bands
-        self.survey_name = renderer.survey_name
-        self.image_size = renderer.image_size
         self.dtype = renderer.dtype
 
         obs = []
-        for band in self.bands:
+        for band in renderer.bands:
             # dictionary of default values.
             survey_dict = descwl.survey.Survey.get_defaults(
-                survey_name=self.survey_name, filter_band=band
+                survey_name=renderer.survey_name, filter_band=band
             )
 
             assert (
-                self.pixel_scale == survey_dict["pixel_scale"]
+                renderer.pixel_scale == survey_dict["pixel_scale"]
             ), "Pixel scale does not match particular band?"
-            survey_dict["image_width"] = self.image_size  # pixels
-            survey_dict["image_height"] = self.image_size
+            survey_dict["image_width"] = renderer.slen  # pixels
+            survey_dict["image_height"] = renderer.slen
 
             descwl_survey = descwl.survey.Survey(
                 no_analysis=True,
-                survey_name=self.survey_name,
+                survey_name=renderer.survey_name,
                 filter_band=band,
                 **survey_dict,
             )
@@ -56,7 +55,9 @@ class SurveyObs(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         for single_obs in self.obs:
             single_obs.image = galsim.Image(
-                bounds=single_obs.image_bounds, scale=self.pixel_scale, dtype=self.dtype
+                bounds=single_obs.image_bounds,
+                scale=self.pixel_scale,
+                dtype=self.dtype,
             )
 
 
@@ -64,7 +65,7 @@ class CatsimRenderer(object):
     def __init__(
         self,
         survey_name="LSST",
-        bands=("i",),
+        n_bands=1,
         slen=41,
         snr=200,
         min_snr=0.05,
@@ -83,33 +84,35 @@ class CatsimRenderer(object):
         """
         # ToDo: Create a test/assertion to check that mean == variance approx.
         assert survey_name == "LSST", "Only using default survey name for now is LSST."
-        assert len(bands) in [1, 6], "Only 1 or 6 bands are supported."
+        assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
         assert add_noise, "Are you sure?"
         assert slen >= 51, "Galaxies won't fit."
         assert slen % 2 == 1, "Odd number of pixels is preferred."
         assert preserve_flux is False, "Otherwise variance of the noise will change."
 
-        self.slen = slen
         self.survey_name = survey_name
+        self.n_bands = n_bands
+        self.bands = n_bands_dict[n_bands]
+
+        self.slen = slen
         self.pixel_scale = get_pixel_scale(self.survey_name)
-        self.stamp_size = self.pixel_scale * self.slen  # arcseconds
-        self.bands = bands
-        self.n_bands = len(self.bands)
-        self.image_size = int(self.stamp_size / self.pixel_scale)  # pixels.
+        stamp_size = self.pixel_scale * self.slen  # arcseconds
+        self.slen = int(stamp_size / self.pixel_scale)  # pixels.
+
         self.snr = snr
         self.min_snr = min_snr
         self.truncate_radius = truncate_radius
+
         self.add_noise = add_noise
-        self.preserve_flux = preserve_flux  # when changing SNR.
         self.deviate_center = deviate_center
+        self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
         self.dtype = dtype
+
         self.background = self.get_background()
 
     def get_background(self):
-        background = np.zeros(
-            (self.n_bands, self.image_size, self.image_size), dtype=self.dtype
-        )
+        background = np.zeros((self.n_bands, self.slen, self.slen), dtype=self.dtype)
 
         with SurveyObs(self) as obs:
             for i, single_obs in enumerate(obs):
@@ -131,9 +134,7 @@ class CatsimRenderer(object):
         * The final image includes its background based on survey's sky level.
         * If deviate_center==True, then galaxy not aligned between bands.
         """
-        image = np.zeros(
-            (self.n_bands, self.image_size, self.image_size), dtype=self.dtype
-        )
+        image = np.zeros((self.n_bands, self.slen, self.slen), dtype=self.dtype)
 
         with SurveyObs(self) as obs:
             for i, band in enumerate(self.bands):
@@ -180,7 +181,7 @@ class CatsimRenderer(object):
                 print("Source not visible")
             raise descwl.render.SourceNotVisible  # pass it on with a warning.
 
-        image_temp = galsim.Image(self.image_size, self.image_size)
+        image_temp = galsim.Image(self.slen, self.slen)
         image_temp += single_obs.image
 
         if self.add_noise:
