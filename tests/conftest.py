@@ -68,17 +68,21 @@ class DeviceSetup:
             torch.cuda.set_device(self.device)
 
 
+def get_cfg(overrides, devices):
+    assert "model" in overrides
+    overrides = [f"{key}={value}" for key, value in overrides.items()]
+    with initialize(config_path="../config"):
+        cfg = compose("config", overrides=overrides)
+        cfg.training.trainer.update({"gpus": devices.gpus})
+    return cfg
+
+
 class SleepSetup:
     def __init__(self, devices):
         self.devices = devices
 
     def get_cfg(self, overrides):
-        assert "model" in overrides
-        overrides = [f"{key}={value}" for key, value in overrides.items()]
-        with initialize(config_path="../config"):
-            cfg = compose("config", overrides=overrides)
-            cfg.training.trainer.update({"gpus": self.devices.gpus})
-        return cfg
+        return get_cfg(overrides, self.devices)
 
     def get_dataset(self, overrides):
         cfg = self.get_cfg(overrides)
@@ -104,6 +108,14 @@ class SleepSetup:
         test_module = self.get_dataset(overrides)
         trainer = self.get_trainer(overrides)
         return trainer.test(sleep_net, datamodule=test_module)[0]
+
+
+class GalaxyVAE:
+    def __init__(self):
+        self.devices = devices
+
+    def get_cfg(self, overrides):
+        return get_cfg(overrides, self.devices)
 
 
 # available fixtures provided globally for all tests.

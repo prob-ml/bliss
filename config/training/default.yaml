@@ -3,6 +3,7 @@ deterministic: False
 plotting: True
 n_epochs: 121
 trainer:
+  limit_train_batches: 1.0
   profiler: False
   logger: True
   checkpoint_callback: False

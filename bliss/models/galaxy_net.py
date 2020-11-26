@@ -12,7 +12,7 @@ plt.switch_backend("Agg")
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=51, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=41, latent_dim=8, n_bands=1, hidden=256):
         super(CenteredGalaxyEncoder, self).__init__()
 
         self.slen = slen
@@ -50,7 +50,7 @@ class CenteredGalaxyEncoder(nn.Module):
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=51, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=41, latent_dim=8, n_bands=1, hidden=256):
         super(CenteredGalaxyDecoder, self).__init__()
 
         self.slen = slen

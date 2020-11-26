@@ -86,7 +86,7 @@ class CatsimRenderer(object):
         assert survey_name == "LSST", "Only using default survey name for now is LSST."
         assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
         assert add_noise, "Are you sure?"
-        assert slen >= 51, "Galaxies won't fit."
+        assert slen >= 41, "Galaxies won't fit."
         assert slen % 2 == 1, "Odd number of pixels is preferred."
         assert preserve_flux is False, "Otherwise variance of the noise will change."
 
@@ -276,26 +276,31 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
 
 
 class SavedCatsim(pl.LightningDataModule, Dataset):
-    def __init__(
-        self, filepath="catsim.pt", batch_size=32, num_workers=4, tt_split=0.1
-    ):
+    def __init__(self, cfg):
         super(SavedCatsim, self).__init__()
-        self.data = torch.load(filepath)
-        self.background = self.data.pop("background")
+        params = cfg.dataset.params
+        self.data = torch.load(params.filepath)
+        self.images = self.data["images"]
+        assert isinstance(self.images, torch.Tensor)
+        assert len(self.images.shape) == 4
 
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.tt_split = tt_split
+        background = self.data.pop("background")
+        assert len(background.shape) == 4
+        self.background = background[0]
+
+        self.batch_size = params.batch_size
+        self.num_workers = params.num_workers
+        self.tt_split = params.tt_split
 
     def __getitem__(self, idx):
-        return {"images": self.data["images"][idx], "background": self.background}
+        return {"images": self.images[idx], "background": self.background}
 
     def __len__(self):
-        return len(self.data)
+        return len(self.images)
 
     def train_dataloader(self):
-        split = len(self) * self.tt_split
-        train_indices = np.arange(split, len(self))
+        split = int(len(self) * self.tt_split)
+        train_indices = np.arange(split, len(self), dtype=int)
         return DataLoader(
             self,
             batch_size=self.batch_size,
@@ -305,12 +310,13 @@ class SavedCatsim(pl.LightningDataModule, Dataset):
         )
 
     def val_dataloader(self):
-
-        test_indices = np.arange(len(self) * self.tt_split)
+        split = int(len(self) * self.tt_split)
+        test_indices = np.arange(split, dtype=int)
         return DataLoader(
             self,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
+            shuffle=False,
             sampler=SubsetRandomSampler(test_indices),
         )
