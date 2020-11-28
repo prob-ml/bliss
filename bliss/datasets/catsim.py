@@ -1,17 +1,12 @@
 import numpy as np
 import torch
-import galsim
-import descwl
 from astropy.table import Table
 import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SubsetRandomSampler
 from omegaconf import DictConfig
 
+
 n_bands_dict = {1: ("i",), 6: ("y", "z", "i", "r", "g", "u")}
-
-
-def get_pixel_scale(survey_name):
-    return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
 
 
 def filter_bounds(cat, param, min_val=-np.inf, max_val=np.inf):
@@ -23,6 +18,8 @@ class SurveyObs(object):
         """Returns a list of :class:`Survey` objects, each of them has an image attribute which is
         where images are written to by iso_render_engine.render_galaxy.
         """
+        import descwl
+
         self.pixel_scale = renderer.pixel_scale
         self.dtype = renderer.dtype
 
@@ -53,6 +50,8 @@ class SurveyObs(object):
         return self.obs
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        import galsim
+
         for single_obs in self.obs:
             single_obs.image = galsim.Image(
                 bounds=single_obs.image_bounds,
@@ -95,7 +94,7 @@ class CatsimRenderer(object):
         self.bands = n_bands_dict[n_bands]
 
         self.slen = slen
-        self.pixel_scale = get_pixel_scale(self.survey_name)
+        self.pixel_scale = self.get_pixel_scale(self.survey_name)
         stamp_size = self.pixel_scale * self.slen  # arcseconds
         self.slen = int(stamp_size / self.pixel_scale)  # pixels.
 
@@ -146,6 +145,8 @@ class CatsimRenderer(object):
 
     def single_band(self, entry, single_obs, band):
         """Builds galaxy from a single entry in the catalog. With no background sky level added."""
+        import descwl
+        import galsim
 
         galaxy_builder = descwl.model.GalaxyBuilder(
             single_obs, no_disk=False, no_bulge=False, no_agn=False, verbose_model=False
@@ -203,7 +204,14 @@ class CatsimRenderer(object):
 
         return image_temp.array
 
+    @staticmethod
+    def get_pixel_scale(survey_name):
+        import descwl
 
+        return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
+
+
+# TODO: Make this Dataset/Renderer faster, still can't do on the fly.
 class CatsimGalaxies(pl.LightningDataModule, Dataset):
     def __init__(self, cfg: DictConfig):
         """This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)
@@ -245,6 +253,7 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
         return len(self.cat)
 
     def __getitem__(self, idx):
+        import descwl
 
         while True:  # loop until visible galaxy is selected.
             try:

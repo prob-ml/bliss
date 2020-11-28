@@ -11,7 +11,7 @@ class TestGalaxyVAE:
     @pytest.fixture(scope="class")
     def trained_galaxy_vae(self, paths, devices):
         use_cuda = devices.use_cuda
-        h5_file = paths["data"].joinpath("catsim_single_galaxies.hdf5")
+        h5_file = paths["data"].joinpath("catsim_images.pt")
         dataset = galaxy_datasets.H5Catalog(h5_file, slen=51, n_bands=1)
         n_epochs = 100 if use_cuda else 1
         check_val_every_n_epoch = 50 if use_cuda else 1

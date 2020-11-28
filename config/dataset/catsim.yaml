@@ -1,9 +1,9 @@
 # @package _group_
 name: "CatsimGalaxies"
 catalog_file: ${paths.root}/data/OneDegSq.fits
-n_batches: 100
-batch_size: 500
-num_workers: 10
+n_batches: 20
+batch_size: 64
+num_workers: 16
 renderer:
   survey_name: "LSST"
   slen: 51
