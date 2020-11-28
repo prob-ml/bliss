@@ -1,5 +1,4 @@
 # @package _group_
-num_workers: 0
 deterministic: False
 plotting: False
 n_epochs: 151
@@ -8,7 +7,9 @@ trainer:
   logger: False
   checkpoint_callback: False
   reload_dataloaders_every_epoch: False
-  check_val_every_n_epoch: 1001
   max_epochs: ${training.n_epochs}
   min_epochs: ${training.n_epochs}
   gpus: ${gpus}
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+  check_val_every_n_epoch: 1001

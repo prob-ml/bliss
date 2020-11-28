@@ -1,5 +1,0 @@
-# @package _group_
-name: OneCenteredGalaxy
-slen: 51
-latent_dim: 8
-n_bands: 1
