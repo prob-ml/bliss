@@ -124,7 +124,7 @@ class GalaxySetup:
         galaxy_vae = galaxy_net.OneCenteredGalaxy(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
         trainer.fit(galaxy_vae, datamodule=dataset)
-        return galaxy_vae.to(devices.device)
+        return galaxy_vae.to(self.devices.device)
 
 
 # available fixtures provided globally for all tests.
