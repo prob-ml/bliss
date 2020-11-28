@@ -3,7 +3,7 @@ deterministic: False
 plotting: False
 n_epochs: 1
 trainer:
-  profiler: False
+  profiler: null
   logger: False
   checkpoint_callback: False
   reload_dataloaders_every_epoch: False
