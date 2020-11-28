@@ -5,7 +5,8 @@ import pytorch_lightning as pl
 from hydra.experimental import initialize, compose
 
 from bliss import sleep
-from bliss.datasets import simulated
+from bliss.datasets import simulated, catsim
+from bliss.models import galaxy_net
 
 
 # command line arguments for tests
@@ -110,12 +111,20 @@ class SleepSetup:
         return trainer.test(sleep_net, datamodule=test_module)[0]
 
 
-class GalaxyVAE:
-    def __init__(self):
+class GalaxySetup:
+    def __init__(self, devices):
         self.devices = devices
 
     def get_cfg(self, overrides):
         return get_cfg(overrides, self.devices)
+
+    def get_trained_vae(self, overrides):
+        cfg = self.get_cfg(overrides)
+        dataset = catsim.SavedCatsim(cfg)
+        galaxy_vae = galaxy_net.OneCenteredGalaxy(cfg)
+        trainer = pl.Trainer(**cfg.training.trainer)
+        trainer.fit(galaxy_vae, datamodule=dataset)
+        return galaxy_vae.to(devices.device)
 
 
 # available fixtures provided globally for all tests.
@@ -137,3 +146,8 @@ def devices(pytestconfig):
 @pytest.fixture(scope="session")
 def sleep_setup(devices):
     return SleepSetup(devices)
+
+
+@pytest.fixture(scope="session")
+def galaxy_setup(devices):
+    return GalaxySetup(devices)
