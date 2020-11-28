@@ -1,11 +1,8 @@
+astropy
+matplotlib
 numpy
 scipy
-astropy
 torch>=1.7.0
-h5py==2.10.0
-matplotlib
-pytorch-lightning==1.0.2
-pillow
-optuna
+pytorch-lightning>=1.0.8
 omegaconf
 hydra-core
