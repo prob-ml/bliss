@@ -1,5 +1,4 @@
 # @package _group_
-num_workers: 0
 deterministic: False
 seed: 42
 plotting: False

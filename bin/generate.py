@@ -6,10 +6,13 @@ import matplotlib.pyplot as plt
 from omegaconf import DictConfig
 from pathlib import Path
 
-from bliss.datasets import simulated
+from bliss.datasets import simulated, catsim
 from bliss import plotting
 
-datasets = {"SimulatedDataset": simulated.SimulatedDataset}
+datasets = {
+    "SimulatedDataset": simulated.SimulatedDataset,
+    "CatsimGalaxies": catsim.CatsimGalaxies,
+}
 
 
 def visualize(batch, path, n_samples, figsize=(12, 12)):
@@ -43,7 +46,7 @@ def main(cfg: DictConfig):
 
     # get batches and combine them
     fbatch = dict()
-    for batch in dataset.batch_generator():
+    for batch in dataset.train_dataloader():
         if not bool(fbatch):  # dict is empty
             fbatch = batch
         else:
