@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7]
+        python-version: [3.8]
 
     steps:
 
@@ -39,6 +39,7 @@ jobs:
         python -m ensurepip
         python -m pip install --upgrade pip
         python -m pip install .
+
     - name: Configure poetry
       shell: bash
       run: python -m poetry config virtualenvs.in-project true
