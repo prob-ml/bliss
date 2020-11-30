@@ -33,37 +33,22 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Bootstrap poetry
-      shell: bash
-      run: |
-        python -m ensurepip
-        python -m pip install --upgrade pip
-        python -m pip install .
-
-    - name: Configure poetry
-      shell: bash
-      run: python -m poetry config virtualenvs.in-project true
-
-    - name: Set up Poetry
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
-
     - name: Create environment variables
       run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
-    - name: Install dependencies
-      shell: bash
-      run: python -m poetry install
+    - name: Install Poetry
+      run: |
+        pip install --upgrade pip
+        pip install "poetry >=1.1.4, <2.0.0"
 
-    - name: Run pytest
-      shell: bash
-      run: python -m poetry run python -m pytest -v tests
+    - name: Install dependencies
+      run: |
+        poetry install
 
     - name: Run Tests
       run: |
-        black --check .
-        pytest --cov=./bliss --cov-report=xml --durations=0 --runslow
+        poetry run black --check .
+        poetry run pytest --cov=./bliss --cov-report=xml --durations=0 --runslow
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
