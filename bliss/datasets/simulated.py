@@ -56,13 +56,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return batch
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=None)
+        return DataLoader(self, batch_size=None, num_workers=0)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=None)
+        return DataLoader(self, batch_size=None, num_workers=0)
 
     def test_dataloader(self):
-        dl = DataLoader(self, batch_size=None)
+        dl = DataLoader(self, batch_size=None, num_workers=0)
 
         if self.cfg.testing.file is not None:
             test_dataset = BlissDataset(self.cfg.testing.file)
