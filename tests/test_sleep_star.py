@@ -28,6 +28,7 @@ class TestSleepStarOneTile:
         assert results["locs_median_mse"] < 0.5
         assert results["fluxes_avg_err"] < 0.5
 
+
 class TestSleepStarTiles:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
