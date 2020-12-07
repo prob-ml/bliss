@@ -308,7 +308,12 @@ class SleepPhase(pl.LightningModule):
         self.log("val_gal_params_loss", galaxy_params_loss.mean())
 
         # calculate metrics for this batch
-        counts_acc, galaxy_counts_acc, locs_median_mse, fluxes_avg_err = self.get_metrics(batch)
+        (
+            counts_acc,
+            galaxy_counts_acc,
+            locs_median_mse,
+            fluxes_avg_err,
+        ) = self.get_metrics(batch)
         self.log("val_acc_counts", counts_acc)
         self.log("val_gal_counts", galaxy_counts_acc)
         self.log("val_locs_median_mse", locs_median_mse)
@@ -321,12 +326,17 @@ class SleepPhase(pl.LightningModule):
             self.make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_indx):
-        counts_acc, galaxy_counts_acc, locs_median_mse, fluxes_avg_err = self.get_metrics(batch)
+        (
+            counts_acc,
+            galaxy_counts_acc,
+            locs_median_mse,
+            fluxes_avg_err,
+        ) = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
         self.log("locs_median_mse", locs_median_mse)
         self.log("fluxes_avg_err", fluxes_avg_err)
-        
+
         return batch
 
     def test_epoch_end(self, outputs):
@@ -339,7 +349,7 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
-        nbands = batch['images'].shape[1]
+        nbands = batch["images"].shape[1]
         batch_size = images.shape[0]
         true_params = {k: v for k, v in batch.items() if k not in exclude}
 
@@ -360,7 +370,7 @@ class SleepPhase(pl.LightningModule):
         # accuracy of locations
         est_locs = estimates["locs"]
         true_locs = true_params["locs"]
-        
+
         # accuracy of fluxes
         est_fluxes = estimates["fluxes"]
         true_fluxes = true_params["fluxes"]
@@ -387,31 +397,31 @@ class SleepPhase(pl.LightningModule):
                 locs_mse = (true_locs_i - locs_i).pow(2).sum(1).pow(1.0 / 2)
                 for mse in locs_mse:
                     locs_mse_vec.append(mse.item())
-                    
+
                 # do the same for fluxes
                 true_fluxes_i = true_fluxes[i].view(-1, nbands)
-                true_fluxes_i = true_fluxes_i[: int(true_n_sources_i)] 
-                fluxes_i = est_fluxes[i].view(-1, nbands)[: int(n_sources_i)]                 
-                
-                # sort the same way we did locations 
+                true_fluxes_i = true_fluxes_i[: int(true_n_sources_i)]
+                fluxes_i = est_fluxes[i].view(-1, nbands)[: int(n_sources_i)]
+
+                # sort the same way we did locations
                 true_fluxes_i = true_fluxes_i[indx_sort_true]
                 fluxes_i = fluxes_i[indx_sort_true]
-                
+
                 # convert to magnitude and compute error
                 true_mags_i = torch.log10(true_fluxes_i) * 2.5
                 log_mags_i = torch.log10(fluxes_i) * 2.5
                 fluxes_mse = torch.abs(true_mags_i - log_mags_i).mean(1)
                 for mse in fluxes_mse:
                     fluxes_mse_vec.append(mse.item())
-                
+
         # TODO: default value? Also not sure how to accumulate medians so we are actually taking an
         #  average over the medians across batches.
         locs_median_mse = 0.5
         if len(locs_mse_vec) > 0:
             locs_median_mse = np.median(locs_mse_vec)
-        
+
         fluxes_avg_err = 1e16
-        if len(fluxes_mse_vec) > 0: 
+        if len(fluxes_mse_vec) > 0:
             fluxes_avg_err = np.mean(fluxes_mse_vec)
 
         return counts_acc, galaxy_counts_acc, locs_median_mse, fluxes_avg_err
