@@ -8,6 +8,7 @@ class TestSleepStarOneTile:
             model="sleep_star_one_tile",
             dataset="single_tile" if devices.use_cuda else "cpu",
             training="unittest" if devices.use_cuda else "cpu",
+            optimizer="m2",
         )
         return overrides
 
@@ -23,9 +24,9 @@ class TestSleepStarOneTile:
         if not devices.use_cuda:
             return
 
-        assert results["acc_counts"] > 0.8
-        assert results["locs_median_mse"] < 0.55
-
+        assert results["acc_counts"] > 0.9
+        assert results["locs_median_mse"] < 0.5
+        assert results["fluxes_avg_err"] < 0.5
 
 class TestSleepStarTiles:
     @pytest.fixture(scope="class")
@@ -51,6 +52,7 @@ class TestSleepStarTiles:
 
         assert results["acc_counts"] > 0.7
         assert results["locs_median_mse"] < 0.5
+        assert results["fluxes_avg_err"] < 0.5
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
         test_file = paths["data"].joinpath("star_test1.pt").as_posix()
@@ -63,3 +65,4 @@ class TestSleepStarTiles:
 
         assert results["acc_counts"] > 0.7
         assert results["locs_median_mse"] < 0.5
+        assert results["fluxes_avg_err"] < 0.5

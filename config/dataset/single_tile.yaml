@@ -2,5 +2,5 @@
 name: SimulatedDataset
 params:
   n_batches: 10
-  batch_size: 64
+  batch_size: 6400
   num_workers: 0
