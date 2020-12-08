@@ -21,7 +21,7 @@ def sort_locs(locs):
     # sort according to x location
     assert len(locs.shape) == 2
     indx_sort = locs[:, 0].sort()[1]
-    return locs[indx_sort, :]
+    return locs[indx_sort, :], indx_sort
 
 
 def _get_log_probs_all_perms(
@@ -308,10 +308,16 @@ class SleepPhase(pl.LightningModule):
         self.log("val_gal_params_loss", galaxy_params_loss.mean())
 
         # calculate metrics for this batch
-        counts_acc, galaxy_counts_acc, locs_median_mse = self.get_metrics(batch)
+        (
+            counts_acc,
+            galaxy_counts_acc,
+            locs_median_mse,
+            fluxes_avg_err,
+        ) = self.get_metrics(batch)
         self.log("val_acc_counts", counts_acc)
         self.log("val_gal_counts", galaxy_counts_acc)
         self.log("val_locs_median_mse", locs_median_mse)
+        self.log("val_fluxes_avg_err", fluxes_avg_err)
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -320,10 +326,17 @@ class SleepPhase(pl.LightningModule):
             self.make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_indx):
-        counts_acc, galaxy_counts_acc, locs_median_mse = self.get_metrics(batch)
+        (
+            counts_acc,
+            galaxy_counts_acc,
+            locs_median_mse,
+            fluxes_avg_err,
+        ) = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
         self.log("locs_median_mse", locs_median_mse)
+        self.log("fluxes_avg_err", fluxes_avg_err)
+
         return batch
 
     def test_epoch_end(self, outputs):
@@ -336,6 +349,7 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
+        nbands = batch["images"].shape[1]
         batch_size = images.shape[0]
         true_params = {k: v for k, v in batch.items() if k not in exclude}
 
@@ -357,7 +371,12 @@ class SleepPhase(pl.LightningModule):
         est_locs = estimates["locs"]
         true_locs = true_params["locs"]
 
-        mses = []
+        # accuracy of fluxes
+        est_fluxes = estimates["fluxes"]
+        true_fluxes = true_params["fluxes"]
+
+        locs_mse_vec = []
+        fluxes_mse_vec = []
         for i in range(batch_size):
             true_n_sources_i = true_params["n_sources"][i]
             n_sources_i = estimates["n_sources"][i]
@@ -371,21 +390,41 @@ class SleepPhase(pl.LightningModule):
                 locs_i = est_locs[i].view(-1, 2)[: int(n_sources_i)] * slen
 
                 # sort each based on x location.
-                true_locs_i = sort_locs(true_locs_i)
-                locs_i = sort_locs(locs_i)
+                true_locs_i, indx_sort_true = sort_locs(true_locs_i)
+                locs_i, indx_sort = sort_locs(locs_i)
 
                 # now calculate mse
                 locs_mse = (true_locs_i - locs_i).pow(2).sum(1).pow(1.0 / 2)
                 for mse in locs_mse:
-                    mses.append(mse.item())
+                    locs_mse_vec.append(mse.item())
+
+                # do the same for fluxes
+                true_fluxes_i = true_fluxes[i].view(-1, nbands)
+                true_fluxes_i = true_fluxes_i[: int(true_n_sources_i)]
+                fluxes_i = est_fluxes[i].view(-1, nbands)[: int(n_sources_i)]
+
+                # sort the same way we did locations
+                true_fluxes_i = true_fluxes_i[indx_sort_true]
+                fluxes_i = fluxes_i[indx_sort_true]
+
+                # convert to magnitude and compute error
+                true_mags_i = torch.log10(true_fluxes_i) * 2.5
+                log_mags_i = torch.log10(fluxes_i) * 2.5
+                fluxes_mse = torch.abs(true_mags_i - log_mags_i).mean(1)
+                for mse in fluxes_mse:
+                    fluxes_mse_vec.append(mse.item())
 
         # TODO: default value? Also not sure how to accumulate medians so we are actually taking an
         #  average over the medians across batches.
         locs_median_mse = 0.5
-        if len(mses) > 0:
-            locs_median_mse = np.median(mses)
+        if len(locs_mse_vec) > 0:
+            locs_median_mse = np.median(locs_mse_vec)
 
-        return counts_acc, galaxy_counts_acc, locs_median_mse
+        fluxes_avg_err = 1e16
+        if len(fluxes_mse_vec) > 0:
+            fluxes_avg_err = np.mean(fluxes_mse_vec)
+
+        return counts_acc, galaxy_counts_acc, locs_median_mse, fluxes_avg_err
 
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
