@@ -51,35 +51,41 @@ class WakeNet(pl.LightningModule):
         star_encoder,
         image_decoder,
         observed_img,
-        init_background_params,
+        init_background_values,
         hparams,
-        pad=0,
     ):
         super(WakeNet, self).__init__()
 
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder
         self.image_decoder.requires_grad_(True)
-
+        
+        self.slen = image_decoder.slen 
+        self.border_padding = image_decoder.border_padding 
+        
         # observed image is batch_size (or 1) x n_bands x slen x slen
+        self.slen_plus_padding = self.slen + 2 * self.border_padding
         assert len(observed_img.shape) == 4
+        assert observed_img.shape[-1] == self.slen_plus_padding, "cached grid won't match."
+        
         self.observed_img = observed_img
-        self.pad = pad
 
         # hyper-parameters
         self.hparams = hparams
         self.n_samples = self.hparams["n_samples"]
         self.lr = self.hparams["lr"]
         self.slen = observed_img.shape[-1]
-        assert self.image_decoder.slen == self.slen, "cached grid won't match."
 
         # get n_bands
         self.n_bands = self.image_decoder.n_bands
 
         # set up initial background parameters
-        assert init_background_params.shape[0] == self.n_bands
-        self.init_background_params = init_background_params
-        self.planar_background = PlanarBackground(init_background_params, self.slen)
+        assert len(init_background_values) == self.n_bands
+        init_background_params = torch.zeros(self.n_bands, 3)
+        for i in range(self.n_bands):
+            init_background_params[i, 0] = init_background_values[i]
+            
+        self.planar_background = PlanarBackground(init_background_params, self.slen_plus_padding)
 
     def forward(self, obs_img):
 
@@ -88,15 +94,16 @@ class WakeNet(pl.LightningModule):
             sample = self.star_encoder.sample_encoder(obs_img, self.n_samples)
 
         background = self.planar_background.forward().unsqueeze(0).detach()
-        stars = self.image_decoder.render_images(
-            sample["n_sources"],
-            sample["locs"],
-            sample["galaxy_bool"],
-            sample["galaxy_params"],
-            sample["fluxes"],
+        sources = self.image_decoder.render_images(
+            sample["n_sources"].contiguous(),
+            sample["locs"].contiguous(),
+            sample["galaxy_bool"].contiguous(),
+            sample["galaxy_params"].contiguous(),
+            sample["fluxes"].contiguous(),
+            add_noise = False
         )
 
-        recon_mean = stars + background
+        recon_mean = sources + background
 
         return recon_mean
 
@@ -126,8 +133,8 @@ class WakeNet(pl.LightningModule):
         recon_mean = self.forward(img)
         error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
-        last = self.slen - self.pad
-        loss = error[:, :, self.pad : last, self.pad : last].sum((1, 2, 3)).mean()
+        last = self.slen - self.border_padding
+        loss = error[:, :, self.border_padding : last, self.border_padding : last].sum((1, 2, 3)).mean()
         return loss
 
     def training_step(self, batch, batch_idx):
