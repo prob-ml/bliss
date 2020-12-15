@@ -11,7 +11,7 @@ import pytorch_lightning as pl
 
 from copy import deepcopy
 
-class TestSleepStarTiles:
+class TestWake:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
         overrides = dict(
@@ -32,6 +32,7 @@ class TestSleepStarTiles:
         image_decoder = trained_sleep.image_decoder.to(device)
         
         # draw some catalogs from the prior
+        torch.manual_seed(23421)
         batch = trained_sleep.image_decoder.sample_prior(batch_size=100)
         
         # pick the catalog with the most stars. 
