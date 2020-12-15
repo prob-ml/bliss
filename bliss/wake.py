@@ -55,7 +55,7 @@ class WakeNet(pl.LightningModule):
         with torch.no_grad():
             self.star_encoder.eval()
             sample = self.star_encoder.sample_encoder(obs_img, self.n_samples)
-
+        
         recon_mean = self.image_decoder.render_images(
             sample["n_sources"].contiguous(),
             sample["locs"].contiguous(),

@@ -31,11 +31,11 @@ class TestSleepStarTiles:
         # the original decoder
         image_decoder = trained_sleep.image_decoder.to(device)
         
-        # draw a bunch of catalogs from the prior
+        # draw some catalogs from the prior
         batch = trained_sleep.image_decoder.sample_prior(batch_size=100)
         
         # pick the catalog with the most stars. 
-        # we will use this image
+        # we will use this to construct an image
         which_batch = batch['n_sources'].sum(1).argmax()
         batch_i = dict()
         for key in batch.keys(): 
@@ -56,6 +56,7 @@ class TestSleepStarTiles:
         image_decoder_perturbed.params = nn.Parameter(psf_params_perturbed)
         
         def eval_decoder_loss(image_decoder): 
+            # evaluate loss of a decoder at the **true** catalog
             recon = image_decoder.render_images(batch_i['n_sources'], 
                                                batch_i['locs'], 
                                                batch_i['galaxy_bool'] * 0., 
@@ -67,31 +68,41 @@ class TestSleepStarTiles:
         
         # loss of true decoder
         target_loss = eval_decoder_loss(image_decoder)
-        
+
         # loss of perurbed decoder
         init_loss = eval_decoder_loss(image_decoder_perturbed)
         
-        # define wake-phase
+        print('LOOOOOOOOOOOO')
+        print(target_loss)
+        print(init_loss)
+        
+        # define wake-phase and train starting from the perturbed decoder
         wake_net = wake.WakeNet(trained_sleep.image_encoder,
-                           deepcopy(image_decoder_perturbed),
-                           obs_image,
-                           torch.Tensor([686.]),
-                           hparams = dict({'lr':1e-5, 
-                                           'n_samples':2000}));
+                                image_decoder_perturbed,
+                                obs_image,
+                                torch.Tensor([686.]),
+                                hparams = dict({'lr':1e-5, 
+                                           'n_samples':3000}));
         wake_net.to(device);
         
-        # train: 
         n_epochs = 3000 if torch.cuda.is_available() else 2
         wake_trainer = pl.Trainer(check_val_every_n_epoch = 10000, 
                                      max_epochs = n_epochs, 
                                      min_epochs = n_epochs)
         
         wake_trainer.fit(wake_net)
+        
+        # loss after training
         trained_loss = eval_decoder_loss(wake_net.image_decoder)
         
+        # check loss went down
         print(target_loss)
         print(init_loss)
         print(trained_loss)
+        diff0 = init_loss - trained_loss
+        diff1 = trained_loss - target_loss
+        assert diff1 < (diff0 * 0.5)
+        
         
         # now compare PSFs
         psf_true = image_decoder.forward().detach()
@@ -101,9 +112,11 @@ class TestSleepStarTiles:
         init_psf_mse = ((psf_fitted - psf_true)**2).mean()
         trained_psf_mse = ((psf_fitted - psf_true)**2).mean()
         
+        # check mse of psf improved
         print(init_psf_mse)
         print(trained_psf_mse)
-            
+        assert trained_psf_mse < (init_psf_mse * 0.5)
+        
 # def test_star_wake(sleep_setup, paths, devices):
 #     device = devices.device
 #     overrides = dict(model="sleep_star_one_tile", training="cpu", dataset="cpu")
