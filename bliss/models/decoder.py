@@ -64,7 +64,7 @@ class ImageDecoder(nn.Module):
         psf_params_file="psf_params.npy",
         background_values=(686.0, 1123.0),
         loc_min=0.0,
-        loc_max=1.0
+        loc_max=1.0,
     ):
         super(ImageDecoder, self).__init__()
 
@@ -601,7 +601,9 @@ class ImageDecoder(nn.Module):
             self.ptile_slen,
         )
 
-    def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True):
+    def render_images(
+        self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
+    ):
         # constructs the full slen x slen image
 
         # n_sources: is (batch_size x n_tiles_per_image)

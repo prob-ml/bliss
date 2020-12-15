@@ -30,15 +30,17 @@ class WakeNet(pl.LightningModule):
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder
         self.image_decoder.requires_grad_(True)
-        
-        self.slen = image_decoder.slen 
-        self.border_padding = image_decoder.border_padding 
-        
+
+        self.slen = image_decoder.slen
+        self.border_padding = image_decoder.border_padding
+
         # observed image is batch_size (or 1) x n_bands x slen x slen
         self.slen_plus_padding = self.slen + 2 * self.border_padding
         assert len(observed_img.shape) == 4
-        assert observed_img.shape[-1] == self.slen_plus_padding, "cached grid won't match."
-        
+        assert (
+            observed_img.shape[-1] == self.slen_plus_padding
+        ), "cached grid won't match."
+
         self.observed_img = observed_img
 
         # hyper-parameters
@@ -55,16 +57,16 @@ class WakeNet(pl.LightningModule):
         with torch.no_grad():
             self.star_encoder.eval()
             sample = self.star_encoder.sample_encoder(obs_img, self.n_samples)
-        
+
         recon_mean = self.image_decoder.render_images(
             sample["n_sources"].contiguous(),
             sample["locs"].contiguous(),
             sample["galaxy_bool"].contiguous(),
             sample["galaxy_params"].contiguous(),
             sample["fluxes"].contiguous(),
-            add_noise = False
+            add_noise=False,
         )
-        
+
         return recon_mean
 
     # ---------------
@@ -94,7 +96,11 @@ class WakeNet(pl.LightningModule):
         error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
         last = self.slen - self.border_padding
-        loss = error[:, :, self.border_padding : last, self.border_padding : last].sum((1, 2, 3)).mean()
+        loss = (
+            error[:, :, self.border_padding : last, self.border_padding : last]
+            .sum((1, 2, 3))
+            .mean()
+        )
         return loss
 
     def training_step(self, batch, batch_idx):
