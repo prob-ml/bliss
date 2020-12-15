@@ -71,18 +71,14 @@ class TestSleepStarTiles:
 
         # loss of perurbed decoder
         init_loss = eval_decoder_loss(image_decoder_perturbed)
-        
-        print('LOOOOOOOOOOOO')
-        print(target_loss)
-        print(init_loss)
-        
+                
         # define wake-phase and train starting from the perturbed decoder
         wake_net = wake.WakeNet(trained_sleep.image_encoder,
                                 image_decoder_perturbed,
                                 obs_image,
                                 torch.Tensor([686.]),
                                 hparams = dict({'lr':1e-5, 
-                                           'n_samples':3000}));
+                                           'n_samples':2000}));
         wake_net.to(device);
         
         n_epochs = 3000 if torch.cuda.is_available() else 2
