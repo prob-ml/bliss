@@ -54,6 +54,7 @@ class TestSleepStarTiles:
         true_psf_params = image_decoder.params
         psf_params_perturbed = true_psf_params * (1.1)
         image_decoder_perturbed.params = nn.Parameter(psf_params_perturbed)
+        psf_init = image_decoder_perturbed.forward().detach()
         
         def eval_decoder_loss(image_decoder): 
             # evaluate loss of a decoder at the **true** catalog
@@ -71,7 +72,8 @@ class TestSleepStarTiles:
 
         # loss of perurbed decoder
         init_loss = eval_decoder_loss(image_decoder_perturbed)
-                
+        assert (init_loss - target_loss) > 0
+        
         # define wake-phase and train starting from the perturbed decoder
         wake_net = wake.WakeNet(trained_sleep.image_encoder,
                                 image_decoder_perturbed,
@@ -95,23 +97,22 @@ class TestSleepStarTiles:
         print(target_loss)
         print(init_loss)
         print(trained_loss)
-        diff0 = init_loss - trained_loss
+        diff0 = init_loss - target_loss
         diff1 = trained_loss - target_loss
-        assert diff1 < (diff0 * 0.5)
+        assert diff1 < (diff0 * 0.75)
         
         
         # now compare PSFs
         psf_true = image_decoder.forward().detach()
-        psf_pert = image_decoder_perturbed.forward().detach()
         psf_fitted = wake_net.image_decoder.forward().detach()
         
-        init_psf_mse = ((psf_fitted - psf_true)**2).mean()
+        init_psf_mse = ((psf_init - psf_true)**2).mean()
         trained_psf_mse = ((psf_fitted - psf_true)**2).mean()
         
-        # check mse of psf improved
+        # check if mse of psf improved
         print(init_psf_mse)
         print(trained_psf_mse)
-        assert trained_psf_mse < (init_psf_mse * 0.5)
+        assert trained_psf_mse < (init_psf_mse * 0.75)
         
 # def test_star_wake(sleep_setup, paths, devices):
 #     device = devices.device
