@@ -34,20 +34,21 @@ class TestWake:
         batch = trained_sleep.image_decoder.sample_prior(batch_size=100)
 
         # pick the catalog with the most stars.
+        # this will be the ground truth catalog.
         # we will use this to construct an image
         which_batch = batch["n_sources"].sum(1).argmax()
-        batch_i = dict()
+        true_params = dict()
         for key in batch.keys():
             if key != "slen":
-                batch_i[key] = batch[key][which_batch : (which_batch + 1)]
+                true_params[key] = batch[key][which_batch : (which_batch + 1)]
 
-        # the "observed" image
+        # the observed image
         obs_image = image_decoder.render_images(
-            batch_i["n_sources"],
-            batch_i["locs"],
-            batch_i["galaxy_bool"],
-            batch_i["galaxy_params"],
-            batch_i["fluxes"],
+            true_params["n_sources"],
+            true_params["locs"],
+            true_params["galaxy_bool"],
+            true_params["galaxy_params"],
+            true_params["fluxes"],
         )
 
         # now perturb psf parameters and get new decoder
@@ -58,13 +59,13 @@ class TestWake:
         psf_init = image_decoder_perturbed.forward().detach()
 
         def eval_decoder_loss(image_decoder):
-            # evaluate loss of a decoder at the **true** catalog
+            # evaluate loss of a decoder at the true catalog
             recon = image_decoder.render_images(
-                batch_i["n_sources"],
-                batch_i["locs"],
-                batch_i["galaxy_bool"] * 0.0,
-                batch_i["galaxy_params"],
-                batch_i["fluxes"],
+                true_params["n_sources"],
+                true_params["locs"],
+                true_params["galaxy_bool"],
+                true_params["galaxy_params"],
+                true_params["fluxes"],
                 add_noise=False,
             )
             loss = -Normal(recon, recon.sqrt()).log_prob(obs_image).mean()
@@ -77,9 +78,14 @@ class TestWake:
         init_loss = eval_decoder_loss(image_decoder_perturbed)
         assert (init_loss - target_loss) > 0
 
-        # define wake-phase and train starting from the perturbed decoder
+        # the trained encoder:
+        # note that this encoder was trained using the
+        # "true" decoder (trained using image_decoder,
+        # not image_decoder_perturbed)
+        trained_encoder = trained_sleep.image_encoder
+
         wake_net = wake.WakeNet(
-            trained_sleep.image_encoder,
+            trained_encoder,
             image_decoder_perturbed,
             obs_image,
             image_decoder.background.mean((1, 2)),
