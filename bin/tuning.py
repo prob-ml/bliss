@@ -1,8 +1,6 @@
-import shutil
 import hydra
 from omegaconf import DictConfig
 
-import torch
 import logging
 import os
 import pytorch_lightning as pl
@@ -47,7 +45,7 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
         progress_bar_refresh_rate=0,
         callbacks=[
             TuneReportCallback(
-                {"loss": "val_loss"},
+                {"loss": "val_loss", "star_count_accuracy": "val_acc_counts"},
                 on="validation_end",
             )
         ],
@@ -69,13 +67,13 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
         "enc_conv_c": tune.grid_search([10, 15, 20, 25]),
         "enc_kern": tune.grid_search([3]),
         "enc_hidden": tune.grid_search([64, 128, 192, 256]),
-        "lr": tune.loguniform(1e-5, 1e-2),
-        "weight_decay": tune.loguniform(1e-6, 1e-3),
+        "lr": tune.loguniform(1e-5, 1e-1),
+        "weight_decay": tune.loguniform(1e-6, 1e-2),
     }
 
     # pruner
     scheduler = ASHAScheduler(
-        metric="loss", mode="min", max_t=num_epochs, grace_period=1
+        metric="loss", mode="min", max_t=num_epochs, grace_period=50
     )
 
     # define how to report the results
@@ -87,7 +85,7 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
             "lr",
             "weight_decay",
         ],
-        metric_columns=["loss"],
+        metric_columns=["loss", "star_count_accuracy"],
     )
 
     # run the trials
