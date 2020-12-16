@@ -35,11 +35,9 @@ class WakeNet(pl.LightningModule):
         self.border_padding = image_decoder.border_padding
 
         # observed image is batch_size (or 1) x n_bands x slen x slen
-        self.slen_plus_padding = self.slen + 2 * self.border_padding
+        self.padded_slen = self.slen + 2 * self.border_padding
         assert len(observed_img.shape) == 4
-        assert (
-            observed_img.shape[-1] == self.slen_plus_padding
-        ), "cached grid won't match."
+        assert observed_img.shape[-1] == self.padded_slen, "cached grid won't match."
 
         self.observed_img = observed_img
 
@@ -47,7 +45,6 @@ class WakeNet(pl.LightningModule):
         self.hparams = hparams
         self.n_samples = self.hparams["n_samples"]
         self.lr = self.hparams["lr"]
-        self.slen = observed_img.shape[-1]
 
         # get n_bands
         self.n_bands = self.image_decoder.n_bands
@@ -95,9 +92,12 @@ class WakeNet(pl.LightningModule):
         recon_mean = self.forward(img)
         error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
-        last = self.slen - self.border_padding
+        image_indx_start = self.border_padding
+        image_indx_end = self.border_padding + self.slen
         loss = (
-            error[:, :, self.border_padding : last, self.border_padding : last]
+            error[
+                :, :, image_indx_start:image_indx_end, image_indx_start:image_indx_end
+            ]
             .sum((1, 2, 3))
             .mean()
         )
