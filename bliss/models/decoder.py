@@ -65,7 +65,6 @@ class ImageDecoder(nn.Module):
         background_values=(686.0, 1123.0),
         loc_min=0.0,
         loc_max=1.0,
-        add_noise=True,
     ):
         super(ImageDecoder, self).__init__()
 
@@ -113,8 +112,6 @@ class ImageDecoder(nn.Module):
         # per-tile constraints on the location of sources
         self.loc_min = loc_min
         self.loc_max = loc_max
-
-        self.add_noise = add_noise
 
         # prior parameters on fluxes
         self.f_min = f_min
@@ -604,7 +601,9 @@ class ImageDecoder(nn.Module):
             self.ptile_slen,
         )
 
-    def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
+    def render_images(
+        self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
+    ):
         # constructs the full slen x slen image
 
         # n_sources: is (batch_size x n_tiles_per_image)
@@ -631,7 +630,7 @@ class ImageDecoder(nn.Module):
 
         # add background and noise
         images += self.background.unsqueeze(0)
-        if self.add_noise:
+        if add_noise:
             images = self._apply_noise(images)
 
         return images
