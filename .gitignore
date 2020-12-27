@@ -17,3 +17,4 @@ build/
 celeste.egg-info/
 temp/
 trials_result/
+.vscode
