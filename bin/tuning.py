@@ -1,3 +1,4 @@
+import argparse
 import hydra
 from omegaconf import DictConfig
 
@@ -14,6 +15,14 @@ from ray.tune.integration.pytorch_lightning import TuneReportCallback
 from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
 
+# argument
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--cuda", type=str, default="1,2,3,4", help="Number of CUDA to use if available."
+)
+parser.add_argument(
+    "--gp", type=str, default="1,2,3,4", help="grace period for ASHA scheduler."
+)
 
 # define the callback that monitors val_loss
 callback = TuneReportCallback({"loss": "val_loss"}, on="validation_end")
@@ -45,7 +54,13 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
         progress_bar_refresh_rate=0,
         callbacks=[
             TuneReportCallback(
-                {"loss": "val_loss", "star_count_accuracy": "val_acc_counts"},
+                {
+                    "loss": "val_loss",
+                    "star_count_acc": "val_acc_counts",
+                    "galaxy_counts_acc": "val_gal_counts",
+                    "locs_median_mse": "val_locs_median_mse",
+                    "fluxes_avg_err": "val_fluxes_avg_err",
+                },
                 on="validation_end",
             )
         ],
@@ -54,26 +69,32 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
 
 @hydra.main(config_path="../config", config_name="config")
-# model=m2, dataset=m2, training=m2 in terminal
+# model=m2, dataset=m2, training=m2 optimizer=m2 in terminal
 def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
 
     logger = logging.getLogger()
 
     # restrict the number for cuda
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1,4,3,2"
+    args = parser.parse_args()
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
 
     # define the parameter space
     config = {
-        "enc_conv_c": tune.grid_search([10, 15, 20, 25]),
-        "enc_kern": tune.grid_search([3]),
-        "enc_hidden": tune.grid_search([64, 128, 192, 256]),
+        "enc_conv_c": tune.choice([10, 15, 20, 25, 30]),
+        "enc_kern": tune.choice([3]),
+        "enc_hidden": tune.choice([64, 128, 192, 256, 320]),
         "lr": tune.loguniform(1e-5, 1e-1),
         "weight_decay": tune.loguniform(1e-6, 1e-2),
     }
 
-    # pruner
+    # scheduler
     scheduler = ASHAScheduler(
-        metric="loss", mode="min", max_t=num_epochs, grace_period=50
+        metric="loss", mode="min", max_t=num_epochs, grace_period=args.gp
+    )
+
+    # search algorithm
+    df_search = tune.suggest.dragonfly.DragonflySearch(
+        domain="euclidean", metric="loss", mode="min"
     )
 
     # define how to report the results
@@ -85,11 +106,16 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
             "lr",
             "weight_decay",
         ],
-        metric_columns=["loss", "star_count_accuracy"],
+        metric_columns=[
+            "loss",
+            "star_count_accuracy",
+            "galaxy_counts_acc",
+            "locs_median_mse",
+            "fluxes_avg_err",
+        ],
     )
 
     # run the trials
-    pl.trainer.seed_everything(10)
     trials = tune.run(
         tune.with_parameters(
             SleepRayTune,
@@ -97,13 +123,13 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
             num_epochs=num_epochs,
             num_gpu=gpus_per_trial,
         ),
-        num_samples=10,
         resources_per_trial={"gpu": gpus_per_trial},
         verbose=1,
         config=config,
         scheduler=scheduler,
+        search_alg=df_search,
         progress_reporter=reporter,
-        name="SleepRayTune",
+        name="tune_sleep",
     )
 
     best_config = trials.get_best_config(metric="loss", mode="min")
@@ -111,4 +137,6 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
 
 
 if __name__ == "__main__":
+    # sets seeds for numpy, torch, and python.random
+    pl.trainer.seed_everything(10)
     main()
