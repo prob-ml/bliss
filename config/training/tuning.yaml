@@ -1,0 +1,16 @@
+# @package _group_
+deterministic: False
+seed: 42
+plotting: False
+n_epochs: 200
+multigpus: "1,2,3,4"
+grace_period: 10
+trainer:
+  profiler: null
+  logger: False
+  checkpoint_callback: False
+  reload_dataloaders_every_epoch: False
+  check_val_every_n_epoch: 50
+  max_epochs: ${training.n_epochs}
+  min_epochs: ${training.n_epochs}
+  gpus: ${gpus}

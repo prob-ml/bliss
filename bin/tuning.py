@@ -1,4 +1,3 @@
-import argparse
 import hydra
 from omegaconf import DictConfig
 
@@ -8,6 +7,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from ray import tune
+from ray.tune.suggest.dragonfly import DragonflySearch
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
@@ -15,14 +15,6 @@ from ray.tune.integration.pytorch_lightning import TuneReportCallback
 from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
 
-# argument
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--cuda", type=str, default="1,2,3,4", help="Number of CUDA to use if available."
-)
-parser.add_argument(
-    "--gp", type=str, default="1,2,3,4", help="grace period for ASHA scheduler."
-)
 
 # define the callback that monitors val_loss
 callback = TuneReportCallback({"loss": "val_loss"}, on="validation_end")
@@ -69,33 +61,35 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
 
 @hydra.main(config_path="../config", config_name="config")
-# model=m2, dataset=m2, training=m2 optimizer=m2 in terminal
+# model=tuning, dataset=m2, training=tuning optimizer=m2 in terminal
 def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
 
     logger = logging.getLogger()
 
     # restrict the number for cuda
-    args = parser.parse_args()
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
+    os.environ["CUDA_VISIBLE_DEVICES"] = cfg.training.multigpus
 
     # define the parameter space
     config = {
-        "enc_conv_c": tune.choice([10, 15, 20, 25, 30]),
-        "enc_kern": tune.choice([3]),
-        "enc_hidden": tune.choice([64, 128, 192, 256, 320]),
+        "enc_conv_c": tune.grid_search([10, 15, 20, 25, 30]),
+        "enc_kern": tune.grid_search([3]),
+        "enc_hidden": tune.grid_search([64, 128, 192, 256, 320]),
         "lr": tune.loguniform(1e-5, 1e-1),
         "weight_decay": tune.loguniform(1e-6, 1e-2),
     }
 
     # scheduler
     scheduler = ASHAScheduler(
-        metric="loss", mode="min", max_t=num_epochs, grace_period=args.gp
+        metric="loss",
+        mode="min",
+        max_t=num_epochs,
+        grace_period=cfg.training.grace_period,
     )
 
     # search algorithm
-    df_search = tune.suggest.dragonfly.DragonflySearch(
-        domain="euclidean", metric="loss", mode="min"
-    )
+    # df_search = DragonflySearch(
+    #    optimizer="bandit", domain="euclidean", metric="loss", mode="min"
+    # )
 
     # define how to report the results
     reporter = CLIReporter(
@@ -124,10 +118,10 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
             num_gpu=gpus_per_trial,
         ),
         resources_per_trial={"gpu": gpus_per_trial},
+        num_samples=20,
         verbose=1,
         config=config,
         scheduler=scheduler,
-        search_alg=df_search,
         progress_reporter=reporter,
         name="tune_sleep",
     )
@@ -138,5 +132,5 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
 
 if __name__ == "__main__":
     # sets seeds for numpy, torch, and python.random
-    pl.trainer.seed_everything(10)
+    pl.trainer.seed_everything(42)
     main()
