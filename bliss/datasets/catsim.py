@@ -238,7 +238,7 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
 
     @staticmethod
     def get_default_filters():
-        # cut on magnitude same as BTK does (gold sample)
+        # gold sample: < 25.3
         filters = dict(i_ab=(-np.inf, 25.3))
         return filters
 
@@ -255,7 +255,8 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
     def __getitem__(self, idx):
         import descwl
 
-        while True:  # loop until visible galaxy is selected.
+        # loop until visible galaxy is selected.
+        while True:
             try:
                 entry = self.cat[idx]
                 image, background = self.renderer.render(entry)
@@ -265,7 +266,11 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
             except descwl.render.SourceNotVisible:
                 idx = np.random.choice(np.arange(len(self)))
 
-        return {"images": image, "background": background}
+        return {
+            "images": image,
+            "background": background,
+            "id": int(entry["galtileid"]),
+        }
 
     def train_dataloader(self):
         return DataLoader(
@@ -293,9 +298,9 @@ class SavedCatsim(pl.LightningDataModule, Dataset):
         assert isinstance(self.images, torch.Tensor)
         assert len(self.images.shape) == 4
 
-        background = self.data.pop("background")
-        assert len(background.shape) == 4
-        self.background = background[0]
+        self.background = self.data.pop("background")
+        assert len(self.background.shape) == 3
+        assert self.background.shape[0] == self.images.shape[1]
 
         self.batch_size = params.batch_size
         self.num_workers = params.num_workers

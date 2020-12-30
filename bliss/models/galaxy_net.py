@@ -167,7 +167,11 @@ class OneCenteredGalaxy(pl.LightningModule):
         images, background = batch["images"], batch["background"]
         recon_mean, recon_var, kl_z = self(images, background)
         loss = self.get_loss(images, recon_mean, recon_var, kl_z)
-        self.log("validation_loss", loss)
+
+        # metrics
+        self.log("val_loss", loss)
+        mad = (images - recon_mean).abs().mean()
+        self.log("per_pixel_mad", mad)
         return {"images": images, "recon_mean": recon_mean, "recon_var": recon_var}
 
     def validation_epoch_end(self, outputs):

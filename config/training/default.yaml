@@ -11,4 +11,5 @@ trainer:
   min_epochs: ${training.n_epochs}
   gpus: ${gpus}
   limit_train_batches: 1.0
+  limit_val_batches: 1.0
   check_val_every_n_epoch: 10

@@ -49,6 +49,9 @@ def main(cfg: DictConfig):
     for batch in dataset.train_dataloader():
         if not bool(fbatch):  # dict is empty
             fbatch = batch
+            for key in fbatch:
+                if key in global_params:
+                    fbatch[key] = fbatch[key][0]
         else:
             for key in fbatch:
                 if key not in global_params:
