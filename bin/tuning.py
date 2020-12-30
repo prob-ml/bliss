@@ -16,6 +16,7 @@ from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
 
 
+# TODO: Maybe collate `config` and `cfg` to one DictConfig
 def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
     # set up the config for SleepPhase
     cfg.model.encoder.params["enc_conv_c"] = config["enc_conv_c"]
@@ -54,11 +55,13 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
 @hydra.main(config_path="../config", config_name="config")
 # model=tuning, dataset=m2, training=tuning optimizer=m2 in terminal
+# TODO: Maybe expose the config for search space outside of main either as argument or with Hydra 
 def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
 
     logger = logging.getLogger()
 
     # restrict the number for cuda
+    # TODO: Limit num of gpus without using env variable
     os.environ["CUDA_VISIBLE_DEVICES"] = cfg.training.multigpus
 
     # define the parameter space
@@ -70,6 +73,7 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
         "weight_decay": tune.loguniform(1e-6, 1e-2),
     }
 
+    # TODO: Use better pruning algorithm to only search trials on better parameter direction
     # scheduler
     scheduler = ASHAScheduler(
         metric="loss",
@@ -124,5 +128,6 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
 
 if __name__ == "__main__":
     # sets seeds for numpy, torch, and python.random
+    # TODO: Test reproducibility and decide wether to use `Trainer(deterministic=True)`, 10% slower
     pl.trainer.seed_everything(42)
     main()
