@@ -16,10 +16,6 @@ from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
 
 
-# define the callback that monitors val_loss
-callback = TuneReportCallback({"loss": "val_loss"}, on="validation_end")
-
-
 def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
     # set up the config for SleepPhase
     cfg.model.encoder.params["enc_conv_c"] = config["enc_conv_c"]
@@ -33,10 +29,6 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
     # data module
     dataset = SimulatedDataset(cfg=cfg)
-
-    # parameters for trainer
-    num_epochs = num_epochs
-    num_gpu = num_gpu
 
     # set up trainer
     trainer = pl.Trainer(
