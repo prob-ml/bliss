@@ -88,7 +88,6 @@ class TestWake:
             trained_encoder,
             image_decoder_perturbed,
             obs_image,
-            image_decoder.background.mean((1, 2)),
             hparams=dict({"lr": 1e-5, "n_samples": 2000}),
         ).to(devices.device)
 

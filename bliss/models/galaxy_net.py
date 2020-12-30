@@ -95,7 +95,6 @@ class OneCenteredGalaxy(pl.LightningModule):
     def __init__(self, cfg: DictConfig):
         super(OneCenteredGalaxy, self).__init__()
         self.cfg = cfg
-        self.hparams = cfg
         self.save_hyperparameters(cfg)
 
         self.enc = CenteredGalaxyEncoder(**cfg.model.params)
