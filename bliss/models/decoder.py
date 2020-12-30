@@ -188,7 +188,7 @@ class ImageDecoder(nn.Module):
         return psf
 
     def _get_psf(self):
-        psf = torch.tensor([])
+        psf = torch.tensor([], device=device)
         for i in range(self.n_bands):
             _psf = self._get_psf_single_band(self.params[i])
             _psf *= self.normalization_constant[i]
@@ -371,9 +371,7 @@ class ImageDecoder(nn.Module):
         return images
 
     def _trim_source(self, source):
-        """Crop the source to length ptile_slen x ptile_slen,
-        centered at the middle.
-        """
+        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
         assert len(source.shape) == 3
 
         # if self.ptile_slen is even, we still make source dimension odd.
