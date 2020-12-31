@@ -5,6 +5,7 @@ defaults:
   - dataset: default
   - testing: default
   - generate: default
+  - tuning: m2
 
 general:
   overwrite: False

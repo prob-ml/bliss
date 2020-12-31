@@ -29,7 +29,7 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
     model = sleep.SleepPhase(cfg)
 
     # data module
-    dataset = SimulatedDataset(cfg=cfg)
+    dataset = SimulatedDataset(cfg)
 
     # set up trainer
     trainer = pl.Trainer(
@@ -65,12 +65,12 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
     os.environ["CUDA_VISIBLE_DEVICES"] = cfg.training.multigpus
 
     # define the parameter space
-    config = {
-        "enc_conv_c": tune.grid_search([10, 15, 20, 25, 30]),
-        "enc_kern": tune.grid_search([3]),
-        "enc_hidden": tune.grid_search([64, 128, 192, 256, 320]),
-        "lr": tune.loguniform(1e-5, 1e-1),
-        "weight_decay": tune.loguniform(1e-6, 1e-2),
+    search_space = {
+        "enc_conv_c": tune.grid_search(list(cfg.tuning.search_space.enc_conv_c)),
+        "enc_kern": tune.grid_search(list(cfg.tuning.search_space.enc_kern)),
+        "enc_hidden": tune.grid_search(list(cfg.tuning.search_space.enc_hidden)),
+        "lr": tune.loguniform(*cfg.tuning.search_space.lr),
+        "weight_decay": tune.loguniform(*cfg.tuning.search_space.weight_decay),
     }
 
     # TODO: Use better pruning algorithm to only search trials on better parameter direction
@@ -116,7 +116,7 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
         resources_per_trial={"gpu": gpus_per_trial},
         num_samples=20,
         verbose=1,
-        config=config,
+        config=search_space,
         scheduler=scheduler,
         progress_reporter=reporter,
         name="tune_sleep",
