@@ -31,7 +31,7 @@ class TestWake:
 
         # draw some catalogs from the prior
         torch.manual_seed(23421)
-        batch = trained_sleep.image_decoder.sample_prior(batch_size=100)
+        batch = image_decoder.sample_prior(batch_size=100)
 
         # pick the catalog with the most stars.
         # this will be the ground truth catalog.
@@ -54,13 +54,13 @@ class TestWake:
         # now perturb psf parameters and get new decoder
         image_decoder_perturbed = deepcopy(image_decoder)
         true_psf_params = image_decoder.params
-        psf_params_perturbed = true_psf_params * (1.1)
+        psf_params_perturbed = true_psf_params * 1.1
         image_decoder_perturbed.params = nn.Parameter(psf_params_perturbed)
         psf_init = image_decoder_perturbed.forward().detach()
 
-        def eval_decoder_loss(image_decoder):
+        def eval_decoder_loss(decoder):
             # evaluate loss of a decoder at the true catalog
-            recon = image_decoder.render_images(
+            recon = decoder.render_images(
                 true_params["n_sources"],
                 true_params["locs"],
                 true_params["galaxy_bool"],
@@ -74,7 +74,7 @@ class TestWake:
         # loss of true decoder
         target_loss = eval_decoder_loss(image_decoder)
 
-        # loss of perurbed decoder
+        # loss of perturbed decoder
         init_loss = eval_decoder_loss(image_decoder_perturbed)
         assert (init_loss - target_loss) > 0
 
@@ -88,19 +88,21 @@ class TestWake:
             trained_encoder,
             image_decoder_perturbed,
             obs_image,
-            image_decoder.background.mean((1, 2)),
             hparams=dict({"lr": 1e-5, "n_samples": 2000}),
         ).to(devices.device)
 
         n_epochs = 3000 if torch.cuda.is_available() else 2
         wake_trainer = pl.Trainer(
-            check_val_every_n_epoch=10000, max_epochs=n_epochs, min_epochs=n_epochs
+            check_val_every_n_epoch=10000,
+            max_epochs=n_epochs,
+            min_epochs=n_epochs,
+            gpus=devices.gpus,
         )
 
         wake_trainer.fit(wake_net)
 
         # loss after training
-        trained_loss = eval_decoder_loss(wake_net.image_decoder)
+        trained_loss = eval_decoder_loss(wake_net.image_decoder.to(devices.device))
 
         # check loss went down
         print("target loss: ", target_loss)
