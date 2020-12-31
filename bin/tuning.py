@@ -17,7 +17,7 @@ from bliss.datasets.simulated import SimulatedDataset
 
 
 # TODO: Maybe collate `config` and `cfg` to one DictConfig
-def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
+def SleepRayTune(config, cfg: DictConfig):
     # set up the config for SleepPhase
     cfg.model.encoder.params["enc_conv_c"] = config["enc_conv_c"]
     cfg.model.encoder.params["enc_kern"] = config["enc_kern"]
@@ -33,8 +33,8 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
     # set up trainer
     trainer = pl.Trainer(
-        max_epochs=num_epochs,
-        gpus=num_gpu,
+        max_epochs=cfg.tuning.max_epochs,
+        gpus=cfg.tuning.gpus_per_trial,
         logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
         callbacks=[
@@ -55,14 +55,14 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
 
 @hydra.main(config_path="../config", config_name="config")
 # model=tuning, dataset=m2, training=tuning optimizer=m2 in terminal
-# TODO: Maybe expose the config for search space outside of main either as argument or with Hydra 
-def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
+# TODO: Maybe expose the config for search space outside of main either as argument or with Hydra
+def main(cfg: DictConfig):
 
     logger = logging.getLogger()
 
     # restrict the number for cuda
     # TODO: Limit num of gpus without using env variable
-    os.environ["CUDA_VISIBLE_DEVICES"] = cfg.training.multigpus
+    os.environ["CUDA_VISIBLE_DEVICES"] = cfg.tuning.allocated_gpus
 
     # define the parameter space
     search_space = {
@@ -78,8 +78,8 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
     scheduler = ASHAScheduler(
         metric="loss",
         mode="min",
-        max_t=num_epochs,
-        grace_period=cfg.training.grace_period,
+        max_t=cfg.tuning.max_epochs,
+        grace_period=cfg.tuning.grace_period,
     )
 
     # search algorithm
@@ -107,13 +107,8 @@ def main(cfg: DictConfig, num_epochs=200, gpus_per_trial=1):
 
     # run the trials
     trials = tune.run(
-        tune.with_parameters(
-            SleepRayTune,
-            cfg=cfg,
-            num_epochs=num_epochs,
-            num_gpu=gpus_per_trial,
-        ),
-        resources_per_trial={"gpu": gpus_per_trial},
+        tune.with_parameters(SleepRayTune, cfg=cfg),
+        resources_per_trial={"gpu": cfg.tuning.gpus_per_trial},
         num_samples=20,
         verbose=1,
         config=search_space,
