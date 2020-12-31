@@ -119,7 +119,6 @@ def _get_min_perm_loss(
 class SleepPhase(pl.LightningModule):
     def __init__(self, cfg: DictConfig):
         super(SleepPhase, self).__init__()
-        self.hparams = cfg
         self.save_hyperparameters(cfg)
 
         self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)

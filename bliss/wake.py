@@ -1,14 +1,8 @@
 import torch
-import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.distributions.normal import Normal
 import pytorch_lightning as pl
-
-import numpy as np
-
-from .models.decoder import get_mgrid
-from . import device
 
 
 class WakeNet(pl.LightningModule):
@@ -22,7 +16,6 @@ class WakeNet(pl.LightningModule):
         star_encoder,
         image_decoder,
         observed_img,
-        init_background_values,
         hparams,
     ):
         super(WakeNet, self).__init__()
@@ -42,7 +35,7 @@ class WakeNet(pl.LightningModule):
         self.observed_img = observed_img
 
         # hyper-parameters
-        self.hparams = hparams
+        self.save_hyperparameters(hparams)
         self.n_samples = self.hparams["n_samples"]
         self.lr = self.hparams["lr"]
 
