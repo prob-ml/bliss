@@ -342,7 +342,7 @@ class ImageDecoder(nn.Module):
             "n_sources": n_sources,
             "locs": locs,
             "galaxy_bool": galaxy_bool,
-            "galaxy_param": galaxy_params,
+            "galaxy_params": galaxy_params,
             "fluxes": fluxes,
             "log_fluxes": log_fluxes,
         }
@@ -638,7 +638,6 @@ class ImageDecoder(nn.Module):
         if add_noise:
             images = self._apply_noise(images)
 
-        # final images have shape (batch_size, n_bands, slen+2*border_padding, "")
         return images, var_images
 
     @staticmethod
