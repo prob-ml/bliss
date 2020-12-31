@@ -120,7 +120,7 @@ def get_full_params(slen: int, tile_params: dict):
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
     required = {"n_sources", "locs"}
-    optional = {"galaxy_bool", "galaxy_param", "fluxes", "log_fluxes"}
+    optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes"}
     assert type(slen) is int
     assert type(tile_params) is dict
     assert required.issubset(tile_params.keys())
@@ -262,7 +262,7 @@ class SleepPhase(pl.LightningModule):
         ) = (
             batch["images"],
             batch["locs"],
-            batch["galaxy_param"],
+            batch["galaxy_params"],
             batch["log_fluxes"],
             batch["galaxy_bool"],
             batch["n_sources"],
@@ -608,7 +608,7 @@ class SleepPhase(pl.LightningModule):
                     tile_estimate["n_sources"],
                     tile_estimate["locs"],
                     tile_estimate["galaxy_bool"],
-                    tile_estimate["galaxy_param"],
+                    tile_estimate["galaxy_params"],
                     tile_estimate["fluxes"],
                 )
 

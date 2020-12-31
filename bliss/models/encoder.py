@@ -460,7 +460,7 @@ class GalaxyEncoder(BaseEncoder):
         pred = self(images, tile_n_sources)
         sd = torch.zeros_like(pred["galaxy_param_logvar"])
         tile_galaxy_param = self._get_normal_samples(pred["loc_mean"], sd, galaxy_bool)
-        return {"galaxy_param": tile_galaxy_param}
+        return {"galaxy_params": tile_galaxy_param}
 
     def forward(self, images, tile_n_sources):
         assert len(tile_n_sources.shape) == 2
