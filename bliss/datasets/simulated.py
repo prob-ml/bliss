@@ -44,8 +44,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["galaxy_bool"],
                 batch["galaxy_params"],
                 batch["fluxes"],
+                add_noise=True,
             )
-            images = self.image_decoder.add_noise(images)
             batch.update(
                 {
                     "images": images,
