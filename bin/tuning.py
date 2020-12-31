@@ -46,7 +46,7 @@ def SleepRayTune(config, cfg: DictConfig, num_epochs, num_gpu):
                     "locs_median_mse": "val_locs_median_mse",
                     "fluxes_avg_err": "val_fluxes_avg_err",
                 },
-                on="validation_end",
+                on="validation_step",
             )
         ],
     )
