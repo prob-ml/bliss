@@ -102,7 +102,7 @@ class TestWake:
         wake_trainer.fit(wake_net)
 
         # loss after training
-        trained_loss = eval_decoder_loss(wake_net.image_decoder)
+        trained_loss = eval_decoder_loss(wake_net.image_decoder.to(devices.device))
 
         # check loss went down
         print("target loss: ", target_loss)
