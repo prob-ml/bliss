@@ -24,3 +24,5 @@ max_epochs : 200
 gpus_per_trial: 1
 allocated_gpus: "1, 2, 3, 4"
 grace_period: 10
+num_samples: 20
+verbose: 1

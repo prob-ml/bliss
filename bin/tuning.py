@@ -33,6 +33,7 @@ def SleepRayTune(search_space, cfg: DictConfig):
 
     # set up trainer
     trainer = pl.Trainer(
+        weights_summary=None,
         max_epochs=cfg.tuning.max_epochs,
         gpus=cfg.tuning.gpus_per_trial,
         logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
@@ -109,8 +110,8 @@ def main(cfg: DictConfig):
     trials = tune.run(
         tune.with_parameters(SleepRayTune, cfg=cfg),
         resources_per_trial={"gpu": cfg.tuning.gpus_per_trial},
-        num_samples=20,
-        verbose=1,
+        num_samples=cfg.tuning.num_samples,
+        verbose=cfg.tuning.verbose,
         config=search_space,
         scheduler=scheduler,
         progress_reporter=reporter,
