@@ -47,7 +47,7 @@ def SleepRayTune(search_space, cfg: DictConfig):
                     "locs_median_mse": "val_locs_median_mse",
                     "fluxes_avg_err": "val_fluxes_avg_err",
                 },
-                on="validation_step",
+                on="validation_end",
             )
         ],
     )
