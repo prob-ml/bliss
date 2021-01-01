@@ -1,5 +1,6 @@
 defaults:
   - optimizer: adam
+  - model/sleep_base # force-load common config 
   - model: sleep_star_basic
   - training: default
   - dataset: default
