@@ -6,6 +6,7 @@ import os
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 
+import ray
 from ray import tune
 from ray.tune.suggest.dragonfly import DragonflySearch
 from ray.tune import CLIReporter
@@ -16,7 +17,6 @@ from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
 
 
-# TODO: Maybe collate `config` and `cfg` to one DictConfig
 def SleepRayTune(search_space, cfg: DictConfig):
     # set up the config for SleepPhase
     cfg.model.encoder.params.enc_conv_c = search_space["enc_conv_c"]
@@ -56,14 +56,12 @@ def SleepRayTune(search_space, cfg: DictConfig):
 
 @hydra.main(config_path="../config", config_name="config")
 # model=m2, dataset=m2, training=m2 optimizer=m2 in terminal
-# TODO: Maybe expose the config for search space outside of main either as argument or with Hydra
 def main(cfg: DictConfig):
 
     logger = logging.getLogger()
 
     # restrict the number for cuda
-    # TODO: Limit num of gpus without using env variable
-    os.environ["CUDA_VISIBLE_DEVICES"] = cfg.tuning.allocated_gpus
+    ray.init(num_gpus=cfg.tuning.allocated_gpus)
 
     # define the parameter space
     search_space = {
