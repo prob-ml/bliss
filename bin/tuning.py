@@ -17,13 +17,13 @@ from bliss.datasets.simulated import SimulatedDataset
 
 
 # TODO: Maybe collate `config` and `cfg` to one DictConfig
-def SleepRayTune(config, cfg: DictConfig):
+def SleepRayTune(search_space, cfg: DictConfig):
     # set up the config for SleepPhase
-    cfg.model.encoder.params["enc_conv_c"] = config["enc_conv_c"]
-    cfg.model.encoder.params["enc_kern"] = config["enc_kern"]
-    cfg.model.encoder.params["enc_hidden"] = config["enc_hidden"]
-    cfg.optimizer.params["lr"] = config["lr"]
-    cfg.optimizer.params["weight_decay"] = config["weight_decay"]
+    cfg.model.encoder.params.enc_conv_c = search_space["enc_conv_c"]
+    cfg.model.encoder.params.enc_kern = search_space["enc_kern"]
+    cfg.model.encoder.params.enc_hidden = search_space["enc_hidden"]
+    cfg.optimizer.params.lr = search_space["lr"]
+    cfg.optimizer.params.weight_decay = search_space["weight_decay"]
 
     # model
     model = sleep.SleepPhase(cfg)
