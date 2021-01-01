@@ -6,6 +6,7 @@ defaults:
   - testing: default
   - generate: default
   - tuning: ${defaults.1.model}
+    optional: true
 
 general:
   overwrite: False
