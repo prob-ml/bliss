@@ -5,7 +5,7 @@ defaults:
   - dataset: default
   - testing: default
   - generate: default
-  - tuning: m2
+  - tuning: ${defaults.1.model}
 
 general:
   overwrite: False

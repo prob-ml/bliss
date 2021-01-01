@@ -55,7 +55,7 @@ def SleepRayTune(search_space, cfg: DictConfig):
 
 
 @hydra.main(config_path="../config", config_name="config")
-# model=tuning, dataset=m2, training=tuning optimizer=m2 in terminal
+# model=m2, dataset=m2, training=m2 optimizer=m2 in terminal
 # TODO: Maybe expose the config for search space outside of main either as argument or with Hydra
 def main(cfg: DictConfig):
 

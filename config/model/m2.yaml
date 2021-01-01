@@ -35,3 +35,7 @@ encoder:
     ptile_slen: 8
     max_detections: 2
     n_galaxy_params: ${model.galaxy.latent_dim}
+    enc_conv_c: 20
+    enc_kern: 3
+    enc_hidden: 256
+    momentum: 0.5
