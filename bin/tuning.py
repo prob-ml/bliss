@@ -37,7 +37,7 @@ def SleepRayTune(search_space, cfg: DictConfig):
         weights_summary=None,
         max_epochs=cfg.tuning.max_epochs,
         gpus=cfg.tuning.gpus_per_trial,
-        logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
+        logger=False,
         progress_bar_refresh_rate=0,
         callbacks=[
             TuneReportCallback(
@@ -85,20 +85,20 @@ def main(cfg: DictConfig):
 
     # define how to report the results
     reporter = CLIReporter(
-        parameter_columns=[
-            "enc_conv_c",
-            "enc_kern",
-            "enc_hidden",
-            "lr",
-            "weight_decay",
-        ],
-        metric_columns=[
-            "loss",
-            "star_count_accuracy",
-            "galaxy_counts_acc",
-            "locs_median_mse",
-            "fluxes_avg_err",
-        ],
+        parameter_columns={
+            "enc_conv_c": "conv_c",
+            "enc_kern": "kern",
+            "enc_hidden": "hidden",
+            "lr": "lr",
+            "weight_decay": "weight_decay",
+        },
+        metric_columns={
+            "loss": "loss",
+            "star_count_accuracy": "star_ct_acc",
+            "galaxy_counts_acc": "gal_ct_acc",
+            "locs_median_mse": "loc_med_mse",
+            "fluxes_avg_err": "flux_avg_err",
+        },
     )
 
     # run the trials
@@ -111,6 +111,7 @@ def main(cfg: DictConfig):
         scheduler=scheduler,
         metric="loss",
         mode="min",
+        local_dir="outputs/hyperparameter_tuning",
         search_alg=search_alg,
         progress_reporter=reporter,
         name="tune_sleep",
