@@ -8,7 +8,8 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 import ray
 from ray import tune
-from ray.tune.suggest.dragonfly import DragonflySearch
+from ray.tune.suggest.hyperopt import HyperOptSearch
+from ray.tune.suggest import ConcurrencyLimiter
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
@@ -63,28 +64,24 @@ def main(cfg: DictConfig):
     # restrict the number for cuda
     ray.init(num_gpus=cfg.tuning.allocated_gpus)
 
-    # define the parameter space
     search_space = {
-        "enc_conv_c": tune.grid_search(list(cfg.tuning.search_space.enc_conv_c)),
-        "enc_kern": tune.grid_search(list(cfg.tuning.search_space.enc_kern)),
-        "enc_hidden": tune.grid_search(list(cfg.tuning.search_space.enc_hidden)),
+        "enc_conv_c": tune.choice(list(cfg.tuning.search_space.enc_conv_c)),
+        "enc_kern": tune.choice(list(cfg.tuning.search_space.enc_kern)),
+        "enc_hidden": tune.choice(list(cfg.tuning.search_space.enc_hidden)),
         "lr": tune.loguniform(*cfg.tuning.search_space.lr),
         "weight_decay": tune.loguniform(*cfg.tuning.search_space.weight_decay),
     }
 
-    # TODO: Use better pruning algorithm to only search trials on better parameter direction
     # scheduler
     scheduler = ASHAScheduler(
-        metric="loss",
-        mode="min",
         max_t=cfg.tuning.max_epochs,
         grace_period=cfg.tuning.grace_period,
     )
-
     # search algorithm
-    # df_search = DragonflySearch(
-    #    optimizer="bandit", domain="euclidean", metric="loss", mode="min"
-    # )
+    search_alg = HyperOptSearch()
+    search_alg = ConcurrencyLimiter(
+        search_alg, max_concurrent=cfg.tuning.allocated_gpus
+    )
 
     # define how to report the results
     reporter = CLIReporter(
@@ -112,6 +109,9 @@ def main(cfg: DictConfig):
         verbose=cfg.tuning.verbose,
         config=search_space,
         scheduler=scheduler,
+        metric="loss",
+        mode="min",
+        search_alg=search_alg,
         progress_reporter=reporter,
         name="tune_sleep",
     )
