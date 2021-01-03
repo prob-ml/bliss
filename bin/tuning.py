@@ -111,7 +111,7 @@ def main(cfg: DictConfig):
         scheduler=scheduler,
         metric="loss",
         mode="min",
-        local_dir="outputs/hyperparameter_tuning",
+        local_dir=f"{hydra.utils.get_original_cwd()}/outputs/hyperparameter_tuning",
         search_alg=search_alg,
         progress_reporter=reporter,
         name="tune_sleep",
