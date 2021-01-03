@@ -26,3 +26,4 @@ allocated_gpus: 4
 grace_period: 10
 num_samples: 20
 verbose: 1
+best_config_save_path: "../config/tuning/m2_best_result.yaml"

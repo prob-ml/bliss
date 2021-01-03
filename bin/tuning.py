@@ -1,9 +1,9 @@
 import hydra
+from omegaconf import OmegaConf
 from omegaconf import DictConfig
+import os
 
-import logging
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import TensorBoardLogger
 
 import ray
 from ray import tune
@@ -57,9 +57,9 @@ def sleep_trainable(search_space, cfg: DictConfig):
 @hydra.main(config_path="../config", config_name="config")
 # model=m2, dataset=m2, training=m2 optimizer=m2 in terminal
 def main(cfg: DictConfig):
-
-    logger = logging.getLogger()
-
+    assert hydra.utils.get_original_cwd().endswith(
+        "/bin"
+    ), f"This script needs to be run in /bin instead of {hydra.utils.get_original_cwd()}"
     # restrict the number for cuda
     ray.init(num_gpus=cfg.tuning.allocated_gpus)
 
@@ -110,14 +110,14 @@ def main(cfg: DictConfig):
         scheduler=scheduler,
         metric="loss",
         mode="min",
-        local_dir=f"{hydra.utils.get_original_cwd()}/outputs/hyperparameter_tuning",
+        local_dir=hydra.utils.to_absolute_path("../outputs/tuning"),
         search_alg=search_alg,
         progress_reporter=reporter,
         name="tune_sleep",
     )
 
-    best_config = analysis.get_best_config(metric="loss", mode="min")
-    logger.info(f"Best config: {best_config}")
+    conf = OmegaConf.create(analysis.best_result)
+    OmegaConf.save(conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path))
 
 
 if __name__ == "__main__":
