@@ -2,7 +2,6 @@ import hydra
 from omegaconf import DictConfig
 
 import logging
-import os
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 
@@ -18,7 +17,7 @@ from bliss import sleep
 from bliss.datasets.simulated import SimulatedDataset
 
 
-def SleepRayTune(search_space, cfg: DictConfig):
+def sleep_trainable(search_space, cfg: DictConfig):
     # set up the config for SleepPhase
     cfg.model.encoder.params.enc_conv_c = search_space["enc_conv_c"]
     cfg.model.encoder.params.enc_kern = search_space["enc_kern"]
@@ -102,8 +101,8 @@ def main(cfg: DictConfig):
     )
 
     # run the trials
-    trials = tune.run(
-        tune.with_parameters(SleepRayTune, cfg=cfg),
+    analysis = tune.run(
+        tune.with_parameters(sleep_trainable, cfg=cfg),
         resources_per_trial={"gpu": cfg.tuning.gpus_per_trial},
         num_samples=cfg.tuning.num_samples,
         verbose=cfg.tuning.verbose,
@@ -117,7 +116,7 @@ def main(cfg: DictConfig):
         name="tune_sleep",
     )
 
-    best_config = trials.get_best_config(metric="loss", mode="min")
+    best_config = analysis.get_best_config(metric="loss", mode="min")
     logger.info(f"Best config: {best_config}")
 
 
