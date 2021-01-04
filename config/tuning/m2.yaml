@@ -8,10 +8,10 @@ search_space:
     - 4
   enc_hidden:
     - 64
-    - 513
+    - 321
   lr:
-    - 1e-5
-    - 1e-1
+    - 1e-7
+    - 1e-3
   weight_decay:
     - 1e-6
     - 1e-2

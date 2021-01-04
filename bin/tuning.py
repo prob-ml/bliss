@@ -20,9 +20,9 @@ from bliss.datasets.simulated import SimulatedDataset
 
 def sleep_trainable(search_space, cfg: DictConfig):
     # set up the config for SleepPhase
-    cfg.model.encoder.params.enc_conv_c = int(search_space["enc_conv_c"])
-    cfg.model.encoder.params.enc_kern = int(search_space["enc_kern"])
-    cfg.model.encoder.params.enc_hidden = int(search_space["enc_hidden"])
+    cfg.model.encoder.params.enc_conv_c = search_space["enc_conv_c"]
+    cfg.model.encoder.params.enc_kern = search_space["enc_kern"]
+    cfg.model.encoder.params.enc_hidden = search_space["enc_hidden"]
     cfg.optimizer.params.lr = search_space["lr"]
     cfg.optimizer.params.weight_decay = search_space["weight_decay"]
 
@@ -70,9 +70,12 @@ def main(cfg: DictConfig):
     ray.init(num_gpus=cfg.tuning.allocated_gpus)
 
     search_space = {
-        "enc_conv_c": tune.randint(*cfg.tuning.search_space.enc_conv_c),
-        "enc_kern": tune.randint(*cfg.tuning.search_space.enc_kern),
-        "enc_hidden": tune.randint(*cfg.tuning.search_space.enc_hidden),
+        # Not as clean as tune.randint(*cfg.tuning...)
+        # Work around solution so that these values are correctly displayed in tensorboard
+        # This also creats primitive dtype supported by omegaconf
+        "enc_conv_c": tune.choice(list(range(*cfg.tuning.search_space.enc_conv_c))),
+        "enc_kern": tune.choice(list(range(*cfg.tuning.search_space.enc_kern))),
+        "enc_hidden": tune.choice(list(range(*cfg.tuning.search_space.enc_hidden))),
         "lr": tune.loguniform(*cfg.tuning.search_space.lr),
         "weight_decay": tune.loguniform(*cfg.tuning.search_space.weight_decay),
     }
@@ -124,6 +127,7 @@ def main(cfg: DictConfig):
     )
 
     # run the trials
+    # TODO add stop criterion for nan loss
     analysis = tune.run(
         tune.with_parameters(sleep_trainable, cfg=cfg),
         resources_per_trial={"gpu": cfg.tuning.gpus_per_trial},
@@ -139,12 +143,7 @@ def main(cfg: DictConfig):
         name="tune_sleep",
     )
 
-    # cast back to primitive dtype
     best_result = analysis.best_result
-    for k, v in best_result["config"].items():
-        if isinstance(v, np.int64):
-            best_result["config"][k] = int(v)
-
     conf = OmegaConf.create(best_result)
     OmegaConf.save(conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path))
 
