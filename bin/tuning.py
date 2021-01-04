@@ -69,13 +69,19 @@ def main(cfg: DictConfig):
     # restrict the number for cuda
     ray.init(num_gpus=cfg.tuning.allocated_gpus)
 
+    discrete_search_space = {
+        "enc_conv_c": list(range(*cfg.tuning.search_space.enc_conv_c)),
+        "enc_kern": list(range(*cfg.tuning.search_space.enc_kern)),
+        "enc_hidden": list(range(*cfg.tuning.search_space.enc_hidden)),
+    }
+
     search_space = {
         # Not as clean as tune.randint(*cfg.tuning...)
         # Work around solution so that these values are correctly displayed in tensorboard
         # This also creats primitive dtype supported by omegaconf
-        "enc_conv_c": tune.choice(list(range(*cfg.tuning.search_space.enc_conv_c))),
-        "enc_kern": tune.choice(list(range(*cfg.tuning.search_space.enc_kern))),
-        "enc_hidden": tune.choice(list(range(*cfg.tuning.search_space.enc_hidden))),
+        "enc_conv_c": tune.choice(discrete_search_space["enc_conv_c"]),
+        "enc_kern": tune.choice(discrete_search_space["enc_kern"]),
+        "enc_hidden": tune.choice(discrete_search_space["enc_hidden"]),
         "lr": tune.loguniform(*cfg.tuning.search_space.lr),
         "weight_decay": tune.loguniform(*cfg.tuning.search_space.weight_decay),
     }
@@ -86,21 +92,25 @@ def main(cfg: DictConfig):
         grace_period=cfg.tuning.grace_period,
     )
 
+    # search algorithm
     # set last best result as intial value if exists
-    last_best_config = None
     if os.path.exists(hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)):
         last_best_result = OmegaConf.load(
             hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)
         )
-        last_best_config = last_best_result.config
+        last_best_config = OmegaConf.to_container(last_best_result.config)
 
-    # search algorithm
-    if last_best_config:
+        # change to index-based value as required by hyperopt
+        for k, v in discrete_search_space.items():
+            index = np.flatnonzero(np.array(v) == last_best_config[k])
+            last_best_config[k] = index.item()
+
+        print("\nSet intial starting point for search algorithm as:")
+        print(OmegaConf.to_yaml(last_best_result.config), "\n")
+
         search_alg = HyperOptSearch(
             points_to_evaluate=[last_best_config], random_state_seed=cfg.tuning.seed
         )
-        print("Set intial starting point for search algorithm as:")
-        print(OmegaConf.to_yaml(last_best_config))
     else:
         search_alg = HyperOptSearch(random_state_seed=cfg.tuning.seed)
 
