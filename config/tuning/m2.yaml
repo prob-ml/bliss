@@ -1,0 +1,25 @@
+# @package _group_
+search_space:
+  enc_conv_c:
+    - 8
+    - 33
+  enc_kern:
+    - 3
+    - 4
+  enc_hidden:
+    - 64
+    - 321
+  lr:
+    - 1e-7
+    - 1e-3
+  weight_decay:
+    - 1e-6
+    - 1e-2
+n_epochs: 200
+gpus_per_trial: 1
+allocated_gpus: 4
+grace_period: 10
+n_samples: 20
+verbose: 1
+seed: 42
+best_config_save_path: "../config/tuning/m2_best_result.yaml"
