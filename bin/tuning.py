@@ -57,6 +57,10 @@ def sleep_trainable(search_space, cfg: DictConfig):
 @hydra.main(config_path="../config", config_name="config")
 # model=m2, dataset=m2, training=m2 optimizer=m2 in terminal
 def main(cfg: DictConfig):
+    # sets seeds for numpy, torch, and python.random
+    # TODO: Test reproducibility and decide wether to use `Trainer(deterministic=True)`, 10% slower
+    pl.trainer.seed_everything(cfg.tuning.seed)
+
     assert hydra.utils.get_original_cwd().endswith(
         "/bin"
     ), f"This script needs to be run in /bin instead of {hydra.utils.get_original_cwd()}"
@@ -121,7 +125,4 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    # sets seeds for numpy, torch, and python.random
-    # TODO: Test reproducibility and decide wether to use `Trainer(deterministic=True)`, 10% slower
-    pl.trainer.seed_everything(42)
     main()
