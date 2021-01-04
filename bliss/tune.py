@@ -114,7 +114,7 @@ def main(cfg: DictConfig):
         search_alg = HyperOptSearch(random_state_seed=cfg.tuning.seed)
 
     search_alg = ConcurrencyLimiter(
-        search_alg, max_concurrent=cfg.tuning.allocated_gpus
+        search_alg, max_concurrent=cfg.tuning.max_concurrent
     )
 
     # define how to report the results
@@ -152,9 +152,12 @@ def main(cfg: DictConfig):
         name="tune_sleep",
     )
 
-    best_result = analysis.best_result
-    conf = OmegaConf.create(best_result)
-    OmegaConf.save(conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path))
+    if cfg.tuning.save:
+        best_result = analysis.best_result
+        conf = OmegaConf.create(best_result)
+        OmegaConf.save(
+            conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)
+        )
 
 
 if __name__ == "__main__":
