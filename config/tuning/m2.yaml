@@ -1,19 +1,14 @@
 # @package _group_
 search_space:
   enc_conv_c:
-    - 10
-    - 15
-    - 20
-    - 25
-    - 30
+    - 8
+    - 33
   enc_kern:
     - 3
+    - 4
   enc_hidden:
     - 64
-    - 128
-    - 192
-    - 256
-    - 320
+    - 513
   lr:
     - 1e-5
     - 1e-1

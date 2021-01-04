@@ -1,7 +1,8 @@
+import os
+import numpy as np
 import hydra
 from omegaconf import OmegaConf
 from omegaconf import DictConfig
-import os
 
 import pytorch_lightning as pl
 
@@ -19,9 +20,9 @@ from bliss.datasets.simulated import SimulatedDataset
 
 def sleep_trainable(search_space, cfg: DictConfig):
     # set up the config for SleepPhase
-    cfg.model.encoder.params.enc_conv_c = search_space["enc_conv_c"]
-    cfg.model.encoder.params.enc_kern = search_space["enc_kern"]
-    cfg.model.encoder.params.enc_hidden = search_space["enc_hidden"]
+    cfg.model.encoder.params.enc_conv_c = int(search_space["enc_conv_c"])
+    cfg.model.encoder.params.enc_kern = int(search_space["enc_kern"])
+    cfg.model.encoder.params.enc_hidden = int(search_space["enc_hidden"])
     cfg.optimizer.params.lr = search_space["lr"]
     cfg.optimizer.params.weight_decay = search_space["weight_decay"]
 
@@ -64,13 +65,14 @@ def main(cfg: DictConfig):
     assert hydra.utils.get_original_cwd().endswith(
         "/bin"
     ), f"This script needs to be run in /bin instead of {hydra.utils.get_original_cwd()}"
+
     # restrict the number for cuda
     ray.init(num_gpus=cfg.tuning.allocated_gpus)
 
     search_space = {
-        "enc_conv_c": tune.choice(list(cfg.tuning.search_space.enc_conv_c)),
-        "enc_kern": tune.choice(list(cfg.tuning.search_space.enc_kern)),
-        "enc_hidden": tune.choice(list(cfg.tuning.search_space.enc_hidden)),
+        "enc_conv_c": tune.randint(*cfg.tuning.search_space.enc_conv_c),
+        "enc_kern": tune.randint(*cfg.tuning.search_space.enc_kern),
+        "enc_hidden": tune.randint(*cfg.tuning.search_space.enc_hidden),
         "lr": tune.loguniform(*cfg.tuning.search_space.lr),
         "weight_decay": tune.loguniform(*cfg.tuning.search_space.weight_decay),
     }
@@ -80,8 +82,25 @@ def main(cfg: DictConfig):
         max_t=cfg.tuning.n_epochs,
         grace_period=cfg.tuning.grace_period,
     )
+
+    # set last best result as intial value if exists
+    last_best_config = None
+    if os.path.exists(hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)):
+        last_best_result = OmegaConf.load(
+            hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)
+        )
+        last_best_config = last_best_result.config
+
     # search algorithm
-    search_alg = HyperOptSearch()
+    if last_best_config:
+        search_alg = HyperOptSearch(
+            points_to_evaluate=[last_best_config], random_state_seed=cfg.tuning.seed
+        )
+        print("Set intial starting point for search algorithm as:")
+        print(OmegaConf.to_yaml(last_best_config))
+    else:
+        search_alg = HyperOptSearch(random_state_seed=cfg.tuning.seed)
+
     search_alg = ConcurrencyLimiter(
         search_alg, max_concurrent=cfg.tuning.allocated_gpus
     )
@@ -120,7 +139,13 @@ def main(cfg: DictConfig):
         name="tune_sleep",
     )
 
-    conf = OmegaConf.create(analysis.best_result)
+    # cast back to primitive dtype
+    best_result = analysis.best_result
+    for k, v in best_result["config"].items():
+        if isinstance(v, np.int64):
+            best_result["config"][k] = int(v)
+
+    conf = OmegaConf.create(best_result)
     OmegaConf.save(conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path))
 
 
