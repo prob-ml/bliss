@@ -30,7 +30,7 @@ ray = {extras = ["tune"], version = "^1.0.1"}
 pylint = "^2.6.0"
 
 [tool.poetry.scripts]
-tuning = "bliss.tuning:main"
+tune = "bliss.tune:main"
 generate = "bliss.generate:main"
 train = "bliss.train:main"
 
