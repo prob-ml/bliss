@@ -22,4 +22,5 @@ grace_period: 10
 n_samples: 20
 verbose: 1
 seed: 42
-best_config_save_path: "../config/tuning/m2_best_result.yaml"
+best_config_save_path: ${paths.root}/config/tuning/m2_best_result.yaml
+log_path: ${paths.root}/temp/tuning
