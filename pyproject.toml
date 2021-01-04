@@ -15,6 +15,7 @@ pytorch-lightning = "^1.0.8"
 omegaconf = "^2.0.5"
 hydra-core = "^1.0.4"
 torch = "^1.7.0"
+hyperopt = "^0.2.5"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.1.2"
