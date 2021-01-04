@@ -1,5 +1,7 @@
 import os
 import numpy as np
+import logging
+
 import hydra
 from omegaconf import OmegaConf
 from omegaconf import DictConfig
@@ -33,6 +35,7 @@ def sleep_trainable(search_space, cfg: DictConfig):
     dataset = SimulatedDataset(cfg)
 
     # set up trainer
+    logging.getLogger("lightning").setLevel(0)
     trainer = pl.Trainer(
         weights_summary=None,
         max_epochs=cfg.tuning.n_epochs,
