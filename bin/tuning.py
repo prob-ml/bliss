@@ -34,7 +34,7 @@ def sleep_trainable(search_space, cfg: DictConfig):
     # set up trainer
     trainer = pl.Trainer(
         weights_summary=None,
-        max_epochs=cfg.tuning.max_epochs,
+        max_epochs=cfg.tuning.n_epochs,
         gpus=cfg.tuning.gpus_per_trial,
         logger=False,
         progress_bar_refresh_rate=0,
@@ -73,7 +73,7 @@ def main(cfg: DictConfig):
 
     # scheduler
     scheduler = ASHAScheduler(
-        max_t=cfg.tuning.max_epochs,
+        max_t=cfg.tuning.n_epochs,
         grace_period=cfg.tuning.grace_period,
     )
     # search algorithm
@@ -104,7 +104,7 @@ def main(cfg: DictConfig):
     analysis = tune.run(
         tune.with_parameters(sleep_trainable, cfg=cfg),
         resources_per_trial={"gpu": cfg.tuning.gpus_per_trial},
-        num_samples=cfg.tuning.num_samples,
+        num_samples=cfg.tuning.n_samples,
         verbose=cfg.tuning.verbose,
         config=search_space,
         scheduler=scheduler,

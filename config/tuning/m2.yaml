@@ -20,10 +20,10 @@ search_space:
   weight_decay:
     - 1e-6
     - 1e-2
-max_epochs: 200
+n_epochs: 200
 gpus_per_trial: 1
 allocated_gpus: 4
 grace_period: 10
-num_samples: 20
+n_samples: 20
 verbose: 1
 best_config_save_path: "../config/tuning/m2_best_result.yaml"
