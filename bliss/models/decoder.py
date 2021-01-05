@@ -646,7 +646,7 @@ class ImageDecoder(nn.Module):
             var_ptiles, self.tile_slen, self.border_padding
         )
 
-        # add background
+        # add background and noise
         images += self.background.unsqueeze(0)
         var_images += self.background.unsqueeze(0)
         if add_noise:
