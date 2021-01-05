@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from pathlib import Path
 from astropy.io import fits
@@ -600,6 +601,20 @@ class ImageDecoder(nn.Module):
         var_images = var_images.view(img_shape)
 
         return images, var_images
+
+    @staticmethod
+    def _apply_noise(images_mean):
+        # add noise to images.
+
+        if torch.any(images_mean <= 0):
+            warnings.warn("image mean less than 0")
+            images_mean = images_mean.clamp(min=1.0)
+
+        _images = torch.sqrt(images_mean)
+        images = _images * torch.randn_like(images_mean)
+        images = images + images_mean
+
+        return images
 
     def render_images(
         self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
