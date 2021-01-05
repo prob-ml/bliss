@@ -13,6 +13,7 @@ import pytorch_lightning as pl
 from . import device, plotting
 from .models import encoder, decoder
 from .models.encoder import get_star_bool, get_full_params
+from .datasets import sdss
 
 plt.switch_backend("Agg")
 
@@ -114,7 +115,6 @@ def _get_min_perm_loss(
     galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, _indx).squeeze()
 
     return locs_loss, galaxy_params_loss, star_params_loss, galaxy_bool_loss
-
 
 class SleepPhase(pl.LightningModule):
     def __init__(self, cfg: DictConfig):
@@ -312,11 +312,15 @@ class SleepPhase(pl.LightningModule):
             galaxy_counts_acc,
             locs_median_mse,
             fluxes_avg_err,
+            sleep_tpr,
+            sleep_ppv
         ) = self.get_metrics(batch)
         self.log("val_acc_counts", counts_acc)
         self.log("val_gal_counts", galaxy_counts_acc)
         self.log("val_locs_median_mse", locs_median_mse)
         self.log("val_fluxes_avg_err", fluxes_avg_err)
+        self.log("val_sleep_tpr", sleep_tpr)
+        self.log("val_sleep_ppv", sleep_ppv) 
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -330,11 +334,15 @@ class SleepPhase(pl.LightningModule):
             galaxy_counts_acc,
             locs_median_mse,
             fluxes_avg_err,
+            sleep_tpr,
+            sleep_ppv
         ) = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
         self.log("locs_median_mse", locs_median_mse)
         self.log("fluxes_avg_err", fluxes_avg_err)
+        self.log("sleep_tpr", sleep_tpr)
+        self.log("sleep_ppv", sleep_ppv)
 
         return batch
 
@@ -342,7 +350,7 @@ class SleepPhase(pl.LightningModule):
         batch = outputs[-1]
         if self.plotting:
             self.make_plots(batch, kind="testing")
-
+    
     def get_metrics(self, batch):
         # get images and properties
         exclude = {"images", "slen", "background"}
@@ -376,6 +384,8 @@ class SleepPhase(pl.LightningModule):
 
         locs_mse_vec = []
         fluxes_mse_vec = []
+        sleep_tpr_vec = []
+        sleep_ppv_vec = []
         for i in range(batch_size):
             true_n_sources_i = true_params["n_sources"][i]
             n_sources_i = estimates["n_sources"][i]
@@ -413,6 +423,19 @@ class SleepPhase(pl.LightningModule):
                 for mse in fluxes_mse:
                     fluxes_mse_vec.append(mse.item())
 
+                # calculate tpr and ppv
+                tpr_i, ppv_i = sdss.get_summary_stats(
+                    locs_i,
+                    true_locs_i,
+                    slen,
+                    fluxes_i,
+                    true_fluxes_i,
+                    1,
+                )[0:2]
+                sleep_tpr_vec.append(tpr_i)
+                sleep_ppv_vec.append(ppv_i)
+
+
         # TODO: default value? Also not sure how to accumulate medians so we are actually taking an
         #  average over the medians across batches.
         locs_median_mse = 0.5
@@ -423,7 +446,11 @@ class SleepPhase(pl.LightningModule):
         if len(fluxes_mse_vec) > 0:
             fluxes_avg_err = np.mean(fluxes_mse_vec)
 
-        return counts_acc, galaxy_counts_acc, locs_median_mse, fluxes_avg_err
+        # set default value?
+        sleep_tpr = np.mean(sleep_tpr_vec) 
+        sleep_ppv = np.mean(sleep_ppv_vec)
+
+        return counts_acc, galaxy_counts_acc, locs_median_mse, fluxes_avg_err, sleep_tpr, sleep_ppv
 
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
