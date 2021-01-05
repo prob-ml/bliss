@@ -129,8 +129,8 @@ def _get_tile_coords(slen, tile_slen):
     def return_coords(i):
         return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
 
-    tile_coords = torch.tensor([return_coords(i) for i in range(n_ptiles)])
-    tile_coords = tile_coords.long().to(device)
+    tile_coords = torch.LongTensor([return_coords(i) for i in range(n_ptiles)])
+    tile_coords = tile_coords.to(device)
 
     return tile_coords
 
