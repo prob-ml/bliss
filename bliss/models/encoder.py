@@ -35,6 +35,74 @@ def get_star_bool(n_sources, galaxy_bool):
     return star_bool
 
 
+def get_full_params(slen: int, tile_params: dict):
+    # NOTE: off sources should have tile_locs == 0.
+    # NOTE: assume that each param in each tile is already pushed to the front.
+    required = {"n_sources", "locs"}
+    optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes"}
+    assert type(slen) is int
+    assert type(tile_params) is dict
+    assert required.issubset(tile_params.keys())
+    # tile_params does not contain extraneous keys
+    for param_name in tile_params:
+        assert param_name in required or param_name in optional
+
+    tile_n_sources = tile_params["n_sources"]
+    tile_locs = tile_params["locs"]
+
+    # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
+    assert len(tile_locs.shape) == 4
+    n_samples = tile_locs.shape[0]
+    n_tiles_per_image = tile_locs.shape[1]
+    max_detections = tile_locs.shape[2]
+    tile_slen = slen / math.sqrt(n_tiles_per_image)
+    n_ptiles = n_samples * n_tiles_per_image
+    assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
+    tile_slen = int(tile_slen)
+
+    # coordinates on tiles.
+    tile_coords = _get_tile_coords(slen, tile_slen)
+    assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
+
+    # get is_on_array
+    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
+    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
+    max_sources = n_sources.max().int().item()
+
+    # recenter and renormalize locations.
+    tile_is_on_array = tile_is_on_array_sampled.view(n_ptiles, -1)
+    _tile_locs = tile_locs.view(n_ptiles, -1, 2)
+    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
+    _locs = (_tile_locs * tile_slen + bias) / slen
+    _locs *= tile_is_on_array.unsqueeze(2)
+
+    # sort locs and clip
+    locs = _locs.view(n_samples, -1, 2)
+    _indx_sort = _argfront(locs[..., 0], dim=1)
+    indx_sort = _indx_sort.unsqueeze(2)
+    locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
+    locs = locs[:, 0:max_sources, ...]
+
+    params = {"n_sources": n_sources, "locs": locs}
+
+    # now do the same for the rest of the parameters (without scaling or biasing ofc)
+    # for same reason no need to multiply times is_on_array
+    for param_name in tile_params:
+        if param_name in optional:
+            # make sure works galaxy bool has same format as well.
+            tile_param = tile_params[param_name]
+            assert len(tile_param.shape) == 4
+            _param = tile_param.view(n_samples, n_tiles_per_image, max_detections, -1)
+            param_dim = _param.size(-1)
+            param = _param.view(n_samples, -1, param_dim)
+            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
+            param = param[:, 0:max_sources, ...]
+
+            params[param_name] = param
+
+    return params
+
+
 def _argfront(is_on_array, dim):
     # return indices that sort pushing all zeroes of tensor to the back.
     # dim is dimension along which do the ordering.
@@ -52,12 +120,7 @@ def _sample_class_weights(class_weights, n_samples=1):
 
 
 def _get_tile_coords(slen, tile_slen):
-    """
-    This records (x0, x1) indices each image tile comes from.
-
-    Returns:
-        tile_coords (torch.LongTensor):
-    """
+    """This records (x0, x1) indices each image tile comes from."""
 
     nptiles1 = int(slen / tile_slen)
     n_ptiles = nptiles1 ** 2
@@ -235,7 +298,7 @@ class BaseEncoder(nn.Module, ABC):
                 ] = torch.arange(curr_indx, new_indx)
                 curr_indx = new_indx
 
-        return indx_mats
+        return indx_mats, curr_indx
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
         """
@@ -259,7 +322,7 @@ class BaseEncoder(nn.Module, ABC):
         n_ptiles = h.size(0)
         n_samples = n_sources.size(0)
 
-        # append null column, return zero if indx_mat returns null index (dim_out_all)
+        # append null column, return zero if indx_mat returns null index (=dim_out_all)
         _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=device)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
@@ -334,7 +397,7 @@ class BaseEncoder(nn.Module, ABC):
 class ImageEncoder(BaseEncoder):
     def __init__(self, **kwargs):
 
-        super(ImageEncoder, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.n_star_params = self.n_bands
         self.log_softmax = nn.LogSoftmax(dim=1)
 
@@ -394,7 +457,6 @@ class ImageEncoder(BaseEncoder):
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
         tile_n_sources = tile_n_sources.view(batch_size, -1)
-
         return tile_n_sources
 
     def tile_map_estimate(self, images, tile_n_sources):
@@ -434,6 +496,16 @@ class ImageEncoder(BaseEncoder):
             "fluxes": tile_fluxes,
         }
 
+    def map_estimate(self, slen, images):
+        # return full estimate of parameters in full image.
+        # slen is size of the image without border padding
+        border_padding = (images.shape[-1] - slen) / 2
+        assert slen % self.tile_slen == 0, "incompatible image"
+        assert border_padding == self.border_padding, "incompatible border"
+        tile_estimate = self.tiled_map_estimate(images)
+        estimate = get_full_params(slen, tile_estimate)
+        return estimate
+
     @property
     def variational_params(self):
         # transform is a function applied directly on NN output.
@@ -451,7 +523,7 @@ class ImageEncoder(BaseEncoder):
 
 class GalaxyEncoder(BaseEncoder):
     def __init__(self, n_galaxy_params=8, **kwargs):
-        super(GalaxyEncoder, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.n_galaxy_params = n_galaxy_params
         self.indx_mats = self._get_hidden_indices()
 
@@ -476,6 +548,9 @@ class GalaxyEncoder(BaseEncoder):
         }
 
         return var_params
+
+    def map_estimate(self, slen, images):
+        raise NotImplementedError()
 
     @property
     def variational_params(self):
