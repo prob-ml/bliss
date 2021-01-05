@@ -2,7 +2,6 @@ from abc import abstractmethod, ABC
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch.distributions import categorical
 from .. import device
 
