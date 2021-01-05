@@ -16,10 +16,10 @@ class TestTune:
             "tuning.allocated_gpus": 2 if devices.use_cuda else 0,
             "tuning.gpus_per_trial": 1 if devices.use_cuda else 0,
             "tuning.max_concurrent": 1,
-            "tuning.grace_period": 2 if devices.use_cuda else 1,
+            "tuning.grace_period": 1,
             "tuning.verbose": 0,
             "tuning.save": False,
-            "tuning.n_epochs": 2 if devices.use_cuda else 1,
+            "tuning.n_epochs": 1,
             "tuning.n_samples": 2 if devices.use_cuda else 1,
         }
         overrides = [f"{k}={v}" for k, v in overrides.items()]
