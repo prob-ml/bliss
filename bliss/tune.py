@@ -59,15 +59,11 @@ def sleep_trainable(search_space, cfg: DictConfig):
 
 
 @hydra.main(config_path="../config", config_name="config")
-# model=m2, dataset=m2, training=m2 optimizer=m2 in terminal
+# model=m2 dataset=m2 training=m2 optimizer=m2 in terminal
 def main(cfg: DictConfig):
     # sets seeds for numpy, torch, and python.random
     # TODO: Test reproducibility and decide wether to use `Trainer(deterministic=True)`, 10% slower
     pl.trainer.seed_everything(cfg.tuning.seed)
-
-    assert hydra.utils.get_original_cwd().endswith(
-        "/bin"
-    ), f"This script needs to be run in /bin instead of {hydra.utils.get_original_cwd()}"
 
     # restrict the number for cuda
     ray.init(num_gpus=cfg.tuning.allocated_gpus)
@@ -118,7 +114,7 @@ def main(cfg: DictConfig):
         search_alg = HyperOptSearch(random_state_seed=cfg.tuning.seed)
 
     search_alg = ConcurrencyLimiter(
-        search_alg, max_concurrent=cfg.tuning.allocated_gpus
+        search_alg, max_concurrent=cfg.tuning.max_concurrent
     )
 
     # define how to report the results
@@ -150,15 +146,18 @@ def main(cfg: DictConfig):
         scheduler=scheduler,
         metric="loss",
         mode="min",
-        local_dir=hydra.utils.to_absolute_path("../outputs/tuning"),
+        local_dir=hydra.utils.to_absolute_path(cfg.tuning.log_path),
         search_alg=search_alg,
         progress_reporter=reporter,
         name="tune_sleep",
     )
 
-    best_result = analysis.best_result
-    conf = OmegaConf.create(best_result)
-    OmegaConf.save(conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path))
+    if cfg.tuning.save:
+        best_result = analysis.best_result
+        conf = OmegaConf.create(best_result)
+        OmegaConf.save(
+            conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)
+        )
 
 
 if __name__ == "__main__":
