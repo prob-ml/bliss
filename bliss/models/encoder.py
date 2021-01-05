@@ -1,4 +1,6 @@
 from abc import abstractmethod, ABC
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -40,8 +42,7 @@ def get_full_params(slen: int, tile_params: dict):
     # NOTE: assume that each param in each tile is already pushed to the front.
     required = {"n_sources", "locs"}
     optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes"}
-    assert type(slen) is int
-    assert type(tile_params) is dict
+    assert isinstance(slen, int) and isinstance(tile_params, dict)
     assert required.issubset(tile_params.keys())
     # tile_params does not contain extraneous keys
     for param_name in tile_params:
