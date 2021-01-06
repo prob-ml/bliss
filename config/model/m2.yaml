@@ -39,3 +39,4 @@ encoder:
     enc_kern: 3
     enc_hidden: 256
     momentum: 0.5
+use_galaxy_encoder: False

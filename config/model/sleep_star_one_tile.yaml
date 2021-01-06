@@ -37,3 +37,4 @@ encoder:
     enc_conv_c: 20
     enc_kern: 3
     enc_hidden: 256
+use_galaxy_encoder: False

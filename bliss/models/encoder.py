@@ -186,7 +186,7 @@ class BaseEncoder(nn.Module, ABC):
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
 
-        conv_out_dim = self.enc_conv_c * ptile_slen ** 2
+        conv_out_dim = enc_conv_c * ptile_slen ** 2
         self.enc_conv = nn.Sequential(
             nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
             nn.ReLU(),
@@ -210,8 +210,6 @@ class BaseEncoder(nn.Module, ABC):
             nn.ReLU(),
         )
 
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
-
         # Number of variational parameters used to characterize each source in an image.
         self.n_params_per_source = sum(
             self.variational_params[k]["dim"] for k in self.variational_params
@@ -227,6 +225,8 @@ class BaseEncoder(nn.Module, ABC):
             * (self.max_detections + 1)
             * self.n_params_per_source
         )
+
+        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
 
         self.indx_mats = {}  # initialize later in child class __init__
 
@@ -388,8 +388,8 @@ class BaseEncoder(nn.Module, ABC):
         # containing the variational parameters on each tile.
         pass
 
-    @abstractmethod
     @property
+    @abstractmethod
     def variational_params(self):
         # return a dict with the variational params that should be estimated.
         pass
@@ -397,21 +397,20 @@ class BaseEncoder(nn.Module, ABC):
 
 class ImageEncoder(BaseEncoder):
     def __init__(self, **kwargs):
-
         super().__init__(**kwargs)
         self.n_star_params = self.n_bands
         self.log_softmax = nn.LogSoftmax(dim=1)
 
         # Accounts for categorical probability over # of objects.
         self.dim_out_all += 1 + self.max_detections
-        self.indx_mats = self._get_hidden_indices()
+        self.indx_mats, last_indx = self._get_hidden_indices()
 
         # TODO: Assign it to the last indices that were not used up.
         # get index for prob_n_sources, assigned indices that were not used.
         self.prob_n_source_indx = torch.zeros(
             self.max_detections + 1, dtype=torch.long, device=device
         )
-        self.prob_n_source_indx = torch.arange(1, 3)
+        self.prob_n_source_indx = torch.arange(last_indx, self.dim_out_all)
 
     def _get_logprob_n_from_var_params(self, h):
         """
@@ -524,9 +523,10 @@ class ImageEncoder(BaseEncoder):
 
 class GalaxyEncoder(BaseEncoder):
     def __init__(self, n_galaxy_params=8, **kwargs):
-        super().__init__(**kwargs)
         self.n_galaxy_params = n_galaxy_params
-        self.indx_mats = self._get_hidden_indices()
+
+        super().__init__(**kwargs)
+        self.indx_mats, _ = self._get_hidden_indices()
 
     def tile_map_estimate(self, images, tile_n_sources, galaxy_bool):
         pred = self(images, tile_n_sources)
