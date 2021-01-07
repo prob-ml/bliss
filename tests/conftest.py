@@ -4,6 +4,7 @@ import torch
 import pytorch_lightning as pl
 from hydra.experimental import initialize, compose
 
+import bliss
 from bliss import sleep
 from bliss.datasets import simulated, catsim
 from bliss.models import galaxy_net
@@ -11,16 +12,10 @@ from bliss.models import galaxy_net
 
 # command line arguments for tests
 def pytest_addoption(parser):
-    parser.addoption(
-        "--use-cpu", action="store_true", default=False, help="Allow cpu runs."
-    )
-
     parser.addoption("--gpus", default="0", type=str, help="--gpus option for trainer.")
-
     parser.addoption(
         "--repeat", default=1, type=str, help="Number of times to repeat each test"
     )
-
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
@@ -59,8 +54,8 @@ def pytest_generate_tests(metafunc):
 
 
 class DeviceSetup:
-    def __init__(self, gpus, use_cpu=False):
-        self.use_cuda = torch.cuda.is_available() if not use_cpu else False
+    def __init__(self, gpus):
+        self.use_cuda = torch.cuda.is_available()
         self.gpus = gpus if self.use_cuda else None
 
         # setup device
@@ -143,8 +138,7 @@ def paths():
 @pytest.fixture(scope="session")
 def devices(pytestconfig):
     gpus = pytestconfig.getoption("gpus")
-    use_cpu = pytestconfig.getoption("use_cpu")
-    return DeviceSetup(gpus, use_cpu=use_cpu)
+    return DeviceSetup(gpus)
 
 
 @pytest.fixture(scope="session")

@@ -27,7 +27,6 @@ class TestSourceEncoder:
             tile_slen=tile_slen,
             n_bands=n_bands,
             max_detections=max_detections,
-            n_galaxy_params=8,
         ).to(device)
 
         with torch.no_grad():
@@ -46,7 +45,7 @@ class TestSourceEncoder:
 
             pred = star_encoder.forward(image_ptiles, n_star_per_tile)
 
-            assert torch.all(0.0 <= pred["loc_mean"])
+            assert torch.all(pred["loc_mean"] >= 0.0)
             assert torch.all(pred["loc_mean"] <= 1.0)
 
             # test we have the correct pattern of zeros
@@ -149,7 +148,6 @@ class TestSourceEncoder:
             tile_slen=tile_slen,
             n_bands=n_bands,
             max_detections=max_detections,
-            n_galaxy_params=8,
         ).to(device)
 
         with torch.no_grad():
@@ -180,10 +178,4 @@ class TestSourceEncoder:
                 assert torch.all(pred_i["log_flux_mean"].eq(pred["log_flux_mean"][i]))
                 assert torch.all(
                     pred_i["log_flux_logvar"].eq(pred["log_flux_logvar"][i])
-                )
-                assert torch.all(
-                    pred_i["galaxy_param_mean"].eq(pred["galaxy_param_mean"][i])
-                )
-                assert torch.all(
-                    pred_i["galaxy_param_logvar"].eq(pred["galaxy_param_logvar"][i])
                 )

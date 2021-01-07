@@ -111,7 +111,6 @@ class SleepPhase(pl.LightningModule):
         self.plotting: bool = cfg.training.plotting
 
         # consistency
-        assert self.image_decoder.n_galaxy_params == self.image_encoder.n_galaxy_params
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
         assert self.image_decoder.border_padding == self.image_encoder.border_padding
 
@@ -121,6 +120,10 @@ class SleepPhase(pl.LightningModule):
             )
             assert self.galaxy_encoder.tile_slen == self.image_encoder.tile_slen
             assert self.galaxy_encoder.ptile_slen == self.image_encoder.ptile_slen
+            assert (
+                self.galaxy_encoder.n_galaxy_params
+                == self.image_decoder.n_galaxy_params
+            )
 
     def forward(self, image_ptiles, n_sources):
         raise NotImplementedError()
