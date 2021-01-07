@@ -28,6 +28,7 @@ pytest-cov = "^2.10"
 pre-commit = "^2.9.2"
 ray = {extras = ["tune"], version = "^1.0.1"}
 pylint = "^2.6.0"
+jedi= "0.17.2"
 
 [tool.poetry.scripts]
 tune = "bliss.tune:main"

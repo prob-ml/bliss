@@ -11,6 +11,9 @@ from bliss.models import galaxy_net
 
 # command line arguments for tests
 def pytest_addoption(parser):
+    parser.addoption(
+        "--use-cpu", action="store_true", default=False, help="Allow cpu runs."
+    )
 
     parser.addoption("--gpus", default="0", type=str, help="--gpus option for trainer.")
 
@@ -56,8 +59,8 @@ def pytest_generate_tests(metafunc):
 
 
 class DeviceSetup:
-    def __init__(self, gpus):
-        self.use_cuda = torch.cuda.is_available()
+    def __init__(self, gpus, use_cpu=False):
+        self.use_cuda = torch.cuda.is_available() if not use_cpu else False
         self.gpus = gpus if self.use_cuda else None
 
         # setup device
@@ -140,7 +143,8 @@ def paths():
 @pytest.fixture(scope="session")
 def devices(pytestconfig):
     gpus = pytestconfig.getoption("gpus")
-    return DeviceSetup(gpus)
+    use_cpu = pytestconfig.getoption("use_cpu")
+    return DeviceSetup(gpus, use_cpu=use_cpu)
 
 
 @pytest.fixture(scope="session")
