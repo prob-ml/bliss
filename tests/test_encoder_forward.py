@@ -9,7 +9,6 @@ class TestSourceEncoder:
         """
         * Test that forward returns the correct pattern of zeros.
         * Test that variational parameters inside h agree with those returned from forward.
-        * Test everything works with n_stars=None in forward.
         """
         device = devices.device
 
@@ -55,12 +54,14 @@ class TestSourceEncoder:
             assert ((pred["loc_logvar"] != 0).sum(1)[:, 0] == n_star_per_tile).all()
             assert ((pred["loc_logvar"] != 0).sum(1)[:, 1] == n_star_per_tile).all()
 
-            for n in range(n_bands):
+            for i in range(2):
                 assert (
-                    (pred["loc_mean"][:, :, n] != 0).sum(1) == n_star_per_tile
+                    (pred["loc_mean"][:, :, i] != 0).sum(1) == n_star_per_tile
                 ).all()
+
+            for b in range(n_bands):
                 assert (
-                    (pred["log_flux_mean"][:, :, n] != 0).sum(1) == n_star_per_tile
+                    (pred["log_flux_mean"][:, :, b] != 0).sum(1) == n_star_per_tile
                 ).all()
 
             # check pattern of zeros
@@ -77,10 +78,10 @@ class TestSourceEncoder:
             h_out = star_encoder._get_var_params_all(image_ptiles)
 
             # get index matrices
-            locs_mean_indx_mat = star_encoder.indx_mats[0]
-            locs_var_indx_mat = star_encoder.indx_mats[1]
-            log_flux_mean_indx_mat = star_encoder.indx_mats[4]
-            log_flux_var_indx_mat = star_encoder.indx_mats[5]
+            locs_mean_indx_mat = star_encoder.indx_mats["loc_mean"]
+            locs_var_indx_mat = star_encoder.indx_mats["loc_logvar"]
+            log_flux_mean_indx_mat = star_encoder.indx_mats["log_flux_mean"]
+            log_flux_var_indx_mat = star_encoder.indx_mats["log_flux_logvar"]
             prob_n_source_indx_mat = star_encoder.prob_n_source_indx
 
             for i in range(n_image_tiles):
@@ -128,54 +129,3 @@ class TestSourceEncoder:
                         pred["n_source_log_probs"][i].flatten()
                         == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
                     )
-
-    def test_forward_to_hidden2d(self, devices):
-        """Consistency check of using forward vs get_var_params"""
-        device = devices.device
-
-        n_image_tiles = 30
-        max_detections = 4
-        ptile_slen = 8
-        tile_slen = 2
-        n_bands = 2
-        n_samples = 10
-
-        # get encoder
-        star_encoder = encoder.ImageEncoder(
-            enc_conv_c=20,
-            enc_hidden=256,
-            ptile_slen=ptile_slen,
-            tile_slen=tile_slen,
-            n_bands=n_bands,
-            max_detections=max_detections,
-        ).to(device)
-
-        with torch.no_grad():
-            star_encoder.eval()
-
-            # simulate image padded tiles
-            image_ptiles = (
-                torch.randn(
-                    n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device
-                )
-                + 10.0
-            )
-            n_star_per_tile_sampled = torch.from_numpy(
-                np.random.choice(max_detections, (n_samples, n_image_tiles))
-            )
-
-            h = star_encoder._get_var_params_all(image_ptiles).detach()
-            pred = star_encoder._get_var_params_for_n_sources(
-                h, n_star_per_tile_sampled
-            )
-
-            #  test prediction matches tile by tile
-            for i in range(n_samples):
-                pred_i = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
-
-                assert (pred_i["loc_mean"] - pred["loc_mean"][i]).abs().max() < 1e-6
-                assert torch.all(pred_i["loc_logvar"].eq(pred["loc_logvar"][i]))
-                assert torch.all(pred_i["log_flux_mean"].eq(pred["log_flux_mean"][i]))
-                assert torch.all(
-                    pred_i["log_flux_logvar"].eq(pred["log_flux_logvar"][i])
-                )

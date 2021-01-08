@@ -329,11 +329,10 @@ class ImageDecoder(nn.Module):
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
         locs = self._sample_locs(is_on_array, batch_size)
 
-        n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
+        n_galaxies, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
             n_sources, is_on_array
         )
         galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
-
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
         log_fluxes = self._get_log_fluxes(fluxes)
 

@@ -334,8 +334,8 @@ class BaseEncoder(nn.Module, ABC):
             n_sources.shape = (n_ptiles)
 
         Returns:
-            loc_mean.shape = (n_samples x n_ptiles x max_detections x len(x,y))
-            source_param_mean.shape = (n_samples x n_ptiles x max_detections x n_source_params)
+            loc_mean.shape = (n_ptiles x max_detections x len(x,y))
+            source_param_mean.shape = (n_ptiles x max_detections x n_source_params)
         """
         assert len(n_sources.shape) == 1
         assert bool(self.indx_mats), "empty indx_mats"
@@ -423,7 +423,6 @@ class ImageEncoder(BaseEncoder):
         assert len(tile_n_sources.shape) == 1
         assert len(image_ptiles.shape) == 4
         assert image_ptiles.shape[0] == tile_n_sources.shape[0]
-        n_ptiles = image_ptiles.shape[0]
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
 
         # h.shape = (n_ptiles x self.dim_out_all)

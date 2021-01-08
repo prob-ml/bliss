@@ -99,6 +99,23 @@ def _get_min_perm_loss(
     return locs_loss, star_params_loss, galaxy_bool_loss
 
 
+def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+    # return shape (n_ptiles x max_detections x max_detections)
+    assert true_params.shape == param_mean.shape == param_logvar.shape
+
+    n_ptiles = true_params.size(0)
+    max_detections = true_params.size(1)
+
+    # view to evaluate all combinations of log_prob.
+    _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+    _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+    _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+
+    _sd = (_param_logvar.exp() + 1e-5).sqrt()
+    param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
+    return param_log_probs_all
+
+
 class SleepPhase(pl.LightningModule):
     def __init__(self, cfg: DictConfig):
         super(SleepPhase, self).__init__()
@@ -113,8 +130,10 @@ class SleepPhase(pl.LightningModule):
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
         assert self.image_decoder.border_padding == self.image_encoder.border_padding
+        assert self.image_encoder.max_detections <= self.image_decoder.max_sources
 
-        if cfg.model.use_galaxy_encoder:
+        self.use_galaxy_encoder = cfg.model.use_galaxy_encoder
+        if self.use_galaxy_encoder:
             self.galaxy_encoder = encoder.GalaxyEncoder(
                 **cfg.model.galaxy_encoder.params
             )
@@ -232,16 +251,14 @@ class SleepPhase(pl.LightningModule):
         batch_size = images.shape[0]
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
         n_ptiles = batch_size * n_tiles_per_image
-        max_sources_dec = self.image_decoder.max_sources
         max_sources = self.image_encoder.max_detections
         n_bands = self.image_decoder.n_bands
 
-        # clip to max sources
-        if max_sources < max_sources_dec:
-            true_tile_locs = true_tile_locs[:, :, 0:max_sources]
-            true_tile_log_fluxes = true_tile_log_fluxes[:, :, 0:max_sources]
-            true_tile_galaxy_bool = true_tile_galaxy_bool[:, :, 0:max_sources]
-            true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
+        # clip decoder output since constraint is: max_detections <= max_sources (per tile)
+        true_tile_locs = true_tile_locs[:, :, 0:max_sources]
+        true_tile_log_fluxes = true_tile_log_fluxes[:, :, 0:max_sources]
+        true_tile_galaxy_bool = true_tile_galaxy_bool[:, :, 0:max_sources]
+        true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
 
         # flatten so first dimension is ptile
         true_tile_locs = true_tile_locs.view(n_ptiles, max_sources, 2)
@@ -253,8 +270,6 @@ class SleepPhase(pl.LightningModule):
         )
 
         # extract image tiles
-        # true_tile_locs has shape = (n_ptiles x max_detections x 2)
-        # true_tile_n_sources has shape = (n_ptiles)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         pred = self.image_encoder.forward(image_ptiles, true_tile_n_sources)
 
@@ -271,17 +286,16 @@ class SleepPhase(pl.LightningModule):
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
-
-        locs_log_probs_all = self._get_params_logprob_all_combs(
+        locs_log_probs_all = _get_params_logprob_all_combs(
             true_tile_locs, loc_mean, loc_logvar
         )
-        star_params_log_probs_all = self._get_params_logprob_all_combs(
+        star_params_log_probs_all = _get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
+        prob_galaxy = pred["prob_galaxy"].view(n_ptiles, max_sources)
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
-        prob_galaxy = pred["prob_galaxy"].view(n_ptiles, max_sources)
         (locs_loss, star_params_loss, galaxy_bool_loss,) = _get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
@@ -296,7 +310,6 @@ class SleepPhase(pl.LightningModule):
             + star_params_loss
             + galaxy_bool_loss
         )
-
         loss = loss_vec.mean()
 
         return (
@@ -309,20 +322,18 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         params = self.hparams.optimizer.params
-        image_opt = Adam(self.image_encoder.parameters(), **params)
-        galaxy_opt = Adam(self.galaxy_encoder.parameters(), **params)
-        return image_opt, galaxy_opt
+        opt = Adam(self.image_encoder.parameters(), **params)
+
+        if self.use_galaxy_encoder:
+            galaxy_opt = Adam(self.galaxy_encoder.parameters(), **params)
+            opt = (opt, galaxy_opt)
+
+        return opt
 
     def training_step(self, batch, batch_idx, optimizer_idx):
 
         if optimizer_idx == 0:  # image_encoder
-            (
-                loss,
-                counter_loss,
-                locs_loss,
-                star_params_loss,
-                galaxy_bool_loss,
-            ) = self.get_detection_loss(batch)
+            loss = self.get_detection_loss(batch)[0]
             self.log("train_detection_loss", loss)
             return loss
 
@@ -341,6 +352,7 @@ class SleepPhase(pl.LightningModule):
 
         self.log("val_loss", loss)
         self.log("val_counter_loss", counter_loss.mean())
+        self.log("val_locs_loss", locs_loss.mean())
         self.log("val_gal_bool_loss", galaxy_bool_loss.mean())
         self.log("val_star_params_loss", star_params_loss.mean())
 
@@ -428,7 +440,7 @@ class SleepPhase(pl.LightningModule):
 
                 # sort each based on x location.
                 true_locs_i, indx_sort_true = sort_locs(true_locs_i)
-                locs_i, indx_sort = sort_locs(locs_i)
+                locs_i, _ = sort_locs(locs_i)
 
                 # now calculate mse
                 locs_mse = (true_locs_i - locs_i).pow(2).sum(1).pow(1.0 / 2)
@@ -584,19 +596,3 @@ class SleepPhase(pl.LightningModule):
             else:
                 raise NotImplementedError()
         plt.close(fig)
-
-    @staticmethod
-    def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
-        assert true_params.shape == param_mean.shape == param_logvar.shape
-
-        n_ptiles = true_params.size(0)
-        max_detections = true_params.size(1)
-
-        # view to evaluate all combinations of log_prob.
-        _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
-        _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
-        _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
-
-        _sd = (_param_logvar.exp() + 1e-5).sqrt()
-        param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
-        return param_log_probs_all
