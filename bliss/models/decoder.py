@@ -618,15 +618,13 @@ class ImageDecoder(nn.Module):
     def render_images(
         self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
     ):
-        # constructs the full slen x slen image
+        # returns the **full** image in shape (batch_size x n_bands x slen x slen)
 
         # n_sources: is (batch_size x n_tiles_per_image)
         # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
         # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources x 1)
         # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
         # fluxes: Is (batch_size x n_tiles_per_image x max_sources x n_bands)
-
-        # returns the **full** image in shape (batch_size x n_bands x slen x slen)
 
         assert n_sources.shape[0] == locs.shape[0]
         assert n_sources.shape[1] == locs.shape[1]
