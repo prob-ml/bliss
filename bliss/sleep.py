@@ -166,7 +166,14 @@ class SleepPhase(pl.LightningModule):
         return est
 
     def get_galaxy_loss(self, batch):
+        images = batch["images"]
         true_tile_galaxy_params = batch["galaxy_params"]
+        locs = batch["locs"]
+
+        # shape = (n_ptiles x band x ptile_slen x ptile_slen)
+        image_ptiles = self.image_encoder.get_images_in_tiles(images)
+
+        # in each padded tile we need to center the galaxy
 
         # clip to max sources
         max_sources_dec = self.image_decoder.max_sources
