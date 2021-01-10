@@ -413,6 +413,47 @@ class ImageEncoder(nn.Module):
         var_params = {key: value.squeeze(0) for key, value in var_params.items()}
         return var_params
 
+    def sample_encoder(self, images, n_samples):
+        assert len(images.shape) == 4
+        assert images.shape[0] == 1, "Only works for 1 image"
+        image_ptiles = self.get_images_in_tiles(images)
+        h = self._get_var_params_all(image_ptiles)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+
+        # sample number of sources.
+        # tile_n_sources shape = (n_samples x n_ptiles)
+        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
+        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
+        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
+        tile_n_sources = tile_n_sources.view(n_samples, -1)
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+
+        # get var_params conditioned on n_sources
+        pred = self.forward_sampled(image_ptiles, tile_n_sources)
+
+        # other quantities based on var_params
+        # tile_galaxy_bool shape = (n_samples x n_ptiles x max_detections x 1)
+        tile_galaxy_bool = torch.bernoulli(pred["prob_galaxy"]).float()
+        tile_galaxy_bool *= tile_is_on_array
+        tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
+        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
+        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
+        tile_locs = self._get_normal_samples(
+            pred["loc_mean"], pred["loc_sd"], tile_is_on_array
+        )
+        tile_log_fluxes = self._get_normal_samples(
+            pred["log_flux_mean"], pred["log_flux_sd"], tile_star_bool
+        )
+        tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
+        return {
+            "n_sources": tile_n_sources,
+            "locs": tile_locs,
+            "galaxy_bool": tile_galaxy_bool,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+        }
+
     def tile_map_estimate(self, slen, images):
         # slen is size of the images without border padding
 
