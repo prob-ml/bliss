@@ -139,6 +139,8 @@ class SleepPhase(pl.LightningModule):
             )
             assert self.galaxy_encoder.slen == self.image_encoder.ptile_slen
             assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params
+            assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
+            assert self.image_encoder.max_detections == 1
 
     def forward(self, image_ptiles, n_sources):
         raise NotImplementedError()
@@ -165,50 +167,68 @@ class SleepPhase(pl.LightningModule):
         est = get_full_params(slen, tile_est)
         return est
 
+    @staticmethod
+    def _center_ptiles(image_ptiles, tile_locs):
+        # assume there is one galaxy in each tile of the given padded tiles
+        # return a centered version of it using their true locations in tiles.
+        assert len(image_ptiles.shape) == 4
+        assert len(tile_locs) == 3
+        n_ptiles = image_ptiles.shape[0]
+        assert tile_locs.shape[0] == n_ptiles
+        raise NotImplementedError()
+
     def get_galaxy_loss(self, batch):
         images = batch["images"]
-        true_tile_galaxy_params = batch["galaxy_params"]
-        locs = batch["locs"]
-
         # shape = (n_ptiles x band x ptile_slen x ptile_slen)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
+        n_ptiles = image_ptiles.shape[0]
+        ptile_slen = image_ptiles.shape[-1]
 
-        # in each padded tile we need to center the galaxy
+        # in each padded tile we need to center the corresponding galaxy
+        # raise NotImplementedError("Need to center padded_tiles")
+        _tile_locs = batch["locs"].reshape(n_ptiles, self.image_decoder.max_sources, 2)
+        centered_ptiles = self._center_ptiles(image_ptiles, _tile_locs)
 
-        # clip to max sources
-        max_sources_dec = self.image_decoder.max_sources
-        max_sources = self.image_encoder.max_detections
-        if max_sources < max_sources_dec:
-            true_tile_galaxy_params = true_tile_galaxy_params[:, :, 0:max_sources]
-        true_tile_galaxy_params = true_tile_galaxy_params.view(
-            n_ptiles, max_sources, n_galaxy_params
+        # remove background before encoding
+        background_values = self.image_decoder.background.mean((1, 2))
+        ptile_background = torch.zeros(
+            1, self.image_decoder.n_bands, ptile_slen, ptile_slen
         )
+        for b in range(ptile_background.shape[1]):
+            ptile_background[:, b] = background_values[b]
+        centered_ptiles -= ptile_background
 
-        # calculate kl_qp loss.
-        # TODO: Should I zero out with is_on_array?
-        q_z = Normal(
-            pred["galaxy_param_mean"], pred["galaxy_param_logvar"].exp().sqrt()
-        )
+        # we can assume there is one galaxy per_tile and encode each tile independently.
+        enc = self.galaxy_encoder.forward(centered_ptiles)
+        galaxy_param_mean, galaxy_param_var = enc
+        assert galaxy_param_mean.shape[0] == n_ptiles
+        assert galaxy_param_var.shape[0] == n_ptiles
+        assert galaxy_param_mean.shape[1] == 1, "Only one galaxy per tile supported"
+        assert galaxy_param_var.shape[1] == 1, "Only one galaxy per tile supported"
+
+        # start calculating kl_qp loss.
+        q_z = Normal(galaxy_param_mean, galaxy_param_var.sqrt())
         z = q_z.rsample()
         log_q_z = q_z.log_prob(z).sum((1, 2))
         p_z = Normal(torch.zeros(z.shape), torch.ones(z.shape))
         log_p_z = p_z.log_prob(z).sum((1, 2))
 
-        # TODO: Are true_tile_locs matched with z? Does this matter or do we have to do
-        #  permutation stuff?
+        # now draw a full reconstructed image.
         recon_mean, recon_var = self.image_decoder.render_images(
-            true_tile_n_sources,
-            true_tile_locs,
-            true_tile_galaxy_bool,
+            batch["n_sources"],
+            batch["locs"],
+            batch["galaxy_bool"],
             z,
-            true_tile_log_fluxes.exp(),
+            batch["fluxes"],
+            add_noise=False,
         )
 
         kl_z = log_q_z - log_p_z  # log q(z | x) - log p(z)
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
         recon_losses = recon_losses.view(n_ptiles, -1).sum(1)
-
         kl_qp = (recon_losses + kl_z).sum()
+
+        return kl_qp
 
     def get_detection_loss(self, batch):
         """
@@ -342,6 +362,7 @@ class SleepPhase(pl.LightningModule):
             self.log("train_detection_loss", loss)
 
         if optimizer_idx == 1:  # galaxy_encoder:
+            loss = self.get_galaxy_loss(batch)
             self.log("train_galaxy_loss", loss)
 
         return loss
