@@ -325,19 +325,19 @@ class SleepPhase(pl.LightningModule):
             opt = (opt, galaxy_opt)
             raise NotImplementedError()
 
-        return
+        return opt
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
+        loss = 0.0
 
         if optimizer_idx == 0:  # image_encoder
             loss = self.get_detection_loss(batch)[0]
             self.log("train_detection_loss", loss)
-            return loss
 
         if optimizer_idx == 1:  # galaxy_encoder:
-            loss = 0.0
             self.log("train_galaxy_loss", loss)
-            return loss
+
+        return loss
 
     def validation_step(self, batch, batch_indx):
         (
@@ -479,7 +479,7 @@ class SleepPhase(pl.LightningModule):
         n_samples = min(10, len(batch["n_sources"]))
         assert n_samples > 1
 
-        # extract non-params entries get_full_params works.
+        # extract non-params entries for get full params to works.
         exclude = {"images", "slen", "background"}
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
@@ -508,7 +508,7 @@ class SleepPhase(pl.LightningModule):
             with torch.no_grad():
                 # get the estimated params, these are *per tile*.
                 self.image_encoder.eval()
-                tile_estimate = self.image_encoder.tiled_map_estimate(image)
+                tile_estimate = self.image_encoder.tile_map_estimate(slen, image)
 
             # convert tile estimates to full parameterization for plotting
             estimate = get_full_params(slen, tile_estimate)
@@ -529,13 +529,12 @@ class SleepPhase(pl.LightningModule):
             # continue only if at least one true source and predicted source.
             max_sources = true_locs.shape[1]
             if max_sources > 0 and n_sources.item() > 0:
-
                 # draw reconstruction image.
                 recon_image, _ = self.image_decoder.render_images(
                     tile_estimate["n_sources"],
                     tile_estimate["locs"],
                     tile_estimate["galaxy_bool"],
-                    batch["galaxy_params"],
+                    batch["galaxy_params"][None, i],
                     tile_estimate["fluxes"],
                 )
 

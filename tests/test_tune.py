@@ -19,7 +19,6 @@ class TestTune:
             "tuning.grace_period": 1,
             "tuning.verbose": 0,
             "tuning.save": False,
-            "tuning.n_epochs": 1,
             "tuning.n_samples": 2 if devices.use_cuda else 1,
         }
         overrides = [f"{k}={v}" for k, v in overrides.items()]

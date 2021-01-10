@@ -572,9 +572,7 @@ class ImageDecoder(nn.Module):
 
         # returns the ptiles in
         # shape = (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
-
         max_sources = locs.shape[2]
-
         assert (n_sources <= max_sources).all()
         batch_size = n_sources.shape[0]
         n_ptiles = batch_size * self.n_tiles_per_image

@@ -4,7 +4,6 @@ import torch
 import pytorch_lightning as pl
 from hydra.experimental import initialize, compose
 
-import bliss
 from bliss import sleep
 from bliss.datasets import simulated, catsim
 from bliss.models import galaxy_net

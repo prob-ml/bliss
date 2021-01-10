@@ -413,7 +413,19 @@ class ImageEncoder(nn.Module):
         var_params = {key: value.squeeze(0) for key, value in var_params.items()}
         return var_params
 
-    def tile_map_estimate(self, image_ptiles):
+    def tile_map_estimate(self, slen, images):
+        # slen is size of the images without border padding
+
+        # check image compatibility
+        border_padding = (images.shape[-1] - slen) / 2
+        assert slen % self.tile_slen == 0, "incompatible image"
+        assert border_padding == self.border_padding, "incompatible border"
+
+        # extract image_ptiles
+        batch_size = images.shape[0]
+        image_ptiles = self.get_images_in_tiles(images)
+        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+
         h = self._get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
@@ -444,33 +456,26 @@ class ImageEncoder(nn.Module):
         tile_log_fluxes *= tile_star_bool
         tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
 
-        # others.shape = (n_ptiles x max_detections x param_dim)
-        return {
-            "n_sources": tile_n_sources,
+        tile_estimate = {
             "locs": tile_locs,
             "galaxy_bool": tile_galaxy_bool,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
         }
 
-    def map_estimate(self, slen, images):
-        # return full estimate of parameters in full image.
-        # slen is size of the image without border padding
-        border_padding = (images.shape[-1] - slen) / 2
-        assert slen % self.tile_slen == 0, "incompatible image"
-        assert border_padding == self.border_padding, "incompatible border"
-        batch_size = images.shape[0]
-        image_ptiles = self.get_images_in_tiles(images)
-        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
-        tile_estimate = self.tile_map_estimate(image_ptiles)
-
         # reshape with images' batch_size.
-        tile_n_sources = tile_estimate.pop("n_sources")
         tile_estimate = {
             key: value.view(batch_size, n_tiles_per_image, self.max_detections, -1)
             for key, value in tile_estimate.items()
         }
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
+
+        return tile_estimate
+
+    def map_estimate(self, slen, images):
+        # return full estimate of parameters in full image.
+        # slen is size of the image without border padding
+        tile_estimate = self.tile_map_estimate(slen, images)
         estimate = get_full_params(slen, tile_estimate)
         return estimate
 

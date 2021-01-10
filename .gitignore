@@ -19,3 +19,4 @@ temp/
 trials_result/
 .vscode
 jupyter/
+outputs/
