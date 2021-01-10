@@ -23,6 +23,7 @@ class WakeNet(pl.LightningModule):
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder
         self.image_decoder.requires_grad_(True)
+        assert self.image_decoder.galaxy_decoder is None
 
         self.slen = image_decoder.slen
         self.border_padding = image_decoder.border_padding
@@ -48,11 +49,13 @@ class WakeNet(pl.LightningModule):
             self.star_encoder.eval()
             sample = self.star_encoder.sample_encoder(obs_img, self.n_samples)
 
-        recon_mean = self.image_decoder.render_images(
+        shape = sample["locs"].shape[:-1]
+        zero_gal_params = torch.zeros(*shape, self.image_decoder.n_galaxy_params)
+        recon_mean, _ = self.image_decoder.render_images(
             sample["n_sources"].contiguous(),
             sample["locs"].contiguous(),
             sample["galaxy_bool"].contiguous(),
-            sample["galaxy_params"].contiguous(),
+            zero_gal_params,
             sample["fluxes"].contiguous(),
             add_noise=False,
         )

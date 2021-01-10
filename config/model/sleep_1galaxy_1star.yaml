@@ -30,4 +30,4 @@ encoder:
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: 12
     max_detections: ${model.decoder.params.max_sources}
-    n_galaxy_params: ${model.galaxy.latent_dim}
+use_galaxy_encoder: False
