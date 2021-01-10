@@ -610,7 +610,7 @@ class ImageDecoder(nn.Module):
                 _locs, _galaxy_params, _galaxy_bool
             )
 
-        images = (galaxies + stars).view(img_shape)
+        images = galaxies.view(img_shape) + stars.view(img_shape)
         var_images = var_images.view(img_shape)
 
         return images, var_images

@@ -387,7 +387,10 @@ class ImageEncoder(nn.Module):
         return self.log_softmax(free_probs)
 
     def forward_sampled(self, image_ptiles, tile_n_sources_sampled):
+        # images shape = (n_ptiles x n_bands x pslen x pslen)
+        # tile_n_sources shape = (n_samples x n_ptiles)
         assert len(tile_n_sources_sampled.shape) == 2
+        assert image_ptiles.shape[0] == tile_n_sources_sampled.shape[1]
         # h.shape = (n_ptiles x self.dim_out_all)
         h = self._get_var_params_all(image_ptiles)
 

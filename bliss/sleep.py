@@ -11,7 +11,7 @@ from torch.distributions import Normal
 from torch.optim import Adam
 
 from . import device, plotting
-from .models import encoder, decoder
+from .models import encoder, decoder, galaxy_net
 from .models.encoder import get_star_bool, get_full_params
 
 plt.switch_backend("Agg")
@@ -134,15 +134,11 @@ class SleepPhase(pl.LightningModule):
 
         self.use_galaxy_encoder = cfg.model.use_galaxy_encoder
         if self.use_galaxy_encoder:
-            self.galaxy_encoder = encoder.GalaxyEncoder(
+            self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(
                 **cfg.model.galaxy_encoder.params
             )
-            assert self.galaxy_encoder.tile_slen == self.image_encoder.tile_slen
-            assert self.galaxy_encoder.ptile_slen == self.image_encoder.ptile_slen
-            assert (
-                self.galaxy_encoder.n_galaxy_params
-                == self.image_decoder.n_galaxy_params
-            )
+            assert self.galaxy_encoder.slen == self.image_encoder.ptile_slen
+            assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params
 
     def forward(self, image_ptiles, n_sources):
         raise NotImplementedError()
@@ -327,10 +323,11 @@ class SleepPhase(pl.LightningModule):
         if self.use_galaxy_encoder:
             galaxy_opt = Adam(self.galaxy_encoder.parameters(), **params)
             opt = (opt, galaxy_opt)
+            raise NotImplementedError()
 
-        return opt
+        return
 
-    def training_step(self, batch, batch_idx, optimizer_idx):
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
 
         if optimizer_idx == 0:  # image_encoder
             loss = self.get_detection_loss(batch)[0]
@@ -339,6 +336,7 @@ class SleepPhase(pl.LightningModule):
 
         if optimizer_idx == 1:  # galaxy_encoder:
             loss = 0.0
+            self.log("train_galaxy_loss", loss)
             return loss
 
     def validation_step(self, batch, batch_indx):
