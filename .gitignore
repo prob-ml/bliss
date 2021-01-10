@@ -18,3 +18,5 @@ celeste.egg-info/
 temp/
 trials_result/
 .vscode
+jupyter/
+outputs/
