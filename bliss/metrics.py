@@ -24,8 +24,8 @@ def inner_join_locs(locs1, locs2):
     assert len(locs2.shape) == 2
     assert locs2.shape[1] == 2
     
-    n1 = locs1.shape[0]
-    n2 = locs2.shape[0]
+    ntrue = locs1.shape[0]
+    nest = locs2.shape[0]
 
     # mse of locs: 
     # entry (i,j) is l1 distance between of ith loc in locs1
@@ -88,32 +88,33 @@ def eval_error_on_batch(true_params, est_params, slen):
     for i in range(batch_size):
         
         # get number of sources
-        n1 = int(true_params['n_sources'][i])
-        n2 = int(est_params['n_sources'][i])
+        ntrue = int(true_params['n_sources'][i])
+        nest = int(est_params['n_sources'][i])
         
-        if (n2 > 0) and (n1 > 0): 
+        if (nest > 0) and (ntrue > 0): 
 
             # prepare locs and get them in units of pixels.
-            locs1 = true_params['locs'][i, 0:n1].view(n1, 2) * slen
-            locs2 = est_params['locs'][i, 0:n2].view(n2, 2) * slen        
+            true_locs = true_params['locs'][i, 0:ntrue].view(ntrue, 2) * slen
+            est_locs = est_params['locs'][i, 0:nest].view(nest, 2) * slen        
 
             # prepare fluxes 
-            fluxes1 = true_params['fluxes'][i, 0:n1].view(n1, n_bands)
-            fluxes2 = est_params['fluxes'][i, 0:n2].view(n2, n_bands)
+            true_fluxes = true_params['fluxes'][i, 0:ntrue].view(ntrue, n_bands)
+            est_fluxes = est_params['fluxes'][i, 0:nest].view(nest, n_bands)
             
-            # convert fluxes to magnitude
-            mag1 = torch.log10(fluxes1) * 2.5
-            mag2 = torch.log10(fluxes2) * 2.5
+            # convert fluxes to magnitude (off by a constant, but
+            # doesn't matter since we are looking at the diff)
+            true_mag = torch.log10(true_fluxes) * 2.5
+            est_mag = torch.log10(est_fluxes) * 2.5
             
             # permute sources so each source has a match
-            locs1, mag1, locs2, mag2 = \
-                inner_join_locs_and_fluxes(locs1, mag1, locs2, mag2)
+            true_locs, est_mag, est_locs, est_mag = \
+                inner_join_locs_and_fluxes(true_locs, est_mag, est_locs, est_mag)
             
             # L1 error over locations  
-            locs_mae_i = (locs1 - locs2).abs().sum(1)
+            locs_mae_i = (true_locs - est_locs).abs().sum(1)
             
             # flux error (for all bands)
-            fluxes_mae_i = (mag1 - mag2).abs()
+            fluxes_mae_i = (true_mag - est_mag).abs()
 
             for k in range(len(locs_mae_i)):
                 locs_mae_vec.append(locs_mae_i[k].item())
@@ -123,3 +124,5 @@ def eval_error_on_batch(true_params, est_params, slen):
     fluxes_mae_vec = torch.Tensor(fluxes_mae_vec)
     
     return locs_mae_vec, fluxes_mae_vec, count_bool, galaxy_counts_bool
+
+
