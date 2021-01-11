@@ -387,13 +387,13 @@ class SleepPhase(pl.LightningModule):
         (
             counts_acc,
             galaxy_counts_acc,
-            locs_median_mse,
-            fluxes_avg_err,
+            locs_mae,
+            fluxes_mae,
         ) = self.get_metrics(batch)
         self.log("val_acc_counts", counts_acc)
         self.log("val_gal_counts", galaxy_counts_acc)
-        self.log("val_locs_median_mse", locs_median_mse)
-        self.log("val_fluxes_avg_err", fluxes_avg_err)
+        self.log("val_locs_mae", locs_mae)
+        self.log("val_fluxes_mae", fluxes_mae)
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -405,13 +405,13 @@ class SleepPhase(pl.LightningModule):
         (
             counts_acc,
             galaxy_counts_acc,
-            locs_median_mse,
-            fluxes_avg_err,
+            locs_mae,
+            fluxes_mae,
         ) = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
-        self.log("locs_median_mse", locs_median_mse)
-        self.log("fluxes_avg_err", fluxes_avg_err)
+        self.log("locs_mae", locs_mae)
+        self.log("fluxes_mae", fluxes_mae)
 
         return batch
 
