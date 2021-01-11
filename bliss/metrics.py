@@ -76,8 +76,15 @@ def eval_error_on_batch(true_params, est_params, slen):
     
     locs_mae_vec = []
     fluxes_mae_vec = []
-    count_bool =  true_params['n_sources'] == est_params['n_sources']
     
+    # accuracy of counting number of sources
+    count_bool =  true_params['n_sources'].eq(est_params['n_sources'])
+    
+    # accuracy of galaxy counts
+    est_n_gal = est_params["galaxy_bool"].view(batch_size, -1).sum(-1)
+    true_n_gal = true_params["galaxy_bool"].view(batch_size, -1).sum(-1)
+    galaxy_counts_bool = est_n_gal.eq(true_n_gal)
+
     for i in range(batch_size):
         
         # get number of sources
@@ -103,13 +110,16 @@ def eval_error_on_batch(true_params, est_params, slen):
                 inner_join_locs_and_fluxes(locs1, mag1, locs2, mag2)
             
             # L1 error over locations  
-            locs_mae = (locs1 - locs2).abs().sum(1)
+            locs_mae_i = (locs1 - locs2).abs().sum(1)
             
             # flux error (for all bands)
-            fluxes_mae = (mag1 - mag2).abs()
+            fluxes_mae_i = (mag1 - mag2).abs()
 
-            for i in range(len(locs_mae)):
-                locs_mae_vec.append(locs_mae[i].item())
-                fluxes_mae_vec.append(fluxes_mae[i].item())
-            
-    return torch.Tensor(locs_mae_vec), torch.Tensor(fluxes_mae_vec), count_bool
+            for k in range(len(locs_mae_i)):
+                locs_mae_vec.append(locs_mae_i[k].item())
+                fluxes_mae_vec.append(fluxes_mae_i[k].item())
+    
+    locs_mae_vec = torch.Tensor(locs_mae_vec)
+    fluxes_mae_vec = torch.Tensor(fluxes_mae_vec)
+    
+    return locs_mae_vec, fluxes_mae_vec, count_bool, galaxy_counts_bool
