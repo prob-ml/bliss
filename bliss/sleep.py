@@ -13,6 +13,7 @@ from torch.optim import Adam
 from . import device, plotting
 from .models import encoder, decoder, galaxy_net
 from .models.encoder import get_star_bool, get_full_params
+from .metrics import eval_error_on_batch
 
 plt.switch_backend("Agg")
 
@@ -433,73 +434,17 @@ class SleepPhase(pl.LightningModule):
 
         # get map estimates
         estimates = self.image_encoder.map_estimate(slen, images)
-
-        # accuracy of counts
-        counts_acc = true_params["n_sources"].eq(estimates["n_sources"]).float().mean()
-
-        # accuracy of galaxy counts
-        est_n_gal = estimates["galaxy_bool"].view(batch_size, -1).sum(-1)
-        true_n_gal = estimates["galaxy_bool"].view(batch_size, -1).sum(-1)
-        galaxy_counts_acc = est_n_gal.eq(true_n_gal).float().mean()
-
-        # accuracy of locations
-        est_locs = estimates["locs"]
-        true_locs = true_params["locs"]
-
-        # accuracy of fluxes
-        est_fluxes = estimates["fluxes"]
-        true_fluxes = true_params["fluxes"]
-
-        locs_mse_vec = []
-        fluxes_mse_vec = []
-        for i in range(batch_size):
-            true_n_sources_i = true_params["n_sources"][i]
-            n_sources_i = estimates["n_sources"][i]
-
-            # only compare locations for mse if counts match.
-            if true_n_sources_i == n_sources_i:
-
-                # prepare locs and get them in units of pixels.
-                true_locs_i = true_locs[i].view(-1, 2)
-                true_locs_i = true_locs_i[: int(true_n_sources_i)] * slen
-                locs_i = est_locs[i].view(-1, 2)[: int(n_sources_i)] * slen
-
-                # sort each based on x location.
-                true_locs_i, indx_sort_true = sort_locs(true_locs_i)
-                locs_i, _ = sort_locs(locs_i)
-
-                # now calculate mse
-                locs_mse = (true_locs_i - locs_i).pow(2).sum(1).pow(1.0 / 2)
-                for mse in locs_mse:
-                    locs_mse_vec.append(mse.item())
-
-                # do the same for fluxes
-                true_fluxes_i = true_fluxes[i].view(-1, n_bands)
-                true_fluxes_i = true_fluxes_i[: int(true_n_sources_i)]
-                fluxes_i = est_fluxes[i].view(-1, n_bands)[: int(n_sources_i)]
-
-                # sort the same way we did locations
-                true_fluxes_i = true_fluxes_i[indx_sort_true]
-                fluxes_i = fluxes_i[indx_sort_true]
-
-                # convert to magnitude and compute error
-                true_mags_i = torch.log10(true_fluxes_i) * 2.5
-                log_mags_i = torch.log10(fluxes_i) * 2.5
-                fluxes_mse = torch.abs(true_mags_i - log_mags_i).mean(1)
-                for mse in fluxes_mse:
-                    fluxes_mse_vec.append(mse.item())
-
-        # TODO: default value? Also not sure how to accumulate medians so we are actually taking an
-        #  average over the medians across batches.
-        locs_median_mse = 0.5
-        if len(locs_mse_vec) > 0:
-            locs_median_mse = np.median(locs_mse_vec)
-
-        fluxes_avg_err = 1e16
-        if len(fluxes_mse_vec) > 0:
-            fluxes_avg_err = np.mean(fluxes_mse_vec)
-
-        return counts_acc, galaxy_counts_acc, locs_median_mse, fluxes_avg_err
+        
+        # get errors
+        locs_mae_vec, fluxes_mae_vec, count_bool, galaxy_counts_bool = \
+            eval_error_on_batch(true_params, estimates, slen)
+        
+        locs_mae = locs_mae_vec.mean()
+        fluxes_mae = fluxes_mae_vec.mean()
+        counts_acc = count_bool.float().mean()
+        galaxy_counts_acc = galaxy_counts_bool.float().mean()
+        
+        return counts_acc, galaxy_counts_acc, locs_mae, fluxes_mae
 
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
