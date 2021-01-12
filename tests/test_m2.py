@@ -3,6 +3,7 @@ import pytest
 import os
 import numpy as np
 from bliss.datasets import sdss
+from bliss import metrics as metrics_lib
 
 torch.manual_seed(841)
 np.random.seed(431)
@@ -48,14 +49,12 @@ class TestStarSleepEncoderM2:
             return
 
         # summary statistics
-        sleep_tpr, sleep_ppv = sdss.get_summary_stats(
-            estimate["locs"][0],
-            true_locs,
-            slen,
-            estimate["fluxes"][0, :, 0],
-            true_fluxes[:, 0],
-            nelec_per_nmgy,
-        )[0:2]
+        sleep_tpr, sleep_ppv = metrics_lib.get_tpr_ppv(
+            true_locs * slen,
+            estimate["locs"][0] * slen,
+            true_fluxes[:, 0:1], 
+            estimate["fluxes"][0, :, 0:1]
+        )
 
         print("Sleep phase TPR: ", sleep_tpr)
         print("Sleep phase PPV: ", sleep_ppv)

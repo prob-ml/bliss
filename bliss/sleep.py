@@ -389,11 +389,15 @@ class SleepPhase(pl.LightningModule):
             galaxy_counts_acc,
             locs_mae,
             fluxes_mae,
+            avg_tpr, 
+            avg_ppv
         ) = self.get_metrics(batch)
         self.log("val_acc_counts", counts_acc)
         self.log("val_gal_counts", galaxy_counts_acc)
         self.log("val_locs_mae", locs_mae)
         self.log("val_fluxes_mae", fluxes_mae)
+        self.log("val_avg_tpr", avg_tpr)
+        self.log("val_avg_ppv", avg_ppv)
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -407,11 +411,15 @@ class SleepPhase(pl.LightningModule):
             galaxy_counts_acc,
             locs_mae,
             fluxes_mae,
+            avg_tpr, 
+            avg_ppv
         ) = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
         self.log("locs_mae", locs_mae)
         self.log("fluxes_mae", fluxes_mae)
+        self.log("avg_tpr", avg_tpr)
+        self.log("avg_ppv", avg_ppv)
 
         return batch
 
@@ -436,15 +444,20 @@ class SleepPhase(pl.LightningModule):
         estimates = self.image_encoder.map_estimate(slen, images)
         
         # get errors
-        locs_mae_vec, fluxes_mae_vec, count_bool, galaxy_counts_bool = \
-            eval_error_on_batch(true_params, estimates, slen)
+        locs_mae_vec, fluxes_mae_vec, count_bool, galaxy_counts_bool, \
+            tpr_vec, ppv_vec = \
+                eval_error_on_batch(true_params, estimates, slen)
         
         locs_mae = locs_mae_vec.mean()
         fluxes_mae = fluxes_mae_vec.mean()
         counts_acc = count_bool.float().mean()
         galaxy_counts_acc = galaxy_counts_bool.float().mean()
         
-        return counts_acc, galaxy_counts_acc, locs_mae, fluxes_mae
+        avg_tpr = tpr_vec.mean()
+        avg_ppv = ppv_vec.mean()
+        
+        return counts_acc, galaxy_counts_acc, locs_mae, fluxes_mae, \
+                    avg_tpr, avg_ppv
 
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
