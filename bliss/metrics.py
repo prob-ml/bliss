@@ -70,7 +70,7 @@ def get_l1_error(true_locs, true_mag, est_locs, est_mag):
     locs_mae = (true_locs - est_locs).abs().sum(1)
 
     # flux error (for all bands)
-    fluxes_mae = (true_mag - est_mag).abs()
+    fluxes_mae = (true_mag - est_mag).abs().flatten()
     
     return locs_mae, fluxes_mae
 
