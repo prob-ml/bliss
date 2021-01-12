@@ -205,7 +205,7 @@ class SleepPhase(pl.LightningModule):
                 n_galaxy_params,
             )
 
-        tile_est = {**tile_params, **tile_galaxy_params}
+        tile_est = {**tile_params, "galaxy_params": tile_galaxy_params}
         return tile_est
 
     @staticmethod
