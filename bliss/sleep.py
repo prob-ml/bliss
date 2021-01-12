@@ -507,9 +507,11 @@ class SleepPhase(pl.LightningModule):
         slen = int(batch["slen"].unique().item())
         border_padding = int((images.shape[-1] - slen) / 2)
         _true_params = {k: v for k, v in batch.items() if k not in exclude}
-
-        # convert to full image parameters for plotting purposes.
         true_params = get_full_params(slen, _true_params)
+
+        # obtain map estimates
+        tile_estimate = self.tile_map_estimate(batch)
+        estimate = get_full_params(slen, tile_estimate)
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
@@ -527,16 +529,10 @@ class SleepPhase(pl.LightningModule):
             true_locs = true_params["locs"][None, i]
             true_galaxy_bool = true_params["galaxy_bool"][None, i]
 
-            with torch.no_grad():
-                # get the estimated params, these are *per tile*.
-                self.image_encoder.eval()
-                tile_estimate = self.image_encoder.tile_map_estimate(image)
-
             # convert tile estimates to full parameterization for plotting
-            estimate = get_full_params(slen, tile_estimate)
-            n_sources = estimate["n_sources"]
-            locs = estimate["locs"]
-            galaxy_bool = estimate["galaxy_bool"]
+            n_sources = estimate["n_sources"][None, i]
+            locs = estimate["locs"][None, i]
+            galaxy_bool = estimate["galaxy_bool"][None, i]
 
             assert len(locs.shape) == 3 and locs.size(0) == 1
             assert locs.shape[1] == n_sources.max().int().item()
@@ -553,11 +549,11 @@ class SleepPhase(pl.LightningModule):
             if max_sources > 0 and n_sources.item() > 0:
                 # draw reconstruction image.
                 recon_image, _ = self.image_decoder.render_images(
-                    tile_estimate["n_sources"],
-                    tile_estimate["locs"],
-                    tile_estimate["galaxy_bool"],
-                    batch["galaxy_params"][None, i],
-                    tile_estimate["fluxes"],
+                    tile_estimate["n_sources"][None, i],
+                    tile_estimate["locs"][None, i],
+                    tile_estimate["galaxy_bool"][None, i],
+                    tile_estimate["galaxy_params"][None, i],
+                    tile_estimate["fluxes"][None, i],
                 )
 
                 # round up true parameters.
@@ -586,7 +582,7 @@ class SleepPhase(pl.LightningModule):
                     border_padding,
                     true_locs=true_galaxy_locs,
                     est_locs=galaxy_locs,
-                    colors=("r", "b"),
+                    markers=("x", "+"),
                 )
                 plotting.plot_image_locs(
                     true_ax,
@@ -594,7 +590,7 @@ class SleepPhase(pl.LightningModule):
                     border_padding,
                     true_locs=true_star_locs,
                     est_locs=star_locs,
-                    colors=("lightpink", "tab:orange"),
+                    colors=("o", "1"),
                 )
 
                 plotting.plot_image(fig, recon_ax, recon_image)
