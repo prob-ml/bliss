@@ -39,7 +39,6 @@ class TestStarSleepEncoderM2:
         # the true parameters
         true_locs = torch.from_numpy(hubble_data["true_locs"]).to(device)
         true_fluxes = torch.from_numpy(hubble_data["true_fluxes"]).to(device)
-        nelec_per_nmgy = torch.from_numpy(hubble_data["nelec_per_nmgy"]).to(device)
 
         # get estimated parameters
         estimate = trained_star_encoder_m2.map_estimate(slen, test_image.to(device))
@@ -51,9 +50,10 @@ class TestStarSleepEncoderM2:
         # summary statistics
         sleep_tpr, sleep_ppv = metrics_lib.get_tpr_ppv(
             true_locs * slen,
+            2.5 * torch.log10(true_fluxes[:, 0:1]), 
             estimate["locs"][0] * slen,
-            true_fluxes[:, 0:1], 
-            estimate["fluxes"][0, :, 0:1]
+            2.5 * torch.log10(estimate["fluxes"][0, :, 0:1]), 
+            slack = 0.5
         )
 
         print("Sleep phase TPR: ", sleep_tpr)

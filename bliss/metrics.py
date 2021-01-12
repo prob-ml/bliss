@@ -93,7 +93,6 @@ def get_tpr_ppv(true_locs, true_mag, est_locs, est_mag,
 
 
 def eval_error_on_batch(true_params, est_params, slen): 
-    
                 
     # check batch sizes are equal 
     assert len(true_params['n_sources']) == len(est_params['n_sources'])
