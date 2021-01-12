@@ -1,5 +1,6 @@
 # @package _group_
 name: SleepPhase
+use_galaxy_encoder: False
 image:
   slen: 40
   n_bands: 1
@@ -16,8 +17,8 @@ decoder:
     ptile_slen: ${model.image.slen}
     prob_galaxy: 1.0
     n_galaxy_params: ${model.galaxy.latent_dim}
-    max_sources: 3
-    mean_sources: 1.5
+    max_sources: 1
+    mean_sources: 0.85
     min_sources: 0
     gal_slen: ${model.galaxy.slen}
     decoder_file: ${paths.root}/data/galaxy_decoder_1_band.dat
@@ -31,4 +32,7 @@ encoder:
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: ${model.decoder.params.tile_slen}
     max_detections: ${model.decoder.params.max_sources}
-use_galaxy_encoder: False
+galaxy_encoder:
+  params:
+    n_bands: 1
+    slen:

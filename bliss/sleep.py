@@ -148,7 +148,7 @@ class SleepPhase(pl.LightningModule):
             assert (
                 self.cropped_slen >= 20
             ), "Final cropped slen must be reasonably sized."
-            assert self.galaxy_encoder.slen == self.crop_slen
+            assert self.galaxy_encoder.slen == self.cropped_slen
             assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params
             assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
             assert self.image_encoder.max_detections == 1
@@ -383,7 +383,6 @@ class SleepPhase(pl.LightningModule):
         if self.use_galaxy_encoder:
             galaxy_opt = Adam(self.galaxy_encoder.parameters(), **params)
             opt = (opt, galaxy_opt)
-            raise NotImplementedError()
 
         return opt
 
