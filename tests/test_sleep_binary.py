@@ -16,4 +16,4 @@ def test_binary(sleep_setup, devices):
     # check testing results are sensible.
     assert results["acc_counts"] > 0.7
     assert results["acc_gal_counts"] > 0.7
-    assert results["locs_median_mse"] < 0.5
+    assert results["locs_mae"] < 0.5
