@@ -167,14 +167,13 @@ class ImageEncoder(nn.Module):
         n_galaxy_params (int): Number of latent dimensions in the galaxy VAE network.
 
         """
-
         super().__init__()
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-
         border_padding = (ptile_slen - tile_slen) / 2
+        assert ptile_slen >= tile_slen
         assert border_padding % 1 == 0, "amount of padding should be an integer"
         self.border_padding = int(border_padding)
 
@@ -278,7 +277,6 @@ class ImageEncoder(nn.Module):
         # shape = (n_ptiles x n_bands x ptile_slen, ptile_slen)
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
 
-    # TODO: Idea is there but need to play around with it to see if it is correct.
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, these are cached since
         same for all h."""
@@ -454,13 +452,7 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def tile_map_estimate(self, slen, images):
-        # slen is size of the images without border padding
-
-        # check image compatibility
-        border_padding = (images.shape[-1] - slen) / 2
-        assert slen % self.tile_slen == 0, "incompatible image"
-        assert border_padding == self.border_padding, "incompatible border"
+    def tile_map_estimate(self, images):
 
         # extract image_ptiles
         batch_size = images.shape[0]
@@ -515,8 +507,14 @@ class ImageEncoder(nn.Module):
 
     def map_estimate(self, slen, images):
         # return full estimate of parameters in full image.
-        # slen is size of the image without border padding
-        tile_estimate = self.tile_map_estimate(slen, images)
+        # NOTE: slen is size of the image without border padding
+
+        # check image compatibility
+        border_padding = (images.shape[-1] - slen) / 2
+        assert slen % self.tile_slen == 0, "incompatible image"
+        assert border_padding == self.border_padding, "incompatible border"
+
+        tile_estimate = self.tile_map_estimate(images)
         estimate = get_full_params(slen, tile_estimate)
         return estimate
 

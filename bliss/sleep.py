@@ -9,6 +9,7 @@ import torch
 from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
 from torch.optim import Adam
+import torch.nn.functional as F
 
 from . import plotting
 from .models import encoder, decoder, galaxy_net
@@ -91,7 +92,6 @@ def _get_min_perm_loss(
         is_on_array,
     )
 
-    # TODO: Why do we select it based on the location losses only?
     # find the permutation that minimizes the location losses
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
 
@@ -137,77 +137,107 @@ class SleepPhase(pl.LightningModule):
 
         self.use_galaxy_encoder = cfg.model.use_galaxy_encoder
         if self.use_galaxy_encoder:
+            # we crop and center each padded tile before passing it on to the galaxy_encoder
+            # assume that cropping = 2*tile_slen (on each side)
+            # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per tile should work but there is no easy way to enforce this.
             self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(
                 **cfg.model.galaxy_encoder.params
             )
-            assert self.galaxy_encoder.slen == self.image_encoder.ptile_slen
+            self.crop_slen = 2 * self.image_encoder.tile_slen
+            self.cropped_slen = self.image_encoder.ptile_slen - 2 * self.crop_slen
+            assert (
+                self.cropped_slen >= 20
+            ), "Final cropped slen must be reasonably sized."
+            assert self.galaxy_encoder.slen == self.crop_slen
             assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params
             assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
             assert self.image_encoder.max_detections == 1
 
+    def forward_galaxy(self, image_ptiles, tile_locs):
+        n_ptiles = image_ptiles.shape[0]
+
+        # in each padded tile we need to center the corresponding galaxy
+        _tile_locs = tile_locs.reshape(n_ptiles, self.image_decoder.max_sources, 2)
+        centered_ptiles = self._center_ptiles(image_ptiles, _tile_locs, self.crop_slen)
+        assert centered_ptiles.shape[-1] == self.cropped_slen
+
+        # remove background before encoding
+        background_values = self.image_decoder.background.mean((1, 2))
+        ptile_background = torch.zeros(
+            1, self.image_encoder.n_bands, self.cropped_slen, self.cropped_slen
+        )
+        for b in range(ptile_background.shape[1]):
+            ptile_background[:, b] = background_values[b]
+        centered_ptiles -= ptile_background
+
+        # TODO: Should we zero out tiles without galaxies during training?
+
+        # we can assume there is one galaxy per_tile and encode each tile independently.
+        encoding = self.galaxy_encoder.forward(centered_ptiles)
+        galaxy_param_mean, galaxy_param_var = encoding
+        assert galaxy_param_mean.shape[0] == n_ptiles
+        assert galaxy_param_var.shape[0] == n_ptiles
+        assert galaxy_param_mean.shape[1] == 1, "Only one galaxy per tile supported"
+        assert galaxy_param_var.shape[1] == 1, "Only one galaxy per tile supported"
+
+        return galaxy_param_mean, galaxy_param_var
+
     def forward(self, image_ptiles, n_sources):
         raise NotImplementedError()
 
-    def map_estimate(self, slen, images, batch):
-        # batch is per tile since it comes from image_decoder
-        tile_galaxy_params = {}
-        tile_params = {
-            "galaxy_bool": batch["galaxy_bool"],
-            "n_sources": batch["n_sources"],
-        }
-        if self.image_encoder:
-            tile_n_sources = self.image_encoder.tile_map_n_sources(images)
-            tile_params = self.image_encoder.tile_map_estimate(images, tile_n_sources)
-            tile_params["n_sources"] = tile_n_sources
-            tile_params["galaxy_bool"] = tile_params["galaxy_bool"]
+    def tile_map_estimate(self, batch):
+        # NOTE: batch is per tile since it comes from image_decoder
+        images = batch["images"]
+        tile_galaxy_params = batch["galaxy_params"]
+        tile_params = self.image_encoder.tile_map_estimate(images)
 
         if self.galaxy_encoder:
-            tile_galaxy_params = self.galaxy_encoder.tile_map_estimate(
-                images, tile_params["n_sources"], tile_params["galaxy_bool"]
+            batch_size = images.shape[0]
+            max_detections = 1
+            tile_locs = tile_params["locs"].reshape(-1, max_detections, 2)
+            image_ptiles = self.image_encoder.get_images_in_tiles(images)
+            tile_galaxy_params, _ = self.forward_galaxy(image_ptiles, tile_locs)
+            n_galaxy_params = tile_galaxy_params.shape[-1]
+            tile_galaxy_params = tile_galaxy_params.reshape(
+                batch_size,
+                -1,
+                max_detections,
+                n_galaxy_params,
             )
 
         tile_est = {**tile_params, **tile_galaxy_params}
-        est = get_full_params(slen, tile_est)
-        return est
+        return tile_est
 
     @staticmethod
-    def _center_ptiles(image_ptiles, tile_locs):
+    def _center_ptiles(image_ptiles, tile_locs, crop_slen):
         # assume there is one galaxy in each tile of the given padded tiles
         # return a centered version of it using their true locations in tiles.
+        # also we crop them to avoid sharp borders with no bacgkround/noise.
         assert len(image_ptiles.shape) == 4
         assert len(tile_locs) == 3
         n_ptiles = image_ptiles.shape[0]
+        ptile_slen = image_ptiles.shape[-1]
         assert tile_locs.shape[0] == n_ptiles
-        raise NotImplementedError()
+        mgrid = decoder.get_mgrid(ptile_slen)
+
+        # center tiles on the corresponding source given by locs.
+        locs = (tile_locs - 0.5) * 2
+        locs = locs.index_select(2, torch.Tensor([1, 0]))  # trps (x,y) coords
+        grid_loc = mgrid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
+        shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
+
+        # now that everything is center we can crop easily
+        cropped_tiles = shifted_tiles[:, :, crop_slen : ptile_slen - crop_slen]
+        return cropped_tiles
 
     def get_galaxy_loss(self, batch):
         images = batch["images"]
         # shape = (n_ptiles x band x ptile_slen x ptile_slen)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         n_ptiles = image_ptiles.shape[0]
-        ptile_slen = image_ptiles.shape[-1]
-
-        # in each padded tile we need to center the corresponding galaxy
-        # raise NotImplementedError("Need to center padded_tiles")
-        _tile_locs = batch["locs"].reshape(n_ptiles, self.image_decoder.max_sources, 2)
-        centered_ptiles = self._center_ptiles(image_ptiles, _tile_locs)
-
-        # remove background before encoding
-        background_values = self.image_decoder.background.mean((1, 2))
-        ptile_background = torch.zeros(
-            1, self.image_decoder.n_bands, ptile_slen, ptile_slen
+        galaxy_param_mean, galaxy_param_var = self.forward_galaxy(
+            image_ptiles, batch["locs"]
         )
-        for b in range(ptile_background.shape[1]):
-            ptile_background[:, b] = background_values[b]
-        centered_ptiles -= ptile_background
-
-        # we can assume there is one galaxy per_tile and encode each tile independently.
-        enc = self.galaxy_encoder.forward(centered_ptiles)
-        galaxy_param_mean, galaxy_param_var = enc
-        assert galaxy_param_mean.shape[0] == n_ptiles
-        assert galaxy_param_var.shape[0] == n_ptiles
-        assert galaxy_param_mean.shape[1] == 1, "Only one galaxy per tile supported"
-        assert galaxy_param_var.shape[1] == 1, "Only one galaxy per tile supported"
 
         # start calculating kl_qp loss.
         q_z = Normal(galaxy_param_mean, galaxy_param_var.sqrt())
@@ -500,7 +530,7 @@ class SleepPhase(pl.LightningModule):
             with torch.no_grad():
                 # get the estimated params, these are *per tile*.
                 self.image_encoder.eval()
-                tile_estimate = self.image_encoder.tile_map_estimate(slen, image)
+                tile_estimate = self.image_encoder.tile_map_estimate(image)
 
             # convert tile estimates to full parameterization for plotting
             estimate = get_full_params(slen, tile_estimate)
