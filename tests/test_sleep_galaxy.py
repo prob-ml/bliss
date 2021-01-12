@@ -25,7 +25,7 @@ class TestBasicGalaxyTiles:
 
         # check testing results are sensible.
         assert results["acc_gal_counts"] > 0.70
-        assert results["locs_median_mse"] < 0.55
+        assert results["locs_mae"] < 0.55
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
         test_file = paths["data"].joinpath("galaxy_test1.pt").as_posix()
@@ -38,4 +38,4 @@ class TestBasicGalaxyTiles:
 
         # check testing results are sensible.
         assert results["acc_gal_counts"] > 0.70
-        assert results["locs_median_mse"] < 0.5
+        assert results["locs_mae"] < 0.5
