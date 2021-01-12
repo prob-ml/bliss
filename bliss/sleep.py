@@ -136,6 +136,7 @@ class SleepPhase(pl.LightningModule):
         assert self.image_encoder.max_detections <= self.image_decoder.max_sources
 
         self.use_galaxy_encoder = cfg.model.use_galaxy_encoder
+        self.galaxy_encoder = None
         if self.use_galaxy_encoder:
             # we crop and center each padded tile before passing it on to the galaxy_encoder
             # assume that cropping = 2*tile_slen (on each side)
@@ -464,8 +465,6 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
-        n_bands = batch["images"].shape[1]
-        batch_size = images.shape[0]
         true_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # get params on full image.
