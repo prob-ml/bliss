@@ -389,8 +389,8 @@ class SleepPhase(pl.LightningModule):
             galaxy_counts_acc,
             locs_mae,
             fluxes_mae,
-            avg_tpr, 
-            avg_ppv
+            avg_tpr,
+            avg_ppv,
         ) = self.get_metrics(batch)
         self.log("val_acc_counts", counts_acc)
         self.log("val_gal_counts", galaxy_counts_acc)
@@ -411,8 +411,8 @@ class SleepPhase(pl.LightningModule):
             galaxy_counts_acc,
             locs_mae,
             fluxes_mae,
-            avg_tpr, 
-            avg_ppv
+            avg_tpr,
+            avg_ppv,
         ) = self.get_metrics(batch)
         self.log("acc_counts", counts_acc)
         self.log("acc_gal_counts", galaxy_counts_acc)
@@ -442,22 +442,26 @@ class SleepPhase(pl.LightningModule):
 
         # get map estimates
         estimates = self.image_encoder.map_estimate(slen, images)
-        
+
         # get errors
-        locs_mae_vec, fluxes_mae_vec, count_bool, galaxy_counts_bool, \
-            tpr_vec, ppv_vec = \
-                eval_error_on_batch(true_params, estimates, slen)
-        
+        (
+            locs_mae_vec,
+            fluxes_mae_vec,
+            count_bool,
+            galaxy_counts_bool,
+            tpr_vec,
+            ppv_vec,
+        ) = eval_error_on_batch(true_params, estimates, slen)
+
         locs_mae = locs_mae_vec.mean()
         fluxes_mae = fluxes_mae_vec.mean()
         counts_acc = count_bool.float().mean()
         galaxy_counts_acc = galaxy_counts_bool.float().mean()
-        
+
         avg_tpr = tpr_vec.mean()
         avg_ppv = ppv_vec.mean()
-        
-        return counts_acc, galaxy_counts_acc, locs_mae, fluxes_mae, \
-                    avg_tpr, avg_ppv
+
+        return counts_acc, galaxy_counts_acc, locs_mae, fluxes_mae, avg_tpr, avg_ppv
 
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.

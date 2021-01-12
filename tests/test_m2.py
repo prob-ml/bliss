@@ -50,10 +50,10 @@ class TestStarSleepEncoderM2:
         # summary statistics
         sleep_tpr, sleep_ppv = metrics_lib.get_tpr_ppv(
             true_locs * slen,
-            2.5 * torch.log10(true_fluxes[:, 0:1]), 
+            2.5 * torch.log10(true_fluxes[:, 0:1]),
             estimate["locs"][0] * slen,
-            2.5 * torch.log10(estimate["fluxes"][0, :, 0:1]), 
-            slack = 0.5
+            2.5 * torch.log10(estimate["fluxes"][0, :, 0:1]),
+            slack=0.5,
         )
 
         print("Sleep phase TPR: ", sleep_tpr)

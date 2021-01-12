@@ -141,5 +141,3 @@ class SloanDigitalSkySurvey(Dataset):
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
         return ret
-
-
