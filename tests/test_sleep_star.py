@@ -25,8 +25,8 @@ class TestSleepStarOneTile:
             return
 
         assert results["acc_counts"] > 0.9
-        assert results["locs_median_mse"] < 0.5
-        assert results["fluxes_avg_err"] < 0.5
+        assert results["locs_mae"] < 0.5
+        assert results["fluxes_mae"] < 0.5
 
 
 class TestSleepStarTiles:
@@ -52,8 +52,8 @@ class TestSleepStarTiles:
             return
 
         assert results["acc_counts"] > 0.7
-        assert results["locs_median_mse"] < 0.5
-        assert results["fluxes_avg_err"] < 0.5
+        assert results["locs_mae"] < 0.5
+        assert results["fluxes_mae"] < 0.5
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
         test_file = paths["data"].joinpath("star_test1.pt").as_posix()
@@ -65,5 +65,5 @@ class TestSleepStarTiles:
             return
 
         assert results["acc_counts"] > 0.7
-        assert results["locs_median_mse"] < 0.5
-        assert results["fluxes_avg_err"] < 0.5
+        assert results["locs_mae"] < 0.5
+        assert results["fluxes_mae"] < 0.5

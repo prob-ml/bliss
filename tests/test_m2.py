@@ -3,6 +3,7 @@ import pytest
 import os
 import numpy as np
 from bliss.datasets import sdss
+from bliss import metrics as metrics_lib
 
 torch.manual_seed(841)
 np.random.seed(431)
@@ -38,7 +39,6 @@ class TestStarSleepEncoderM2:
         # the true parameters
         true_locs = torch.from_numpy(hubble_data["true_locs"]).to(device)
         true_fluxes = torch.from_numpy(hubble_data["true_fluxes"]).to(device)
-        nelec_per_nmgy = torch.from_numpy(hubble_data["nelec_per_nmgy"]).to(device)
 
         # get estimated parameters
         estimate = trained_star_encoder_m2.map_estimate(slen, test_image.to(device))
@@ -48,14 +48,13 @@ class TestStarSleepEncoderM2:
             return
 
         # summary statistics
-        sleep_tpr, sleep_ppv = sdss.get_summary_stats(
-            estimate["locs"][0],
-            true_locs,
-            slen,
-            estimate["fluxes"][0, :, 0],
-            true_fluxes[:, 0],
-            nelec_per_nmgy,
-        )[0:2]
+        sleep_tpr, sleep_ppv = metrics_lib.get_tpr_ppv(
+            true_locs * slen,
+            2.5 * torch.log10(true_fluxes[:, 0:1]),
+            estimate["locs"][0] * slen,
+            2.5 * torch.log10(estimate["fluxes"][0, :, 0:1]),
+            slack=0.5,
+        )
 
         print("Sleep phase TPR: ", sleep_tpr)
         print("Sleep phase PPV: ", sleep_ppv)
