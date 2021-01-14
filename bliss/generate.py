@@ -34,7 +34,6 @@ def visualize(batch, path, n_samples, figsize=(12, 12)):
     fig.savefig(path, bbox_inches="tight")
 
 
-@hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig):
     # setup
     filepath = Path(cfg.generate.file)

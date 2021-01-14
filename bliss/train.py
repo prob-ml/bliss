@@ -81,7 +81,6 @@ def setup_checkpoint_callback(cfg, paths, logger):
     return checkpoint_callback
 
 
-@hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig):
 
     # setup gpus
