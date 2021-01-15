@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
+import os
 import math
-import hydra
 import torch
 import matplotlib.pyplot as plt
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
 
 from bliss.datasets import simulated, catsim
@@ -34,9 +34,13 @@ def visualize(batch, path, n_samples, figsize=(12, 12)):
     fig.savefig(path, bbox_inches="tight")
 
 
-@hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig):
     # setup
+    paths = OmegaConf.to_container(cfg.paths, resolve=True)
+    output = Path(paths["root"]).joinpath(paths["output"])
+    if not os.path.exists(output.as_posix()):
+        os.makedirs(output.as_posix())
+
     filepath = Path(cfg.generate.file)
     imagepath = Path(cfg.paths.root).joinpath("temp", filepath.stem + "_images.pdf")
     dataset = datasets[cfg.dataset.name](cfg)

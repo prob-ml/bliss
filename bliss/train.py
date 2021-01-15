@@ -2,7 +2,7 @@
 from pathlib import Path
 import shutil
 
-import hydra
+import os
 from omegaconf import DictConfig, OmegaConf
 
 import pytorch_lightning as pl
@@ -27,6 +27,8 @@ def setup_paths(cfg: DictConfig, enforce_overwrite=True):
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
     output = Path(paths["root"]).joinpath(paths["output"])
     paths["output"] = output.as_posix()
+    if not os.path.exists(paths["output"]):
+        os.makedirs(paths["output"])
 
     if enforce_overwrite:
         assert not output.exists() or cfg.general.overwrite, "Enforcing overwrite."
@@ -81,12 +83,12 @@ def setup_checkpoint_callback(cfg, paths, logger):
     return checkpoint_callback
 
 
-@hydra.main(config_path="../config", config_name="config")
 def main(cfg: DictConfig):
 
     # setup gpus
-    gpus = list(cfg.training.trainer.gpus)
-    if gpus and use_cuda:
+
+    if cfg.training.trainer.gpus != None and use_cuda:
+        gpus = list(cfg.training.trainer.gpus)
         assert isinstance(gpus, list)
         assert len(gpus) == 1 and isinstance(gpus[0], int), "Only one GPU is supported."
         device_id = gpus[0]
