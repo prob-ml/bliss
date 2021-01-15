@@ -151,8 +151,8 @@ def eval_error_on_batch(true_params, est_params, slen):
                 locs_mae_vec.append(locs_mae_i[k].item())
                 fluxes_mae_vec.append(fluxes_mae_i[k].item())
 
-    locs_mae_vec = torch.Tensor(locs_mae_vec)
-    fluxes_mae_vec = torch.Tensor(fluxes_mae_vec)
+    locs_mae_vec = torch.tensor(locs_mae_vec)
+    fluxes_mae_vec = torch.tensor(fluxes_mae_vec)
 
     return (
         locs_mae_vec,

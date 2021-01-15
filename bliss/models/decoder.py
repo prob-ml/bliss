@@ -8,19 +8,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Poisson, Normal
 
-from .encoder import get_is_on_from_n_sources
+from .encoder import get_is_on_from_n_sources, get_mgrid
 from . import galaxy_net
 import pytorch_lightning as pl
-
-
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.Tensor(np.dstack((y, x))) / offset
-    # mgrid is between -1 and 1
-    # then scale slightly because of the way f.grid_sample
-    # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float() * (slen - 1) / slen
 
 
 def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):

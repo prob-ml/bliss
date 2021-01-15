@@ -1,9 +1,19 @@
-import math
+import numpy as np
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import categorical
+
+
+def get_mgrid(slen):
+    offset = (slen - 1) / 2
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    # mgrid is between -1 and 1
+    # then scale slightly because of the way f.grid_sample
+    # parameterizes the edges: (0, 0) is center of edge pixel
+    return mgrid.float().to(device) * (slen - 1) / slen
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -54,7 +64,7 @@ def get_full_params(slen: int, tile_params: dict):
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
-    tile_slen = slen / math.sqrt(n_tiles_per_image)
+    tile_slen = slen / np.sqrt(n_tiles_per_image)
     n_ptiles = n_samples * n_tiles_per_image
     assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
     tile_slen = int(tile_slen)
@@ -276,6 +286,43 @@ class ImageEncoder(nn.Module):
 
         # shape = (n_ptiles x n_bands x ptile_slen, ptile_slen)
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
+
+    def center_ptiles(self, image_ptiles, tile_locs):
+        # assume there is at most one source per tile
+        # return a centered version of sources in tiles using their true locations in tiles.
+        # also we crop them to avoid sharp borders with no bacgkround/noise.
+
+        # round up necessary variables and paramters
+        assert len(image_ptiles.shape) == 4
+        assert len(tile_locs.shape) == 3
+        assert tile_locs.shape[1] == 1
+        assert image_ptiles.shape[-1] == self.ptile_slen
+        n_ptiles = image_ptiles.shape[0]
+        crop_slen = 2 * self.tile_slen
+        ptile_slen = self.ptile_slen
+        assert tile_locs.shape[0] == n_ptiles
+        mgrid = get_mgrid(self.ptile_slen)
+
+        # get new locs to do the shift
+        ptile_locs = tile_locs * self.tile_slen + self.border_padding
+        ptile_locs /= ptile_slen
+        locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
+        locs0 /= ptile_slen - 1
+        locs0 = locs0.view(1, 1, 2).to(device)
+        locs = 2 * locs0 - ptile_locs
+
+        # center tiles on the corresponding source given by locs.
+        locs = (locs - 0.5) * 2
+        swap = torch.tensor([1, 0], device=device)
+        locs = locs.index_select(2, swap)  # trps (x,y) coords
+        grid_loc = mgrid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
+        shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
+
+        # now that everything is center we can crop easily
+        cropped_tiles = shifted_tiles[
+            :, :, crop_slen : ptile_slen - crop_slen, crop_slen : ptile_slen - crop_slen
+        ]
+        return cropped_tiles
 
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, these are cached since

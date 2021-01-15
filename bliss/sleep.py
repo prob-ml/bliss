@@ -138,17 +138,16 @@ class SleepPhase(pl.LightningModule):
         self.use_galaxy_encoder = cfg.model.use_galaxy_encoder
         self.galaxy_encoder = None
         if self.use_galaxy_encoder:
-            # we crop and center each padded tile before passing it on to the galaxy_encoder
-            # assume that cropping = 2*tile_slen (on each side)
+            # NOTE: We crop and center each padded tile before passing it on to the galaxy_encoder
+            # assume that crop_slen = 2*tile_slen (on each side)
             # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per tile should work but there is no easy way to enforce this.
             self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(
                 **cfg.model.galaxy_encoder.params
             )
-            self.crop_slen = 2 * self.image_encoder.tile_slen
-            self.cropped_slen = self.image_encoder.ptile_slen - 2 * self.crop_slen
-            assert (
-                self.cropped_slen >= 20
-            ), "Final cropped slen must be reasonably sized."
+            self.cropped_slen = (
+                self.image_encoder.ptile_slen - 4 * self.image_encoder.tile_slen
+            )
+            assert self.cropped_slen >= 20, "Cropped slen not reasonable"
             assert self.galaxy_encoder.slen == self.cropped_slen
             assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params
             assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
@@ -159,7 +158,7 @@ class SleepPhase(pl.LightningModule):
 
         # in each padded tile we need to center the corresponding galaxy
         _tile_locs = tile_locs.reshape(n_ptiles, self.image_decoder.max_sources, 2)
-        centered_ptiles = self._center_ptiles(image_ptiles, _tile_locs, self.crop_slen)
+        centered_ptiles = self.image_encoder.center_ptiles(image_ptiles, _tile_locs)
         assert centered_ptiles.shape[-1] == self.cropped_slen
 
         # remove background before encoding
@@ -172,7 +171,6 @@ class SleepPhase(pl.LightningModule):
         centered_ptiles -= ptile_background
 
         # TODO: Should we zero out tiles without galaxies during training?
-
         # we can assume there is one galaxy per_tile and encode each tile independently.
         encoding = self.galaxy_encoder.forward(centered_ptiles)
         galaxy_param_mean, galaxy_param_var = encoding
@@ -208,28 +206,6 @@ class SleepPhase(pl.LightningModule):
 
         tile_est = {**tile_params, "galaxy_params": tile_galaxy_params}
         return tile_est
-
-    @staticmethod
-    def _center_ptiles(image_ptiles, tile_locs, crop_slen):
-        # assume there is one galaxy in each tile of the given padded tiles
-        # return a centered version of it using their true locations in tiles.
-        # also we crop them to avoid sharp borders with no bacgkround/noise.
-        assert len(image_ptiles.shape) == 4
-        assert len(tile_locs) == 3
-        n_ptiles = image_ptiles.shape[0]
-        ptile_slen = image_ptiles.shape[-1]
-        assert tile_locs.shape[0] == n_ptiles
-        mgrid = decoder.get_mgrid(ptile_slen)
-
-        # center tiles on the corresponding source given by locs.
-        locs = (tile_locs - 0.5) * 2
-        locs = locs.index_select(2, torch.Tensor([1, 0]))  # trps (x,y) coords
-        grid_loc = mgrid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
-        shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
-
-        # now that everything is center we can crop easily
-        cropped_tiles = shifted_tiles[:, :, crop_slen : ptile_slen - crop_slen]
-        return cropped_tiles
 
     def get_galaxy_loss(self, batch):
         images = batch["images"]
