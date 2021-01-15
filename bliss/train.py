@@ -84,8 +84,9 @@ def setup_checkpoint_callback(cfg, paths, logger):
 def main(cfg: DictConfig):
 
     # setup gpus
-    gpus = list(cfg.training.trainer.gpus)
-    if gpus and use_cuda:
+
+    if cfg.training.trainer.gpus != None and use_cuda:
+        gpus = list(cfg.training.trainer.gpus)
         assert isinstance(gpus, list)
         assert len(gpus) == 1 and isinstance(gpus[0], int), "Only one GPU is supported."
         device_id = gpus[0]
@@ -110,7 +111,7 @@ def main(cfg: DictConfig):
     trainer_dict.update(
         dict(logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback)
     )
-    trainer = pl.Trainer(**trainer_dict)
+    trainer = pl.Trainer(**trainer_dict, num_sanity_val_steps=0)
 
     # train!
     trainer.fit(model, datamodule=dataset)
