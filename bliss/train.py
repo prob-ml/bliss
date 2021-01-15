@@ -113,7 +113,7 @@ def main(cfg: DictConfig):
     trainer_dict.update(
         dict(logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback)
     )
-    trainer = pl.Trainer(**trainer_dict, num_sanity_val_steps=0)
+    trainer = pl.Trainer(**trainer_dict)
 
     # train!
     trainer.fit(model, datamodule=dataset)
