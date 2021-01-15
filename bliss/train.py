@@ -2,7 +2,7 @@
 from pathlib import Path
 import shutil
 
-import hydra
+import os
 from omegaconf import DictConfig, OmegaConf
 
 import pytorch_lightning as pl
@@ -27,6 +27,8 @@ def setup_paths(cfg: DictConfig, enforce_overwrite=True):
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
     output = Path(paths["root"]).joinpath(paths["output"])
     paths["output"] = output.as_posix()
+    if not os.path.exists(paths["output"]):
+        os.makedirs(paths["output"])
 
     if enforce_overwrite:
         assert not output.exists() or cfg.general.overwrite, "Enforcing overwrite."
