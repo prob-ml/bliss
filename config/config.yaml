@@ -8,6 +8,8 @@ defaults:
   - tuning: ${defaults.1.model}
     optional: true
 
+mode: train
+
 general:
   overwrite: False
 

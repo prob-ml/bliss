@@ -58,7 +58,6 @@ def sleep_trainable(search_space, cfg: DictConfig):
     trainer.fit(model, datamodule=dataset)
 
 
-@hydra.main(config_path="../config", config_name="config")
 # model=m2 dataset=m2 training=m2 optimizer=m2 in terminal
 def main(cfg: DictConfig):
     # sets seeds for numpy, torch, and python.random
