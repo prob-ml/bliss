@@ -20,7 +20,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.n_batches = cfg.dataset.params.n_batches
         self.batch_size = cfg.dataset.params.batch_size
-        self.image_decoder = ImageDecoder(**cfg.model.decoder.params)
+        self.image_decoder = ImageDecoder(
+            generate_device = cfg.dataset.params.generate_device, **cfg.model.decoder.params
+        )
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
 
         # check sleep training will work.
