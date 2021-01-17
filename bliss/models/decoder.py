@@ -11,38 +11,12 @@ from torch.distributions import Poisson, Normal
 from .. import device
 from .encoder import get_is_on_from_n_sources
 from . import galaxy_net
+import pytorch_lightning as pl
 
 
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    # mgrid is between -1 and 1
-    # then scale slightly because of the way f.grid_sample
-    # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float().to(device) * (slen - 1) / slen
 
 
-def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
-    psfield = fits.open(psf_fit_file, ignore_missing_end=True)
-    psf_params = torch.zeros(len(bands), 6)
-    for i in range(len(bands)):
-        band = bands[i]
-
-        sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
-        sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
-        sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
-
-        beta = psfield[6].data["psf_beta"][0][band]
-        b = psfield[6].data["psf_b"][0][band]
-        p0 = psfield[6].data["psf_p0"][0][band]
-
-        psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
-
-    return psf_params.to(device)
-
-
-class ImageDecoder(nn.Module):
+class ImageDecoder(pl.LightningModule):
     def __init__(
         self,
         n_bands=1,
@@ -123,7 +97,7 @@ class ImageDecoder(nn.Module):
         # grid: between -1 and 1,
         # then scale slightly because of the way f.grid_sample
         # parameterizes the edges: (0, 0) is center of edge pixel
-        self.cached_grid = get_mgrid(self.ptile_slen)
+        self.cached_grid = self.get_mgrid(self.ptile_slen)
 
         # misc
         self.swap = torch.tensor([1, 0], device=device)
@@ -159,7 +133,7 @@ class ImageDecoder(nn.Module):
         elif ext == ".fits":
             assert n_bands == 2, "only 2 band fit files are supported."
             bands = (2, 3)
-            psf_params = get_fit_file_psf_params(psf_params_file, bands).to(device)
+            psf_params = self.get_fit_file_psf_params(psf_params_file, bands).to(device)
         else:
             raise NotImplementedError(
                 "Only .npy and .fits extensions are supported for PSF params files."
@@ -167,7 +141,7 @@ class ImageDecoder(nn.Module):
 
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
-        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+        grid = self.get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
         # extra factor to be consistent with old repo
         # but probably doesn't matter ...
         grid *= self.psf_slen / (self.psf_slen - 1)
@@ -186,6 +160,34 @@ class ImageDecoder(nn.Module):
         norm = psf.sum(-1).sum(-1)
         psf *= (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
         return psf
+
+    def get_mgrid(self, slen):
+        offset = (slen - 1) / 2
+        x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+        mgrid = torch.tensor(np.dstack((y, x))) / offset
+        # mgrid is between -1 and 1
+        # then scale slightly because of the way f.grid_sample
+        # parameterizes the edges: (0, 0) is center of edge pixel
+        return mgrid.float().to(device) * (slen - 1) / slen
+
+
+    def get_fit_file_psf_params(self, psf_fit_file, bands=(2, 3)):
+        psfield = fits.open(psf_fit_file, ignore_missing_end=True)
+        psf_params = torch.zeros(len(bands), 6)
+        for i in range(len(bands)):
+            band = bands[i]
+
+            sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
+            sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
+            sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
+
+            beta = psfield[6].data["psf_beta"][0][band]
+            b = psfield[6].data["psf_b"][0][band]
+            p0 = psfield[6].data["psf_p0"][0][band]
+
+            psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
+
+        return psf_params.to(device)
 
     def _get_psf(self):
         psf = torch.tensor([], device=device)
