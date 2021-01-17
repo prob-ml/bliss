@@ -403,20 +403,14 @@ class SleepPhase(pl.LightningModule):
             self.log("val_galaxy_loss", galaxy_loss)
 
         # calculate metrics for this batch
-        (
-            counts_acc,
-            galaxy_counts_acc,
-            locs_mae,
-            fluxes_mae,
-            avg_tpr,
-            avg_ppv,
-        ) = self.get_metrics(batch)
-        self.log("val_acc_counts", counts_acc)
-        self.log("val_gal_counts", galaxy_counts_acc)
-        self.log("val_locs_mae", locs_mae)
-        self.log("val_fluxes_mae", fluxes_mae)
-        self.log("val_avg_tpr", avg_tpr)
-        self.log("val_avg_ppv", avg_ppv)
+        metrics = self.get_metrics(batch)
+        self.log("val_acc_counts", metrics["counts_acc"])
+        self.log("val_gal_counts", metrics["galaxy_counts_acc"])
+        self.log("val_locs_mae", metrics["locs_mae"])
+        self.log("val_fluxes_mae", metrics["fluxes_mae"])
+        self.log("val_avg_tpr", metrics["avg_tpr"])
+        self.log("val_avg_ppv", metrics["avg_ppv"])
+        self.log("galaxy_params_mae", metrics["galaxy_params_mae"])
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -425,20 +419,14 @@ class SleepPhase(pl.LightningModule):
             self.make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_indx):
-        (
-            counts_acc,
-            galaxy_counts_acc,
-            locs_mae,
-            fluxes_mae,
-            avg_tpr,
-            avg_ppv,
-        ) = self.get_metrics(batch)
-        self.log("acc_counts", counts_acc)
-        self.log("acc_gal_counts", galaxy_counts_acc)
-        self.log("locs_mae", locs_mae)
-        self.log("fluxes_mae", fluxes_mae)
-        self.log("avg_tpr", avg_tpr)
-        self.log("avg_ppv", avg_ppv)
+        metrics = self.get_metrics(batch)
+        self.log("acc_counts", metrics["counts_acc"])
+        self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
+        self.log("locs_mae", metrics["locs_mae"])
+        self.log("fluxes_mae", metrics["fluxes_mae"])
+        self.log("avg_tpr", metrics["avg_trp"])
+        self.log("avg_ppv", metrics["avg_ppv"])
+        self.log("galaxy_params_mae", metrics["galaxy_params_mae"])
 
         return batch
 
@@ -458,7 +446,8 @@ class SleepPhase(pl.LightningModule):
         true_params = get_full_params(slen, true_params)
 
         # get map estimates
-        estimates = self.image_encoder.map_estimate(slen, images)
+        tile_estimate = self.tile_map_estimate(batch)
+        estimates = get_full_params(slen, tile_estimate)
 
         # get errors
         (
@@ -478,7 +467,20 @@ class SleepPhase(pl.LightningModule):
         avg_tpr = tpr_vec.mean()
         avg_ppv = ppv_vec.mean()
 
-        return counts_acc, galaxy_counts_acc, locs_mae, fluxes_mae, avg_tpr, avg_ppv
+        gal_params_mae = 0.0
+        if self.use_galaxy_encoder:
+            gal_diff = true_params["galaxy_params"] - estimates["galaxy_params"]
+            gal_params_mae = gal_diff.abs().mean()
+
+        return {
+            "counts_acc": counts_acc,
+            "galaxy_counts_acc": galaxy_counts_acc,
+            "locs_mae": locs_mae,
+            "fluxes_mae": fluxes_mae,
+            "avg_tpr": avg_tpr,
+            "avg_ppv": avg_ppv,
+            "galaxy_params_mae": gal_params_mae,
+        }
 
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.

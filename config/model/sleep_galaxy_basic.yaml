@@ -18,7 +18,7 @@ decoder:
     prob_galaxy: 1.0
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 1
-    mean_sources: 0.1
+    mean_sources: 0.05
     min_sources: 0
     gal_slen: ${model.galaxy.slen}
     decoder_file: ${paths.root}/data/galaxy_decoder_1_band.dat
