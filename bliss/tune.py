@@ -37,6 +37,7 @@ def sleep_trainable(search_space, cfg: DictConfig):
     # set up trainer
     logging.getLogger("lightning").setLevel(0)
     trainer = pl.Trainer(
+        limit_val_batches=cfg.tuning.limit_val_batches,
         weights_summary=None,
         max_epochs=cfg.tuning.n_epochs,
         gpus=cfg.tuning.gpus_per_trial,

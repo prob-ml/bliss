@@ -37,7 +37,9 @@ def _get_log_probs_all_perms(
     max_detections = star_params_log_probs_all.size(-1)
 
     n_permutations = math.factorial(max_detections)
-    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations, device=locs_log_probs_all.device)
+    locs_log_probs_all_perm = torch.zeros(
+        n_ptiles, n_permutations, device=locs_log_probs_all.device
+    )
     star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
 

@@ -13,6 +13,33 @@ from . import galaxy_net
 import pytorch_lightning as pl
 
 
+def get_mgrid(slen):
+    offset = (slen - 1) / 2
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    # mgrid is between -1 and 1
+    # then scale slightly because of the way f.grid_sample
+    # parameterizes the edges: (0, 0) is center of edge pixel
+    return mgrid.float() * (slen - 1) / slen
+
+
+def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
+    psfield = fits.open(psf_fit_file, ignore_missing_end=True)
+    psf_params = torch.zeros(len(bands), 6)
+    for i in range(len(bands)):
+        band = bands[i]
+
+        sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
+        sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
+        sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
+
+        beta = psfield[6].data["psf_beta"][0][band]
+        b = psfield[6].data["psf_b"][0][band]
+        p0 = psfield[6].data["psf_p0"][0][band]
+
+        psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
+
+    return psf_params
 
 
 class ImageDecoder(pl.LightningModule):
@@ -38,14 +65,8 @@ class ImageDecoder(pl.LightningModule):
         background_values=(686.0, 1123.0),
         loc_min=0.0,
         loc_max=1.0,
-        generate_device=None
     ):
         super(ImageDecoder, self).__init__()
-        
-        if generate_device is None:
-            self.generate_device = self.device
-        else:
-            self.generate_device = generate_device
 
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
@@ -102,10 +123,12 @@ class ImageDecoder(pl.LightningModule):
         # grid: between -1 and 1,
         # then scale slightly because of the way f.grid_sample
         # parameterizes the edges: (0, 0) is center of edge pixel
-        self.cached_grid = self.get_mgrid(self.ptile_slen)
+        self.register_buffer(
+            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
+        )
 
         # misc
-        self.swap = torch.tensor([1, 0], device=self.generate_device)
+        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
         # background
         assert len(background_values) == n_bands
@@ -114,7 +137,9 @@ class ImageDecoder(pl.LightningModule):
             self.slen + 2 * self.border_padding,
             self.slen + 2 * self.border_padding,
         )
-        self.background = torch.zeros(background_shape, device=self.generate_device)
+        self.register_buffer(
+            "background", torch.zeros(background_shape), persistent=False
+        )
         for i in range(n_bands):
             self.background[i] = background_values[i]
 
@@ -125,28 +150,26 @@ class ImageDecoder(pl.LightningModule):
         assert self.prob_galaxy > 0.0 or decoder_file is None
         if decoder_file is not None:
             dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, n_galaxy_params, n_bands)
-            dec = dec.to(self.generate_device)
-            dec.load_state_dict(torch.load(decoder_file, map_location=self.generate_device))
+            dec.load_state_dict(torch.load(decoder_file))
             dec.eval().requires_grad_(False)
             self.galaxy_decoder = dec
 
         # load psf params + grid
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
-            psf_params = torch.from_numpy(np.load(psf_params_file)).to(self.generate_device)
+            psf_params = torch.from_numpy(np.load(psf_params_file))
             psf_params = psf_params[list(range(n_bands))]
         elif ext == ".fits":
             assert n_bands == 2, "only 2 band fit files are supported."
             bands = (2, 3)
-            psf_params = self.get_fit_file_psf_params(psf_params_file, bands).to(self.generate_device)
+            psf_params = get_fit_file_psf_params(psf_params_file, bands)
         else:
             raise NotImplementedError(
                 "Only .npy and .fits extensions are supported for PSF params files."
             )
-
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
-        grid = self.get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
         # extra factor to be consistent with old repo
         # but probably doesn't matter ...
         grid *= self.psf_slen / (self.psf_slen - 1)
@@ -166,36 +189,8 @@ class ImageDecoder(pl.LightningModule):
         psf *= (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
         return psf
 
-    def get_mgrid(self, slen):
-        offset = (slen - 1) / 2
-        x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-        mgrid = torch.tensor(np.dstack((y, x))) / offset
-        # mgrid is between -1 and 1
-        # then scale slightly because of the way f.grid_sample
-        # parameterizes the edges: (0, 0) is center of edge pixel
-        return mgrid.float().to(self.generate_device) * (slen - 1) / slen
-
-
-    def get_fit_file_psf_params(self, psf_fit_file, bands=(2, 3)):
-        psfield = fits.open(psf_fit_file, ignore_missing_end=True)
-        psf_params = torch.zeros(len(bands), 6)
-        for i in range(len(bands)):
-            band = bands[i]
-
-            sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
-            sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
-            sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
-
-            beta = psfield[6].data["psf_beta"][0][band]
-            b = psfield[6].data["psf_b"][0][band]
-            p0 = psfield[6].data["psf_p0"][0][band]
-
-            psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
-
-        return psf_params.to(self.generate_device)
-
     def _get_psf(self):
-        psf = torch.tensor([], device=self.generate_device)
+        psf = torch.tensor([], device=self.device)
         for i in range(self.n_bands):
             _psf = self._get_psf_single_band(self.params[i])
             _psf *= self.normalization_constant[i]
@@ -228,7 +223,7 @@ class ImageDecoder(pl.LightningModule):
         # output dimension is batch_size x n_tiles_per_image
 
         # always poisson distributed.
-        p = torch.full((1,), self.mean_sources, device=self.generate_device, dtype=torch.float)
+        p = torch.full((1,), self.mean_sources, device=self.device, dtype=torch.float)
         m = Poisson(p)
         n_sources = m.sample([batch_size, self.n_tiles_per_image])
 
@@ -247,7 +242,7 @@ class ImageDecoder(pl.LightningModule):
             self.max_sources,
             2,
         )
-        locs = torch.rand(*shape, device=self.generate_device)
+        locs = torch.rand(*shape, device=is_on_array.device)
         locs *= self.loc_max - self.loc_min
         locs += self.loc_min
         locs *= is_on_array.unsqueeze(-1)
@@ -262,7 +257,11 @@ class ImageDecoder(pl.LightningModule):
 
         batch_size = n_sources.size(0)
         uniform = torch.rand(
-            batch_size, self.n_tiles_per_image, self.max_sources, 1, device=self.generate_device
+            batch_size,
+            self.n_tiles_per_image,
+            self.max_sources,
+            1,
+            device=is_on_array.device,
         )
         galaxy_bool = uniform < self.prob_galaxy
         galaxy_bool = (galaxy_bool * is_on_array.unsqueeze(-1)).float()
@@ -280,7 +279,7 @@ class ImageDecoder(pl.LightningModule):
         # draw pareto conditioned on being less than f_max
 
         u_max = self._pareto_cdf(self.f_max)
-        uniform_samples = torch.rand(*shape, device=self.generate_device) * u_max
+        uniform_samples = torch.rand(*shape, device=self.device) * u_max
         return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     def _sample_fluxes(self, n_stars, star_bool, batch_size):
@@ -300,7 +299,7 @@ class ImageDecoder(pl.LightningModule):
                 self.max_sources,
                 self.n_bands - 1,
             )
-            colors = torch.randn(*shape, device=self.generate_device)
+            colors = torch.randn(*shape, device=base_fluxes.device)
             _fluxes = 10 ** (colors / 2.5) * base_fluxes
             fluxes = torch.cat((base_fluxes, _fluxes), dim=3)
             fluxes *= star_bool.float()
@@ -314,8 +313,8 @@ class ImageDecoder(pl.LightningModule):
 
         assert len(n_galaxies.shape) == 2
         batch_size = n_galaxies.size(0)
-        mean = torch.zeros(1, dtype=torch.float, device=self.generate_device)
-        std = torch.ones(1, dtype=torch.float, device=self.generate_device)
+        mean = torch.zeros(1, dtype=torch.float, device=n_galaxies.device)
+        std = torch.ones(1, dtype=torch.float, device=n_galaxies.device)
         p_z = Normal(mean, std)
         shape = (
             batch_size,
@@ -406,7 +405,9 @@ class ImageDecoder(pl.LightningModule):
 
         assert source_slen <= _slen, "Should be using trim source."
 
-        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=self.generate_device)
+        source_expanded = torch.zeros(
+            source.shape[0], _slen, _slen, device=source.device
+        )
         offset = int((_slen - source_slen) / 2)
 
         source_expanded[
@@ -487,7 +488,7 @@ class ImageDecoder(pl.LightningModule):
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=self.generate_device)
+        ptile = torch.zeros(ptile_shape, device=locs.device)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
@@ -518,8 +519,12 @@ class ImageDecoder(pl.LightningModule):
 
         # allocate memory
         _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        gal = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=self.generate_device)
-        var = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=self.generate_device)
+        gal = torch.zeros(
+            z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device
+        )
+        var = torch.zeros(
+            z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device
+        )
 
         # forward only galaxies that are on!
         gal_on, var_on = self.galaxy_decoder.forward(z[b == 1])
@@ -544,8 +549,8 @@ class ImageDecoder(pl.LightningModule):
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=self.generate_device)
-        var_ptile = torch.zeros(ptile_shape, device=self.generate_device)
+        ptile = torch.zeros(ptile_shape, device=locs.device)
+        var_ptile = torch.zeros(ptile_shape, device=locs.device)
 
         assert self.galaxy_decoder is not None
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
@@ -608,8 +613,8 @@ class ImageDecoder(pl.LightningModule):
 
         # draw stars and galaxies
         stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
-        galaxies = torch.zeros(img_shape, device=self.generate_device)
-        var_images = torch.zeros(img_shape, device=self.generate_device)
+        galaxies = torch.zeros(img_shape, device=locs.device)
+        var_images = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_decoder is not None:
             galaxies, var_images = self._render_multiple_galaxies_on_ptile(
                 _locs, _galaxy_params, _galaxy_bool
@@ -725,10 +730,16 @@ class ImageDecoder(pl.LightningModule):
         for i in range(n_tiles1_in_ptile):
             for j in range(n_tiles1_in_ptile):
                 indx_vec1 = torch.arange(
-                    start=i, end=n_tiles, step=n_tiles1_in_ptile, device=image_ptiles.device
+                    start=i,
+                    end=n_tiles,
+                    step=n_tiles1_in_ptile,
+                    device=image_ptiles.device,
                 )
                 indx_vec2 = torch.arange(
-                    start=j, end=n_tiles, step=n_tiles1_in_ptile, device=image_ptiles.device
+                    start=j,
+                    end=n_tiles,
+                    step=n_tiles1_in_ptile,
+                    device=image_ptiles.device,
                 )
 
                 canvas_len = len(indx_vec1) * ptile_slen
