@@ -4,3 +4,4 @@ params:
   n_batches: 1
   batch_size: 3
   num_workers: 0
+  generate_device: "cpu"

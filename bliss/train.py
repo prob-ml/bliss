@@ -11,7 +11,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 import torch
 
-from bliss import use_cuda, sleep
+from bliss import sleep
 from bliss.datasets import simulated, catsim
 from bliss.models import galaxy_net
 
@@ -87,7 +87,7 @@ def main(cfg: DictConfig):
 
     # setup gpus
 
-    if cfg.training.trainer.gpus != None and use_cuda:
+    if cfg.training.trainer.gpus != None and torch.cuda.is_available():
         gpus = list(cfg.training.trainer.gpus)
         assert isinstance(gpus, list)
         assert len(gpus) == 1 and isinstance(gpus[0], int), "Only one GPU is supported."

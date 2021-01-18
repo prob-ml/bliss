@@ -91,7 +91,7 @@ class TestWake:
             hparams=dict({"lr": 1e-5, "n_samples": 2000}),
         ).to(devices.device)
 
-        n_epochs = 3000 if torch.cuda.is_available() else 2
+        n_epochs = 3000 if devices.use_cuda else 2
         wake_trainer = pl.Trainer(
             check_val_every_n_epoch=10000,
             max_epochs=n_epochs,

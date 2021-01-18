@@ -4,3 +4,4 @@ params:
   n_batches: 10
   batch_size: 32
   num_workers: 0
+  generate_device: "cuda:0"

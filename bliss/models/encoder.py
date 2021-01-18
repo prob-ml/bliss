@@ -5,8 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import categorical
 
-from .. import device
-
 
 def get_is_on_from_n_sources(n_sources, max_sources):
     """Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
@@ -17,7 +15,7 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert torch.all(n_sources.le(max_sources))
 
     is_on_array = torch.zeros(
-        *n_sources.shape, max_sources, device=device, dtype=torch.float
+        *n_sources.shape, max_sources, device=n_sources.device, dtype=torch.float
     )
 
     for i in range(max_sources):
@@ -62,7 +60,7 @@ def get_full_params(slen: int, tile_params: dict):
     tile_slen = int(tile_slen)
 
     # coordinates on tiles.
-    tile_coords = _get_tile_coords(slen, tile_slen)
+    tile_coords = _get_tile_coords(slen, tile_slen).type_as(tile_locs)
     assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
 
     # get is_on_array
@@ -128,7 +126,6 @@ def _get_tile_coords(slen, tile_slen):
         return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
 
     tile_coords = torch.LongTensor([return_coords(i) for i in range(n_ptiles)])
-    tile_coords = tile_coords.to(device)
 
     return tile_coords
 
@@ -228,11 +225,13 @@ class ImageEncoder(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=1)
 
         # get index for prob_n_sources, assigned indices that were not used.
-        self.indx_mats, last_indx = self._get_hidden_indices()
-        self.prob_n_source_indx = torch.arange(
-            last_indx,
-            self.dim_out_all,
-            device=device,
+        indx_mats, last_indx = self._get_hidden_indices()
+        for k, v in indx_mats.items():
+            self.register_buffer(k + "_indx", v, persistent=False)
+        self.register_buffer(
+            "prob_n_source_indx",
+            torch.arange(last_indx, self.dim_out_all),
+            persistent=False,
         )
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
@@ -245,12 +244,15 @@ class ImageEncoder(nn.Module):
         # These weights are set up and  cached during the __init__.
 
         ptile_slen2 = self.ptile_slen ** 2
-        self.tile_conv_weights = torch.zeros(
-            ptile_slen2 * self.n_bands,
-            self.n_bands,
-            self.ptile_slen,
-            self.ptile_slen,
-            device=device,
+        self.register_buffer(
+            "tile_conv_weights",
+            torch.zeros(
+                ptile_slen2 * self.n_bands,
+                self.n_bands,
+                self.ptile_slen,
+                self.ptile_slen,
+            ),
+            persistent=False,
         )
 
         for b in range(self.n_bands):
@@ -290,7 +292,6 @@ class ImageEncoder(nn.Module):
                 shape,
                 self.dim_out_all,
                 dtype=torch.long,
-                device=device,
             )
             indx_mats[k] = indx_mat
 
@@ -326,7 +327,7 @@ class ImageEncoder(nn.Module):
         n_samples = n_sources.size(0)
 
         # append null column, return zero if indx_mat returns null index (dim_out_all)
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=device)), dim=1)
+        _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
         var_param = torch.gather(
@@ -356,11 +357,10 @@ class ImageEncoder(nn.Module):
             loc_mean.shape = (n_sample x n_ptiles x max_detections x len(x,y))
         """
         assert len(n_sources.shape) == 2
-        assert bool(self.indx_mats)
 
         est_params = {}
         for k in self.variational_params:
-            indx_mat = self.indx_mats[k]
+            indx_mat = getattr(self, k + "_indx")
             param_dim = self.variational_params[k]["dim"]
             transform = self.variational_params[k]["transform"]
             _param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
