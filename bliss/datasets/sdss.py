@@ -1,11 +1,12 @@
 import torch
 import pathlib
 import pickle
+import warnings
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
-from astropy.wcs import WCS
+from astropy.wcs import WCS, FITSFixedWarning
 
 
 class SloanDigitalSkySurvey(Dataset):
@@ -122,7 +123,9 @@ class SloanDigitalSkySurvey(Dataset):
             nelec_per_nmgy_list.append(nelec_per_nmgy)
             calibration_list.append(calibration)
 
-            wcs = WCS(frame[0])
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FITSFixedWarning)
+                wcs = WCS(frame[0])
             wcs_list.append(wcs)
 
             frame.close()
