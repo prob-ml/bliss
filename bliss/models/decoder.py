@@ -355,7 +355,7 @@ class ImageDecoder(pl.LightningModule):
     @staticmethod
     def _get_log_fluxes(fluxes):
         log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(fluxes.device)
+            fluxes > 0, fluxes, torch.ones_like(fluxes)
         )  # prevent log(0) errors.
         log_fluxes = torch.log(log_fluxes)
 
