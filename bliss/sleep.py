@@ -407,10 +407,12 @@ class SleepPhase(pl.LightningModule):
         self.log("val_acc_counts", metrics["counts_acc"])
         self.log("val_gal_counts", metrics["galaxy_counts_acc"])
         self.log("val_locs_mae", metrics["locs_mae"])
-        self.log("val_fluxes_mae", metrics["fluxes_mae"])
+        self.log("val_star_fluxes_mae", metrics["star_fluxes_mae"])
         self.log("val_avg_tpr", metrics["avg_tpr"])
         self.log("val_avg_ppv", metrics["avg_ppv"])
-        self.log("galaxy_params_mae", metrics["galaxy_params_mae"])
+        self.log("val_galaxy_params_mae", metrics["galaxy_params_mae"])
+        self.log("val_image_fluxes_mae", metrics["image_fluxes_mae"])
+        self.log("val_norm_pp_mae", metrics["norm_pp_mae"])
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -423,10 +425,12 @@ class SleepPhase(pl.LightningModule):
         self.log("acc_counts", metrics["counts_acc"])
         self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
         self.log("locs_mae", metrics["locs_mae"])
-        self.log("fluxes_mae", metrics["fluxes_mae"])
+        self.log("star_fluxes_mae", metrics["star_fluxes_mae"])
         self.log("avg_tpr", metrics["avg_trp"])
         self.log("avg_ppv", metrics["avg_ppv"])
         self.log("galaxy_params_mae", metrics["galaxy_params_mae"])
+        self.log("image_fluxes_mae", metrics["image_fluxes_mae"])
+        self.log("norm_pp_mae", metrics["norm_pp_mae"])
 
         return batch
 
@@ -438,7 +442,7 @@ class SleepPhase(pl.LightningModule):
     def get_metrics(self, batch):
         # get images and properties
         exclude = {"images", "slen", "background"}
-        images = batch["images"]
+        true_images = batch["images"]
         slen = int(batch["slen"].unique().item())
         true_params = {k: v for k, v in batch.items() if k not in exclude}
 
@@ -448,8 +452,15 @@ class SleepPhase(pl.LightningModule):
         # get map estimates
         tile_estimate = self.tile_map_estimate(batch)
         estimates = get_full_params(slen, tile_estimate)
+        recon_images, _ = self.image_decoder.render_images(
+            tile_estimate["n_sources"],
+            tile_estimate["locs"],
+            tile_estimate["galaxy_bool"],
+            tile_estimate["galaxy_params"],
+            tile_estimate["fluxes"],
+        )
 
-        # get errors
+        # get detection and star fluxes metrics
         (
             locs_mae_vec,
             fluxes_mae_vec,
@@ -460,26 +471,39 @@ class SleepPhase(pl.LightningModule):
         ) = eval_error_on_batch(true_params, estimates, slen)
 
         locs_mae = locs_mae_vec.mean()
-        fluxes_mae = fluxes_mae_vec.mean()
+        star_fluxes_mae = fluxes_mae_vec.mean()
         counts_acc = count_bool.float().mean()
         galaxy_counts_acc = galaxy_counts_bool.float().mean()
 
         avg_tpr = tpr_vec.mean()
         avg_ppv = ppv_vec.mean()
 
+        # galaxy metrics
         gal_params_mae = 0.0
         if self.use_galaxy_encoder:
             gal_diff = true_params["galaxy_params"] - estimates["galaxy_params"]
             gal_params_mae = gal_diff.abs().mean()
 
+        # image metrics
+        background = self.image_decoder.background
+        image_diff = true_images - recon_images
+        diff_fluxes = true_images.sum(1, 2, 3) - recon_images.sum(1, 2, 3)
+        image_fluxes_mae = diff_fluxes.abs().mean()
+        norm_pp_mae = (
+            image_diff.sum(1, 2, 3)
+            / (true_images - background).sum(1, 2, 3).abs().mean()
+        )
+
         return {
             "counts_acc": counts_acc,
             "galaxy_counts_acc": galaxy_counts_acc,
             "locs_mae": locs_mae,
-            "fluxes_mae": fluxes_mae,
+            "star_fluxes_mae": star_fluxes_mae,
             "avg_tpr": avg_tpr,
             "avg_ppv": avg_ppv,
             "galaxy_params_mae": gal_params_mae,
+            "image_fluxes_mae": image_fluxes_mae,
+            "norm_pp_mae": norm_pp_mae,
         }
 
     def make_plots(self, batch, kind="validation"):
