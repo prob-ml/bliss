@@ -10,7 +10,7 @@ from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
 from torch.optim import Adam
 
-from . import device, plotting
+from . import plotting
 from .models import encoder, decoder, galaxy_net
 from .models.encoder import get_star_bool, get_full_params
 from .metrics import eval_error_on_batch
@@ -37,7 +37,9 @@ def _get_log_probs_all_perms(
     max_detections = star_params_log_probs_all.size(-1)
 
     n_permutations = math.factorial(max_detections)
-    locs_log_probs_all_perm = torch.zeros(n_ptiles, n_permutations, device=device)
+    locs_log_probs_all_perm = torch.zeros(
+        n_ptiles, n_permutations, device=locs_log_probs_all.device
+    )
     star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
     galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
 
