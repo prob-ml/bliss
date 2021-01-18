@@ -404,6 +404,7 @@ class SleepPhase(pl.LightningModule):
 
         # calculate metrics for this batch
         metrics = self.get_metrics(batch)
+        print("metrics:", metrics)
         self.log("val_acc_counts", metrics["counts_acc"])
         self.log("val_gal_counts", metrics["galaxy_counts_acc"])
         self.log("val_locs_mae", metrics["locs_mae"])
@@ -461,37 +462,30 @@ class SleepPhase(pl.LightningModule):
         )
 
         # get detection and star fluxes metrics
-        (
-            locs_mae_vec,
-            fluxes_mae_vec,
-            count_bool,
-            galaxy_counts_bool,
-            tpr_vec,
-            ppv_vec,
-        ) = eval_error_on_batch(true_params, estimates, slen)
+        errors = eval_error_on_batch(true_params, estimates, slen)
 
-        locs_mae = locs_mae_vec.mean()
-        star_fluxes_mae = fluxes_mae_vec.mean()
-        counts_acc = count_bool.float().mean()
-        galaxy_counts_acc = galaxy_counts_bool.float().mean()
-
-        avg_tpr = tpr_vec.mean()
-        avg_ppv = ppv_vec.mean()
+        locs_mae = errors["locs_mae_vec"].mean()
+        star_fluxes_mae = errors["fluxes_mae_vec"].mean()
+        counts_acc = errors["count_bool"].float().mean()
+        galaxy_counts_acc = errors["galaxy_counts_bool"].float().mean()
+        avg_tpr = errors["tpr_vec"].mean()
+        avg_ppv = errors["ppv_vec"].mean()
 
         # galaxy metrics
         gal_params_mae = 0.0
         if self.use_galaxy_encoder:
-            gal_diff = true_params["galaxy_params"] - estimates["galaxy_params"]
-            gal_params_mae = gal_diff.abs().mean()
+            gal_params_mae = errors["galaxy_params_mae_vec"].float().mean()
 
         # image metrics
         background = self.image_decoder.background
         image_diff = true_images - recon_images
-        diff_fluxes = true_images.sum(1, 2, 3) - recon_images.sum(1, 2, 3)
+        diff_fluxes = true_images.sum((1, 2, 3)) - recon_images.sum((1, 2, 3))
+        # TODO: normalize the expression below?
         image_fluxes_mae = diff_fluxes.abs().mean()
         norm_pp_mae = (
-            image_diff.sum(1, 2, 3)
-            / (true_images - background).sum(1, 2, 3).abs().mean()
+            (image_diff.sum((1, 2, 3)) / (true_images - background).sum((1, 2, 3)))
+            .abs()
+            .mean()
         )
 
         return {
