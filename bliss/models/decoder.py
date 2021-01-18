@@ -150,7 +150,7 @@ class ImageDecoder(pl.LightningModule):
         assert self.prob_galaxy > 0.0 or decoder_file is None
         if decoder_file is not None:
             dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, n_galaxy_params, n_bands)
-            dec.load_state_dict(torch.load(decoder_file))
+            dec.load_state_dict(torch.load(decoder_file, map_location=self.device))
             dec.eval().requires_grad_(False)
             self.galaxy_decoder = dec
 
