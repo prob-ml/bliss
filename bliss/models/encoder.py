@@ -227,7 +227,7 @@ class ImageEncoder(nn.Module):
         # get index for prob_n_sources, assigned indices that were not used.
         indx_mats, last_indx = self._get_hidden_indices()
         for k, v in indx_mats.items():
-            self.register_buffer(k, v, persistent=False)
+            self.register_buffer(k+"_indx", v, persistent=False)
         self.register_buffer(
             "prob_n_source_indx",
             torch.arange(last_indx, self.dim_out_all),
@@ -360,7 +360,7 @@ class ImageEncoder(nn.Module):
 
         est_params = {}
         for k in self.variational_params:
-            indx_mat = getattr(self, k)
+            indx_mat = getattr(self, k+"_indx")
             param_dim = self.variational_params[k]["dim"]
             transform = self.variational_params[k]["transform"]
             _param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)

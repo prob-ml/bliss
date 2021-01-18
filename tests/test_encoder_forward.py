@@ -78,10 +78,10 @@ class TestSourceEncoder:
             h_out = star_encoder._get_var_params_all(image_ptiles)
 
             # get index matrices
-            locs_mean_indx_mat = star_encoder.loc_mean
-            locs_var_indx_mat = star_encoder.loc_logvar
-            log_flux_mean_indx_mat = star_encoder.log_flux_mean
-            log_flux_var_indx_mat = star_encoder.log_flux_logvar
+            locs_mean_indx_mat = star_encoder.loc_mean_indx
+            locs_var_indx_mat = star_encoder.loc_logvar_indx
+            log_flux_mean_indx_mat = star_encoder.log_flux_mean_indx
+            log_flux_var_indx_mat = star_encoder.log_flux_logvar_indx
             prob_n_source_indx_mat = star_encoder.prob_n_source_indx
 
             for i in range(n_image_tiles):
