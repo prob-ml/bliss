@@ -19,3 +19,5 @@ temp/
 trials_result/
 .vscode
 .env
+jupyter/
+outputs/

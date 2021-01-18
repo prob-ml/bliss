@@ -48,8 +48,8 @@ def sleep_trainable(search_space, cfg: DictConfig):
                     "loss": "val_loss",
                     "star_count_acc": "val_acc_counts",
                     "galaxy_counts_acc": "val_gal_counts",
-                    "locs_median_mse": "val_locs_median_mse",
-                    "fluxes_avg_err": "val_fluxes_avg_err",
+                    "locs_mae": "val_locs_mae",
+                    "fluxes_mae": "val_fluxes_mae",
                 },
                 on="validation_end",
             )
@@ -58,7 +58,6 @@ def sleep_trainable(search_space, cfg: DictConfig):
     trainer.fit(model, datamodule=dataset)
 
 
-@hydra.main(config_path="../config", config_name="config")
 # model=m2 dataset=m2 training=m2 optimizer=m2 in terminal
 def main(cfg: DictConfig):
     # sets seeds for numpy, torch, and python.random

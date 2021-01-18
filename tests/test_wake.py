@@ -24,7 +24,7 @@ class TestWake:
     def trained_sleep(self, overrides, sleep_setup):
         return sleep_setup.get_trained_sleep(overrides)
 
-    def test_simulated(self, overrides, trained_sleep, sleep_setup, devices):
+    def test_simulated(self, trained_sleep, devices):
 
         # the original decoder
         image_decoder = trained_sleep.image_decoder.to(devices.device)
@@ -43,7 +43,7 @@ class TestWake:
                 true_params[key] = batch[key][which_batch : (which_batch + 1)]
 
         # the observed image
-        obs_image = image_decoder.render_images(
+        obs_image, _ = image_decoder.render_images(
             true_params["n_sources"],
             true_params["locs"],
             true_params["galaxy_bool"],
@@ -60,7 +60,7 @@ class TestWake:
 
         def eval_decoder_loss(decoder):
             # evaluate loss of a decoder at the true catalog
-            recon = decoder.render_images(
+            recon, _ = decoder.render_images(
                 true_params["n_sources"],
                 true_params["locs"],
                 true_params["galaxy_bool"],
@@ -110,7 +110,7 @@ class TestWake:
         print("trained loss: ", trained_loss)
         diff0 = init_loss - target_loss
         diff1 = trained_loss - target_loss
-        if torch.cuda.is_available():
+        if devices.use_cuda:
             assert diff1 < (diff0 * 0.5)
 
         # now compare PSFs
@@ -123,5 +123,5 @@ class TestWake:
         # check if mse of psf improved
         print("initial psf mse: ", init_psf_mse)
         print("trained psf mse: ", trained_psf_mse)
-        if torch.cuda.is_available():
+        if devices.use_cuda:
             assert trained_psf_mse < (init_psf_mse * 0.5)
