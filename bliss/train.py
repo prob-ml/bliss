@@ -85,16 +85,6 @@ def setup_checkpoint_callback(cfg, paths, logger):
 
 def main(cfg: DictConfig):
 
-    # setup gpus
-
-    if cfg.training.trainer.gpus != None and torch.cuda.is_available():
-        gpus = list(cfg.training.trainer.gpus)
-        assert isinstance(gpus, list)
-        assert len(gpus) == 1 and isinstance(gpus[0], int), "Only one GPU is supported."
-        device_id = gpus[0]
-        device = torch.device(f"cuda:{device_id}")
-        torch.cuda.set_device(device)
-
     # setup paths and seed
     paths = setup_paths(cfg, enforce_overwrite=False)
     setup_seed(cfg)
