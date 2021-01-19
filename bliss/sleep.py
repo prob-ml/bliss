@@ -206,6 +206,12 @@ class SleepPhase(pl.LightningModule):
                 n_galaxy_params,
             )
 
+        # TODO: True galaxy params are not necessarily consistent with MAP estimated
+        # need to do some matching to ensure correctness of residual images?
+        # maybe doesn't matter because only care about detection if not estimating
+        # galaxy_parameters.
+        max_sources = tile_params["locs"].shape[2]
+        tile_galaxy_params = tile_galaxy_params[:, :, :max_sources].contiguous()
         tile_est = {**tile_params, "galaxy_params": tile_galaxy_params}
         return tile_est
 
@@ -404,7 +410,6 @@ class SleepPhase(pl.LightningModule):
 
         # calculate metrics for this batch
         metrics = self.get_metrics(batch)
-        print("metrics:", metrics)
         self.log("val_acc_counts", metrics["counts_acc"])
         self.log("val_gal_counts", metrics["galaxy_counts_acc"])
         self.log("val_locs_mae", metrics["locs_mae"])
@@ -427,7 +432,7 @@ class SleepPhase(pl.LightningModule):
         self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
         self.log("locs_mae", metrics["locs_mae"])
         self.log("star_fluxes_mae", metrics["star_fluxes_mae"])
-        self.log("avg_tpr", metrics["avg_trp"])
+        self.log("avg_tpr", metrics["avg_tpr"])
         self.log("avg_ppv", metrics["avg_ppv"])
         self.log("galaxy_params_mae", metrics["galaxy_params_mae"])
         self.log("image_fluxes_mae", metrics["image_fluxes_mae"])

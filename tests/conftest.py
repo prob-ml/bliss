@@ -14,9 +14,18 @@ def pytest_addoption(parser):
     parser.addoption("--gpus", default="0", type=str, help="--gpus option for trainer.")
 
 
+def get_cfg(overrides, devices):
+    assert "model" in overrides
+    overrides = [f"{key}={value}" for key, value in overrides.items()]
+    with initialize(config_path="../config"):
+        cfg = compose("config", overrides=overrides)
+        cfg.training.trainer.update({"gpus": devices.gpus})
+    return cfg
+
+
 class DeviceSetup:
     def __init__(self, gpus):
-        self.use_cuda = torch.cuda.is_available()
+        self.use_cuda = torch.cuda.is_available() if gpus != "" else False
         self.gpus = gpus if self.use_cuda else None
 
         # setup device
@@ -26,15 +35,6 @@ class DeviceSetup:
             device_id = int(self.gpus[0])
             self.device = torch.device(f"cuda:{device_id}")
             torch.cuda.set_device(self.device)
-
-
-def get_cfg(overrides, devices):
-    assert "model" in overrides
-    overrides = [f"{key}={value}" for key, value in overrides.items()]
-    with initialize(config_path="../config"):
-        cfg = compose("config", overrides=overrides)
-        cfg.training.trainer.update({"gpus": devices.gpus})
-    return cfg
 
 
 class SleepSetup:
@@ -70,7 +70,7 @@ class SleepSetup:
         return trainer.test(sleep_net, datamodule=test_module)[0]
 
 
-class GalaxySetup:
+class GalaxyVAESetup:
     def __init__(self, devices):
         self.devices = devices
 
@@ -86,7 +86,6 @@ class GalaxySetup:
         return galaxy_vae.to(self.devices.device)
 
 
-# available fixtures provided globally for all tests.
 @pytest.fixture(scope="session")
 def paths():
     root_path = pathlib.Path(__file__).parent.parent.absolute()
@@ -108,5 +107,5 @@ def sleep_setup(devices):
 
 
 @pytest.fixture(scope="session")
-def galaxy_setup(devices):
-    return GalaxySetup(devices)
+def galaxy_vae_setup(devices):
+    return GalaxyVAESetup(devices)

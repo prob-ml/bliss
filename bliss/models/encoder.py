@@ -244,6 +244,14 @@ class ImageEncoder(nn.Module):
         )
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
+        # grid for center cropped tiles
+        self.register_buffer(
+            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
+        )
+
+        # misc
+        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
+
     def _cache_tiling_conv_weights(self):
         # this function sets up weights for the "identity" convolution
         # used to divide a full-image into padded tiles.
@@ -301,21 +309,21 @@ class ImageEncoder(nn.Module):
         crop_slen = 2 * self.tile_slen
         ptile_slen = self.ptile_slen
         assert tile_locs.shape[0] == n_ptiles
-        mgrid = get_mgrid(self.ptile_slen)
 
         # get new locs to do the shift
         ptile_locs = tile_locs * self.tile_slen + self.border_padding
         ptile_locs /= ptile_slen
         locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
         locs0 /= ptile_slen - 1
-        locs0 = locs0.view(1, 1, 2).to(device)
+        locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
         locs = 2 * locs0 - ptile_locs
 
         # center tiles on the corresponding source given by locs.
         locs = (locs - 0.5) * 2
-        swap = torch.tensor([1, 0], device=device)
-        locs = locs.index_select(2, swap)  # trps (x,y) coords
-        grid_loc = mgrid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
+        locs = locs.index_select(2, self.swap)  # trps (x,y) coords
+        grid_loc = self.cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(
+            -1, 1, 1, 2
+        )
         shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
 
         # now that everything is center we can crop easily

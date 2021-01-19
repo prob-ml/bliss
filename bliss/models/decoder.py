@@ -584,8 +584,8 @@ class ImageDecoder(pl.LightningModule):
         _n_sources = n_sources.view(n_ptiles)
         _locs = locs.view(n_ptiles, max_sources, 2)
         _galaxy_bool = galaxy_bool.view(n_ptiles, max_sources, 1)
-        _galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
         _fluxes = fluxes.view(n_ptiles, max_sources, self.n_bands)
+        _galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
 
         # draw stars and galaxies
         _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)

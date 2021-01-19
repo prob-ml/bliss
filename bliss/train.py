@@ -50,7 +50,7 @@ def setup_seed(cfg):
 
 
 def setup_profiler(cfg, paths):
-    profiler = False
+    profiler = None
     output = Path(paths["output"])
     if cfg.training.trainer.profiler:
         profile_file = output.joinpath("profile.txt")
@@ -75,7 +75,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
             filepath=checkpoint_dir,
             save_top_k=True,
             verbose=True,
-            monitor="val_loss",
+            monitor="val_detection_loss",
             mode="min",
             prefix="",
         )
