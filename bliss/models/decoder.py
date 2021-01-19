@@ -1,16 +1,16 @@
 import warnings
-import numpy as np
 from pathlib import Path
+import numpy as np
 from astropy.io import fits
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Poisson, Normal
+import pytorch_lightning as pl
 
 from .encoder import get_is_on_from_n_sources, get_mgrid
 from . import galaxy_net
-import pytorch_lightning as pl
 
 
 def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):

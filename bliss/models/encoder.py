@@ -13,7 +13,7 @@ def get_mgrid(slen):
     # mgrid is between -1 and 1
     # then scale slightly because of the way f.grid_sample
     # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float().to(device) * (slen - 1) / slen
+    return mgrid.float() * (slen - 1) / slen
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):

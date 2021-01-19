@@ -168,7 +168,7 @@ class SleepPhase(pl.LightningModule):
             self.image_encoder.n_bands,
             self.cropped_slen,
             self.cropped_slen,
-            device=device,
+            device=centered_ptiles.device,
         )
         for b in range(ptile_background.shape[1]):
             ptile_background[:, b] = background_values[b]

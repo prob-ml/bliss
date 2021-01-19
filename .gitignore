@@ -1,5 +1,5 @@
 *.ipynb_checkpoints
-__pycache__/* 
+*__pycache__
 fits/*
 *.pyc
 /models
