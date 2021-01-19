@@ -7,7 +7,7 @@ class TestBasicGalaxyMeasure:
         overrides = dict(
             model="sleep_galaxy_measure_basic",
             dataset="default" if devices.use_cuda else "cpu",
-            training="unittest" if devices.use_cuda else "cpu",
+            training="cpu",
         )
         return overrides
 
