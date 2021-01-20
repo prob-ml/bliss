@@ -120,6 +120,26 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
 
 class SleepPhase(pl.LightningModule):
+    """[summary]
+    Implementation of sleep-phase training using pytorch-lightning framework.
+
+    Args:
+        cfg (DictConfig: OmegaConf configuration from YAML files
+
+    Example:
+        In python script, set up the sleep-phase model and pytorch-lightning trainer::
+
+            import pytorch_lightning as pl
+            from bliss.sleep import SleepPhase
+
+
+            model = SleepPhase(cfg)
+            trainer = pl.Trainer()
+            trainer.fit(model, data=dataset)
+
+        
+    """   
+
     def __init__(self, cfg: DictConfig):
         super(SleepPhase, self).__init__()
         self.save_hyperparameters(cfg)
