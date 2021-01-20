@@ -9,6 +9,7 @@ import torch
 from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
 from torch.optim import Adam
+import torch.nn.functional as F
 
 from . import plotting
 from .models import encoder, decoder, galaxy_net
@@ -91,7 +92,6 @@ def _get_min_perm_loss(
         is_on_array,
     )
 
-    # TODO: Why do we select it based on the location losses only?
     # find the permutation that minimizes the location losses
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
 
@@ -136,85 +136,104 @@ class SleepPhase(pl.LightningModule):
         assert self.image_encoder.max_detections <= self.image_decoder.max_sources
 
         self.use_galaxy_encoder = cfg.model.use_galaxy_encoder
+        self.galaxy_encoder = None
         if self.use_galaxy_encoder:
+            # NOTE: We crop and center each padded tile before passing it on to the galaxy_encoder
+            # assume that crop_slen = 2*tile_slen (on each side)
+            # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per tile should work but there is no easy way to enforce this.
             self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(
                 **cfg.model.galaxy_encoder.params
             )
-            assert self.galaxy_encoder.slen == self.image_encoder.ptile_slen
+            self.cropped_slen = (
+                self.image_encoder.ptile_slen - 4 * self.image_encoder.tile_slen
+            )
+            assert self.cropped_slen >= 20, "Cropped slen not reasonable"
+            assert self.galaxy_encoder.slen == self.cropped_slen
             assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params
             assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
             assert self.image_encoder.max_detections == 1
 
-    def forward(self, image_ptiles, n_sources):
-        raise NotImplementedError()
-
-    def map_estimate(self, slen, images, batch):
-        # batch is per tile since it comes from image_decoder
-        tile_galaxy_params = {}
-        tile_params = {
-            "galaxy_bool": batch["galaxy_bool"],
-            "n_sources": batch["n_sources"],
-        }
-        if self.image_encoder:
-            tile_n_sources = self.image_encoder.tile_map_n_sources(images)
-            tile_params = self.image_encoder.tile_map_estimate(images, tile_n_sources)
-            tile_params["n_sources"] = tile_n_sources
-            tile_params["galaxy_bool"] = tile_params["galaxy_bool"]
-
-        if self.galaxy_encoder:
-            tile_galaxy_params = self.galaxy_encoder.tile_map_estimate(
-                images, tile_params["n_sources"], tile_params["galaxy_bool"]
-            )
-
-        tile_est = {**tile_params, **tile_galaxy_params}
-        est = get_full_params(slen, tile_est)
-        return est
-
-    @staticmethod
-    def _center_ptiles(image_ptiles, tile_locs):
-        # assume there is one galaxy in each tile of the given padded tiles
-        # return a centered version of it using their true locations in tiles.
-        assert len(image_ptiles.shape) == 4
-        assert len(tile_locs) == 3
+    def forward_galaxy(self, image_ptiles, tile_locs):
         n_ptiles = image_ptiles.shape[0]
-        assert tile_locs.shape[0] == n_ptiles
-        raise NotImplementedError()
-
-    def get_galaxy_loss(self, batch):
-        images = batch["images"]
-        # shape = (n_ptiles x band x ptile_slen x ptile_slen)
-        image_ptiles = self.image_encoder.get_images_in_tiles(images)
-        n_ptiles = image_ptiles.shape[0]
-        ptile_slen = image_ptiles.shape[-1]
 
         # in each padded tile we need to center the corresponding galaxy
-        # raise NotImplementedError("Need to center padded_tiles")
-        _tile_locs = batch["locs"].reshape(n_ptiles, self.image_decoder.max_sources, 2)
-        centered_ptiles = self._center_ptiles(image_ptiles, _tile_locs)
+        _tile_locs = tile_locs.reshape(n_ptiles, self.image_decoder.max_sources, 2)
+        centered_ptiles = self.image_encoder.center_ptiles(image_ptiles, _tile_locs)
+        assert centered_ptiles.shape[-1] == self.cropped_slen
 
         # remove background before encoding
         background_values = self.image_decoder.background.mean((1, 2))
         ptile_background = torch.zeros(
-            1, self.image_decoder.n_bands, ptile_slen, ptile_slen
+            1,
+            self.image_encoder.n_bands,
+            self.cropped_slen,
+            self.cropped_slen,
+            device=centered_ptiles.device,
         )
         for b in range(ptile_background.shape[1]):
             ptile_background[:, b] = background_values[b]
         centered_ptiles -= ptile_background
 
+        # TODO: Should we zero out tiles without galaxies during training?
         # we can assume there is one galaxy per_tile and encode each tile independently.
-        enc = self.galaxy_encoder.forward(centered_ptiles)
-        galaxy_param_mean, galaxy_param_var = enc
+        encoding = self.galaxy_encoder.forward(centered_ptiles)
+        galaxy_param_mean, galaxy_param_var = encoding
         assert galaxy_param_mean.shape[0] == n_ptiles
         assert galaxy_param_var.shape[0] == n_ptiles
-        assert galaxy_param_mean.shape[1] == 1, "Only one galaxy per tile supported"
-        assert galaxy_param_var.shape[1] == 1, "Only one galaxy per tile supported"
+
+        return galaxy_param_mean, galaxy_param_var
+
+    def forward(self, image_ptiles, n_sources):
+        raise NotImplementedError()
+
+    def tile_map_estimate(self, batch):
+        # NOTE: batch is per tile since it comes from image_decoder
+        images = batch["images"]
+        tile_galaxy_params = batch["galaxy_params"]
+        tile_params = self.image_encoder.tile_map_estimate(images)
+
+        if self.use_galaxy_encoder:
+            batch_size = images.shape[0]
+            max_detections = 1
+            tile_locs = tile_params["locs"].reshape(-1, max_detections, 2)
+            image_ptiles = self.image_encoder.get_images_in_tiles(images)
+            tile_galaxy_params, _ = self.forward_galaxy(image_ptiles, tile_locs)
+            n_galaxy_params = tile_galaxy_params.shape[-1]
+            tile_galaxy_params = tile_galaxy_params.reshape(
+                batch_size,
+                -1,
+                max_detections,
+                n_galaxy_params,
+            )
+
+        # TODO: True galaxy params are not necessarily consistent with MAP estimated
+        # need to do some matching to ensure correctness of residual images?
+        # maybe doesn't matter because only care about detection if not estimating
+        # galaxy_parameters.
+        max_sources = tile_params["locs"].shape[2]
+        tile_galaxy_params = tile_galaxy_params[:, :, :max_sources].contiguous()
+        tile_est = {**tile_params, "galaxy_params": tile_galaxy_params}
+        return tile_est
+
+    def get_galaxy_loss(self, batch):
+        images = batch["images"]
+        batch_size = images.shape[0]
+        # shape = (n_ptiles x band x ptile_slen x ptile_slen)
+        image_ptiles = self.image_encoder.get_images_in_tiles(images)
+        n_galaxy_params = self.image_decoder.n_galaxy_params
+        galaxy_param_mean, galaxy_param_var = self.forward_galaxy(
+            image_ptiles, batch["locs"]
+        )
+
+        galaxy_param_mean = galaxy_param_mean.view(batch_size, -1, 1, n_galaxy_params)
+        galaxy_param_var = galaxy_param_var.view(batch_size, -1, 1, n_galaxy_params)
 
         # start calculating kl_qp loss.
         q_z = Normal(galaxy_param_mean, galaxy_param_var.sqrt())
         z = q_z.rsample()
-        log_q_z = q_z.log_prob(z).sum((1, 2))
-        p_z = Normal(torch.zeros(z.shape), torch.ones(z.shape))
-        log_p_z = p_z.log_prob(z).sum((1, 2))
+        log_q_z = q_z.log_prob(z).sum((1, 2, 3))
+        p_z = Normal(torch.zeros_like(z), torch.ones_like(z))
+        log_p_z = p_z.log_prob(z).sum((1, 2, 3))
 
         # now draw a full reconstructed image.
         recon_mean, recon_var = self.image_decoder.render_images(
@@ -228,7 +247,7 @@ class SleepPhase(pl.LightningModule):
 
         kl_z = log_q_z - log_p_z  # log q(z | x) - log p(z)
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
-        recon_losses = recon_losses.view(n_ptiles, -1).sum(1)
+        recon_losses = recon_losses.view(batch_size, -1).sum(1)
         kl_qp = (recon_losses + kl_z).sum()
 
         return kl_qp
@@ -353,7 +372,6 @@ class SleepPhase(pl.LightningModule):
         if self.use_galaxy_encoder:
             galaxy_opt = Adam(self.galaxy_encoder.parameters(), **params)
             opt = (opt, galaxy_opt)
-            raise NotImplementedError()
 
         return opt
 
@@ -372,34 +390,34 @@ class SleepPhase(pl.LightningModule):
 
     def validation_step(self, batch, batch_indx):
         (
-            loss,
+            detection_loss,
             counter_loss,
             locs_loss,
             star_params_loss,
             galaxy_bool_loss,
         ) = self.get_detection_loss(batch)
 
-        self.log("val_loss", loss)
+        self.log("val_detection_loss", detection_loss)
         self.log("val_counter_loss", counter_loss.mean())
         self.log("val_locs_loss", locs_loss.mean())
         self.log("val_gal_bool_loss", galaxy_bool_loss.mean())
         self.log("val_star_params_loss", star_params_loss.mean())
 
+        if self.use_galaxy_encoder:
+            galaxy_loss = self.get_galaxy_loss(batch)
+            self.log("val_galaxy_loss", galaxy_loss)
+
         # calculate metrics for this batch
-        (
-            counts_acc,
-            galaxy_counts_acc,
-            locs_mae,
-            fluxes_mae,
-            avg_tpr,
-            avg_ppv,
-        ) = self.get_metrics(batch)
-        self.log("val_acc_counts", counts_acc)
-        self.log("val_gal_counts", galaxy_counts_acc)
-        self.log("val_locs_mae", locs_mae)
-        self.log("val_fluxes_mae", fluxes_mae)
-        self.log("val_avg_tpr", avg_tpr)
-        self.log("val_avg_ppv", avg_ppv)
+        metrics = self.get_metrics(batch)
+        self.log("val_acc_counts", metrics["counts_acc"])
+        self.log("val_gal_counts", metrics["galaxy_counts_acc"])
+        self.log("val_locs_mae", metrics["locs_mae"])
+        self.log("val_star_fluxes_mae", metrics["star_fluxes_mae"])
+        self.log("val_avg_tpr", metrics["avg_tpr"])
+        self.log("val_avg_ppv", metrics["avg_ppv"])
+        self.log("val_galaxy_params_mae", metrics["galaxy_params_mae"])
+        self.log("val_image_fluxes_mae", metrics["image_fluxes_mae"])
+        self.log("val_norm_pp_mae", metrics["norm_pp_mae"])
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -408,20 +426,16 @@ class SleepPhase(pl.LightningModule):
             self.make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_indx):
-        (
-            counts_acc,
-            galaxy_counts_acc,
-            locs_mae,
-            fluxes_mae,
-            avg_tpr,
-            avg_ppv,
-        ) = self.get_metrics(batch)
-        self.log("acc_counts", counts_acc)
-        self.log("acc_gal_counts", galaxy_counts_acc)
-        self.log("locs_mae", locs_mae)
-        self.log("fluxes_mae", fluxes_mae)
-        self.log("avg_tpr", avg_tpr)
-        self.log("avg_ppv", avg_ppv)
+        metrics = self.get_metrics(batch)
+        self.log("acc_counts", metrics["counts_acc"])
+        self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
+        self.log("locs_mae", metrics["locs_mae"])
+        self.log("star_fluxes_mae", metrics["star_fluxes_mae"])
+        self.log("avg_tpr", metrics["avg_tpr"])
+        self.log("avg_ppv", metrics["avg_ppv"])
+        self.log("galaxy_params_mae", metrics["galaxy_params_mae"])
+        self.log("image_fluxes_mae", metrics["image_fluxes_mae"])
+        self.log("norm_pp_mae", metrics["norm_pp_mae"])
 
         return batch
 
@@ -433,37 +447,62 @@ class SleepPhase(pl.LightningModule):
     def get_metrics(self, batch):
         # get images and properties
         exclude = {"images", "slen", "background"}
-        images = batch["images"]
+        true_images = batch["images"]
         slen = int(batch["slen"].unique().item())
-        n_bands = batch["images"].shape[1]
-        batch_size = images.shape[0]
         true_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # get params on full image.
         true_params = get_full_params(slen, true_params)
 
         # get map estimates
-        estimates = self.image_encoder.map_estimate(slen, images)
+        tile_estimate = self.tile_map_estimate(batch)
+        estimates = get_full_params(slen, tile_estimate)
+        recon_images, _ = self.image_decoder.render_images(
+            tile_estimate["n_sources"],
+            tile_estimate["locs"],
+            tile_estimate["galaxy_bool"],
+            tile_estimate["galaxy_params"],
+            tile_estimate["fluxes"],
+        )
 
-        # get errors
-        (
-            locs_mae_vec,
-            fluxes_mae_vec,
-            count_bool,
-            galaxy_counts_bool,
-            tpr_vec,
-            ppv_vec,
-        ) = eval_error_on_batch(true_params, estimates, slen)
+        # get detection and star fluxes metrics
+        errors = eval_error_on_batch(true_params, estimates, slen)
 
-        locs_mae = locs_mae_vec.mean()
-        fluxes_mae = fluxes_mae_vec.mean()
-        counts_acc = count_bool.float().mean()
-        galaxy_counts_acc = galaxy_counts_bool.float().mean()
+        locs_mae = errors["locs_mae_vec"].mean()
+        star_fluxes_mae = errors["fluxes_mae_vec"].mean()
+        counts_acc = errors["count_bool"].float().mean()
+        galaxy_counts_acc = errors["galaxy_counts_bool"].float().mean()
+        avg_tpr = errors["tpr_vec"].mean()
+        avg_ppv = errors["ppv_vec"].mean()
 
-        avg_tpr = tpr_vec.mean()
-        avg_ppv = ppv_vec.mean()
+        # galaxy metrics
+        gal_params_mae = 0.0
+        if self.use_galaxy_encoder:
+            gal_params_mae = errors["galaxy_params_mae_vec"].float().mean()
 
-        return counts_acc, galaxy_counts_acc, locs_mae, fluxes_mae, avg_tpr, avg_ppv
+        # image metrics
+        background = self.image_decoder.background
+        image_diff = true_images - recon_images
+        diff_fluxes = true_images.sum((1, 2, 3)) - recon_images.sum((1, 2, 3))
+        # TODO: normalize the expression below?
+        image_fluxes_mae = diff_fluxes.abs().mean()
+        norm_pp_mae = (
+            (image_diff.sum((1, 2, 3)) / (true_images - background).sum((1, 2, 3)))
+            .abs()
+            .mean()
+        )
+
+        return {
+            "counts_acc": counts_acc,
+            "galaxy_counts_acc": galaxy_counts_acc,
+            "locs_mae": locs_mae,
+            "star_fluxes_mae": star_fluxes_mae,
+            "avg_tpr": avg_tpr,
+            "avg_ppv": avg_ppv,
+            "galaxy_params_mae": gal_params_mae,
+            "image_fluxes_mae": image_fluxes_mae,
+            "norm_pp_mae": norm_pp_mae,
+        }
 
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
@@ -477,9 +516,13 @@ class SleepPhase(pl.LightningModule):
         slen = int(batch["slen"].unique().item())
         border_padding = int((images.shape[-1] - slen) / 2)
         _true_params = {k: v for k, v in batch.items() if k not in exclude}
-
-        # convert to full image parameters for plotting purposes.
         true_params = get_full_params(slen, _true_params)
+
+        # obtain map estimates
+        tile_estimate = self.tile_map_estimate(batch)
+        estimate = get_full_params(slen, tile_estimate)
+        assert len(estimate["locs"].shape) == 3
+        assert estimate["locs"].shape[1] == estimate["n_sources"].max().int().item()
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
@@ -497,22 +540,13 @@ class SleepPhase(pl.LightningModule):
             true_locs = true_params["locs"][None, i]
             true_galaxy_bool = true_params["galaxy_bool"][None, i]
 
-            with torch.no_grad():
-                # get the estimated params, these are *per tile*.
-                self.image_encoder.eval()
-                tile_estimate = self.image_encoder.tile_map_estimate(slen, image)
-
             # convert tile estimates to full parameterization for plotting
-            estimate = get_full_params(slen, tile_estimate)
-            n_sources = estimate["n_sources"]
-            locs = estimate["locs"]
-            galaxy_bool = estimate["galaxy_bool"]
-
-            assert len(locs.shape) == 3 and locs.size(0) == 1
-            assert locs.shape[1] == n_sources.max().int().item()
+            n_sources = estimate["n_sources"][None, i]
+            locs = estimate["locs"][None, i]
+            galaxy_bool = estimate["galaxy_bool"][None, i]
 
             # plot true image + number of sources first.
-            image = image[0, 0].cpu().numpy()  # only first band.
+            image = image[0, 0].cpu().numpy()  # only first band will be plotted.
             plotting.plot_image(fig, true_ax, image)
             true_ax.set_xlabel(
                 f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}"
@@ -523,11 +557,11 @@ class SleepPhase(pl.LightningModule):
             if max_sources > 0 and n_sources.item() > 0:
                 # draw reconstruction image.
                 recon_image, _ = self.image_decoder.render_images(
-                    tile_estimate["n_sources"],
-                    tile_estimate["locs"],
-                    tile_estimate["galaxy_bool"],
-                    batch["galaxy_params"][None, i],
-                    tile_estimate["fluxes"],
+                    tile_estimate["n_sources"][None, i],
+                    tile_estimate["locs"][None, i],
+                    tile_estimate["galaxy_bool"][None, i],
+                    tile_estimate["galaxy_params"][None, i],
+                    tile_estimate["fluxes"][None, i],
                 )
 
                 # round up true parameters.
@@ -556,7 +590,7 @@ class SleepPhase(pl.LightningModule):
                     border_padding,
                     true_locs=true_galaxy_locs,
                     est_locs=galaxy_locs,
-                    colors=("r", "b"),
+                    markers=("x", "+"),
                 )
                 plotting.plot_image_locs(
                     true_ax,
@@ -564,7 +598,7 @@ class SleepPhase(pl.LightningModule):
                     border_padding,
                     true_locs=true_star_locs,
                     est_locs=star_locs,
-                    colors=("lightpink", "tab:orange"),
+                    markers=("o", "1"),
                 )
 
                 plotting.plot_image(fig, recon_ax, recon_image)

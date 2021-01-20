@@ -1,9 +1,19 @@
-import math
+import numpy as np
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import categorical
+
+
+def get_mgrid(slen):
+    offset = (slen - 1) / 2
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    # mgrid is between -1 and 1
+    # then scale slightly because of the way f.grid_sample
+    # parameterizes the edges: (0, 0) is center of edge pixel
+    return mgrid.float() * (slen - 1) / slen
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -54,7 +64,7 @@ def get_full_params(slen: int, tile_params: dict):
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
-    tile_slen = slen / math.sqrt(n_tiles_per_image)
+    tile_slen = slen / np.sqrt(n_tiles_per_image)
     n_ptiles = n_samples * n_tiles_per_image
     assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
     tile_slen = int(tile_slen)
@@ -167,14 +177,13 @@ class ImageEncoder(nn.Module):
         n_galaxy_params (int): Number of latent dimensions in the galaxy VAE network.
 
         """
-
         super().__init__()
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-
         border_padding = (ptile_slen - tile_slen) / 2
+        assert ptile_slen >= tile_slen
         assert border_padding % 1 == 0, "amount of padding should be an integer"
         self.border_padding = int(border_padding)
 
@@ -235,6 +244,14 @@ class ImageEncoder(nn.Module):
         )
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
+        # grid for center cropped tiles
+        self.register_buffer(
+            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
+        )
+
+        # misc
+        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
+
     def _cache_tiling_conv_weights(self):
         # this function sets up weights for the "identity" convolution
         # used to divide a full-image into padded tiles.
@@ -278,7 +295,43 @@ class ImageEncoder(nn.Module):
         # shape = (n_ptiles x n_bands x ptile_slen, ptile_slen)
         return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
 
-    # TODO: Idea is there but need to play around with it to see if it is correct.
+    def center_ptiles(self, image_ptiles, tile_locs):
+        # assume there is at most one source per tile
+        # return a centered version of sources in tiles using their true locations in tiles.
+        # also we crop them to avoid sharp borders with no bacgkround/noise.
+
+        # round up necessary variables and paramters
+        assert len(image_ptiles.shape) == 4
+        assert len(tile_locs.shape) == 3
+        assert tile_locs.shape[1] == 1
+        assert image_ptiles.shape[-1] == self.ptile_slen
+        n_ptiles = image_ptiles.shape[0]
+        crop_slen = 2 * self.tile_slen
+        ptile_slen = self.ptile_slen
+        assert tile_locs.shape[0] == n_ptiles
+
+        # get new locs to do the shift
+        ptile_locs = tile_locs * self.tile_slen + self.border_padding
+        ptile_locs /= ptile_slen
+        locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
+        locs0 /= ptile_slen - 1
+        locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
+        locs = 2 * locs0 - ptile_locs
+
+        # center tiles on the corresponding source given by locs.
+        locs = (locs - 0.5) * 2
+        locs = locs.index_select(2, self.swap)  # trps (x,y) coords
+        grid_loc = self.cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(
+            -1, 1, 1, 2
+        )
+        shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
+
+        # now that everything is center we can crop easily
+        cropped_tiles = shifted_tiles[
+            :, :, crop_slen : ptile_slen - crop_slen, crop_slen : ptile_slen - crop_slen
+        ]
+        return cropped_tiles
+
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, these are cached since
         same for all h."""
@@ -454,13 +507,7 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def tile_map_estimate(self, slen, images):
-        # slen is size of the images without border padding
-
-        # check image compatibility
-        border_padding = (images.shape[-1] - slen) / 2
-        assert slen % self.tile_slen == 0, "incompatible image"
-        assert border_padding == self.border_padding, "incompatible border"
+    def tile_map_estimate(self, images):
 
         # extract image_ptiles
         batch_size = images.shape[0]
@@ -515,8 +562,14 @@ class ImageEncoder(nn.Module):
 
     def map_estimate(self, slen, images):
         # return full estimate of parameters in full image.
-        # slen is size of the image without border padding
-        tile_estimate = self.tile_map_estimate(slen, images)
+        # NOTE: slen is size of the image without border padding
+
+        # check image compatibility
+        border_padding = (images.shape[-1] - slen) / 2
+        assert slen % self.tile_slen == 0, "incompatible image"
+        assert border_padding == self.border_padding, "incompatible border"
+
+        tile_estimate = self.tile_map_estimate(images)
         estimate = get_full_params(slen, tile_estimate)
         return estimate
 

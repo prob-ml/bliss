@@ -1,7 +1,7 @@
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
-def plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=1):
+def _plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=1):
     assert len(locs.shape) == 2
     assert locs.shape[1] == 2
     assert isinstance(slen, int)
@@ -23,6 +23,7 @@ def plot_image_locs(
     est_locs=None,
     colors=("r", "b"),
     s=20,
+    markers=("x", "+"),
 ):
 
     # mark border
@@ -33,11 +34,15 @@ def plot_image_locs(
 
     assert isinstance(border_padding, int)
     if true_locs is not None:
-        plot_locs(ax, slen, border_padding, true_locs, color=colors[0], marker="x", s=s)
+        _plot_locs(
+            ax, slen, border_padding, true_locs, color=colors[0], marker=markers[0], s=s
+        )
 
     if est_locs is not None:
         s2 = 2 * s
-        plot_locs(ax, slen, border_padding, est_locs, color=colors[1], marker="+", s=s2)
+        _plot_locs(
+            ax, slen, border_padding, est_locs, color=colors[1], marker=markers[1], s=s2
+        )
 
 
 def plot_image(

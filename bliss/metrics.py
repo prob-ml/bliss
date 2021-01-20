@@ -1,5 +1,4 @@
 import torch
-
 from scipy import optimize as sp_optim
 
 
@@ -21,9 +20,6 @@ def inner_join_locs(locs1, locs2):
 
     assert len(locs2.shape) == 2
     assert locs2.shape[1] == 2
-
-    ntrue = locs1.shape[0]
-    nest = locs2.shape[0]
 
     # mse of locs:
     # entry (i,j) is l1 distance between of ith loc in locs1
@@ -106,6 +102,7 @@ def eval_error_on_batch(true_params, est_params, slen):
 
     locs_mae_vec = []
     fluxes_mae_vec = []
+    galaxy_params_mae_vec = []
 
     # accuracy of counting number of sources
     count_bool = true_params["n_sources"].eq(est_params["n_sources"])
@@ -131,6 +128,12 @@ def eval_error_on_batch(true_params, est_params, slen):
             true_fluxes = true_params["fluxes"][i, 0:ntrue].view(ntrue, n_bands)
             est_fluxes = est_params["fluxes"][i, 0:nest].view(nest, n_bands)
 
+            # prepare galaxy params.
+            true_galaxy_params = true_params["galaxy_params"][i, 0:ntrue].view(
+                ntrue, -1
+            )
+            est_galaxy_params = est_params["galaxy_params"][i, 0:nest].view(nest, -1)
+
             # convert fluxes to magnitude (off by a constant, but
             # doesn't matter since we are looking at the diff)
             true_mag = torch.log10(true_fluxes) * 2.5
@@ -147,18 +150,26 @@ def eval_error_on_batch(true_params, est_params, slen):
                 true_locs, true_mag, est_locs, est_mag
             )
 
-            for k in range(len(locs_mae_i)):
+            # get l1 error in galaxy_params
+            _, galaxy_params_mae_i = get_l1_error(
+                true_locs, true_galaxy_params, est_locs, est_galaxy_params
+            )
+
+            for k, _ in enumerate(locs_mae_i):
                 locs_mae_vec.append(locs_mae_i[k].item())
                 fluxes_mae_vec.append(fluxes_mae_i[k].item())
+                galaxy_params_mae_vec.append(galaxy_params_mae_i[k].item())
 
-    locs_mae_vec = torch.Tensor(locs_mae_vec)
-    fluxes_mae_vec = torch.Tensor(fluxes_mae_vec)
+    locs_mae_vec = torch.tensor(locs_mae_vec)
+    fluxes_mae_vec = torch.tensor(fluxes_mae_vec)
+    galaxy_params_mae_vec = torch.tensor(galaxy_params_mae_vec)
 
-    return (
-        locs_mae_vec,
-        fluxes_mae_vec,
-        count_bool,
-        galaxy_counts_bool,
-        tpr_vec,
-        ppv_vec,
-    )
+    return {
+        "locs_mae_vec": locs_mae_vec,
+        "fluxes_mae_vec": fluxes_mae_vec,
+        "galaxy_params_mae_vec": galaxy_params_mae_vec,
+        "count_bool": count_bool,
+        "galaxy_counts_bool": galaxy_counts_bool,
+        "tpr_vec": tpr_vec,
+        "ppv_vec": ppv_vec,
+    }

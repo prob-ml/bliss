@@ -50,7 +50,7 @@ def setup_seed(cfg):
 
 
 def setup_profiler(cfg, paths):
-    profiler = False
+    profiler = None
     output = Path(paths["output"])
     if cfg.training.trainer.profiler:
         profile_file = output.joinpath("profile.txt")
@@ -75,7 +75,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
             filepath=checkpoint_dir,
             save_top_k=True,
             verbose=True,
-            monitor="val_loss",
+            monitor="val_detection_loss",
             mode="min",
             prefix="",
         )
@@ -84,16 +84,6 @@ def setup_checkpoint_callback(cfg, paths, logger):
 
 
 def main(cfg: DictConfig):
-
-    # setup gpus
-
-    if cfg.training.trainer.gpus != None and torch.cuda.is_available():
-        gpus = list(cfg.training.trainer.gpus)
-        assert isinstance(gpus, list)
-        assert len(gpus) == 1 and isinstance(gpus[0], int), "Only one GPU is supported."
-        device_id = gpus[0]
-        device = torch.device(f"cuda:{device_id}")
-        torch.cuda.set_device(device)
 
     # setup paths and seed
     paths = setup_paths(cfg, enforce_overwrite=False)
