@@ -155,7 +155,7 @@ def eval_error_on_batch(true_params, est_params, slen):
                 true_locs, true_galaxy_params, est_locs, est_galaxy_params
             )
 
-            for k, _ in enumerate(locs_mae_vec):
+            for k, _ in enumerate(locs_mae_i):
                 locs_mae_vec.append(locs_mae_i[k].item())
                 fluxes_mae_vec.append(fluxes_mae_i[k].item())
                 galaxy_params_mae_vec.append(galaxy_params_mae_i[k].item())

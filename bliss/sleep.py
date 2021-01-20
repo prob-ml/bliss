@@ -220,7 +220,6 @@ class SleepPhase(pl.LightningModule):
         batch_size = images.shape[0]
         # shape = (n_ptiles x band x ptile_slen x ptile_slen)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
-        n_ptiles = image_ptiles.shape[0]
         n_galaxy_params = self.image_decoder.n_galaxy_params
         galaxy_param_mean, galaxy_param_var = self.forward_galaxy(
             image_ptiles, batch["locs"]
