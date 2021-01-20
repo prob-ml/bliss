@@ -1,38 +1,38 @@
 [tool.poetry]
+authors = ["Bryan Liu", "Ismael Mendoza", "Zhe Zhao", "Jeffrey Regier"]
+description = "Bayesian Light Source Separator"
+license = "MIT"
 name = "bliss"
 version = "0.1.0"
-description = "Bayesian Light Source Separator"
-authors = ["Bryan Liu", "Ismael Mendoza", "Zhe Zhao", "Jeffrey Regier"]
-license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.8"
 astropy = "^4.2"
+hydra-core = "^1.0.4"
+hyperopt = "^0.2.5"
 matplotlib = "^3.3.3"
 numpy = "^1.18.5"
-scipy = "^1.4.1"
-pytorch-lightning = "^1.0.8"
 omegaconf = "^2.0.5"
-hydra-core = "^1.0.4"
+python = "^3.8"
+pytorch-lightning = "^1.0.8"
+scipy = "^1.4.1"
 torch = "^1.7.0"
-hyperopt = "^0.2.5"
 
 [tool.poetry.dev-dependencies]
-pytest = "^6.1.2"
 black = "^20.8b1"
-tox = "^3.20.1"
 git-lfs = "^1.6"
-nbstripout = "^0.3.9"
+jedi = "0.17.2"
 jupyter = "^1.0.0"
-pytest-cov = "^2.10"
+nbstripout = "^0.3.9"
 pre-commit = "^2.9.2"
-ray = {extras = ["tune"], version = "^1.0.1"}
 pylint = "^2.6.0"
-jedi= "0.17.2"
+pytest = "^6.1.2"
+pytest-cov = "^2.10"
+ray = {extras = ["tune"], version = "^1.0.1"}
+tox = "^3.20.1"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]
