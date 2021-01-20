@@ -18,31 +18,7 @@ bliss.generate module
 
 .. automodule:: bliss.generate
    :members:
-   :undoc-members:
-   :show-inheritance:
-
-bliss.main module
------------------
-
-.. automodule:: bliss.main
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-bliss.metrics module
---------------------
-
-.. automodule:: bliss.metrics
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-bliss.plotting module
----------------------
-
-.. automodule:: bliss.plotting
-   :members:
-   :undoc-members:
+   :no-undoc-members:
    :show-inheritance:
 
 bliss.sleep module
@@ -50,15 +26,7 @@ bliss.sleep module
 
 .. automodule:: bliss.sleep
    :members:
-   :undoc-members:
-   :show-inheritance:
-
-bliss.train module
-------------------
-
-.. automodule:: bliss.train
-   :members:
-   :undoc-members:
+   :no-undoc-members:
    :show-inheritance:
 
 bliss.tune module
@@ -66,7 +34,7 @@ bliss.tune module
 
 .. automodule:: bliss.tune
    :members:
-   :undoc-members:
+   :no-undoc-members:
    :show-inheritance:
 
 bliss.wake module
@@ -74,7 +42,7 @@ bliss.wake module
 
 .. automodule:: bliss.wake
    :members:
-   :undoc-members:
+   :no-undoc-members:
    :show-inheritance:
 
 Module contents
