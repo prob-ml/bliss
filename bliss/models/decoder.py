@@ -1,33 +1,21 @@
-import numpy as np
 import warnings
+from pathlib import Path
+import numpy as np
 from astropy.io import fits
 
 import torch
 import torch.nn as nn
-from torch.nn.functional import pad
 import torch.nn.functional as F
 from torch.distributions import Poisson, Normal
+import pytorch_lightning as pl
+
+from .encoder import get_is_on_from_n_sources, get_mgrid
+from . import galaxy_net
 
 
-from .. import device
-from .encoder import get_is_on_from_n_sources
-
-
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    # mgrid is between -1 and 1
-    # then scale slightly because of the way f.grid_sample
-    # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.type(torch.FloatTensor).to(device) * (slen - 1) / slen
-
-
-def get_psf_params(psfield_fit_file, bands):
-    psfield = fits.open(psfield_fit_file)
-
+def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
+    psfield = fits.open(psf_fit_file, ignore_missing_end=True)
     psf_params = torch.zeros(len(bands), 6)
-
     for i in range(len(bands)):
         band = bands[i]
 
@@ -44,34 +32,163 @@ def get_psf_params(psfield_fit_file, bands):
     return psf_params
 
 
-class PowerLawPSF(nn.Module):
-    def __init__(self, init_psf_params, psf_slen=25, image_slen=101):
+class ImageDecoder(pl.LightningModule):
+    def __init__(
+        self,
+        n_bands=1,
+        slen=50,
+        tile_slen=2,
+        ptile_slen=10,
+        border_padding=None,
+        prob_galaxy=0.0,
+        n_galaxy_params=8,
+        max_sources=2,
+        mean_sources=0.4,
+        min_sources=0,
+        f_min=1e4,
+        f_max=1e6,
+        alpha=0.5,
+        gal_slen=51,
+        psf_slen=25,
+        decoder_file=None,
+        psf_params_file="psf_params.npy",
+        background_values=(686.0, 1123.0),
+        loc_min=0.0,
+        loc_max=1.0,
+    ):
+        super(ImageDecoder, self).__init__()
 
-        super(PowerLawPSF, self).__init__()
-        assert len(init_psf_params.shape) == 2
-        assert image_slen % 2 == 1, "image_slen must be odd"
-        assert psf_slen % 2 == 1, "psf_slen must be odd"
+        # side-length in pixels of an image (image is assumed to be square)
+        assert slen % 1 == 0, "slen must be an integer."
+        self.slen = int(slen)
 
-        self.n_bands = init_psf_params.shape[0]
+        # side-length of an image tile.
+        # latent variables (locations, fluxes, etc) are drawn per-tile
+        self.tile_slen = tile_slen
+        assert (self.slen % self.tile_slen) == 0, (
+            "We assume that the tiles cover the image."
+            + " So slen must be divisible by tile_slen"
+        )
 
+        # Images are first rendered on *padded* tiles (aka ptiles).
+        # The padded tile consists of the tile and neighboring tiles
+        # The width of the padding is given by ptile_slen.
+        # border_padding is the amount of padding we leave in the final image. Useful for
+        # avoiding sources getting too close to the edges.
+        if border_padding is None:
+            # default value matches encoder default.
+            border_padding = (ptile_slen - tile_slen) / 2
+
+        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * tile_slen
+        assert border_padding % 1 == 0, "amount of border padding must be an integer"
+        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
+        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
+        assert tile_slen <= ptile_slen
+        self.border_padding = int(border_padding)
+        self.ptile_slen = ptile_slen
+
+        # number of tiles per image
+        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
+        self.n_tiles_per_image = int(n_tiles_per_image)
+
+        self.n_bands = n_bands  # number of bands
+
+        # per-tile prior parameters on number (and type) of sources
+        self.max_sources = max_sources
+        self.mean_sources = mean_sources
+        self.min_sources = min_sources
+        self.prob_galaxy = float(prob_galaxy)
+
+        # per-tile constraints on the location of sources
+        self.loc_min = loc_min
+        self.loc_max = loc_max
+
+        # prior parameters on fluxes
+        self.f_min = f_min
+        self.f_max = f_max
+        self.alpha = alpha  # pareto parameter.
+
+        # caching the underlying
+        # coordinates on which we simulate source
+        # grid: between -1 and 1,
+        # then scale slightly because of the way f.grid_sample
+        # parameterizes the edges: (0, 0) is center of edge pixel
+        self.register_buffer(
+            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
+        )
+
+        # misc
+        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
+
+        # background
+        assert len(background_values) == n_bands
+        background_shape = (
+            self.n_bands,
+            self.slen + 2 * self.border_padding,
+            self.slen + 2 * self.border_padding,
+        )
+        self.register_buffer(
+            "background", torch.zeros(background_shape), persistent=False
+        )
+        for i in range(n_bands):
+            self.background[i] = background_values[i]
+
+        # galaxy decoder
+        self.gal_slen = gal_slen
+        self.n_galaxy_params = n_galaxy_params
+        self.galaxy_decoder = None
+        assert self.prob_galaxy > 0.0 or decoder_file is None
+        if decoder_file is not None:
+            dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, n_galaxy_params, n_bands)
+            dec.load_state_dict(torch.load(decoder_file, map_location=self.device))
+            dec.eval().requires_grad_(False)
+            self.galaxy_decoder = dec
+
+        # load psf params + grid
+        ext = Path(psf_params_file).suffix
+        if ext == ".npy":
+            psf_params = torch.from_numpy(np.load(psf_params_file))
+            psf_params = psf_params[list(range(n_bands))]
+        elif ext == ".fits":
+            assert n_bands == 2, "only 2 band fit files are supported."
+            bands = (2, 3)
+            psf_params = get_fit_file_psf_params(psf_params_file, bands)
+        else:
+            raise NotImplementedError(
+                "Only .npy and .fits extensions are supported for PSF params files."
+            )
+        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
-        self.image_slen = image_slen
-
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        self.cached_radii_grid = (grid ** 2).sum(2).sqrt().to(device)
-
-        # initial weights
-        self.params = nn.Parameter(init_psf_params.clone(), requires_grad=True)
+        # extra factor to be consistent with old repo
+        # but probably doesn't matter ...
+        grid *= self.psf_slen / (self.psf_slen - 1)
+        self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
 
         # get normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = self._get_psf_single_band(init_psf_params[i])
+            psf_i = self._get_psf_single_band(psf_params[i])
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
-        # initial psf norm
-        self.init_psf_sum = self._get_psf().sum(-1).sum(-1).detach()
+    def forward(self):
+        psf = self._get_psf()
+        init_psf_sum = psf.sum(-1).sum(-1).detach()
+        norm = psf.sum(-1).sum(-1)
+        psf *= (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
+        return psf
+
+    def _get_psf(self):
+        psf = torch.tensor([], device=self.device)
+        for i in range(self.n_bands):
+            _psf = self._get_psf_single_band(self.params[i])
+            _psf *= self.normalization_constant[i]
+            psf = torch.cat((psf.type_as(_psf), _psf.unsqueeze(0)))
+
+        assert (psf > 0).all()
+        return psf
 
     @staticmethod
     def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
@@ -92,123 +209,169 @@ class PowerLawPSF(nn.Module):
             _psf_params[5],
         )
 
-    def _get_psf(self):
-        # TODO make the psf function vectorized ...
-        psf = torch.tensor([]).to(device)
-        for i in range(self.n_bands):
-            _psf = self._get_psf_single_band(self.params[i])
-            _psf *= self.normalization_constant[i]
-            psf = torch.cat((psf, _psf.unsqueeze(0)))
+    def _sample_n_sources(self, batch_size):
+        # returns number of sources for each batch x tile
+        # output dimension is batch_size x n_tiles_per_image
 
-        assert (psf > 0).all()
-        return psf
+        # always poisson distributed.
+        p = torch.full((1,), self.mean_sources, device=self.device, dtype=torch.float)
+        m = Poisson(p)
+        n_sources = m.sample([batch_size, self.n_tiles_per_image])
 
-    def forward(self):
-        psf = self._get_psf()
-        norm = psf.sum(-1).sum(-1)
-        psf *= (self.init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
-        l_pad = (self.image_slen - self.psf_slen) // 2
+        # long() here is necessary because used for indexing and one_hot encoding.
+        n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
+        n_sources = n_sources.long().view(batch_size, self.n_tiles_per_image)
+        return n_sources
 
-        # add padding so psf has length of image_slen
-        return pad(psf, [l_pad] * 4)
+    def _sample_locs(self, is_on_array, batch_size):
+        # output dimension is batch_size x n_tiles_per_image x max_sources x 2
 
-
-class ImageDecoder(object):
-    def __init__(
-        self,
-        galaxy_decoder,
-        init_psf_params,
-        background,
-        n_bands=1,
-        slen=50,
-        tile_slen=2,
-        ptile_padding=2,
-        prob_galaxy=0.0,
-        max_sources_per_tile=2,
-        mean_sources_per_tile=0.4,
-        min_sources_per_tile=0,
-        loc_min_per_tile=0.0,
-        loc_max_per_tile=1.0,
-        f_min=1e4,
-        f_max=1e6,
-        alpha=0.5,
-        add_noise=True,
-    ):
-
-        # side-length in pixels of an image (image is assumed to be square)
-        self.slen = slen
-
-        # side-length of an image tile.
-        # latent variables (locations, fluxes, etc) are drawn per-tile
-        self.tile_slen = tile_slen
-        assert (self.slen % self.tile_slen) == 0, (
-            "we assume that the tiles paritition and cover the image."
-            + " So slen must be divisible by tile_slen"
+        # 2 = (x,y)
+        shape = (
+            batch_size,
+            self.n_tiles_per_image,
+            self.max_sources,
+            2,
         )
+        locs = torch.rand(*shape, device=is_on_array.device)
+        locs *= self.loc_max - self.loc_min
+        locs += self.loc_min
+        locs *= is_on_array.unsqueeze(-1)
 
-        # Images are first rendered on *padded* tiles (aka ptiles).
-        # The padded tile consists of the tile and neighboring tiles
-        # The width of the padding (in number of tiles) is given by ptile padding.
-        # e.g. if ptile_padding is 1, then each ptile consists of 9 tiles:
-        # the center tile, surrounded one tile on each side.
-        self.ptile_padding = ptile_padding
-        self.ptile_slen = int((self.ptile_padding * 2 + 1) * tile_slen)
+        return locs
 
-        # number of tiles per image
-        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
-        self.n_tiles_per_image = int(n_tiles_per_image)
+    def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
+        # the counts returned (n_galaxies, n_stars) are of shape (batch_size x n_tiles_per_image)
+        # the booleans returned (galaxy_bool, star_bool) are of shape
+        # (batch_size x n_tiles_per_image x max_detections x 1)
+        # this last dimension is so it is parallel to other galaxy/star params.
 
-        self.n_bands = n_bands  # number of bands
-        self.background = background.to(device)  # sky background
+        batch_size = n_sources.size(0)
+        uniform = torch.rand(
+            batch_size,
+            self.n_tiles_per_image,
+            self.max_sources,
+            1,
+            device=is_on_array.device,
+        )
+        galaxy_bool = uniform < self.prob_galaxy
+        galaxy_bool = (galaxy_bool * is_on_array.unsqueeze(-1)).float()
+        star_bool = (1 - galaxy_bool) * is_on_array.unsqueeze(-1)
+        n_galaxies = galaxy_bool.sum((-2, -1))
+        n_stars = star_bool.sum((-2, -1))
+        assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
 
-        assert len(background.shape) == 3
-        assert self.background.shape[0] == self.n_bands
-        assert self.background.shape[1] == self.background.shape[2] == self.slen
+        return n_galaxies, n_stars, galaxy_bool, star_bool
 
-        # per-tile prior parameters on number (and type) of sources
-        self.max_sources_per_tile = max_sources_per_tile
-        self.mean_sources_per_tile = mean_sources_per_tile
-        self.min_sources_per_tile = min_sources_per_tile
-        self.prob_galaxy = float(prob_galaxy)
+    def _pareto_cdf(self, x):
+        return 1 - (self.f_min / x) ** self.alpha
 
-        # per-tile constraints on the location of sources
-        self.loc_min_per_tile = loc_min_per_tile
-        self.loc_max_per_tile = loc_max_per_tile
+    def _draw_pareto_maxed(self, shape):
+        # draw pareto conditioned on being less than f_max
 
-        self.add_noise = add_noise
+        u_max = self._pareto_cdf(self.f_max)
+        uniform_samples = torch.rand(*shape, device=self.device) * u_max
+        return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
-        # galaxy decoder
-        self.galaxy_decoder = galaxy_decoder
-        self.latent_dim = 8
-        self.gal_slen = 51
-        if self.prob_galaxy > 0:
-            self.gal_slen = self.galaxy_decoder.slen
-            self.latent_dim = self.galaxy_decoder.latent_dim
-            assert self.galaxy_decoder.n_bands == self.n_bands
+    def _sample_fluxes(self, n_stars, star_bool, batch_size):
+        """
+        Returns:
+            fluxes, tensor shape (batch_size x self.n_tiles_per_image x self.max_sources x n_bands)
+        """
+        assert n_stars.shape[0] == batch_size
 
-        # prior parameters on fluxes
-        self.f_min = f_min
-        self.f_max = f_max
-        self.alpha = alpha  # pareto parameter.
+        shape = (batch_size, self.n_tiles_per_image, self.max_sources, 1)
+        base_fluxes = self._draw_pareto_maxed(shape)
 
-        # caching the underlying
-        # coordinates on which we simulate source
-        # grid: between -1 and 1,
-        # then scale slightly because of the way f.grid_sample
-        # parameterizes the edges: (0, 0) is center of edge pixel
-        self.cached_grid = get_mgrid(self.ptile_slen)
+        if self.n_bands > 1:
+            shape = (
+                batch_size,
+                self.n_tiles_per_image,
+                self.max_sources,
+                self.n_bands - 1,
+            )
+            colors = torch.randn(*shape, device=base_fluxes.device)
+            _fluxes = 10 ** (colors / 2.5) * base_fluxes
+            fluxes = torch.cat((base_fluxes, _fluxes), dim=3)
+            fluxes *= star_bool.float()
+        else:
+            fluxes = base_fluxes * star_bool.float()
 
-        # load psf_params
-        self.power_law_psf = PowerLawPSF(init_psf_params.clone())
+        return fluxes
+
+    def _sample_galaxy_params(self, n_galaxies, galaxy_bool):
+        # galaxy params are just Normal(0,1) variables.
+
+        assert len(n_galaxies.shape) == 2
+        batch_size = n_galaxies.size(0)
+        mean = torch.zeros(1, dtype=torch.float, device=n_galaxies.device)
+        std = torch.ones(1, dtype=torch.float, device=n_galaxies.device)
+        p_z = Normal(mean, std)
+        shape = (
+            batch_size,
+            self.n_tiles_per_image,
+            self.max_sources,
+            self.n_galaxy_params,
+        )
+        sample_shape = torch.tensor(shape)
+        galaxy_params = p_z.rsample(sample_shape)
+        galaxy_params = galaxy_params.view(*shape)
+
+        # zero out excess according to galaxy_bool.
+        galaxy_params = galaxy_params * galaxy_bool
+        return galaxy_params
+
+    def sample_prior(self, batch_size=1):
+        n_sources = self._sample_n_sources(batch_size)
+        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
+        locs = self._sample_locs(is_on_array, batch_size)
+
+        n_galaxies, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
+            n_sources, is_on_array
+        )
+        galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
+        fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
+        log_fluxes = self._get_log_fluxes(fluxes)
+
+        # per tile quantities.
+        return {
+            "n_sources": n_sources,
+            "locs": locs,
+            "galaxy_bool": galaxy_bool,
+            "galaxy_params": galaxy_params,
+            "fluxes": fluxes,
+            "log_fluxes": log_fluxes,
+        }
+
+    @staticmethod
+    def _get_log_fluxes(fluxes):
+        log_fluxes = torch.where(
+            fluxes > 0, fluxes, torch.ones_like(fluxes)
+        )  # prevent log(0) errors.
+        log_fluxes = torch.log(log_fluxes)
+
+        return log_fluxes
+
+    @staticmethod
+    def _apply_noise(images_mean):
+        # add noise to images.
+
+        if torch.any(images_mean <= 0):
+            warnings.warn("image mean less than 0")
+            images_mean = images_mean.clamp(min=1.0)
+
+        _images = torch.sqrt(images_mean)
+        images = _images * torch.randn_like(images_mean)
+        images = images + images_mean
+
+        return images
 
     def _trim_source(self, source):
-        """Crop the source to length ptile_slen x ptile_slen,
-        centered at the middle.
-        """
+        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
         assert len(source.shape) == 3
 
-        # if self.ptile_slen is even, we still make psf dimension odd.
-        # otherwise, the psf won't have a peak in the center pixel.
+        # if self.ptile_slen is even, we still make source dimension odd.
+        # otherwise, the source won't have a peak in the center pixel.
         _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
         source_slen = source.shape[2]
@@ -227,14 +390,15 @@ class ImageDecoder(object):
         assert len(source.shape) == 3
 
         _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        """Pad the source with zeros so that it is size slen,"""
         assert len(source.shape) == 3
 
         source_slen = source.shape[2]
 
         assert source_slen <= _slen, "Should be using trim source."
 
-        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=device)
+        source_expanded = torch.zeros(
+            source.shape[0], _slen, _slen, device=source.device
+        )
         offset = int((_slen - source_slen) / 2)
 
         source_expanded[
@@ -243,11 +407,11 @@ class ImageDecoder(object):
 
         return source_expanded
 
-    def _get_psf(self):
+    def _adjust_psf(self):
         # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
         # first dimension of psf is number of bands
         # dimension of the psf/slen should be odd
-        psf = self.power_law_psf.forward()
+        psf = self.forward()
         psf_slen = psf.shape[2]
         assert len(psf.shape) == 3
         assert psf.shape[1] == psf_slen
@@ -268,7 +432,7 @@ class ImageDecoder(object):
 
         n_galaxies = galaxy.shape[0]
         galaxy_slen = galaxy.shape[3]
-        galaxy = galaxy.reshape(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
+        galaxy = galaxy.view(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
 
         if self.ptile_slen >= galaxy.shape[-1]:
             sized_galaxy = self._expand_source(galaxy)
@@ -276,185 +440,7 @@ class ImageDecoder(object):
             sized_galaxy = self._trim_source(galaxy)
 
         outsize = sized_galaxy.shape[-1]
-        return sized_galaxy.reshape(n_galaxies, self.n_bands, outsize, outsize)
-
-    def _sample_n_sources(self, batch_size):
-        # returns number of sources for each batch x tile
-        # output dimension is batchsize x n_tiles_per_image
-
-        # always poisson distributed.
-        m = Poisson(
-            torch.full(
-                (1,), self.mean_sources_per_tile, dtype=torch.float, device=device
-            )
-        )
-        n_sources = m.sample([batch_size, self.n_tiles_per_image])
-
-        # long() here is necessary because used for indexing and one_hot encoding.
-        n_sources = n_sources.clamp(
-            max=self.max_sources_per_tile, min=self.min_sources_per_tile
-        )
-        n_sources = n_sources.long().squeeze(-1)
-        return n_sources
-
-    def _sample_locs(self, is_on_array, batch_size):
-        # output dimension is batchsize x n_tiles_per_image x max_sources_per_tile x 2
-
-        # 2 = (x,y)
-        locs = (
-            torch.rand(
-                batch_size,
-                self.n_tiles_per_image,
-                self.max_sources_per_tile,
-                2,
-                device=device,
-            )
-            * (self.loc_max_per_tile - self.loc_min_per_tile)
-            + self.loc_min_per_tile
-        )
-        locs *= is_on_array.unsqueeze(-1)
-
-        return locs
-
-    def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
-        # the counts returned (n_galaxies, n_stars) are of shape (batch_size x n_tiles_per_image)
-        # the booleans returned (galaxy_bool, star_bool) are of shape (batch_size x n_tiles_per_image x max_detections)
-
-        batch_size = n_sources.size(0)
-        uniform = torch.rand(
-            batch_size, self.n_tiles_per_image, self.max_sources_per_tile, device=device
-        )
-        galaxy_bool = uniform < self.prob_galaxy
-        galaxy_bool = (galaxy_bool * is_on_array).float()
-        star_bool = (1 - galaxy_bool) * is_on_array
-        n_galaxies = galaxy_bool.sum(-1)
-        n_stars = star_bool.sum(-1)
-        assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
-
-        return n_galaxies, n_stars, galaxy_bool, star_bool
-
-    def _pareto_cdf(self, x):
-        return 1 - (self.f_min / x) ** self.alpha
-
-    def _draw_pareto_maxed(self, shape):
-        # draw pareto conditioned on being less than f_max
-
-        u_max = self._pareto_cdf(self.f_max)
-        uniform_samples = torch.rand(*shape, device=device) * u_max
-        return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
-
-    @staticmethod
-    def _get_log_fluxes(fluxes):
-        """
-        To obtain fluxes from log_fluxes.
-
-        >> is_on_array = get_is_on_from_n_stars(n_stars, max_sources)
-        >> fluxes = np.exp(log_fluxes) * is_on_array
-        """
-        log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones(*fluxes.shape).to(device)
-        )  # prevent log(0) errors.
-        log_fluxes = torch.log(log_fluxes)
-
-        return log_fluxes
-
-    def _sample_fluxes(self, n_stars, star_bool, batch_size):
-        """
-
-        :return: fluxes, a shape (batch_size x self.max_sources_per_tile x max_sources x n_bands) tensor
-        """
-        assert n_stars.shape[0] == batch_size
-
-        shape = (batch_size, self.n_tiles_per_image, self.max_sources_per_tile)
-        base_fluxes = self._draw_pareto_maxed(shape)
-
-        if self.n_bands > 1:
-            colors = (
-                torch.rand(
-                    batch_size,
-                    self.n_tiles_per_image,
-                    self.max_sources_per_tile,
-                    self.n_bands - 1,
-                    device=device,
-                )
-                * 0.15
-                + 0.3
-            )
-            _fluxes = 10 ** (colors / 2.5) * base_fluxes.unsqueeze(-1)
-
-            fluxes = torch.cat((base_fluxes.unsqueeze(-1), _fluxes), dim=3)
-            fluxes *= star_bool.unsqueeze(-1)
-        else:
-            fluxes = (base_fluxes * star_bool.float()).unsqueeze(-1)
-
-        return fluxes
-
-    def _sample_galaxy_params(self, n_galaxies, galaxy_bool):
-        # galaxy params are just Normal(0,1) variables.
-
-        assert len(n_galaxies.shape) == 2
-        batch_size = n_galaxies.size(0)
-
-        mean = torch.zeros(1, dtype=torch.float, device=device)
-        std = torch.ones(1, dtype=torch.float, device=device)
-        p_z = Normal(mean, std)
-        sample_shape = torch.tensor(
-            [
-                batch_size,
-                self.n_tiles_per_image,
-                self.max_sources_per_tile,
-                self.latent_dim,
-            ]
-        )
-        galaxy_params = p_z.rsample(sample_shape)
-        galaxy_params = galaxy_params.reshape(
-            batch_size,
-            self.n_tiles_per_image,
-            self.max_sources_per_tile,
-            self.latent_dim,
-        )
-
-        # zero out excess according to galaxy_bool.
-        galaxy_params = galaxy_params * galaxy_bool.unsqueeze(-1)
-        return galaxy_params
-
-    def sample_parameters(self, batch_size=1):
-        n_sources = self._sample_n_sources(batch_size)
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources_per_tile)
-        locs = self._sample_locs(is_on_array, batch_size)
-
-        n_galaxies, n_stars, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
-            n_sources, is_on_array
-        )
-        galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
-
-        fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
-        log_fluxes = self._get_log_fluxes(fluxes)
-
-        return {
-            "n_sources": n_sources,
-            "n_galaxies": n_galaxies,
-            "n_stars": n_stars,
-            "locs": locs,
-            "galaxy_params": galaxy_params,
-            "fluxes": fluxes,
-            "log_fluxes": log_fluxes,
-            "galaxy_bool": galaxy_bool,
-        }
-
-    @staticmethod
-    def _apply_noise(images_mean):
-        # add noise to images.
-
-        if torch.any(images_mean <= 0):
-            warnings.warn("image mean less than 0")
-            images_mean = images_mean.clamp(min=1.0)
-
-        _images = torch.sqrt(images_mean)
-        images = _images * torch.randn(*images_mean.shape, device=device)
-        images = images + images_mean
-
-        return images
+        return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
 
     def _render_one_source(self, locs, source):
         """
@@ -465,8 +451,10 @@ class ImageDecoder(object):
         :return: shape = (n_ptiles x n_bands x slen x slen)
         """
         n_ptiles = locs.shape[0]
-        assert locs.shape[1] == 2
         assert source.shape[0] == n_ptiles
+        assert source.shape[1] == self.n_bands
+        assert source.shape[2] == source.shape[3]
+        assert locs.shape[1] == 2
 
         # scale so that they land in the tile within the padded tile
         padding = (self.ptile_slen - self.tile_slen) / 2
@@ -474,27 +462,31 @@ class ImageDecoder(object):
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
         _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
-        grid_loc = _grid - locs[:, [1, 0]].view(n_ptiles, 1, 1, 2)
+
+        locs_swapped = locs.index_select(1, self.swap)
+        grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
+
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
-    def render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
+    def _render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x n_bands x max_stars)
-        # star_bool: Is (n_ptiles x max_stars)
+        # star_bool: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
-        psf = self._get_psf()
+        psf = self._adjust_psf()
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=device)
+        ptile = torch.zeros(ptile_shape, device=locs.device)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
         assert fluxes.shape[0] == star_bool.shape[0] == n_ptiles
         assert fluxes.shape[1] == star_bool.shape[1] == max_sources
         assert fluxes.shape[2] == psf.shape[0] == self.n_bands
+        assert star_bool.shape[2] == 1
 
         # all stars are just the PSF so we copy it.
         expanded_psf = psf.expand(n_ptiles, self.n_bands, -1, -1)
@@ -503,76 +495,78 @@ class ImageDecoder(object):
         for n in range(max_sources):
             star_bool_n = star_bool[:, n]
             locs_n = locs[:, n, :]
-            fluxes_n = fluxes[:, n, :] * star_bool_n.unsqueeze(1)
+            fluxes_n = fluxes[:, n, :] * star_bool_n.view(-1, 1)
             fluxes_n = fluxes_n.view(n_ptiles, self.n_bands, 1, 1)
             one_star = self._render_one_source(locs_n, expanded_psf)
             ptile += one_star * fluxes_n
 
         return ptile
 
-    def render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
+    def _render_single_galaxies(self, galaxy_params, galaxy_bool):
+
+        # flatten parameters
+        z = galaxy_params.view(-1, self.n_galaxy_params)
+        b = galaxy_bool.flatten()
+
+        # allocate memory
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        gal = torch.zeros(
+            z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device
+        )
+        var = torch.zeros(
+            z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device
+        )
+
+        # forward only galaxies that are on!
+        gal_on, var_on = self.galaxy_decoder.forward(z[b == 1])
+
+        # size the galaxy (either trims or crops to the size of ptile)
+        gal_on = self._size_galaxy(gal_on)
+        var_on = self._size_galaxy(var_on)
+
+        # set galaxies
+        gal[b == 1] = gal_on
+        var[b == 1] = var_on
+
+        batchsize = galaxy_params.shape[0]
+        gal_shape = (batchsize, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
+        single_galaxies = gal.view(gal_shape)
+        single_vars = var.view(gal_shape)
+
+        return single_galaxies, single_vars
+
+    def _render_multiple_galaxies_on_ptile(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
         ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=device)
+        ptile = torch.zeros(ptile_shape, device=locs.device)
+        var_ptile = torch.zeros(ptile_shape, device=locs.device)
 
+        assert self.galaxy_decoder is not None
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
-        assert galaxy_params.shape[2] == self.latent_dim
+        assert galaxy_params.shape[2] == self.n_galaxy_params
+        assert galaxy_bool.shape[2] == 1
 
-        if galaxy_bool.sum() > 0 and self.galaxy_decoder is not None:
-            z = galaxy_params.reshape(-1, self.latent_dim)
-            gal, _ = self.galaxy_decoder.forward(z)
-            gal = self._size_galaxy(gal)
-            gal_shape = (n_ptiles, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
-            single_galaxies = gal.reshape(gal_shape)
-            for n in range(max_sources):
-                galaxy_bool_n = galaxy_bool[:, n]
-                locs_n = locs[:, n, :]
-                _galaxy = single_galaxies[:, n, :, :, :]
-                galaxy = _galaxy * galaxy_bool_n.reshape(-1, self.n_bands, 1, 1)
-                one_galaxy = self._render_one_source(locs_n, galaxy)
-                ptile += one_galaxy
+        single_galaxies, single_vars = self._render_single_galaxies(
+            galaxy_params, galaxy_bool
+        )
+        for n in range(max_sources):
+            galaxy_bool_n = galaxy_bool[:, n]
+            locs_n = locs[:, n, :]
+            _galaxy = single_galaxies[:, n, :, :, :]
+            _var = single_vars[:, n, :, :, :]
+            galaxy = _galaxy * galaxy_bool_n.view(-1, 1, 1, 1)
+            var = _var * galaxy_bool_n.view(-1, 1, 1, 1)
+            one_galaxy = self._render_one_source(locs_n, galaxy)
+            one_var = self._render_one_source(locs_n, var)
+            ptile += one_galaxy
+            var_ptile += one_var
 
-        return ptile
+        return ptile, var_ptile
 
     def _render_ptiles(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
-        # n_sources: is (n_ptiles)
-        # locs: is (n_ptiles x max_sources x 2)
-        # galaxy_bool: Is (n_ptiles x max_sources)
-        # galaxy_params : is (n_ptiles x max_sources x galaxy_decoder.latent_dim)
-        # fluxes: Is (n_ptiles x max_sources x 2)
-
-        # returns the ptiles in shape n_ptiles x n_bands x ptile_slen x ptile_slen
-
-        # explicit consistent shapes.
-        assert len(n_sources.shape) == 1
-        assert (n_sources <= self.max_sources_per_tile).all()
-        n_ptiles = n_sources.shape[0]
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources_per_tile)
-
-        locs = locs.reshape(n_ptiles, self.max_sources_per_tile, 2)
-        galaxy_bool = galaxy_bool.reshape(n_ptiles, self.max_sources_per_tile)
-        star_bool = (1 - galaxy_bool) * is_on_array
-        star_bool = star_bool.reshape(n_ptiles, self.max_sources_per_tile)
-        galaxy_params = galaxy_params.reshape(
-            n_ptiles, self.max_sources_per_tile, self.latent_dim
-        )
-        fluxes = fluxes.reshape(n_ptiles, self.max_sources_per_tile, self.n_bands)
-
-        # need n_sources because `*_locs` are not necessarily ordered.
-        galaxies = self.render_multiple_galaxies_on_ptile(
-            locs, galaxy_params, galaxy_bool
-        )
-        stars = self.render_multiple_stars_on_ptile(locs, fluxes, star_bool)
-
-        # shape = (n_ptiles x n_bands x slen x slen)
-        images = galaxies + stars
-
-        return images
-
-    def render_ptiles(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
         # n_sources: is (batch_size x n_tiles_per_image)
         # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
         # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources)
@@ -581,30 +575,26 @@ class ImageDecoder(object):
 
         # returns the ptiles in
         # shape = (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
-
+        max_sources = locs.shape[2]
+        assert (n_sources <= max_sources).all()
         batch_size = n_sources.shape[0]
         n_ptiles = batch_size * self.n_tiles_per_image
 
-        # reshape parameters
-        n_sources_flattened = n_sources.reshape(n_ptiles)
-        locs_flattened = locs.reshape(n_ptiles, self.max_sources_per_tile, 2)
-        galaxy_bool_flattened = galaxy_bool.reshape(n_ptiles, self.max_sources_per_tile)
-        galaxy_params_flattened = galaxy_params.reshape(
-            n_ptiles, self.max_sources_per_tile, self.latent_dim
-        )
-        fluxes_flattened = fluxes.reshape(
-            n_ptiles, self.max_sources_per_tile, self.n_bands
-        )
+        # view parameters being explicit about shapes
+        _n_sources = n_sources.view(n_ptiles)
+        _locs = locs.view(n_ptiles, max_sources, 2)
+        _galaxy_bool = galaxy_bool.view(n_ptiles, max_sources, 1)
+        _fluxes = fluxes.view(n_ptiles, max_sources, self.n_bands)
+        _galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
 
-        image_ptiles = self._render_ptiles(
-            n_sources_flattened,
-            locs_flattened,
-            galaxy_bool_flattened,
-            galaxy_params_flattened,
-            fluxes_flattened,
-        )
+        # draw stars and galaxies
+        _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)
+        _is_on_array = _is_on_array.view(n_ptiles, max_sources, 1)
+        _star_bool = (1 - _galaxy_bool) * _is_on_array
+        _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
 
-        return image_ptiles.reshape(
+        # final shapes of images.
+        img_shape = (
             batch_size,
             self.n_tiles_per_image,
             self.n_bands,
@@ -612,122 +602,153 @@ class ImageDecoder(object):
             self.ptile_slen,
         )
 
-    def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
-        # constructs the full slen x slen image
+        # draw stars and galaxies
+        stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
+        galaxies = torch.zeros(img_shape, device=locs.device)
+        var_images = torch.zeros(img_shape, device=locs.device)
+        if self.galaxy_decoder is not None:
+            galaxies, var_images = self._render_multiple_galaxies_on_ptile(
+                _locs, _galaxy_params, _galaxy_bool
+            )
+
+        images = galaxies.view(img_shape) + stars.view(img_shape)
+        var_images = var_images.view(img_shape)
+
+        return images, var_images
+
+    def render_images(
+        self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
+    ):
+        # returns the **full** image in shape (batch_size x n_bands x slen x slen)
 
         # n_sources: is (batch_size x n_tiles_per_image)
         # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
-        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources)
+        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources x 1)
         # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
-        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x 2)
+        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x n_bands)
 
-        # returns the **full** image in shape batch_size x n_bands x slen x slen
+        assert n_sources.shape[0] == locs.shape[0]
+        assert n_sources.shape[1] == locs.shape[1]
+        assert galaxy_bool.shape[-1] == 1
 
         # first render the padded tiles
-        image_ptiles = self.render_ptiles(
+        image_ptiles, var_ptiles = self._render_ptiles(
             n_sources, locs, galaxy_bool, galaxy_params, fluxes
         )
 
         # render the image from padded tiles
-        images = construct_full_image_from_ptiles(image_ptiles, self.tile_slen)
+        images = self._construct_full_image_from_ptiles(
+            image_ptiles, self.tile_slen, self.border_padding
+        )
+        var_images = self._construct_full_image_from_ptiles(
+            var_ptiles, self.tile_slen, self.border_padding
+        )
 
         # add background and noise
-        images = images + self.background.unsqueeze(0)
-        if self.add_noise:
+        images += self.background.unsqueeze(0)
+        var_images += self.background.unsqueeze(0)
+        if add_noise:
             images = self._apply_noise(images)
 
-        return images
+        return images, var_images
 
+    @staticmethod
+    def _construct_full_image_from_ptiles(image_ptiles, tile_slen, border_padding):
+        # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
+        batch_size = image_ptiles.shape[0]
+        n_tiles_per_image = image_ptiles.shape[1]
+        n_bands = image_ptiles.shape[2]
+        ptile_slen = image_ptiles.shape[3]
+        assert image_ptiles.shape[4] == ptile_slen
 
-def construct_full_image_from_ptiles(image_ptiles, tile_slen):
-    # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
-    batch_size = image_ptiles.shape[0]
-    n_tiles_per_image = image_ptiles.shape[1]
-    n_bands = image_ptiles.shape[2]
-    ptile_slen = image_ptiles.shape[3]
-    assert image_ptiles.shape[4] == ptile_slen
+        n_tiles1 = np.sqrt(n_tiles_per_image)
+        # check it is an integer
+        assert n_tiles1 % 1 == 0
+        n_tiles1 = int(n_tiles1)
 
-    n_tiles1 = np.sqrt(n_tiles_per_image)
-    # check it is an integer
-    assert n_tiles1 % 1 == 0
-    n_tiles1 = int(n_tiles1)
+        # the number of tiles in ptile row
+        # i.e the slen of a ptile but in units of tile_slen
+        n_tiles1_in_ptile = ptile_slen / tile_slen
+        n_tiles_of_padding = (n_tiles1_in_ptile - 1) / 2
+        assert (
+            n_tiles1_in_ptile % 1 == 0
+        ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
+        assert (
+            n_tiles_of_padding % 1 == 0
+        ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
+        n_tiles1_in_ptile = int(n_tiles1_in_ptile)
+        n_tiles_of_padding = int(n_tiles_of_padding)
 
-    # the number of tiles in ptile row
-    # i.e the slen of a ptile but in units of tile_slen
-    n_tiles1_in_ptile = ptile_slen / tile_slen
-    ptile_padding = (n_tiles1_in_ptile - 1) / 2
-    assert (
-        n_tiles1_in_ptile % 1 == 0
-    ), "tile_slen and ptile_slen are not compatable. check tile_slen argument"
-    assert (
-        ptile_padding % 1 == 0
-    ), "tile_slen and ptile_slen are not compatable. check tile_slen argument"
-    n_tiles1_in_ptile = int(n_tiles1_in_ptile)
-    ptile_padding = int(ptile_padding)
+        image_tiles_4d = image_ptiles.view(
+            batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
+        )
 
-    image_tiles_4d = image_ptiles.view(
-        batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
-    )
+        # zero pad tiles, so that the number of tiles in a row (and column)
+        # are divisible by n_tiles1_in_ptile
+        n_tiles_pad = n_tiles1_in_ptile - (n_tiles1 % n_tiles1_in_ptile)
+        zero_pads1 = torch.zeros(
+            batch_size,
+            n_tiles_pad,
+            n_tiles1,
+            n_bands,
+            ptile_slen,
+            ptile_slen,
+            device=image_ptiles.device,
+        )
+        zero_pads2 = torch.zeros(
+            batch_size,
+            n_tiles1 + n_tiles_pad,
+            n_tiles_pad,
+            n_bands,
+            ptile_slen,
+            ptile_slen,
+            device=image_ptiles.device,
+        )
+        image_tiles_4d = torch.cat((image_tiles_4d, zero_pads1), dim=1)
+        image_tiles_4d = torch.cat((image_tiles_4d, zero_pads2), dim=2)
 
-    # zero pad tiles, so that the number of tiles in a row (and column)
-    # are divisible by n_tiles1_in_ptile
-    n_tiles_pad = n_tiles1_in_ptile - (n_tiles1 % n_tiles1_in_ptile)
-    zero_pads1 = torch.zeros(
-        batch_size,
-        n_tiles_pad,
-        n_tiles1,
-        n_bands,
-        ptile_slen,
-        ptile_slen,
-        device=device,
-    )
-    zero_pads2 = torch.zeros(
-        batch_size,
-        n_tiles1 + n_tiles_pad,
-        n_tiles_pad,
-        n_bands,
-        ptile_slen,
-        ptile_slen,
-        device=device,
-    )
-    image_tiles_4d = torch.cat((image_tiles_4d, zero_pads1), dim=1)
-    image_tiles_4d = torch.cat((image_tiles_4d, zero_pads2), dim=2)
+        # construct the full image
+        n_tiles = n_tiles1 + n_tiles_pad
+        canvas = torch.zeros(
+            batch_size,
+            n_bands,
+            (n_tiles + n_tiles1_in_ptile - 1) * tile_slen,
+            (n_tiles + n_tiles1_in_ptile - 1) * tile_slen,
+            device=image_ptiles.device,
+        )
 
-    # construct the full image
-    n_tiles = n_tiles1 + n_tiles_pad
-    canvas = torch.zeros(
-        batch_size,
-        n_bands,
-        (n_tiles + n_tiles1_in_ptile - 1) * tile_slen,
-        (n_tiles + n_tiles1_in_ptile - 1) * tile_slen,
-        device=device,
-    )
+        # loop through all tiles in a ptile
+        for i in range(n_tiles1_in_ptile):
+            for j in range(n_tiles1_in_ptile):
+                indx_vec1 = torch.arange(
+                    start=i,
+                    end=n_tiles,
+                    step=n_tiles1_in_ptile,
+                    device=image_ptiles.device,
+                )
+                indx_vec2 = torch.arange(
+                    start=j,
+                    end=n_tiles,
+                    step=n_tiles1_in_ptile,
+                    device=image_ptiles.device,
+                )
 
-    # loop through all tiles in a ptile
-    for i in range(n_tiles1_in_ptile):
-        for j in range(n_tiles1_in_ptile):
-            indx_vec1 = torch.arange(start=i, end=n_tiles, step=n_tiles1_in_ptile)
-            indx_vec2 = torch.arange(start=j, end=n_tiles, step=n_tiles1_in_ptile)
+                canvas_len = len(indx_vec1) * ptile_slen
 
-            canvas_len = len(indx_vec1) * ptile_slen
+                image_tile_rows = image_tiles_4d[:, indx_vec1]
+                image_tile_cols = image_tile_rows[:, :, indx_vec2]
 
-            image_tile_rows = image_tiles_4d[:, indx_vec1]
-            image_tile_cols = image_tile_rows[:, :, indx_vec2]
+                # get canvas
+                canvas[
+                    :,
+                    :,
+                    (i * tile_slen) : (i * tile_slen + canvas_len),
+                    (j * tile_slen) : (j * tile_slen + canvas_len),
+                ] += image_tile_cols.permute(0, 3, 1, 4, 2, 5).reshape(
+                    batch_size, n_bands, canvas_len, canvas_len
+                )
 
-            # get canvas
-            canvas[
-                :,
-                :,
-                (i * tile_slen) : (i * tile_slen + canvas_len),
-                (j * tile_slen) : (j * tile_slen + canvas_len),
-            ] += image_tile_cols.permute(0, 3, 1, 4, 2, 5).reshape(
-                batch_size, n_bands, canvas_len, canvas_len
-            )
-
-    # trim to original image size
-    return canvas[
-        :,
-        :,
-        (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
-        (ptile_padding * tile_slen) : ((n_tiles1 + ptile_padding) * tile_slen),
-    ]
+        # trim to original image size
+        x0 = n_tiles_of_padding * tile_slen - border_padding
+        x1 = (n_tiles1 + n_tiles_of_padding) * tile_slen + border_padding
+        return canvas[:, :, x0:x1, x0:x1]

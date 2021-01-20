@@ -1,28 +1,34 @@
-import inspect
+from omegaconf import DictConfig
+import pytorch_lightning as pl
+import warnings
 
-import numpy as np
 import torch
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, Dataset, DataLoader
 
-from bliss import device
-from bliss.models import galaxy_net
 from bliss.models.decoder import ImageDecoder
 
+# prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
+warnings.filterwarnings(
+    "ignore", ".*does not have many workers which may be a bottleneck.*", UserWarning
+)
 
-class SimulatedDataset(IterableDataset):
-    def __init__(self, n_batches: int, batch_size: int, decoder_args, decoder_kwargs):
-        super(SimulatedDataset, self).__init__()
 
-        self.n_batches = n_batches
-        self.batch_size = batch_size
+class SimulatedDataset(pl.LightningDataModule, IterableDataset):
+    def __init__(self, cfg: DictConfig):
+        super().__init__()
+        self.cfg = cfg
 
-        self.image_decoder = ImageDecoder(*decoder_args, **decoder_kwargs)
-        self.slen = self.image_decoder.slen
-        self.tile_slen = self.image_decoder.tile_slen
-        self.n_bands = self.image_decoder.n_bands
-        self.latent_dim = self.image_decoder.latent_dim
+        self.n_batches = cfg.dataset.params.n_batches
+        self.batch_size = cfg.dataset.params.batch_size
+        self.image_decoder = ImageDecoder(**cfg.model.decoder.params).to(
+            cfg.dataset.params.generate_device
+        )
+        self.image_decoder.requires_grad_(False)  # freeze decoder weights.
 
-        self.max_sources_per_tile = self.image_decoder.max_sources_per_tile
+        # check sleep training will work.
+        n_tiles_per_image = self.image_decoder.n_tiles_per_image
+        total_ptiles = n_tiles_per_image * self.batch_size
+        assert total_ptiles > 1, "Need at least 2 tiles over all batches."
 
     def __iter__(self):
         return self.batch_generator()
@@ -32,115 +38,65 @@ class SimulatedDataset(IterableDataset):
             yield self.get_batch()
 
     def get_batch(self):
-        params = self.image_decoder.sample_parameters(batch_size=self.batch_size)
+        with torch.no_grad():
+            batch = self.image_decoder.sample_prior(batch_size=self.batch_size)
+            images, _ = self.image_decoder.render_images(
+                batch["n_sources"],
+                batch["locs"],
+                batch["galaxy_bool"],
+                batch["galaxy_params"],
+                batch["fluxes"],
+                add_noise=True,
+            )
+            batch.update(
+                {
+                    "images": images,
+                    "background": self.image_decoder.background,
+                    "slen": torch.tensor([self.image_decoder.slen]),
+                }
+            )
 
-        images = self.image_decoder.render_images(
-            params["n_sources"],
-            params["locs"],
-            params["galaxy_bool"],
-            params["galaxy_params"],
-            params["fluxes"],
-        )
-        params.update({"images": images, "background": self.image_decoder.background})
+        return batch
 
-        return params
+    def train_dataloader(self):
+        return DataLoader(self, batch_size=None, num_workers=0)
 
-    @staticmethod
-    def get_gal_decoder_from_file(decoder_file, gal_slen=51, n_bands=1, latent_dim=8):
-        dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, latent_dim, n_bands).to(device)
-        dec.load_state_dict(torch.load(decoder_file, map_location=device))
-        dec.eval()
-        return dec
+    def val_dataloader(self):
+        return DataLoader(self, batch_size=None, num_workers=0)
 
-    @staticmethod
-    def get_psf_params_from_file(psf_file):
-        return torch.from_numpy(np.load(psf_file)).to(device)
+    def test_dataloader(self):
+        dl = DataLoader(self, batch_size=None, num_workers=0)
 
-    @staticmethod
-    def get_background_from_file(background_file, slen, n_bands):
-        # for numpy background that are not necessarily of the correct size.
-        background = torch.load(background_file)
-        assert n_bands == background.shape[0]
+        if self.cfg.testing.file is not None:
+            test_dataset = BlissDataset(self.cfg.testing.file)
+            batch_size = self.cfg.testing.batch_size
+            num_workers = self.cfg.testing.num_workers
+            dl = DataLoader(
+                test_dataset, batch_size=batch_size, num_workers=num_workers
+            )
 
-        # now convert background to size of scenes
-        values = background.mean((1, 2))  # shape = (n_bands)
-        background = torch.zeros(n_bands, slen, slen)
-        for i, value in enumerate(values):
-            background[i, ...] = value
+        return dl
 
-        return background
 
-    @staticmethod
-    def decoder_args_from_args(args, paths: dict):
-        slen, latent_dim, n_bands = args.slen, args.latent_dim, args.n_bands
-        gal_slen = args.gal_slen
-        decoder_file = paths["data"].joinpath(args.galaxy_decoder_file)
-        background_file = paths["data"].joinpath(args.background_file)
-        psf_file = paths["data"].joinpath(args.psf_file)
+class BlissDataset(Dataset):
+    def __init__(self, pt_file="example.pt"):
+        """A dataset created from simulated batches saved as a single dict by
+        bin/generate.py"""
+        super().__init__()
 
-        dec = SimulatedDataset.get_gal_decoder_from_file(
-            decoder_file, gal_slen, n_bands, latent_dim
-        )
-        background = SimulatedDataset.get_background_from_file(
-            background_file, slen, n_bands
-        )
-        psf_params = SimulatedDataset.get_psf_params_from_file(psf_file)[range(n_bands)]
+        data = torch.load(pt_file)
+        assert isinstance(data, dict)
 
-        return dec, psf_params, background
+        self.data = data
+        self.size = self.data["images"].shape[0]
+        self.background = self.data.pop("background")
+        self.slen = self.data.pop("slen")
 
-    @classmethod
-    def from_args(cls, args, paths: dict):
-        args_dict = vars(args)
-        parameters = inspect.signature(ImageDecoder).parameters
+    def __len__(self):
+        """Number of batches saved in the file."""
+        return self.size
 
-        args_names = [
-            "n_batches",
-            "batch_size",
-            "galaxy_decoder",
-            "init_psf_params",
-            "background",
-        ]
-        decoder_args = SimulatedDataset.decoder_args_from_args(args, paths)
-        decoder_kwargs = {
-            key: value
-            for key, value in args_dict.items()
-            if key in parameters and key not in args_names
-        }
-        return cls(args.n_batches, args.batch_size, decoder_args, decoder_kwargs)
-
-    @staticmethod
-    def add_args(parser):
-        parser.add_argument(
-            "--galaxy-decoder-file",
-            type=str,
-            default="galaxy_decoder_1_band.dat",
-            help="File relative to data directory containing galaxy decoder state_dict.",
-        )
-
-        parser.add_argument(
-            "--background-file",
-            type=str,
-            default="background_galaxy_single_band_i.npy",
-            help="File relative to data directory containing background to be used.",
-        )
-
-        parser.add_argument(
-            "--psf-file",
-            type=str,
-            default="fitted_powerlaw_psf_params.npy",
-            help="File relative to data directory containing PSF to be used.",
-        )
-
-        # general sources
-        parser.add_argument("--max-sources", type=int, default=10)
-        parser.add_argument("--mean-sources", type=float, default=5)
-        parser.add_argument("--min-sources", type=int, default=1)
-        parser.add_argument("--loc-min", type=float, default=0.0)
-        parser.add_argument("--loc-max", type=float, default=1.0)
-        parser.add_argument("--prob-galaxy", type=float, default=0.0)
-        parser.add_argument("--gal-slen", type=int, default=51)
-
-        # stars.
-        parser.add_argument("--f-min", type=float, default=1e4)
-        parser.add_argument("--f-max", type=float, default=1e6)
-        parser.add_argument("--alpha", type=float, default=0.5)
+    def __getitem__(self, idx):
+        d = {k: v[idx] for k, v in self.data.items()}
+        d.update({"background": self.background, "slen": self.slen})
+        return d

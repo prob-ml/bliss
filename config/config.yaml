@@ -1,0 +1,21 @@
+defaults:
+  - optimizer: adam
+  - model: sleep_star_basic
+  - training: default
+  - dataset: default
+  - testing: default
+  - generate: default
+  - tuning: ${defaults.1.model}
+    optional: true
+
+mode: train
+
+general:
+  overwrite: False
+
+gpus:
+  - 0
+
+paths:
+  root: ${env:BLISS_HOME}
+  output: ${paths.root}/temp/example

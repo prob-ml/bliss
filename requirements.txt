@@ -1,9 +1,0 @@
-numpy
-scipy
-astropy
-torch
-h5py
-matplotlib
-pytorch-lightning
-pillow
-optuna

@@ -1,0 +1,41 @@
+# @package _group_
+name: SleepPhase
+image:
+  slen: 100
+  n_bands: 2
+  background:
+    - 686.0
+    - 1123.0
+galaxy:
+  slen: 51
+  latent_dim: 8
+decoder:
+  params:
+    n_bands: ${model.image.n_bands}
+    slen: ${model.image.slen}
+    tile_slen: 2
+    ptile_slen: 26
+    border_padding: 3
+    prob_galaxy: 0.0
+    n_galaxy_params: ${model.galaxy.latent_dim}
+    max_sources: 5
+    mean_sources: 0.48
+    min_sources: 0
+    f_min: 1e3
+    f_max: 1e6
+    alpha: 0.5
+    gal_slen: ${model.galaxy.slen}
+    decoder_file: null
+    psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
+    background_values: ${model.image.background}
+encoder:
+  params:
+    n_bands: ${model.image.n_bands}
+    tile_slen: ${model.decoder.params.tile_slen}
+    ptile_slen: 8
+    max_detections: 2
+    enc_conv_c: 20
+    enc_kern: 3
+    enc_hidden: 256
+    momentum: 0.5
+use_galaxy_encoder: False

@@ -5,13 +5,12 @@ from bliss.models import encoder
 
 
 class TestSourceEncoder:
-    def test_forward(self, device_setup):
+    def test_forward(self, devices):
         """
         * Test that forward returns the correct pattern of zeros.
         * Test that variational parameters inside h agree with those returned from forward.
-        * Test everything works with n_stars=None in forward.
         """
-        device = device_setup.device
+        device = devices.device
 
         n_image_tiles = 30
         max_detections = 4
@@ -23,12 +22,10 @@ class TestSourceEncoder:
         star_encoder = encoder.ImageEncoder(
             enc_conv_c=20,
             enc_hidden=256,
-            slen=100,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             n_bands=n_bands,
             max_detections=max_detections,
-            n_galaxy_params=8,
         ).to(device)
 
         with torch.no_grad():
@@ -47,7 +44,7 @@ class TestSourceEncoder:
 
             pred = star_encoder.forward(image_ptiles, n_star_per_tile)
 
-            assert torch.all(0.0 <= pred["loc_mean"])
+            assert torch.all(pred["loc_mean"] >= 0.0)
             assert torch.all(pred["loc_mean"] <= 1.0)
 
             # test we have the correct pattern of zeros
@@ -57,12 +54,14 @@ class TestSourceEncoder:
             assert ((pred["loc_logvar"] != 0).sum(1)[:, 0] == n_star_per_tile).all()
             assert ((pred["loc_logvar"] != 0).sum(1)[:, 1] == n_star_per_tile).all()
 
-            for n in range(n_bands):
+            for i in range(2):
                 assert (
-                    (pred["loc_mean"][:, :, n] != 0).sum(1) == n_star_per_tile
+                    (pred["loc_mean"][:, :, i] != 0).sum(1) == n_star_per_tile
                 ).all()
+
+            for b in range(n_bands):
                 assert (
-                    (pred["log_flux_mean"][:, :, n] != 0).sum(1) == n_star_per_tile
+                    (pred["log_flux_mean"][:, :, b] != 0).sum(1) == n_star_per_tile
                 ).all()
 
             # check pattern of zeros
@@ -79,10 +78,10 @@ class TestSourceEncoder:
             h_out = star_encoder._get_var_params_all(image_ptiles)
 
             # get index matrices
-            locs_mean_indx_mat = star_encoder.indx_mats[0]
-            locs_var_indx_mat = star_encoder.indx_mats[1]
-            log_flux_mean_indx_mat = star_encoder.indx_mats[4]
-            log_flux_var_indx_mat = star_encoder.indx_mats[5]
+            locs_mean_indx_mat = star_encoder.loc_mean_indx
+            locs_var_indx_mat = star_encoder.loc_logvar_indx
+            log_flux_mean_indx_mat = star_encoder.log_flux_mean_indx
+            log_flux_var_indx_mat = star_encoder.log_flux_logvar_indx
             prob_n_source_indx_mat = star_encoder.prob_n_source_indx
 
             for i in range(n_image_tiles):
@@ -131,9 +130,9 @@ class TestSourceEncoder:
                         == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
                     )
 
-    def test_forward_to_hidden2d(self, device_setup):
+    def test_forward_to_hidden2d(self, devices):
         """Consistency check of using forward vs get_var_params"""
-        device = device_setup.device
+        device = devices.device
 
         n_image_tiles = 30
         max_detections = 4
@@ -144,14 +143,10 @@ class TestSourceEncoder:
 
         # get encoder
         star_encoder = encoder.ImageEncoder(
-            enc_conv_c=20,
-            enc_hidden=256,
-            slen=100,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             n_bands=n_bands,
             max_detections=max_detections,
-            n_galaxy_params=8,
         ).to(device)
 
         with torch.no_grad():
@@ -168,24 +163,15 @@ class TestSourceEncoder:
                 np.random.choice(max_detections, (n_samples, n_image_tiles))
             )
 
-            h = star_encoder._get_var_params_all(image_ptiles).detach()
-            pred = star_encoder._get_var_params_for_n_sources(
-                h, n_star_per_tile_sampled
-            )
+            pred = star_encoder.forward_sampled(image_ptiles, n_star_per_tile_sampled)
 
             #  test prediction matches tile by tile
             for i in range(n_samples):
                 pred_i = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
 
                 assert (pred_i["loc_mean"] - pred["loc_mean"][i]).abs().max() < 1e-6
-                assert torch.all(pred_i["loc_logvar"] == pred["loc_logvar"][i])
-                assert torch.all(pred_i["log_flux_mean"] == pred["log_flux_mean"][i])
+                assert torch.all(pred_i["loc_logvar"].eq(pred["loc_logvar"][i]))
+                assert torch.all(pred_i["log_flux_mean"].eq(pred["log_flux_mean"][i]))
                 assert torch.all(
-                    pred_i["log_flux_logvar"] == pred["log_flux_logvar"][i]
-                )
-                assert torch.all(
-                    pred_i["galaxy_param_mean"] == pred["galaxy_param_mean"][i]
-                )
-                assert torch.all(
-                    pred_i["galaxy_param_logvar"] == pred["galaxy_param_logvar"][i]
+                    pred_i["log_flux_logvar"].eq(pred["log_flux_logvar"][i])
                 )
