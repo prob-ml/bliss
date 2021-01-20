@@ -1,26 +1,16 @@
 import warnings
-import numpy as np
 from pathlib import Path
+import numpy as np
 from astropy.io import fits
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Poisson, Normal
-
-from .encoder import get_is_on_from_n_sources
-from . import galaxy_net
 import pytorch_lightning as pl
 
-
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    # mgrid is between -1 and 1
-    # then scale slightly because of the way f.grid_sample
-    # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float() * (slen - 1) / slen
+from .encoder import get_is_on_from_n_sources, get_mgrid
+from . import galaxy_net
 
 
 def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
@@ -94,6 +84,7 @@ class ImageDecoder(pl.LightningModule):
         assert border_padding % 1 == 0, "amount of border padding must be an integer"
         assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
         assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
+        assert tile_slen <= ptile_slen
         self.border_padding = int(border_padding)
         self.ptile_slen = ptile_slen
 
@@ -593,8 +584,8 @@ class ImageDecoder(pl.LightningModule):
         _n_sources = n_sources.view(n_ptiles)
         _locs = locs.view(n_ptiles, max_sources, 2)
         _galaxy_bool = galaxy_bool.view(n_ptiles, max_sources, 1)
-        _galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
         _fluxes = fluxes.view(n_ptiles, max_sources, self.n_bands)
+        _galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
 
         # draw stars and galaxies
         _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)

@@ -1,7 +1,7 @@
 import torch
 
 
-def test_galaxy_vae(galaxy_setup, paths, devices):
+def test_galaxy_vae(galaxy_vae_setup, paths, devices):
     use_cuda = devices.use_cuda
     device = devices.device
     overrides = {
@@ -20,7 +20,7 @@ def test_galaxy_vae(galaxy_setup, paths, devices):
     background = one_galaxy["background"].to(device)
 
     # train galaxy_vae
-    galaxy_vae = galaxy_setup.get_trained_vae(overrides)
+    galaxy_vae = galaxy_vae_setup.get_trained_vae(overrides)
 
     with torch.no_grad():
         galaxy_vae.eval()

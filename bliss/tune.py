@@ -46,11 +46,11 @@ def sleep_trainable(search_space, cfg: DictConfig):
         callbacks=[
             TuneReportCallback(
                 {
-                    "loss": "val_loss",
+                    "loss": "val_detection_loss",
                     "star_count_acc": "val_acc_counts",
                     "galaxy_counts_acc": "val_gal_counts",
                     "locs_mae": "val_locs_mae",
-                    "fluxes_mae": "val_fluxes_mae",
+                    "fluxes_mae": "val_star_fluxes_mae",
                 },
                 on="validation_end",
             )
@@ -60,13 +60,13 @@ def sleep_trainable(search_space, cfg: DictConfig):
 
 
 # model=m2 dataset=m2 training=m2 optimizer=m2 in terminal
-def main(cfg: DictConfig):
+def main(cfg: DictConfig, local_mode=False):
     # sets seeds for numpy, torch, and python.random
     # TODO: Test reproducibility and decide wether to use `Trainer(deterministic=True)`, 10% slower
     pl.trainer.seed_everything(cfg.tuning.seed)
 
     # restrict the number for cuda
-    ray.init(num_gpus=cfg.tuning.allocated_gpus)
+    ray.init(num_gpus=cfg.tuning.allocated_gpus, local_mode=local_mode)
 
     discrete_search_space = {
         "enc_conv_c": list(range(*cfg.tuning.search_space.enc_conv_c)),

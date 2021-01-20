@@ -15,7 +15,7 @@ warnings.filterwarnings(
 
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(self, cfg: DictConfig):
-        super(SimulatedDataset, self).__init__()
+        super().__init__()
         self.cfg = cfg
 
         self.n_batches = cfg.dataset.params.n_batches
@@ -82,7 +82,7 @@ class BlissDataset(Dataset):
     def __init__(self, pt_file="example.pt"):
         """A dataset created from simulated batches saved as a single dict by
         bin/generate.py"""
-        super(BlissDataset, self).__init__()
+        super().__init__()
 
         data = torch.load(pt_file)
         assert isinstance(data, dict)
