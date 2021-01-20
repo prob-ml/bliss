@@ -1,7 +1,7 @@
 # @package _group_
 deterministic: False
 plotting: True
-n_epochs: 201
+n_epochs: 121
 trainer:
   profiler: null
   logger: True
@@ -12,4 +12,4 @@ trainer:
   gpus: ${gpus}
   limit_train_batches: 1.0
   limit_val_batches: 1.0
-  check_val_every_n_epoch: 5
+  check_val_every_n_epoch: 10

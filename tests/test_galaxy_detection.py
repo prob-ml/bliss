@@ -4,11 +4,12 @@ import pytest
 class TestBasicGalaxyTiles:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        overrides = dict(
-            model="sleep_galaxy_detection_basic",
-            dataset="default" if devices.use_cuda else "cpu",
-            training="unittest" if devices.use_cuda else "cpu",
-        )
+        overrides = {
+            "model": "sleep_galaxy_detection_basic",
+            "dataset": "default" if devices.use_cuda else "cpu",
+            "training": "unittest" if devices.use_cuda else "cpu",
+            "training.n_epochs": 201 if devices.use_cuda else 1,
+        }
         return overrides
 
     @pytest.fixture(scope="class")
@@ -25,8 +26,8 @@ class TestBasicGalaxyTiles:
             return
 
         # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.70
-        assert results["locs_mae"] < 0.65
+        assert results["acc_gal_counts"] > 0.80
+        assert results["locs_mae"] < 0.55
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
         test_file = paths["data"].joinpath("galaxy_test1.pt").as_posix()
@@ -38,5 +39,5 @@ class TestBasicGalaxyTiles:
             return
 
         # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.70
-        assert results["locs_mae"] < 0.60
+        assert results["acc_gal_counts"] > 0.80
+        assert results["locs_mae"] < 0.55
