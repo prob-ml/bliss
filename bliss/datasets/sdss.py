@@ -212,7 +212,7 @@ class SloanDigitalSkySurvey(Dataset):
                 if p.exists():
                     p.unlink()
 
-    def fetch_bright_stars(self, po_fits, img, wcs, bg, psf, allow_edge=False):
+    def fetch_bright_stars(self, po_fits, img, wcs, bg, psf):
         is_star = po_fits["objc_type"] == 6
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
         is_thing = po_fits["thing_id"] != -1
@@ -240,24 +240,13 @@ class SloanDigitalSkySurvey(Dataset):
             row_upper = pri + self.stampsize // 2 + 1
             col_lower = pti - self.stampsize // 2
             col_upper = pti + self.stampsize // 2 + 1
-            edge_stamp = False
-            if row_lower < 0:
-                row_lower = 0
-                row_upper = self.stampsize
-                edge_stamp = True
-            if row_upper > img.shape[0]:
-                row_lower = img.shape[0] - self.stampsize
-                row_upper = img.shape[0]
-                edge_stamp = True
-            if col_lower < 0:
-                col_lower = 0
-                col_upper = self.stampsize
-                edge_stamp = True
-            if col_upper > img.shape[1]:
-                col_lower = img.shape[1] - self.stampsize
-                col_upper = img.shape[1]
-                edge_stamp = True
-            if (not edge_stamp) or allow_edge:
+            edge_stamp = (
+                (row_lower < 0)
+                or (row_upper > img.shape[0])
+                or (col_lower < 0)
+                or (col_upper > img.shape[1])
+            )
+            if not edge_stamp:
                 stamp = img[row_lower:row_upper, col_lower:col_upper]
                 if self.center_subpixel:
                     stamp = center_stamp_subpixel(stamp, pt, pr, G)
