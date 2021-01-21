@@ -15,13 +15,12 @@ from sklearn.preprocessing import StandardScaler
 from torch.optim import Adam
 from importlib import reload
 
-import case_studies.fnp.rotate_dgp as dgp
-from case_studies.fnp.rotate_dgp import PsfFnpData
+import rotate_dgp as dgp
+from rotate_dgp import PsfFnpData
 
 import bliss.models.fnp as fnp
 
-# outdir = os.environ["BLISS_DIR"]+"case_studies/fnp/"
-outdir = "/home/derek/projects/bliss/case_studies/fnp/"
+outdir = os.environ["BLISS_DIR"]+"/case_studies/fnp/"
 
 
 parser = argparse.ArgumentParser(
@@ -61,12 +60,12 @@ parser.add_argument(
 )
 parser.add_argument("--condref", dest="condition_on_ref", action="store_true")
 parser.add_argument(
-    "--notrainproposal", dest="train_separate_proposal", action="store_true"
+    "--notrainproposal", dest="notrain_separate_proposal", action="store_true"
 )
 parser.add_argument("--skiptrain", dest="skiptrain", action="store_true")
 
 parser.add_argument(
-    "--generate", help="Generate the data rather than read it in", action="store_true"
+    "--nogenerate", help="Generate the data rather than read it in", action="store_true"
 )
 parser.add_argument(
     "--n_ref",
@@ -134,8 +133,8 @@ if __name__ == "__main__":
 
     epochs_outer = args.epochs[0]
     condition_on_ref = args.condition_on_ref
-    train_separate_proposal = not args.train_separate_proposal
-    generate = args.generate
+    train_separate_proposal = not args.notrain_separate_proposal
+    generate = not args.nogenerate
     n_ref = args.n_ref[0]
     N = args.N[0]
     size_h = args.size_h[0]
@@ -168,9 +167,6 @@ if __name__ == "__main__":
             N_valid=10,
             device="cuda:{0}".format(args.cuda_device[0]),
         )
-        os.remove(outdir + "rotating_star_dgp.png")
-        os.remove(outdir + "rotating_star_dgp_valid.png")
-        os.remove("../temp/star_data.pt")
         star_data.export_images(outdir + "rotating_star_dgp.png", nrows=10)
         star_data.export_images(
             outdir + "rotating_star_dgp_valid.png", nrows=10, valid=True
@@ -289,21 +285,20 @@ if __name__ == "__main__":
     )
     vmin = star_data.images.min()
     vmax = star_data.images.max()
-    os.remove(outdir + "rotating_star_fnp_dgp_valid.png")
     plt.imsave(outdir + "rotating_star_fnp_dgp_valid.png", myimg, vmin=vmin, vmax=vmax)
 
     myimgvar = star_data.make_fnp_var_image(fnp_model, samples=10, valid=True)
 
-    os.remove(outdir + "rotating_star_fnp_dgp_valid_var.png")
     plt.imsave(
         outdir + "rotating_star_fnp_dgp_valid_var.png", myimgvar, vmin=vmin, vmax=vmax
     )
 
     many_images = torch.stack(
-        [star_data.make_fnp_single_image(fnp_model, valid=True) for i in range(100)]
+        [star_data.make_fnp_single_image(fnp_model, valid=True) for i in range(5)]
     )
+    sampledir = outdir + "samples/"
     for i in range(many_images.size(0)):
-        imgname = outdir + "fnp_valid_{:02d}.png".format(i)
+        imgname = sampledir + "fnp_valid_{:02d}.png".format(i)
         if os.path.isfile(imgname):
             os.remove(imgname)
         plt.imsave(imgname, many_images[i], vmin=vmin, vmax=vmax)
@@ -317,5 +312,4 @@ if __name__ == "__main__":
     myimg = star_data.make_fnp_mean_image(fnp_model, samples=10, valid=False, N=10)
     vmin = star_data.images.min()
     vmax = star_data.images.max()
-    os.remove(outdir + "rotating_star_fnp_dgp_train.png")
     plt.imsave(outdir + "rotating_star_fnp_dgp_train.png", myimg, vmin=vmin, vmax=vmax)
