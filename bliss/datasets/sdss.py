@@ -159,7 +159,7 @@ class SloanDigitalSkySurvey(Dataset):
                         po_fits = fits.getdata(po_path)
                     except IndexError as e:
                         print(
-                            "Warning: IndexError while accessing field: {}. This field will not be included.".format(
+                            "INFO: IndexError while accessing field: {}. This field will not be included.".format(
                                 _field
                             )
                         )
@@ -170,7 +170,7 @@ class SloanDigitalSkySurvey(Dataset):
                     po_fits = pickle.load(po_cache_path.open("rb+"))
                     if po_fits is None:
                         print(
-                            "Warning: cached data for field {} is None. This field will not be included".format(
+                            "INFO: cached data for field {} is None. This field will not be included".format(
                                 _field
                             )
                         )
@@ -186,7 +186,7 @@ class SloanDigitalSkySurvey(Dataset):
                         psf = SdssPSF(psf_path.as_posix(), bands)
                     except IndexError as e:
                         print(
-                            "Warning: IndexError while accessing field: {}. This field will not be included.".format(
+                            "INFO: IndexError while accessing field: {}. This field will not be included.".format(
                                 _field
                             )
                         )
@@ -198,7 +198,7 @@ class SloanDigitalSkySurvey(Dataset):
                     psf = pickle.load(psf_cache_path.open("rb+"))
                     if psf is None:
                         print(
-                            "Warning: cached psf data for field {} is None.".format(
+                            "INFO: cached psf data for field {} is None.".format(
                                 _field
                             )
                         )
