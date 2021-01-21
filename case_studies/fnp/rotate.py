@@ -6,6 +6,7 @@ import math
 import os
 import sys
 import time
+import subprocess as sp
 
 # path = os.path.abspath("..")
 # if path not in sys.path:
@@ -14,13 +15,14 @@ import time
 from sklearn.preprocessing import StandardScaler
 from torch.optim import Adam
 from importlib import reload
+from shutil import which
 
 import rotate_dgp as dgp
 from rotate_dgp import PsfFnpData
 
 import bliss.models.fnp as fnp
 
-outdir = os.environ["BLISS_DIR"]+"/case_studies/fnp/"
+outdir = os.environ["BLISS_DIR"] + "/case_studies/fnp/"
 
 
 parser = argparse.ArgumentParser(
@@ -297,11 +299,21 @@ if __name__ == "__main__":
         [star_data.make_fnp_single_image(fnp_model, valid=True) for i in range(5)]
     )
     sampledir = outdir + "samples/"
+    if not os.path.exists(sampledir):
+        os.mkdir(sampledir)
+    imgnames = []
     for i in range(many_images.size(0)):
         imgname = sampledir + "fnp_valid_{:02d}.png".format(i)
         if os.path.isfile(imgname):
             os.remove(imgname)
         plt.imsave(imgname, many_images[i], vmin=vmin, vmax=vmax)
+        imgnames.append(imgname)
+
+    apngasm = which("apngasm")
+    if apngasm is not None:
+        sp.call(
+            [apngasm] + ["--force"] + imgnames + ["-o", outdir + "fnp_valid_anim.png"]
+        )
 
     mean_Z_img = star_data.make_fnp_single_image(fnp_model, valid=True, sample_Z=False)
     meanz_file = outdir + "fnp_valid_mean.png"
