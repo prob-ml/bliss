@@ -122,7 +122,6 @@ class SloanDigitalSkySurvey(Dataset):
         bands=[2],
         stampsize=5,
         overwrite_fits_cache=False,
-        overwrite_psf_cache=True,
         overwrite_cache=False,
         center_subpixel=True,
     ):
@@ -181,26 +180,19 @@ class SloanDigitalSkySurvey(Dataset):
 
                 psf_path = camcol_path.joinpath(str(_field), psf_file)
                 psf_cache_path = camcol_path.joinpath(str(_field), psf_cache)
-                if (not psf_cache_path.exists()) or (overwrite_psf_cache):
-                    try:
-                        psf = SdssPSF(psf_path.as_posix(), bands)
-                    except IndexError as e:
-                        print(
-                            "INFO: IndexError while accessing field: {}. This field will not be included.".format(
-                                _field
-                            )
-                        )
-                        print(e)
-                        psf = None
-                    pickle.dump(psf, psf_cache_path.open("wb+"))
-                else:
-                    raise (Exception("cannot currently use cache with PSF"))
-                    psf = pickle.load(psf_cache_path.open("rb+"))
-                    if psf is None:
-                        print(
-                            "INFO: cached psf data for field {} is None.".format(_field)
-                        )
 
+                try:
+                    psf = SdssPSF(psf_path.as_posix(), bands)
+                except IndexError as e:
+                    print(
+                        "INFO: IndexError while accessing PSF for field: {}. This field will not be included.".format(
+                            _field
+                        )
+                    )
+                    print(e)
+                    psf = None
+
+                pickle.dump(psf, psf_cache_path.open("wb+"))
                 if po_fits is not None:
                     self.rcfgcs.append((run, camcol, _field, gain, po_fits, psf))
         self.items = [None] * len(self.rcfgcs)

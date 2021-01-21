@@ -16,7 +16,6 @@ class TestSDSS:
             stampsize=5,
             overwrite_cache=True,
             overwrite_fits_cache=True,
-            overwrite_psf_cache=True,
         )
         assert sdss_obj[0]["gain"][3] == pytest.approx(4.76)
 
