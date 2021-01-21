@@ -8,7 +8,7 @@ class TestSDSS:
     def test_sdss(self, paths):
         sdss_dir = paths["data"].joinpath("sdss")
         sdss_obj = sdss.SloanDigitalSkySurvey(
-            sdss_dir, run=3900, camcol=6, field=269, bands=range(5)
+            sdss_dir, run=3900, camcol=6, fields=[269], bands=range(5)
         )
         assert sdss_obj[0]["gain"][3] == pytest.approx(4.76)
 
