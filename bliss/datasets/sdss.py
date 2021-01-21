@@ -206,14 +206,21 @@ class SloanDigitalSkySurvey(Dataset):
                 if po_fits is not None:
                     self.rcfgcs.append((run, camcol, _field, gain, po_fits, psf))
         self.items = [None] * len(self.rcfgcs)
+        self.cache_paths = [None] * len(self.rcfgcs)
 
     def __len__(self):
         return len(self.rcfgcs)
 
     def __getitem__(self, idx):
         if not self.items[idx]:
-            self.items[idx] = self.get_from_disk(idx)
+            self.items[idx], self.cache_paths[idx] = self.get_from_disk(idx)
         return self.items[idx]
+
+    def clear_cache(self):
+        for p in self.cache_paths:
+            if p is not None:
+                if p.exists():
+                    p.unlink()
 
     def fetch_bright_stars(self, po_fits, img, wcs, bg, psf, allow_edge=False):
         is_star = po_fits["objc_type"] == 6
@@ -294,10 +301,10 @@ class SloanDigitalSkySurvey(Dataset):
         gain_list = []
         wcs_list = []
 
-        cache_path = field_dir.joinpath("cache.pkl")
+        cache_path = field_dir.joinpath(f"cache_stmpsz{self.stampsize}_ctr{self.center_subpixel}.pkl")
         if cache_path.exists() and not self.overwrite_cache:
             ret = pickle.load(cache_path.open("rb+"))
-            return ret
+            return ret, cache_path
 
         for b, bl in enumerate("ugriz"):
             if not (b in self.bands):
@@ -375,4 +382,4 @@ class SloanDigitalSkySurvey(Dataset):
         }
         pickle.dump(ret, cache_path.open("wb+"))
 
-        return ret
+        return ret, cache_path
