@@ -23,12 +23,14 @@ all : $(SUBDIR3)/fpM-$(RUN6)-u$(CAMCOL)-$(FIELD4).fits \
       $(SUBDIR3)/frame-r-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
       $(SUBDIR3)/frame-i-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
       $(SUBDIR3)/frame-z-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
-      $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
       $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits \
       field_extents.fits \
       photoobj
 
 photoobj : $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
+
+
+psfield  : $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
 
 field_extents.fits :
 	curl -O http://portal.nersc.gov/project/dasrepo/celeste/field_extents.fits
@@ -39,7 +41,7 @@ $(SUBDIR3)/fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fits : $(SUBDIR3)/fpM-$(RUN6)-%$(CAM
 	gunzip < $(SUBDIR3)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz > $(SUBDIR3)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fits
 
 $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fits :
-	curl --create-dirs -o $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fits $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
+	curl --create-dirs -o $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fits $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit
 
 $(SUBDIR3)/frame-%-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 :
 	curl --create-dirs -o $(SUBDIR3)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 $(URLBASE)/photoObj/frames/301/$(RUN_STRIPPED)/$(CAMCOL)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2
