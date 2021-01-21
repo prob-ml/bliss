@@ -198,9 +198,7 @@ class SloanDigitalSkySurvey(Dataset):
                     psf = pickle.load(psf_cache_path.open("rb+"))
                     if psf is None:
                         print(
-                            "INFO: cached psf data for field {} is None.".format(
-                                _field
-                            )
+                            "INFO: cached psf data for field {} is None.".format(_field)
                         )
 
                 if po_fits is not None:
@@ -301,7 +299,9 @@ class SloanDigitalSkySurvey(Dataset):
         gain_list = []
         wcs_list = []
 
-        cache_path = field_dir.joinpath(f"cache_stmpsz{self.stampsize}_ctr{self.center_subpixel}.pkl")
+        cache_path = field_dir.joinpath(
+            f"cache_stmpsz{self.stampsize}_ctr{self.center_subpixel}.pkl"
+        )
         if cache_path.exists() and not self.overwrite_cache:
             ret = pickle.load(cache_path.open("rb+"))
             return ret, cache_path
