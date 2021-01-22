@@ -74,6 +74,6 @@ class TestFNP:
                 od.cuda()
                 model = model.cuda()
             model, loss_initial, loss_final = fnp.train_onedim_model(
-                model, od, epochs=1000, lr=1e-4
+                model, od, epochs=800, lr=1e-4
             )
             assert loss_final < loss_initial * thresholds[i]
