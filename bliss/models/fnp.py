@@ -1016,7 +1016,9 @@ class PMA(nn.Module):
         return out
 
 
+## ----------------------------
 ## 1-dimensional example
+## ----------------------------
 class OneDimDataset:
     def __init__(
         self,
