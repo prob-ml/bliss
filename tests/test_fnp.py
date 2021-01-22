@@ -66,7 +66,7 @@ class TestFNP:
         )
 
         model_names = ["fnp", "fnp plus", "pool - attention", "pool - deep set"]
-        thresholds = [0.5, 0.6, 0.5, 0.6]
+        thresholds = [0.5, 0.6, 0.5, 0.75]
 
         for (i, model) in enumerate([vanilla_fnp, fnpp, attt, poolnp]):
             print(model_names[i])
