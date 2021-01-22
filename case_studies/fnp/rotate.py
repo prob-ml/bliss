@@ -17,10 +17,8 @@ from torch.optim import Adam
 from importlib import reload
 from shutil import which
 
-import rotate_dgp as dgp
-from rotate_dgp import PsfFnpData
-
 import bliss.models.fnp as fnp
+from bliss.models.fnp import PsfFnpData
 
 outdir = os.environ["BLISS_DIR"] + "/case_studies/fnp/"
 
@@ -154,7 +152,7 @@ if __name__ == "__main__":
     if generate:
         print("Generating data...")
         tic = time.perf_counter()
-        star_data = dgp.PsfFnpData(
+        star_data = PsfFnpData(
             n_ref,
             Ks,
             N,
