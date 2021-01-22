@@ -42,7 +42,7 @@ parser.add_argument(
     type=int,
     nargs=1,
     help="Number of epochs to run through the data",
-    default=[1000],
+    default=[100],
 )
 parser.add_argument(
     "--batchsize",
@@ -83,7 +83,7 @@ parser.add_argument(
     type=int,
     dest="N",
     nargs=1,
-    default=[500],
+    default=[1000],
 )
 parser.add_argument(
     "--sizeh",
@@ -123,7 +123,7 @@ parser.add_argument(
     type=float,
     dest="angle_stdev",
     nargs=1,
-    default=[0.1],
+    default=[0.025],
 )
 
 if __name__ == "__main__":
