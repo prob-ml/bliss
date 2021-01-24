@@ -1497,7 +1497,11 @@ class PsfFnpData:
     def cuda(self):
         self.X_r, self.X_m, self.X = self.X_r.cuda(), self.X_m.cuda(), self.X.cuda()
         self.y_r, self.y_m, self.y = self.y_r.cuda(), self.y_m.cuda(), self.y.cuda()
-        self.X_r_valid, self.X_m_valid, self.X_valid = self.X_r_valid.cuda(), self.X_m_valid.cuda(), self.X_valid.cuda()
+        self.X_r_valid, self.X_m_valid, self.X_valid = (
+            self.X_r_valid.cuda(),
+            self.X_m_valid.cuda(),
+            self.X_valid.cuda(),
+        )
         self.y_r_valid, self.y_m_valid, self.y_valid = (
             self.y_r_valid.cuda(),
             self.y_m_valid.cuda(),
