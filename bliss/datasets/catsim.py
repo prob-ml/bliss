@@ -1,76 +1,38 @@
 import numpy as np
-import torch
+from pathlib import Path
 from astropy.table import Table
-import pytorch_lightning as pl
-from torch.utils.data import Dataset, DataLoader, RandomSampler, SubsetRandomSampler
+from numpy.lib import npyio
 from omegaconf import DictConfig
+from astropy.io import fits
+import galsim
+
+import torch
+from torch.utils.data import Dataset, DataLoader, RandomSampler, SubsetRandomSampler
+import pytorch_lightning as pl
 
 
-n_bands_dict = {1: ("i",), 6: ("y", "z", "i", "r", "g", "u")}
+n_bands_dict = {1: ("r",), 6: ("y", "z", "i", "r", "g", "u")}
+
+SDSS_PIX = 0.396
 
 
-def filter_bounds(cat, param, min_val=-np.inf, max_val=np.inf):
-    return cat[(cat[param] >= min_val) & (cat[param] <= max_val)]
+class SourceNotVisible(Exception):
+    """Custom exception to indicate that a source has no visible model components."""
 
-
-class SurveyObs:
-    def __init__(self, renderer):
-        """Returns a list of :class:`Survey` objects, each of them has an image attribute which is
-        where images are written to by iso_render_engine.render_galaxy.
-        """
-        import descwl
-
-        self.pixel_scale = renderer.pixel_scale
-        self.dtype = renderer.dtype
-
-        obs = []
-        for band in renderer.bands:
-            # dictionary of default values.
-            survey_dict = descwl.survey.Survey.get_defaults(
-                survey_name=renderer.survey_name, filter_band=band
-            )
-
-            assert (
-                renderer.pixel_scale == survey_dict["pixel_scale"]
-            ), "Pixel scale does not match particular band?"
-            survey_dict["image_width"] = renderer.slen  # pixels
-            survey_dict["image_height"] = renderer.slen
-
-            descwl_survey = descwl.survey.Survey(
-                no_analysis=True,
-                survey_name=renderer.survey_name,
-                filter_band=band,
-                **survey_dict,
-            )
-            obs.append(descwl_survey)
-
-        self.obs = obs
-
-    def __enter__(self):
-        return self.obs
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        import galsim
-
-        for single_obs in self.obs:
-            single_obs.image = galsim.Image(
-                bounds=single_obs.image_bounds,
-                scale=self.pixel_scale,
-                dtype=self.dtype,
-            )
+    pass
 
 
 class CatsimRenderer:
     def __init__(
         self,
-        survey_name="LSST",
+        survey_name="SDSS",
         n_bands=1,
         slen=41,
+        background=(646,),  # r-band
         snr=200,
-        min_snr=0.05,
-        truncate_radius=30,
+        psf_file="data/sdss-002583-2-0136-psf-r.fits",
+        pixel_scale=SDSS_PIX,
         add_noise=True,
-        preserve_flux=False,
         verbose=False,
         deviate_center=False,
         dtype=np.float32,
@@ -82,47 +44,49 @@ class CatsimRenderer:
         survey_dict, so it can be obtained in advance only once.
         """
         # ToDo: Create a test/assertion to check that mean == variance approx.
-        assert survey_name == "LSST", "Only using default survey name for now is LSST."
-        assert n_bands in [1, 6], "Only 1 or 6 bands are supported."
-        assert add_noise, "Are you sure?"
+        assert survey_name == "SDSS", "Only using default survey name for now is SDSS."
+        assert n_bands == 1, "Only 1 band is supported"
         assert slen >= 41, "Galaxies won't fit."
         assert slen % 2 == 1, "Odd number of pixels is preferred."
-        assert preserve_flux is False, "Otherwise variance of the noise will change."
+        assert Path(psf_file).is_file(), "psf file not found."
+        assert Path(psf_file).as_posix().endswith(".fits")
 
         self.survey_name = survey_name
         self.n_bands = n_bands
         self.bands = n_bands_dict[n_bands]
 
         self.slen = slen
-        self.pixel_scale = self.get_pixel_scale(self.survey_name)
+        self.pixel_scale = pixel_scale
         stamp_size = self.pixel_scale * self.slen  # arcseconds
         self.slen = int(stamp_size / self.pixel_scale)  # pixels.
 
         self.snr = snr
-        self.min_snr = min_snr
-        self.truncate_radius = truncate_radius
 
         self.add_noise = add_noise
         self.deviate_center = deviate_center
-        self.preserve_flux = preserve_flux  # when changing SNR.
         self.verbose = verbose
         self.dtype = dtype
 
-        self.background = self.get_background()
+        # get background
+        image_shape = (self.n_bands, self.slen, self.slen)
+        self.background = np.zeros(image_shape, dtype=self.dtype)
+        for b in range(self.n_bands):
+            self.background[b, :, :] = background[b]
 
-    def get_background(self):
-        background = np.zeros((self.n_bands, self.slen, self.slen), dtype=self.dtype)
-
-        with SurveyObs(self) as obs:
-            for i, single_obs in enumerate(obs):
-                background[i, :, :] = single_obs.mean_sky_level
-        return background
+        # Unintegrated galsim psf for the convolution
+        psf = fits.getdata(psf_file)
+        assert len(psf.shape) == 2, "Same PSF for all bands for now."
+        psf[psf < 0] = 0
+        psf /= np.sum(psf)
+        self.psf = galsim.InterpolatedImage(
+            galsim.Image(psf), scale=self.pixel_scale
+        ).withFlux(1.0)
 
     def center_deviation(self, entry):
         # random deviation from exactly in center of center pixel, in arcseconds.
         deviation_ra = (np.random.rand() - 0.5) if self.deviate_center else 0.0
         deviation_dec = (np.random.rand() - 0.5) if self.deviate_center else 0.0
-        entry["ra"] = deviation_ra * self.pixel_scale  # arcseconds
+        entry["ra"] = deviation_ra * self.pixel_scale
         entry["dec"] = deviation_dec * self.pixel_scale
         return entry
 
@@ -130,95 +94,127 @@ class CatsimRenderer:
         """
         Return a multi-band image corresponding to the entry from the catalog given.
 
-        * The final image includes its background based on survey's sky level.
+        * The final image includes background.
         * If deviate_center==True, then galaxy not aligned between bands.
         """
         image = np.zeros((self.n_bands, self.slen, self.slen), dtype=self.dtype)
+        entry = self.center_deviation(entry)  # all bands are centered same way.
 
-        with SurveyObs(self) as obs:
-            for i, band in enumerate(self.bands):
-                entry = self.center_deviation(entry)
-                image_no_background = self.single_band(entry, obs[i], band)
-                image[i, :, :] = image_no_background + self.background[i]
+        for b, _ in enumerate(self.bands):
+            image[b] = self.single_band_galaxy(entry, b).array
 
+        # add background and (optionally) Gaussian noise
+        image += self.background
+        if self.add_noise:
+            _image = torch.sqrt(image)
+            _image = _image * np.randn(*image.shape)
+            image = _image + image
         return image, self.background
 
-    def single_band(self, entry, single_obs, band):
-        """Builds galaxy from a single entry in the catalog. With no background sky level added."""
-        import descwl
-        import galsim
-
-        galaxy_builder = descwl.model.GalaxyBuilder(
-            single_obs, no_disk=False, no_bulge=False, no_agn=False, verbose_model=False
-        )
-
-        galaxy = galaxy_builder.from_catalog(entry, entry["ra"], entry["dec"], band)
-
-        iso_render_engine = descwl.render.Engine(
-            survey=single_obs,
-            min_snr=self.min_snr,
-            truncate_radius=self.truncate_radius,
-            no_margin=False,
-            verbose_render=False,
-        )
-
-        # Up to this point, single_obs has not been changed by the previous 3 statements.
-
-        try:
-            # this line draws the given galaxy image onto single_obs.image,
-            # this is the only change in single_obs.
-            iso_render_engine.render_galaxy(
-                galaxy,
-                variations_x=None,
-                variations_s=None,
-                variations_g=None,
-                no_fisher=True,
-                calculate_bias=False,
-                no_analysis=True,
-            )  # saves image in single_obs
-
-        except descwl.render.SourceNotVisible:
-            if self.verbose:
-                print("Source not visible")
-            # pass it on with a warning.
-            raise descwl.render.SourceNotVisible from CatsimRenderer
-
-        image_temp = galsim.Image(self.slen, self.slen)
-        image_temp += single_obs.image
-
-        if self.add_noise:
-            # NOTE: PoissonNoise assumes background already subtracted off.
-            generator = galsim.random.BaseDeviate(seed=np.random.randint(99999999))
-            noise = galsim.PoissonNoise(
-                rng=generator, sky_level=single_obs.mean_sky_level
-            )
-
-            # Both of the adding noise methods add noise on the image consisting of the
-            # (galaxy flux + background), but then remove the background at the end so we need
-            # to add it later.
-            if self.snr:
-                image_temp.addNoiseSNR(
-                    noise, snr=self.snr, preserve_flux=self.preserve_flux
-                )
-            else:
-                image_temp.addNoise(noise)
-
-        return image_temp.array
-
     @staticmethod
-    def get_pixel_scale(survey_name):
-        import descwl
+    def get_flux(ab_magnitude):
+        """Convert source magnitude to flux.
+        Args:
+            ab_magnitude(float): AB magnitude of source.
+        Returns:
+            float: Flux in detected electrons.
+        """
 
-        return descwl.survey.Survey.get_defaults(survey_name, "*")["pixel_scale"]
+        return 10 ** (ab_magnitude / 2.5)
+
+    def single_band_galaxy(self, entry, no_disk=False, no_bulge=False, no_agn=False):
+        """Builds galaxy from a single entry in the catalog. With background and noise"""
+        components = []
+
+        total_flux = self.get_flux(entry["ab_magnitude"])
+
+        # Calculate the flux of each component in detected electrons.
+        total_fluxnorm = (
+            entry["fluxnorm_disk"] + entry["fluxnorm_bulge"] + entry["fluxnorm_agn"]
+        )
+        disk_flux = (
+            0.0 if no_disk else entry["fluxnorm_disk"] / total_fluxnorm * total_flux
+        )
+        bulge_flux = (
+            0.0 if no_bulge else entry["fluxnorm_bulge"] / total_fluxnorm * total_flux
+        )
+        agn_flux = (
+            0.0 if no_agn else entry["fluxnorm_agn"] / total_fluxnorm * total_flux
+        )
+
+        if disk_flux + bulge_flux + agn_flux == 0:
+            raise SourceNotVisible
+
+        # Calculate the position of angle of the Sersic components, which are assumed to be the same.
+        if disk_flux > 0:
+            beta_radians = np.radians(entry["pa_disk"])
+            if bulge_flux > 0:
+                assert (
+                    entry["pa_disk"] == entry["pa_bulge"]
+                ), "Sersic components have different beta."
+        elif bulge_flux > 0:
+            beta_radians = np.radians(entry["pa_bulge"])
+        else:
+            # This might happen if we only have an AGN component.
+            beta_radians = None
+        # Calculate shapes hlr = sqrt(a*b) and q = b/a of Sersic components.
+        if disk_flux > 0:
+            a_d, b_d = entry["a_d"], entry["b_d"]
+            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            disk_q = b_d / a_d
+        else:
+            disk_hlr_arcsecs, disk_q = None, None
+        if bulge_flux > 0:
+            a_b, b_b = entry["a_b"], entry["b_b"]
+            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+            bulge_q = b_b / a_b
+        else:
+            bulge_hlr_arcsecs, bulge_q = None, None
+
+        if disk_flux > 0:
+            disk = galsim.Exponential(
+                flux=disk_flux, half_light_radius=disk_hlr_arcsecs
+            ).shear(q=disk_q, beta=beta_radians * galsim.radians)
+            components.append(disk)
+
+        a_b, b_b = entry["a_b"], entry["b_b"]
+        bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+        bulge_q = b_b / a_b
+
+        if disk_flux > 0:
+            disk = galsim.Exponential(
+                flux=disk_flux, half_light_radius=disk_hlr_arcsecs
+            ).shear(q=disk_q, beta=beta_radians * galsim.radians)
+            components.append(disk)
+
+        if bulge_flux > 0:
+            bulge = galsim.DeVaucouleurs(
+                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
+            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
+            components.append(bulge)
+
+        if agn_flux > 0:
+            agn = galsim.Gaussian(flux=agn_flux, sigma=1e-8)
+            components.append(agn)
+
+        image_temp = galsim.Image(self.slen, self.slen, scale=self.pixel_scale)
+        profile = galsim.Add(components)
+        profile = galsim.convolve.Convolution(profile, self.psf)
+        image_temp = profile.drawImage(image=image_temp)
+        return image_temp
 
 
 # TODO: Make this Dataset/Renderer faster, still can't do on the fly.
 class CatsimGalaxies(pl.LightningDataModule, Dataset):
     def __init__(self, cfg: DictConfig):
+<<<<<<< HEAD
         """This class reads a random entry from the OneDegSq.fits file (sample from the Catsim
         catalog) and returns a galaxy drawn from the catalog with realistic seeing conditions using
         functions from WeakLensingDeblending.
         """
+=======
+        """This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog) and returns a centered galaxy drawn from the catalog."""
+>>>>>>> updating catsim so it does not depend on descwl.
         super().__init__()
         self.renderer = CatsimRenderer(**cfg.dataset.renderer)
         self.background = self.renderer.background
@@ -227,7 +223,6 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
         # shuffle in case that order matters.
         cat = Table.read(cfg.dataset.catalog_file)
         cat = cat[np.random.permutation(len(cat))]
-        self.filter_dict = self.get_default_filters()
         self.cat = self.get_filtered_cat(cat)
 
         # data processing
@@ -237,35 +232,24 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
         n_samples = self.batch_size * self.n_batches
         self.sampler = RandomSampler(self, replacement=True, num_samples=n_samples)
 
-    @staticmethod
-    def get_default_filters():
-        # gold sample: < 25.3
-        filters = dict(i_ab=(-np.inf, 25.3))
-        return filters
-
     def get_filtered_cat(self, cat):
-        _cat = cat.copy()
-        for param, bounds in self.filter_dict.items():
+        filters = {"i_ab": (-np.inf, 25.3)}
+        for param, bounds in filters.items():
             min_val, max_val = bounds
-            _cat = filter_bounds(_cat, param, min_val, max_val)
-        return _cat
+            cat = cat[(cat[param] >= min_val) & (cat[param] <= max_val)]
+        return cat
 
     def __len__(self):
         return len(self.cat)
 
     def __getitem__(self, idx):
-        import descwl
 
-        # loop until visible galaxy is selected.
         while True:
             try:
                 entry = self.cat[idx]
                 image, background = self.renderer.render(entry)
-                break
-
-            # select some other random galaxy to return if we fail.
-            except descwl.render.SourceNotVisible:
-                idx = np.random.choice(np.arange(len(self)))
+            except SourceNotVisible:
+                continue
 
         return {
             "images": image,
