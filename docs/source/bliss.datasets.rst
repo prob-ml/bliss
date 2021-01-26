@@ -1,37 +1,24 @@
 bliss.datasets package
 ======================
 
-Submodules
-----------
-
 bliss.datasets.catsim module
 ----------------------------
 
 .. automodule:: bliss.datasets.catsim
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
 bliss.datasets.sdss module
 --------------------------
 
 .. automodule:: bliss.datasets.sdss
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
 bliss.datasets.simulated module
 -------------------------------
 
 .. automodule:: bliss.datasets.simulated
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
-Module contents
----------------
-
-.. automodule:: bliss.datasets
-   :members:
-   :undoc-members:
-   :show-inheritance:

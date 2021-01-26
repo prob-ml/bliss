@@ -1,86 +1,69 @@
 bliss package
 =============
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   bliss.datasets
-   bliss.models
-
-Submodules
-----------
-
 bliss.generate module
 ---------------------
 
 .. automodule:: bliss.generate
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
-bliss.main module
------------------
-
-.. automodule:: bliss.main
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 bliss.metrics module
 --------------------
 
 .. automodule:: bliss.metrics
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
 bliss.plotting module
 ---------------------
 
 .. automodule:: bliss.plotting
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
 bliss.sleep module
 ------------------
 
 .. automodule:: bliss.sleep
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
 bliss.train module
 ------------------
 
 .. automodule:: bliss.train
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
 bliss.tune module
 -----------------
 
 .. automodule:: bliss.tune
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
 bliss.wake module
 -----------------
 
 .. automodule:: bliss.wake
    :members:
-   :undoc-members:
-   :show-inheritance:
+   :no-undoc-members:
 
-Module contents
----------------
 
-.. automodule:: bliss
-   :members:
-   :undoc-members:
-   :show-inheritance:
+Datasets
+-----------
+
+.. toctree::
+   :maxdepth: 2
+
+   bliss.datasets
+
+Models
+-----------
+
+.. toctree::
+   :maxdepth: 2
+   
+   bliss.models

@@ -6,9 +6,15 @@
 Welcome to bliss's documentation!
 =================================
 
+Import bliss as::
+
+   import bliss
+
+
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 3
+
+   bliss
 
 
 
