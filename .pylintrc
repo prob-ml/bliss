@@ -18,4 +18,13 @@ disable=too-many-ancestors,
 	# that may be resolved in pytorch version 1.7.2
 	not-callable,
 	# we often don't want to override lightning's abstract methods
-	abstract-method
+	abstract-method,
+	# we have too a lot of short variable names, and fixing them doesn't
+	# seem urgent
+	invalid-name,
+	# we don't have comprehensive documentation yet, let's suppress
+	# these warnings until that's something we're focused on
+	missing-function-docstring,
+	missing-module-docstring,
+	missing-class-docstring,
+
