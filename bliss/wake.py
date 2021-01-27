@@ -18,7 +18,7 @@ class WakeNet(pl.LightningModule):
         observed_img,
         hparams,
     ):
-        super(WakeNet, self).__init__()
+        super().__init__()
 
         self.star_encoder = star_encoder
         self.image_decoder = image_decoder

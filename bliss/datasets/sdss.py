@@ -1,7 +1,7 @@
-import torch
 import pathlib
 import pickle
 import warnings
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -125,7 +125,7 @@ class SloanDigitalSkySurvey(Dataset):
         overwrite_cache=False,
         center_subpixel=True,
     ):
-        super(SloanDigitalSkySurvey, self).__init__()
+        super().__init__()
 
         self.sdss_path = pathlib.Path(sdss_dir)
         self.rcfgcs = []
@@ -288,7 +288,7 @@ class SloanDigitalSkySurvey(Dataset):
             return ret, cache_path
 
         for b, bl in enumerate("ugriz"):
-            if not (b in self.bands):
+            if b not in self.bands:
                 continue
 
             frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(

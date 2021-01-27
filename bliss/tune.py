@@ -1,11 +1,10 @@
 import os
-import numpy as np
 import logging
 
+import numpy as np
 import hydra
 from omegaconf import OmegaConf
 from omegaconf import DictConfig
-
 import pytorch_lightning as pl
 
 import ray

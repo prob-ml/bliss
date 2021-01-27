@@ -1,8 +1,8 @@
 import warnings
 from pathlib import Path
+
 import numpy as np
 from astropy.io import fits
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -56,7 +56,7 @@ class ImageDecoder(pl.LightningModule):
         loc_min=0.0,
         loc_max=1.0,
     ):
-        super(ImageDecoder, self).__init__()
+        super().__init__()
 
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."

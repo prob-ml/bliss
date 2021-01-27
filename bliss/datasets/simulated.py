@@ -1,10 +1,8 @@
+import warnings
 from omegaconf import DictConfig
 import pytorch_lightning as pl
-import warnings
-
 import torch
 from torch.utils.data import IterableDataset, Dataset, DataLoader
-
 from bliss.models.decoder import ImageDecoder
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset

@@ -1,6 +1,7 @@
 import math
-import numpy as np
 from itertools import permutations
+
+import numpy as np
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig
 import pytorch_lightning as pl
@@ -121,7 +122,7 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
 class SleepPhase(pl.LightningModule):
     def __init__(self, cfg: DictConfig):
-        super(SleepPhase, self).__init__()
+        super().__init__()
         self.save_hyperparameters(cfg)
 
         self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
@@ -615,7 +616,7 @@ class SleepPhase(pl.LightningModule):
                 title = f"Val Images {self.current_epoch}"
                 self.logger.experiment.add_figure(title, fig)
             elif kind == "testing":
-                self.logger.experiment.add_figure(f"Test Images", fig)
+                self.logger.experiment.add_figure("Test Images", fig)
             else:
                 raise NotImplementedError()
         plt.close(fig)

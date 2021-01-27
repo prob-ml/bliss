@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+
 import os
 import math
+from pathlib import Path
+
 import torch
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig, OmegaConf
-from pathlib import Path
 
 from bliss.datasets import simulated, catsim
 from bliss import plotting
