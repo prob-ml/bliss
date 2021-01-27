@@ -1,4 +1,5 @@
 import torch
+from pathlib import Path
 
 
 def test_galaxy_vae(galaxy_vae_setup, paths, devices):
@@ -15,7 +16,7 @@ def test_galaxy_vae(galaxy_vae_setup, paths, devices):
     }
 
     # prepare galaxy
-    one_galaxy = torch.load(paths["data"].joinpath("1_catsim_galaxy.pt"))
+    one_galaxy = torch.load(Path(paths["data"]).joinpath("1_catsim_galaxy.pt"))
     galaxy = one_galaxy["images"].to(device)
     background = one_galaxy["background"].to(device)
 
