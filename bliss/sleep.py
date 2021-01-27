@@ -376,7 +376,9 @@ class SleepPhase(pl.LightningModule):
 
         return opt
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
+    def training_step(
+        self, batch, batch_idx, optimizer_idx=0
+    ):  # pylint: disable=unused-argument
         loss = 0.0
 
         if optimizer_idx == 0:  # image_encoder
