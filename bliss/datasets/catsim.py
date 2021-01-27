@@ -19,8 +19,6 @@ SDSS_PIX = 0.396
 class SourceNotVisible(Exception):
     """Custom exception to indicate that a source has no visible model components."""
 
-    pass
-
 
 class CatsimRenderer:
     def __init__(
@@ -46,7 +44,7 @@ class CatsimRenderer:
         # ToDo: Create a test/assertion to check that mean == variance approx.
         assert survey_name == "SDSS", "Only using default survey name for now is SDSS."
         assert n_bands == 1, "Only 1 band is supported"
-        assert slen >= 41, "Galaxies won't fit."
+        # assert slen >= 41, "Galaxies won't fit."
         assert slen % 2 == 1, "Odd number of pixels is preferred."
         assert Path(psf_file).is_file(), "psf file not found."
         assert Path(psf_file).as_posix().endswith(".fits")
@@ -73,9 +71,10 @@ class CatsimRenderer:
         for b in range(self.n_bands):
             self.background[b, :, :] = background[b]
 
-        # Unintegrated galsim psf for the convolution
+        # Get unintegrated galsim psf for the convolution
         psf = fits.getdata(psf_file)
         assert len(psf.shape) == 2, "Same PSF for all bands for now."
+        psf = psf - psf[1, int(psf.shape[1] / 2)] * 2
         psf[psf < 0] = 0
         psf /= np.sum(psf)
         self.psf = galsim.InterpolatedImage(
@@ -100,19 +99,18 @@ class CatsimRenderer:
         image = np.zeros((self.n_bands, self.slen, self.slen), dtype=self.dtype)
         entry = self.center_deviation(entry)  # all bands are centered same way.
 
-        for b, _ in enumerate(self.bands):
-            image[b] = self.single_band_galaxy(entry, b).array
+        for b, band in enumerate(self.bands):
+            image[b] = self.single_band_galaxy(entry, band).array
 
         # add background and (optionally) Gaussian noise
         image += self.background
         if self.add_noise:
-            _image = torch.sqrt(image)
-            _image = _image * np.randn(*image.shape)
-            image = _image + image
+            _image = np.sqrt(image)
+            _image = _image * np.random.randn(*image.shape) * 0.1
+            image += _image
         return image, self.background
 
-    @staticmethod
-    def get_flux(ab_magnitude):
+    def get_flux(self, ab_magnitude):
         """Convert source magnitude to flux.
         Args:
             ab_magnitude(float): AB magnitude of source.
@@ -120,13 +118,17 @@ class CatsimRenderer:
             float: Flux in detected electrons.
         """
 
-        return 10 ** (ab_magnitude / 2.5)
+        # TODO: other bands that are not 'r'
+        return 3000 * 10 ** (-0.4 * (ab_magnitude - 24))
 
-    def single_band_galaxy(self, entry, no_disk=False, no_bulge=False, no_agn=False):
+    def single_band_galaxy(
+        self, entry, band, no_disk=False, no_bulge=False, no_agn=False
+    ):
         """Builds galaxy from a single entry in the catalog. With background and noise"""
         components = []
 
-        total_flux = self.get_flux(entry["ab_magnitude"])
+        mag_name = band + "_ab"
+        total_flux = self.get_flux(entry[mag_name])
 
         # Calculate the flux of each component in detected electrons.
         total_fluxnorm = (
@@ -199,8 +201,15 @@ class CatsimRenderer:
 
         image_temp = galsim.Image(self.slen, self.slen, scale=self.pixel_scale)
         profile = galsim.Add(components)
-        profile = galsim.convolve.Convolution(profile, self.psf)
-        image_temp = profile.drawImage(image=image_temp)
+        profile = galsim.convolve.Convolution(
+            profile, self.psf, gsparams=galsim.GSParams(maximum_fft_size=1 << 16)
+        )
+        image_temp = profile.drawImage(
+            image=image_temp,
+            use_true_center=True,
+            method="auto",
+            dtype=self.dtype,
+        )
         return image_temp
 
 
@@ -248,8 +257,9 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
             try:
                 entry = self.cat[idx]
                 image, background = self.renderer.render(entry)
+                break
             except SourceNotVisible:
-                continue
+                idx = np.random.choice(range(len(self)))
 
         return {
             "images": image,
