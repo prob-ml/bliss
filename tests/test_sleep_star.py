@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 
 class TestSleepStarOneTile:
@@ -58,7 +59,7 @@ class TestSleepStarTiles:
         assert results["star_fluxes_mae"] < 0.5
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
-        test_file = paths["data"].joinpath("star_test1.pt").as_posix()
+        test_file = Path(paths["data"]).joinpath("star_test1.pt").as_posix()
         overrides.update({"testing.file": test_file})
         results = sleep_setup.test_sleep(overrides, trained_sleep)
 

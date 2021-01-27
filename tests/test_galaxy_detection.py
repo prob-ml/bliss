@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 
 class TestBasicGalaxyTiles:
@@ -30,7 +31,7 @@ class TestBasicGalaxyTiles:
         assert results["locs_mae"] < 0.55
 
     def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
-        test_file = paths["data"].joinpath("galaxy_test1.pt").as_posix()
+        test_file = Path(paths["data"]).joinpath("galaxy_test1.pt").as_posix()
         overrides.update({"testing.file": test_file})
         results = sleep_setup.test_sleep(overrides, trained_sleep)
 

@@ -88,11 +88,9 @@ class GalaxyVAESetup:
 
 @pytest.fixture(scope="session")
 def paths():
-    root_path = pathlib.Path(__file__).parent.parent.absolute()
-    return {
-        "data": root_path.joinpath("data"),
-        "model_dir": root_path.joinpath("trials_result"),
-    }
+    with initialize(config_path="../config"):
+        cfg = compose("config")
+    return cfg.paths
 
 
 @pytest.fixture(scope="session")

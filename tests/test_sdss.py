@@ -6,7 +6,7 @@ import numpy as np
 
 class TestSDSS:
     def test_sdss(self, paths):
-        sdss_dir = paths["data"].joinpath("sdss")
+        sdss_dir = paths["sdss"]
         sdss_obj = sdss.SloanDigitalSkySurvey(
             sdss_dir,
             run=3900,
