@@ -92,6 +92,7 @@ def paths():
         cfg = compose("config")
     return cfg.paths
 
+
 @pytest.fixture(scope="session")
 def devices(pytestconfig):
     gpus = pytestconfig.getoption("gpus")
