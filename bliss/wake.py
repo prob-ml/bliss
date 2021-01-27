@@ -99,11 +99,11 @@ class WakeNet(pl.LightningModule):
         )
         return loss
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         loss = self.get_loss(batch)
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         loss = self.get_loss(batch)
         self.log("validation_loss", loss)

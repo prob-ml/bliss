@@ -376,7 +376,7 @@ class SleepPhase(pl.LightningModule):
 
         return opt
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):
+    def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
         loss = 0.0
 
         if optimizer_idx == 0:  # image_encoder
@@ -389,7 +389,7 @@ class SleepPhase(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, batch, batch_indx):
+    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         (
             detection_loss,
             counter_loss,
@@ -426,7 +426,7 @@ class SleepPhase(pl.LightningModule):
         if self.plotting and self.current_epoch > 1:
             self.make_plots(outputs[-1], kind="validation")
 
-    def test_step(self, batch, batch_indx):
+    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         metrics = self.get_metrics(batch)
         self.log("acc_counts", metrics["counts_acc"])
         self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
