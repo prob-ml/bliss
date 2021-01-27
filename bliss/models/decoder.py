@@ -359,9 +359,8 @@ class ImageDecoder(pl.LightningModule):
             warnings.warn("image mean less than 0")
             images_mean = images_mean.clamp(min=1.0)
 
-        _images = torch.sqrt(images_mean)
-        images = _images * torch.randn_like(images_mean)
-        images = images + images_mean
+        _images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
+        images = _images + images_mean
 
         return images
 

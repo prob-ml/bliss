@@ -7,11 +7,9 @@ def test_galaxy_vae(galaxy_vae_setup, paths, devices):
     device = devices.device
     overrides = {
         "model": "galaxy_net",
-        "dataset": "saved_catsim",
+        "dataset": "catsim",
         "training": "unittest",
         "training.n_epochs": 101 if use_cuda else 2,
-        "training.trainer.limit_train_batches": 20 if use_cuda else 2,
-        "training.trainer.limit_val_batches": 1,
         "training.trainer.check_val_every_n_epoch": 50 if use_cuda else 1,
     }
 

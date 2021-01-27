@@ -2,11 +2,11 @@
 name: "CatsimGalaxies"
 catalog_file: ${paths.root}/data/OneDegSq.fits
 n_batches: 20
-batch_size: 64
-num_workers: 16
+batch_size: 128
+num_workers: 8
 renderer:
   survey_name: "SDSS"
-  slen: 51
+  slen: 41
   n_bands: 1
   deviate_center: False
   noise_factor: 0.1

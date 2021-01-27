@@ -143,49 +143,27 @@ class CatsimRenderer:
         if disk_flux + bulge_flux + agn_flux == 0:
             raise SourceNotVisible
 
-        # Calculate the position of angle of the Sersic components, which are assumed to be the same.
+        # Assumes position angle of the Sersic components are the same for bulge & disk.
         if disk_flux > 0:
             beta_radians = np.radians(entry["pa_disk"])
+            a_d, b_d = entry["a_d"], entry["b_d"]
+            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            disk_q = b_d / a_d
+            disk = galsim.Exponential(
+                flux=disk_flux, half_light_radius=disk_hlr_arcsecs
+            ).shear(q=disk_q, beta=beta_radians * galsim.radians)
+            components.append(disk)
+
             if bulge_flux > 0:
                 assert (
                     entry["pa_disk"] == entry["pa_bulge"]
                 ), "Sersic components have different beta."
-        elif bulge_flux > 0:
-            beta_radians = np.radians(entry["pa_bulge"])
-        else:
-            # This might happen if we only have an AGN component.
-            beta_radians = None
-        # Calculate shapes hlr = sqrt(a*b) and q = b/a of Sersic components.
-        if disk_flux > 0:
-            a_d, b_d = entry["a_d"], entry["b_d"]
-            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
-            disk_q = b_d / a_d
-        else:
-            disk_hlr_arcsecs, disk_q = None, None
+
         if bulge_flux > 0:
+            beta_radians = np.radians(entry["pa_bulge"])
             a_b, b_b = entry["a_b"], entry["b_b"]
             bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
             bulge_q = b_b / a_b
-        else:
-            bulge_hlr_arcsecs, bulge_q = None, None
-
-        if disk_flux > 0:
-            disk = galsim.Exponential(
-                flux=disk_flux, half_light_radius=disk_hlr_arcsecs
-            ).shear(q=disk_q, beta=beta_radians * galsim.radians)
-            components.append(disk)
-
-        a_b, b_b = entry["a_b"], entry["b_b"]
-        bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
-        bulge_q = b_b / a_b
-
-        if disk_flux > 0:
-            disk = galsim.Exponential(
-                flux=disk_flux, half_light_radius=disk_hlr_arcsecs
-            ).shear(q=disk_q, beta=beta_radians * galsim.radians)
-            components.append(disk)
-
-        if bulge_flux > 0:
             bulge = galsim.DeVaucouleurs(
                 flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
             ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
@@ -209,7 +187,6 @@ class CatsimRenderer:
         return image_temp
 
 
-# TODO: Make this Dataset/Renderer faster, still can't do on the fly.
 class CatsimGalaxies(pl.LightningDataModule, Dataset):
     def __init__(self, cfg: DictConfig):
 <<<<<<< HEAD
@@ -277,51 +254,4 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
             batch_size=self.batch_size,
             sampler=self.sampler,
             num_workers=self.num_workers,
-        )
-
-
-class SavedCatsim(pl.LightningDataModule, Dataset):
-    def __init__(self, cfg):
-        super().__init__()
-        params = cfg.dataset.params
-        self.data = torch.load(params.filepath)
-        self.images = self.data["images"]
-        assert isinstance(self.images, torch.Tensor)
-        assert len(self.images.shape) == 4
-
-        self.background = self.data.pop("background")
-        assert len(self.background.shape) == 3
-        assert self.background.shape[0] == self.images.shape[1]
-
-        self.batch_size = params.batch_size
-        self.num_workers = params.num_workers
-        self.tt_split = params.tt_split
-
-    def __getitem__(self, idx):
-        return {"images": self.images[idx], "background": self.background}
-
-    def __len__(self):
-        return len(self.images)
-
-    def train_dataloader(self):
-        split = int(len(self) * self.tt_split)
-        train_indices = np.arange(split, len(self), dtype=int)
-        return DataLoader(
-            self,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            sampler=SubsetRandomSampler(train_indices),
-        )
-
-    def val_dataloader(self):
-        split = int(len(self) * self.tt_split)
-        test_indices = np.arange(split, dtype=int)
-        return DataLoader(
-            self,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            shuffle=False,
-            sampler=SubsetRandomSampler(test_indices),
         )
