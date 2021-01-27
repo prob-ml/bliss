@@ -12,7 +12,3 @@ def main(cfg):
     else:
         raise KeyError
     task(cfg)
-
-
-if __name__ == "__main__":
-    main()

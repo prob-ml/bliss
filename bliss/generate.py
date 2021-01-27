@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
 import os
 import math
+from pathlib import Path
+
 import torch
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig, OmegaConf
-from pathlib import Path
 
 from bliss.datasets import simulated, catsim
 from bliss import plotting
@@ -68,7 +68,3 @@ def main(cfg: DictConfig):
     # save batch and images as pdf for visualization purposes.
     torch.save(fbatch, filepath)
     visualize(fbatch, imagepath, cfg.generate.n_plots)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,8 +1,8 @@
 import warnings
 from pathlib import Path
+
 import numpy as np
 from astropy.io import fits
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -56,7 +56,7 @@ class ImageDecoder(pl.LightningModule):
         loc_min=0.0,
         loc_max=1.0,
     ):
-        super(ImageDecoder, self).__init__()
+        super().__init__()
 
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
@@ -420,8 +420,7 @@ class ImageDecoder(pl.LightningModule):
 
         if self.ptile_slen >= psf.shape[-1]:
             return self._expand_source(psf)
-        else:
-            return self._trim_source(psf)
+        return self._trim_source(psf)
 
     def _size_galaxy(self, galaxy):
         # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen
