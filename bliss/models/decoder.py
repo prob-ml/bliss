@@ -420,8 +420,7 @@ class ImageDecoder(pl.LightningModule):
 
         if self.ptile_slen >= psf.shape[-1]:
             return self._expand_source(psf)
-        else:
-            return self._trim_source(psf)
+        return self._trim_source(psf)
 
     def _size_galaxy(self, galaxy):
         # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen

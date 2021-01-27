@@ -1,6 +1,7 @@
 import pathlib
 import pickle
 import warnings
+from math import floor, ceil
 
 import numpy as np
 import torch
@@ -10,7 +11,6 @@ from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
-from math import floor, ceil
 
 
 def construct_subpixel_grid_base(size_x, size_y):
@@ -86,11 +86,11 @@ def psf_at_points(x, y, psf_data):
     # http://photo.astro.princeton.edu/photoop_doc.html#SDSS_PSF_RECON
     #   acoeff_k = SUM_i{ SUM_j{ (0.001*ROWC)^i * (0.001*COLC)^j * C_k_ij } }
     #   psfimage = SUM_k{ acoeff_k * RROWS_k }
-    for k in range(len(psf)):
-        nrb = psf[k]["nrow_b"]
-        ncb = psf[k]["ncol_b"]
+    for k, psf_k in enumerate(psf):
+        nrb = psf_k["nrow_b"]
+        ncb = psf_k["ncol_b"]
 
-        c = psf[k]["c"].reshape(5, 5)
+        c = psf_k["c"].reshape(5, 5)
         c = c[:nrb, :ncb]
 
         (gridi, gridj) = np.meshgrid(range(nrb), range(ncb))

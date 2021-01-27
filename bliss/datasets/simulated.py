@@ -32,7 +32,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return self.batch_generator()
 
     def batch_generator(self):
-        for i in range(self.n_batches):
+        for _ in range(self.n_batches):
             yield self.get_batch()
 
     def get_batch(self):

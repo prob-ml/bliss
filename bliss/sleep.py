@@ -10,7 +10,6 @@ import torch
 from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
 from torch.optim import Adam
-import torch.nn.functional as F
 
 from . import plotting
 from .models import encoder, decoder, galaxy_net
@@ -140,8 +139,9 @@ class SleepPhase(pl.LightningModule):
         self.galaxy_encoder = None
         if self.use_galaxy_encoder:
             # NOTE: We crop and center each padded tile before passing it on to the galaxy_encoder
-            # assume that crop_slen = 2*tile_slen (on each side)
-            # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per tile should work but there is no easy way to enforce this.
+            #       assume that crop_slen = 2*tile_slen (on each side)
+            # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per
+            #       tile should work but there is no easy way to enforce this.
             self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(
                 **cfg.model.galaxy_encoder.params
             )

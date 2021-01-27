@@ -9,7 +9,6 @@ import pytorch_lightning as pl
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
-import torch
 
 from bliss import sleep
 from bliss.datasets import simulated, catsim
