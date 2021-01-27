@@ -89,7 +89,7 @@ class GalaxyVAESetup:
 @pytest.fixture(scope="session")
 def paths():
     with initialize(config_path="../config"):
-        cfg = compose("config", overrides=overrides)
+        cfg = compose("config")
     return cfg.paths
 
 @pytest.fixture(scope="session")
