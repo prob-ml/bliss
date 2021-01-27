@@ -1,0 +1,210 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bliss.wake &#8212; bliss  documentation</title>
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for bliss.wake</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">optim</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.normal</span> <span class="kn">import</span> <span class="n">Normal</span>
+<span class="kn">import</span> <span class="nn">pytorch_lightning</span> <span class="k">as</span> <span class="nn">pl</span>
+
+
+<div class="viewcode-block" id="WakeNet"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet">[docs]</a><span class="k">class</span> <span class="nc">WakeNet</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
+
+    <span class="c1"># ---------------</span>
+    <span class="c1"># Model</span>
+    <span class="c1"># ----------------</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">star_encoder</span><span class="p">,</span>
+        <span class="n">image_decoder</span><span class="p">,</span>
+        <span class="n">observed_img</span><span class="p">,</span>
+        <span class="n">hparams</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">star_encoder</span> <span class="o">=</span> <span class="n">star_encoder</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span> <span class="o">=</span> <span class="n">image_decoder</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">galaxy_decoder</span> <span class="ow">is</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="n">image_decoder</span><span class="o">.</span><span class="n">slen</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span> <span class="o">=</span> <span class="n">image_decoder</span><span class="o">.</span><span class="n">border_padding</span>
+
+        <span class="c1"># observed image is batch_size (or 1) x n_bands x slen x slen</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padded_slen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">observed_img</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
+        <span class="k">assert</span> <span class="n">observed_img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">padded_slen</span><span class="p">,</span> <span class="s2">&quot;cached grid won&#39;t match.&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">observed_img</span> <span class="o">=</span> <span class="n">observed_img</span>
+
+        <span class="c1"># hyper-parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">(</span><span class="n">hparams</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;n_samples&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;lr&quot;</span><span class="p">]</span>
+
+        <span class="c1"># get n_bands</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">n_bands</span>
+
+<div class="viewcode-block" id="WakeNet.forward"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs_img</span><span class="p">):</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">star_encoder</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+            <span class="n">sample</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">star_encoder</span><span class="o">.</span><span class="n">sample_encoder</span><span class="p">(</span><span class="n">obs_img</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span><span class="p">)</span>
+
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">zero_gal_params</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">n_galaxy_params</span><span class="p">)</span>
+        <span class="n">recon_mean</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">render_images</span><span class="p">(</span>
+            <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+            <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+            <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;galaxy_bool&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+            <span class="n">zero_gal_params</span><span class="p">,</span>
+            <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+            <span class="n">add_noise</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">recon_mean</span></div>
+
+    <span class="c1"># ---------------</span>
+    <span class="c1"># Data</span>
+    <span class="c1"># ----------------</span>
+
+<div class="viewcode-block" id="WakeNet.train_dataloader"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.train_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">train_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observed_img</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="WakeNet.val_dataloader"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.val_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">val_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observed_img</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></div>
+
+    <span class="c1"># ---------------</span>
+    <span class="c1"># Optimizer</span>
+    <span class="c1"># ----------------</span>
+
+<div class="viewcode-block" id="WakeNet.configure_optimizers"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.configure_optimizers">[docs]</a>    <span class="k">def</span> <span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">([{</span><span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">lr</span><span class="p">}])</span></div>
+
+    <span class="c1"># ---------------</span>
+    <span class="c1"># Training</span>
+    <span class="c1"># ----------------</span>
+
+    <span class="k">def</span> <span class="nf">get_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">recon_mean</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="n">error</span> <span class="o">=</span> <span class="o">-</span><span class="n">Normal</span><span class="p">(</span><span class="n">recon_mean</span><span class="p">,</span> <span class="n">recon_mean</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+
+        <span class="n">image_indx_start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span>
+        <span class="n">image_indx_end</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">error</span><span class="p">[</span>
+                <span class="p">:,</span> <span class="p">:,</span> <span class="n">image_indx_start</span><span class="p">:</span><span class="n">image_indx_end</span><span class="p">,</span> <span class="n">image_indx_start</span><span class="p">:</span><span class="n">image_indx_end</span>
+            <span class="p">]</span>
+            <span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+            <span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">loss</span>
+
+<div class="viewcode-block" id="WakeNet.training_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.training_step">[docs]</a>    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;train_loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">loss</span></div>
+
+<div class="viewcode-block" id="WakeNet.validation_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.validation_step">[docs]</a>    <span class="k">def</span> <span class="nf">validation_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;validation_loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span></div></div>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">bliss</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/index.html">Bliss API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/index.html#indices-and-tables">Indices and tables</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Probabilistic Machine Learning Research Group.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
