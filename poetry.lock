@@ -351,17 +351,6 @@ optional = false
 python-versions = "*"
 
 [[package]]
-name = "fitsio"
-version = "1.1.3"
-description = "A full featured python library to read from and write to FITS files."
-category = "main"
-optional = false
-python-versions = "*"
-
-[package.dependencies]
-numpy = "*"
-
-[[package]]
 name = "fsspec"
 version = "0.8.5"
 description = "File-system specification"
@@ -1912,7 +1901,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "a034b7ee2b2b4206073a75970390373621f093a75692a48a232145f413e0b95b"
+content-hash = "207b5e5188107efcaa10919ca49ac5a6074894799855e7bf5e2adc25d748d8b6"
 
 [metadata.files]
 absl-py = [
@@ -2180,9 +2169,6 @@ entrypoints = [
 filelock = [
     {file = "filelock-3.0.12-py3-none-any.whl", hash = "sha256:929b7d63ec5b7d6b71b0fa5ac14e030b3f70b75747cef1b10da9b879fef15836"},
     {file = "filelock-3.0.12.tar.gz", hash = "sha256:18d82244ee114f543149c66a6e0c14e9c4f8a1044b5cdaadd0f82159d6a6ff59"},
-]
-fitsio = [
-    {file = "fitsio-1.1.3.tar.gz", hash = "sha256:abed9700a1aaada9a74315b17bd0b14f4c08603a35783fc51a12e02c0e33b797"},
 ]
 fsspec = [
     {file = "fsspec-0.8.5-py3-none-any.whl", hash = "sha256:5629dc945800873cb2092df806c854e74c2799f4854247bce37ca7171000a7ec"},
