@@ -45,9 +45,9 @@ def center_stamp_subpixel(stamp, pt, pr, G):
 
 
 def read_psf(psf_fit_file, band=2):
-    psfield = fitsio.FITS(psf_fit_file)
+    psfield = fits.open(psf_fit_file)
     hdu = psfield[band + 1]
-    psf = hdu.read()
+    psf = hdu.data
     return {"hdu": hdu, "psf": psf}
 
 
@@ -55,9 +55,6 @@ class SdssPSF:
     def __init__(self, psf_fit_file, bands):
         self.psf_fit_file = psf_fit_file
         self.bands = bands
-        self.init_cache()
-
-    def init_cache(self):
         self.cache = [None] * len(self.bands)
 
     def __getitem__(self, idx):
@@ -97,13 +94,13 @@ def psf_at_points(x, y, psf_data):
 
         if psfimgs is None:
             psfimgs = [
-                np.zeros_like(hdu["rrows"].read()[k]) for xy in np.broadcast(x, y)
+                np.zeros_like(psf["rrows"][k]) for xy in np.broadcast(x, y)
             ]
-            (outh, outw) = (hdu["rnrow"].read()[k], hdu["rncol"].read()[k])
+            (outh, outw) = (psf["rnrow"][k], psf["rncol"][k])
 
         for i, (xi, yi) in enumerate(np.broadcast(x, y)):
             acoeff_k = (((0.001 * xi) ** gridi * (0.001 * yi) ** gridj * c)).sum()
-            psfimgs[i] += acoeff_k * hdu["rrows"].read()[k]
+            psfimgs[i] += acoeff_k * psf["rrows"][k]
 
     psfimgs = [img.reshape((outh, outw)) for img in psfimgs]
 
