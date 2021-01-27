@@ -111,8 +111,6 @@ class SloanDigitalSkySurvey(Dataset):
         overwrite_fits_cache=False,
         overwrite_cache=False,
         center_subpixel=True,
-        objc_type=6,
-        flux_lim=100,
     ):
         super().__init__()
 
@@ -122,11 +120,6 @@ class SloanDigitalSkySurvey(Dataset):
         self.stampsize = stampsize
         self.overwrite_cache = overwrite_cache
         self.center_subpixel = center_subpixel
-
-        # fetch individual objects,
-        # default is bright stars.
-        self.objc_type = objc_type
-        self.flux_lim = flux_lim
 
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
