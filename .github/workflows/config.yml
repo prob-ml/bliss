@@ -41,7 +41,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get install libfftw3-dev libeigen3-dev  
+          sudo apt-get install libfftw3-dev
           poetry install
 
       - name: Run pylint
