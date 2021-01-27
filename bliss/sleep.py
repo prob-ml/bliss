@@ -129,7 +129,7 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
 class SleepPhase(pl.LightningModule):
     """Summary line.
-    
+
     Implementation of sleep-phase training using pytorch-lightning framework.
 
     Args:
@@ -145,7 +145,8 @@ class SleepPhase(pl.LightningModule):
             model = SleepPhase(cfg)
             trainer = pl.Trainer()
             trainer.fit(model, data=dataset)
-    """  
+    """
+
     def __init__(self, cfg: DictConfig):
         super(SleepPhase, self).__init__()
         self.save_hyperparameters(cfg)
