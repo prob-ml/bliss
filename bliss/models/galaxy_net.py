@@ -151,7 +151,7 @@ class OneCenteredGalaxy(pl.LightningModule):
     # Training
     # ----------------
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
         recon_mean, recon_var, kl_z = self(images, background)
         loss = self.get_loss(images, recon_mean, recon_var, kl_z)
@@ -162,7 +162,7 @@ class OneCenteredGalaxy(pl.LightningModule):
     # Validation
     # ----------------
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
         recon_mean, recon_var, kl_z = self(images, background)
         loss = self.get_loss(images, recon_mean, recon_var, kl_z)
