@@ -27,13 +27,12 @@ class CatsimRenderer:
         n_bands=1,
         slen=41,
         background=(646,),  # r-band
-        snr=200,
         psf_file="data/sdss-002583-2-0136-psf-r.fits",
         pixel_scale=SDSS_PIX,
-        add_noise=True,
         verbose=False,
         deviate_center=False,
         dtype=np.float32,
+        noise_factor=0.1,
     ):
         """
         Can draw a single entry in CATSIM in the given bands.
@@ -58,9 +57,8 @@ class CatsimRenderer:
         stamp_size = self.pixel_scale * self.slen  # arcseconds
         self.slen = int(stamp_size / self.pixel_scale)  # pixels.
 
-        self.snr = snr
+        self.noise_factor = noise_factor
 
-        self.add_noise = add_noise
         self.deviate_center = deviate_center
         self.verbose = verbose
         self.dtype = dtype
@@ -104,10 +102,8 @@ class CatsimRenderer:
 
         # add background and (optionally) Gaussian noise
         image += self.background
-        if self.add_noise:
-            _image = np.sqrt(image)
-            _image = _image * np.random.randn(*image.shape) * 0.1
-            image += _image
+        _image = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        image += _image
         return image, self.background
 
     def get_flux(self, ab_magnitude):
