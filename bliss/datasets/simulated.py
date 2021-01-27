@@ -1,10 +1,8 @@
+import warnings
 from omegaconf import DictConfig
 import pytorch_lightning as pl
-import warnings
-
 import torch
 from torch.utils.data import IterableDataset, Dataset, DataLoader
-
 from bliss.models.decoder import ImageDecoder
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
@@ -34,7 +32,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return self.batch_generator()
 
     def batch_generator(self):
-        for i in range(self.n_batches):
+        for _ in range(self.n_batches):
             yield self.get_batch()
 
     def get_batch(self):

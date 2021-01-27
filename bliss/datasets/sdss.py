@@ -1,7 +1,8 @@
-import torch
 import pathlib
 import pickle
 import warnings
+from math import floor, ceil
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -9,7 +10,6 @@ from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
-from math import floor, ceil
 
 
 def construct_subpixel_grid_base(size_x, size_y):
@@ -76,11 +76,11 @@ class SdssPSF:
         # http://photo.astro.princeton.edu/photoop_doc.html#SDSS_PSF_RECON
         #   acoeff_k = SUM_i{ SUM_j{ (0.001*ROWC)^i * (0.001*COLC)^j * C_k_ij } }
         #   psfimage = SUM_k{ acoeff_k * RROWS_k }
-        for k in range(len(psf)):
-            nrb = psf[k]["nrow_b"]
-            ncb = psf[k]["ncol_b"]
+        for k, psf_k in enumerate(psf):
+            nrb = psf_k["nrow_b"]
+            ncb = psf_k["ncol_b"]
 
-            c = psf[k]["c"].reshape(5, 5)
+            c = psf_k["c"].reshape(5, 5)
             c = c[:nrb, :ncb]
 
             (gridi, gridj) = np.meshgrid(range(nrb), range(ncb))
@@ -113,7 +113,7 @@ class SloanDigitalSkySurvey(Dataset):
         overwrite_cache=False,
         center_subpixel=True,
     ):
-        super(SloanDigitalSkySurvey, self).__init__()
+        super().__init__()
 
         self.sdss_path = pathlib.Path(sdss_dir)
         self.rcfgcs = []
@@ -276,7 +276,7 @@ class SloanDigitalSkySurvey(Dataset):
             return ret, cache_path
 
         for b, bl in enumerate("ugriz"):
-            if not (b in self.bands):
+            if b not in self.bands:
                 continue
 
             frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(
