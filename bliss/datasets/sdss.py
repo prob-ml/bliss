@@ -5,7 +5,6 @@ import warnings
 import numpy as np
 import torch
 import torch.nn.functional as F
-import fitsio
 from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
@@ -48,7 +47,7 @@ def read_psf(psf_fit_file, band=2):
     psfield = fits.open(psf_fit_file)
     hdu = psfield[band + 1]
     psf = hdu.data
-    return {"hdu": hdu, "psf": psf}
+    return psf
 
 
 class SdssPSF:
@@ -64,12 +63,7 @@ class SdssPSF:
         return self.cache[idx]
 
 
-def psf_at_points(x, y, psf_data):
-    hdu = psf_data["hdu"]
-    psf = psf_data["psf"]
-    # psfield = fitsio.FITS(psf_fit_file)
-    # hdu = psfield[3]
-
+def psf_at_points(x, y, psf):
     rtnscalar = np.isscalar(x) and np.isscalar(y)
     x = np.atleast_1d(x)
     y = np.atleast_1d(y)
