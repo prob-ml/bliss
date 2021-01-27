@@ -42,6 +42,7 @@ def center_stamp_subpixel(stamp, pt, pr, G):
     )
     return stamp_shifted.squeeze(0).squeeze(0).numpy()
 
+
 class SdssPSF:
     def __init__(self, psf_fit_file, bands):
         self.psf_fit_file = psf_fit_file
@@ -59,7 +60,7 @@ class SdssPSF:
         hdu = psfield[band + 1]
         psf = hdu.data
         return psf
-    
+
     def psf_at_points(self, idx, x, y):
         psf = self[idx]
         rtnscalar = np.isscalar(x) and np.isscalar(y)
@@ -85,9 +86,7 @@ class SdssPSF:
             (gridi, gridj) = np.meshgrid(range(nrb), range(ncb))
 
             if psfimgs is None:
-                psfimgs = [
-                    np.zeros_like(psf["rrows"][k]) for xy in np.broadcast(x, y)
-                ]
+                psfimgs = [np.zeros_like(psf["rrows"][k]) for xy in np.broadcast(x, y)]
                 (outh, outw) = (psf["rnrow"][k], psf["rncol"][k])
 
             for i, (xi, yi) in enumerate(np.broadcast(x, y)):
