@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import os
 import math
 from pathlib import Path
@@ -70,7 +68,3 @@ def main(cfg: DictConfig):
     # save batch and images as pdf for visualization purposes.
     torch.save(fbatch, filepath)
     visualize(fbatch, imagepath, cfg.generate.n_plots)
-
-
-if __name__ == "__main__":
-    main()

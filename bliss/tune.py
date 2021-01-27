@@ -157,7 +157,3 @@ def main(cfg: DictConfig, local_mode=False):
         OmegaConf.save(
             conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)
         )
-
-
-if __name__ == "__main__":
-    main()

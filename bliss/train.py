@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from pathlib import Path
 import shutil
 
@@ -110,7 +109,3 @@ def main(cfg: DictConfig):
     # test!
     if cfg.testing.file is not None:
         _ = trainer.test(model, datamodule=dataset)
-
-
-if __name__ == "__main__":
-    main()
