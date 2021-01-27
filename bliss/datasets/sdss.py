@@ -6,7 +6,6 @@ from math import floor, ceil
 import numpy as np
 import torch
 import torch.nn.functional as F
-import fitsio
 from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
@@ -44,72 +43,61 @@ def center_stamp_subpixel(stamp, pt, pr, G):
     return stamp_shifted.squeeze(0).squeeze(0).numpy()
 
 
-def read_psf(psf_fit_file, band=2):
-    psfield = fitsio.FITS(psf_fit_file)
-    hdu = psfield[band + 1]
-    psf = hdu.read()
-    return {"hdu": hdu, "psf": psf}
-
-
 class SdssPSF:
     def __init__(self, psf_fit_file, bands):
         self.psf_fit_file = psf_fit_file
         self.bands = bands
-        self.init_cache()
-
-    def init_cache(self):
         self.cache = [None] * len(self.bands)
 
     def __getitem__(self, idx):
         if self.cache[idx] is None:
-            x = read_psf(self.psf_fit_file, band=self.bands[idx])
+            x = self.read_psf(self.bands[idx])
             self.cache[idx] = x
         return self.cache[idx]
 
+    def read_psf(self, band):
+        psfield = fits.open(self.psf_fit_file)
+        hdu = psfield[band + 1]
+        psf = hdu.data
+        return psf
 
-def psf_at_points(x, y, psf_data):
-    hdu = psf_data["hdu"]
-    psf = psf_data["psf"]
-    # psfield = fitsio.FITS(psf_fit_file)
-    # hdu = psfield[3]
+    def psf_at_points(self, idx, x, y):
+        psf = self[idx]
+        rtnscalar = np.isscalar(x) and np.isscalar(y)
+        x = np.atleast_1d(x)
+        y = np.atleast_1d(y)
 
-    rtnscalar = np.isscalar(x) and np.isscalar(y)
-    x = np.atleast_1d(x)
-    y = np.atleast_1d(y)
+        # psf = hdu.read()
 
-    # psf = hdu.read()
+        psfimgs = None
+        (outh, outw) = (None, None)
 
-    psfimgs = None
-    (outh, outw) = (None, None)
+        # From the IDL docs:
+        # http://photo.astro.princeton.edu/photoop_doc.html#SDSS_PSF_RECON
+        #   acoeff_k = SUM_i{ SUM_j{ (0.001*ROWC)^i * (0.001*COLC)^j * C_k_ij } }
+        #   psfimage = SUM_k{ acoeff_k * RROWS_k }
+        for k, psf_k in enumerate(psf):
+            nrb = psf_k["nrow_b"]
+            ncb = psf_k["ncol_b"]
 
-    # From the IDL docs:
-    # http://photo.astro.princeton.edu/photoop_doc.html#SDSS_PSF_RECON
-    #   acoeff_k = SUM_i{ SUM_j{ (0.001*ROWC)^i * (0.001*COLC)^j * C_k_ij } }
-    #   psfimage = SUM_k{ acoeff_k * RROWS_k }
-    for k, psf_k in enumerate(psf):
-        nrb = psf_k["nrow_b"]
-        ncb = psf_k["ncol_b"]
+            c = psf_k["c"].reshape(5, 5)
+            c = c[:nrb, :ncb]
 
-        c = psf_k["c"].reshape(5, 5)
-        c = c[:nrb, :ncb]
+            (gridi, gridj) = np.meshgrid(range(nrb), range(ncb))
 
-        (gridi, gridj) = np.meshgrid(range(nrb), range(ncb))
+            if psfimgs is None:
+                psfimgs = [np.zeros_like(psf["rrows"][k]) for xy in np.broadcast(x, y)]
+                (outh, outw) = (psf["rnrow"][k], psf["rncol"][k])
 
-        if psfimgs is None:
-            psfimgs = [
-                np.zeros_like(hdu["rrows"].read()[k]) for xy in np.broadcast(x, y)
-            ]
-            (outh, outw) = (hdu["rnrow"].read()[k], hdu["rncol"].read()[k])
+            for i, (xi, yi) in enumerate(np.broadcast(x, y)):
+                acoeff_k = (((0.001 * xi) ** gridi * (0.001 * yi) ** gridj * c)).sum()
+                psfimgs[i] += acoeff_k * psf["rrows"][k]
 
-        for i, (xi, yi) in enumerate(np.broadcast(x, y)):
-            acoeff_k = (((0.001 * xi) ** gridi * (0.001 * yi) ** gridj * c)).sum()
-            psfimgs[i] += acoeff_k * hdu["rrows"].read()[k]
+        psfimgs = [img.reshape((outh, outw)) for img in psfimgs]
 
-    psfimgs = [img.reshape((outh, outw)) for img in psfimgs]
-
-    if rtnscalar:
-        return psfimgs[0]
-    return psfimgs
+        if rtnscalar:
+            return psfimgs[0]
+        return psfimgs
 
 
 class SloanDigitalSkySurvey(Dataset):
@@ -339,7 +327,7 @@ class SloanDigitalSkySurvey(Dataset):
         stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(
             po_fits, image_list[2], wcs_list[2], background_list[2], psf[2]
         )
-        stamp_psfs = np.asarray(psf_at_points(pts, prs, psf[2]))
+        stamp_psfs = np.asarray(psf.psf_at_points(2, pts, prs))
         if len(stamp_bgs) > 0:
             psf_center = stamp_psfs.shape[-1] // 2
             psf_lower = psf_center - floor(self.stampsize / 2)
