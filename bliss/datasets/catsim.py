@@ -13,7 +13,7 @@ def filter_bounds(cat, param, min_val=-np.inf, max_val=np.inf):
     return cat[(cat[param] >= min_val) & (cat[param] <= max_val)]
 
 
-class SurveyObs(object):
+class SurveyObs:
     def __init__(self, renderer):
         """Returns a list of :class:`Survey` objects, each of them has an image attribute which is
         where images are written to by iso_render_engine.render_galaxy.
@@ -60,7 +60,7 @@ class SurveyObs(object):
             )
 
 
-class CatsimRenderer(object):
+class CatsimRenderer:
     def __init__(
         self,
         survey_name="LSST",
@@ -218,7 +218,7 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
         and returns a galaxy drawn from the catalog with realistic seeing conditions using
         functions from WeakLensingDeblending.
         """
-        super(CatsimGalaxies, self).__init__()
+        super().__init__()
         self.renderer = CatsimRenderer(**cfg.dataset.renderer)
         self.background = self.renderer.background
 
@@ -291,7 +291,7 @@ class CatsimGalaxies(pl.LightningDataModule, Dataset):
 
 class SavedCatsim(pl.LightningDataModule, Dataset):
     def __init__(self, cfg):
-        super(SavedCatsim, self).__init__()
+        super().__init__()
         params = cfg.dataset.params
         self.data = torch.load(params.filepath)
         self.images = self.data["images"]

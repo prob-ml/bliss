@@ -1,11 +1,10 @@
 import os
-import numpy as np
 import logging
 
+import numpy as np
 import hydra
 from omegaconf import OmegaConf
 from omegaconf import DictConfig
-
 import pytorch_lightning as pl
 
 import ray
@@ -158,7 +157,3 @@ def main(cfg: DictConfig, local_mode=False):
         OmegaConf.save(
             conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)
         )
-
-
-if __name__ == "__main__":
-    main()
