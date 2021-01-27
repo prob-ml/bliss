@@ -18,5 +18,6 @@ gpus:
 
 paths:
   root: ${env:BLISS_HOME}
+  data: ${paths.root}/data
   output: ${paths.root}/temp/example
-  sdss: ${paths.root}/data/sdss
+  sdss: ${paths.data}/sdss
