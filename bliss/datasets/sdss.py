@@ -42,14 +42,6 @@ def center_stamp_subpixel(stamp, pt, pr, G):
     )
     return stamp_shifted.squeeze(0).squeeze(0).numpy()
 
-
-def read_psf(psf_fit_file, band=2):
-    psfield = fits.open(psf_fit_file)
-    hdu = psfield[band + 1]
-    psf = hdu.data
-    return psf
-
-
 class SdssPSF:
     def __init__(self, psf_fit_file, bands):
         self.psf_fit_file = psf_fit_file
@@ -58,10 +50,15 @@ class SdssPSF:
 
     def __getitem__(self, idx):
         if self.cache[idx] is None:
-            x = read_psf(self.psf_fit_file, band=self.bands[idx])
+            x = self.read_psf(self.bands[idx])
             self.cache[idx] = x
         return self.cache[idx]
 
+    def read_psf(self, band):
+        psfield = fits.open(self.psf_fit_file)
+        hdu = psfield[band + 1]
+        psf = hdu.data
+        return psf
 
 def psf_at_points(x, y, psf):
     rtnscalar = np.isscalar(x) and np.isscalar(y)
