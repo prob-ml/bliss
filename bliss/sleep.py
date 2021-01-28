@@ -1,6 +1,15 @@
+"""Summary for sleep.py
+
+This module contains SleepPhase class, which implements the sleep-phase traning using 
+pytorch-lightning framework. Users should use this class to construct the sleep-phase 
+model.  
+
+"""
+
 import math
-import numpy as np
 from itertools import permutations
+
+import numpy as np
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig
 import pytorch_lightning as pl
@@ -9,7 +18,6 @@ import torch
 from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
 from torch.optim import Adam
-import torch.nn.functional as F
 
 from . import plotting
 from .models import encoder, decoder, galaxy_net
@@ -120,8 +128,27 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
 
 class SleepPhase(pl.LightningModule):
+    """Summary line.
+
+    Implementation of sleep-phase training using pytorch-lightning framework.
+
+    Args:
+        cfg (DictConfig): OmegaConf configuration from YAML files
+
+    Example:
+        In python script, set up the sleep-phase model and pytorch-lightning trainer::
+
+            import pytorch_lightning as pl
+            from bliss.sleep import SleepPhase
+
+
+            model = SleepPhase(cfg)
+            trainer = pl.Trainer()
+            trainer.fit(model, data=dataset)
+    """
+
     def __init__(self, cfg: DictConfig):
-        super(SleepPhase, self).__init__()
+        super().__init__()
         self.save_hyperparameters(cfg)
 
         self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
@@ -139,8 +166,9 @@ class SleepPhase(pl.LightningModule):
         self.galaxy_encoder = None
         if self.use_galaxy_encoder:
             # NOTE: We crop and center each padded tile before passing it on to the galaxy_encoder
-            # assume that crop_slen = 2*tile_slen (on each side)
-            # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per tile should work but there is no easy way to enforce this.
+            #       assume that crop_slen = 2*tile_slen (on each side)
+            # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per
+            #       tile should work but there is no easy way to enforce this.
             self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(
                 **cfg.model.galaxy_encoder.params
             )
@@ -375,7 +403,9 @@ class SleepPhase(pl.LightningModule):
 
         return opt
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):
+    def training_step(
+        self, batch, batch_idx, optimizer_idx=0
+    ):  # pylint: disable=unused-argument
         loss = 0.0
 
         if optimizer_idx == 0:  # image_encoder
@@ -388,7 +418,7 @@ class SleepPhase(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, batch, batch_indx):
+    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         (
             detection_loss,
             counter_loss,
@@ -425,7 +455,7 @@ class SleepPhase(pl.LightningModule):
         if self.plotting and self.current_epoch > 1:
             self.make_plots(outputs[-1], kind="validation")
 
-    def test_step(self, batch, batch_indx):
+    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         metrics = self.get_metrics(batch)
         self.log("acc_counts", metrics["counts_acc"])
         self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
@@ -615,7 +645,7 @@ class SleepPhase(pl.LightningModule):
                 title = f"Val Images {self.current_epoch}"
                 self.logger.experiment.add_figure(title, fig)
             elif kind == "testing":
-                self.logger.experiment.add_figure(f"Test Images", fig)
+                self.logger.experiment.add_figure("Test Images", fig)
             else:
                 raise NotImplementedError()
         plt.close(fig)
