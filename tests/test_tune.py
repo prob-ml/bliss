@@ -1,6 +1,6 @@
-from bliss import tune
 import pytest
 from hydra.experimental import initialize, compose
+from bliss import tune
 
 
 class TestTune:

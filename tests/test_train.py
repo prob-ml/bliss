@@ -1,5 +1,5 @@
-from bliss import train
 from hydra.experimental import initialize, compose
+from bliss import train
 
 
 def test_train_run(devices):
