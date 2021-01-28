@@ -26,6 +26,7 @@ def make_fc_net(insize, hs, outsize, act=nn.ReLU, final=None):
         layers += [final()]
     return nn.Sequential(*layers)
 
+
 def calc_pairwise_isright(uM, uR):
     """
     This returns a binary matrix that is one if uM_i < uR_i and zero otherwise
@@ -119,7 +120,6 @@ class RegressionFNP(pl.LightningModule):
         mu_nu_layers=[128],
         use_x_mu_nu=True,
         use_direction_mu_nu=False,
-        mu_nu_skip=False,
         output_layers=[128],
         x_as_u=False,
         condition_on_ref=False,
@@ -127,9 +127,6 @@ class RegressionFNP(pl.LightningModule):
         train_separate_extrapolate=False,
         discrete_orientation=True,
         weighted_graph=False,
-        y_encoder_resid=False,
-        mu_nu_resid=False,
-        output_resid=False,
     ):
         """
         :param dim_x: Dimensionality of the input
@@ -170,7 +167,6 @@ class RegressionFNP(pl.LightningModule):
         self.mu_nu_layers = mu_nu_layers
         self.use_x_mu_nu = use_x_mu_nu
         self.use_direction_mu_nu = use_direction_mu_nu
-        self.mu_nu_skip = mu_nu_skip
         self.output_layers = output_layers
         self.x_as_u = x_as_u
         self.condition_on_ref = condition_on_ref
@@ -254,24 +250,18 @@ class RegressionFNP(pl.LightningModule):
         if self.train_separate_extrapolate:
             mu_nu_in += 1
 
-        return make_fc_net(
-            mu_nu_in, self.mu_nu_layers, 2 * self.dim_z
-        )
+        return make_fc_net(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
 
     def make_mu_nu_proposal(self):
         mu_nu_in = self.dim_y_enc
         if self.use_x_mu_nu is True:
             # raise(NotImplementedError("use_x_mu_nu is not yet implemented")
             mu_nu_in += self.dim_x
-        return make_fc_net(
-            mu_nu_in, self.mu_nu_layers, 2 * self.dim_z
-        )
+        return make_fc_net(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
 
     def make_output(self):
         output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
-        return make_fc_net(
-            output_insize, self.output_layers, 2 * self.dim_y
-        )
+        return make_fc_net(output_insize, self.output_layers, 2 * self.dim_y)
 
     def sample_u(self, X_all, n_ref):
         # get U
@@ -560,16 +550,11 @@ class PoolingFNP(RegressionFNP):
         mu_nu_in = self.dim_y_enc + self.dim_u
         if self.train_separate_extrapolate:
             mu_nu_in += 1
-        if self.mu_nu_skip:
-            return make_fc_skip(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
-        else:
             return make_fc_net(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
 
     def make_pool_net(self):
         dim_in = self.mu_nu_theta[-1].out_features
-        return make_fc_net(
-            dim_in, self.pooling_layers, 2 * self.dim_z
-        )
+        return make_fc_net(dim_in, self.pooling_layers, 2 * self.dim_z)
 
     def make_settrans(self):
         dim_in = self.mu_nu_theta[-1].out_features
@@ -577,9 +562,7 @@ class PoolingFNP(RegressionFNP):
         settrans = nn.Sequential(
             *sabs,
             PMA(dim_in, 2, 1, squeeze_out=True),
-            make_fc_net(
-                dim_in, self.pooling_layers, 2 * self.dim_z
-            )
+            make_fc_net(dim_in, self.pooling_layers, 2 * self.dim_z)
         )
         return settrans
 
@@ -932,6 +915,7 @@ class UnFlatten(torch.nn.Module):
     def forward(self, x):
         # assert len(x.shape) == 2
         return x.view(*x.shape[0:-1], *self.shape)
+
 
 ## Set Transformer
 class MAB(nn.Module):
