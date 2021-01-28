@@ -300,8 +300,13 @@ class RegressionFNP(pl.LightningModule):
         # See equation 7
         self.q_z = nn.Linear(self.dim_h, 2 * self.dim_z)
         # for p(z|A, XR, yR)
-        self.trans_cond_y = self.make_trans_cond_y()
 
+        self.dim_y_enc = 2 * self.dim_z
+        self.trans_cond_y = MLP(
+            self.dim_y,
+            self.y_encoder_layers,
+            2 * self.dim_z,
+        )
         mu_nu_in = self.dim_y_enc
         if self.use_x_mu_nu is True:
             mu_nu_in += self.dim_x
@@ -318,7 +323,8 @@ class RegressionFNP(pl.LightningModule):
 
         self.mu_nu_proposal = self.make_mu_nu_proposal()
         # for p(y|z)
-        self.output = self.make_output()
+        output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
+        self.output = MLP(output_insize, self.output_layers, 2 * self.dim_y)
 
     def training_step(self, batch, batch_idx):
         yR = batch["YR"]
@@ -338,24 +344,12 @@ class RegressionFNP(pl.LightningModule):
         optimizer = Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-    def make_trans_cond_y(self):
-        self.dim_y_enc = 2 * self.dim_z
-        return MLP(
-            self.dim_y,
-            self.y_encoder_layers,
-            2 * self.dim_z,
-        )
-
     def make_mu_nu_proposal(self):
         mu_nu_in = self.dim_y_enc
         if self.use_x_mu_nu is True:
             # raise(NotImplementedError("use_x_mu_nu is not yet implemented")
             mu_nu_in += self.dim_x
         return MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
-
-    def make_output(self):
-        output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
-        return MLP(output_insize, self.output_layers, 2 * self.dim_y)
 
     def sample_u(self, X_all, n_ref):
         # get U
@@ -609,12 +603,6 @@ class ConvRegressionFNP(RegressionFNP):
         self.conv_channels = conv_channels
         super(ConvRegressionFNP, self).__init__(**kwargs)
 
-    def make_trans_cond_y(self):
-        # end_channels, self.dim_h_end, self.dim_w_end, self.pad_hs, self.pad_ws = calc_conv2d_layers_output_size(self.conv_layers, 1, self.kernel_size, self.stride, self.size_h, self.size_w)
-        # assert self.dim_h_end > 0
-        # assert self.dim_w_end > 0
-        # self.dim_y_enc = end_channels * self.dim_h_end * self.dim_w_end
-
         self.pad_hs = []
         self.pad_ws = []
 
@@ -643,17 +631,10 @@ class ConvRegressionFNP(RegressionFNP):
         self.dim_w_end = w_out
         y_encoder_array.append(Flatten())
         y_encoder_array.append(nn.Linear(self.dim_y_enc, self.dim_y_enc))
-        q = nn.Sequential(*y_encoder_array)
-        return q
+        self.trans_cond_y = nn.Sequential(*y_encoder_array)
+        self.mu_nu_proposal = self.make_mu_nu_proposal()
 
-    def calc_trans_cond_y(self, yR):
-        yR_encoded = self.trans_cond_y(
-            yR.view(yR.size(0) * yR.size(1), yR.size(2), yR.size(3), yR.size(4))
-        )
-        yR_encoded = yR_encoded.view(yR.size(0), yR.size(1), -1)
-        return yR_encoded
-
-    def make_output(self):
+        ## Make Convolutional Output
         output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
         fc_layers = MLP(output_insize, self.output_layers, self.dim_y_enc)
         output_array = [
@@ -682,7 +663,14 @@ class ConvRegressionFNP(RegressionFNP):
             ),
         ]
 
-        return nn.Sequential(*output_array)
+        self.output = nn.Sequential(*output_array)
+
+    def calc_trans_cond_y(self, yR):
+        yR_encoded = self.trans_cond_y(
+            yR.view(yR.size(0) * yR.size(1), yR.size(2), yR.size(3), yR.size(4))
+        )
+        yR_encoded = yR_encoded.view(yR.size(0), yR.size(1), -1)
+        return yR_encoded
 
     def calc_output_y(self, final_rep):
         output_y = self.output(
