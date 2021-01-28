@@ -327,7 +327,14 @@ class RegressionFNP(pl.LightningModule):
         # for p(z|A, XR, yR)
         self.trans_cond_y = self.make_trans_cond_y()
 
-        self.mu_nu_theta = self.make_mu_nu_theta()
+        mu_nu_in = self.dim_y_enc
+        if self.use_x_mu_nu is True:
+            mu_nu_in += self.dim_x
+        if self.use_direction_mu_nu:
+            mu_nu_in += 1
+
+        mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
+
         self.pooler = AveragePooler(
             dim_z,
             discrete_orientation,
@@ -335,7 +342,7 @@ class RegressionFNP(pl.LightningModule):
             use_x_mu_nu,
             weighted_graph,
             self.trans_cond_y,
-            self.mu_nu_theta,
+            mu_nu_theta,
         )
 
         self.mu_nu_proposal = self.make_mu_nu_proposal()
@@ -369,14 +376,7 @@ class RegressionFNP(pl.LightningModule):
         )
 
     def make_mu_nu_theta(self):
-        mu_nu_in = self.dim_y_enc
-        if self.use_x_mu_nu is True:
-            # raise(NotImplementedError("use_x_mu_nu is not yet implemented")
-            mu_nu_in += self.dim_x
-        if self.use_direction_mu_nu:
-            mu_nu_in += 1
 
-        return MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
 
     def make_mu_nu_proposal(self):
         mu_nu_in = self.dim_y_enc
