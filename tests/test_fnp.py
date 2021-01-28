@@ -155,7 +155,6 @@ class TestFNP:
             x_as_u=True,
             condition_on_ref=condition_on_ref,
             train_separate_proposal=train_separate_proposal,
-            train_separate_extrapolate=False,
             discrete_orientation=False,
             set_transformer=True,
         )

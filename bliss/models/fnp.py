@@ -104,7 +104,6 @@ class AveragePooler(nn.Module):
         discrete_orientation,
         use_direction_mu_nu,
         use_x_mu_nu,
-        train_separate_extrapolate,
         weighted_graph,
         calc_trans_cond_y,
         mu_nu_theta,
@@ -114,7 +113,6 @@ class AveragePooler(nn.Module):
         self.discrete_orientation = discrete_orientation
         self.use_direction_mu_nu = use_direction_mu_nu
         self.use_x_mu_nu = use_x_mu_nu
-        self.train_separate_extrapolate = train_separate_extrapolate
         self.weighted_graph = weighted_graph
         self.calc_trans_cond_y = calc_trans_cond_y
         self.mu_nu_theta = mu_nu_theta
@@ -152,20 +150,6 @@ class AveragePooler(nn.Module):
                 dim=3,
             )
 
-        if self.train_separate_extrapolate:
-            pGA = GA.unsqueeze(-1) * pairwise_differences
-            extrapolating = pGA.sum(1).abs() - pGA.abs().sum(1) == 0
-            mu_nu_in = torch.cat(
-                [
-                    mu_nu_in,
-                    extrapolating.float()
-                    .unsqueeze(1)
-                    .unsqueeze(0)
-                    .repeat(mu_nu_in.size(0), 1, mu_nu_in.size(2), 1),
-                ],
-                dim=3,
-            )
-
         pz_mean_R, pz_logscale_R = torch.split(
             self.mu_nu_theta(mu_nu_in), self.dim_z, -1
         )
@@ -191,7 +175,6 @@ class SetPooler(nn.Module):
     def __init__(
         self,
         dim_z,
-        train_separate_extrapolate,
         calc_trans_cond_y,
         mu_nu_theta,
         set_transformer,
@@ -200,7 +183,6 @@ class SetPooler(nn.Module):
     ):
         super().__init__()
         self.dim_z = dim_z
-        self.train_separate_extrapolate = train_separate_extrapolate
         self.calc_trans_cond_y = calc_trans_cond_y
         self.mu_nu_theta = mu_nu_theta
         self.set_transformer = set_transformer
@@ -223,20 +205,6 @@ class SetPooler(nn.Module):
             ],
             dim=-1,
         )
-
-        if self.train_separate_extrapolate:
-            pGA = GA.unsqueeze(-1) * u_diff
-            extrapolating = pGA.sum(1).abs() - pGA.abs().sum(1) == 0
-            mu_nu_in = torch.cat(
-                [
-                    mu_nu_in,
-                    extrapolating.float()
-                    .unsqueeze(1)
-                    .unsqueeze(0)
-                    .repeat(mu_nu_in.size(0), 1, mu_nu_in.size(2), 1),
-                ],
-                dim=3,
-            )
 
         rep_R = self.mu_nu_theta(mu_nu_in)
         if not self.set_transformer:
@@ -279,7 +247,6 @@ class RegressionFNP(pl.LightningModule):
         x_as_u=False,
         condition_on_ref=False,
         train_separate_proposal=True,
-        train_separate_extrapolate=False,
         discrete_orientation=True,
         weighted_graph=False,
     ):
@@ -326,7 +293,6 @@ class RegressionFNP(pl.LightningModule):
         self.x_as_u = x_as_u
         self.condition_on_ref = condition_on_ref
         self.train_separate_proposal = train_separate_proposal
-        self.train_separate_extrapolate = train_separate_extrapolate
         self.discrete_orientation = discrete_orientation
         self.weighted_graph = weighted_graph
 
@@ -362,7 +328,6 @@ class RegressionFNP(pl.LightningModule):
             discrete_orientation,
             use_direction_mu_nu,
             use_x_mu_nu,
-            train_separate_extrapolate,
             weighted_graph,
             self.trans_cond_y,
             self.mu_nu_theta,
@@ -407,9 +372,6 @@ class RegressionFNP(pl.LightningModule):
             # raise(NotImplementedError("use_x_mu_nu is not yet implemented")
             mu_nu_in += self.dim_x
         if self.use_direction_mu_nu:
-            mu_nu_in += 1
-
-        if self.train_separate_extrapolate:
             mu_nu_in += 1
 
         return make_fc_net(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
@@ -631,7 +593,6 @@ class PoolingFNP(RegressionFNP):
         pooling_rep_size=32,
         set_transformer=False,
         st_numheads=[2, 2],
-        train_separate_extrapolate=False,
         **kwargs
     ):
         self.pooling_layers = pooling_layers
@@ -649,7 +610,6 @@ class PoolingFNP(RegressionFNP):
 
         self.pooler = SetPooler(
             self.dim_z,
-            train_separate_extrapolate,
             self.calc_trans_cond_y,
             self.mu_nu_theta,
             self.set_transformer,
@@ -659,8 +619,6 @@ class PoolingFNP(RegressionFNP):
 
     def make_mu_nu_theta(self):
         mu_nu_in = self.dim_y_enc + self.dim_u
-        if self.train_separate_extrapolate:
-            mu_nu_in += 1
         return make_fc_net(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
 
     def make_pool_net(self):
