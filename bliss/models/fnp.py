@@ -112,7 +112,6 @@ class AveragePooler(nn.Module):
         use_direction_mu_nu,
         use_x_mu_nu,
         weighted_graph,
-        calc_trans_cond_y,
         mu_nu_theta,
     ):
         super().__init__()
@@ -121,14 +120,12 @@ class AveragePooler(nn.Module):
         self.use_direction_mu_nu = use_direction_mu_nu
         self.use_x_mu_nu = use_x_mu_nu
         self.weighted_graph = weighted_graph
-        self.calc_trans_cond_y = calc_trans_cond_y
         self.mu_nu_theta = mu_nu_theta
 
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
-    def calc_pz_dist(self, u, uR, GA, XR, yR, minscale=1e-8):
-        yR_encoded = self.calc_trans_cond_y(yR)
+    def calc_pz_dist(self, u, uR, GA, XR, yR_encoded, minscale=1e-8):
 
         if self.discrete_orientation:
             pairwise_differences = calc_pairwise_isright(u, uR).float().unsqueeze(-1)
@@ -185,7 +182,6 @@ class SetPooler(nn.Module):
         dim_y_enc,
         pooling_rep_size,
         dim_z,
-        calc_trans_cond_y,
         mu_nu_layers,
         pooling_layers,
         set_transformer,
@@ -196,7 +192,6 @@ class SetPooler(nn.Module):
         self.dim_y_enc = dim_y_enc
         self.pooling_rep_size = pooling_rep_size
         self.dim_z = dim_z
-        self.calc_trans_cond_y = calc_trans_cond_y
         self.mu_nu_layers = mu_nu_layers
         self.pooling_layers = pooling_layers
         self.set_transformer = set_transformer
@@ -223,8 +218,7 @@ class SetPooler(nn.Module):
                 MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
             )
 
-    def calc_pz_dist(self, u, uR, GA, XR, yR, minscale=1e-8):
-        yR_encoded = self.calc_trans_cond_y(yR)
+    def calc_pz_dist(self, u, uR, GA, XR, yR_encoded, minscale=1e-8):
         # yR_enc_with_uR = torch.cat([yR_encoded, uR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)], dim=-1)
 
         u_diff = u.unsqueeze(1) - uR.unsqueeze(0)
@@ -364,7 +358,6 @@ class RegressionFNP(pl.LightningModule):
             use_direction_mu_nu,
             use_x_mu_nu,
             weighted_graph,
-            self.trans_cond_y,
             mu_nu_theta,
         )
 
@@ -518,7 +511,8 @@ class RegressionFNP(pl.LightningModule):
         # pdb.set_trace()
         assert torch.isnan(GA).sum() == 0
 
-        pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(u, uR, GA, XR, yR)
+        yR_encoded                   = self.calc_trans_cond_y(yR)
+        pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(u, uR, GA, XR, yR_encoded)
         qz_mean_all, qz_logscale_all = self.calc_qz_dist(X_all, y_all)
 
         assert torch.isnan(pz_mean_all).sum() == 0
@@ -618,7 +612,6 @@ class PoolingFNP(RegressionFNP):
             self.dim_y_enc,
             self.pooling_rep_size,
             self.dim_z,
-            self.calc_trans_cond_y,
             self.mu_nu_layers,
             self.pooling_layers,
             self.set_transformer,
