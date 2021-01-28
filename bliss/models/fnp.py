@@ -525,7 +525,9 @@ class RegressionFNP(pl.LightningModule):
         else:
             A = A_in
 
-        pz_mean_all, pz_logscale_all = self.calc_pz_dist(uM, uR, A, XR, yR)
+        yR_encoded = self.calc_trans_cond_y(yR)
+        rep_R = self.rep_encoder(uM, uR, XR, yR_encoded)
+        pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(rep_R, A)
 
         pz = Normal(pz_mean_all, pz_logscale_all)
         if sample_Z:
