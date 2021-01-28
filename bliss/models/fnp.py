@@ -550,7 +550,7 @@ class PoolingFNP(RegressionFNP):
         mu_nu_in = self.dim_y_enc + self.dim_u
         if self.train_separate_extrapolate:
             mu_nu_in += 1
-            return make_fc_net(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
+        return make_fc_net(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
 
     def make_pool_net(self):
         dim_in = self.mu_nu_theta[-1].out_features
