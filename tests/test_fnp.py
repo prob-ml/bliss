@@ -8,7 +8,7 @@ from torch.optim import Adam
 
 
 class TestFNP:
-    def test_fnp(self, paths):
+    def test_fnp_onedim(self, paths):
         # One dimensional example
         od = fnp.OneDimDataset()
 
@@ -83,6 +83,7 @@ class TestFNP:
             # Smoke test for prediction
             pred = model.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
 
+    def test_fnp_rotate(self, paths):
         ## Rotating star
 
         if torch.get_num_threads() > 8:
