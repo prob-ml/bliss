@@ -108,31 +108,15 @@ class AveragePooler(nn.Module):
     def __init__(
         self,
         dim_z,
-        use_x_mu_nu,
-        mu_nu_theta,
     ):
         super().__init__()
         self.dim_z = dim_z
-        self.use_x_mu_nu = use_x_mu_nu
-        self.mu_nu_theta = mu_nu_theta
 
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
-    def calc_pz_dist(self, u, uR, GA, XR, yR_encoded, minscale=1e-8):
-
-
-        if not self.use_x_mu_nu:
-            mu_nu_in = yR_encoded
-        else:
-            mu_nu_in = torch.cat(
-                [yR_encoded, XR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)],
-                dim=-1,
-            )
-
-        pz_mean_R, pz_logscale_R = torch.split(
-            self.mu_nu_theta(mu_nu_in), self.dim_z, -1
-        )
+    def calc_pz_dist(self, rep_R, GA, minscale=1e-8):
+        pz_mean_R, pz_logscale_R = torch.split(rep_R, self.dim_z, -1)
 
         W = self.norm_graph(GA)
 
@@ -147,21 +131,15 @@ class AveragePooler(nn.Module):
 class SetPooler(nn.Module):
     def __init__(
         self,
-        dim_u,
-        dim_y_enc,
-        pooling_rep_size,
+        dim_rep_R,
         dim_z,
-        mu_nu_layers,
         pooling_layers,
         set_transformer,
         st_numheads,
     ):
         super().__init__()
-        self.dim_u = dim_u
-        self.dim_y_enc = dim_y_enc
-        self.pooling_rep_size = pooling_rep_size
+        self.dim_rep_R = dim_rep_R
         self.dim_z = dim_z
-        self.mu_nu_layers = mu_nu_layers
         self.pooling_layers = pooling_layers
         self.set_transformer = set_transformer
         self.st_numheads = st_numheads
@@ -169,17 +147,12 @@ class SetPooler(nn.Module):
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
-        mu_nu_in = self.dim_y_enc + self.dim_u
-        self.mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
-
         if not self.set_transformer:
-            self.pool_net = MLP(
-                self.mu_nu_theta.out_features, self.pooling_layers, 2 * self.dim_z
-            )
+            self.pool_net = MLP(self.dim_rep_R, self.pooling_layers, 2 * self.dim_z)
             self.settrans = None
         else:
             self.pool_net = None
-            dim_in = self.mu_nu_theta.out_features
+            dim_in = self.dim_rep_R
             sabs = [SAB(dim_in, dim_in, nh) for nh in self.st_numheads]
             self.settrans = nn.Sequential(
                 *sabs,
@@ -187,20 +160,9 @@ class SetPooler(nn.Module):
                 MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
             )
 
-    def calc_pz_dist(self, u, uR, GA, XR, yR_encoded, minscale=1e-8):
+    def calc_pz_dist(self, rep_R, GA, minscale=1e-8):
         # yR_enc_with_uR = torch.cat([yR_encoded, uR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)], dim=-1)
 
-        u_diff = u.unsqueeze(1) - uR.unsqueeze(0)
-        mu_nu_in = torch.cat(
-            [
-                # yR_enc_with_uR.unsqueeze(1).repeat(1, u.size(0), 1, 1),
-                yR_encoded.unsqueeze(1).repeat(1, u_diff.size(0), 1, 1),
-                u_diff.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1, 1),
-            ],
-            dim=-1,
-        )
-
-        rep_R = self.mu_nu_theta(mu_nu_in)
         if not self.set_transformer:
             rep_pooled = GA.unsqueeze(0).unsqueeze(-1).mul(rep_R).sum(2)
             pz_all = self.pool_net(rep_pooled)
@@ -212,6 +174,31 @@ class SetPooler(nn.Module):
             minscale + (1 - minscale) * F.softplus(pz_logscale_all)
         )
         return pz_mean_all, pz_logscale_all
+
+
+class RepEncoder(nn.Module):
+    def __init__(self, mu_nu_theta, use_u_diff=False, use_x=False):
+        super().__init__()
+        self.mu_nu_theta = mu_nu_theta
+        self.use_u_diff = use_u_diff
+        self.use_x = use_x
+
+    def forward(self, u, uR, XR, yR_encoded):
+        input_list = [yR_encoded]
+        if self.use_x:
+            input_list.append(XR.unsqueeze(0).repeat(input_list[0].size(0), 1, 1))
+
+        ## If we look at differences in U values, we need to increase the dimension
+        ## (each representative member looks different to each dependent member)
+        if self.use_u_diff:
+            u_diff = u.unsqueeze(1) - uR.unsqueeze(0)
+            for i, x in enumerate(input_list):
+                input_list[i] = x.unsqueeze(1).repeat(1, u_diff.size(0), 1, 1)
+            input_list.append(u_diff.unsqueeze(0).repeat(x.size(0), 1, 1, 1))
+
+        mu_nu_in = torch.cat(input_list, -1)
+        rep_R = self.mu_nu_theta(mu_nu_in)
+        return rep_R
 
 
 class RegressionFNP(pl.LightningModule):
@@ -321,12 +308,10 @@ class RegressionFNP(pl.LightningModule):
         if self.use_direction_mu_nu:
             mu_nu_in += 1
         mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
-
+        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=False, use_x=use_x_mu_nu)
         if pooler is None:
             self.pooler = AveragePooler(
                 dim_z,
-                use_x_mu_nu,
-                mu_nu_theta,
             )
         else:
             self.pooler = pooler
@@ -481,8 +466,9 @@ class RegressionFNP(pl.LightningModule):
         # pdb.set_trace()
         assert torch.isnan(GA).sum() == 0
 
-        yR_encoded                   = self.calc_trans_cond_y(yR)
-        pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(u, uR, GA, XR, yR_encoded)
+        yR_encoded = self.calc_trans_cond_y(yR)
+        rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
+        pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(rep_R, GA)
         qz_mean_all, qz_logscale_all = self.calc_qz_dist(X_all, y_all)
 
         assert torch.isnan(pz_mean_all).sum() == 0
@@ -576,13 +562,13 @@ class PoolingFNP(RegressionFNP):
         self.set_transformer = set_transformer
         self.st_numheads = st_numheads
         super().__init__(**kwargs)
+        mu_nu_in = self.dim_y_enc + self.dim_u
+        mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
+        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
 
         self.pooler = SetPooler(
-            self.dim_u,
-            self.dim_y_enc,
-            self.pooling_rep_size,
+            mu_nu_theta.out_features,
             self.dim_z,
-            self.mu_nu_layers,
             self.pooling_layers,
             self.set_transformer,
             self.st_numheads,
