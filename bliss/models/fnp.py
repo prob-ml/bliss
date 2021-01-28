@@ -17,14 +17,21 @@ from torch.optim import Adam
 from sklearn.preprocessing import StandardScaler
 
 
-def make_fc_net(insize, hs, outsize, act=nn.ReLU, final=None):
-    layers = [nn.Sequential(nn.Linear(insize, hs[0]), act())]
-    for i in range(len(hs) - 1):
-        layers.append(nn.Sequential(nn.Linear(hs[i], hs[i + 1]), act()))
-    layers.append(nn.Linear(hs[-1], outsize))
-    if final is not None:
-        layers += [final()]
-    return nn.Sequential(*layers)
+class MLP(nn.Module):
+    def __init__(self, in_features, hs, out_features, act=nn.ReLU, final=None):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        layers = [nn.Sequential(nn.Linear(in_features, hs[0]), act())]
+        for i in range(len(hs) - 1):
+            layers.append(nn.Sequential(nn.Linear(hs[i], hs[i + 1]), act()))
+        layers.append(nn.Linear(hs[-1], out_features))
+        if final is not None:
+            layers += [final()]
+        self.f = nn.Sequential(*layers)
+
+    def forward(self, X):
+        return self.f(X)
 
 
 def calc_pairwise_isright(uM, uR):
@@ -360,7 +367,7 @@ class RegressionFNP(pl.LightningModule):
 
     def make_trans_cond_y(self):
         self.dim_y_enc = 2 * self.dim_z
-        return make_fc_net(
+        return MLP(
             self.dim_y,
             self.y_encoder_layers,
             2 * self.dim_z,
@@ -374,18 +381,18 @@ class RegressionFNP(pl.LightningModule):
         if self.use_direction_mu_nu:
             mu_nu_in += 1
 
-        return make_fc_net(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
+        return MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
 
     def make_mu_nu_proposal(self):
         mu_nu_in = self.dim_y_enc
         if self.use_x_mu_nu is True:
             # raise(NotImplementedError("use_x_mu_nu is not yet implemented")
             mu_nu_in += self.dim_x
-        return make_fc_net(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
+        return MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
 
     def make_output(self):
         output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
-        return make_fc_net(output_insize, self.output_layers, 2 * self.dim_y)
+        return MLP(output_insize, self.output_layers, 2 * self.dim_y)
 
     def sample_u(self, X_all, n_ref):
         # get U
@@ -619,19 +626,19 @@ class PoolingFNP(RegressionFNP):
 
     def make_mu_nu_theta(self):
         mu_nu_in = self.dim_y_enc + self.dim_u
-        return make_fc_net(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
+        return MLP(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
 
     def make_pool_net(self):
-        dim_in = self.mu_nu_theta[-1].out_features
-        return make_fc_net(dim_in, self.pooling_layers, 2 * self.dim_z)
+        dim_in = self.mu_nu_theta.out_features
+        return MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
 
     def make_settrans(self):
-        dim_in = self.mu_nu_theta[-1].out_features
+        dim_in = self.mu_nu_theta.out_features
         sabs = [SAB(dim_in, dim_in, nh) for nh in self.st_numheads]
         settrans = nn.Sequential(
             *sabs,
             PMA(dim_in, 2, 1, squeeze_out=True),
-            make_fc_net(dim_in, self.pooling_layers, 2 * self.dim_z)
+            MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
         )
         return settrans
 
@@ -713,11 +720,10 @@ class ConvRegressionFNP(RegressionFNP):
         return yR_encoded
 
     def make_output(self):
-        fc_layers = super(ConvRegressionFNP, self).make_output()[:-1]
-
+        output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
+        fc_layers = MLP(output_insize, self.output_layers, self.dim_y_enc)
         output_array = [
             fc_layers,
-            nn.Linear(fc_layers[-1][0].out_features, self.dim_y_enc),
             UnFlatten([self.conv_channels[-1], self.dim_h_end, self.dim_w_end]),
         ]
 
