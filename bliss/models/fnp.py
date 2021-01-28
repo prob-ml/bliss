@@ -677,47 +677,6 @@ class PoolingFNP(RegressionFNP):
         )
         return settrans
 
-    def calc_pz_dist(self, u, uR, GA, XR, yR, minscale=1e-8):
-        yR_encoded = self.calc_trans_cond_y(yR)
-        # yR_enc_with_uR = torch.cat([yR_encoded, uR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)], dim=-1)
-
-        u_diff = u.unsqueeze(1) - uR.unsqueeze(0)
-        mu_nu_in = torch.cat(
-            [
-                # yR_enc_with_uR.unsqueeze(1).repeat(1, u.size(0), 1, 1),
-                yR_encoded.unsqueeze(1).repeat(1, u_diff.size(0), 1, 1),
-                u_diff.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1, 1),
-            ],
-            dim=-1,
-        )
-
-        if self.train_separate_extrapolate:
-            pGA = GA.unsqueeze(-1) * u_diff
-            extrapolating = pGA.sum(1).abs() - pGA.abs().sum(1) == 0
-            mu_nu_in = torch.cat(
-                [
-                    mu_nu_in,
-                    extrapolating.float()
-                    .unsqueeze(1)
-                    .unsqueeze(0)
-                    .repeat(mu_nu_in.size(0), 1, mu_nu_in.size(2), 1),
-                ],
-                dim=3,
-            )
-
-        rep_R = self.mu_nu_theta(mu_nu_in)
-        if not self.set_transformer:
-            rep_pooled = GA.unsqueeze(0).unsqueeze(-1).mul(rep_R).sum(2)
-            pz_all = self.pool_net(rep_pooled)
-        else:
-            pz_all = self.settrans(GA.unsqueeze(0).unsqueeze(-1).mul(rep_R))
-
-        pz_mean_all, pz_logscale_all = torch.split(pz_all, self.dim_z, -1)
-        pz_logscale_all = torch.log(
-            minscale + (1 - minscale) * F.softplus(pz_logscale_all)
-        )
-        return pz_mean_all, pz_logscale_all
-
 
 def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
     _, _, h_in, w_in = dummy_input.size()
