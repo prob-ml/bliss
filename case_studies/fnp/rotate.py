@@ -211,7 +211,6 @@ if __name__ == "__main__":
         output_layers=[32, 64, 128],
         x_as_u=True,
         condition_on_ref=condition_on_ref,
-        train_separate_extrapolate=False,
         discrete_orientation=False,
         set_transformer=True,
     )
