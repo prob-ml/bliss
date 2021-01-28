@@ -181,7 +181,7 @@ class CatsimRenderer:
             if self.verbose:
                 print("Source not visible")
             # pass it on with a warning.
-            raise descwl.render.SourceNotVisible  from CatsimRenderer
+            raise descwl.render.SourceNotVisible from CatsimRenderer
 
         image_temp = galsim.Image(self.slen, self.slen)
         image_temp += single_obs.image

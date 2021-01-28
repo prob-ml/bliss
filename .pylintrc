@@ -54,3 +54,4 @@ disable=too-many-ancestors,
 
 # Minimum lines number of a similarity to report duplicate-code
 min-similarity-lines=11
+
