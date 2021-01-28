@@ -127,48 +127,23 @@ class AveragePooler(nn.Module):
 
     def calc_pz_dist(self, u, uR, GA, XR, yR_encoded, minscale=1e-8):
 
-        if self.discrete_orientation:
-            pairwise_differences = calc_pairwise_isright(u, uR).float().unsqueeze(-1)
-        else:
-            pairwise_differences = u.unsqueeze(1) - uR.unsqueeze(0)
-        pairwise_distances = calc_pairwise_dist2(u, uR)
 
-        if not self.use_direction_mu_nu:
-            if not self.use_x_mu_nu:
-                mu_nu_in = yR_encoded
-            else:
-                mu_nu_in = torch.cat(
-                    [yR_encoded, XR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)],
-                    dim=-1,
-                )
+        if not self.use_x_mu_nu:
+            mu_nu_in = yR_encoded
         else:
             mu_nu_in = torch.cat(
-                [
-                    yR_encoded.unsqueeze(1).repeat(
-                        1, pairwise_differences.size(0), 1, 1
-                    ),
-                    pairwise_differences.unsqueeze(0).repeat(
-                        yR_encoded.size(0), 1, 1, 1
-                    ),
-                ],
-                dim=3,
+                [yR_encoded, XR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)],
+                dim=-1,
             )
 
         pz_mean_R, pz_logscale_R = torch.split(
             self.mu_nu_theta(mu_nu_in), self.dim_z, -1
         )
 
-        if self.weighted_graph:
-            W = norm_graph_weighted(GA, pairwise_distances.add(1e-8).reciprocal())
-        else:
-            W = self.norm_graph(GA)
+        W = self.norm_graph(GA)
 
-        if not self.use_direction_mu_nu:
-            pz_mean_all = torch.matmul(W, pz_mean_R)
-            pz_logscale_all = torch.matmul(W, pz_logscale_R)
-        else:
-            pz_mean_all = W.unsqueeze(0).unsqueeze(3).mul(pz_mean_R).sum(2)
-            pz_logscale_all = W.unsqueeze(0).unsqueeze(3).mul(pz_logscale_R).sum(2)
+        pz_mean_all = torch.matmul(W, pz_mean_R)
+        pz_logscale_all = torch.matmul(W, pz_logscale_R)
         pz_logscale_all = torch.log(
             minscale + (1 - minscale) * F.softplus(pz_logscale_all)
         )
@@ -273,6 +248,7 @@ class RegressionFNP(pl.LightningModule):
         condition_on_ref=False,
         discrete_orientation=True,
         weighted_graph=False,
+        pooler=None,
     ):
         """
         :param dim_x: Dimensionality of the input
@@ -352,14 +328,14 @@ class RegressionFNP(pl.LightningModule):
             mu_nu_in += 1
         mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
 
-        self.pooler = AveragePooler(
-            dim_z,
-            discrete_orientation,
-            use_direction_mu_nu,
-            use_x_mu_nu,
-            weighted_graph,
-            mu_nu_theta,
-        )
+        if pooler is None:
+            self.pooler = AveragePooler(
+                dim_z,
+                use_x_mu_nu,
+                mu_nu_theta,
+            )
+        else:
+            self.pooler = pooler
 
         self.mu_nu_proposal = self.make_mu_nu_proposal()
         # for p(y|z)
