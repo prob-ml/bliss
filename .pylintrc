@@ -9,22 +9,38 @@ generated-members=numpy.*,torch.*
 # it's not really a problem and there isn't really anything we could do
 # about it anyway
 disable=too-many-ancestors,
+
 	# We get these arguments-differ warnings when we override
 	# PyTorch Lightnings dataload methods because we have fewer
 	# arguments, but if we include all the arguments, we'd
 	# get unused variable warnings instead
 	arguments-differ,
+
 	# these not-callable warnings come from an issue with pytorch
 	# that may be resolved in pytorch version 1.7.2
 	not-callable,
+
 	# we often don't want to override lightning's abstract methods
 	abstract-method,
+
 	# we have too a lot of short variable names, and fixing them doesn't
 	# seem urgent
 	invalid-name,
+
 	# we don't have comprehensive documentation yet, let's suppress
 	# these warnings until that's something we're focused on
 	missing-function-docstring,
 	missing-module-docstring,
 	missing-class-docstring,
 
+	# we should fix the "too-many" warnings below
+	too-many-arguments,
+	too-many-locals,
+	too-many-instance-attributes,
+
+	# we should remove fixme comments
+	fixme,
+
+	# to be fixed soon
+	import-outside-toplevel,
+	import-error,

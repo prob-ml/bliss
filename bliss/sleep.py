@@ -1,8 +1,8 @@
 """Summary for sleep.py
 
-This module contains SleepPhase class, which implements the sleep-phase traning using 
-pytorch-lightning framework. Users should use this class to construct the sleep-phase 
-model.  
+This module contains SleepPhase class, which implements the sleep-phase traning using
+pytorch-lightning framework. Users should use this class to construct the sleep-phase
+model.
 
 """
 
@@ -534,6 +534,7 @@ class SleepPhase(pl.LightningModule):
             "norm_pp_mae": norm_pp_mae,
         }
 
+    # pylint: disable=too-many-statements
     def make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
         # 'batch' is a batch from simulated dataset (all params are tiled)
