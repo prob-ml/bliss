@@ -332,7 +332,6 @@ class RegressionFNP(pl.LightningModule):
             mu_nu_in += self.dim_x
         if self.use_direction_mu_nu:
             mu_nu_in += 1
-
         mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
 
         self.pooler = AveragePooler(
@@ -374,9 +373,6 @@ class RegressionFNP(pl.LightningModule):
             self.y_encoder_layers,
             2 * self.dim_z,
         )
-
-    def make_mu_nu_theta(self):
-
 
     def make_mu_nu_proposal(self):
         mu_nu_in = self.dim_y_enc
@@ -593,39 +589,32 @@ class PoolingFNP(RegressionFNP):
         self.st_numheads = st_numheads
         super().__init__(**kwargs)
 
+        mu_nu_in = self.dim_y_enc + self.dim_u
+        mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
+
         if not self.set_transformer:
-            self.pool_net = self.make_pool_net()
+            self.pool_net = MLP(
+                mu_nu_theta.out_features, self.pooling_layers, 2 * self.dim_z
+            )
             self.settrans = None
         else:
             self.pool_net = None
-            self.settrans = self.make_settrans()
-
+            dim_in = mu_nu_theta.out_features
+            sabs = [SAB(dim_in, dim_in, nh) for nh in self.st_numheads]
+            self.settrans = nn.Sequential(
+                *sabs,
+                PMA(dim_in, 2, 1, squeeze_out=True),
+                MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
+            )
         self.pooler = SetPooler(
             self.dim_z,
             self.calc_trans_cond_y,
-            self.mu_nu_theta,
+            mu_nu_theta,
             self.set_transformer,
             self.pool_net,
             self.settrans,
         )
 
-    def make_mu_nu_theta(self):
-        mu_nu_in = self.dim_y_enc + self.dim_u
-        return MLP(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
-
-    def make_pool_net(self):
-        dim_in = self.mu_nu_theta.out_features
-        return MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
-
-    def make_settrans(self):
-        dim_in = self.mu_nu_theta.out_features
-        sabs = [SAB(dim_in, dim_in, nh) for nh in self.st_numheads]
-        settrans = nn.Sequential(
-            *sabs,
-            PMA(dim_in, 2, 1, squeeze_out=True),
-            MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
-        )
-        return settrans
 
 
 def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
