@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bayesian Light Source Separator (BLISS) &#8212; bliss  documentation</title>
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Bliss API" href="api/index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="bayesian-light-source-separator-bliss">
+<h1>Bayesian Light Source Separator (BLISS)<a class="headerlink" href="#bayesian-light-source-separator-bliss" title="Permalink to this headline">¶</a></h1>
+<p>BLISS is a Bayesian procedure for deblending light sources. BLISS provides:</p>
+<ul class="simple">
+<li><p><strong>Accurate estimation</strong> of parameters in blended field.</p></li>
+<li><p><strong>Calibrated uncertainties</strong> through fitting an approximate Bayesian posterior.</p></li>
+<li><p><strong>Scalability</strong> of Bayesian inference to entire astronomical surveys.</p></li>
+</ul>
+<p>BLISS uses state-of-the-art methods in variational inference including:</p>
+<ul class="simple">
+<li><p><strong>Amortized inference</strong>, in which a neural network maps telescope images to an approximate Bayesian posterior on parameters of interest.</p></li>
+<li><p><strong>Variational auto-encoders</strong> (VAEs) to fit a flexible model for galaxy morphology.</p></li>
+<li><p><strong>Wake-sleep algorithm</strong> to jointly fit the approximate posterior and model parameters such as the PSF and the galaxy VAE.</p></li>
+</ul>
+<div class="section" id="latest-updates">
+<h2>Latest updates<a class="headerlink" href="#latest-updates" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="galaxies">
+<h3>Galaxies<a class="headerlink" href="#galaxies" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>BLISS now includes a galaxy model based on a Variational AutoEncoder that was trained on CATSIM bulge+disk galaxies.</p></li>
+<li><p>We are working on testing galaxy detection functionality and developing galaxy shape measurement.</p></li>
+</ul>
+</div>
+<div class="section" id="stars">
+<h3>Stars<a class="headerlink" href="#stars" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>BLISS already includes the StarNet functionality from its predecessor repo: [DeblendingStarFields](<a class="reference external" href="https://github.com/Runjing-Liu120/DeblendingStarfields">https://github.com/Runjing-Liu120/DeblendingStarfields</a>).</p></li>
+</ul>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">Bliss API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/bliss.html">bliss package</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html#indices-and-tables">Indices and tables</a></li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="#">bliss</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">Bliss API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html#indices-and-tables">Indices and tables</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+      <li>Next: <a href="api/index.html" title="next chapter">Bliss API</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Probabilistic Machine Learning Research Group.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

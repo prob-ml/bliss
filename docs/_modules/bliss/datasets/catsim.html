@@ -1,0 +1,437 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bliss.datasets.catsim &#8212; bliss  documentation</title>
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for bliss.datasets.catsim</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
+<span class="kn">import</span> <span class="nn">pytorch_lightning</span> <span class="k">as</span> <span class="nn">pl</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">DataLoader</span><span class="p">,</span> <span class="n">RandomSampler</span><span class="p">,</span> <span class="n">SubsetRandomSampler</span>
+<span class="kn">from</span> <span class="nn">omegaconf</span> <span class="kn">import</span> <span class="n">DictConfig</span>
+
+
+<span class="n">n_bands_dict</span> <span class="o">=</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;i&quot;</span><span class="p">,),</span> <span class="mi">6</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">,</span> <span class="s2">&quot;u&quot;</span><span class="p">)}</span>
+
+
+<span class="k">def</span> <span class="nf">filter_bounds</span><span class="p">(</span><span class="n">cat</span><span class="p">,</span> <span class="n">param</span><span class="p">,</span> <span class="n">min_val</span><span class="o">=-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">max_val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">cat</span><span class="p">[(</span><span class="n">cat</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">min_val</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">cat</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">max_val</span><span class="p">)]</span>
+
+
+<span class="k">class</span> <span class="nc">SurveyObs</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">renderer</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Returns a list of :class:`Survey` objects, each of them has an image attribute which is</span>
+<span class="sd">        where images are written to by iso_render_engine.render_galaxy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">descwl</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixel_scale</span> <span class="o">=</span> <span class="n">renderer</span><span class="o">.</span><span class="n">pixel_scale</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">renderer</span><span class="o">.</span><span class="n">dtype</span>
+
+        <span class="n">obs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">renderer</span><span class="o">.</span><span class="n">bands</span><span class="p">:</span>
+            <span class="c1"># dictionary of default values.</span>
+            <span class="n">survey_dict</span> <span class="o">=</span> <span class="n">descwl</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">Survey</span><span class="o">.</span><span class="n">get_defaults</span><span class="p">(</span>
+                <span class="n">survey_name</span><span class="o">=</span><span class="n">renderer</span><span class="o">.</span><span class="n">survey_name</span><span class="p">,</span> <span class="n">filter_band</span><span class="o">=</span><span class="n">band</span>
+            <span class="p">)</span>
+
+            <span class="k">assert</span> <span class="p">(</span>
+                <span class="n">renderer</span><span class="o">.</span><span class="n">pixel_scale</span> <span class="o">==</span> <span class="n">survey_dict</span><span class="p">[</span><span class="s2">&quot;pixel_scale&quot;</span><span class="p">]</span>
+            <span class="p">),</span> <span class="s2">&quot;Pixel scale does not match particular band?&quot;</span>
+            <span class="n">survey_dict</span><span class="p">[</span><span class="s2">&quot;image_width&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">renderer</span><span class="o">.</span><span class="n">slen</span>  <span class="c1"># pixels</span>
+            <span class="n">survey_dict</span><span class="p">[</span><span class="s2">&quot;image_height&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">renderer</span><span class="o">.</span><span class="n">slen</span>
+
+            <span class="n">descwl_survey</span> <span class="o">=</span> <span class="n">descwl</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">Survey</span><span class="p">(</span>
+                <span class="n">no_analysis</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">survey_name</span><span class="o">=</span><span class="n">renderer</span><span class="o">.</span><span class="n">survey_name</span><span class="p">,</span>
+                <span class="n">filter_band</span><span class="o">=</span><span class="n">band</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">survey_dict</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">obs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">descwl_survey</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs</span> <span class="o">=</span> <span class="n">obs</span>
+
+    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs</span>
+
+    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">galsim</span>
+
+        <span class="k">for</span> <span class="n">single_obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs</span><span class="p">:</span>
+            <span class="n">single_obs</span><span class="o">.</span><span class="n">image</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span>
+                <span class="n">bounds</span><span class="o">=</span><span class="n">single_obs</span><span class="o">.</span><span class="n">image_bounds</span><span class="p">,</span>
+                <span class="n">scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel_scale</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">CatsimRenderer</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">survey_name</span><span class="o">=</span><span class="s2">&quot;LSST&quot;</span><span class="p">,</span>
+        <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">slen</span><span class="o">=</span><span class="mi">41</span><span class="p">,</span>
+        <span class="n">snr</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+        <span class="n">min_snr</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">truncate_radius</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+        <span class="n">add_noise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">preserve_flux</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">deviate_center</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Can draw a single entry in CATSIM in the given bands.</span>
+
+<span class="sd">        NOTE: Background is constant given the band, survey_name, image size, and default</span>
+<span class="sd">        survey_dict, so it can be obtained in advance only once.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># ToDo: Create a test/assertion to check that mean == variance approx.</span>
+        <span class="k">assert</span> <span class="n">survey_name</span> <span class="o">==</span> <span class="s2">&quot;LSST&quot;</span><span class="p">,</span> <span class="s2">&quot;Only using default survey name for now is LSST.&quot;</span>
+        <span class="k">assert</span> <span class="n">n_bands</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span> <span class="s2">&quot;Only 1 or 6 bands are supported.&quot;</span>
+        <span class="k">assert</span> <span class="n">add_noise</span><span class="p">,</span> <span class="s2">&quot;Are you sure?&quot;</span>
+        <span class="k">assert</span> <span class="n">slen</span> <span class="o">&gt;=</span> <span class="mi">41</span><span class="p">,</span> <span class="s2">&quot;Galaxies won&#39;t fit.&quot;</span>
+        <span class="k">assert</span> <span class="n">slen</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Odd number of pixels is preferred.&quot;</span>
+        <span class="k">assert</span> <span class="n">preserve_flux</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;Otherwise variance of the noise will change.&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">survey_name</span> <span class="o">=</span> <span class="n">survey_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="n">n_bands</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bands</span> <span class="o">=</span> <span class="n">n_bands_dict</span><span class="p">[</span><span class="n">n_bands</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="n">slen</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixel_scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_pixel_scale</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">survey_name</span><span class="p">)</span>
+        <span class="n">stamp_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel_scale</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span>  <span class="c1"># arcseconds</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">stamp_size</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel_scale</span><span class="p">)</span>  <span class="c1"># pixels.</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">snr</span> <span class="o">=</span> <span class="n">snr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_snr</span> <span class="o">=</span> <span class="n">min_snr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">truncate_radius</span> <span class="o">=</span> <span class="n">truncate_radius</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_noise</span> <span class="o">=</span> <span class="n">add_noise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deviate_center</span> <span class="o">=</span> <span class="n">deviate_center</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">preserve_flux</span> <span class="o">=</span> <span class="n">preserve_flux</span>  <span class="c1"># when changing SNR.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">background</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_background</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">get_background</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">background</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">SurveyObs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">as</span> <span class="n">obs</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">single_obs</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obs</span><span class="p">):</span>
+                <span class="n">background</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">single_obs</span><span class="o">.</span><span class="n">mean_sky_level</span>
+        <span class="k">return</span> <span class="n">background</span>
+
+    <span class="k">def</span> <span class="nf">center_deviation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entry</span><span class="p">):</span>
+        <span class="c1"># random deviation from exactly in center of center pixel, in arcseconds.</span>
+        <span class="n">deviation_ra</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">()</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">deviate_center</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">deviation_dec</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">()</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">deviate_center</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;ra&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">deviation_ra</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel_scale</span>  <span class="c1"># arcseconds</span>
+        <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;dec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">deviation_dec</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel_scale</span>
+        <span class="k">return</span> <span class="n">entry</span>
+
+    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entry</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return a multi-band image corresponding to the entry from the catalog given.</span>
+
+<span class="sd">        * The final image includes its background based on survey&#39;s sky level.</span>
+<span class="sd">        * If deviate_center==True, then galaxy not aligned between bands.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">SurveyObs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">as</span> <span class="n">obs</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">band</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bands</span><span class="p">):</span>
+                <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_deviation</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+                <span class="n">image_no_background</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">single_band</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">obs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">band</span><span class="p">)</span>
+                <span class="n">image</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">image_no_background</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">background</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">image</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">background</span>
+
+    <span class="k">def</span> <span class="nf">single_band</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">single_obs</span><span class="p">,</span> <span class="n">band</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Builds galaxy from a single entry in the catalog. With no background sky level added.&quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">descwl</span>
+        <span class="kn">import</span> <span class="nn">galsim</span>
+
+        <span class="n">galaxy_builder</span> <span class="o">=</span> <span class="n">descwl</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">GalaxyBuilder</span><span class="p">(</span>
+            <span class="n">single_obs</span><span class="p">,</span> <span class="n">no_disk</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">no_bulge</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">no_agn</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose_model</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+
+        <span class="n">galaxy</span> <span class="o">=</span> <span class="n">galaxy_builder</span><span class="o">.</span><span class="n">from_catalog</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;ra&quot;</span><span class="p">],</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;dec&quot;</span><span class="p">],</span> <span class="n">band</span><span class="p">)</span>
+
+        <span class="n">iso_render_engine</span> <span class="o">=</span> <span class="n">descwl</span><span class="o">.</span><span class="n">render</span><span class="o">.</span><span class="n">Engine</span><span class="p">(</span>
+            <span class="n">survey</span><span class="o">=</span><span class="n">single_obs</span><span class="p">,</span>
+            <span class="n">min_snr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_snr</span><span class="p">,</span>
+            <span class="n">truncate_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">truncate_radius</span><span class="p">,</span>
+            <span class="n">no_margin</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">verbose_render</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Up to this point, single_obs has not been changed by the previous 3 statements.</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># this line draws the given galaxy image onto single_obs.image,</span>
+            <span class="c1"># this is the only change in single_obs.</span>
+            <span class="n">iso_render_engine</span><span class="o">.</span><span class="n">render_galaxy</span><span class="p">(</span>
+                <span class="n">galaxy</span><span class="p">,</span>
+                <span class="n">variations_x</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">variations_s</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">variations_g</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">no_fisher</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">calculate_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">no_analysis</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>  <span class="c1"># saves image in single_obs</span>
+
+        <span class="k">except</span> <span class="n">descwl</span><span class="o">.</span><span class="n">render</span><span class="o">.</span><span class="n">SourceNotVisible</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Source not visible&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">descwl</span><span class="o">.</span><span class="n">render</span><span class="o">.</span><span class="n">SourceNotVisible</span>  <span class="c1"># pass it on with a warning.</span>
+
+        <span class="n">image_temp</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span><span class="p">)</span>
+        <span class="n">image_temp</span> <span class="o">+=</span> <span class="n">single_obs</span><span class="o">.</span><span class="n">image</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_noise</span><span class="p">:</span>
+            <span class="c1"># NOTE: PoissonNoise assumes background already subtracted off.</span>
+            <span class="n">generator</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">BaseDeviate</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">99999999</span><span class="p">))</span>
+            <span class="n">noise</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">PoissonNoise</span><span class="p">(</span>
+                <span class="n">rng</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span> <span class="n">sky_level</span><span class="o">=</span><span class="n">single_obs</span><span class="o">.</span><span class="n">mean_sky_level</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Both of the adding noise methods add noise on the image consisting of the</span>
+            <span class="c1"># (galaxy flux + background), but then remove the background at the end so we need</span>
+            <span class="c1"># to add it later.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snr</span><span class="p">:</span>
+                <span class="n">image_temp</span><span class="o">.</span><span class="n">addNoiseSNR</span><span class="p">(</span>
+                    <span class="n">noise</span><span class="p">,</span> <span class="n">snr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">snr</span><span class="p">,</span> <span class="n">preserve_flux</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">preserve_flux</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">image_temp</span><span class="o">.</span><span class="n">addNoise</span><span class="p">(</span><span class="n">noise</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">image_temp</span><span class="o">.</span><span class="n">array</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">get_pixel_scale</span><span class="p">(</span><span class="n">survey_name</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">descwl</span>
+
+        <span class="k">return</span> <span class="n">descwl</span><span class="o">.</span><span class="n">survey</span><span class="o">.</span><span class="n">Survey</span><span class="o">.</span><span class="n">get_defaults</span><span class="p">(</span><span class="n">survey_name</span><span class="p">,</span> <span class="s2">&quot;*&quot;</span><span class="p">)[</span><span class="s2">&quot;pixel_scale&quot;</span><span class="p">]</span>
+
+
+<span class="c1"># TODO: Make this Dataset/Renderer faster, still can&#39;t do on the fly.</span>
+<div class="viewcode-block" id="CatsimGalaxies"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.catsim.CatsimGalaxies">[docs]</a><span class="k">class</span> <span class="nc">CatsimGalaxies</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningDataModule</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">DictConfig</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)</span>
+<span class="sd">        and returns a galaxy drawn from the catalog with realistic seeing conditions using</span>
+<span class="sd">        functions from WeakLensingDeblending.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">renderer</span> <span class="o">=</span> <span class="n">CatsimRenderer</span><span class="p">(</span><span class="o">**</span><span class="n">cfg</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">renderer</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">background</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">renderer</span><span class="o">.</span><span class="n">background</span>
+
+        <span class="c1"># prepare catalog table.</span>
+        <span class="c1"># shuffle in case that order matters.</span>
+        <span class="n">cat</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">catalog_file</span><span class="p">)</span>
+        <span class="n">cat</span> <span class="o">=</span> <span class="n">cat</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">permutation</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">cat</span><span class="p">))]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filter_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_default_filters</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_filtered_cat</span><span class="p">(</span><span class="n">cat</span><span class="p">)</span>
+
+        <span class="c1"># data processing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">num_workers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_batches</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">n_batches</span>
+        <span class="n">n_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_batches</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">RandomSampler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">replacement</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">get_default_filters</span><span class="p">():</span>
+        <span class="c1"># gold sample: &lt; 25.3</span>
+        <span class="n">filters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">i_ab</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="mf">25.3</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">filters</span>
+
+    <span class="k">def</span> <span class="nf">get_filtered_cat</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cat</span><span class="p">):</span>
+        <span class="n">_cat</span> <span class="o">=</span> <span class="n">cat</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">bounds</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span> <span class="o">=</span> <span class="n">bounds</span>
+            <span class="n">_cat</span> <span class="o">=</span> <span class="n">filter_bounds</span><span class="p">(</span><span class="n">_cat</span><span class="p">,</span> <span class="n">param</span><span class="p">,</span> <span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_cat</span>
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cat</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">descwl</span>
+
+        <span class="c1"># loop until visible galaxy is selected.</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cat</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                <span class="n">image</span><span class="p">,</span> <span class="n">background</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">renderer</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+                <span class="k">break</span>
+
+            <span class="c1"># select some other random galaxy to return if we fail.</span>
+            <span class="k">except</span> <span class="n">descwl</span><span class="o">.</span><span class="n">render</span><span class="o">.</span><span class="n">SourceNotVisible</span><span class="p">:</span>
+                <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)))</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;images&quot;</span><span class="p">:</span> <span class="n">image</span><span class="p">,</span>
+            <span class="s2">&quot;background&quot;</span><span class="p">:</span> <span class="n">background</span><span class="p">,</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;galtileid&quot;</span><span class="p">]),</span>
+        <span class="p">}</span>
+
+<div class="viewcode-block" id="CatsimGalaxies.train_dataloader"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.catsim.CatsimGalaxies.train_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">train_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">sampler</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="CatsimGalaxies.val_dataloader"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.catsim.CatsimGalaxies.val_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">val_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">sampler</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+        <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="SavedCatsim"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.catsim.SavedCatsim">[docs]</a><span class="k">class</span> <span class="nc">SavedCatsim</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningDataModule</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cfg</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">filepath</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">images</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">background</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;background&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">background</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">background</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">num_workers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tt_split</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">tt_split</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;images&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="s2">&quot;background&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">background</span><span class="p">}</span>
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SavedCatsim.train_dataloader"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.catsim.SavedCatsim.train_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">train_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">split</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">tt_split</span><span class="p">)</span>
+        <span class="n">train_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">split</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+            <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">sampler</span><span class="o">=</span><span class="n">SubsetRandomSampler</span><span class="p">(</span><span class="n">train_indices</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="SavedCatsim.val_dataloader"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.catsim.SavedCatsim.val_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">val_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">split</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">tt_split</span><span class="p">)</span>
+        <span class="n">test_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">split</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+            <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">sampler</span><span class="o">=</span><span class="n">SubsetRandomSampler</span><span class="p">(</span><span class="n">test_indices</span><span class="p">),</span>
+        <span class="p">)</span></div></div>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">bliss</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html#indices-and-tables">Indices and tables</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Probabilistic Machine Learning Research Group.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
