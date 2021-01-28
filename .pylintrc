@@ -44,3 +44,7 @@ disable=too-many-ancestors,
 	# to be fixed soon
 	import-outside-toplevel,
 	import-error,
+
+	# problems in the tests directory
+	no-self-use,
+	redefined-outer-name,

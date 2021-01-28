@@ -27,4 +27,4 @@ class TestTune:
     def test_tune_run(self, overrides, devices):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            tune.main(cfg, local_mode=False if devices.use_cuda else True)
+            tune.main(cfg, local_mode=(not devices.use_cuda))
