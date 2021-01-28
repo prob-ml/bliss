@@ -97,6 +97,161 @@ def calc_pairwise_dist2(uM, uR):
 #         pass
 
 
+class AveragePooler(nn.Module):
+    def __init__(
+        self,
+        dim_z,
+        discrete_orientation,
+        use_direction_mu_nu,
+        use_x_mu_nu,
+        train_separate_extrapolate,
+        weighted_graph,
+        calc_trans_cond_y,
+        mu_nu_theta,
+    ):
+        super().__init__()
+        self.dim_z = dim_z
+        self.discrete_orientation = discrete_orientation
+        self.use_direction_mu_nu = use_direction_mu_nu
+        self.use_x_mu_nu = use_x_mu_nu
+        self.train_separate_extrapolate = train_separate_extrapolate
+        self.weighted_graph = weighted_graph
+        self.calc_trans_cond_y = calc_trans_cond_y
+        self.mu_nu_theta = mu_nu_theta
+
+        # normalizes the graph such that inner products correspond to averages of the parents
+        self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
+
+    def calc_pz_dist(self, u, uR, GA, XR, yR, minscale=1e-8):
+        yR_encoded = self.calc_trans_cond_y(yR)
+
+        if self.discrete_orientation:
+            pairwise_differences = calc_pairwise_isright(u, uR).float().unsqueeze(-1)
+        else:
+            pairwise_differences = u.unsqueeze(1) - uR.unsqueeze(0)
+        pairwise_distances = calc_pairwise_dist2(u, uR)
+
+        if not self.use_direction_mu_nu:
+            if not self.use_x_mu_nu:
+                mu_nu_in = yR_encoded
+            else:
+                mu_nu_in = torch.cat(
+                    [yR_encoded, XR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)],
+                    dim=-1,
+                )
+        else:
+            mu_nu_in = torch.cat(
+                [
+                    yR_encoded.unsqueeze(1).repeat(
+                        1, pairwise_differences.size(0), 1, 1
+                    ),
+                    pairwise_differences.unsqueeze(0).repeat(
+                        yR_encoded.size(0), 1, 1, 1
+                    ),
+                ],
+                dim=3,
+            )
+
+        if self.train_separate_extrapolate:
+            pGA = GA.unsqueeze(-1) * pairwise_differences
+            extrapolating = pGA.sum(1).abs() - pGA.abs().sum(1) == 0
+            mu_nu_in = torch.cat(
+                [
+                    mu_nu_in,
+                    extrapolating.float()
+                    .unsqueeze(1)
+                    .unsqueeze(0)
+                    .repeat(mu_nu_in.size(0), 1, mu_nu_in.size(2), 1),
+                ],
+                dim=3,
+            )
+
+        pz_mean_R, pz_logscale_R = torch.split(
+            self.mu_nu_theta(mu_nu_in), self.dim_z, -1
+        )
+
+        if self.weighted_graph:
+            W = norm_graph_weighted(GA, pairwise_distances.add(1e-8).reciprocal())
+        else:
+            W = self.norm_graph(GA)
+
+        if not self.use_direction_mu_nu:
+            pz_mean_all = torch.matmul(W, pz_mean_R)
+            pz_logscale_all = torch.matmul(W, pz_logscale_R)
+        else:
+            pz_mean_all = W.unsqueeze(0).unsqueeze(3).mul(pz_mean_R).sum(2)
+            pz_logscale_all = W.unsqueeze(0).unsqueeze(3).mul(pz_logscale_R).sum(2)
+        pz_logscale_all = torch.log(
+            minscale + (1 - minscale) * F.softplus(pz_logscale_all)
+        )
+        return pz_mean_all, pz_logscale_all
+
+
+class SetPooler(nn.Module):
+    def __init__(
+        self,
+        dim_z,
+        train_separate_extrapolate,
+        calc_trans_cond_y,
+        mu_nu_theta,
+        set_transformer,
+        pool_net,
+        settrans,
+    ):
+        super().__init__()
+        self.dim_z = dim_z
+        self.train_separate_extrapolate = train_separate_extrapolate
+        self.calc_trans_cond_y = calc_trans_cond_y
+        self.mu_nu_theta = mu_nu_theta
+        self.set_transformer = set_transformer
+        self.pool_net = pool_net
+        self.settrans = settrans
+
+        # normalizes the graph such that inner products correspond to averages of the parents
+        self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
+
+    def calc_pz_dist(self, u, uR, GA, XR, yR, minscale=1e-8):
+        yR_encoded = self.calc_trans_cond_y(yR)
+        # yR_enc_with_uR = torch.cat([yR_encoded, uR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)], dim=-1)
+
+        u_diff = u.unsqueeze(1) - uR.unsqueeze(0)
+        mu_nu_in = torch.cat(
+            [
+                # yR_enc_with_uR.unsqueeze(1).repeat(1, u.size(0), 1, 1),
+                yR_encoded.unsqueeze(1).repeat(1, u_diff.size(0), 1, 1),
+                u_diff.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1, 1),
+            ],
+            dim=-1,
+        )
+
+        if self.train_separate_extrapolate:
+            pGA = GA.unsqueeze(-1) * u_diff
+            extrapolating = pGA.sum(1).abs() - pGA.abs().sum(1) == 0
+            mu_nu_in = torch.cat(
+                [
+                    mu_nu_in,
+                    extrapolating.float()
+                    .unsqueeze(1)
+                    .unsqueeze(0)
+                    .repeat(mu_nu_in.size(0), 1, mu_nu_in.size(2), 1),
+                ],
+                dim=3,
+            )
+
+        rep_R = self.mu_nu_theta(mu_nu_in)
+        if not self.set_transformer:
+            rep_pooled = GA.unsqueeze(0).unsqueeze(-1).mul(rep_R).sum(2)
+            pz_all = self.pool_net(rep_pooled)
+        else:
+            pz_all = self.settrans(GA.unsqueeze(0).unsqueeze(-1).mul(rep_R))
+
+        pz_mean_all, pz_logscale_all = torch.split(pz_all, self.dim_z, -1)
+        pz_logscale_all = torch.log(
+            minscale + (1 - minscale) * F.softplus(pz_logscale_all)
+        )
+        return pz_mean_all, pz_logscale_all
+
+
 class RegressionFNP(pl.LightningModule):
     """
     Functional Neural Process for regression
@@ -175,9 +330,6 @@ class RegressionFNP(pl.LightningModule):
         self.discrete_orientation = discrete_orientation
         self.weighted_graph = weighted_graph
 
-        # normalizes the graph such that inner products correspond to averages of the parents
-        self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
-
         self.register_buffer("lambda_z", float_tensor(1).fill_(1e-8))
 
         # function that assigns the edge probabilities in the graph
@@ -205,6 +357,16 @@ class RegressionFNP(pl.LightningModule):
         self.trans_cond_y = self.make_trans_cond_y()
 
         self.mu_nu_theta = self.make_mu_nu_theta()
+        self.pooler = AveragePooler(
+            dim_z,
+            discrete_orientation,
+            use_direction_mu_nu,
+            use_x_mu_nu,
+            train_separate_extrapolate,
+            weighted_graph,
+            self.trans_cond_y,
+            self.mu_nu_theta,
+        )
 
         if self.train_separate_proposal:
             self.mu_nu_proposal = self.make_mu_nu_proposal()
@@ -296,70 +458,6 @@ class RegressionFNP(pl.LightningModule):
     def calc_trans_cond_y(self, yR):
         return self.trans_cond_y(yR)
 
-    def calc_pz_dist(self, u, uR, GA, XR, yR, minscale=1e-8):
-        yR_encoded = self.calc_trans_cond_y(yR)
-
-        if self.discrete_orientation:
-            pairwise_differences = calc_pairwise_isright(u, uR).float().unsqueeze(-1)
-        else:
-            pairwise_differences = u.unsqueeze(1) - uR.unsqueeze(0)
-        pairwise_distances = calc_pairwise_dist2(u, uR)
-
-        if not self.use_direction_mu_nu:
-            if not self.use_x_mu_nu:
-                mu_nu_in = yR_encoded
-            else:
-                mu_nu_in = torch.cat(
-                    [yR_encoded, XR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)],
-                    dim=-1,
-                )
-        else:
-            mu_nu_in = torch.cat(
-                [
-                    yR_encoded.unsqueeze(1).repeat(
-                        1, pairwise_differences.size(0), 1, 1
-                    ),
-                    pairwise_differences.unsqueeze(0).repeat(
-                        yR_encoded.size(0), 1, 1, 1
-                    ),
-                ],
-                dim=3,
-            )
-
-        if self.train_separate_extrapolate:
-            pGA = GA.unsqueeze(-1) * pairwise_differences
-            extrapolating = pGA.sum(1).abs() - pGA.abs().sum(1) == 0
-            mu_nu_in = torch.cat(
-                [
-                    mu_nu_in,
-                    extrapolating.float()
-                    .unsqueeze(1)
-                    .unsqueeze(0)
-                    .repeat(mu_nu_in.size(0), 1, mu_nu_in.size(2), 1),
-                ],
-                dim=3,
-            )
-
-        pz_mean_R, pz_logscale_R = torch.split(
-            self.mu_nu_theta(mu_nu_in), self.dim_z, -1
-        )
-
-        if self.weighted_graph:
-            W = norm_graph_weighted(GA, pairwise_distances.add(1e-8).reciprocal())
-        else:
-            W = self.norm_graph(GA)
-
-        if not self.use_direction_mu_nu:
-            pz_mean_all = torch.matmul(W, pz_mean_R)
-            pz_logscale_all = torch.matmul(W, pz_logscale_R)
-        else:
-            pz_mean_all = W.unsqueeze(0).unsqueeze(3).mul(pz_mean_R).sum(2)
-            pz_logscale_all = W.unsqueeze(0).unsqueeze(3).mul(pz_logscale_R).sum(2)
-        pz_logscale_all = torch.log(
-            minscale + (1 - minscale) * F.softplus(pz_logscale_all)
-        )
-        return pz_mean_all, pz_logscale_all
-
     def calc_qz_dist(self, X_all, y_all, minscale=1e-8):
         y_all_encoded = self.calc_trans_cond_y(y_all)
         if self.use_x_mu_nu:
@@ -446,7 +544,7 @@ class RegressionFNP(pl.LightningModule):
         # pdb.set_trace()
         assert torch.isnan(GA).sum() == 0
 
-        pz_mean_all, pz_logscale_all = self.calc_pz_dist(u, uR, GA, XR, yR)
+        pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(u, uR, GA, XR, yR)
         qz_mean_all, qz_logscale_all = self.calc_qz_dist(X_all, y_all)
 
         assert torch.isnan(pz_mean_all).sum() == 0
@@ -533,6 +631,7 @@ class PoolingFNP(RegressionFNP):
         pooling_rep_size=32,
         set_transformer=False,
         st_numheads=[2, 2],
+        train_separate_extrapolate=False,
         **kwargs
     ):
         self.pooling_layers = pooling_layers
@@ -543,8 +642,20 @@ class PoolingFNP(RegressionFNP):
 
         if not self.set_transformer:
             self.pool_net = self.make_pool_net()
+            self.settrans = None
         else:
+            self.pool_net = None
             self.settrans = self.make_settrans()
+
+        self.pooler = SetPooler(
+            self.dim_z,
+            train_separate_extrapolate,
+            self.calc_trans_cond_y,
+            self.mu_nu_theta,
+            self.set_transformer,
+            self.pool_net,
+            self.settrans,
+        )
 
     def make_mu_nu_theta(self):
         mu_nu_in = self.dim_y_enc + self.dim_u
