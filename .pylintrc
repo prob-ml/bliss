@@ -48,3 +48,9 @@ disable=too-many-ancestors,
 	# problems in the tests directory
 	no-self-use,
 	redefined-outer-name,
+
+
+[SIMILARITIES]
+
+# Minimum lines number of a similarity to report duplicate-code
+min-similarity-lines=11
