@@ -91,7 +91,6 @@ class TestFNP:
 
         epochs_outer = 100
         condition_on_ref = False
-        train_separate_proposal = True
         # generate = True
         n_ref = 10
         N = 10
@@ -154,7 +153,6 @@ class TestFNP:
             output_layers=[32, 64, 128],
             x_as_u=True,
             condition_on_ref=condition_on_ref,
-            train_separate_proposal=train_separate_proposal,
             discrete_orientation=False,
             set_transformer=True,
         )

@@ -253,7 +253,6 @@ class RegressionFNP(pl.LightningModule):
         output_layers=[128],
         x_as_u=False,
         condition_on_ref=False,
-        train_separate_proposal=True,
         discrete_orientation=True,
         weighted_graph=False,
     ):
@@ -299,7 +298,6 @@ class RegressionFNP(pl.LightningModule):
         self.output_layers = output_layers
         self.x_as_u = x_as_u
         self.condition_on_ref = condition_on_ref
-        self.train_separate_proposal = train_separate_proposal
         self.discrete_orientation = discrete_orientation
         self.weighted_graph = weighted_graph
 
@@ -340,10 +338,7 @@ class RegressionFNP(pl.LightningModule):
             self.mu_nu_theta,
         )
 
-        if self.train_separate_proposal:
-            self.mu_nu_proposal = self.make_mu_nu_proposal()
-        else:
-            self.mu_nu_proposal = self.mu_nu_theta
+        self.mu_nu_proposal = self.make_mu_nu_proposal()
         # for p(y|z)
         self.output = self.make_output()
 
@@ -433,16 +428,6 @@ class RegressionFNP(pl.LightningModule):
             y_all_encoded = torch.cat(
                 [y_all_encoded, X_all.unsqueeze(0).repeat(y_all_encoded.size(0), 1, 1)],
                 dim=-1,
-            )
-        if self.use_direction_mu_nu and not self.train_separate_proposal:
-            y_all_encoded = torch.cat(
-                [
-                    y_all_encoded,
-                    torch.zeros(
-                        *y_all_encoded.shape[0:2], 1, device=y_all_encoded.device
-                    ),
-                ],
-                dim=2,
             )
         qz_mean_all, qz_logscale_all = torch.split(
             self.mu_nu_proposal(y_all_encoded), self.dim_z, -1

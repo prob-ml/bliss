@@ -59,9 +59,6 @@ parser.add_argument(
     default=[1e-3],
 )
 parser.add_argument("--condref", dest="condition_on_ref", action="store_true")
-parser.add_argument(
-    "--notrainproposal", dest="notrain_separate_proposal", action="store_true"
-)
 parser.add_argument("--skiptrain", dest="skiptrain", action="store_true")
 
 parser.add_argument(
@@ -133,7 +130,6 @@ if __name__ == "__main__":
 
     epochs_outer = args.epochs[0]
     condition_on_ref = args.condition_on_ref
-    train_separate_proposal = not args.notrain_separate_proposal
     generate = not args.nogenerate
     n_ref = args.n_ref[0]
     N = args.N[0]
@@ -215,7 +211,6 @@ if __name__ == "__main__":
         output_layers=[32, 64, 128],
         x_as_u=True,
         condition_on_ref=condition_on_ref,
-        train_separate_proposal=train_separate_proposal,
         train_separate_extrapolate=False,
         discrete_orientation=False,
         set_transformer=True,
