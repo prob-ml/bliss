@@ -84,6 +84,59 @@ def calc_pairwise_dist2(uM, uR):
     return Z.pow(2).sum(2).sqrt()
 
 
+# class FNP(pl.LightningModule):
+#     """
+#     This is an implementation of the Functional Neural Process (FNP)
+#     from http://arxiv.org/abs/1906.08324.
+
+#     The FNP is made up of a few different modules. These are all
+#     application-specific, so they are passed as arguments to the
+#     class constructor
+#     * cov_vencoder This is a module which, conditional on
+#     the covariate X, samples a representation U (probabilistic)
+#     * rep_encoder: This is a module which deterministically
+#     encodes the covariate representation U and the label Y
+#     * prop_vencoder: This is a module which samples a representation
+#     for an object given the label (only used in training, not prediction)
+#     * rep_vpooler: This is a module which samples a representation
+#     based on pooling the representations of its dependencies.
+#     * label_vdecoder: This is a module which probabilistically
+#     decodes the pooled representation into the output
+
+#     Part of the FNP is also learning and sampling from a
+#     dependency graph. This can be modified via an optional argument:
+#     * dep_graph_sampler
+#     """
+#     def __init__(self, cov_vencoder, rep_encoder, prop_encoder, rep_vpooler, label_vdecoder, dep_graph_sampler=BernoulliGraph):
+#        super().__init__(self)
+
+#     def forward(self):
+#         """
+#         This step does everything short of actually sampling the labels
+#         """
+
+#     def log_prob(self):
+#         """
+#         This step calculates the log_probability over the current dataset
+#         """
+#         self.forward()
+#     def predict(self):
+#         """
+#         This step predicts labels for the dependent objects
+#         """
+#         self.forward()
+
+#     ## Lightning functions for training
+#     def training_step(self, batch, batch_idx):
+#         pass
+
+#     def validation_step(self, batch, batch_idx):
+#         pass
+
+#     def configure_optimizers(self):
+#         pass
+
+
 class RegressionFNP(pl.LightningModule):
     """
     Functional Neural Process for regression
