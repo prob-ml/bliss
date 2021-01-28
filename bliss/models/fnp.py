@@ -17,55 +17,14 @@ from torch.optim import Adam
 from sklearn.preprocessing import StandardScaler
 
 
-def make_fc_net(insize, hs, outsize, act=nn.ReLU, final=None, resid=False):
+def make_fc_net(insize, hs, outsize, act=nn.ReLU, final=None):
     layers = [nn.Sequential(nn.Linear(insize, hs[0]), act())]
     for i in range(len(hs) - 1):
         layers.append(nn.Sequential(nn.Linear(hs[i], hs[i + 1]), act()))
-        if resid:
-            layers[-1] = ResidualLayer(layers[-1])
     layers.append(nn.Linear(hs[-1], outsize))
-    # if resid:
-    #     layers[-1] = ResidualLayer(layers[-1])
     if final is not None:
         layers += [final()]
     return nn.Sequential(*layers)
-
-
-class SkipConnection(nn.Module):
-    def __init__(self, f, size_skip):
-        super(SkipConnection, self).__init__()
-        self.f = f
-        self.size_skip = size_skip
-
-    def forward(self, x):
-        y = self.f(x)
-        _, x_skip = torch.split(x, [x.size(-1) - self.size_skip, self.size_skip], -1)
-        return torch.cat([y, x_skip], -1)
-
-
-def linear_skip_connection(featin, featout, size_skip=1):
-    return SkipConnection(nn.Linear(featin, featout), size_skip)
-
-
-def make_fc_skip(
-    insize, hs, outsize, act=nn.ReLU, final=None, size_skip=1, skip_final=False
-):
-    layers = [linear_skip_connection(insize, hs[0], size_skip=size_skip), act()]
-    for i in range(len(hs) - 1):
-        layers += [
-            linear_skip_connection(hs[i] + size_skip, hs[i + 1], size_skip=size_skip),
-            act(),
-        ]
-    if skip_final:
-        layers += [
-            linear_skip_connection(hs[-1] + size_skip, outsize, size_skip=size_skip)
-        ]
-    else:
-        layers += [nn.Linear(hs[-1] + size_skip, outsize)]
-    if final is not None:
-        layers += [final()]
-    return nn.Sequential(*layers)
-
 
 def calc_pairwise_isright(uM, uR):
     """
@@ -219,9 +178,6 @@ class RegressionFNP(pl.LightningModule):
         self.train_separate_extrapolate = train_separate_extrapolate
         self.discrete_orientation = discrete_orientation
         self.weighted_graph = weighted_graph
-        self.y_encoder_resid = y_encoder_resid
-        self.mu_nu_resid = mu_nu_resid
-        self.output_resid = output_resid
 
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
@@ -285,7 +241,6 @@ class RegressionFNP(pl.LightningModule):
             self.dim_y,
             self.y_encoder_layers,
             2 * self.dim_z,
-            resid=self.y_encoder_resid,
         )
 
     def make_mu_nu_theta(self):
@@ -300,7 +255,7 @@ class RegressionFNP(pl.LightningModule):
             mu_nu_in += 1
 
         return make_fc_net(
-            mu_nu_in, self.mu_nu_layers, 2 * self.dim_z, resid=self.mu_nu_resid
+            mu_nu_in, self.mu_nu_layers, 2 * self.dim_z
         )
 
     def make_mu_nu_proposal(self):
@@ -309,13 +264,13 @@ class RegressionFNP(pl.LightningModule):
             # raise(NotImplementedError("use_x_mu_nu is not yet implemented")
             mu_nu_in += self.dim_x
         return make_fc_net(
-            mu_nu_in, self.mu_nu_layers, 2 * self.dim_z, resid=self.mu_nu_resid
+            mu_nu_in, self.mu_nu_layers, 2 * self.dim_z
         )
 
     def make_output(self):
         output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
         return make_fc_net(
-            output_insize, self.output_layers, 2 * self.dim_y, resid=self.output_resid
+            output_insize, self.output_layers, 2 * self.dim_y
         )
 
     def sample_u(self, X_all, n_ref):
@@ -586,7 +541,6 @@ class PoolingFNP(RegressionFNP):
         self,
         pooling_layers=[64],
         pooling_rep_size=32,
-        pooling_resid=False,
         set_transformer=False,
         st_numheads=[2, 2],
         **kwargs
@@ -595,7 +549,6 @@ class PoolingFNP(RegressionFNP):
         self.pooling_rep_size = pooling_rep_size
         self.set_transformer = set_transformer
         self.st_numheads = st_numheads
-        self.pooling_resid = pooling_resid
         super().__init__(**kwargs)
 
         if not self.set_transformer:
@@ -615,7 +568,7 @@ class PoolingFNP(RegressionFNP):
     def make_pool_net(self):
         dim_in = self.mu_nu_theta[-1].out_features
         return make_fc_net(
-            dim_in, self.pooling_layers, 2 * self.dim_z, resid=self.pooling_resid
+            dim_in, self.pooling_layers, 2 * self.dim_z
         )
 
     def make_settrans(self):
@@ -625,7 +578,7 @@ class PoolingFNP(RegressionFNP):
             *sabs,
             PMA(dim_in, 2, 1, squeeze_out=True),
             make_fc_net(
-                dim_in, self.pooling_layers, 2 * self.dim_z, resid=self.pooling_resid
+                dim_in, self.pooling_layers, 2 * self.dim_z
             )
         )
         return settrans
@@ -979,23 +932,6 @@ class UnFlatten(torch.nn.Module):
     def forward(self, x):
         # assert len(x.shape) == 2
         return x.view(*x.shape[0:-1], *self.shape)
-
-
-class ResidualLayer(torch.nn.Module):
-    def __init__(self, f):
-        super(ResidualLayer, self).__init__()
-        self.f = f
-
-    def forward(self, x):
-        y = self.f(x)
-        if y.size(-1) > x.size(-1):
-            zshape = [*y.size()]
-            zshape[-1] = y.size(-1) - x.size(-1)
-            xx = torch.cat([x, torch.zeros(zshape, device=x.device)], dim=-1)
-        else:
-            xx = x
-        return y + xx
-
 
 ## Set Transformer
 class MAB(nn.Module):
