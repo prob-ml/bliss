@@ -1036,6 +1036,7 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
     model.train()
     holdout_loss_prev = np.infty
     holdout_loss_initial = model(od.XR, od.yhR, od.XM, od.yhM)[0]
+    holdout_loss_best = holdout_loss_initial
     print("Initial holdout loss: {:.3f})".format(holdout_loss_initial))
     for i in range(epochs):
         optimizer.zero_grad()
@@ -1061,6 +1062,8 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
                     samples=100,
                 )
             holdout_loss = model(od.XR, od.yhR, od.XM, od.yhM)[0]
+            if holdout_loss < holdout_loss_best:
+                holdout_loss_best = holdout_loss
             print("Holdout loss: {:.3f}".format(holdout_loss))
     if visualize:
         visualize_onedim(
@@ -1077,7 +1080,7 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
             samples=100,
         )
     print("Done.")
-    return model, holdout_loss_initial, holdout_loss
+    return model, holdout_loss_initial, holdout_loss, holdout_loss_best
 
 
 def visualize_onedim(

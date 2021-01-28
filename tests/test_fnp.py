@@ -76,10 +76,10 @@ class TestFNP:
             if torch.cuda.is_available():
                 od.cuda()
                 model = model.cuda()
-            model, loss_initial, loss_final = fnp.train_onedim_model(
-                model, od, epochs=1000, lr=5e-5
+            model, loss_initial, loss_final, loss_best = fnp.train_onedim_model(
+                model, od, epochs=1000, lr=1e-4
             )
-            assert loss_final < loss_initial * thresholds[i]
+            assert loss_best < loss_initial * thresholds[i]
             # Smoke test for prediction
             pred = model.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
 
