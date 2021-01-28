@@ -181,23 +181,47 @@ class AveragePooler(nn.Module):
 class SetPooler(nn.Module):
     def __init__(
         self,
+        dim_u,
+        dim_y_enc,
+        pooling_rep_size,
         dim_z,
         calc_trans_cond_y,
-        mu_nu_theta,
+        mu_nu_layers,
+        pooling_layers,
         set_transformer,
-        pool_net,
-        settrans,
+        st_numheads,
     ):
         super().__init__()
+        self.dim_u = dim_u
+        self.dim_y_enc = dim_y_enc
+        self.pooling_rep_size = pooling_rep_size
         self.dim_z = dim_z
         self.calc_trans_cond_y = calc_trans_cond_y
-        self.mu_nu_theta = mu_nu_theta
+        self.mu_nu_layers = mu_nu_layers
+        self.pooling_layers = pooling_layers
         self.set_transformer = set_transformer
-        self.pool_net = pool_net
-        self.settrans = settrans
+        self.st_numheads = st_numheads
 
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
+
+        mu_nu_in = self.dim_y_enc + self.dim_u
+        self.mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
+
+        if not self.set_transformer:
+            self.pool_net = MLP(
+                self.mu_nu_theta.out_features, self.pooling_layers, 2 * self.dim_z
+            )
+            self.settrans = None
+        else:
+            self.pool_net = None
+            dim_in = self.mu_nu_theta.out_features
+            sabs = [SAB(dim_in, dim_in, nh) for nh in self.st_numheads]
+            self.settrans = nn.Sequential(
+                *sabs,
+                PMA(dim_in, 2, 1, squeeze_out=True),
+                MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
+            )
 
     def calc_pz_dist(self, u, uR, GA, XR, yR, minscale=1e-8):
         yR_encoded = self.calc_trans_cond_y(yR)
@@ -589,32 +613,17 @@ class PoolingFNP(RegressionFNP):
         self.st_numheads = st_numheads
         super().__init__(**kwargs)
 
-        mu_nu_in = self.dim_y_enc + self.dim_u
-        mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
-
-        if not self.set_transformer:
-            self.pool_net = MLP(
-                mu_nu_theta.out_features, self.pooling_layers, 2 * self.dim_z
-            )
-            self.settrans = None
-        else:
-            self.pool_net = None
-            dim_in = mu_nu_theta.out_features
-            sabs = [SAB(dim_in, dim_in, nh) for nh in self.st_numheads]
-            self.settrans = nn.Sequential(
-                *sabs,
-                PMA(dim_in, 2, 1, squeeze_out=True),
-                MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
-            )
         self.pooler = SetPooler(
+            self.dim_u,
+            self.dim_y_enc,
+            self.pooling_rep_size,
             self.dim_z,
             self.calc_trans_cond_y,
-            mu_nu_theta,
+            self.mu_nu_layers,
+            self.pooling_layers,
             self.set_transformer,
-            self.pool_net,
-            self.settrans,
+            self.st_numheads,
         )
-
 
 
 def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
