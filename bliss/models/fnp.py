@@ -108,18 +108,12 @@ class AveragePooler(nn.Module):
     def __init__(
         self,
         dim_z,
-        discrete_orientation,
-        use_direction_mu_nu,
         use_x_mu_nu,
-        weighted_graph,
         mu_nu_theta,
     ):
         super().__init__()
         self.dim_z = dim_z
-        self.discrete_orientation = discrete_orientation
-        self.use_direction_mu_nu = use_direction_mu_nu
         self.use_x_mu_nu = use_x_mu_nu
-        self.weighted_graph = weighted_graph
         self.mu_nu_theta = mu_nu_theta
 
         # normalizes the graph such that inner products correspond to averages of the parents
