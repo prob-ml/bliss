@@ -103,16 +103,46 @@ def calc_pairwise_dist2(uM, uR):
 #     def configure_optimizers(self):
 #         pass
 class VEncoder(nn.Module):
-    def __init__(self, dim_x, dim_h, dim_u, n_layers):
+    def __init__(self, dim_x, layers, dim_u, minscale=None):
         super().__init__()
         self.dim_u = dim_u
-        self.encoder = MLP(dim_x, [dim_h] * n_layers, 2 * dim_u)
+        self.minscale = minscale
+        self.encoder = MLP(dim_x, layers, 2 * dim_u)
 
     def forward(self, X_all):
         mean_z, logscale_z = torch.split(self.encoder(X_all), self.dim_u, -1)
+        if self.minscale is not None:
+            logscale_z = torch.log(
+                self.minscale + (1 - self.minscale) * F.softplus(logscale_z)
+            )
         pz = Normal(mean_z, logscale_z)
-        z = pz.rsample()
-        return z
+        return pz
+
+
+class ConstantDist(nn.Module):
+    def __init__(self, X):
+        self.X = X
+
+    def log_prob(self, X):
+        if X is self.X:
+            return 0
+        else:
+            return -np.inf
+
+    def sample(self):
+        return self.X
+
+    def rsample(self):
+        return self.sample()
+
+
+class IdentityEncoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.X = None
+
+    def forward(self, X):
+        return ConstantDist(X)
 
 
 class AveragePooler(nn.Module):
@@ -316,9 +346,9 @@ class RegressionFNP(pl.LightningModule):
         ).view(x.size(0), 1)
         # transformation of the input
         if not self.x_as_u:
-            self.cov_vencoder = VEncoder(dim_x, self.dim_h, self.dim_u, n_layers)
+            self.cov_vencoder = VEncoder(dim_x, [self.dim_h] * n_layers, self.dim_u)
         else:
-            self.cov_vencoder = nn.Identity()
+            self.cov_vencoder = IdentityEncoder()
         # p(u|x)
         # q(z|x)
         # See equation 7
@@ -336,6 +366,7 @@ class RegressionFNP(pl.LightningModule):
             mu_nu_in += self.dim_x
         if self.use_direction_mu_nu:
             mu_nu_in += 1
+        self.mu_nu_in = mu_nu_in
         mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
         self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=False, use_x=use_x_mu_nu)
         if pooler is None:
@@ -345,7 +376,12 @@ class RegressionFNP(pl.LightningModule):
         else:
             self.pooler = pooler
 
-        self.mu_nu_proposal = self.make_mu_nu_proposal()
+        self.prop_vencoder = VEncoder(
+            self.dim_y_enc + (self.use_x_mu_nu) * self.dim_x,
+            self.mu_nu_layers,
+            self.dim_z,
+            minscale=1e-8,
+        )
         # for p(y|z)
         output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
         self.output = nn.Sequential(
@@ -370,28 +406,6 @@ class RegressionFNP(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), lr=1e-3)
         return optimizer
-
-    def make_mu_nu_proposal(self):
-        mu_nu_in = self.dim_y_enc
-        if self.use_x_mu_nu is True:
-            # raise(NotImplementedError("use_x_mu_nu is not yet implemented")
-            mu_nu_in += self.dim_x
-        return MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
-
-    def calc_qz_dist(self, X_all, y_all, minscale=1e-8):
-        y_all_encoded = self.trans_cond_y(y_all)
-        if self.use_x_mu_nu:
-            y_all_encoded = torch.cat(
-                [y_all_encoded, X_all.unsqueeze(0).repeat(y_all_encoded.size(0), 1, 1)],
-                dim=-1,
-            )
-        qz_mean_all, qz_logscale_all = torch.split(
-            self.mu_nu_proposal(y_all_encoded), self.dim_z, -1
-        )
-        qz_logscale_all = torch.log(
-            minscale + (1 - minscale) * F.softplus(qz_logscale_all)
-        )
-        return qz_mean_all, qz_logscale_all
 
     def calc_log_pqz(self, pz, qz, z, n_ref):
         """
@@ -442,14 +456,14 @@ class RegressionFNP(pl.LightningModule):
         y_all = torch.cat([yR, yM], dim=1)
 
         ## Sample covariate representation U
-        u = self.cov_vencoder(X_all)
+        pu = self.cov_vencoder(X_all)
+        u = pu.rsample()
         uR = u[:n_ref]
         uM = u[n_ref:]
         assert torch.isnan(u).sum() == 0
 
         ## Sample the dependency matrices
         if (A_in is None) or (G_in is None):
-            G, A = self.sample_dependency_matrices(uR, uM)
             if self.G is None:
                 G = sample_DAG(uR, self.pairwise_g, training=self.training)
             else:
@@ -470,12 +484,17 @@ class RegressionFNP(pl.LightningModule):
         yR_encoded = self.trans_cond_y(yR)
         rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
         pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(rep_R, GA)
-        qz_mean_all, qz_logscale_all = self.calc_qz_dist(X_all, y_all)
 
+        y_all_encoded = self.trans_cond_y(y_all)
+        if self.use_x_mu_nu:
+            y_all_encoded = torch.cat(
+                [y_all_encoded, X_all.unsqueeze(0).repeat(y_all_encoded.size(0), 1, 1)],
+                dim=-1,
+            )
+        qz = self.prop_vencoder(y_all_encoded)
         assert torch.isnan(pz_mean_all).sum() == 0
 
         pz = Normal(pz_mean_all, pz_logscale_all)
-        qz = Normal(qz_mean_all, qz_logscale_all)
         z = qz.sample()
 
         log_pqz_R, log_pqz_M = self.calc_log_pqz(pz, qz, z, n_ref)
@@ -520,11 +539,15 @@ class RegressionFNP(pl.LightningModule):
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
         n_ref = XR.size(0)
         X_all = torch.cat([XR, x_new], 0)
-        u = self.cov_vencoder(X_all)
+        pu = self.cov_vencoder(X_all)
+        u = pu.rsample()
         uR = u[:n_ref]
         uM = u[n_ref:]
         if A_in is None:
-            _, A = self.sample_dependency_matrices(uR, uM)
+            if self.A is None:
+                A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
+            else:
+                A = self.A_const
         else:
             A = A_in
 
@@ -733,7 +756,12 @@ class ConvRegressionFNP(RegressionFNP):
 
         self.trans_cond_y = conv_autoencoder.encoder
         self.dim_y_enc = conv_autoencoder.dim_y_enc
-        self.mu_nu_proposal = self.make_mu_nu_proposal()
+        self.prop_vencoder = VEncoder(
+            self.dim_y_enc + (self.use_x_mu_nu) * self.dim_x,
+            self.mu_nu_layers,
+            self.dim_z,
+            minscale=1e-8,
+        )
         self.output = conv_autoencoder.decoder
 
 
