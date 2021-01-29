@@ -201,6 +201,20 @@ class RepEncoder(nn.Module):
         return rep_R
 
 
+class SplitLayer(nn.Module):
+    """
+    This layer splits the input according to the arguments to torch.split
+    """
+
+    def __init__(self, split_size_or_sections, dim):
+        super().__init__()
+        self.split_size_or_sections = split_size_or_sections
+        self.dim = dim
+
+    def forward(self, tensor):
+        return torch.split(tensor, self.split_size_or_sections, self.dim)
+
+
 class RegressionFNP(pl.LightningModule):
     """
     Functional Neural Process for regression
@@ -324,7 +338,10 @@ class RegressionFNP(pl.LightningModule):
         self.mu_nu_proposal = self.make_mu_nu_proposal()
         # for p(y|z)
         output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
-        self.output = MLP(output_insize, self.output_layers, 2 * self.dim_y)
+        self.output = nn.Sequential(
+            MLP(output_insize, self.output_layers, 2 * self.dim_y),
+            SplitLayer(self.dim_y, -1),
+        )
 
     def training_step(self, batch, batch_idx):
         yR = batch["YR"]
@@ -381,11 +398,8 @@ class RegressionFNP(pl.LightningModule):
 
         return G, A
 
-    def calc_trans_cond_y(self, yR):
-        return self.trans_cond_y(yR)
-
     def calc_qz_dist(self, X_all, y_all, minscale=1e-8):
-        y_all_encoded = self.calc_trans_cond_y(y_all)
+        y_all_encoded = self.trans_cond_y(y_all)
         if self.use_x_mu_nu:
             y_all_encoded = torch.cat(
                 [y_all_encoded, X_all.unsqueeze(0).repeat(y_all_encoded.size(0), 1, 1)],
@@ -428,8 +442,7 @@ class RegressionFNP(pl.LightningModule):
         return log_pqz_R, log_pqz_M
 
     def calc_output_y(self, final_rep):
-        output_y = self.output(final_rep)
-        mean_y, logstd_y = torch.split(output_y, self.dim_y, -1)
+        mean_y, logstd_y = self.output(final_rep)
         logstd_y = torch.log(0.1 + 0.9 * F.softplus(logstd_y))
         return mean_y, logstd_y
 
@@ -460,7 +473,7 @@ class RegressionFNP(pl.LightningModule):
         # pdb.set_trace()
         assert torch.isnan(GA).sum() == 0
 
-        yR_encoded = self.calc_trans_cond_y(yR)
+        yR_encoded = self.trans_cond_y(yR)
         rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
         pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(rep_R, GA)
         qz_mean_all, qz_logscale_all = self.calc_qz_dist(X_all, y_all)
@@ -519,7 +532,7 @@ class RegressionFNP(pl.LightningModule):
         else:
             A = A_in
 
-        yR_encoded = self.calc_trans_cond_y(yR)
+        yR_encoded = self.trans_cond_y(yR)
         rep_R = self.rep_encoder(uM, uR, XR, yR_encoded)
         pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(rep_R, A)
 
@@ -581,6 +594,27 @@ def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
     return q, dummy_output, h_out, w_out, pad_h, pad_w
 
 
+class ReshapeWrapper(nn.Module):
+    """
+    This module wraps around a module which expects tensors of a fixed dimension. For example,
+    a Conv2D layer expects a 4-dimensional tensor, but we may want to use 5-dimensional or higher
+    tensors with it. This flattens the higher dimensions into dimension 0, then unflattens them.
+    """
+
+    def __init__(self, f, f_dim):
+        super().__init__()
+        self.f = f
+        self.f_dim = f_dim
+
+    def forward(self, X):
+        k = len(X.shape) - self.f_dim + 1
+        assert k > 0
+        in_size = torch.Size([np.product(X.shape[:k])]) + X.shape[k:]
+        Y = self.f(X.view(in_size))
+        Y = Y.view(X.shape[:k] + Y.shape[(k - 1) :])
+        return Y
+
+
 class Conv2DAutoEncoder(nn.Module):
     """
     This module creates a stacked layer of Conv2D layers to decode an image tensor to a
@@ -636,19 +670,14 @@ class Conv2DAutoEncoder(nn.Module):
         self.dim_w_end = w_out
         y_encoder_array.append(Flatten())
         y_encoder_array.append(nn.Linear(self.dim_y_enc, self.dim_y_enc))
-        self.encoder = nn.Sequential(*y_encoder_array)
+        self.encoder = ReshapeWrapper(nn.Sequential(*y_encoder_array), 4)
 
         ## Make Convolutional Output
-        fc_layers = MLP(self.output_insize, self.output_layers, self.dim_y_enc)
-        output_array = [
-            fc_layers,
-            UnFlatten([self.conv_channels[-1], self.dim_h_end, self.dim_w_end]),
-        ]
-
+        fc_layer = MLP(self.output_insize, self.output_layers, self.dim_y_enc)
+        output_array = []
         for i in range(len(self.conv_channels) - 1):
             inchannel = self.conv_channels[-(i + 1)]
             ouchannel = self.conv_channels[-(i + 2)]
-            output_array.append(nn.ReLU())
             output_array.append(
                 nn.ConvTranspose2d(
                     inchannel,
@@ -658,15 +687,20 @@ class Conv2DAutoEncoder(nn.Module):
                     output_padding=(self.pad_hs[-(i + 1)], self.pad_ws[-(i + 1)]),
                 )
             )
+            output_array.append(nn.ReLU())
 
         output_array += [
-            nn.ReLU(),
             nn.ConvTranspose2d(
                 self.conv_channels[0], 2, self.kernel_sizes[0], self.strides[0]
             ),
         ]
 
-        self.decoder = nn.Sequential(*output_array)
+        self.decoder = nn.Sequential(
+            fc_layer,
+            UnFlatten([self.conv_channels[-1], self.dim_h_end, self.dim_w_end]),
+            ReshapeWrapper(nn.Sequential(*output_array), 4),
+            SplitLayer(1, -3),
+        )
 
 
 class ConvRegressionFNP(RegressionFNP):
@@ -705,29 +739,6 @@ class ConvRegressionFNP(RegressionFNP):
         self.dim_y_enc = conv_autoencoder.dim_y_enc
         self.mu_nu_proposal = self.make_mu_nu_proposal()
         self.output = conv_autoencoder.decoder
-
-    def calc_trans_cond_y(self, yR):
-        yR_encoded = self.trans_cond_y(
-            yR.view(yR.size(0) * yR.size(1), yR.size(2), yR.size(3), yR.size(4))
-        )
-        yR_encoded = yR_encoded.view(yR.size(0), yR.size(1), -1)
-        return yR_encoded
-
-    def calc_output_y(self, final_rep):
-        output_y = self.output(
-            final_rep.view(final_rep.size(0) * final_rep.size(1), final_rep.size(2))
-        )
-        output_y = output_y.view(
-            final_rep.size(0),
-            final_rep.size(1),
-            output_y.size(1),
-            output_y.size(2),
-            output_y.size(3),
-        )
-        mean_y = output_y[:, :, 0:1, :, :]
-        logstd_y = output_y[:, :, 1:2, :, :]
-        logstd_y = torch.log(0.1 + 0.9 * F.softplus(logstd_y))
-        return mean_y, logstd_y
 
 
 class ConvPoolingFNP(PoolingFNP, ConvRegressionFNP):
