@@ -84,15 +84,35 @@ class MLP(nn.Module):
 
 #     def configure_optimizers(self):
 #         pass
-class VEncoder(nn.Module):
-    def __init__(self, dim_x, layers, dim_u, minscale=None):
+
+
+class SplitLayer(nn.Module):
+    """
+    This layer splits the input according to the arguments to torch.split
+    """
+
+    def __init__(self, split_size_or_sections, dim):
         super().__init__()
-        self.dim_u = dim_u
+        self.split_size_or_sections = split_size_or_sections
+        self.dim = dim
+
+    def forward(self, tensor):
+        return torch.split(tensor, self.split_size_or_sections, self.dim)
+
+
+class NormalEncoder(nn.Module):
+    """
+    This module takes an encoder as input, which returns two tensors of equal shape.
+    These then encode a Normal distribution with the corresponding mean and logscale.
+    """
+
+    def __init__(self, encoder, minscale=None):
+        super().__init__()
+        self.encoder = encoder
         self.minscale = minscale
-        self.encoder = MLP(dim_x, layers, 2 * dim_u)
 
     def forward(self, X_all):
-        mean_z, logscale_z = torch.split(self.encoder(X_all), self.dim_u, -1)
+        mean_z, logscale_z = self.encoder(X_all)
         if self.minscale is not None:
             logscale_z = torch.log(
                 self.minscale + (1 - self.minscale) * F.softplus(logscale_z)
@@ -224,20 +244,6 @@ class RepEncoder(nn.Module):
         return rep_R
 
 
-class SplitLayer(nn.Module):
-    """
-    This layer splits the input according to the arguments to torch.split
-    """
-
-    def __init__(self, split_size_or_sections, dim):
-        super().__init__()
-        self.split_size_or_sections = split_size_or_sections
-        self.dim = dim
-
-    def forward(self, tensor):
-        return torch.split(tensor, self.split_size_or_sections, self.dim)
-
-
 class RegressionFNP(nn.Module):
     """
     Functional Neural Process for regression
@@ -319,7 +325,12 @@ class RegressionFNP(nn.Module):
         ).view(x.size(0), 1)
         # transformation of the input
         if not self.x_as_u:
-            self.cov_vencoder = VEncoder(dim_x, [self.dim_h] * n_layers, self.dim_u)
+            self.cov_vencoder = NormalEncoder(
+                nn.Sequential(
+                    MLP(dim_x, [self.dim_h] * n_layers, 2 * self.dim_u),
+                    SplitLayer(self.dim_u, -1),
+                )
+            )
         else:
             self.cov_vencoder = IdentityEncoder()
         # p(u|x)
@@ -349,10 +360,15 @@ class RegressionFNP(nn.Module):
         else:
             self.pooler = pooler
 
-        self.prop_vencoder = VEncoder(
-            self.dim_y_enc + (self.use_x_mu_nu) * self.dim_x,
-            self.mu_nu_layers,
-            self.dim_z,
+        self.prop_vencoder = NormalEncoder(
+            nn.Sequential(
+                MLP(
+                    self.dim_y_enc + (self.use_x_mu_nu) * self.dim_x,
+                    self.mu_nu_layers,
+                    2 * self.dim_z,
+                ),
+                SplitLayer(self.dim_z, -1),
+            ),
             minscale=1e-8,
         )
         # for p(y|z)
@@ -724,10 +740,15 @@ class ConvRegressionFNP(RegressionFNP):
 
         self.trans_cond_y = conv_autoencoder.encoder
         self.dim_y_enc = conv_autoencoder.dim_y_enc
-        self.prop_vencoder = VEncoder(
-            self.dim_y_enc + (self.use_x_mu_nu) * self.dim_x,
-            self.mu_nu_layers,
-            self.dim_z,
+        self.prop_vencoder = NormalEncoder(
+            nn.Sequential(
+                MLP(
+                    self.dim_y_enc + (self.use_x_mu_nu) * self.dim_x,
+                    self.mu_nu_layers,
+                    self.dim_z * 2,
+                ),
+                SplitLayer(self.dim_z, -1),
+            ),
             minscale=1e-8,
         )
         self.output = conv_autoencoder.decoder
