@@ -23,7 +23,6 @@ def trained_star_encoder_m2(sleep_setup, devices):
     return sleep_net.image_encoder.to(devices.device)
 
 
-# pylint: disable=too-few-public-methods
 class TestStarSleepEncoderM2:
     def test_star_sleep_m2(self, trained_star_encoder_m2, devices, paths):
         device = devices.device

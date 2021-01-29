@@ -22,7 +22,6 @@ def get_cfg(overrides, devices):
     return cfg
 
 
-# pylint: disable=too-few-public-methods
 class DeviceSetup:
     def __init__(self, gpus):
         self.use_cuda = torch.cuda.is_available() if gpus != "" else False

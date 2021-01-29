@@ -3,7 +3,6 @@ import numpy as np
 from bliss.datasets import sdss
 
 
-# pylint: disable=too-few-public-methods
 class TestSDSS:
     def test_sdss(self, paths):
         sdss_dir = paths["sdss"]
