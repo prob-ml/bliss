@@ -156,7 +156,7 @@ class AveragePooler(nn.Module):
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
-    def calc_pz_dist(self, rep_R, GA, minscale=1e-8):
+    def forward(self, rep_R, GA, minscale=1e-8):
         pz_mean_R, pz_logscale_R = torch.split(rep_R, self.dim_z, -1)
 
         W = self.norm_graph(GA)
@@ -166,7 +166,7 @@ class AveragePooler(nn.Module):
         pz_logscale_all = torch.log(
             minscale + (1 - minscale) * F.softplus(pz_logscale_all)
         )
-        return pz_mean_all, pz_logscale_all
+        return Normal(pz_mean_all, pz_logscale_all)
 
 
 class SetPooler(nn.Module):
@@ -201,7 +201,7 @@ class SetPooler(nn.Module):
                 MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
             )
 
-    def calc_pz_dist(self, rep_R, GA, minscale=1e-8):
+    def forward(self, rep_R, GA, minscale=1e-8):
         # yR_enc_with_uR = torch.cat([yR_encoded, uR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)], dim=-1)
 
         if not self.set_transformer:
@@ -214,7 +214,7 @@ class SetPooler(nn.Module):
         pz_logscale_all = torch.log(
             minscale + (1 - minscale) * F.softplus(pz_logscale_all)
         )
-        return pz_mean_all, pz_logscale_all
+        return Normal(pz_mean_all, pz_logscale_all)
 
 
 class RepEncoder(nn.Module):
@@ -483,7 +483,7 @@ class RegressionFNP(pl.LightningModule):
 
         yR_encoded = self.trans_cond_y(yR)
         rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
-        pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(rep_R, GA)
+        pz = self.pooler(rep_R, GA)
 
         y_all_encoded = self.trans_cond_y(y_all)
         if self.use_x_mu_nu:
@@ -492,9 +492,7 @@ class RegressionFNP(pl.LightningModule):
                 dim=-1,
             )
         qz = self.prop_vencoder(y_all_encoded)
-        assert torch.isnan(pz_mean_all).sum() == 0
 
-        pz = Normal(pz_mean_all, pz_logscale_all)
         z = qz.sample()
 
         log_pqz_R, log_pqz_M = self.calc_log_pqz(pz, qz, z, n_ref)
@@ -553,9 +551,7 @@ class RegressionFNP(pl.LightningModule):
 
         yR_encoded = self.trans_cond_y(yR)
         rep_R = self.rep_encoder(uM, uR, XR, yR_encoded)
-        pz_mean_all, pz_logscale_all = self.pooler.calc_pz_dist(rep_R, A)
-
-        pz = Normal(pz_mean_all, pz_logscale_all)
+        pz = self.pooler(rep_R, A)
         if sample_Z:
             z = pz.rsample()
         else:
