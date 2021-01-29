@@ -373,10 +373,11 @@ class RegressionFNP(nn.Module):
         )
         # for p(y|z)
         output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
-        self.output = nn.Sequential(
+        output = nn.Sequential(
             MLP(output_insize, self.output_layers, 2 * self.dim_y),
             SplitLayer(self.dim_y, -1),
         )
+        self.label_vdecoder = NormalEncoder(output, minscale=0.1)
 
     def calc_log_pqz(self, pz, qz, z, n_ref):
         """
@@ -405,12 +406,6 @@ class RegressionFNP(nn.Module):
             log_pqz_R = torch.sum(pqz_all[0:n_ref])
             log_pqz_M = torch.sum(pqz_all[n_ref:])
         return log_pqz_R, log_pqz_M
-
-    def calc_output_y(self, final_rep):
-        mean_y, logstd_y = self.output(final_rep)
-        logstd_y = torch.log(0.1 + 0.9 * F.softplus(logstd_y))
-        return mean_y, logstd_y
-
 
     def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
         """
@@ -490,34 +485,16 @@ class RegressionFNP(nn.Module):
         ## of posterior collapse.
         log_pqz_R, log_pqz_M = self.calc_log_pqz(pz, qz, z, n_ref)
 
-        ## Conditional on Z, calculate the distribution of the labels y
+        ## Calculate the conditional likelihood of the labels y conditional on Z
         final_rep = (
             z
             if not self.use_plus
             else torch.cat([z, u.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
         )
-        mean_y, logstd_y = self.calc_output_y(final_rep)
-        mean_yR, mean_yM = torch.split(mean_y, [n_ref, mean_y.size(1) - n_ref], 1)
-        logstd_yR, logstd_yM = torch.split(
-            logstd_y, [n_ref, logstd_y.size(1) - n_ref], 1
-        )
-
-        ## Calculate the log-likelihood of the labels
-        pyR = Normal(mean_yR, logstd_yR)
-        log_pyR = torch.sum(pyR.log_prob(yR))
-        assert not torch.isnan(log_pyR)
-
-        pyM = Normal(mean_yM, logstd_yM)
-        log_pyM = torch.sum(pyM.log_prob(yM))
-        assert not torch.isnan(log_pyM)
-
-        obj_R = (log_pyR + log_pqz_R) / float(XM.size(0))
-        obj_M = (log_pyM + log_pqz_M) / float(XM.size(0))
-
-        assert not torch.isnan(obj_R)
-        assert not torch.isnan(obj_M)
-
-        obj = obj_R + obj_M
+        py = self.label_vdecoder(final_rep)
+        log_py = py.log_prob(y_all).sum()
+        assert not torch.isnan(log_py)
+        obj = log_pqz_R + log_pqz_M + log_py
         return obj
 
     def forward(self, XR, yR, XM, yM, G_in=None, A_in=None, kl_anneal=1.0):
@@ -542,16 +519,15 @@ class RegressionFNP(nn.Module):
         self.z = z
 
         final_rep = (
-            z
+            zM
             if not self.use_plus
-            else torch.cat([z, u.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
+            else torch.cat([zM, uM.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
         )
-        mean_y, logstd_y = self.calc_output_y(final_rep)
-        py = Normal(mean_y, logstd_y)
+        py = self.label_vdecoder(final_rep)
         if sample:
             y_new_i = py.sample()
         else:
-            y_new_i = mean_y
+            y_new_i = py.means
 
         if self.transf_y is not None:
             y_pred = self.inverse_transform(y_new_i)
@@ -752,7 +728,8 @@ class ConvRegressionFNP(RegressionFNP):
             ),
             minscale=1e-8,
         )
-        self.output = conv_autoencoder.decoder
+        output = conv_autoencoder.decoder
+        self.label_vdecoder = NormalEncoder(output, minscale=0.1)
 
 
 class ConvPoolingFNP(PoolingFNP, ConvRegressionFNP):
