@@ -450,10 +450,14 @@ class RegressionFNP(pl.LightningModule):
         mean_y, logstd_y = self.calc_output_y(final_rep)
         return mean_y, logstd_y
 
-    def forward(self, XR, yR, XM, yM, G_in=None, A_in=None, kl_anneal=1.0):
+    def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
+        """
+        This method runs the FNP up to the point the distributions for the latent
+        variables are calculated. This is the shared procedure for both model inference
+        and prediction.
+        """
         n_ref = XR.size(0)
         X_all = torch.cat([XR, XM], dim=0)
-        y_all = torch.cat([yR, yM], dim=1)
 
         ## Sample covariate representation U
         pu = self.cov_vencoder(X_all)
@@ -463,20 +467,28 @@ class RegressionFNP(pl.LightningModule):
         assert torch.isnan(u).sum() == 0
 
         ## Sample the dependency matrices
-        if (A_in is None) or (G_in is None):
-            if self.G is None:
-                G = sample_DAG(uR, self.pairwise_g, training=self.training)
-            else:
-                G = self.G_const
+        if A_in is None:
             if self.A is None:
                 A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
             else:
                 A = self.A_const
-        if G_in is not None:
-            G = G_in
-        if A_in is not None:
+        else:
             A = A_in
-        GA = torch.cat([G, A], 0)
+
+        if mode == "infer":
+            if G_in is None:
+                if self.G is None:
+                    G = sample_DAG(uR, self.pairwise_g, training=self.training)
+                else:
+                    G = self.G_const
+            else:
+                G = G_in
+
+            GA = torch.cat([G, A], 0)
+        elif mode == "predict":
+            GA = A
+        else:
+            raise ("invalid encode mode")
 
         # pdb.set_trace()
         assert torch.isnan(GA).sum() == 0
@@ -484,7 +496,15 @@ class RegressionFNP(pl.LightningModule):
         yR_encoded = self.trans_cond_y(yR)
         rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
         pz = self.pooler(rep_R, GA)
+        return u, pz
 
+    def log_prob(self, XR, yR, XM, yM, G_in=None, A_in=None):
+        u, pz = self.encode(XR, yR, XM, G_in, A_in)
+
+        n_ref = XR.size(0)
+        X_all = torch.cat([XR, XM], dim=0)
+
+        y_all = torch.cat([yR, yM], dim=1)
         y_all_encoded = self.trans_cond_y(y_all)
         if self.use_x_mu_nu:
             y_all_encoded = torch.cat(
@@ -523,9 +543,10 @@ class RegressionFNP(pl.LightningModule):
         else:
             obj = obj_R + obj_M
 
-        loss = -obj
+        return obj
 
-        return loss
+    def forward(self, XR, yR, XM, yM, G_in=None, A_in=None, kl_anneal=1.0):
+        return -self.log_prob(XR, yR, XM, yM, G_in, A_in)
 
     def inverse_transform(self, y):
         y = y.squeeze(-3)
@@ -536,28 +557,16 @@ class RegressionFNP(pl.LightningModule):
 
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
         n_ref = XR.size(0)
-        X_all = torch.cat([XR, x_new], 0)
-        pu = self.cov_vencoder(X_all)
-        u = pu.rsample()
-        uR = u[:n_ref]
+        u, pz = self.encode(XR, yR, x_new, None, A_in)
         uM = u[n_ref:]
-        if A_in is None:
-            if self.A is None:
-                A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
-            else:
-                A = self.A_const
-        else:
-            A = A_in
-
-        yR_encoded = self.trans_cond_y(yR)
-        rep_R = self.rep_encoder(uM, uR, XR, yR_encoded)
-        pz = self.pooler(rep_R, A)
         if sample_Z:
             z = pz.rsample()
         else:
-            z = pz_mean_all
+            z = pz.means
+        zM = z[:, n_ref:]
         self.z = z
-        mean_y, logstd_y = self.calc_py_dist(z, uM)
+
+        mean_y, logstd_y = self.calc_py_dist(zM, uM)
         py = Normal(mean_y, logstd_y)
         if sample:
             y_new_i = py.sample()
