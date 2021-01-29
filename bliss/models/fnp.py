@@ -378,21 +378,6 @@ class RegressionFNP(pl.LightningModule):
             mu_nu_in += self.dim_x
         return MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
 
-    def sample_dependency_matrices(self, uR, uM):
-        if self.G is None:
-            # raise(NotImplementedError("Random graphs are not implemented yet for batch likelihood"))
-            G = sample_DAG(uR, self.pairwise_g, training=self.training)
-        else:
-            G = self.G_const
-
-        if self.A is None:
-            # raise(NotImplementedError("Random graphs are not implemented yet for batch likelihood"))
-            A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
-        else:
-            A = self.A_const
-
-        return G, A
-
     def calc_qz_dist(self, X_all, y_all, minscale=1e-8):
         y_all_encoded = self.trans_cond_y(y_all)
         if self.use_x_mu_nu:
@@ -456,18 +441,29 @@ class RegressionFNP(pl.LightningModule):
         X_all = torch.cat([XR, XM], dim=0)
         y_all = torch.cat([yR, yM], dim=1)
 
+        ## Sample covariate representation U
         u = self.cov_vencoder(X_all)
         uR = u[:n_ref]
         uM = u[n_ref:]
-
         assert torch.isnan(u).sum() == 0
+
+        ## Sample the dependency matrices
         if (A_in is None) or (G_in is None):
             G, A = self.sample_dependency_matrices(uR, uM)
+            if self.G is None:
+                G = sample_DAG(uR, self.pairwise_g, training=self.training)
+            else:
+                G = self.G_const
+            if self.A is None:
+                A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
+            else:
+                A = self.A_const
         if G_in is not None:
             G = G_in
         if A_in is not None:
             A = A_in
         GA = torch.cat([G, A], 0)
+
         # pdb.set_trace()
         assert torch.isnan(GA).sum() == 0
 
