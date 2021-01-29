@@ -411,15 +411,6 @@ class RegressionFNP(nn.Module):
         logstd_y = torch.log(0.1 + 0.9 * F.softplus(logstd_y))
         return mean_y, logstd_y
 
-    def calc_py_dist(self, z, u):
-        final_rep = (
-            z
-            if not self.use_plus
-            else torch.cat([z, u.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
-        )
-        # Encodes y from z
-        mean_y, logstd_y = self.calc_output_y(final_rep)
-        return mean_y, logstd_y
 
     def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
         """
@@ -500,7 +491,12 @@ class RegressionFNP(nn.Module):
         log_pqz_R, log_pqz_M = self.calc_log_pqz(pz, qz, z, n_ref)
 
         ## Conditional on Z, calculate the distribution of the labels y
-        mean_y, logstd_y = self.calc_py_dist(z, u)
+        final_rep = (
+            z
+            if not self.use_plus
+            else torch.cat([z, u.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
+        )
+        mean_y, logstd_y = self.calc_output_y(final_rep)
         mean_yR, mean_yM = torch.split(mean_y, [n_ref, mean_y.size(1) - n_ref], 1)
         logstd_yR, logstd_yM = torch.split(
             logstd_y, [n_ref, logstd_y.size(1) - n_ref], 1
@@ -545,7 +541,12 @@ class RegressionFNP(nn.Module):
         zM = z[:, n_ref:]
         self.z = z
 
-        mean_y, logstd_y = self.calc_py_dist(zM, uM)
+        final_rep = (
+            z
+            if not self.use_plus
+            else torch.cat([z, u.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
+        )
+        mean_y, logstd_y = self.calc_output_y(final_rep)
         py = Normal(mean_y, logstd_y)
         if sample:
             y_new_i = py.sample()
