@@ -207,7 +207,6 @@ if __name__ == "__main__":
         use_direction_mu_nu=True,
         output_layers=[32, 64, 128],
         x_as_u=True,
-        discrete_orientation=False,
         set_transformer=True,
     )
 

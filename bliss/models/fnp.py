@@ -34,23 +34,6 @@ class MLP(nn.Module):
         return self.f(X)
 
 
-def calc_pairwise_isright(uM, uR):
-    """
-    This returns a binary matrix that is one if uM_i < uR_i and zero otherwise
-    """
-    Z = uM.unsqueeze(1) - uR.unsqueeze(0)
-    return (Z < 0).squeeze(2)
-
-
-def calc_pairwise_dist2(uM, uR):
-    """
-    This calculates the cross product of dist2
-    """
-    Z = uM.unsqueeze(1) - uR.unsqueeze(0)
-    # return Z
-    return Z.pow(2).sum(2).sqrt()
-
-
 # class FNP(pl.LightningModule):
 #     """
 #     This is an implementation of the Functional Neural Process (FNP)
