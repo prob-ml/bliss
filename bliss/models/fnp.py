@@ -2,7 +2,6 @@ import torch.nn as nn
 import torch
 import math
 import torch.nn.functional as F
-import pytorch_lightning as pl
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.distributions import Bernoulli, MultivariateNormal
@@ -239,7 +238,7 @@ class SplitLayer(nn.Module):
         return torch.split(tensor, self.split_size_or_sections, self.dim)
 
 
-class RegressionFNP(pl.LightningModule):
+class RegressionFNP(nn.Module):
     """
     Functional Neural Process for regression
     """
@@ -362,24 +361,6 @@ class RegressionFNP(pl.LightningModule):
             MLP(output_insize, self.output_layers, 2 * self.dim_y),
             SplitLayer(self.dim_y, -1),
         )
-
-    def training_step(self, batch, batch_idx):
-        yR = batch["YR"]
-        yM = batch["YM"]
-        XR = batch["XR"][:, 0:1]
-        XM = batch["XM"][:, 0:1]
-
-        yR = yR.view(1, yR.size(0), -1)
-        yM = yM.view(1, yM.size(0), -1)
-
-        loss = self.forward(XR, yR, XM, yM)
-        self.log("train_loss", loss)
-
-        return loss
-
-    def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=1e-3)
-        return optimizer
 
     def calc_log_pqz(self, pz, qz, z, n_ref):
         """
