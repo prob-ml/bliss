@@ -269,7 +269,6 @@ class RegressionFNP(pl.LightningModule):
         transf_y=None,
         n_layers=1,
         use_plus=True,
-        num_M=100,
         dim_u=1,
         dim_z=1,
         fb_z=0.0,
@@ -281,9 +280,6 @@ class RegressionFNP(pl.LightningModule):
         use_direction_mu_nu=False,
         output_layers=[128],
         x_as_u=False,
-        condition_on_ref=False,
-        discrete_orientation=True,
-        weighted_graph=False,
         pooler=None,
     ):
         """
@@ -293,7 +289,6 @@ class RegressionFNP(pl.LightningModule):
         :param transf_y: Transformation of the output (e.g. standardization)
         :param n_layers: How many hidden layers to us
         :param use_plus: Whether to use the FNP+
-        :param num_M: How many points exist in the training set that are not part of the reference set
         :param dim_u: Dimensionality of the latents in the embedding space
         :param dim_z: Dimensionality of the  latents that summarize the parents
         :param fb_z: How many free bits do we allow for the latent variable z
@@ -306,7 +301,6 @@ class RegressionFNP(pl.LightningModule):
         """
         super(RegressionFNP, self).__init__()
 
-        # self.num_M = num_M
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.dim_h = dim_h
@@ -327,9 +321,6 @@ class RegressionFNP(pl.LightningModule):
         self.use_direction_mu_nu = use_direction_mu_nu
         self.output_layers = output_layers
         self.x_as_u = x_as_u
-        self.condition_on_ref = condition_on_ref
-        self.discrete_orientation = discrete_orientation
-        self.weighted_graph = weighted_graph
 
         self.register_buffer("lambda_z", float_tensor(1).fill_(1e-8))
 
@@ -538,11 +529,7 @@ class RegressionFNP(pl.LightningModule):
         assert not torch.isnan(obj_R)
         assert not torch.isnan(obj_M)
 
-        if self.condition_on_ref:
-            obj = obj_M
-        else:
-            obj = obj_R + obj_M
-
+        obj = obj_R + obj_M
         return obj
 
     def forward(self, XR, yR, XM, yM, G_in=None, A_in=None, kl_anneal=1.0):

@@ -19,7 +19,6 @@ class TestFNP:
             dim_h=100,
             dim_u=3,
             n_layers=1,
-            num_M=od.XM.size(0),
             dim_z=50,
             fb_z=1.0,
             use_plus=False,
@@ -32,7 +31,6 @@ class TestFNP:
             dim_h=100,
             dim_u=3,
             n_layers=1,
-            num_M=od.XM.size(0),
             dim_z=50,
             fb_z=1.0,
             use_plus=True,
@@ -45,7 +43,6 @@ class TestFNP:
             dim_h=100,
             dim_u=3,
             n_layers=1,
-            num_M=od.XM.size(0),
             dim_z=50,
             fb_z=1.0,
             use_plus=False,
@@ -60,7 +57,6 @@ class TestFNP:
             dim_h=100,
             dim_u=3,
             n_layers=1,
-            num_M=od.XM.size(0),
             dim_z=50,
             fb_z=0.5,
             use_plus=False,
@@ -93,7 +89,6 @@ class TestFNP:
         # torch.cuda.set_device(args.cuda_device[0])
 
         epochs_outer = 100
-        condition_on_ref = False
         # generate = True
         n_ref = 10
         N = 10
@@ -144,7 +139,6 @@ class TestFNP:
             dim_u=1,
             pooling_layers=[32, 16],
             n_layers=3,
-            num_M=star_data.X_m.size(0),
             dim_z=8,
             fb_z=1.0,
             use_plus=False,
@@ -155,7 +149,6 @@ class TestFNP:
             use_direction_mu_nu=True,
             output_layers=[32, 64, 128],
             x_as_u=True,
-            condition_on_ref=condition_on_ref,
             discrete_orientation=False,
             set_transformer=True,
         )

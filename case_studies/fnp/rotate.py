@@ -58,7 +58,6 @@ parser.add_argument(
     help="Learning rate for ADAM",
     default=[1e-3],
 )
-parser.add_argument("--condref", dest="condition_on_ref", action="store_true")
 parser.add_argument("--skiptrain", dest="skiptrain", action="store_true")
 
 parser.add_argument(
@@ -129,7 +128,6 @@ if __name__ == "__main__":
     torch.cuda.set_device(args.cuda_device[0])
 
     epochs_outer = args.epochs[0]
-    condition_on_ref = args.condition_on_ref
     generate = not args.nogenerate
     n_ref = args.n_ref[0]
     N = args.N[0]
@@ -199,7 +197,6 @@ if __name__ == "__main__":
         dim_u=1,
         pooling_layers=[32, 16],
         n_layers=3,
-        num_M=star_data.X_m.size(0),
         dim_z=8,
         fb_z=1.0,
         use_plus=False,
@@ -210,7 +207,6 @@ if __name__ == "__main__":
         use_direction_mu_nu=True,
         output_layers=[32, 64, 128],
         x_as_u=True,
-        condition_on_ref=condition_on_ref,
         discrete_orientation=False,
         set_transformer=True,
     )
