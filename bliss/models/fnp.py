@@ -102,6 +102,24 @@ def calc_pairwise_dist2(uM, uR):
 
 #     def configure_optimizers(self):
 #         pass
+class VEncoder(nn.Module):
+    def __init__(self, dim_x, dim_h, dim_u, n_layers):
+        super().__init__()
+        self.dim_u = dim_u
+        init = [nn.Linear(dim_x, dim_h), nn.ReLU()]
+        for _ in range(n_layers - 1):
+            init += [nn.Linear(dim_h, dim_h), nn.ReLU()]
+        self.cond_trans = nn.Sequential(*init)
+        self.p_u = nn.Linear(dim_h, 2 * dim_u)
+
+    def sample(self, X_all, n_ref):
+        H_all = self.cond_trans(X_all)
+        pu_mean_all, pu_logscale_all = torch.split(self.p_u(H_all), self.dim_u, dim=1)
+        pu = Normal(pu_mean_all, pu_logscale_all)
+        u = pu.rsample()
+        uR = u[0:n_ref]
+        uM = u[n_ref:]
+        return u, uR, uM
 
 
 class AveragePooler(nn.Module):
@@ -304,12 +322,8 @@ class RegressionFNP(pl.LightningModule):
             / self.pairwise_g_logscale.exp()
         ).view(x.size(0), 1)
         # transformation of the input
-        init = [nn.Linear(dim_x, self.dim_h), nn.ReLU()]
-        for i in range(n_layers - 1):
-            init += [nn.Linear(self.dim_h, self.dim_h), nn.ReLU()]
-        self.cond_trans = nn.Sequential(*init)
+        self.cov_vencoder = VEncoder(dim_x, self.dim_h, self.dim_u, n_layers)
         # p(u|x)
-        self.p_u = nn.Linear(self.dim_h, 2 * self.dim_u)
         # q(z|x)
         # See equation 7
         self.q_z = nn.Linear(self.dim_h, 2 * self.dim_z)
@@ -367,21 +381,6 @@ class RegressionFNP(pl.LightningModule):
             # raise(NotImplementedError("use_x_mu_nu is not yet implemented")
             mu_nu_in += self.dim_x
         return MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
-
-    def sample_u(self, X_all, n_ref):
-        # get U
-        if self.x_as_u:
-            u = X_all
-        else:
-            H_all = self.cond_trans(X_all)
-            pu_mean_all, pu_logscale_all = torch.split(
-                self.p_u(H_all), self.dim_u, dim=1
-            )
-            pu = Normal(pu_mean_all, pu_logscale_all)
-            u = pu.rsample()
-        uR = u[0:n_ref]
-        uM = u[n_ref:]
-        return u, uR, uM
 
     def sample_dependency_matrices(self, uR, uM):
         if self.G is None:
@@ -461,7 +460,7 @@ class RegressionFNP(pl.LightningModule):
         X_all = torch.cat([XR, XM], dim=0)
         y_all = torch.cat([yR, yM], dim=1)
 
-        u, uR, uM = self.sample_u(X_all, n_ref)
+        u, uR, uM = self.cov_vencoder.sample(X_all, n_ref)
         assert torch.isnan(u).sum() == 0
         if (A_in is None) or (G_in is None):
             G, A = self.sample_dependency_matrices(uR, uM)
@@ -526,7 +525,7 @@ class RegressionFNP(pl.LightningModule):
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
         n_ref = XR.size(0)
         X_all = torch.cat([XR, x_new], 0)
-        u, uR, uM = self.sample_u(X_all, n_ref)
+        u, uR, uM = self.cov_vencoder.sample(X_all, n_ref)
         if A_in is None:
             _, A = self.sample_dependency_matrices(uR, uM)
         else:
