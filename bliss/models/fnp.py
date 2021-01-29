@@ -422,6 +422,10 @@ class RegressionFNP(nn.Module):
         assert torch.isnan(u).sum() == 0
 
         ## Sample the dependency matrices
+        ## If we are training ("infer"), the entire dependency
+        ## graph (A and G) is generated.
+        ## If we are predicting ("predict"), only the dependent
+        ## graph (A) is used.
         if A_in is None:
             if self.A is None:
                 A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
@@ -429,7 +433,6 @@ class RegressionFNP(nn.Module):
                 A = self.A_const
         else:
             A = A_in
-
         if mode == "infer":
             if G_in is None:
                 if self.G is None:
@@ -444,21 +447,26 @@ class RegressionFNP(nn.Module):
             GA = A
         else:
             raise ("invalid encode mode")
-
-        # pdb.set_trace()
         assert torch.isnan(GA).sum() == 0
 
+        ## From the dependency graph GA and the encoded
+        ## representative set, we calculate the distribution
+        ## of the latent representations Z
         yR_encoded = self.trans_cond_y(yR)
         rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
         pz = self.pooler(rep_R, GA)
         return u, pz
 
     def log_prob(self, XR, yR, XM, yM, G_in=None, A_in=None):
+        ## Get the distribution of the latent representations Z
+        ## and the encoding U of the covariates
         u, pz = self.encode(XR, yR, XM, G_in, A_in)
 
         n_ref = XR.size(0)
         X_all = torch.cat([XR, XM], dim=0)
 
+        ## Sample Z from the proposal distribution (which
+        ## is allowed to look at the labels of all points)
         y_all = torch.cat([yR, yM], dim=1)
         y_all_encoded = self.trans_cond_y(y_all)
         if self.use_x_mu_nu:
@@ -467,18 +475,22 @@ class RegressionFNP(nn.Module):
                 dim=-1,
             )
         qz = self.prop_vencoder(y_all_encoded)
-
         z = qz.sample()
 
+        ## Calculate the difference between the "prior" pz and the
+        ## variational distribution qz with an optional "free-bits" strategy.
+        ## This free-bits strategy is a lower bound that solves the problem
+        ## of posterior collapse.
         log_pqz_R, log_pqz_M = self.calc_log_pqz(pz, qz, z, n_ref)
 
+        ## Conditional on Z, calculate the distribution of the labels y
         mean_y, logstd_y = self.calc_py_dist(z, u)
-
         mean_yR, mean_yM = torch.split(mean_y, [n_ref, mean_y.size(1) - n_ref], 1)
         logstd_yR, logstd_yM = torch.split(
             logstd_y, [n_ref, logstd_y.size(1) - n_ref], 1
         )
 
+        ## Calculate the log-likelihood of the labels
         pyR = Normal(mean_yR, logstd_yR)
         log_pyR = torch.sum(pyR.log_prob(yR))
         assert not torch.isnan(log_pyR)
