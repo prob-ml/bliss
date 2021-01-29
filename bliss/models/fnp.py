@@ -581,27 +581,32 @@ def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
     return q, dummy_output, h_out, w_out, pad_h, pad_w
 
 
-class ConvRegressionFNP(RegressionFNP):
+class Conv2DAutoEncoder(nn.Module):
     """
-    Functional Neural Procoess for regression on images
+    This module creates a stacked layer of Conv2D layers to decode an image tensor to a
+    flattened representation. It simulatenously creates a corresponding stacked layer of
+    Conv2d Transposes which will map that representation to an output image of the same
+    dimension.
     """
 
     def __init__(
         self,
-        size_h=10,
-        size_w=10,
-        kernel_sizes=[3, 3],
-        strides=[1, 1],
-        conv_channels=[20, 20],
-        **kwargs
+        size_h,
+        size_w,
+        conv_channels,
+        kernel_sizes,
+        strides,
+        output_insize,
+        output_layers,
     ):
+        super().__init__()
         self.size_h = size_h
         self.size_w = size_w
+        self.conv_channels = conv_channels
         self.kernel_sizes = kernel_sizes
         self.strides = strides
-        # self.conv_layers = conv_layers
-        self.conv_channels = conv_channels
-        super(ConvRegressionFNP, self).__init__(**kwargs)
+        self.output_insize = output_insize
+        self.output_layers = output_layers
 
         self.pad_hs = []
         self.pad_ws = []
@@ -631,12 +636,10 @@ class ConvRegressionFNP(RegressionFNP):
         self.dim_w_end = w_out
         y_encoder_array.append(Flatten())
         y_encoder_array.append(nn.Linear(self.dim_y_enc, self.dim_y_enc))
-        self.trans_cond_y = nn.Sequential(*y_encoder_array)
-        self.mu_nu_proposal = self.make_mu_nu_proposal()
+        self.encoder = nn.Sequential(*y_encoder_array)
 
         ## Make Convolutional Output
-        output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
-        fc_layers = MLP(output_insize, self.output_layers, self.dim_y_enc)
+        fc_layers = MLP(self.output_insize, self.output_layers, self.dim_y_enc)
         output_array = [
             fc_layers,
             UnFlatten([self.conv_channels[-1], self.dim_h_end, self.dim_w_end]),
@@ -663,7 +666,45 @@ class ConvRegressionFNP(RegressionFNP):
             ),
         ]
 
-        self.output = nn.Sequential(*output_array)
+        self.decoder = nn.Sequential(*output_array)
+
+
+class ConvRegressionFNP(RegressionFNP):
+    """
+    Functional Neural Procoess for regression on images
+    """
+
+    def __init__(
+        self,
+        size_h=10,
+        size_w=10,
+        kernel_sizes=[3, 3],
+        strides=[1, 1],
+        conv_channels=[20, 20],
+        **kwargs
+    ):
+        self.size_h = size_h
+        self.size_w = size_w
+        self.kernel_sizes = kernel_sizes
+        self.strides = strides
+        # self.conv_layers = conv_layers
+        self.conv_channels = conv_channels
+        super(ConvRegressionFNP, self).__init__(**kwargs)
+
+        conv_autoencoder = Conv2DAutoEncoder(
+            size_h,
+            size_w,
+            conv_channels,
+            kernel_sizes,
+            strides,
+            self.dim_z if not self.use_plus else self.dim_z + self.dim_u,
+            self.output_layers,
+        )
+
+        self.trans_cond_y = conv_autoencoder.encoder
+        self.dim_y_enc = conv_autoencoder.dim_y_enc
+        self.mu_nu_proposal = self.make_mu_nu_proposal()
+        self.output = conv_autoencoder.decoder
 
     def calc_trans_cond_y(self, yR):
         yR_encoded = self.trans_cond_y(
