@@ -19,6 +19,7 @@ print(sys.path)
 
 # -- Project information -----------------------------------------------------
 
+# pylint: disable=redefined-builtin
 project = "bliss"
 copyright = "2021, Probabilistic Machine Learning Research Group"
 author = (

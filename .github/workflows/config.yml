@@ -45,9 +45,16 @@ jobs:
       run: |
         poetry install
 
-    - name: Run Tests
+    - name: Run pylint
+      run: |
+        poetry run pylint bliss
+
+    - name: Run black
       run: |
         poetry run black --check .
+        
+    - name: Run Tests
+      run: |
         poetry run pytest --cov=./bliss --cov-report=xml --durations=0
 
     - name: Upload coverage to Codecov
