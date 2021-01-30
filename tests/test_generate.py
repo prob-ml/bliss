@@ -1,5 +1,5 @@
-from bliss import generate
 from hydra.experimental import initialize, compose
+from bliss import generate
 
 
 def test_generate_run(devices):

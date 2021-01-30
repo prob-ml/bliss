@@ -1,5 +1,5 @@
-import torch
 from pathlib import Path
+import torch
 
 
 def test_galaxy_vae(galaxy_vae_setup, paths, devices):

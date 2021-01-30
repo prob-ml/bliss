@@ -16,9 +16,7 @@ from . import galaxy_net
 def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
     psfield = fits.open(psf_fit_file, ignore_missing_end=True)
     psf_params = torch.zeros(len(bands), 6)
-    for i in range(len(bands)):
-        band = bands[i]
-
+    for i, band in enumerate(bands):
         sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
         sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
         sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
@@ -33,6 +31,7 @@ def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
 
 
 class ImageDecoder(pl.LightningModule):
+    # pylint: disable=too-many-statements
     def __init__(
         self,
         n_bands=1,

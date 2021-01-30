@@ -75,7 +75,7 @@ class TestSourceEncoder:
 
             # we check the variational parameters against the hidden parameters
             # one by one
-            h_out = star_encoder._get_var_params_all(image_ptiles)
+            h_out = star_encoder.get_var_params_all(image_ptiles)
 
             # get index matrices
             locs_mean_indx_mat = star_encoder.loc_mean_indx

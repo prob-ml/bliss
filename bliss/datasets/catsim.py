@@ -180,7 +180,8 @@ class CatsimRenderer:
         except descwl.render.SourceNotVisible:
             if self.verbose:
                 print("Source not visible")
-            raise descwl.render.SourceNotVisible  # pass it on with a warning.
+            # pass it on with a warning.
+            raise descwl.render.SourceNotVisible from CatsimRenderer
 
         image_temp = galsim.Image(self.slen, self.slen)
         image_temp += single_obs.image
@@ -214,8 +215,8 @@ class CatsimRenderer:
 # TODO: Make this Dataset/Renderer faster, still can't do on the fly.
 class CatsimGalaxies(pl.LightningDataModule, Dataset):
     def __init__(self, cfg: DictConfig):
-        """This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)
-        and returns a galaxy drawn from the catalog with realistic seeing conditions using
+        """This class reads a random entry from the OneDegSq.fits file (sample from the Catsim
+        catalog) and returns a galaxy drawn from the catalog with realistic seeing conditions using
         functions from WeakLensingDeblending.
         """
         super().__init__()

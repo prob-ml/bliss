@@ -1,5 +1,4 @@
 import pytest
-import pathlib
 import torch
 import pytorch_lightning as pl
 from hydra.experimental import initialize, compose

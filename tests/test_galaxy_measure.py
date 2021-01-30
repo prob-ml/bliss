@@ -15,5 +15,5 @@ class TestBasicGalaxyMeasure:
     def trained_sleep(self, overrides, sleep_setup):
         return sleep_setup.get_trained_sleep(overrides)
 
-    def test_simulated(self, overrides, trained_sleep, devices):
+    def test_simulated(self, trained_sleep):
         assert trained_sleep.galaxy_encoder is not None

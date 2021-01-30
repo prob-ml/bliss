@@ -1,8 +1,9 @@
+import os
+
 import torch
 import pytest
-import os
 import numpy as np
-from bliss.datasets import sdss
+
 from bliss import metrics as metrics_lib
 
 torch.manual_seed(841)
