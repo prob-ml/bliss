@@ -489,7 +489,7 @@ class RegressionFNP(nn.Module):
             else torch.cat([z, u.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
         )
         py = self.label_vdecoder(final_rep)
-        log_py = py.log_prob(y_all).sum()
+        log_py = py.log_prob(y_all).sum() / XM.size(0)
         assert not torch.isnan(log_py)
         obj = log_pqz + log_py
         return obj

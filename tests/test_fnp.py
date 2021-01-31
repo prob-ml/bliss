@@ -75,6 +75,11 @@ class TestFNP:
             model, loss_initial, loss_final, loss_best = fnp.train_onedim_model(
                 model, od, epochs=1000, lr=1e-4
             )
+            ## These are to flag if the model has changed sufficiently to
+            ## have a much different starting loss value
+            assert loss_initial < 70
+            assert loss_initial > 40
+
             assert loss_best < loss_initial * thresholds[i]
             # Smoke test for prediction
             pred = model.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
@@ -210,4 +215,7 @@ class TestFNP:
             / star_data.N_valid
         )
         print("Final loss : {:.3f}".format(loss_final.item()))
+
+        assert loss_initial < 7000
+        assert loss_initial > 4000
         assert loss_final < loss_initial - 5000
