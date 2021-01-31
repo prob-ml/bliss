@@ -379,10 +379,9 @@ class RegressionFNP(nn.Module):
         )
         self.label_vdecoder = NormalEncoder(output, minscale=0.1)
 
-    def calc_log_pqz(self, pz, qz, z, n_ref):
+    def calc_log_pqz(self, pz, qz, z):
         """
-        Calculates the log difference between pz and qz (with an optional free bits strategy that
-        Derek doesn't understand)
+        Calculates the log difference between pz and qz (with an optional free bits strategy
         """
         pqz_all = pz.log_prob(z) - qz.log_prob(z)
         assert torch.isnan(pqz_all).sum() == 0
@@ -399,13 +398,11 @@ class RegressionFNP(nn.Module):
                         self.lambda_z * (1 - 0.1), min=1e-8, max=1.0
                     )
 
-            log_pqz_R = self.lambda_z * torch.sum(pqz_all[0:n_ref])
-            log_pqz_M = self.lambda_z * torch.sum(pqz_all[n_ref:])
+            log_pqz = self.lambda_z * pqz_all.sum()
 
         else:
-            log_pqz_R = torch.sum(pqz_all[0:n_ref])
-            log_pqz_M = torch.sum(pqz_all[n_ref:])
-        return log_pqz_R, log_pqz_M
+            log_pqz = pqz_all.sum()
+        return log_pqz
 
     def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
         """
@@ -483,7 +480,7 @@ class RegressionFNP(nn.Module):
         ## variational distribution qz with an optional "free-bits" strategy.
         ## This free-bits strategy is a lower bound that solves the problem
         ## of posterior collapse.
-        log_pqz_R, log_pqz_M = self.calc_log_pqz(pz, qz, z, n_ref)
+        log_pqz = self.calc_log_pqz(pz, qz, z)
 
         ## Calculate the conditional likelihood of the labels y conditional on Z
         final_rep = (
@@ -494,7 +491,7 @@ class RegressionFNP(nn.Module):
         py = self.label_vdecoder(final_rep)
         log_py = py.log_prob(y_all).sum()
         assert not torch.isnan(log_py)
-        obj = log_pqz_R + log_pqz_M + log_py
+        obj = log_pqz + log_py
         return obj
 
     def forward(self, XR, yR, XM, yM, G_in=None, A_in=None, kl_anneal=1.0):
