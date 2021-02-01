@@ -36,6 +36,7 @@ class TestTune:
         overrides = [f"{k}={v}" for k, v in overrides.items()]
         return overrides
 
+    @pytest.mark.filterwarnings("ignore:.*PytestUnhandledThreadExceptionWarning.*")
     def test_tune_run(self, overrides, devices):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
