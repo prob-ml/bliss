@@ -21,4 +21,3 @@ bliss.datasets.simulated module
 .. automodule:: bliss.datasets.simulated
    :members:
    :no-undoc-members:
-
