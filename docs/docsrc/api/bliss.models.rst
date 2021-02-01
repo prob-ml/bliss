@@ -21,4 +21,3 @@ bliss.models.galaxy\_net module
 .. automodule:: bliss.models.galaxy_net
    :members:
    :no-undoc-members:
-
