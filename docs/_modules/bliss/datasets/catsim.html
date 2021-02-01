@@ -14,22 +14,22 @@
     <script src="../../../_static/doctools.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-   
+
   <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
-  
-  
+
+
   <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
 
   </head><body>
-  
+
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          
+
 
           <div class="body" role="main">
-            
+
   <h1>Source code for bliss.datasets.catsim</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">torch</span>
@@ -213,7 +213,8 @@
         <span class="k">except</span> <span class="n">descwl</span><span class="o">.</span><span class="n">render</span><span class="o">.</span><span class="n">SourceNotVisible</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
                 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Source not visible&quot;</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="n">descwl</span><span class="o">.</span><span class="n">render</span><span class="o">.</span><span class="n">SourceNotVisible</span>  <span class="c1"># pass it on with a warning.</span>
+            <span class="c1"># pass it on with a warning.</span>
+            <span class="k">raise</span> <span class="n">descwl</span><span class="o">.</span><span class="n">render</span><span class="o">.</span><span class="n">SourceNotVisible</span> <span class="kn">from</span> <span class="nn">CatsimRenderer</span>
 
         <span class="n">image_temp</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span><span class="p">)</span>
         <span class="n">image_temp</span> <span class="o">+=</span> <span class="n">single_obs</span><span class="o">.</span><span class="n">image</span>
@@ -247,8 +248,8 @@
 <span class="c1"># TODO: Make this Dataset/Renderer faster, still can&#39;t do on the fly.</span>
 <div class="viewcode-block" id="CatsimGalaxies"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.catsim.CatsimGalaxies">[docs]</a><span class="k">class</span> <span class="nc">CatsimGalaxies</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningDataModule</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">DictConfig</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;This class reads a random entry from the OneDegSq.fits file (sample from the Catsim catalog)</span>
-<span class="sd">        and returns a galaxy drawn from the catalog with realistic seeing conditions using</span>
+        <span class="sd">&quot;&quot;&quot;This class reads a random entry from the OneDegSq.fits file (sample from the Catsim</span>
+<span class="sd">        catalog) and returns a galaxy drawn from the catalog with realistic seeing conditions using</span>
 <span class="sd">        functions from WeakLensingDeblending.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
@@ -370,7 +371,7 @@
 </pre></div>
 
           </div>
-          
+
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
@@ -423,15 +424,15 @@
     </div>
     <div class="footer">
       &copy;2021, Probabilistic Machine Learning Research Group.
-      
+
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-      
+
     </div>
 
-    
 
-    
+
+
   </body>
 </html>

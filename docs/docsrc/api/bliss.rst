@@ -65,5 +65,5 @@ Models
 
 .. toctree::
    :maxdepth: 2
-   
+
    bliss.models
