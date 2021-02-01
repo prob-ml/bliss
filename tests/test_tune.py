@@ -9,10 +9,12 @@ class TestTune:
     def overrides(self, devices):
         allocated_gpus = 0
         gpus_per_trial = 0
+        max_concurrent = 1
         if devices.use_cuda:
             gpus_per_trial = 1
             if torch.cuda.device_count() >= 2:
                 allocated_gpus = 2
+                max_concurrent = 2
             else:
                 allocated_gpus = 1
 
@@ -25,7 +27,7 @@ class TestTune:
             "tuning.n_epochs": 2 if devices.use_cuda else 1,
             "tuning.allocated_gpus": allocated_gpus,
             "tuning.gpus_per_trial": gpus_per_trial,
-            "tuning.max_concurrent": allocated_gpus,
+            "tuning.max_concurrent": max_concurrent,
             "tuning.grace_period": 1,
             "tuning.verbose": 0,
             "tuning.save": False,
