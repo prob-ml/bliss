@@ -769,7 +769,7 @@ class ConvPoolingFNP(PoolingFNP):
             mu_nu_in += 1
         # self.mu_nu_in = mu_nu_in
         ## This is a quick fix, but pooling_rep_size should not be used
-        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, 2 * self.pooling_rep_size)
+        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, self.pooling_rep_size)
         self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
         prop_inputs = [1]
         prop_mlp_in = dim_y_enc
