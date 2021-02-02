@@ -49,6 +49,16 @@ from bliss.models.fnp import (
     OneDimDataset,
     train_onedim_model,
 )
+from bliss.models.fnp import (
+    FNP,
+    SequentialVarg,
+    MLP,
+    SplitLayer,
+    NormalEncoder,
+    AveragePooler,
+    RepEncoder,
+    ConcatLayer,
+)
 from sklearn.preprocessing import StandardScaler
 import torch
 from torch.optim import Adam
@@ -75,22 +85,60 @@ torch.manual_seed(5)
 
 
 # %%
-fnp = RegressionFNP(
-    dim_x=1,
-    dim_y=1,
-    transf_y=od.stdy,
-    dim_h=100,
-    dim_u=3,
-    n_layers=1,
-    dim_z=50,
+# fnp = RegressionFNP(
+#     dim_x=1,
+#     dim_y=1,
+#     transf_y=od.stdy,
+#     dim_h=100,
+#     dim_u=3,
+#     n_layers=1,
+#     dim_z=50,
+#     fb_z=1.0,
+#     use_plus=False,
+# )
+dim_x = 1
+dim_y = 1
+dim_z = 50
+dim_u = 3
+dim_y_enc = 100
+fnp = FNP(
+    dim_u=dim_u,
+    cov_vencoder=SequentialVarg(
+        MLP(dim_x, [100], 2 * dim_u),
+        SplitLayer(dim_u, -1),
+        NormalEncoder(),
+    ),
+    trans_cond_y=MLP(dim_y, [128], dim_y_enc),
+    rep_encoder=RepEncoder(
+        MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
+    ),
+    pooler=SequentialVarg(
+        AveragePooler(dim_z),
+        SplitLayer(dim_z, -1),
+        NormalEncoder(minscale=1e-8),
+    ),
+    prop_vencoder=SequentialVarg(
+        ConcatLayer([1, 0]),
+        MLP(
+            dim_y_enc + dim_x,
+            [128],
+            2 * dim_z,
+        ),
+        SplitLayer(dim_z, -1),
+        NormalEncoder(minscale=1e-8),
+    ),
+    label_vdecoder=SequentialVarg(
+        ConcatLayer([0]),
+        MLP(dim_z, [128], 2 * dim_y),
+        SplitLayer(dim_y, -1),
+        NormalEncoder(minscale=0.1),
+    ),
     fb_z=1.0,
-    use_plus=False,
 )
-
 if torch.cuda.is_available():
     fnp = fnp.cuda()
 
-fnp, _, fnp_loss_final = train_onedim_model(
+fnp, _, _, fnp_loss_best = train_onedim_model(
     fnp, od, epochs=10000, lr=1e-4, visualize=VISUALIZE
 )
 

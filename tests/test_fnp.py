@@ -6,22 +6,60 @@ import os
 import math
 from torch.optim import Adam
 
+from bliss.models.fnp import (
+    FNP,
+    SequentialVarg,
+    MLP,
+    SplitLayer,
+    NormalEncoder,
+    AveragePooler,
+    RepEncoder,
+    ConcatLayer,
+)
+
 
 class TestFNP:
     def test_fnp_onedim(self, paths):
         # One dimensional example
         od = fnp.OneDimDataset()
-
-        vanilla_fnp = fnp.RegressionFNP(
-            dim_x=1,
-            dim_y=1,
-            transf_y=od.stdy,
-            dim_h=100,
-            dim_u=3,
-            n_layers=1,
-            dim_z=50,
+        dim_x = 1
+        dim_y = 1
+        dim_z = 50
+        dim_u = 3
+        dim_y_enc = 100
+        vanilla_fnp = FNP(
+            dim_u=dim_u,
+            cov_vencoder=SequentialVarg(
+                MLP(dim_x, [100], 2 * dim_u),
+                SplitLayer(dim_u, -1),
+                NormalEncoder(),
+            ),
+            trans_cond_y=MLP(dim_y, [128], dim_y_enc),
+            rep_encoder=RepEncoder(
+                MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
+            ),
+            pooler=SequentialVarg(
+                AveragePooler(dim_z),
+                SplitLayer(dim_z, -1),
+                NormalEncoder(minscale=1e-8),
+            ),
+            prop_vencoder=SequentialVarg(
+                ConcatLayer([1, 0]),
+                MLP(
+                    dim_y_enc + dim_x,
+                    [128],
+                    2 * dim_z,
+                ),
+                SplitLayer(dim_z, -1),
+                NormalEncoder(minscale=1e-8),
+            ),
+            label_vdecoder=SequentialVarg(
+                ConcatLayer([0]),
+                MLP(dim_z, [128], 2 * dim_y),
+                SplitLayer(dim_y, -1),
+                NormalEncoder(minscale=0.1),
+            ),
             fb_z=1.0,
-            use_plus=False,
         )
 
         fnpp = fnp.RegressionFNP(

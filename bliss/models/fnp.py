@@ -250,7 +250,7 @@ class SetPooler(nn.Module):
 class RepEncoder(nn.Module):
     def __init__(self, f, use_u_diff=False, use_x=False):
         super().__init__()
-        self.f   = f
+        self.f = f
         self.cat = ConcatLayer()
         self.use_u_diff = use_u_diff
         self.use_x = use_x
@@ -275,6 +275,7 @@ class RepEncoder(nn.Module):
 class FNP(nn.Module):
     def __init__(
         self,
+        dim_u,
         cov_vencoder,
         trans_cond_y,
         rep_encoder,
@@ -300,13 +301,11 @@ class FNP(nn.Module):
         ## TO BE DEPRECATED; the dependency graph should be rolled into
         ## its own Learned Submodule
         self.pairwise_g_logscale = nn.Parameter(
-            float_tensor(1).fill_(math.log(math.sqrt(self.dim_u)))
+            float_tensor(1).fill_(math.log(math.sqrt(dim_u)))
         )
         self.pairwise_g = lambda x: logitexp(
             -0.5
-            * torch.sum(
-                torch.pow(x[:, self.dim_u :] - x[:, 0 : self.dim_u], 2), 1, keepdim=True
-            )
+            * torch.sum(torch.pow(x[:, dim_u:] - x[:, 0:dim_u], 2), 1, keepdim=True)
             / self.pairwise_g_logscale.exp()
         ).view(x.size(0), 1)
 
@@ -473,7 +472,7 @@ class RegressionFNP(FNP):
         :param use_x_mu_nu: Whether to use x in mu_nu
         :param output_layers: Array of integers for the sizes of the output nn
         """
-        self.dim_u = dim_u if not x_as_u else dim_x
+        dim_u = dim_u if not x_as_u else dim_x
         if not x_as_u:
             cov_vencoder = SequentialVarg(
                 MLP(dim_x, [dim_h] * n_layers, 2 * dim_u),
@@ -533,6 +532,7 @@ class RegressionFNP(FNP):
             NormalEncoder(minscale=0.1),
         )
         super(RegressionFNP, self).__init__(
+            dim_u,
             cov_vencoder,
             trans_cond_y,
             rep_encoder,
@@ -1138,6 +1138,10 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
     holdout_loss_initial = model(od.XR, od.yhR, od.XM, od.yhM)[0]
     holdout_loss_best = holdout_loss_initial
     print("Initial holdout loss: {:.3f})".format(holdout_loss_initial))
+    if isinstance(model, RegressionFNP):
+        stdy = None
+    else:
+        stdy = od.stdy
     for i in range(epochs):
         optimizer.zero_grad()
 
@@ -1170,7 +1174,7 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
             model,
             od.dx,
             od.stdx,
-            None,
+            stdy,
             od.f,
             cond_x=od.XR,
             cond_y=od.yR[0],
