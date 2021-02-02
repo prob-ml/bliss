@@ -266,7 +266,6 @@ class FNP(nn.Module):
         label_vdecoder,
         A=None,
         G=None,
-        use_plus=True,
         fb_z=0.0,
     ):
         super().__init__()
@@ -287,7 +286,6 @@ class FNP(nn.Module):
             self.register_buffer("A_const", self.A)
 
         ## Module settings
-        self.use_plus = use_plus  # POSSIBLY TO BE DEPRECATED
 
         ## Initialize free-bits regularization
         self.fb_z = fb_z
@@ -383,12 +381,7 @@ class FNP(nn.Module):
         log_pqz = self.calc_log_pqz(pz, qz, z)
 
         ## Calculate the conditional likelihood of the labels y conditional on Z
-        final_rep = (
-            z
-            if not self.use_plus
-            else torch.cat([z, u.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
-        )
-        py = self.label_vdecoder(final_rep)
+        py = self.label_vdecoder(z, u.unsqueeze(0).repeat(z.size(0), 1, 1))
         log_py = py.log_prob(y_all).sum() / XM.size(0)
         assert not torch.isnan(log_py)
         obj = log_pqz + log_py
@@ -433,12 +426,7 @@ class FNP(nn.Module):
         zM = z[:, n_ref:]
         self.z = z
 
-        final_rep = (
-            zM
-            if not self.use_plus
-            else torch.cat([zM, uM.unsqueeze(0).repeat(z.size(0), 1, 1)], dim=-1)
-        )
-        py = self.label_vdecoder(final_rep)
+        py = self.label_vdecoder(zM, uM.unsqueeze(0).repeat(z.size(0), 1, 1))
         if sample:
             y_pred = py.sample()
         else:
@@ -544,10 +532,14 @@ class RegressionFNP(FNP):
             minscale=1e-8,
         )
         # for p(y|z)
+        output_inputs = [0] if not use_plus else [0, 1]
         output_insize = dim_z if not use_plus else dim_z + dim_u
-        output = nn.Sequential(
-            MLP(output_insize, output_layers, 2 * dim_y),
-            SplitLayer(dim_y, -1),
+        output = ConcatLayer(
+            output_inputs,
+            nn.Sequential(
+                MLP(output_insize, output_layers, 2 * dim_y),
+                SplitLayer(dim_y, -1),
+            ),
         )
         label_vdecoder = NormalEncoder(output, minscale=0.1)
         super(RegressionFNP, self).__init__(
@@ -559,8 +551,6 @@ class RegressionFNP(FNP):
             label_vdecoder,
             A=A,
             G=G,
-            use_x_mu_nu=use_x_mu_nu,
-            use_plus=use_plus,
             fb_z=fb_z,
         )
         self.transf_y = transf_y
@@ -757,6 +747,8 @@ class ConvPoolingFNP(PoolingFNP):
         dim_z = kwargs["dim_z"]
         mu_nu_layers = kwargs.get("mu_nu_layers", [128])
         output_layers = kwargs["output_layers"]
+        use_x_mu_nu = kwargs.get("use_x_mu_nu", True)
+        use_plus = kwargs.get("use_plus", True)
 
         conv_autoencoder = Conv2DAutoEncoder(
             size_h,
@@ -764,14 +756,14 @@ class ConvPoolingFNP(PoolingFNP):
             conv_channels,
             kernel_sizes,
             strides,
-            dim_z if not self.use_plus else dim_z + dim_u,
+            dim_z if not use_plus else dim_z + dim_u,
             output_layers,
         )
 
         self.trans_cond_y = conv_autoencoder.encoder
         dim_y_enc = conv_autoencoder.dim_y_enc
         mu_nu_in = dim_y_enc
-        if self.use_x_mu_nu is True:
+        if use_x_mu_nu is True:
             mu_nu_in += dim_x
         if kwargs.get("use_direction_mu_nu", False):
             mu_nu_in += 1
@@ -781,7 +773,7 @@ class ConvPoolingFNP(PoolingFNP):
         self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
         prop_inputs = [1]
         prop_mlp_in = dim_y_enc
-        if self.use_x_mu_nu:
+        if use_x_mu_nu:
             prop_inputs += [0]
             prop_mlp_in += dim_x
         self.prop_vencoder = NormalEncoder(
@@ -798,7 +790,8 @@ class ConvPoolingFNP(PoolingFNP):
             ),
             minscale=1e-8,
         )
-        output = conv_autoencoder.decoder
+        output_inputs = [0] if not use_plus else [0, 1]
+        output = ConcatLayer(output_inputs, conv_autoencoder.decoder)
         self.label_vdecoder = NormalEncoder(output, minscale=0.1)
 
         self.pooler = SetPooler(
