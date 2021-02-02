@@ -501,36 +501,7 @@ class RegressionFNP(FNP):
         :param use_x_mu_nu: Whether to use x in mu_nu
         :param output_layers: Array of integers for the sizes of the output nn
         """
-
-        # self.dim_x = dim_x
-        # self.dim_y = dim_y
-        # self.dim_h = dim_h
         self.dim_u = dim_u if not x_as_u else dim_x
-        # self.dim_z = dim_z
-        # self.use_plus = use_plus
-        # self.fb_z = fb_z
-        # self.transf_y = transf_y
-        # self.G = G
-        # self.A = A
-        # self.y_encoder_layers = y_encoder_layers
-        # self.mu_nu_layers = mu_nu_layers
-        # self.use_x_mu_nu = use_x_mu_nu
-        # self.use_direction_mu_nu = use_direction_mu_nu
-        # self.output_layers = output_layers
-        # self.x_as_u = x_as_u
-
-        # function that assigns the edge probabilities in the graph
-        # self.pairwise_g_logscale = nn.Parameter(
-        #     float_tensor(1).fill_(math.log(math.sqrt(self.dim_u)))
-        # )
-        # self.pairwise_g = lambda x: logitexp(
-        #     -0.5
-        #     * torch.sum(
-        #         torch.pow(x[:, self.dim_u :] - x[:, 0 : self.dim_u], 2), 1, keepdim=True
-        #     )
-        #     / self.pairwise_g_logscale.exp()
-        # ).view(x.size(0), 1)
-        # transformation of the input
         if not x_as_u:
             cov_vencoder = NormalEncoder(
                 nn.Sequential(
@@ -564,9 +535,6 @@ class RegressionFNP(FNP):
             pooler = AveragePooler(
                 dim_z,
             )
-        # else:
-        #     self.pooler = pooler
-
         prop_vencoder = NormalEncoder(
             nn.Sequential(
                 MLP(
