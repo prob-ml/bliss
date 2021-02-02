@@ -110,8 +110,8 @@ class NormalEncoder(nn.Module):
         self.encoder = encoder
         self.minscale = minscale
 
-    def forward(self, X_all):
-        mean_z, logscale_z = self.encoder(X_all)
+    def forward(self, *args):
+        mean_z, logscale_z = self.encoder(*args)
         if self.minscale is not None:
             logscale_z = torch.log(
                 self.minscale + (1 - self.minscale) * F.softplus(logscale_z)
@@ -145,6 +145,17 @@ class IdentityEncoder(nn.Module):
 
     def forward(self, X):
         return ConstantDist(X)
+
+
+class ConcatLayer(nn.Module):
+    def __init__(self, input_idxs, f=nn.Identity):
+        super().__init__()
+        self.input_idxs = input_idxs
+        self.f = f
+
+    def forward(self, *args):
+        X = torch.cat([args[i] for i in self.input_idxs], -1)
+        return self.f(X)
 
 
 class AveragePooler(nn.Module):
@@ -255,7 +266,6 @@ class FNP(nn.Module):
         label_vdecoder,
         A=None,
         G=None,
-        use_x_mu_nu=True,
         use_plus=True,
         fb_z=0.0,
     ):
@@ -277,7 +287,6 @@ class FNP(nn.Module):
             self.register_buffer("A_const", self.A)
 
         ## Module settings
-        self.use_x_mu_nu = use_x_mu_nu  # TO BE DEPRECATED
         self.use_plus = use_plus  # POSSIBLY TO BE DEPRECATED
 
         ## Initialize free-bits regularization
@@ -362,13 +371,10 @@ class FNP(nn.Module):
         ## is allowed to look at the labels of all points)
         y_all = torch.cat([yR, yM], dim=1)
         y_all_encoded = self.trans_cond_y(y_all)
-        if self.use_x_mu_nu:
-            y_all_encoded = torch.cat(
-                [y_all_encoded, X_all.unsqueeze(0).repeat(y_all_encoded.size(0), 1, 1)],
-                dim=-1,
-            )
-        qz = self.prop_vencoder(y_all_encoded)
-        z = qz.sample()
+        qz = self.prop_vencoder(
+            X_all.unsqueeze(0).repeat(y_all_encoded.size(0), 1, 1), y_all_encoded
+        )
+        z = qz.rsample()
 
         ## Calculate the difference between the "prior" pz and the
         ## variational distribution qz with an optional "free-bits" strategy.
@@ -518,14 +524,22 @@ class RegressionFNP(FNP):
             pooler = AveragePooler(
                 dim_z,
             )
+        prop_inputs = [1]
+        prop_mlp_in = dim_y_enc
+        if use_x_mu_nu:
+            prop_inputs += [0]
+            prop_mlp_in += dim_x
         prop_vencoder = NormalEncoder(
-            nn.Sequential(
-                MLP(
-                    dim_y_enc + (use_x_mu_nu) * dim_x,
-                    mu_nu_layers,
-                    2 * dim_z,
+            ConcatLayer(
+                prop_inputs,
+                nn.Sequential(
+                    MLP(
+                        prop_mlp_in,
+                        mu_nu_layers,
+                        2 * dim_z,
+                    ),
+                    SplitLayer(dim_z, -1),
                 ),
-                SplitLayer(dim_z, -1),
             ),
             minscale=1e-8,
         )
@@ -765,14 +779,22 @@ class ConvPoolingFNP(PoolingFNP):
         ## This is a quick fix, but pooling_rep_size should not be used
         mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, 2 * self.pooling_rep_size)
         self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
+        prop_inputs = [1]
+        prop_mlp_in = dim_y_enc
+        if self.use_x_mu_nu:
+            prop_inputs += [0]
+            prop_mlp_in += dim_x
         self.prop_vencoder = NormalEncoder(
-            nn.Sequential(
-                MLP(
-                    dim_y_enc + (self.use_x_mu_nu) * dim_x,
-                    mu_nu_layers,
-                    dim_z * 2,
+            ConcatLayer(
+                prop_inputs,
+                nn.Sequential(
+                    MLP(
+                        prop_mlp_in,
+                        mu_nu_layers,
+                        2 * dim_z,
+                    ),
+                    SplitLayer(dim_z, -1),
                 ),
-                SplitLayer(dim_z, -1),
             ),
             minscale=1e-8,
         )
