@@ -427,7 +427,7 @@ class SleepPhase(pl.LightningModule):
             galaxy_bool_loss,
         ) = self.get_detection_loss(batch)
 
-        self.log("val_detection_loss", detection_loss)
+        self.log("val_loss", detection_loss)
         self.log("val_counter_loss", counter_loss.mean())
         self.log("val_locs_loss", locs_loss.mean())
         self.log("val_gal_bool_loss", galaxy_bool_loss.mean())

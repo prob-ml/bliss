@@ -10,11 +10,11 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from bliss import sleep
-from bliss.datasets import simulated, catsim
+from bliss.datasets import simulated, galsim_galaxies
 from bliss.models import galaxy_net
 
 # compatible datasets and models.
-_datasets = [simulated.SimulatedDataset, catsim.GalsimGalaxies]
+_datasets = [simulated.SimulatedDataset, galsim_galaxies.GalsimGalaxies]
 datasets = {cls.__name__: cls for cls in _datasets}
 
 _models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxy]
@@ -73,7 +73,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
             filepath=checkpoint_dir,
             save_top_k=True,
             verbose=True,
-            monitor="val_detection_loss",
+            monitor="val_loss",
             mode="min",
             prefix="",
         )

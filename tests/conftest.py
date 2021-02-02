@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 from hydra.experimental import initialize, compose
 
 from bliss import sleep
-from bliss.datasets import simulated, catsim
+from bliss.datasets import simulated, galsim_galaxies
 from bliss.models import galaxy_net
 
 
@@ -78,7 +78,7 @@ class GalaxyVAESetup:
 
     def get_trained_vae(self, overrides):
         cfg = self.get_cfg(overrides)
-        dataset = catsim.SavedCatsim(cfg)
+        dataset = galsim_galaxies.GalsimGalaxies(cfg)
         galaxy_vae = galaxy_net.OneCenteredGalaxy(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
         trainer.fit(galaxy_vae, datamodule=dataset)
