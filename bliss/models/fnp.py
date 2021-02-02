@@ -275,10 +275,6 @@ class FNP(nn.Module):
         self.prop_vencoder = prop_vencoder
         self.label_vdecoder = label_vdecoder
 
-        ## Fixed dependency graphs (TO BE DEPRECATED; should use G_in and A_in)
-
-        ## Module settings
-
         ## Initialize free-bits regularization
         self.fb_z = fb_z
         self.register_buffer("lambda_z", float_tensor(1).fill_(1e-8))
