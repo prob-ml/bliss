@@ -259,7 +259,6 @@ class FNP(nn.Module):
         use_x_mu_nu=True,
         use_plus=True,
         fb_z=0.0,
-        transf_y=None,
     ):
         super().__init__()
         ## Learned Submodules
@@ -299,10 +298,6 @@ class FNP(nn.Module):
             )
             / self.pairwise_g_logscale.exp()
         ).view(x.size(0), 1)
-
-        ## Transformation of output for prediction
-        ## TO BE DEPRECATED; this does not need to be handled by FNP
-        self.transf_y = transf_y
 
     def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
         """
@@ -440,23 +435,11 @@ class FNP(nn.Module):
         )
         py = self.label_vdecoder(final_rep)
         if sample:
-            y_new_i = py.sample()
+            y_pred = py.sample()
         else:
-            y_new_i = py.means
-
-        if self.transf_y is not None:
-            y_pred = self.inverse_transform(y_new_i)
-        else:
-            y_pred = y_new_i
+            y_pred = py.means
 
         return y_pred
-
-    def inverse_transform(self, y):
-        y = y.squeeze(-3)
-        y_flat = y.reshape(*y.shape[0:2], -1).cpu().detach().numpy()
-        y_flat_invt = self.transf_y.inverse_transform(y_flat)
-        y_out = torch.from_numpy(y_flat_invt).resize_(y.size())
-        return y_out
 
 
 class RegressionFNP(FNP):
@@ -566,8 +549,23 @@ class RegressionFNP(FNP):
             use_x_mu_nu=use_x_mu_nu,
             use_plus=use_plus,
             fb_z=fb_z,
-            transf_y=transf_y,
         )
+        self.transf_y = transf_y
+
+    def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
+        y_pred = super().predict(
+            x_new, XR, yR, sample=sample, A_in=A_in, sample_Z=sample_Z
+        )
+        if self.transf_y is not None:
+            y_pred = self.inverse_transform(y_pred)
+        return y_pred
+
+    def inverse_transform(self, y):
+        y = y.squeeze(-3)
+        y_flat = y.reshape(*y.shape[0:2], -1).cpu().detach().numpy()
+        y_flat_invt = self.transf_y.inverse_transform(y_flat)
+        y_out = torch.from_numpy(y_flat_invt).resize_(y.size())
+        return y_out
 
 
 class PoolingFNP(RegressionFNP):
