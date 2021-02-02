@@ -115,13 +115,11 @@ class NormalEncoder(nn.Module):
     These then encode a Normal distribution with the corresponding mean and logscale.
     """
 
-    def __init__(self, encoder, minscale=None):
+    def __init__(self, minscale=None):
         super().__init__()
-        self.encoder = encoder
         self.minscale = minscale
 
-    def forward(self, *args):
-        mean_z, logscale_z = self.encoder(*args)
+    def forward(self, mean_z, logscale_z):
         if self.minscale is not None:
             logscale_z = torch.log(
                 self.minscale + (1 - self.minscale) * F.softplus(logscale_z)
@@ -158,10 +156,9 @@ class IdentityEncoder(nn.Module):
 
 
 class ConcatLayer(nn.Module):
-    def __init__(self, input_idxs=None, f=nn.Identity):
+    def __init__(self, input_idxs=None):
         super().__init__()
         self.input_idxs = input_idxs
-        self.f = f
 
     def forward(self, *args):
         ## Filter only to arguments we want to concatenate
@@ -189,7 +186,7 @@ class ConcatLayer(nn.Module):
                             "The sizes in ConcatLayer need to be either the same or 1."
                         )
         X = torch.cat(args, -1)
-        return self.f(X)
+        return X
 
 
 class AveragePooler(nn.Module):
@@ -477,11 +474,10 @@ class RegressionFNP(FNP):
         """
         self.dim_u = dim_u if not x_as_u else dim_x
         if not x_as_u:
-            cov_vencoder = NormalEncoder(
-                nn.Sequential(
-                    MLP(dim_x, [dim_h] * n_layers, 2 * dim_u),
-                    SplitLayer(dim_u, -1),
-                )
+            cov_vencoder = SequentialVarg(
+                MLP(dim_x, [dim_h] * n_layers, 2 * dim_u),
+                SplitLayer(dim_u, -1),
+                NormalEncoder(),
             )
         else:
             cov_vencoder = IdentityEncoder()
@@ -506,43 +502,35 @@ class RegressionFNP(FNP):
         mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, 2 * dim_z)
         rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=False, use_x=use_x_mu_nu)
         if pooler is None:
-            pooler = NormalEncoder(
-                SequentialVarg(
-                    AveragePooler(dim_z),
-                    SplitLayer(dim_z, -1),
-                ),
-                minscale=1e-8,
+            pooler = SequentialVarg(
+                AveragePooler(dim_z),
+                SplitLayer(dim_z, -1),
+                NormalEncoder(minscale=1e-8),
             )
         prop_inputs = [1]
         prop_mlp_in = dim_y_enc
         if use_x_mu_nu:
             prop_inputs += [0]
             prop_mlp_in += dim_x
-        prop_vencoder = NormalEncoder(
-            ConcatLayer(
-                prop_inputs,
-                nn.Sequential(
-                    MLP(
-                        prop_mlp_in,
-                        mu_nu_layers,
-                        2 * dim_z,
-                    ),
-                    SplitLayer(dim_z, -1),
-                ),
+        prop_vencoder = SequentialVarg(
+            ConcatLayer(prop_inputs),
+            MLP(
+                prop_mlp_in,
+                mu_nu_layers,
+                2 * dim_z,
             ),
-            minscale=1e-8,
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
         )
         # for p(y|z)
         output_inputs = [0] if not use_plus else [0, 1]
         output_insize = dim_z if not use_plus else dim_z + dim_u
-        output = ConcatLayer(
-            output_inputs,
-            nn.Sequential(
-                MLP(output_insize, output_layers, 2 * dim_y),
-                SplitLayer(dim_y, -1),
-            ),
+        label_vdecoder = SequentialVarg(
+            ConcatLayer(output_inputs),
+            MLP(output_insize, output_layers, 2 * dim_y),
+            SplitLayer(dim_y, -1),
+            NormalEncoder(minscale=0.1),
         )
-        label_vdecoder = NormalEncoder(output, minscale=0.1)
         super(RegressionFNP, self).__init__(
             cov_vencoder,
             trans_cond_y,
@@ -592,18 +580,16 @@ class PoolingFNP(RegressionFNP):
         mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, self.pooling_rep_size)
         self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
 
-        self.pooler = NormalEncoder(
-            SequentialVarg(
-                SetPooler(
-                    mu_nu_theta.out_features,
-                    dim_z,
-                    self.pooling_layers,
-                    self.set_transformer,
-                    self.st_numheads,
-                ),
-                SplitLayer(dim_z, -1),
+        self.pooler = SequentialVarg(
+            SetPooler(
+                mu_nu_theta.out_features,
+                dim_z,
+                self.pooling_layers,
+                self.set_transformer,
+                self.st_numheads,
             ),
-            minscale=1e-8,
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
         )
 
 
@@ -781,36 +767,29 @@ class ConvPoolingFNP(PoolingFNP):
         if use_x_mu_nu:
             prop_inputs += [0]
             prop_mlp_in += dim_x
-        self.prop_vencoder = NormalEncoder(
-            ConcatLayer(
-                prop_inputs,
-                nn.Sequential(
-                    MLP(
-                        prop_mlp_in,
-                        mu_nu_layers,
-                        2 * dim_z,
-                    ),
-                    SplitLayer(dim_z, -1),
-                ),
-            ),
-            minscale=1e-8,
+        self.prop_vencoder = SequentialVarg(
+            ConcatLayer(prop_inputs),
+            MLP(prop_mlp_in, mu_nu_layers, 2 * dim_z),
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
         )
         output_inputs = [0] if not use_plus else [0, 1]
-        output = ConcatLayer(output_inputs, conv_autoencoder.decoder)
-        self.label_vdecoder = NormalEncoder(output, minscale=0.1)
+        self.label_vdecoder = SequentialVarg(
+            ConcatLayer(output_inputs),
+            conv_autoencoder.decoder,
+            NormalEncoder(minscale=0.1),
+        )
 
-        self.pooler = NormalEncoder(
-            SequentialVarg(
-                SetPooler(
-                    mu_nu_theta.out_features,
-                    dim_z,
-                    self.pooling_layers,
-                    self.set_transformer,
-                    self.st_numheads,
-                ),
-                SplitLayer(dim_z, -1),
+        self.pooler = SequentialVarg(
+            SetPooler(
+                mu_nu_theta.out_features,
+                dim_z,
+                self.pooling_layers,
+                self.set_transformer,
+                self.st_numheads,
             ),
-            minscale=1e-8,
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
         )
 
 
