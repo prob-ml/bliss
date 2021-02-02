@@ -244,75 +244,50 @@ class RepEncoder(nn.Module):
         return rep_R
 
 
-class RegressionFNP(nn.Module):
-    """
-    Functional Neural Process for regression
-    """
-
+class FNP(nn.Module):
     def __init__(
         self,
-        dim_x=1,
-        dim_y=1,
-        dim_h=50,
-        transf_y=None,
-        n_layers=1,
-        use_plus=True,
-        dim_u=1,
-        dim_z=1,
-        fb_z=0.0,
-        G=None,
+        cov_vencoder,
+        trans_cond_y,
+        rep_encoder,
+        pooler,
+        prop_vencoder,
+        label_vdecoder,
         A=None,
-        y_encoder_layers=[128],
-        mu_nu_layers=[128],
+        G=None,
         use_x_mu_nu=True,
-        use_direction_mu_nu=False,
-        output_layers=[128],
-        x_as_u=False,
-        pooler=None,
+        use_plus=True,
+        fb_z=0.0,
+        transf_y=None,
     ):
-        """
-        :param dim_x: Dimensionality of the input
-        :param dim_y: Dimensionality of the output
-        :param dim_h: Dimensionality of the hidden layers
-        :param transf_y: Transformation of the output (e.g. standardization)
-        :param n_layers: How many hidden layers to us
-        :param use_plus: Whether to use the FNP+
-        :param dim_u: Dimensionality of the latents in the embedding space
-        :param dim_z: Dimensionality of the  latents that summarize the parents
-        :param fb_z: How many free bits do we allow for the latent variable z
-        :param G: Use a supplied G matrix instead of sampling it (default is None)
-        :param A: Use a supplied A matrix instead of sampling it (default is None)
-        :param y_encoder_layers: Array of integers for the sizes to encode y into z
-        :param mu_nu_layers: Array of integers for the network to map encoded x and y to z
-        :param use_x_mu_nu: Whether to use x in mu_nu
-        :param output_layers: Array of integers for the sizes of the output nn
-        """
-        super(RegressionFNP, self).__init__()
+        super().__init__()
+        ## Learned Submodules
+        self.cov_vencoder = cov_vencoder
+        self.trans_cond_y = trans_cond_y
+        self.rep_encoder = rep_encoder
+        self.pooler = pooler
+        self.prop_vencoder = prop_vencoder
+        self.label_vdecoder = label_vdecoder
 
-        self.dim_x = dim_x
-        self.dim_y = dim_y
-        self.dim_h = dim_h
-        self.dim_u = dim_u if not x_as_u else dim_x
-        self.dim_z = dim_z
-        self.use_plus = use_plus
-        self.fb_z = fb_z
-        self.transf_y = transf_y
-        self.G = G
+        ## Fixed dependency graphs (TO BE DEPRECATED; should use G_in and A_in)
         self.A = A
-        if G is not None:
+        self.G = G
+        if self.G is not None:
             self.register_buffer("G_const", self.G)
-        if A is not None:
+        if self.A is not None:
             self.register_buffer("A_const", self.A)
-        self.y_encoder_layers = y_encoder_layers
-        self.mu_nu_layers = mu_nu_layers
-        self.use_x_mu_nu = use_x_mu_nu
-        self.use_direction_mu_nu = use_direction_mu_nu
-        self.output_layers = output_layers
-        self.x_as_u = x_as_u
 
+        ## Module settings
+        self.use_x_mu_nu = use_x_mu_nu  # TO BE DEPRECATED
+        self.use_plus = use_plus  # POSSIBLY TO BE DEPRECATED
+
+        ## Initialize free-bits regularization
+        self.fb_z = fb_z
         self.register_buffer("lambda_z", float_tensor(1).fill_(1e-8))
 
-        # function that assigns the edge probabilities in the graph
+        ## Initialized the learned graph
+        ## TO BE DEPRECATED; the dependency graph should be rolled into
+        ## its own Learned Submodule
         self.pairwise_g_logscale = nn.Parameter(
             float_tensor(1).fill_(math.log(math.sqrt(self.dim_u)))
         )
@@ -323,61 +298,10 @@ class RegressionFNP(nn.Module):
             )
             / self.pairwise_g_logscale.exp()
         ).view(x.size(0), 1)
-        # transformation of the input
-        if not self.x_as_u:
-            self.cov_vencoder = NormalEncoder(
-                nn.Sequential(
-                    MLP(dim_x, [self.dim_h] * n_layers, 2 * self.dim_u),
-                    SplitLayer(self.dim_u, -1),
-                )
-            )
-        else:
-            self.cov_vencoder = IdentityEncoder()
-        # p(u|x)
-        # q(z|x)
-        # See equation 7
-        self.q_z = nn.Linear(self.dim_h, 2 * self.dim_z)
-        # for p(z|A, XR, yR)
 
-        self.dim_y_enc = 2 * self.dim_z
-        self.trans_cond_y = MLP(
-            self.dim_y,
-            self.y_encoder_layers,
-            2 * self.dim_z,
-        )
-        mu_nu_in = self.dim_y_enc
-        if self.use_x_mu_nu is True:
-            mu_nu_in += self.dim_x
-        if self.use_direction_mu_nu:
-            mu_nu_in += 1
-        self.mu_nu_in = mu_nu_in
-        mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, 2 * self.dim_z)
-        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=False, use_x=use_x_mu_nu)
-        if pooler is None:
-            self.pooler = AveragePooler(
-                dim_z,
-            )
-        else:
-            self.pooler = pooler
-
-        self.prop_vencoder = NormalEncoder(
-            nn.Sequential(
-                MLP(
-                    self.dim_y_enc + (self.use_x_mu_nu) * self.dim_x,
-                    self.mu_nu_layers,
-                    2 * self.dim_z,
-                ),
-                SplitLayer(self.dim_z, -1),
-            ),
-            minscale=1e-8,
-        )
-        # for p(y|z)
-        output_insize = self.dim_z if not self.use_plus else self.dim_z + self.dim_u
-        output = nn.Sequential(
-            MLP(output_insize, self.output_layers, 2 * self.dim_y),
-            SplitLayer(self.dim_y, -1),
-        )
-        self.label_vdecoder = NormalEncoder(output, minscale=0.1)
+        ## Transformation of output for prediction
+        ## TO BE DEPRECATED; this does not need to be handled by FNP
+        self.transf_y = transf_y
 
     def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
         """
@@ -471,7 +395,7 @@ class RegressionFNP(nn.Module):
 
     def calc_log_pqz(self, pz, qz, z):
         """
-        Calculates the log difference between pz and qz (with an optional free bits strategy
+        Calculates the log difference between pz and qz (with an optional free bits strategy)
         """
         pqz_all = pz.log_prob(z) - qz.log_prob(z)
         assert torch.isnan(pqz_all).sum() == 0
@@ -534,6 +458,149 @@ class RegressionFNP(nn.Module):
         return y_out
 
 
+class RegressionFNP(FNP):
+    """
+    Functional Neural Process for regression
+    """
+
+    def __init__(
+        self,
+        dim_x=1,
+        dim_y=1,
+        dim_h=50,
+        transf_y=None,
+        n_layers=1,
+        use_plus=True,
+        dim_u=1,
+        dim_z=1,
+        fb_z=0.0,
+        G=None,
+        A=None,
+        y_encoder_layers=[128],
+        mu_nu_layers=[128],
+        use_x_mu_nu=True,
+        use_direction_mu_nu=False,
+        output_layers=[128],
+        x_as_u=False,
+        pooler=None,
+    ):
+        """
+        :param dim_x: Dimensionality of the input
+        :param dim_y: Dimensionality of the output
+        :param dim_h: Dimensionality of the hidden layers
+        :param transf_y: Transformation of the output (e.g. standardization)
+        :param n_layers: How many hidden layers to us
+        :param use_plus: Whether to use the FNP+
+        :param dim_u: Dimensionality of the latents in the embedding space
+        :param dim_z: Dimensionality of the  latents that summarize the parents
+        :param fb_z: How many free bits do we allow for the latent variable z
+        :param G: Use a supplied G matrix instead of sampling it (default is None)
+        :param A: Use a supplied A matrix instead of sampling it (default is None)
+        :param y_encoder_layers: Array of integers for the sizes to encode y into z
+        :param mu_nu_layers: Array of integers for the network to map encoded x and y to z
+        :param use_x_mu_nu: Whether to use x in mu_nu
+        :param output_layers: Array of integers for the sizes of the output nn
+        """
+
+        # self.dim_x = dim_x
+        # self.dim_y = dim_y
+        # self.dim_h = dim_h
+        self.dim_u = dim_u if not x_as_u else dim_x
+        # self.dim_z = dim_z
+        # self.use_plus = use_plus
+        # self.fb_z = fb_z
+        # self.transf_y = transf_y
+        # self.G = G
+        # self.A = A
+        # self.y_encoder_layers = y_encoder_layers
+        # self.mu_nu_layers = mu_nu_layers
+        # self.use_x_mu_nu = use_x_mu_nu
+        # self.use_direction_mu_nu = use_direction_mu_nu
+        # self.output_layers = output_layers
+        # self.x_as_u = x_as_u
+
+        # function that assigns the edge probabilities in the graph
+        # self.pairwise_g_logscale = nn.Parameter(
+        #     float_tensor(1).fill_(math.log(math.sqrt(self.dim_u)))
+        # )
+        # self.pairwise_g = lambda x: logitexp(
+        #     -0.5
+        #     * torch.sum(
+        #         torch.pow(x[:, self.dim_u :] - x[:, 0 : self.dim_u], 2), 1, keepdim=True
+        #     )
+        #     / self.pairwise_g_logscale.exp()
+        # ).view(x.size(0), 1)
+        # transformation of the input
+        if not x_as_u:
+            cov_vencoder = NormalEncoder(
+                nn.Sequential(
+                    MLP(dim_x, [dim_h] * n_layers, 2 * dim_u),
+                    SplitLayer(dim_u, -1),
+                )
+            )
+        else:
+            cov_vencoder = IdentityEncoder()
+        # p(u|x)
+        # q(z|x)
+        # See equation 7
+        # self.q_z = nn.Linear(self.dim_h, 2 * self.dim_z)
+        # for p(z|A, XR, yR)
+
+        dim_y_enc = 2 * dim_z
+        trans_cond_y = MLP(
+            dim_y,
+            y_encoder_layers,
+            2 * dim_z,
+        )
+        mu_nu_in = dim_y_enc
+        if use_x_mu_nu is True:
+            mu_nu_in += dim_x
+        if use_direction_mu_nu:
+            mu_nu_in += 1
+        # self.mu_nu_in = mu_nu_in
+        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, 2 * dim_z)
+        rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=False, use_x=use_x_mu_nu)
+        if pooler is None:
+            pooler = AveragePooler(
+                dim_z,
+            )
+        # else:
+        #     self.pooler = pooler
+
+        prop_vencoder = NormalEncoder(
+            nn.Sequential(
+                MLP(
+                    dim_y_enc + (use_x_mu_nu) * dim_x,
+                    mu_nu_layers,
+                    2 * dim_z,
+                ),
+                SplitLayer(dim_z, -1),
+            ),
+            minscale=1e-8,
+        )
+        # for p(y|z)
+        output_insize = dim_z if not use_plus else dim_z + dim_u
+        output = nn.Sequential(
+            MLP(output_insize, output_layers, 2 * dim_y),
+            SplitLayer(dim_y, -1),
+        )
+        label_vdecoder = NormalEncoder(output, minscale=0.1)
+        super(RegressionFNP, self).__init__(
+            cov_vencoder,
+            trans_cond_y,
+            rep_encoder,
+            pooler,
+            prop_vencoder,
+            label_vdecoder,
+            A=A,
+            G=G,
+            use_x_mu_nu=use_x_mu_nu,
+            use_plus=use_plus,
+            fb_z=fb_z,
+            transf_y=transf_y,
+        )
+
+
 class PoolingFNP(RegressionFNP):
     def __init__(
         self,
@@ -548,13 +615,17 @@ class PoolingFNP(RegressionFNP):
         self.set_transformer = set_transformer
         self.st_numheads = st_numheads
         super().__init__(**kwargs)
-        mu_nu_in = self.dim_y_enc + self.dim_u
-        mu_nu_theta = MLP(mu_nu_in, self.mu_nu_layers, self.pooling_rep_size)
+        dim_z = kwargs["dim_z"]
+        dim_u = kwargs["dim_u"]
+        mu_nu_layers = kwargs.get("mu_nu_layers", [128])
+        dim_y_enc = 2 * dim_z
+        mu_nu_in = dim_y_enc + dim_u
+        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, self.pooling_rep_size)
         self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
 
         self.pooler = SetPooler(
             mu_nu_theta.out_features,
-            self.dim_z,
+            dim_z,
             self.pooling_layers,
             self.set_transformer,
             self.st_numheads,
@@ -680,7 +751,7 @@ class Conv2DAutoEncoder(nn.Module):
         )
 
 
-class ConvRegressionFNP(RegressionFNP):
+class ConvPoolingFNP(PoolingFNP):
     """
     Functional Neural Procoess for regression on images
     """
@@ -700,7 +771,12 @@ class ConvRegressionFNP(RegressionFNP):
         self.strides = strides
         # self.conv_layers = conv_layers
         self.conv_channels = conv_channels
-        super(ConvRegressionFNP, self).__init__(**kwargs)
+        super().__init__(**kwargs)
+        dim_x = kwargs["dim_x"]
+        dim_u = kwargs["dim_u"]
+        dim_z = kwargs["dim_z"]
+        mu_nu_layers = kwargs.get("mu_nu_layers", [128])
+        output_layers = kwargs["output_layers"]
 
         conv_autoencoder = Conv2DAutoEncoder(
             size_h,
@@ -708,30 +784,43 @@ class ConvRegressionFNP(RegressionFNP):
             conv_channels,
             kernel_sizes,
             strides,
-            self.dim_z if not self.use_plus else self.dim_z + self.dim_u,
-            self.output_layers,
+            dim_z if not self.use_plus else dim_z + dim_u,
+            output_layers,
         )
 
         self.trans_cond_y = conv_autoencoder.encoder
-        self.dim_y_enc = conv_autoencoder.dim_y_enc
+        dim_y_enc = conv_autoencoder.dim_y_enc
+        mu_nu_in = dim_y_enc
+        if self.use_x_mu_nu is True:
+            mu_nu_in += dim_x
+        if kwargs.get("use_direction_mu_nu", False):
+            mu_nu_in += 1
+        # self.mu_nu_in = mu_nu_in
+        ## This is a quick fix, but pooling_rep_size should not be used
+        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, 2 * self.pooling_rep_size)
+        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
         self.prop_vencoder = NormalEncoder(
             nn.Sequential(
                 MLP(
-                    self.dim_y_enc + (self.use_x_mu_nu) * self.dim_x,
-                    self.mu_nu_layers,
-                    self.dim_z * 2,
+                    dim_y_enc + (self.use_x_mu_nu) * dim_x,
+                    mu_nu_layers,
+                    dim_z * 2,
                 ),
-                SplitLayer(self.dim_z, -1),
+                SplitLayer(dim_z, -1),
             ),
             minscale=1e-8,
         )
         output = conv_autoencoder.decoder
         self.label_vdecoder = NormalEncoder(output, minscale=0.1)
 
+        self.pooler = SetPooler(
+            mu_nu_theta.out_features,
+            dim_z,
+            self.pooling_layers,
+            self.set_transformer,
+            self.st_numheads,
+        )
 
-class ConvPoolingFNP(PoolingFNP, ConvRegressionFNP):
-    def __init__(self, **kwargs):
-        super(ConvPoolingFNP, self).__init__(**kwargs)
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
