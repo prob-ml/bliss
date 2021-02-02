@@ -123,6 +123,7 @@ class NormalEncoder(nn.Module):
 
 class ConstantDist(nn.Module):
     def __init__(self, X):
+        super().__init__()
         self.X = X
 
     def log_prob(self, X):
@@ -788,7 +789,6 @@ class ConvPoolingFNP(PoolingFNP):
             self.set_transformer,
             self.st_numheads,
         )
-
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
