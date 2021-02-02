@@ -14,7 +14,7 @@ from bliss.datasets import simulated, catsim
 from bliss.models import galaxy_net
 
 # compatible datasets and models.
-_datasets = [simulated.SimulatedDataset, catsim.CatsimGalaxies]
+_datasets = [simulated.SimulatedDataset, catsim.GalsimGalaxies]
 datasets = {cls.__name__: cls for cls in _datasets}
 
 _models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxy]
