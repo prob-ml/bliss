@@ -147,8 +147,6 @@ class TestFNP:
             dim_z=8,
             fb_z=1.0,
             use_plus=False,
-            G=star_data.G,
-            A=star_data.A,
             mu_nu_layers=[128, 64, 32],
             use_x_mu_nu=False,
             use_direction_mu_nu=True,
@@ -170,13 +168,22 @@ class TestFNP:
                 star_data.y_r_valid[[0]],
                 star_data.X_m_valid,
                 star_data.y_m_valid[[0]],
+                G_in=star_data.G,
+                A_in=star_data.A,
             )
             / star_data.N_valid
         )
         y_r_in = star_data.y_r_valid[[2]]
         y_m_in = star_data.y_m_valid[[2]]
         loss_initial = (
-            fnp_model(star_data.X_r_valid, y_r_in, star_data.X_m_valid, y_m_in)
+            fnp_model(
+                star_data.X_r_valid,
+                y_r_in,
+                star_data.X_m_valid,
+                y_m_in,
+                G_in=star_data.G,
+                A_in=star_data.A,
+            )
             / batch_size
         )
         print("Initial loss : {:.3f}".format(loss_initial.item()))
@@ -191,7 +198,15 @@ class TestFNP:
                 y_r_in = star_data.y_r[ns]
                 y_m_in = star_data.y_m[ns]
                 loss = (
-                    fnp_model(star_data.X_r, y_r_in, star_data.X_m, y_m_in) / batch_size
+                    fnp_model(
+                        star_data.X_r,
+                        y_r_in,
+                        star_data.X_m,
+                        y_m_in,
+                        G_in=star_data.G,
+                        A_in=star_data.A,
+                    )
+                    / batch_size
                 )
                 loss.backward()
                 optimizer.step()
@@ -211,6 +226,8 @@ class TestFNP:
                 star_data.y_r_valid[[0]],
                 star_data.X_m_valid,
                 star_data.y_m_valid[[0]],
+                G_in=star_data.G,
+                A_in=star_data.A,
             )
             / star_data.N_valid
         )

@@ -200,8 +200,6 @@ if __name__ == "__main__":
         dim_z=8,
         fb_z=1.0,
         use_plus=False,
-        G=star_data.G,
-        A=star_data.A,
         mu_nu_layers=[128, 64, 32],
         use_x_mu_nu=False,
         use_direction_mu_nu=True,
@@ -237,7 +235,15 @@ if __name__ == "__main__":
                 y_r_in = star_data.y_r[ns]
                 y_m_in = star_data.y_m[ns]
                 loss = (
-                    fnp_model(star_data.X_r, y_r_in, star_data.X_m, y_m_in) / batch_size
+                    fnp_model(
+                        star_data.X_r,
+                        y_r_in,
+                        star_data.X_m,
+                        y_m_in,
+                        G_in=star_data.G,
+                        A_in=star_data.A,
+                    )
+                    / batch_size
                 )
                 loss.backward()
                 optimizer.step()
@@ -264,11 +270,11 @@ if __name__ == "__main__":
     X_extra_std = torch.from_numpy(
         star_data.stdx.transform(X_extra.cpu().unsqueeze(1)).astype(np.float32)
     ).cuda()
-    A_extra = torch.zeros(5, fnp_model.A.size(1)).cuda()
+    A_extra = torch.zeros(5, star_data.A.size(1)).cuda()
     A_extra[:, -1] = 1
     X_pred = torch.cat([star_data.X_dep, X_extra])
     X_pred_std = torch.cat([star_data.X_m, X_extra_std])
-    A_pred = torch.cat([fnp_model.A.cuda(), A_extra])
+    A_pred = torch.cat([star_data.A.cuda(), A_extra])
     myimg = star_data.make_fnp_mean_image(
         fnp_model, X=X_pred_std, X_nostd=X_pred, A=A_pred, samples=10, valid=True
     )

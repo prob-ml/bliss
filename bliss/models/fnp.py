@@ -264,8 +264,6 @@ class FNP(nn.Module):
         pooler,
         prop_vencoder,
         label_vdecoder,
-        A=None,
-        G=None,
         fb_z=0.0,
     ):
         super().__init__()
@@ -278,12 +276,6 @@ class FNP(nn.Module):
         self.label_vdecoder = label_vdecoder
 
         ## Fixed dependency graphs (TO BE DEPRECATED; should use G_in and A_in)
-        self.A = A
-        self.G = G
-        if self.G is not None:
-            self.register_buffer("G_const", self.G)
-        if self.A is not None:
-            self.register_buffer("A_const", self.A)
 
         ## Module settings
 
@@ -327,18 +319,12 @@ class FNP(nn.Module):
         ## If we are predicting ("predict"), only the dependent
         ## graph (A) is used.
         if A_in is None:
-            if self.A is None:
-                A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
-            else:
-                A = self.A_const
+            A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
         else:
             A = A_in
         if mode == "infer":
             if G_in is None:
-                if self.G is None:
-                    G = sample_DAG(uR, self.pairwise_g, training=self.training)
-                else:
-                    G = self.G_const
+                G = sample_DAG(uR, self.pairwise_g, training=self.training)
             else:
                 G = G_in
 
@@ -451,8 +437,6 @@ class RegressionFNP(FNP):
         dim_u=1,
         dim_z=1,
         fb_z=0.0,
-        G=None,
-        A=None,
         y_encoder_layers=[128],
         mu_nu_layers=[128],
         use_x_mu_nu=True,
@@ -549,8 +533,6 @@ class RegressionFNP(FNP):
             pooler,
             prop_vencoder,
             label_vdecoder,
-            A=A,
-            G=G,
             fb_z=fb_z,
         )
         self.transf_y = transf_y
@@ -1548,10 +1530,14 @@ class PsfFnpData:
             self.y_m_valid.cuda(),
             self.y_valid.cuda(),
         )
+        self.A = self.A.cuda()
+        self.G = self.G.cuda()
 
     def cpu(self):
         self.X_r, self.X_m, self.X = self.X_r.cpu(), self.X_m.cpu(), self.X.cpu()
         self.y_r, self.y_m, self.y = self.y_r.cpu(), self.y_m.cpu(), self.y.cpu()
+        self.A = self.A.cpu()
+        self.G = self.G.cpu()
 
     def predict_n(self, y_r, fnp_model, X=None, A=None, sample_Z=True):
         """
