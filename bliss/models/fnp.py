@@ -32,6 +32,16 @@ class MLP(nn.Sequential):
         super().__init__(*layers)
 
 
+class SequentialVarg(nn.Sequential):
+    def forward(self, *input):
+        for module in self:
+            if isinstance(input, tuple):
+                input = module(*input)
+            else:
+                input = module(input)
+        return input
+
+
 # class FNP(pl.LightningModule):
 #     """
 #     This is an implementation of the Functional Neural Process (FNP)
@@ -193,17 +203,10 @@ class AveragePooler(nn.Module):
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
-    def forward(self, rep_R, GA, minscale=1e-8):
-        pz_mean_R, pz_logscale_R = torch.split(rep_R, self.dim_z, -1)
-
+    def forward(self, rep_R, GA):
         W = self.norm_graph(GA)
-
-        pz_mean_all = torch.matmul(W, pz_mean_R)
-        pz_logscale_all = torch.matmul(W, pz_logscale_R)
-        pz_logscale_all = torch.log(
-            minscale + (1 - minscale) * F.softplus(pz_logscale_all)
-        )
-        return Normal(pz_mean_all, pz_logscale_all)
+        pz_all = torch.matmul(W, rep_R)
+        return pz_all
 
 
 class SetPooler(nn.Module):
@@ -238,20 +241,13 @@ class SetPooler(nn.Module):
                 MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
             )
 
-    def forward(self, rep_R, GA, minscale=1e-8):
-        # yR_enc_with_uR = torch.cat([yR_encoded, uR.unsqueeze(0).repeat(yR_encoded.size(0), 1, 1)], dim=-1)
-
+    def forward(self, rep_R, GA):
         if not self.set_transformer:
             rep_pooled = GA.unsqueeze(0).unsqueeze(-1).mul(rep_R).sum(2)
             pz_all = self.pool_net(rep_pooled)
         else:
             pz_all = self.settrans(GA.unsqueeze(0).unsqueeze(-1).mul(rep_R))
-
-        pz_mean_all, pz_logscale_all = torch.split(pz_all, self.dim_z, -1)
-        pz_logscale_all = torch.log(
-            minscale + (1 - minscale) * F.softplus(pz_logscale_all)
-        )
-        return Normal(pz_mean_all, pz_logscale_all)
+        return pz_all
 
 
 class RepEncoder(nn.Module):
@@ -510,8 +506,12 @@ class RegressionFNP(FNP):
         mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, 2 * dim_z)
         rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=False, use_x=use_x_mu_nu)
         if pooler is None:
-            pooler = AveragePooler(
-                dim_z,
+            pooler = NormalEncoder(
+                SequentialVarg(
+                    AveragePooler(dim_z),
+                    SplitLayer(dim_z, -1),
+                ),
+                minscale=1e-8,
             )
         prop_inputs = [1]
         prop_mlp_in = dim_y_enc
@@ -592,12 +592,18 @@ class PoolingFNP(RegressionFNP):
         mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, self.pooling_rep_size)
         self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
 
-        self.pooler = SetPooler(
-            mu_nu_theta.out_features,
-            dim_z,
-            self.pooling_layers,
-            self.set_transformer,
-            self.st_numheads,
+        self.pooler = NormalEncoder(
+            SequentialVarg(
+                SetPooler(
+                    mu_nu_theta.out_features,
+                    dim_z,
+                    self.pooling_layers,
+                    self.set_transformer,
+                    self.st_numheads,
+                ),
+                SplitLayer(dim_z, -1),
+            ),
+            minscale=1e-8,
         )
 
 
@@ -793,12 +799,18 @@ class ConvPoolingFNP(PoolingFNP):
         output = ConcatLayer(output_inputs, conv_autoencoder.decoder)
         self.label_vdecoder = NormalEncoder(output, minscale=0.1)
 
-        self.pooler = SetPooler(
-            mu_nu_theta.out_features,
-            dim_z,
-            self.pooling_layers,
-            self.set_transformer,
-            self.st_numheads,
+        self.pooler = NormalEncoder(
+            SequentialVarg(
+                SetPooler(
+                    mu_nu_theta.out_features,
+                    dim_z,
+                    self.pooling_layers,
+                    self.set_transformer,
+                    self.st_numheads,
+                ),
+                SplitLayer(dim_z, -1),
+            ),
+            minscale=1e-8,
         )
 
 
