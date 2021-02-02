@@ -16,21 +16,20 @@ from torch.optim import Adam
 from sklearn.preprocessing import StandardScaler
 
 
-class MLP(nn.Module):
+class MLP(nn.Sequential):
     def __init__(self, in_features, hs, out_features, act=nn.ReLU, final=None):
-        super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        layers = [nn.Sequential(nn.Linear(in_features, hs[0]), act())]
+        layers = []
+        layers.append(nn.Linear(in_features, hs[0]))
+        layers.append(act())
         for i in range(len(hs) - 1):
-            layers.append(nn.Sequential(nn.Linear(hs[i], hs[i + 1]), act()))
+            layers.append(nn.Linear(hs[i], hs[i + 1]))
+            layers.append(act())
         layers.append(nn.Linear(hs[-1], out_features))
         if final is not None:
-            layers += [final()]
-        self.f = nn.Sequential(*layers)
-
-    def forward(self, X):
-        return self.f(X)
+            layers.append(final())
+        super().__init__(*layers)
 
 
 # class FNP(pl.LightningModule):
