@@ -154,7 +154,28 @@ class ConcatLayer(nn.Module):
         self.f = f
 
     def forward(self, *args):
-        X = torch.cat([args[i] for i in self.input_idxs], -1)
+        ## Filter only to arguments we want to concatenate
+        args = [args[i] for i in self.input_idxs]
+
+        ## Get the maximum size of each tensor dimension
+        ## and repeat any tensors which have a 1 in
+        ## a dimension
+        sizes = []
+        for d, _ in enumerate(args[0].size()):
+            sizes.append(max([arg.size(d) for arg in args]))
+        for d in range(len(sizes) - 1):
+            size = sizes[d]
+            if size > 1:
+                for i, _ in enumerate(args):
+                    if args[i].size(d) == 1:
+                        r = [1] * len(sizes)
+                        r[d] = size
+                        args[i] = args[i].repeat(*r)
+                    elif args[i].size(d) < size:
+                        raise ValueError(
+                            "The sizes in ConcatLayer need to be either the same or 1."
+                        )
+        X = torch.cat(args, -1)
         return self.f(X)
 
 
@@ -351,9 +372,7 @@ class FNP(nn.Module):
         ## is allowed to look at the labels of all points)
         y_all = torch.cat([yR, yM], dim=1)
         y_all_encoded = self.trans_cond_y(y_all)
-        qz = self.prop_vencoder(
-            X_all.unsqueeze(0).repeat(y_all_encoded.size(0), 1, 1), y_all_encoded
-        )
+        qz = self.prop_vencoder(X_all.unsqueeze(0), y_all_encoded)
         z = qz.rsample()
 
         ## Calculate the difference between the "prior" pz and the
@@ -363,7 +382,7 @@ class FNP(nn.Module):
         log_pqz = self.calc_log_pqz(pz, qz, z)
 
         ## Calculate the conditional likelihood of the labels y conditional on Z
-        py = self.label_vdecoder(z, u.unsqueeze(0).repeat(z.size(0), 1, 1))
+        py = self.label_vdecoder(z, u.unsqueeze(0))
         log_py = py.log_prob(y_all).sum() / XM.size(0)
         assert not torch.isnan(log_py)
         obj = log_pqz + log_py
@@ -408,7 +427,7 @@ class FNP(nn.Module):
         zM = z[:, n_ref:]
         self.z = z
 
-        py = self.label_vdecoder(zM, uM.unsqueeze(0).repeat(z.size(0), 1, 1))
+        py = self.label_vdecoder(zM, uM.unsqueeze(0))
         if sample:
             y_pred = py.sample()
         else:
