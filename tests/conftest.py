@@ -84,6 +84,12 @@ class GalaxyVAESetup:
         trainer.fit(galaxy_vae, datamodule=dataset)
         return galaxy_vae.to(self.devices.device)
 
+    def test_vae(self, overrides, galaxy_net):
+        cfg = self.get_cfg(overrides)
+        test_module = galsim_galaxies.GalsimGalaxies(cfg)
+        trainer = pl.Trainer(**cfg.training.trainer)
+        return trainer.test(galaxy_net, datamodule=test_module)[0]
+
 
 @pytest.fixture(scope="session")
 def paths():

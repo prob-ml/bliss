@@ -75,3 +75,8 @@ class GalsimGalaxies(pl.LightningDataModule, Dataset):
         return DataLoader(
             self, batch_size=self.batch_size, num_workers=self.num_workers
         )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self, batch_size=self.batch_size, num_workers=self.num_workers
+        )

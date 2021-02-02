@@ -170,8 +170,8 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         # metrics
         self.log("val_loss", loss)
-        mad = (images - recon_mean).abs().mean()
-        self.log("per_pixel_mad", mad)
+        residuals = (images - recon_mean) / torch.sqrt(images)
+        self.log("val_max_residual", residuals.abs().max())
         return {"images": images, "recon_mean": recon_mean, "recon_var": recon_var}
 
     def validation_epoch_end(self, outputs):
@@ -221,3 +221,9 @@ class OneCenteredGalaxy(pl.LightningModule):
         plt.tight_layout()
 
         return fig
+
+    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+        images, background = batch["images"], batch["background"]
+        recon_mean, _, _ = self(images, background)
+        residuals = (images - recon_mean) / torch.sqrt(images)
+        self.log("max_residual", residuals.abs().max())
