@@ -379,31 +379,6 @@ class RegressionFNP(nn.Module):
         )
         self.label_vdecoder = NormalEncoder(output, minscale=0.1)
 
-    def calc_log_pqz(self, pz, qz, z):
-        """
-        Calculates the log difference between pz and qz (with an optional free bits strategy
-        """
-        pqz_all = pz.log_prob(z) - qz.log_prob(z)
-        assert torch.isnan(pqz_all).sum() == 0
-        if self.fb_z > 0:
-            log_qpz = -torch.sum(pqz_all)
-
-            if self.training:
-                if log_qpz.item() > self.fb_z * z.size(0) * z.size(1) * (1 + 0.05):
-                    self.lambda_z = torch.clamp(
-                        self.lambda_z * (1 + 0.1), min=1e-8, max=1.0
-                    )
-                elif log_qpz.item() < self.fb_z * z.size(0) * z.size(1):
-                    self.lambda_z = torch.clamp(
-                        self.lambda_z * (1 - 0.1), min=1e-8, max=1.0
-                    )
-
-            log_pqz = self.lambda_z * pqz_all.sum()
-
-        else:
-            log_pqz = pqz_all.sum()
-        return log_pqz
-
     def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
         """
         This method runs the FNP up to the point the distributions for the latent
@@ -494,15 +469,33 @@ class RegressionFNP(nn.Module):
         obj = log_pqz + log_py
         return obj
 
+    def calc_log_pqz(self, pz, qz, z):
+        """
+        Calculates the log difference between pz and qz (with an optional free bits strategy
+        """
+        pqz_all = pz.log_prob(z) - qz.log_prob(z)
+        assert torch.isnan(pqz_all).sum() == 0
+        if self.fb_z > 0:
+            log_qpz = -torch.sum(pqz_all)
+
+            if self.training:
+                if log_qpz.item() > self.fb_z * z.size(0) * z.size(1) * (1 + 0.05):
+                    self.lambda_z = torch.clamp(
+                        self.lambda_z * (1 + 0.1), min=1e-8, max=1.0
+                    )
+                elif log_qpz.item() < self.fb_z * z.size(0) * z.size(1):
+                    self.lambda_z = torch.clamp(
+                        self.lambda_z * (1 - 0.1), min=1e-8, max=1.0
+                    )
+
+            log_pqz = self.lambda_z * pqz_all.sum()
+
+        else:
+            log_pqz = pqz_all.sum()
+        return log_pqz
+
     def forward(self, XR, yR, XM, yM, G_in=None, A_in=None, kl_anneal=1.0):
         return -self.log_prob(XR, yR, XM, yM, G_in, A_in)
-
-    def inverse_transform(self, y):
-        y = y.squeeze(-3)
-        y_flat = y.reshape(*y.shape[0:2], -1).cpu().detach().numpy()
-        y_flat_invt = self.transf_y.inverse_transform(y_flat)
-        y_out = torch.from_numpy(y_flat_invt).resize_(y.size())
-        return y_out
 
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
         n_ref = XR.size(0)
@@ -532,6 +525,13 @@ class RegressionFNP(nn.Module):
             y_pred = y_new_i
 
         return y_pred
+
+    def inverse_transform(self, y):
+        y = y.squeeze(-3)
+        y_flat = y.reshape(*y.shape[0:2], -1).cpu().detach().numpy()
+        y_flat_invt = self.transf_y.inverse_transform(y_flat)
+        y_out = torch.from_numpy(y_flat_invt).resize_(y.size())
+        return y_out
 
 
 class PoolingFNP(RegressionFNP):
