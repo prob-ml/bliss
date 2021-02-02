@@ -250,7 +250,8 @@ class SetPooler(nn.Module):
 class RepEncoder(nn.Module):
     def __init__(self, f, use_u_diff=False, use_x=False):
         super().__init__()
-        self.f = ConcatLayer(f=f)
+        self.f   = f
+        self.cat = ConcatLayer()
         self.use_u_diff = use_u_diff
         self.use_x = use_x
 
@@ -267,7 +268,7 @@ class RepEncoder(nn.Module):
                 input_list[i] = x.unsqueeze(1)
             input_list.append(u_diff.unsqueeze(0))
 
-        rep_R = self.f(*input_list)
+        rep_R = self.f(self.cat(*input_list))
         return rep_R
 
 
