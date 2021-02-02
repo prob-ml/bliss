@@ -148,14 +148,17 @@ class IdentityEncoder(nn.Module):
 
 
 class ConcatLayer(nn.Module):
-    def __init__(self, input_idxs, f=nn.Identity):
+    def __init__(self, input_idxs=None, f=nn.Identity):
         super().__init__()
         self.input_idxs = input_idxs
         self.f = f
 
     def forward(self, *args):
         ## Filter only to arguments we want to concatenate
-        args = [args[i] for i in self.input_idxs]
+        if self.input_idxs is not None:
+            args = [args[i] for i in self.input_idxs]
+        else:
+            args = list(args)
 
         ## Get the maximum size of each tensor dimension
         ## and repeat any tensors which have a 1 in
@@ -252,27 +255,26 @@ class SetPooler(nn.Module):
 
 
 class RepEncoder(nn.Module):
-    def __init__(self, mu_nu_theta, use_u_diff=False, use_x=False):
+    def __init__(self, f, use_u_diff=False, use_x=False):
         super().__init__()
-        self.mu_nu_theta = mu_nu_theta
+        self.f = ConcatLayer(f=f)
         self.use_u_diff = use_u_diff
         self.use_x = use_x
 
     def forward(self, u, uR, XR, yR_encoded):
         input_list = [yR_encoded]
         if self.use_x:
-            input_list.append(XR.unsqueeze(0).repeat(input_list[0].size(0), 1, 1))
+            input_list.append(XR.unsqueeze(0))
 
         ## If we look at differences in U values, we need to increase the dimension
         ## (each representative member looks different to each dependent member)
         if self.use_u_diff:
             u_diff = u.unsqueeze(1) - uR.unsqueeze(0)
             for i, x in enumerate(input_list):
-                input_list[i] = x.unsqueeze(1).repeat(1, u_diff.size(0), 1, 1)
-            input_list.append(u_diff.unsqueeze(0).repeat(x.size(0), 1, 1, 1))
+                input_list[i] = x.unsqueeze(1)
+            input_list.append(u_diff.unsqueeze(0))
 
-        mu_nu_in = torch.cat(input_list, -1)
-        rep_R = self.mu_nu_theta(mu_nu_in)
+        rep_R = self.f(*input_list)
         return rep_R
 
 
