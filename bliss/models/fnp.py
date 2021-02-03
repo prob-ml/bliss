@@ -659,8 +659,6 @@ class Conv2DAutoEncoder(nn.Module):
         conv_channels,
         kernel_sizes,
         strides,
-        output_insize,
-        output_layers,
     ):
         super().__init__()
         self.size_h = size_h
@@ -668,8 +666,6 @@ class Conv2DAutoEncoder(nn.Module):
         self.conv_channels = conv_channels
         self.kernel_sizes = kernel_sizes
         self.strides = strides
-        self.output_insize = output_insize
-        self.output_layers = output_layers
 
         dummy_input = torch.randn(1, 1, self.size_h, self.size_w)
 
@@ -702,14 +698,11 @@ class Conv2DAutoEncoder(nn.Module):
         self.dim_h_end = h_out
         self.dim_w_end = w_out
         y_encoder_array.append(Flatten())
-        y_encoder_array.append(nn.Linear(self.dim_y_enc, self.dim_y_enc))
         self.encoder = nn.Sequential(*y_encoder_array)
 
         ## Make Convolutional Output
-        fc_layer = MLP(self.output_insize, self.output_layers, self.dim_y_enc)
 
         self.decoder = nn.Sequential(
-            fc_layer,
             UnFlatten([self.conv_channels[-1], self.dim_h_end, self.dim_w_end]),
             *output_array,
         )

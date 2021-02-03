@@ -5,6 +5,7 @@ import bliss.models.fnp as fnp
 import os
 import math
 import numpy as np
+import torch.nn as nn
 from matplotlib import pyplot as plt
 from torch.optim import Adam
 from sklearn.preprocessing import StandardScaler
@@ -524,11 +525,12 @@ class ConvPoolingFNP(FNP):
             conv_channels,
             kernel_sizes,
             strides,
-            dim_z if not use_plus else dim_z + dim_u,
-            output_layers,
         )
 
-        self.trans_cond_y = ReshapeWrapper(conv_autoencoder.encoder, k=2)
+        self.trans_cond_y = nn.Sequential(
+            ReshapeWrapper(conv_autoencoder.encoder, k=2),
+            nn.Linear(conv_autoencoder.dim_y_enc, conv_autoencoder.dim_y_enc),
+        )
         dim_y_enc = conv_autoencoder.dim_y_enc
         mu_nu_in = dim_y_enc
         if use_x_mu_nu is True:
@@ -551,8 +553,10 @@ class ConvPoolingFNP(FNP):
             NormalEncoder(minscale=1e-8),
         )
         output_inputs = [0] if not use_plus else [0, 1]
+        output_insize = dim_z if not use_plus else dim_z + dim_u
         self.label_vdecoder = SequentialVarg(
             ConcatLayer(output_inputs),
+            MLP(output_insize, output_layers, conv_autoencoder.dim_y_enc),
             ReshapeWrapper(conv_autoencoder.decoder, k=2),
             SplitLayer(1, -3),
             NormalEncoder(minscale=0.1),
