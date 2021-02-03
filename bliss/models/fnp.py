@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.distributions import Bernoulli, MultivariateNormal
+from torch.distributions.relaxed_bernoulli import LogitRelaxedBernoulli
 from itertools import product
 from scipy.signal import savgol_filter
 
@@ -809,31 +810,6 @@ def logitexp(logp):
     return pos_val + neg_val
 
 
-class LogitRelaxedBernoulli(object):
-    def __init__(self, logits, temperature=0.3, **kwargs):
-        self.logits = logits
-        self.temperature = temperature
-
-    def rsample(self):
-        eps = torch.clamp(
-            torch.rand(
-                self.logits.size(), dtype=self.logits.dtype, device=self.logits.device
-            ),
-            min=1e-6,
-            max=1 - 1e-6,
-        )
-        y = (self.logits + torch.log(eps) - torch.log(1.0 - eps)) / self.temperature
-        return y
-
-    def log_prob(self, value):
-        return (
-            math.log(self.temperature)
-            - self.temperature * value
-            + self.logits
-            - 2 * F.softplus(-self.temperature * value + self.logits)
-        )
-
-
 def order_z(z):
     # scalar ordering function
     if z.size(1) == 1:
@@ -859,7 +835,7 @@ def sample_DAG(Z, g, training=True, temperature=0.3):
     logits = g(Z_pairs)
 
     if training:
-        p_edges = LogitRelaxedBernoulli(logits=logits, temperature=temperature)
+        p_edges = LogitRelaxedBernoulli(temperature=temperature, logits=logits)
         G = torch.sigmoid(p_edges.rsample())
     else:
         p_edges = Bernoulli(logits=logits)
@@ -884,7 +860,7 @@ def sample_bipartite(Z1, Z2, g, training=True, temperature=0.3):
 
     logits = g(Z_pairs)
     if training:
-        p_edges = LogitRelaxedBernoulli(logits=logits, temperature=temperature)
+        p_edges = LogitRelaxedBernoulli(temperature=temperature, logits=logits)
         A_vals = torch.sigmoid(p_edges.rsample())
     else:
         p_edges = Bernoulli(logits=logits)
