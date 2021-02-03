@@ -609,16 +609,6 @@ class IdentityEncoder(nn.Module):
 # **********************
 
 
-def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
-    _, _, h_in, w_in = dummy_input.size()
-    q = nn.Conv2d(c_in, c_out, kernel_size, stride)
-    dummy_output = q(dummy_input)
-    _, _, h_out, w_out = dummy_output.size()
-    pad_h = 0 if not ((stride * h_out + kernel_size - 1) == h_in) or stride == 1 else 1
-    pad_w = 0 if not ((stride * w_out + kernel_size - 1) == w_in) or stride == 1 else 1
-    return q, dummy_output, h_out, w_out, pad_h, pad_w
-
-
 class ReshapeWrapper(nn.Module):
     """
     This module wraps around a module which expects tensors of a fixed dimension. For example,
@@ -672,7 +662,7 @@ class Conv2DAutoEncoder(nn.Module):
         y_encoder_array = []
         output_array = []
         for i, _ in enumerate(self.conv_channels):
-            q, dummy_input, h_out, w_out, pad_h, pad_w = make_conv_layer_and_trace(
+            q, dummy_input, h_out, w_out, pad_h, pad_w = self.make_conv_layer_and_trace(
                 1 if i == 0 else self.conv_channels[i - 1],
                 self.conv_channels[i],
                 self.kernel_sizes[i],
@@ -706,3 +696,17 @@ class Conv2DAutoEncoder(nn.Module):
             UnFlatten([self.conv_channels[-1], self.size_h_end, self.size_w_end]),
             *output_array,
         )
+
+    @staticmethod
+    def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
+        _, _, h_in, w_in = dummy_input.size()
+        q = nn.Conv2d(c_in, c_out, kernel_size, stride)
+        dummy_output = q(dummy_input)
+        _, _, h_out, w_out = dummy_output.size()
+        pad_h = (
+            0 if not ((stride * h_out + kernel_size - 1) == h_in) or stride == 1 else 1
+        )
+        pad_w = (
+            0 if not ((stride * w_out + kernel_size - 1) == w_in) or stride == 1 else 1
+        )
+        return q, dummy_output, h_out, w_out, pad_h, pad_w
