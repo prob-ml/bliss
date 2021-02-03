@@ -67,8 +67,6 @@ class SdssPSF:
         x = np.atleast_1d(x)
         y = np.atleast_1d(y)
 
-        # psf = hdu.read()
-
         psfimgs = None
         (outh, outw) = (None, None)
 
@@ -107,7 +105,7 @@ class SloanDigitalSkySurvey(Dataset):
         sdss_dir,
         run=3900,
         camcol=6,
-        fields=None,
+        fields=(269,),
         bands=[2],
         stampsize=5,
         overwrite_fits_cache=False,
