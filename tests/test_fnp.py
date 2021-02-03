@@ -4,7 +4,9 @@ import torch
 import bliss.models.fnp as fnp
 import os
 import math
+import numpy as np
 from torch.optim import Adam
+from sklearn.preprocessing import StandardScaler
 
 from bliss.models.fnp import (
     DepGraph,
@@ -17,12 +19,118 @@ from bliss.models.fnp import (
     RepEncoder,
     ConcatLayer,
 )
+class OneDimDataset:
+    def __init__(
+        self,
+        N=20,
+        num_extra=500,
+        seed=1,
+        offset=0.1,
+    ):
+        ## Generate the first row as in the FNP paper
+        np.random.seed(seed)
+        X = np.concatenate(
+            [
+                np.random.uniform(low=0, high=0.6, size=(N - 8, 1)),
+                np.random.uniform(low=0.8, high=1.0, size=(8, 1)),
+            ],
+            axis=0,
+        )
+        eps = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
+        self.f = lambda x, eps: x + np.sin(4 * (x + eps)) + np.sin(13 * (x + eps)) + eps
+        y = self.f(X, eps)
 
+        ## Pick which indices are references or not
+        # self.idxR = idxR
+        # self.idxM = np.array([i for i in idx if i not in idxR.tolist()])
+
+        ## Generate more y-values
+        ys = [y]
+        for _ in range(99):
+            Xi = X + np.random.normal()
+            eps_i = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
+            # f = lambda x, eps: x + np.sin(4 * (x + eps)) + np.sin(13 * (x + eps)) + eps
+            yi = self.f(Xi, eps_i)
+            ys.append(yi)
+        y = np.concatenate(ys, axis=1).transpose()
+
+        ## Generate holdouts
+        ys = []
+        for i in range(10):
+            Xi = X + np.random.normal()
+            eps_i = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
+            # f = lambda x, eps: x + np.sin(4 * (x + eps)) + np.sin(13 * (x + eps)) + eps
+            yi = self.f(Xi, eps_i)
+            ys.append(yi)
+        yh = np.concatenate(ys, axis=1).transpose()
+
+        self.stdx, self.stdy = StandardScaler().fit(X), StandardScaler().fit(
+            y.reshape(-1, 1)
+        )
+        # X, y = stdx.transform(X), stdy.transform(y)
+        X = self.stdx.transform(X)
+        idx = np.arange(X.shape[0])
+        # self.idxR = np.random.choice(idx, size=(10,), replace=False)
+        # self.idxM = np.array([i for i in idx if i not in idxR.tolist()])
+        self.idxR = np.array([2, 16, 9, 6, 17, 12, 4, 15, 1, 14])
+        self.idxM = np.array([i for i in idx if i not in self.idxR.tolist()])
+
+        self.X = torch.from_numpy(X.astype(np.float32))
+        self.y = torch.from_numpy(y.astype(np.float32)).unsqueeze(2)
+        self.XR, self.yR = self.X[self.idxR], self.y[:, self.idxR]
+        self.XM, self.yM = self.X[self.idxM], self.y[:, self.idxM]
+
+        ## Holdouts
+        yh = torch.from_numpy(yh.astype(np.float32))
+        self.yh = yh.unsqueeze(2)
+        self.yhR = self.yh[:, self.idxR]
+        self.yhM = self.yh[:, self.idxM]
+
+        ## Point where predictions will be made for plotting
+        self.dx = np.linspace(-1.0, 2.0, num_extra).astype(np.float32)[:, np.newaxis]
+
+    def cuda(self):
+        for nm in ["XR", "XM", "X", "yR", "yM", "y", "yhR", "yhM", "yh"]:
+            setattr(self, nm, getattr(self, nm).cuda())
+
+    def cpu(self):
+        for nm in ["XR", "XM", "X", "yR", "yM", "y", "yhR", "yhM", "yh"]:
+            setattr(self, nm, getattr(self, nm).cpu())
+
+        # return x, y, dx, f
+def train_onedim_model(model, od, epochs=10000, lr=1e-4):
+    if torch.cuda.is_available():
+        model = model.cuda()
+    optimizer = Adam(model.parameters(), lr=lr)
+    model.train()
+    holdout_loss_prev = np.infty
+    holdout_loss_initial = model(od.XR, od.yhR, od.XM, od.yhM)
+    holdout_loss_best = holdout_loss_initial
+    print("Initial holdout loss: {:.3f})".format(holdout_loss_initial.item()))
+    if isinstance(model, fnp.RegressionFNP):
+        stdy = None
+    else:
+        stdy = od.stdy
+    for i in range(epochs):
+        optimizer.zero_grad()
+
+        loss = model(od.XR, od.yR, od.XM, od.yM)
+        loss.backward()
+        optimizer.step()
+
+        if i % int(epochs / 10) == 0:
+            print("Epoch {}/{}, loss: {:.3f}".format(i, epochs, loss.item()))
+            holdout_loss = model(od.XR, od.yhR, od.XM, od.yhM)
+            if holdout_loss < holdout_loss_best:
+                holdout_loss_best = holdout_loss
+            print("Holdout loss: {:.3f}".format(holdout_loss.item()))
+    print("Done.")
+    return model, holdout_loss_initial, holdout_loss, holdout_loss_best
 
 class TestFNP:
     def test_fnp_onedim(self, paths):
         # One dimensional example
-        od = fnp.OneDimDataset()
+        od = OneDimDataset()
         dim_x = 1
         dim_y = 1
         dim_z = 50
@@ -111,7 +219,7 @@ class TestFNP:
             if torch.cuda.is_available():
                 od.cuda()
                 model = model.cuda()
-            model, loss_initial, loss_final, loss_best = fnp.train_onedim_model(
+            model, loss_initial, loss_final, loss_best = train_onedim_model(
                 model, od, epochs=1000, lr=1e-4
             )
             ## These are to flag if the model has changed sufficiently to

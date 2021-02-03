@@ -47,7 +47,6 @@ from bliss.models.fnp import (
     RegressionFNP,
     PoolingFNP,
     OneDimDataset,
-    train_onedim_model,
 )
 from bliss.models.fnp import (
     FNP,
@@ -71,7 +70,153 @@ import matplotlib.pyplot as plt
 plt.style.use(["seaborn-whitegrid", "seaborn-colorblind", "seaborn-notebook"])
 VISUALIZE = True
 warnings.filterwarnings("ignore")
+# %%
+def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
+    if torch.cuda.is_available():
+        model = model.cuda()
+    optimizer = Adam(model.parameters(), lr=lr)
+    model.train()
+    holdout_loss_prev = np.infty
+    holdout_loss_initial = model(od.XR, od.yhR, od.XM, od.yhM)
+    holdout_loss_best = holdout_loss_initial
+    print("Initial holdout loss: {:.3f})".format(holdout_loss_initial.item()))
+    if isinstance(model, RegressionFNP):
+        stdy = None
+    else:
+        stdy = od.stdy
+    for i in range(epochs):
+        optimizer.zero_grad()
 
+        loss = model(od.XR, od.yR, od.XM, od.yM)
+        loss.backward()
+        optimizer.step()
+
+        if i % int(epochs / 10) == 0:
+            print("Epoch {}/{}, loss: {:.3f}".format(i, epochs, loss.item()))
+            if visualize:
+                visualize_onedim(
+                    model,
+                    od.dx,
+                    od.stdx,
+                    None,
+                    od.f,
+                    cond_x=od.XR,
+                    cond_y=od.yR[0],
+                    all_x=od.X,
+                    all_y=od.y[0],
+                    range_y=(-2.0, 3.0),
+                    samples=100,
+                )
+            holdout_loss = model(od.XR, od.yhR, od.XM, od.yhM)
+            if holdout_loss < holdout_loss_best:
+                holdout_loss_best = holdout_loss
+            print("Holdout loss: {:.3f}".format(holdout_loss.item()))
+    if visualize:
+        visualize_onedim(
+            model,
+            od.dx,
+            od.stdx,
+            stdy,
+            od.f,
+            cond_x=od.XR,
+            cond_y=od.yR[0],
+            all_x=od.X,
+            all_y=od.y[0],
+            range_y=(-2.0, 3.0),
+            samples=100,
+        )
+    print("Done.")
+    return model, holdout_loss_initial, holdout_loss, holdout_loss_best
+
+# %%
+def visualize_onedim(
+    model,
+    dx,
+    stdx,
+    stdy,
+    f,
+    cond_x=None,
+    cond_y=None,
+    all_x=None,
+    all_y=None,
+    samples=30,
+    range_y=(-100.0, 100.0),
+    title="",
+    train=False,
+):
+    """
+    Visualizes the predictive distribution
+    """
+    dxy = np.zeros((dx.shape[0], samples))
+    if not train:
+        model.eval()
+    with torch.no_grad():
+        dxi = torch.from_numpy(stdx.transform(dx).astype(np.float32))
+        if torch.cuda.is_available():
+            dxi = dxi.cuda()
+        for j in range(samples):
+            dxy[:, j] = (
+                model.predict(dxi, cond_x, cond_y.unsqueeze(0)).cpu().numpy().ravel()
+            )
+    print()
+
+    plt.figure()
+    mean_dxy, std_dxy = dxy.mean(axis=1), dxy.std(axis=1)
+    # smooth it in order to avoid the sampling jitter
+    mean_dxys = savgol_filter(mean_dxy, 61, 3)
+    std_dxys = savgol_filter(std_dxy, 61, 3)
+
+    if torch.cuda.is_available():
+        all_x, all_y, cond_x, cond_y = (
+            all_x.cpu(),
+            all_y.cpu(),
+            cond_x.cpu(),
+            cond_y.cpu(),
+        )
+
+    if stdy is None:
+        y_invt = lambda x: x
+    else:
+        y_invt = stdy.inverse_transform
+
+    plt.plot(dx.ravel(), mean_dxys, label="Mean function")
+    dxf = f(dx, 0.0)
+    plt.plot(dx.ravel(), dxf.ravel(), label="Actual function")
+    plt.plot(
+        stdx.inverse_transform(all_x.data.numpy()).ravel(),
+        y_invt(all_y.data.numpy()).ravel(),
+        "o",
+        label="Observations",
+    )
+    if cond_x is not None:
+        plt.plot(
+            stdx.inverse_transform(cond_x.data.numpy()).ravel(),
+            y_invt(cond_y.data.numpy()).ravel(),
+            "o",
+            label="Reference",
+        )
+    plt.fill_between(
+        dx.ravel(), mean_dxys - 1.0 * std_dxys, mean_dxys + 1.0 * std_dxys, alpha=0.1
+    )
+    plt.fill_between(
+        dx.ravel(), mean_dxys - 2.0 * std_dxys, mean_dxys + 2.0 * std_dxys, alpha=0.1
+    )
+    plt.fill_between(
+        dx.ravel(), mean_dxys - 3.0 * std_dxys, mean_dxys + 3.0 * std_dxys, alpha=0.1
+    )
+
+    plt.xlim([np.min(dx), np.max(dx)])
+    plt.ylim(range_y)
+    plt.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.10),
+        ncol=3,
+        fancybox=False,
+        shadow=False,
+    )
+    plt.title(title)
+    model.train()
+    plt.show()
 # %%
 od = OneDimDataset()
 # %%
