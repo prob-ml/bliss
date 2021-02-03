@@ -16,6 +16,7 @@ from bliss.models.fnp import (
     SplitLayer,
     NormalEncoder,
     AveragePooler,
+    SetPooler,
     RepEncoder,
     ConcatLayer,
 )
@@ -110,6 +111,11 @@ def make_onedim_model(
     dim_y_enc=100,
     fb_z=1.0,
     use_plus=False,
+    use_set_pooler=False,
+    pooling_rep_size=32,
+    pooling_layers=[64],
+    use_attention=False,
+    st_numheads=[2, 2],
 ):
     cov_vencoder = SequentialVarg(
         MLP(dim_x, [100], 2 * dim_u),
@@ -118,14 +124,32 @@ def make_onedim_model(
     )
     dep_graph = DepGraph(dim_u)
     trans_cond_y = MLP(dim_y, [128], dim_y_enc)
-    rep_encoder = RepEncoder(
-        MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
-    )
-    pooler = SequentialVarg(
-        AveragePooler(dim_z),
-        SplitLayer(dim_z, -1),
-        NormalEncoder(minscale=1e-8),
-    )
+    if use_set_pooler:
+        rep_encoder = RepEncoder(
+            MLP(dim_y_enc + dim_u, [128], pooling_rep_size),
+            use_u_diff=True,
+            use_x=False,
+        )
+        pooler = SequentialVarg(
+            SetPooler(
+                pooling_rep_size,
+                dim_z,
+                pooling_layers,
+                use_attention,
+                st_numheads,
+            ),
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
+        )
+    else:
+        rep_encoder = RepEncoder(
+            MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
+        )
+        pooler = SequentialVarg(
+            AveragePooler(dim_z),
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
+        )
     prop_vencoder = SequentialVarg(
         ConcatLayer([1, 0]),
         MLP(
@@ -199,38 +223,10 @@ class TestFNP:
         dim_y_enc = 100
         vanilla_fnp = make_onedim_model()
         fnpp = make_onedim_model(use_plus=True)
-
-        attt = fnp.PoolingFNP(
-            dim_x=1,
-            dim_y=1,
-            transf_y=None,
-            dim_h=100,
-            dim_u=3,
-            n_layers=1,
-            dim_z=50,
-            fb_z=1.0,
-            use_plus=False,
-            use_direction_mu_nu=True,
-            set_transformer=True,
-        )
-
-        poolnp = fnp.PoolingFNP(
-            dim_x=1,
-            dim_y=1,
-            transf_y=od.stdy,
-            dim_h=100,
-            dim_u=3,
-            n_layers=1,
-            dim_z=50,
-            fb_z=0.5,
-            use_plus=False,
-            use_direction_mu_nu=True,
-            set_transformer=False,
-        )
-
+        attt = make_onedim_model(use_set_pooler=True, use_attention=True)
+        poolnp = make_onedim_model(use_set_pooler=True, use_attention=False, fb_z=0.5)
         model_names = ["fnp", "fnp plus", "pool - attention", "pool - deep set"]
         thresholds = [0.5, 0.75, 0.5, 0.75]
-
         for (i, model) in enumerate([vanilla_fnp, fnpp, attt, poolnp]):
             print(model_names[i])
             if torch.cuda.is_available():
