@@ -19,6 +19,8 @@ from bliss.models.fnp import (
     RepEncoder,
     ConcatLayer,
 )
+
+
 class OneDimDataset:
     def __init__(
         self,
@@ -98,6 +100,64 @@ class OneDimDataset:
             setattr(self, nm, getattr(self, nm).cpu())
 
         # return x, y, dx, f
+
+
+def make_onedim_model(
+    dim_x=1,
+    dim_y=1,
+    dim_z=50,
+    dim_u=3,
+    dim_y_enc=100,
+    fb_z=1.0,
+    use_plus=False,
+):
+    cov_vencoder = SequentialVarg(
+        MLP(dim_x, [100], 2 * dim_u),
+        SplitLayer(dim_u, -1),
+        NormalEncoder(),
+    )
+    dep_graph = DepGraph(dim_u)
+    trans_cond_y = MLP(dim_y, [128], dim_y_enc)
+    rep_encoder = RepEncoder(
+        MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
+    )
+    pooler = SequentialVarg(
+        AveragePooler(dim_z),
+        SplitLayer(dim_z, -1),
+        NormalEncoder(minscale=1e-8),
+    )
+    prop_vencoder = SequentialVarg(
+        ConcatLayer([1, 0]),
+        MLP(
+            dim_y_enc + dim_x,
+            [128],
+            2 * dim_z,
+        ),
+        SplitLayer(dim_z, -1),
+        NormalEncoder(minscale=1e-8),
+    )
+    output_in = [0] if not use_plus else [0, 1]
+    output_insize = dim_z if not use_plus else dim_z + dim_u
+    label_vdecoder = SequentialVarg(
+        ConcatLayer(output_in),
+        MLP(output_insize, [128], 2 * dim_y),
+        SplitLayer(dim_y, -1),
+        NormalEncoder(minscale=0.1),
+    )
+    model = FNP(
+        cov_vencoder,
+        dep_graph,
+        trans_cond_y,
+        rep_encoder,
+        pooler,
+        prop_vencoder,
+        label_vdecoder,
+        fb_z=fb_z,
+    )
+
+    return model
+
+
 def train_onedim_model(model, od, epochs=10000, lr=1e-4):
     if torch.cuda.is_available():
         model = model.cuda()
@@ -127,6 +187,7 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4):
     print("Done.")
     return model, holdout_loss_initial, holdout_loss, holdout_loss_best
 
+
 class TestFNP:
     def test_fnp_onedim(self, paths):
         # One dimensional example
@@ -136,52 +197,8 @@ class TestFNP:
         dim_z = 50
         dim_u = 3
         dim_y_enc = 100
-        vanilla_fnp = FNP(
-            cov_vencoder=SequentialVarg(
-                MLP(dim_x, [100], 2 * dim_u),
-                SplitLayer(dim_u, -1),
-                NormalEncoder(),
-            ),
-            dep_graph=DepGraph(dim_u),
-            trans_cond_y=MLP(dim_y, [128], dim_y_enc),
-            rep_encoder=RepEncoder(
-                MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
-            ),
-            pooler=SequentialVarg(
-                AveragePooler(dim_z),
-                SplitLayer(dim_z, -1),
-                NormalEncoder(minscale=1e-8),
-            ),
-            prop_vencoder=SequentialVarg(
-                ConcatLayer([1, 0]),
-                MLP(
-                    dim_y_enc + dim_x,
-                    [128],
-                    2 * dim_z,
-                ),
-                SplitLayer(dim_z, -1),
-                NormalEncoder(minscale=1e-8),
-            ),
-            label_vdecoder=SequentialVarg(
-                ConcatLayer([0]),
-                MLP(dim_z, [128], 2 * dim_y),
-                SplitLayer(dim_y, -1),
-                NormalEncoder(minscale=0.1),
-            ),
-            fb_z=1.0,
-        )
-
-        fnpp = fnp.RegressionFNP(
-            dim_x=1,
-            dim_y=1,
-            transf_y=od.stdy,
-            dim_h=100,
-            dim_u=3,
-            n_layers=1,
-            dim_z=50,
-            fb_z=1.0,
-            use_plus=True,
-        )
+        vanilla_fnp = make_onedim_model()
+        fnpp = make_onedim_model(use_plus=True)
 
         attt = fnp.PoolingFNP(
             dim_x=1,

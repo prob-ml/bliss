@@ -983,7 +983,6 @@ class ConvPoolingFNP(PoolingFNP):
 ## ----------------------------
 
 
-
 def make_rot_matrices(phis):
     cos_phi = phis.cos()
     sin_phi = phis.sin()

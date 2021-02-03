@@ -128,6 +128,7 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
     print("Done.")
     return model, holdout_loss_initial, holdout_loss, holdout_loss_best
 
+
 # %%
 def visualize_onedim(
     model,
@@ -217,6 +218,8 @@ def visualize_onedim(
     plt.title(title)
     model.train()
     plt.show()
+
+
 # %%
 od = OneDimDataset()
 # %%
