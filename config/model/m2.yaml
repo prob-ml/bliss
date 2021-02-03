@@ -34,8 +34,8 @@ encoder:
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: 8
     max_detections: 2
-    enc_conv_c: 20
+    enc_conv_c: 30
     enc_kern: 3
-    enc_hidden: 256
+    enc_hidden: 220
     momentum: 0.5
 use_galaxy_encoder: False
