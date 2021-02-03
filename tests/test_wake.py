@@ -1,13 +1,12 @@
+from copy import deepcopy
+
+import pytest
 import torch
 from torch import nn
 from torch.distributions.normal import Normal
-
-import pytest
-
-from bliss import wake
 import pytorch_lightning as pl
 
-from copy import deepcopy
+from bliss import wake
 
 
 class TestWake:

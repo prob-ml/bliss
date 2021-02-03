@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 
 
 class TestBasicGalaxyTiles:
@@ -27,18 +26,5 @@ class TestBasicGalaxyTiles:
             return
 
         # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.80
-        assert results["locs_mae"] < 0.55
-
-    def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
-        test_file = Path(paths["data"]).joinpath("galaxy_test1.pt").as_posix()
-        overrides.update({"testing.file": test_file})
-        results = sleep_setup.test_sleep(overrides, trained_sleep)
-
-        # only check testing results if GPU available
-        if not devices.use_cuda:
-            return
-
-        # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.80
-        assert results["locs_mae"] < 0.55
+        assert results["acc_gal_counts"] > 0.7
+        assert results["locs_mae"] < 0.7

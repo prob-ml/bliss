@@ -6,55 +6,61 @@ name: tests
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: [3.8]
 
     steps:
+      - name: Checkout github repo (+ download lfs dependencies)
+        uses: actions/checkout@v2
+        with:
+          lfs: true
 
-    - name: Checkout github repo (+ download lfs dependencies)
-      uses: actions/checkout@v2
-      with:
-        lfs: true
+      - name: Checkout LFS objects
+        run: git lfs checkout
 
-    - name: Checkout LFS objects
-      run: git lfs checkout
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Create environment variables
+        run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
-    - name: Create environment variables
-      run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+      - name: Install Poetry
+        run: |
+          pip install --upgrade pip
+          pip install "poetry >=1.1.4, <2.0.0"
 
-    - name: Install Poetry
-      run: |
-        pip install --upgrade pip
-        pip install "poetry >=1.1.4, <2.0.0"
+      - name: Install dependencies
+        run: |
+          sudo apt-get install libfftw3-dev
+          poetry install
 
-    - name: Install dependencies
-      run: |
-        poetry install
+      - name: Run pylint
+        run: |
+          poetry run pylint bliss
 
-    - name: Run Tests
-      run: |
-        poetry run black --check .
-        poetry run pytest --cov=./bliss --cov-report=xml --durations=0
+      - name: Run black
+        run: |
+          poetry run black --check .
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v1
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        env_vars: OS,PYTHON
-        name: codecov-umbrella
-        fail_ci_if_error: true
+      - name: Run Tests
+        run: |
+          poetry run pytest --cov=./bliss --cov-report=xml --durations=0
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          env_vars: OS,PYTHON
+          name: codecov-umbrella
+          fail_ci_if_error: true

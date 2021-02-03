@@ -67,8 +67,6 @@ class SdssPSF:
         x = np.atleast_1d(x)
         y = np.atleast_1d(y)
 
-        # psf = hdu.read()
-
         psfimgs = None
         (outh, outw) = (None, None)
 
@@ -101,12 +99,13 @@ class SdssPSF:
 
 
 class SloanDigitalSkySurvey(Dataset):
+    # pylint: disable=dangerous-default-value
     def __init__(
         self,
         sdss_dir,
         run=3900,
         camcol=6,
-        fields=None,
+        fields=(269,),
         bands=[2],
         stampsize=5,
         overwrite_fits_cache=False,
@@ -132,8 +131,7 @@ class SloanDigitalSkySurvey(Dataset):
         fieldgains = self.pf_fits["GAIN"]
 
         # get desired field
-        for i in range(len(fieldnums)):
-            _field = fieldnums[i]
+        for i, _field in enumerate(fieldnums):
             gain = fieldgains[i]
             if (not fields) or _field in fields:
                 # load the catalog distributed with SDSS
@@ -146,9 +144,8 @@ class SloanDigitalSkySurvey(Dataset):
                         po_fits = fits.getdata(po_path)
                     except IndexError as e:
                         print(
-                            "INFO: IndexError while accessing field: {}. This field will not be included.".format(
-                                _field
-                            )
+                            "INFO: IndexError while accessing field: {}. "
+                            "This field will not be included.\n".format(_field)
                         )
                         print(e)
                         po_fits = None
@@ -157,9 +154,8 @@ class SloanDigitalSkySurvey(Dataset):
                     po_fits = pickle.load(po_cache_path.open("rb+"))
                     if po_fits is None:
                         print(
-                            "INFO: cached data for field {} is None. This field will not be included".format(
-                                _field
-                            )
+                            "INFO: cached data for field {} is None. "
+                            "This field will not be included".format(_field)
                         )
 
                 # Load the PSF produced by SDSS
@@ -173,9 +169,8 @@ class SloanDigitalSkySurvey(Dataset):
                     psf = SdssPSF(psf_path.as_posix(), bands)
                 except IndexError as e:
                     print(
-                        "INFO: IndexError while accessing PSF for field: {}. This field will not be included.".format(
-                            _field
-                        )
+                        "INFO: IndexError while accessing PSF for field: {}. "
+                        "This field will not be included.".format(_field),
                     )
                     print(e)
                     psf = None
@@ -200,7 +195,8 @@ class SloanDigitalSkySurvey(Dataset):
                 if p.exists():
                     p.unlink()
 
-    def fetch_bright_stars(self, po_fits, img, wcs, bg, psf):
+    # pylint: disable=too-many-statements
+    def fetch_bright_stars(self, po_fits, img, wcs, bg):
         is_star = po_fits["objc_type"] == 6
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
         is_thing = po_fits["thing_id"] != -1
@@ -209,7 +205,6 @@ class SloanDigitalSkySurvey(Dataset):
         decs = po_fits["dec"][is_target]
         fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
-        band = 2
         stamps = []
         pts = []
         prs = []
@@ -217,7 +212,7 @@ class SloanDigitalSkySurvey(Dataset):
         flxs = []
 
         G = construct_subpixel_grid_base(self.stampsize, self.stampsize)
-        for (ra, dec, f, flux) in zip(
+        for (ra, dec, _f, flux) in zip(
             ras, decs, po_fits["thing_id"][is_target], fluxes
         ):
             # pt = "time" in pixel coordinates
@@ -325,7 +320,7 @@ class SloanDigitalSkySurvey(Dataset):
             frame.close()
 
         stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(
-            po_fits, image_list[2], wcs_list[2], background_list[2], psf[2]
+            po_fits, image_list[2], wcs_list[2], background_list[2]
         )
         stamp_psfs = np.asarray(psf.psf_at_points(2, pts, prs))
         if len(stamp_bgs) > 0:

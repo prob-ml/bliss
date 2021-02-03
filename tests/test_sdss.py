@@ -1,7 +1,6 @@
 import pytest
-from bliss.datasets import sdss
-import os
 import numpy as np
+from bliss.datasets import sdss
 
 
 class TestSDSS:

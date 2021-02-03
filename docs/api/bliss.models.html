@@ -15,22 +15,22 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="prev" title="bliss.datasets package" href="bliss.datasets.html" />
-   
+
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
-  
-  
+
+
   <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
 
   </head><body>
-  
+
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          
+
 
           <div class="body" role="main">
-            
+
   <div class="section" id="bliss-models-package">
 <h1>bliss.models package<a class="headerlink" href="#bliss-models-package" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="module-bliss.models.decoder">
@@ -41,7 +41,7 @@
 <dd><dl class="py method">
 <dt id="bliss.models.decoder.ImageDecoder.forward">
 <code class="sig-name descname">forward</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/decoder.html#ImageDecoder.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.decoder.ImageDecoder.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Same as <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>, however in Lightning you want this to define
+<dd><p>Same as <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>, however in Lightning you want this to define
 the operations you want to use for prediction (i.e.: on a server or as a feature extractor).</p>
 <p>Normally you’d call <code class="docutils literal notranslate"><span class="pre">self()</span></code> from your <code class="xref py py-meth docutils literal notranslate"><span class="pre">training_step()</span></code> method.
 This makes it easy to write a complex system for training with the outputs
@@ -283,7 +283,7 @@ or want to monitor a custom metric, you can specify these in a lr_dict:</p>
 <dl class="py method">
 <dt id="bliss.models.galaxy_net.OneCenteredGalaxy.forward">
 <code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">image</span></em>, <em class="sig-param"><span class="n">background</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#OneCenteredGalaxy.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxy.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Same as <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>, however in Lightning you want this to define
+<dd><p>Same as <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>, however in Lightning you want this to define
 the operations you want to use for prediction (i.e.: on a server or as a feature extractor).</p>
 <p>Normally you’d call <code class="docutils literal notranslate"><span class="pre">self()</span></code> from your <a class="reference internal" href="#bliss.models.galaxy_net.OneCenteredGalaxy.training_step" title="bliss.models.galaxy_net.OneCenteredGalaxy.training_step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">training_step()</span></code></a> method.
 This makes it easy to write a complex system for training with the outputs
@@ -341,17 +341,17 @@ the progress bar or logger.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
+<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
 <li><p><strong>batch_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – Integer displaying index of this batch</p></li>
 <li><p><strong>optimizer_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – When using multiple optimizers, this argument will also be present.</p></li>
-<li><p><strong>hiddens</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>) – Passed in if
+<li><p><strong>hiddens</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>) – Passed in if
 <a href="#id1"><span class="problematic" id="id2">:paramref:`~pytorch_lightning.trainer.trainer.Trainer.truncated_bptt_steps`</span></a> &gt; 0.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p><p>Any of.</p>
 <ul class="simple">
-<li><p><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> - The loss tensor</p></li>
+<li><p><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> - The loss tensor</p></li>
 <li><p><cite>dict</cite> - A dictionary. Can include any keys, but must include the key ‘loss’</p></li>
 <li><p><cite>None</cite> - Training will skip to the next batch</p></li>
 </ul>
@@ -456,7 +456,7 @@ In this step you’d might generate examples or calculate anything of interest l
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
+<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
 <li><p><strong>batch_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – The index of this batch</p></li>
 <li><p><strong>dataloader_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – The index of the dataloader that produced this batch
 (only if multiple val dataloaders used)</p></li>
@@ -535,7 +535,7 @@ the model goes back to training mode and gradients are enabled.</p>
 
 
           </div>
-          
+
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
@@ -591,18 +591,18 @@ the model goes back to training mode and gradients are enabled.</p>
     </div>
     <div class="footer">
       &copy;2021, Probabilistic Machine Learning Research Group.
-      
+
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-      
+
       |
       <a href="../_sources/api/bliss.models.rst.txt"
           rel="nofollow">Page source</a>
     </div>
 
-    
 
-    
+
+
   </body>
 </html>

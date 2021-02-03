@@ -14,28 +14,28 @@
     <script src="../../_static/doctools.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-   
+
   <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
-  
-  
+
+
   <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
 
   </head><body>
-  
+
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          
+
 
           <div class="body" role="main">
-            
+
   <h1>Source code for bliss.sleep</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Summary for sleep.py</span>
 
-<span class="sd">This module contains SleepPhase class, which implements the sleep-phase traning using </span>
-<span class="sd">pytorch-lightning framework. Users should use this class to construct the sleep-phase </span>
-<span class="sd">model.  </span>
+<span class="sd">This module contains SleepPhase class, which implements the sleep-phase traning using</span>
+<span class="sd">pytorch-lightning framework. Users should use this class to construct the sleep-phase</span>
+<span class="sd">model.</span>
 
 <span class="sd">&quot;&quot;&quot;</span>
 
@@ -567,6 +567,7 @@
             <span class="s2">&quot;norm_pp_mae&quot;</span><span class="p">:</span> <span class="n">norm_pp_mae</span><span class="p">,</span>
         <span class="p">}</span>
 
+    <span class="c1"># pylint: disable=too-many-statements</span>
     <span class="k">def</span> <span class="nf">make_plots</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;validation&quot;</span><span class="p">):</span>
         <span class="c1"># add some images to tensorboard for validating location/counts.</span>
         <span class="c1"># &#39;batch&#39; is a batch from simulated dataset (all params are tiled)</span>
@@ -685,7 +686,7 @@
 </pre></div>
 
           </div>
-          
+
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
@@ -738,15 +739,15 @@
     </div>
     <div class="footer">
       &copy;2021, Probabilistic Machine Learning Research Group.
-      
+
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-      
+
     </div>
 
-    
 
-    
+
+
   </body>
 </html>

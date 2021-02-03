@@ -6,12 +6,11 @@ import torch
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 
-from bliss.datasets import simulated, catsim
+from bliss.datasets import simulated
 from bliss import plotting
 
 datasets = {
     "SimulatedDataset": simulated.SimulatedDataset,
-    "CatsimGalaxies": catsim.CatsimGalaxies,
 }
 
 

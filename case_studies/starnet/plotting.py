@@ -1,11 +1,7 @@
 import torch
-import numpy as np
-
 import matplotlib.pyplot as plt
 
-from bliss import device
-
-from bliss.models.encoder import _get_tile_coords, get_is_on_from_n_sources
+from bliss.models.encoder import get_is_on_from_n_sources
 
 
 def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
@@ -73,10 +69,8 @@ def get_params_in_tiles(tile_coords, locs, fluxes, slen, subimage_slen, edge_pad
         n_bands = 1
 
     # sort locs so all the zeros are at the end
-    is_on_array = (
-        which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool).to(device)
-    )
-    n_stars_per_tile = is_on_array.float().sum(dim=1).type(torch.LongTensor).to(device)
+    is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool)
+    n_stars_per_tile = is_on_array.float().sum(dim=1).type(torch.LongTensor)
 
     is_on_array_sorted = get_is_on_from_n_sources(
         n_stars_per_tile, n_stars_per_tile.max()
