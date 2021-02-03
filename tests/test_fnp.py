@@ -191,10 +191,6 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4):
     holdout_loss_initial = model(od.XR, od.yhR, od.XM, od.yhM)
     holdout_loss_best = holdout_loss_initial
     print("Initial holdout loss: {:.3f})".format(holdout_loss_initial.item()))
-    if isinstance(model, fnp.RegressionFNP):
-        stdy = None
-    else:
-        stdy = od.stdy
     for i in range(epochs):
         optimizer.zero_grad()
 

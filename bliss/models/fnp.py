@@ -614,11 +614,7 @@ class IdentityEncoder(nn.Module):
 # **********************
 
 
-class RegressionFNP(FNP):
-    """
-    Functional Neural Process for regression
-    """
-
+class ConvPoolingFNP(FNP):
     def __init__(
         self,
         dim_x=1,
@@ -637,24 +633,16 @@ class RegressionFNP(FNP):
         output_layers=[128],
         x_as_u=False,
         pooler=None,
+        pooling_layers=[64],
+        pooling_rep_size=32,
+        set_transformer=False,
+        st_numheads=[2, 2],
+        size_h=10,
+        size_w=10,
+        kernel_sizes=[3, 3],
+        strides=[1, 1],
+        conv_channels=[20, 20],
     ):
-        """
-        :param dim_x: Dimensionality of the input
-        :param dim_y: Dimensionality of the output
-        :param dim_h: Dimensionality of the hidden layers
-        :param transf_y: Transformation of the output (e.g. standardization)
-        :param n_layers: How many hidden layers to us
-        :param use_plus: Whether to use the FNP+
-        :param dim_u: Dimensionality of the latents in the embedding space
-        :param dim_z: Dimensionality of the  latents that summarize the parents
-        :param fb_z: How many free bits do we allow for the latent variable z
-        :param G: Use a supplied G matrix instead of sampling it (default is None)
-        :param A: Use a supplied A matrix instead of sampling it (default is None)
-        :param y_encoder_layers: Array of integers for the sizes to encode y into z
-        :param mu_nu_layers: Array of integers for the network to map encoded x and y to z
-        :param use_x_mu_nu: Whether to use x in mu_nu
-        :param output_layers: Array of integers for the sizes of the output nn
-        """
         dim_u = dim_u if not x_as_u else dim_x
         if not x_as_u:
             cov_vencoder = SequentialVarg(
@@ -715,7 +703,7 @@ class RegressionFNP(FNP):
             SplitLayer(dim_y, -1),
             NormalEncoder(minscale=0.1),
         )
-        super(RegressionFNP, self).__init__(
+        super().__init__(
             cov_vencoder,
             dep_graph,
             trans_cond_y,
@@ -726,6 +714,76 @@ class RegressionFNP(FNP):
             fb_z=fb_z,
         )
         self.transf_y = transf_y
+        # dim_z = kwargs["dim_z"]
+        # dim_u = kwargs["dim_u"]
+        # mu_nu_layers = kwargs.get("mu_nu_layers", [128])
+        dim_y_enc = 2 * dim_z
+        mu_nu_in = dim_y_enc + dim_u
+        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, pooling_rep_size)
+        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
+
+        self.pooler = SequentialVarg(
+            SetPooler(
+                mu_nu_theta.out_features,
+                dim_z,
+                pooling_layers,
+                set_transformer,
+                st_numheads,
+            ),
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
+        )
+
+        conv_autoencoder = Conv2DAutoEncoder(
+            size_h,
+            size_w,
+            conv_channels,
+            kernel_sizes,
+            strides,
+            dim_z if not use_plus else dim_z + dim_u,
+            output_layers,
+        )
+
+        self.trans_cond_y = conv_autoencoder.encoder
+        dim_y_enc = conv_autoencoder.dim_y_enc
+        mu_nu_in = dim_y_enc
+        if use_x_mu_nu is True:
+            mu_nu_in += dim_x
+        if use_direction_mu_nu:
+            mu_nu_in += 1
+        # self.mu_nu_in = mu_nu_in
+        ## This is a quick fix, but pooling_rep_size should not be used
+        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, pooling_rep_size)
+        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
+        prop_inputs = [1]
+        prop_mlp_in = dim_y_enc
+        if use_x_mu_nu:
+            prop_inputs += [0]
+            prop_mlp_in += dim_x
+        self.prop_vencoder = SequentialVarg(
+            ConcatLayer(prop_inputs),
+            MLP(prop_mlp_in, mu_nu_layers, 2 * dim_z),
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
+        )
+        output_inputs = [0] if not use_plus else [0, 1]
+        self.label_vdecoder = SequentialVarg(
+            ConcatLayer(output_inputs),
+            conv_autoencoder.decoder,
+            NormalEncoder(minscale=0.1),
+        )
+
+        self.pooler = SequentialVarg(
+            SetPooler(
+                mu_nu_theta.out_features,
+                dim_z,
+                pooling_layers,
+                set_transformer,
+                st_numheads,
+            ),
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
+        )
 
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
         y_pred = super().predict(
@@ -741,41 +799,6 @@ class RegressionFNP(FNP):
         y_flat_invt = self.transf_y.inverse_transform(y_flat)
         y_out = torch.from_numpy(y_flat_invt).resize_(y.size())
         return y_out
-
-
-class PoolingFNP(RegressionFNP):
-    def __init__(
-        self,
-        pooling_layers=[64],
-        pooling_rep_size=32,
-        set_transformer=False,
-        st_numheads=[2, 2],
-        **kwargs
-    ):
-        self.pooling_layers = pooling_layers
-        self.pooling_rep_size = pooling_rep_size
-        self.set_transformer = set_transformer
-        self.st_numheads = st_numheads
-        super().__init__(**kwargs)
-        dim_z = kwargs["dim_z"]
-        dim_u = kwargs["dim_u"]
-        mu_nu_layers = kwargs.get("mu_nu_layers", [128])
-        dim_y_enc = 2 * dim_z
-        mu_nu_in = dim_y_enc + dim_u
-        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, self.pooling_rep_size)
-        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
-
-        self.pooler = SequentialVarg(
-            SetPooler(
-                mu_nu_theta.out_features,
-                dim_z,
-                self.pooling_layers,
-                self.set_transformer,
-                self.st_numheads,
-            ),
-            SplitLayer(dim_z, -1),
-            NormalEncoder(minscale=1e-8),
-        )
 
 
 def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
@@ -894,87 +917,6 @@ class Conv2DAutoEncoder(nn.Module):
             UnFlatten([self.conv_channels[-1], self.dim_h_end, self.dim_w_end]),
             ReshapeWrapper(nn.Sequential(*output_array), 4),
             SplitLayer(1, -3),
-        )
-
-
-class ConvPoolingFNP(PoolingFNP):
-    """
-    Functional Neural Procoess for regression on images
-    """
-
-    def __init__(
-        self,
-        size_h=10,
-        size_w=10,
-        kernel_sizes=[3, 3],
-        strides=[1, 1],
-        conv_channels=[20, 20],
-        **kwargs
-    ):
-        self.size_h = size_h
-        self.size_w = size_w
-        self.kernel_sizes = kernel_sizes
-        self.strides = strides
-        # self.conv_layers = conv_layers
-        self.conv_channels = conv_channels
-        super().__init__(**kwargs)
-        dim_x = kwargs["dim_x"]
-        dim_u = kwargs["dim_u"]
-        dim_z = kwargs["dim_z"]
-        mu_nu_layers = kwargs.get("mu_nu_layers", [128])
-        output_layers = kwargs["output_layers"]
-        use_x_mu_nu = kwargs.get("use_x_mu_nu", True)
-        use_plus = kwargs.get("use_plus", True)
-
-        conv_autoencoder = Conv2DAutoEncoder(
-            size_h,
-            size_w,
-            conv_channels,
-            kernel_sizes,
-            strides,
-            dim_z if not use_plus else dim_z + dim_u,
-            output_layers,
-        )
-
-        self.trans_cond_y = conv_autoencoder.encoder
-        dim_y_enc = conv_autoencoder.dim_y_enc
-        mu_nu_in = dim_y_enc
-        if use_x_mu_nu is True:
-            mu_nu_in += dim_x
-        if kwargs.get("use_direction_mu_nu", False):
-            mu_nu_in += 1
-        # self.mu_nu_in = mu_nu_in
-        ## This is a quick fix, but pooling_rep_size should not be used
-        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, self.pooling_rep_size)
-        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
-        prop_inputs = [1]
-        prop_mlp_in = dim_y_enc
-        if use_x_mu_nu:
-            prop_inputs += [0]
-            prop_mlp_in += dim_x
-        self.prop_vencoder = SequentialVarg(
-            ConcatLayer(prop_inputs),
-            MLP(prop_mlp_in, mu_nu_layers, 2 * dim_z),
-            SplitLayer(dim_z, -1),
-            NormalEncoder(minscale=1e-8),
-        )
-        output_inputs = [0] if not use_plus else [0, 1]
-        self.label_vdecoder = SequentialVarg(
-            ConcatLayer(output_inputs),
-            conv_autoencoder.decoder,
-            NormalEncoder(minscale=0.1),
-        )
-
-        self.pooler = SequentialVarg(
-            SetPooler(
-                mu_nu_theta.out_features,
-                dim_z,
-                self.pooling_layers,
-                self.set_transformer,
-                self.st_numheads,
-            ),
-            SplitLayer(dim_z, -1),
-            NormalEncoder(minscale=1e-8),
         )
 
 
