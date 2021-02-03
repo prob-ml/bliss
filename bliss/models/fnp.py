@@ -353,7 +353,7 @@ class SetPooler(nn.Module):
             self.settrans = nn.Sequential(
                 *sabs,
                 PMA(dim_in, 2, 1, squeeze_out=True),
-                MLP(dim_in, self.pooling_layers, 2 * self.dim_z)
+                MLP(dim_in, self.pooling_layers, 2 * self.dim_z),
             )
 
     def forward(self, rep_R, GA):
@@ -626,13 +626,17 @@ class ReshapeWrapper(nn.Module):
     tensors with it. This flattens the higher dimensions into dimension 0, then unflattens them.
     """
 
-    def __init__(self, f, f_dim):
+    def __init__(self, f, k=None, f_dim=None):
         super().__init__()
         self.f = f
+        self.k = k
         self.f_dim = f_dim
 
     def forward(self, X):
-        k = len(X.shape) - self.f_dim + 1
+        if self.k is None:
+            k = len(X.shape) - self.f_dim + 1
+        else:
+            k = self.k
         assert k > 0
         in_size = torch.Size([np.product(X.shape[:k])]) + X.shape[k:]
         Y = self.f(X.view(in_size))
@@ -699,7 +703,7 @@ class Conv2DAutoEncoder(nn.Module):
         self.dim_w_end = w_out
         y_encoder_array.append(Flatten())
         y_encoder_array.append(nn.Linear(self.dim_y_enc, self.dim_y_enc))
-        self.encoder = ReshapeWrapper(nn.Sequential(*y_encoder_array), 4)
+        self.encoder = nn.Sequential(*y_encoder_array)
 
         ## Make Convolutional Output
         fc_layer = MLP(self.output_insize, self.output_layers, self.dim_y_enc)
@@ -707,6 +711,5 @@ class Conv2DAutoEncoder(nn.Module):
         self.decoder = nn.Sequential(
             fc_layer,
             UnFlatten([self.conv_channels[-1], self.dim_h_end, self.dim_w_end]),
-            ReshapeWrapper(nn.Sequential(*output_array), 4),
-            SplitLayer(1, -3),
+            *output_array,
         )

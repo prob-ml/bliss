@@ -23,6 +23,7 @@ from bliss.models.fnp import (
     SetPooler,
     RepEncoder,
     ConcatLayer,
+    ReshapeWrapper,
 )
 
 
@@ -527,7 +528,7 @@ class ConvPoolingFNP(FNP):
             output_layers,
         )
 
-        self.trans_cond_y = conv_autoencoder.encoder
+        self.trans_cond_y = ReshapeWrapper(conv_autoencoder.encoder, k=2)
         dim_y_enc = conv_autoencoder.dim_y_enc
         mu_nu_in = dim_y_enc
         if use_x_mu_nu is True:
@@ -552,7 +553,8 @@ class ConvPoolingFNP(FNP):
         output_inputs = [0] if not use_plus else [0, 1]
         self.label_vdecoder = SequentialVarg(
             ConcatLayer(output_inputs),
-            conv_autoencoder.decoder,
+            ReshapeWrapper(conv_autoencoder.decoder, k=2),
+            SplitLayer(1, -3),
             NormalEncoder(minscale=0.1),
         )
 
