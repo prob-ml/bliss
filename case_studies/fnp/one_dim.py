@@ -58,6 +58,7 @@ from bliss.models.fnp import (
     AveragePooler,
     RepEncoder,
     ConcatLayer,
+    DepGraph,
 )
 from sklearn.preprocessing import StandardScaler
 import torch
@@ -102,12 +103,12 @@ dim_z = 50
 dim_u = 3
 dim_y_enc = 100
 fnp = FNP(
-    dim_u=dim_u,
     cov_vencoder=SequentialVarg(
         MLP(dim_x, [100], 2 * dim_u),
         SplitLayer(dim_u, -1),
         NormalEncoder(),
     ),
+    dep_graph=DepGraph(dim_u),
     trans_cond_y=MLP(dim_y, [128], dim_y_enc),
     rep_encoder=RepEncoder(
         MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True

@@ -276,8 +276,8 @@ class RepEncoder(nn.Module):
 class FNP(nn.Module):
     def __init__(
         self,
-        dim_u,
         cov_vencoder,
+        dep_graph,
         trans_cond_y,
         rep_encoder,
         pooler,
@@ -288,6 +288,7 @@ class FNP(nn.Module):
         super().__init__()
         ## Learned Submodules
         self.cov_vencoder = cov_vencoder
+        self.dep_graph = dep_graph
         self.trans_cond_y = trans_cond_y
         self.rep_encoder = rep_encoder
         self.pooler = pooler
@@ -297,18 +298,6 @@ class FNP(nn.Module):
         ## Initialize free-bits regularization
         self.fb_z = fb_z
         self.register_buffer("lambda_z", float_tensor(1).fill_(1e-8))
-
-        ## Initialized the learned graph
-        ## TO BE DEPRECATED; the dependency graph should be rolled into
-        ## its own Learned Submodule
-        self.pairwise_g_logscale = nn.Parameter(
-            float_tensor(1).fill_(math.log(math.sqrt(dim_u)))
-        )
-        self.pairwise_g = lambda x: logitexp(
-            -0.5
-            * torch.sum(torch.pow(x[:, dim_u:] - x[:, 0:dim_u], 2), 1, keepdim=True)
-            / self.pairwise_g_logscale.exp()
-        ).view(x.size(0), 1)
 
     def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
         """
@@ -332,12 +321,12 @@ class FNP(nn.Module):
         ## If we are predicting ("predict"), only the dependent
         ## graph (A) is used.
         if A_in is None:
-            A = sample_bipartite(uM, uR, self.pairwise_g, training=self.training)
+            A = self.dep_graph.sample_A(uM, uR)
         else:
             A = A_in
         if mode == "infer":
             if G_in is None:
-                G = sample_DAG(uR, self.pairwise_g, training=self.training)
+                G = self.dep_graph.sample_G(uR)
             else:
                 G = G_in
 
@@ -482,6 +471,7 @@ class RegressionFNP(FNP):
             )
         else:
             cov_vencoder = IdentityEncoder()
+        dep_graph = DepGraph(dim_u)
         # p(u|x)
         # q(z|x)
         # See equation 7
@@ -533,8 +523,8 @@ class RegressionFNP(FNP):
             NormalEncoder(minscale=0.1),
         )
         super(RegressionFNP, self).__init__(
-            dim_u,
             cov_vencoder,
+            dep_graph,
             trans_cond_y,
             rep_encoder,
             pooler,
@@ -801,76 +791,91 @@ float_tensor = (
 )
 
 
-def logitexp(logp):
-    # https: // github.com / pytorch / pytorch / issues / 4007
-    pos = torch.clamp(logp, min=-0.69314718056)
-    neg = torch.clamp(logp, max=-0.69314718056)
-    neg_val = neg - torch.log(1 - torch.exp(neg))
-    pos_val = -torch.log(torch.clamp(torch.expm1(-pos), min=1e-20))
-    return pos_val + neg_val
+class DepGraph(nn.Module):
+    def __init__(self, dim_u, temperature=0.3):
+        super().__init__()
+        ## Temperature for LogitRelaxedBernoulli when training
+        self.temperature = temperature
+        ## Initialized the distance function pairwise_g
+        ## This has a single learned parameter
+        self.g_logscale = nn.Parameter(
+            float_tensor(1).fill_(math.log(math.sqrt(dim_u)))
+        )
+        self.g = lambda x: self.logitexp(
+            -0.5
+            * torch.sum(torch.pow(x[:, dim_u:] - x[:, 0:dim_u], 2), 1, keepdim=True)
+            / self.g_logscale.exp()
+        ).view(x.size(0), 1)
 
+    def sample_G(self, Z):
+        # get the indices of an upper triangular adjacency matrix that represents the DAG
+        idx_utr = np.triu_indices(Z.size(0), 1)
 
-def order_z(z):
-    # scalar ordering function
-    if z.size(1) == 1:
-        return z
-    log_cdf = torch.sum(
-        torch.log(0.5 + 0.5 * torch.erf(z / math.sqrt(2))), dim=1, keepdim=True
-    )
-    return log_cdf
+        # get the ordering
+        ordering = self.order_z(Z)
+        # sort the latents according to the ordering
+        sort_idx = torch.sort(torch.squeeze(ordering), 0)[1]
+        Y = Z[sort_idx, :]
+        # form the latent pairs for the edges
+        Z_pairs = torch.cat([Y[idx_utr[0]], Y[idx_utr[1]]], 1)
+        # get the logits for the edges in the DAG
+        logits = self.g(Z_pairs)
 
+        if self.training:
+            p_edges = LogitRelaxedBernoulli(temperature=self.temperature, logits=logits)
+            G = torch.sigmoid(p_edges.rsample())
+        else:
+            p_edges = Bernoulli(logits=logits)
+            G = p_edges.sample()
 
-def sample_DAG(Z, g, training=True, temperature=0.3):
-    # get the indices of an upper triangular adjacency matrix that represents the DAG
-    idx_utr = np.triu_indices(Z.size(0), 1)
+        # embed the upper triangular to the adjacency matrix
+        unsorted_G = float_tensor(Z.size(0), Z.size(0)).zero_()
+        unsorted_G[idx_utr[0], idx_utr[1]] = G.squeeze()
+        # unsort the dag to conform to the data order
+        original_idx = torch.sort(sort_idx)[1]
+        unsorted_G = unsorted_G[original_idx, :][:, original_idx]
 
-    # get the ordering
-    ordering = order_z(Z)
-    # sort the latents according to the ordering
-    sort_idx = torch.sort(torch.squeeze(ordering), 0)[1]
-    Y = Z[sort_idx, :]
-    # form the latent pairs for the edges
-    Z_pairs = torch.cat([Y[idx_utr[0]], Y[idx_utr[1]]], 1)
-    # get the logits for the edges in the DAG
-    logits = g(Z_pairs)
+        return unsorted_G
 
-    if training:
-        p_edges = LogitRelaxedBernoulli(temperature=temperature, logits=logits)
-        G = torch.sigmoid(p_edges.rsample())
-    else:
-        p_edges = Bernoulli(logits=logits)
-        G = p_edges.sample()
+    def sample_A(self, Z1, Z2):
+        indices = []
+        for element in product(range(Z1.size(0)), range(Z2.size(0))):
+            indices.append(element)
+        indices = np.array(indices)
+        Z_pairs = torch.cat([Z1[indices[:, 0]], Z2[indices[:, 1]]], 1)
 
-    # embed the upper triangular to the adjacency matrix
-    unsorted_G = float_tensor(Z.size(0), Z.size(0)).zero_()
-    unsorted_G[idx_utr[0], idx_utr[1]] = G.squeeze()
-    # unsort the dag to conform to the data order
-    original_idx = torch.sort(sort_idx)[1]
-    unsorted_G = unsorted_G[original_idx, :][:, original_idx]
+        logits = self.g(Z_pairs)
+        if self.training:
+            p_edges = LogitRelaxedBernoulli(temperature=self.temperature, logits=logits)
+            A_vals = torch.sigmoid(p_edges.rsample())
+        else:
+            p_edges = Bernoulli(logits=logits)
+            A_vals = p_edges.sample()
 
-    return unsorted_G
+        # embed the values to the adjacency matrix
+        A = float_tensor(Z1.size(0), Z2.size(0)).zero_()
+        A[indices[:, 0], indices[:, 1]] = A_vals.squeeze()
 
+        return A
 
-def sample_bipartite(Z1, Z2, g, training=True, temperature=0.3):
-    indices = []
-    for element in product(range(Z1.size(0)), range(Z2.size(0))):
-        indices.append(element)
-    indices = np.array(indices)
-    Z_pairs = torch.cat([Z1[indices[:, 0]], Z2[indices[:, 1]]], 1)
+    @staticmethod
+    def logitexp(logp):
+        # https: // github.com / pytorch / pytorch / issues / 4007
+        pos = torch.clamp(logp, min=-0.69314718056)
+        neg = torch.clamp(logp, max=-0.69314718056)
+        neg_val = neg - torch.log(1 - torch.exp(neg))
+        pos_val = -torch.log(torch.clamp(torch.expm1(-pos), min=1e-20))
+        return pos_val + neg_val
 
-    logits = g(Z_pairs)
-    if training:
-        p_edges = LogitRelaxedBernoulli(temperature=temperature, logits=logits)
-        A_vals = torch.sigmoid(p_edges.rsample())
-    else:
-        p_edges = Bernoulli(logits=logits)
-        A_vals = p_edges.sample()
-
-    # embed the values to the adjacency matrix
-    A = float_tensor(Z1.size(0), Z2.size(0)).zero_()
-    A[indices[:, 0], indices[:, 1]] = A_vals.squeeze()
-
-    return A
+    @staticmethod
+    def order_z(z):
+        # scalar ordering function
+        if z.size(1) == 1:
+            return z
+        log_cdf = torch.sum(
+            torch.log(0.5 + 0.5 * torch.erf(z / math.sqrt(2))), dim=1, keepdim=True
+        )
+        return log_cdf
 
 
 class Flatten(torch.nn.Module):

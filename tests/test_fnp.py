@@ -7,6 +7,7 @@ import math
 from torch.optim import Adam
 
 from bliss.models.fnp import (
+    DepGraph,
     FNP,
     SequentialVarg,
     MLP,
@@ -28,12 +29,12 @@ class TestFNP:
         dim_u = 3
         dim_y_enc = 100
         vanilla_fnp = FNP(
-            dim_u=dim_u,
             cov_vencoder=SequentialVarg(
                 MLP(dim_x, [100], 2 * dim_u),
                 SplitLayer(dim_u, -1),
                 NormalEncoder(),
             ),
+            dep_graph=DepGraph(dim_u),
             trans_cond_y=MLP(dim_y, [128], dim_y_enc),
             rep_encoder=RepEncoder(
                 MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
