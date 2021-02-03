@@ -672,23 +672,32 @@ class Conv2DAutoEncoder(nn.Module):
 
         dummy_input = torch.randn(1, 1, self.size_h, self.size_w)
 
-        q, dummy_input, h_out, w_out, pad_h, pad_w = make_conv_layer_and_trace(
-            1, self.conv_channels[0], self.kernel_sizes[0], self.strides[0], dummy_input
-        )
-        y_encoder_array = [q, nn.ReLU()]
-        self.pad_hs.append(pad_h)
-        self.pad_ws.append(pad_w)
-        for i in range(len(self.conv_channels) - 1):
+        y_encoder_array = []
+        output_array = []
+        for i, _ in enumerate(self.conv_channels):
             q, dummy_input, h_out, w_out, pad_h, pad_w = make_conv_layer_and_trace(
+                1 if i == 0 else self.conv_channels[i - 1],
                 self.conv_channels[i],
-                self.conv_channels[i + 1],
-                self.kernel_sizes[i + 1],
-                self.strides[i + 1],
+                self.kernel_sizes[i],
+                self.strides[i],
                 dummy_input,
             )
             y_encoder_array += [q, nn.ReLU()]
             self.pad_hs.append(pad_h)
             self.pad_ws.append(pad_w)
+
+            output_array.insert(
+                0,
+                nn.ConvTranspose2d(
+                    self.conv_channels[i],
+                    2 if i == 0 else self.conv_channels[i - 1],
+                    self.kernel_sizes[i],
+                    self.strides[i],
+                    output_padding=(pad_h, pad_w),
+                ),
+            )
+            if i > 0:
+                output_array.insert(1, nn.ReLU())
 
         self.dim_y_enc = self.conv_channels[-1] * h_out * w_out
         self.dim_h_end = h_out
@@ -699,26 +708,7 @@ class Conv2DAutoEncoder(nn.Module):
 
         ## Make Convolutional Output
         fc_layer = MLP(self.output_insize, self.output_layers, self.dim_y_enc)
-        output_array = []
-        for i in range(len(self.conv_channels) - 1):
-            inchannel = self.conv_channels[-(i + 1)]
-            ouchannel = self.conv_channels[-(i + 2)]
-            output_array.append(
-                nn.ConvTranspose2d(
-                    inchannel,
-                    ouchannel,
-                    self.kernel_sizes[-(i + 1)],
-                    self.strides[-(i + 1)],
-                    output_padding=(self.pad_hs[-(i + 1)], self.pad_ws[-(i + 1)]),
-                )
-            )
-            output_array.append(nn.ReLU())
 
-        output_array += [
-            nn.ConvTranspose2d(
-                self.conv_channels[0], 2, self.kernel_sizes[0], self.strides[0]
-            ),
-        ]
 
         self.decoder = nn.Sequential(
             fc_layer,
