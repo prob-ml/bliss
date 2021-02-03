@@ -785,9 +785,6 @@ class ConvPoolingFNP(PoolingFNP):
         )
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
 class DepGraph(nn.Module):
     def __init__(self, dim_u, temperature=0.3):
         super().__init__()
