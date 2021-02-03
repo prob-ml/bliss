@@ -297,7 +297,7 @@ class FNP(nn.Module):
 
         ## Initialize free-bits regularization
         self.fb_z = fb_z
-        self.register_buffer("lambda_z", float_tensor(1).fill_(1e-8))
+        self.register_buffer("lambda_z", torch.tensor(1e-8))
 
     def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
         """
@@ -786,9 +786,6 @@ class ConvPoolingFNP(PoolingFNP):
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-float_tensor = (
-    torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
-)
 
 
 class DepGraph(nn.Module):
@@ -798,9 +795,7 @@ class DepGraph(nn.Module):
         self.temperature = temperature
         ## Initialized the distance function pairwise_g
         ## This has a single learned parameter
-        self.g_logscale = nn.Parameter(
-            float_tensor(1).fill_(math.log(math.sqrt(dim_u)))
-        )
+        self.g_logscale = nn.Parameter(torch.tensor(math.log(dim_u) * 0.5))
         self.g = lambda x: self.logitexp(
             -0.5
             * torch.sum(torch.pow(x[:, dim_u:] - x[:, 0:dim_u], 2), 1, keepdim=True)
@@ -829,7 +824,7 @@ class DepGraph(nn.Module):
             G = p_edges.sample()
 
         # embed the upper triangular to the adjacency matrix
-        unsorted_G = float_tensor(Z.size(0), Z.size(0)).zero_()
+        unsorted_G = torch.zeros(Z.size(0), Z.size(0), device=Z.device)
         unsorted_G[idx_utr[0], idx_utr[1]] = G.squeeze()
         # unsort the dag to conform to the data order
         original_idx = torch.sort(sort_idx)[1]
@@ -853,7 +848,7 @@ class DepGraph(nn.Module):
             A_vals = p_edges.sample()
 
         # embed the values to the adjacency matrix
-        A = float_tensor(Z1.size(0), Z2.size(0)).zero_()
+        A = torch.zeros(Z1.size(0), Z2.size(0), device=Z1.device)
         A[indices[:, 0], indices[:, 1]] = A_vals.squeeze()
 
         return A
@@ -1060,9 +1055,9 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
     optimizer = Adam(model.parameters(), lr=lr)
     model.train()
     holdout_loss_prev = np.infty
-    holdout_loss_initial = model(od.XR, od.yhR, od.XM, od.yhM)[0]
+    holdout_loss_initial = model(od.XR, od.yhR, od.XM, od.yhM)
     holdout_loss_best = holdout_loss_initial
-    print("Initial holdout loss: {:.3f})".format(holdout_loss_initial))
+    print("Initial holdout loss: {:.3f})".format(holdout_loss_initial.item()))
     if isinstance(model, RegressionFNP):
         stdy = None
     else:
@@ -1090,10 +1085,10 @@ def train_onedim_model(model, od, epochs=10000, lr=1e-4, visualize=False):
                     range_y=(-2.0, 3.0),
                     samples=100,
                 )
-            holdout_loss = model(od.XR, od.yhR, od.XM, od.yhM)[0]
+            holdout_loss = model(od.XR, od.yhR, od.XM, od.yhM)
             if holdout_loss < holdout_loss_best:
                 holdout_loss_best = holdout_loss
-            print("Holdout loss: {:.3f}".format(holdout_loss))
+            print("Holdout loss: {:.3f}".format(holdout_loss.item()))
     if visualize:
         visualize_onedim(
             model,
