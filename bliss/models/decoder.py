@@ -47,7 +47,7 @@ class ImageDecoder(pl.LightningModule):
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
-        gal_slen=51,
+        gal_slen=41,
         psf_slen=25,
         decoder_file=None,
         psf_params_file="psf_params.npy",

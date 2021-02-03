@@ -7,7 +7,7 @@ image:
   background:
     - 686.0
 galaxy:
-  slen: 51
+  slen: 41
   latent_dim: 8
 decoder:
   params:
