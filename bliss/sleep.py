@@ -493,6 +493,7 @@ class SleepPhase(pl.LightningModule):
             tile_estimate["galaxy_bool"],
             tile_estimate["galaxy_params"],
             tile_estimate["fluxes"],
+            add_noise=False,
         )
 
         # get detection and star fluxes metrics
