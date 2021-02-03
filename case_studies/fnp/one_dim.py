@@ -418,7 +418,7 @@ fnp, _, _, fnp_loss_best = train_onedim_model(
 
 # %%
 fnpp = make_onedim_model(use_plus=True)
-fnpp, _, fnpp_loss_final = train_onedim_model(
+fnpp, _, _, fnpp_loss_final = train_onedim_model(
     fnpp, od, epochs=10000, lr=1e-4, visualize=VISUALIZE
 )
 
@@ -427,7 +427,7 @@ fnpp, _, fnpp_loss_final = train_onedim_model(
 
 # %%
 attt = make_onedim_model(use_set_pooler=True, use_attention=True)
-attt, _, attt_loss_final = train_onedim_model(
+attt, _, _, attt_loss_final = train_onedim_model(
     attt, od, epochs=10000, lr=1e-4, visualize=VISUALIZE
 )
 
@@ -436,6 +436,6 @@ attt, _, attt_loss_final = train_onedim_model(
 
 # %%
 poolnp = make_onedim_model(use_set_pooler=False, use_attention=False, fb_z=0.5)
-poolnp, _, poolnp_loss_final = train_onedim_model(
+poolnp, _, _, poolnp_loss_final = train_onedim_model(
     poolnp, od, epochs=10000, lr=1e-4, visualize=VISUALIZE
 )
