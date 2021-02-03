@@ -800,11 +800,6 @@ float_tensor = (
 )
 
 
-def norm_graph_weighted(x, weights):
-    xw = torch.mul(x, weights)
-    return xw / (xw.sum(dim=1, keepdim=True) + 1e-8)
-
-
 def logitexp(logp):
     # https: // github.com / pytorch / pytorch / issues / 4007
     pos = torch.clamp(logp, min=-0.69314718056)
@@ -812,13 +807,6 @@ def logitexp(logp):
     neg_val = neg - torch.log(1 - torch.exp(neg))
     pos_val = -torch.log(torch.clamp(torch.expm1(-pos), min=1e-20))
     return pos_val + neg_val
-
-
-def one_hot(x, n_classes=10):
-    x_onehot = float_tensor(x.size(0), n_classes).zero_()
-    x_onehot.scatter_(1, x[:, None], 1)
-
-    return x_onehot
 
 
 class LogitRelaxedBernoulli(object):
@@ -862,28 +850,6 @@ class Normal(object):
             float_tensor(self.means.size()).zero_(),
             float_tensor(self.means.size()).fill_(1),
         )
-        return self.means + self.logscales.exp() * eps
-
-    def rsample(self, **kwargs):
-        return self.sample(**kwargs)
-
-
-class L1Error(object):
-    def __init__(self, means, logscales, **kwargs):
-        self.means = means
-        self.logscales = logscales
-
-    def log_prob(self, value):
-        log_prob = torch.abs(value - self.means)
-        log_prob *= -(1 / (2.0 * self.logscales.mul(1.0).exp()))
-        log_prob -= self.logscales + 0.5 * math.log(2.0 * math.pi)
-        return log_prob
-
-    def sample(self, **kwargs):
-        eps = torch.distributions.Laplace(
-            float_tensor(self.means.size()).zero_(),
-            float_tensor(self.means.size()).fill_(1),
-        ).sample()
         return self.means + self.logscales.exp() * eps
 
     def rsample(self, **kwargs):
