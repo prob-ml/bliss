@@ -54,7 +54,7 @@ class GalsimGalaxies(pl.LightningDataModule, Dataset):
         )
 
         # add noise.
-        poisson_noise = galsim.GaussianNoise(self.rng, sky_level=self.background.mean())
+        poisson_noise = galsim.PoissonNoise(self.rng, sky_level=self.background.mean())
         image.addNoiseSNR(poisson_noise, snr=self.snr, preserve_flux=True)
 
         # add background
