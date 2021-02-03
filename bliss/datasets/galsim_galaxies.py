@@ -6,9 +6,6 @@ from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 
 
-n_bands_dict = {1: ("r",), 6: ("y", "z", "i", "r", "g", "u")}
-
-
 class GalsimGalaxies(pl.LightningDataModule, Dataset):
     def __init__(self, cfg: DictConfig):
         super().__init__()
