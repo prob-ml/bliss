@@ -10,7 +10,7 @@ from scipy.signal import savgol_filter
 
 # from .utils import Normal, L1Error, float_tensor, logitexp, sample_DAG, sample_bipartite, Flatten, UnFlatten, one_hot, norm_graph_weighted, ResidualLayer
 # from .set_transformer.modules import SAB, PMA
-from torch.distributions import Categorical, Bernoulli
+from torch.distributions import Normal, Bernoulli
 from torch.optim import Adam
 
 from sklearn.preprocessing import StandardScaler
@@ -124,7 +124,7 @@ class NormalEncoder(nn.Module):
             logscale_z = torch.log(
                 self.minscale + (1 - self.minscale) * F.softplus(logscale_z)
             )
-        pz = Normal(mean_z, logscale_z)
+        pz = Normal(mean_z, logscale_z.exp())
         return pz
 
 
@@ -832,28 +832,6 @@ class LogitRelaxedBernoulli(object):
             + self.logits
             - 2 * F.softplus(-self.temperature * value + self.logits)
         )
-
-
-class Normal(object):
-    def __init__(self, means, logscales, **kwargs):
-        self.means = means
-        self.logscales = logscales
-
-    def log_prob(self, value):
-        log_prob = torch.pow(value - self.means, 2)
-        log_prob *= -(1 / (2.0 * self.logscales.mul(2.0).exp()))
-        log_prob -= self.logscales + 0.5 * math.log(2.0 * math.pi)
-        return log_prob
-
-    def sample(self, **kwargs):
-        eps = torch.normal(
-            float_tensor(self.means.size()).zero_(),
-            float_tensor(self.means.size()).fill_(1),
-        )
-        return self.means + self.logscales.exp() * eps
-
-    def rsample(self, **kwargs):
-        return self.sample(**kwargs)
 
 
 def order_z(z):
