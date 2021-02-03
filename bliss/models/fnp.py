@@ -920,71 +920,6 @@ class Conv2DAutoEncoder(nn.Module):
         )
 
 
-## ----------------------------
-## 1-dimensional example
-## ----------------------------
-
-
-def make_rot_matrices(phis):
-    cos_phi = phis.cos()
-    sin_phi = phis.sin()
-    row1 = torch.stack([cos_phi, -sin_phi], -1)
-    row2 = torch.stack([sin_phi, cos_phi], -1)
-    y = torch.stack([row1, row2], -1)
-    return y
-
-
-def make_X_ref_pair(x1, x2, K):
-    X = x1 + (x2 - x1) / (K + 1) * (torch.tensor(range(K), dtype=torch.float32) + 1.0)
-    return X
-
-
-# TODO: Add jitter here
-def make_X(n_ref, Ks):
-    X_ref = torch.tensor(range(0, n_ref * 2, 2), dtype=torch.float32)
-    X_dep = torch.tensor([], dtype=torch.float32)
-    for i in range(n_ref - 1):
-        X_dep = torch.cat([X_dep, make_X_ref_pair(X_ref[i], X_ref[i + 1], Ks[i])])
-    X_all, idxs = torch.cat([X_ref, X_dep], 0).sort()
-
-    Is = torch.tensor(range(X_all.size(0)))
-    idx_ref = Is[idxs < n_ref]
-    idx_dep = Is[idxs >= n_ref]
-    return X_ref, X_dep, X_all, idx_ref, idx_dep
-
-
-def make_graph_ref_pair(j1, j2, K, n_ref):
-    """
-    This calculates dependency matrix for points between j1 and j2
-    :param j1: Index of first reference point
-    :param j2: Index of second reference point
-    :param K: Number of dependent points
-    :param n_ref: Number of reference_points
-    """
-    X = torch.zeros(K, n_ref)
-    X[:, j1] = 1
-    X[:, j2] = 1
-    return X
-
-
-def make_graphs(n_ref, Ks):
-    """
-    This calculates the dependency matrices G and A, assuming that there are Ks[j] interpolated points between
-    references j and j+1
-    :param n_ref: Number of reference_points
-    :param Ks: List of integers indicated number of interpolated points in that gap
-    """
-    G = torch.zeros(n_ref, n_ref, dtype=torch.float32)
-    for j in range(n_ref - 1):
-        G[j + 1, j] = 1.0
-
-    A = torch.tensor([], dtype=torch.float32)
-    for j in range(n_ref - 1):
-        A = torch.cat([A, make_graph_ref_pair(j, j + 1, Ks[j], n_ref)])
-
-    return G, A
-
-
 class PSFRotate:
     """
     Class for generating synthetic sequences of stars which rotate.
@@ -1054,7 +989,7 @@ class PSFRotate:
         l[:, idx_brights] = self.bright_val
 
         mu = torch.tensor([torch.mean(self.h), torch.mean(self.w)], device=device)
-        rots = make_rot_matrices(phi)
+        rots = self.make_rot_matrices(phi)
         covs = (
             rots.transpose(3, 2)
             .matmul(self.base_cov.to(device))
@@ -1068,6 +1003,15 @@ class PSFRotate:
             self.grid.to(device).unsqueeze(0)
         ).exp() * l.unsqueeze(-1).unsqueeze(-1)
         return brights
+
+    @staticmethod
+    def make_rot_matrices(phis):
+        cos_phi = phis.cos()
+        sin_phi = phis.sin()
+        row1 = torch.stack([cos_phi, -sin_phi], -1)
+        row2 = torch.stack([sin_phi, cos_phi], -1)
+        y = torch.stack([row1, row2], -1)
+        return y
 
 
 class PsfFnpData:
@@ -1083,10 +1027,10 @@ class PsfFnpData:
         else:
             self.N_valid = N_valid
 
-        self.X_ref, self.X_dep, self.X_all, self.idx_ref, self.idx_dep = make_X(
+        self.X_ref, self.X_dep, self.X_all, self.idx_ref, self.idx_dep = self.make_X(
             n_ref, Ks
         )
-        self.G, self.A = make_graphs(n_ref, Ks)
+        self.G, self.A = self.make_graphs(n_ref, Ks)
 
         self.dgp = PSFRotate(self.X_all, **kwargs)
 
@@ -1111,6 +1055,37 @@ class PsfFnpData:
             self.X_valid,
             self.y_valid,
         ) = self.split_reference_dependent(X, y)
+
+    @staticmethod
+    def make_graph_ref_pair(j1, j2, K, n_ref):
+        """
+        This calculates dependency matrix for points between j1 and j2
+        :param j1: Index of first reference point
+        :param j2: Index of second reference point
+        :param K: Number of dependent points
+        :param n_ref: Number of reference_points
+        """
+        X = torch.zeros(K, n_ref)
+        X[:, j1] = 1
+        X[:, j2] = 1
+        return X
+
+    def make_graphs(self, n_ref, Ks):
+        """
+        This calculates the dependency matrices G and A, assuming that there are Ks[j] interpolated points between
+        references j and j+1
+        :param n_ref: Number of reference_points
+        :param Ks: List of integers indicated number of interpolated points in that gap
+        """
+        G = torch.zeros(n_ref, n_ref, dtype=torch.float32)
+        for j in range(n_ref - 1):
+            G[j + 1, j] = 1.0
+
+        A = torch.tensor([], dtype=torch.float32)
+        for j in range(n_ref - 1):
+            A = torch.cat([A, self.make_graph_ref_pair(j, j + 1, Ks[j], n_ref)])
+
+        return G, A
 
     def generate(self, N, stdx=None, stdy=None):
         images = self.dgp.generate(N, device=self.device).cpu()
@@ -1157,6 +1132,27 @@ class PsfFnpData:
         img[:, 0] = max_bright
         img[:, self.dgp.size_w - 1] = max_bright
         return img
+
+    @staticmethod
+    def make_X_ref_pair(x1, x2, K):
+        X = x1 + (x2 - x1) / (K + 1) * (
+            torch.tensor(range(K), dtype=torch.float32) + 1.0
+        )
+        return X
+
+    def make_X(self, n_ref, Ks):
+        X_ref = torch.tensor(range(0, n_ref * 2, 2), dtype=torch.float32)
+        X_dep = torch.tensor([], dtype=torch.float32)
+        for i in range(n_ref - 1):
+            X_dep = torch.cat(
+                [X_dep, self.make_X_ref_pair(X_ref[i], X_ref[i + 1], Ks[i])]
+            )
+        X_all, idxs = torch.cat([X_ref, X_dep], 0).sort()
+
+        Is = torch.tensor(range(X_all.size(0)))
+        idx_ref = Is[idxs < n_ref]
+        idx_dep = Is[idxs >= n_ref]
+        return X_ref, X_dep, X_all, idx_ref, idx_dep
 
     def export_images(self, path, mark_ref=True, valid=False, nrows=None):
         if valid:
