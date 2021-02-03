@@ -1,9 +1,10 @@
 def test_binary(sleep_setup, devices):
-    overrides = dict(
-        model="sleep_1galaxy_1star",
-        dataset="default" if devices.use_cuda else "cpu",
-        training="unittest" if devices.use_cuda else "cpu",
-    )
+    overrides = {
+        "model": "sleep_1galaxy_1star",
+        "dataset": "default" if devices.use_cuda else "cpu",
+        "training": "unittest" if devices.use_cuda else "cpu",
+        "training.n_epochs": 201 if devices.use_cuda else 1,
+    }
     trained_sleep = sleep_setup.get_trained_sleep(overrides)
 
     overrides.update({"testing": "default"})
@@ -16,4 +17,4 @@ def test_binary(sleep_setup, devices):
     # check testing results are sensible.
     assert results["acc_counts"] > 0.7
     assert results["acc_gal_counts"] > 0.7
-    assert results["locs_mae"] < 0.5
+    assert results["locs_mae"] < 0.55
