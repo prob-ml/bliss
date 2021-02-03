@@ -694,15 +694,15 @@ class Conv2DAutoEncoder(nn.Module):
             if i > 0:
                 output_array.insert(1, nn.ReLU())
 
-        self.dim_y_enc = self.conv_channels[-1] * h_out * w_out
-        self.dim_h_end = h_out
-        self.dim_w_end = w_out
+        self.dim_rep = self.conv_channels[-1] * h_out * w_out
+        self.size_h_end = h_out
+        self.size_w_end = w_out
         y_encoder_array.append(Flatten())
         self.encoder = nn.Sequential(*y_encoder_array)
 
         ## Make Convolutional Output
 
         self.decoder = nn.Sequential(
-            UnFlatten([self.conv_channels[-1], self.dim_h_end, self.dim_w_end]),
+            UnFlatten([self.conv_channels[-1], self.size_h_end, self.size_w_end]),
             *output_array,
         )

@@ -529,9 +529,9 @@ class ConvPoolingFNP(FNP):
 
         self.trans_cond_y = nn.Sequential(
             ReshapeWrapper(conv_autoencoder.encoder, k=2),
-            nn.Linear(conv_autoencoder.dim_y_enc, conv_autoencoder.dim_y_enc),
+            nn.Linear(conv_autoencoder.dim_rep, conv_autoencoder.dim_rep),
         )
-        dim_y_enc = conv_autoencoder.dim_y_enc
+        dim_y_enc = conv_autoencoder.dim_rep
         mu_nu_in = dim_y_enc
         if use_x_mu_nu is True:
             mu_nu_in += dim_x
@@ -556,7 +556,7 @@ class ConvPoolingFNP(FNP):
         output_insize = dim_z if not use_plus else dim_z + dim_u
         self.label_vdecoder = SequentialVarg(
             ConcatLayer(output_inputs),
-            MLP(output_insize, output_layers, conv_autoencoder.dim_y_enc),
+            MLP(output_insize, output_layers, conv_autoencoder.dim_rep),
             ReshapeWrapper(conv_autoencoder.decoder, k=2),
             SplitLayer(1, -3),
             NormalEncoder(minscale=0.1),
