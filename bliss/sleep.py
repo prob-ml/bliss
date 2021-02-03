@@ -594,6 +594,7 @@ class SleepPhase(pl.LightningModule):
                     tile_estimate["galaxy_bool"][None, i],
                     tile_estimate["galaxy_params"][None, i],
                     tile_estimate["fluxes"][None, i],
+                    add_noise=False,
                 )
 
                 # round up true parameters.
