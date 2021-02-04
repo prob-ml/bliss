@@ -1,15 +1,11 @@
-import torch.nn as nn
-import torch
 import math
+from itertools import product
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from torch.distributions import Bernoulli
-from torch.distributions.relaxed_bernoulli import LogitRelaxedBernoulli
-from itertools import product
-
-# from .utils import Normal, L1Error, float_tensor, logitexp, sample_DAG, sample_bipartite, Flatten, UnFlatten, one_hot, norm_graph_weighted, ResidualLayer
-# from .set_transformer.modules import SAB, PMA
 from torch.distributions import Normal, Bernoulli
+from torch.distributions.relaxed_bernoulli import LogitRelaxedBernoulli
 
 
 class FNP(nn.Module):
@@ -98,7 +94,7 @@ class FNP(nn.Module):
         elif mode == "predict":
             GA = A
         else:
-            raise ("invalid encode mode")
+            raise ValueError("invalid encode mode")
         assert torch.isnan(GA).sum() == 0
 
         ## From the dependency graph GA and the encoded
@@ -114,7 +110,6 @@ class FNP(nn.Module):
         ## and the encoding U of the covariates
         u, pz = self.encode(XR, yR, XM, G_in, A_in)
 
-        n_ref = XR.size(0)
         X_all = torch.cat([XR, XM], dim=0)
 
         ## Sample Z from the proposal distribution (which
@@ -138,6 +133,7 @@ class FNP(nn.Module):
         return obj
 
     def calc_log_pqz(self, pz, qz, z):
+        # pylint: disable=attribute-defined-outside-init
         """
         Calculates the log difference between pz and qz (with an optional free bits strategy)
         """
@@ -162,7 +158,7 @@ class FNP(nn.Module):
             log_pqz = pqz_all.sum()
         return log_pqz
 
-    def forward(self, XR, yR, XM, yM, G_in=None, A_in=None, kl_anneal=1.0):
+    def forward(self, XR, yR, XM, yM, G_in=None, A_in=None):
         return -self.log_prob(XR, yR, XM, yM, G_in, A_in)
 
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
@@ -174,7 +170,6 @@ class FNP(nn.Module):
         else:
             z = pz.means
         zM = z[:, n_ref:]
-        self.z = z
 
         py = self.label_vdecoder(zM, uM.unsqueeze(0))
         if sample:
@@ -368,7 +363,7 @@ class SetPooler(nn.Module):
 ## Set Transformer
 class MAB(nn.Module):
     def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
-        super(MAB, self).__init__()
+        super().__init__()
         self.dim_V = dim_V
         self.num_heads = num_heads
         self.fc_q = nn.Linear(dim_Q, dim_V)
@@ -400,7 +395,7 @@ class MAB(nn.Module):
 
 class SAB(nn.Module):
     def __init__(self, dim_in, dim_out, num_heads, ln=False):
-        super(SAB, self).__init__()
+        super().__init__()
         self.mab = MAB(dim_in, dim_in, dim_out, num_heads, ln=ln)
 
     def forward(self, X):
@@ -409,7 +404,7 @@ class SAB(nn.Module):
 
 class ISAB(nn.Module):
     def __init__(self, dim_in, dim_out, num_heads, num_inds, ln=False):
-        super(ISAB, self).__init__()
+        super().__init__()
         self.I = nn.Parameter(torch.Tensor(1, num_inds, dim_out))
         nn.init.xavier_uniform_(self.I)
         self.mab0 = MAB(dim_out, dim_in, dim_out, num_heads, ln=ln)
@@ -422,7 +417,7 @@ class ISAB(nn.Module):
 
 class PMA(nn.Module):
     def __init__(self, dim, num_heads, num_seeds, ln=False, squeeze_out=False):
-        super(PMA, self).__init__()
+        super().__init__()
         self.S = nn.Parameter(torch.Tensor(num_seeds, dim))
         nn.init.xavier_uniform_(self.S)
         self.mab = MAB(dim, dim, dim, num_heads, ln=ln)
@@ -470,13 +465,13 @@ class SequentialVarg(nn.Sequential):
     and/or return multiple arguments.
     """
 
-    def forward(self, *input):
+    def forward(self, *X):
         for module in self:
-            if isinstance(input, tuple):
-                input = module(*input)
+            if isinstance(X, tuple):
+                X = module(*X)
             else:
-                input = module(input)
-        return input
+                X = module(X)
+        return X
 
 
 class SplitLayer(nn.Module):
@@ -528,9 +523,6 @@ class ConcatLayer(nn.Module):
 
 
 class Flatten(nn.Module):
-    def __init__(self):
-        super().__init__()
-
     def forward(self, x):
         assert len(x.shape) > 1
 
@@ -577,12 +569,6 @@ class ConstantDist(nn.Module):
     def __init__(self, X):
         super().__init__()
         self.X = X
-
-    def log_prob(self, X):
-        if X is self.X:
-            return 0
-        else:
-            return -np.inf
 
     def sample(self):
         return self.X
