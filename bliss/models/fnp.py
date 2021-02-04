@@ -15,6 +15,10 @@ class FNP(nn.Module):
     This is an implementation of the Functional Neural Process (FNP)
     from http://arxiv.org/abs/1906.08324.
 
+    This implementation is based on https://github.com/AMLab-Amsterdam/FNP,
+    distributed with the MIT license. Significant changes have been made,
+    so any problems or bugs should not be attributed to the original authors.
+
     The FNP is made up of a few different modules. These are all
     application-specific, so they are passed as arguments to the
     class constructor
@@ -187,9 +191,14 @@ class FNP(nn.Module):
 ## ***********************
 class DepGraph(nn.Module):
     """
-    A dependency-graph module for use within FNP. For tensors of input encodings from
-    the reference points (uR) and dependent points (uM), this module returns matrices
+    A dependency-graph module for use within FNP.
+    For tensors of input encodings from the reference points (uR)
+    and dependent points (uM), this module returns matrices
     that represent the dependency structure.
+
+    This implementation is based on https://github.com/AMLab-Amsterdam/FNP,
+    distributed with the MIT license. Significant changes have been made,
+    so any problems or bugs should not be attributed to the original authors.
     """
 
     def __init__(self, dim_u, temperature=0.3):
@@ -277,6 +286,12 @@ class DepGraph(nn.Module):
 
 
 class RepEncoder(nn.Module):
+    """
+    Module which forms an encoded representation based on
+    the encoded input (U), the reference input (xR),
+    and the encoded reference labels (yR).
+    """
+
     def __init__(self, f, use_u_diff=False, use_x=False):
         super().__init__()
         self.f = f
@@ -305,6 +320,10 @@ class RepEncoder(nn.Module):
 # Representation Poolers
 # **************************
 class AveragePooler(nn.Module):
+    """
+    Pools together representations by taking a sum.
+    """
+
     def __init__(
         self,
         dim_z,
@@ -322,6 +341,11 @@ class AveragePooler(nn.Module):
 
 
 class SetPooler(nn.Module):
+    """
+    Pools together representations using a set transformer architecture.
+    See https://arxiv.org/abs/1810.00825.
+    """
+
     def __init__(
         self,
         dim_rep_R,
@@ -365,6 +389,10 @@ class SetPooler(nn.Module):
 # *********************
 # Set Transformer
 # *********************
+# This implementation is taken from https://github.com/juho-lee/set_transformer/,
+# which comes with the MIT license.
+
+
 class MAB(nn.Module):
     def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
         super().__init__()
