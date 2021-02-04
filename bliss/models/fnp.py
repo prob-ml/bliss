@@ -658,9 +658,8 @@ class Conv2DAutoEncoder(nn.Module):
         self.strides = strides
 
         dummy_input = torch.randn(1, 1, self.size_h, self.size_w)
-
-        y_encoder_array = []
-        output_array = []
+        encoder_list = []
+        decoder_list = []
         for i, _ in enumerate(self.conv_channels):
             conv_net = nn.Conv2d(
                 1 if i == 0 else self.conv_channels[i - 1],
@@ -693,23 +692,21 @@ class Conv2DAutoEncoder(nn.Module):
                 output_padding=(pad_h, pad_w),
             )
 
-            y_encoder_array.append(conv_net)
-            y_encoder_array.append(nn.ReLU())
-            output_array.insert(0, conv_net_t)
+            encoder_list.append(conv_net)
+            encoder_list.append(nn.ReLU())
+            decoder_list.insert(0, conv_net_t)
             if i > 0:
-                output_array.insert(1, nn.ReLU())
+                decoder_list.insert(1, nn.ReLU())
 
             dummy_input = dummy_output
 
         self.dim_rep = self.conv_channels[-1] * h_out * w_out
         self.size_h_end = h_out
         self.size_w_end = w_out
-        y_encoder_array.append(Flatten())
-        self.encoder = nn.Sequential(*y_encoder_array)
+        encoder_list.append(Flatten())
 
-        ## Make Convolutional Output
-
+        self.encoder = nn.Sequential(*encoder_list)
         self.decoder = nn.Sequential(
             UnFlatten([self.conv_channels[-1], self.size_h_end, self.size_w_end]),
-            *output_array,
+            *decoder_list,
         )
