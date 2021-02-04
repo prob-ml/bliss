@@ -662,27 +662,42 @@ class Conv2DAutoEncoder(nn.Module):
         y_encoder_array = []
         output_array = []
         for i, _ in enumerate(self.conv_channels):
-            q, dummy_input, h_out, w_out, pad_h, pad_w = self.make_conv_layer_and_trace(
+            conv_net = nn.Conv2d(
                 1 if i == 0 else self.conv_channels[i - 1],
                 self.conv_channels[i],
                 self.kernel_sizes[i],
                 self.strides[i],
-                dummy_input,
             )
-            y_encoder_array += [q, nn.ReLU()]
+            h_in, w_in = dummy_input.shape[2:]
+            dummy_output = conv_net(dummy_input)
+            h_out, w_out = dummy_output.shape[2:]
+            pad_h = (
+                0
+                if not ((self.strides[i] * h_out + self.kernel_sizes[i] - 1) == h_in)
+                or self.strides[i] == 1
+                else 1
+            )
+            pad_w = (
+                0
+                if not ((self.strides[i] * w_out + self.kernel_sizes[i] - 1) == w_in)
+                or self.strides[i] == 1
+                else 1
+            )
+            conv_net_t = nn.ConvTranspose2d(
+                self.conv_channels[i],
+                2 if i == 0 else self.conv_channels[i - 1],
+                self.kernel_sizes[i],
+                self.strides[i],
+                output_padding=(pad_h, pad_w),
+            )
 
-            output_array.insert(
-                0,
-                nn.ConvTranspose2d(
-                    self.conv_channels[i],
-                    2 if i == 0 else self.conv_channels[i - 1],
-                    self.kernel_sizes[i],
-                    self.strides[i],
-                    output_padding=(pad_h, pad_w),
-                ),
-            )
+            y_encoder_array.append(conv_net)
+            y_encoder_array.append(nn.ReLU())
+            output_array.insert(0, conv_net_t)
             if i > 0:
                 output_array.insert(1, nn.ReLU())
+
+            dummy_input = dummy_output
 
         self.dim_rep = self.conv_channels[-1] * h_out * w_out
         self.size_h_end = h_out
@@ -696,17 +711,3 @@ class Conv2DAutoEncoder(nn.Module):
             UnFlatten([self.conv_channels[-1], self.size_h_end, self.size_w_end]),
             *output_array,
         )
-
-    @staticmethod
-    def make_conv_layer_and_trace(c_in, c_out, kernel_size, stride, dummy_input):
-        _, _, h_in, w_in = dummy_input.size()
-        q = nn.Conv2d(c_in, c_out, kernel_size, stride)
-        dummy_output = q(dummy_input)
-        _, _, h_out, w_out = dummy_output.size()
-        pad_h = (
-            0 if not ((stride * h_out + kernel_size - 1) == h_in) or stride == 1 else 1
-        )
-        pad_w = (
-            0 if not ((stride * w_out + kernel_size - 1) == w_in) or stride == 1 else 1
-        )
-        return q, dummy_output, h_out, w_out, pad_h, pad_w
