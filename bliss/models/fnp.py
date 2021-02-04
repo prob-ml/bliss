@@ -649,6 +649,7 @@ class Conv2DAutoEncoder(nn.Module):
         conv_channels,
         kernel_sizes,
         strides,
+        last_decoder_channel=2,
     ):
         super().__init__()
         self.size_h = size_h
@@ -686,7 +687,7 @@ class Conv2DAutoEncoder(nn.Module):
                 pad_w = 1
             conv_net_t = nn.ConvTranspose2d(
                 self.conv_channels[i],
-                2 if i == 0 else self.conv_channels[i - 1],
+                last_decoder_channel if i == 0 else self.conv_channels[i - 1],
                 self.kernel_sizes[i],
                 self.strides[i],
                 output_padding=(pad_h, pad_w),
