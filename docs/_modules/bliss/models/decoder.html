@@ -14,22 +14,22 @@
     <script src="../../../_static/doctools.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-
+   
   <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
-
-
+  
+  
   <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
 
   </head><body>
-
+  
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-
+          
 
           <div class="body" role="main">
-
+            
   <h1>Source code for bliss.models.decoder</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
@@ -80,7 +80,7 @@
         <span class="n">f_min</span><span class="o">=</span><span class="mf">1e4</span><span class="p">,</span>
         <span class="n">f_max</span><span class="o">=</span><span class="mf">1e6</span><span class="p">,</span>
         <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
-        <span class="n">gal_slen</span><span class="o">=</span><span class="mi">51</span><span class="p">,</span>
+        <span class="n">gal_slen</span><span class="o">=</span><span class="mi">41</span><span class="p">,</span>
         <span class="n">psf_slen</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
         <span class="n">decoder_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">psf_params_file</span><span class="o">=</span><span class="s2">&quot;psf_params.npy&quot;</span><span class="p">,</span>
@@ -392,9 +392,8 @@
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;image mean less than 0&quot;</span><span class="p">)</span>
             <span class="n">images_mean</span> <span class="o">=</span> <span class="n">images_mean</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
 
-        <span class="n">_images</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">images_mean</span><span class="p">)</span>
-        <span class="n">images</span> <span class="o">=</span> <span class="n">_images</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">images_mean</span><span class="p">)</span>
-        <span class="n">images</span> <span class="o">=</span> <span class="n">images</span> <span class="o">+</span> <span class="n">images_mean</span>
+        <span class="n">_images</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">images_mean</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">images_mean</span><span class="p">)</span>
+        <span class="n">images</span> <span class="o">=</span> <span class="n">_images</span> <span class="o">+</span> <span class="n">images_mean</span>
 
         <span class="k">return</span> <span class="n">images</span>
 
@@ -786,7 +785,7 @@
 </pre></div>
 
           </div>
-
+          
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
@@ -839,15 +838,15 @@
     </div>
     <div class="footer">
       &copy;2021, Probabilistic Machine Learning Research Group.
-
+      
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-
+      
     </div>
 
+    
 
-
-
+    
   </body>
 </html>

@@ -15,6 +15,13 @@ bliss.models.encoder module
    :members:
    :no-undoc-members:
 
+bliss.models.fnp module
+---------------------------
+
+.. automodule:: bliss.models.fnp
+   :members:
+   :no-undoc-members:
+
 bliss.models.galaxy\_net module
 -------------------------------
 
