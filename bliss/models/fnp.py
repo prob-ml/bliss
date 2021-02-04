@@ -604,11 +604,6 @@ class IdentityEncoder(nn.Module):
         return ConstantDist(X)
 
 
-########################
-# Model-specific code
-# **********************
-
-
 class ReshapeWrapper(nn.Module):
     """
     This module wraps around a module which expects tensors of a fixed dimension. For example,
