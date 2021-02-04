@@ -8,15 +8,12 @@ from sklearn.preprocessing import StandardScaler
 from bliss.models.fnp import (
     DepGraph,
     FNP,
-    SequentialVarg,
-    MLP,
-    SplitLayer,
-    NormalEncoder,
     AveragePooler,
     SetPooler,
     RepEncoder,
-    ConcatLayer,
 )
+
+from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEncoder
 
 
 class TestFNP:
