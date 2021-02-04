@@ -13,10 +13,8 @@ class MLP(nn.Sequential):
         self.in_features = in_features
         self.out_features = out_features
         layers = []
-        layers.append(nn.Linear(in_features, hs[0]))
-        layers.append(act())
-        for i in range(len(hs) - 1):
-            layers.append(nn.Linear(hs[i], hs[i + 1]))
+        for i, h in enumerate(hs):
+            layers.append(nn.Linear(in_features if i == 0 else hs[i - 1], h))
             layers.append(act())
         layers.append(nn.Linear(hs[-1], out_features))
         if final is not None:
