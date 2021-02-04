@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 from torch.optim import Adam
+from pytorch_lightning import LightningModule, Trainer
+from torch.utils.data.dataloader import DataLoader
 
 from bliss.models.fnp import (
     DepGraph,
@@ -14,31 +16,36 @@ from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEnco
 
 
 class TestFNP:
-    def test_fnp_onedim(self):
+    def test_fnp_onedim(self, devices):
         # One dimensional example
         od = OneDimDataset()
-        vanilla_fnp = make_onedim_model()
-        fnpp = make_onedim_model(use_plus=True)
-        attt = make_onedim_model(use_set_pooler=True, use_attention=True)
-        poolnp = make_onedim_model(use_set_pooler=True, use_attention=False, fb_z=0.5)
+        vanilla_fnp = OneDimFNP()
+        fnpp = OneDimFNP(use_plus=True)
+        attt = OneDimFNP(use_set_pooler=True, use_attention=True)
+        poolnp = OneDimFNP(use_set_pooler=True, use_attention=False, fb_z=0.5)
         model_names = ["fnp", "fnp plus", "pool - attention", "pool - deep set"]
         thresholds = [0.5, 0.75, 0.5, 0.75]
         for (i, model) in enumerate([vanilla_fnp, fnpp, attt, poolnp]):
             print(model_names[i])
-            if torch.cuda.is_available():
-                od.cuda()
-                model = model.cuda()
-            model, loss_initial, loss_final, loss_best = train_onedim_model(
-                model, od, epochs=1000, lr=1e-4
+            train_loader = DataLoader(
+                [[od.XR, od.yR, od.XM, od.yM]], batch_size=None, batch_sampler=None
             )
-            ## These are to flag if the model has changed sufficiently to
-            ## have a much different starting loss value
-            assert loss_initial < 70
-            assert loss_initial > 40
-
-            assert loss_best < loss_initial * thresholds[i]
+            val_loader = DataLoader(
+                [[od.XR, od.yhR, od.XM, od.yhM]], batch_size=None, batch_sampler=None
+            )
+            trainer = Trainer(
+                gpus=devices.gpus,
+                max_epochs=1000,
+                logger=None,
+                check_val_every_n_epoch=100,
+                checkpoint_callback=False,
+            )
+            trainer.fit(model, train_loader, val_loader)
+            assert model.valid_losses[0] < 70
+            assert model.valid_losses[0] > 40
+            assert min(model.valid_losses) < model.valid_losses[0] * thresholds[i]
             # Smoke test for prediction
-            pred = model.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
+            pred = model.fnp.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
 
 
 ## Onedim example
@@ -109,106 +116,99 @@ class OneDimDataset:
         # return x, y, dx, f
 
 
-def make_onedim_model(
-    dim_x=1,
-    dim_y=1,
-    dim_z=50,
-    dim_u=3,
-    dim_y_enc=100,
-    fb_z=1.0,
-    use_plus=False,
-    use_set_pooler=False,
-    pooling_rep_size=32,
-    pooling_layers=[64],
-    use_attention=False,
-    st_numheads=[2, 2],
-):
-    cov_vencoder = SequentialVarg(
-        MLP(dim_x, [100], 2 * dim_u),
-        SplitLayer(dim_u, -1),
-        NormalEncoder(),
-    )
-    dep_graph = DepGraph(dim_u)
-    trans_cond_y = MLP(dim_y, [128], dim_y_enc)
-    if use_set_pooler:
-        rep_encoder = RepEncoder(
-            MLP(dim_y_enc + dim_u, [128], pooling_rep_size),
-            use_u_diff=True,
-            use_x=False,
+class OneDimFNP(LightningModule):
+    def __init__(
+        self,
+        dim_x=1,
+        dim_y=1,
+        dim_z=50,
+        dim_u=3,
+        dim_y_enc=100,
+        fb_z=1.0,
+        use_plus=False,
+        use_set_pooler=False,
+        pooling_rep_size=32,
+        pooling_layers=[64],
+        use_attention=False,
+        st_numheads=[2, 2],
+        lr=1e-4,
+    ):
+        super().__init__()
+        cov_vencoder = SequentialVarg(
+            MLP(dim_x, [100], 2 * dim_u),
+            SplitLayer(dim_u, -1),
+            NormalEncoder(),
         )
-        pooler = SequentialVarg(
-            SetPooler(
-                pooling_rep_size,
-                dim_z,
-                pooling_layers,
-                use_attention,
-                st_numheads,
+        dep_graph = DepGraph(dim_u)
+        trans_cond_y = MLP(dim_y, [128], dim_y_enc)
+        if use_set_pooler:
+            rep_encoder = RepEncoder(
+                MLP(dim_y_enc + dim_u, [128], pooling_rep_size),
+                use_u_diff=True,
+                use_x=False,
+            )
+            pooler = SequentialVarg(
+                SetPooler(
+                    pooling_rep_size,
+                    dim_z,
+                    pooling_layers,
+                    use_attention,
+                    st_numheads,
+                ),
+                SplitLayer(dim_z, -1),
+                NormalEncoder(minscale=1e-8),
+            )
+        else:
+            rep_encoder = RepEncoder(
+                MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
+            )
+            pooler = SequentialVarg(
+                AveragePooler(dim_z),
+                SplitLayer(dim_z, -1),
+                NormalEncoder(minscale=1e-8),
+            )
+        prop_vencoder = SequentialVarg(
+            ConcatLayer([1, 0]),
+            MLP(
+                dim_y_enc + dim_x,
+                [128],
+                2 * dim_z,
             ),
             SplitLayer(dim_z, -1),
             NormalEncoder(minscale=1e-8),
         )
-    else:
-        rep_encoder = RepEncoder(
-            MLP(dim_y_enc + dim_x, [128], 2 * dim_z), use_u_diff=False, use_x=True
+        output_in = [0] if not use_plus else [0, 1]
+        output_insize = dim_z if not use_plus else dim_z + dim_u
+        label_vdecoder = SequentialVarg(
+            ConcatLayer(output_in),
+            MLP(output_insize, [128], 2 * dim_y),
+            SplitLayer(dim_y, -1),
+            NormalEncoder(minscale=0.1),
         )
-        pooler = SequentialVarg(
-            AveragePooler(dim_z),
-            SplitLayer(dim_z, -1),
-            NormalEncoder(minscale=1e-8),
+        self.fnp = FNP(
+            cov_vencoder,
+            dep_graph,
+            trans_cond_y,
+            rep_encoder,
+            pooler,
+            prop_vencoder,
+            label_vdecoder,
+            fb_z=fb_z,
         )
-    prop_vencoder = SequentialVarg(
-        ConcatLayer([1, 0]),
-        MLP(
-            dim_y_enc + dim_x,
-            [128],
-            2 * dim_z,
-        ),
-        SplitLayer(dim_z, -1),
-        NormalEncoder(minscale=1e-8),
-    )
-    output_in = [0] if not use_plus else [0, 1]
-    output_insize = dim_z if not use_plus else dim_z + dim_u
-    label_vdecoder = SequentialVarg(
-        ConcatLayer(output_in),
-        MLP(output_insize, [128], 2 * dim_y),
-        SplitLayer(dim_y, -1),
-        NormalEncoder(minscale=0.1),
-    )
-    model = FNP(
-        cov_vencoder,
-        dep_graph,
-        trans_cond_y,
-        rep_encoder,
-        pooler,
-        prop_vencoder,
-        label_vdecoder,
-        fb_z=fb_z,
-    )
+        self.lr = lr
+        self.valid_losses = []
 
-    return model
+    def training_step(self, batch, batch_idx):
+        XR, yR, XM, yM = batch
+        loss = self.fnp(XR, yR, XM, yM)
+        return loss
 
+    def validation_step(self, batch, batch_idx):
+        loss = self.training_step(batch, batch_idx)
+        self.log("val_loss", loss)
+        self.valid_losses.append(loss.item())
+        return loss
 
-def train_onedim_model(model, od, epochs=10000, lr=1e-4):
-    if torch.cuda.is_available():
-        model = model.cuda()
-    optimizer = Adam(model.parameters(), lr=lr)
-    model.train()
-    holdout_loss_prev = np.infty
-    holdout_loss_initial = model(od.XR, od.yhR, od.XM, od.yhM)
-    holdout_loss_best = holdout_loss_initial
-    print("Initial holdout loss: {:.3f})".format(holdout_loss_initial.item()))
-    for i in range(epochs):
-        optimizer.zero_grad()
-
-        loss = model(od.XR, od.yR, od.XM, od.yM)
-        loss.backward()
-        optimizer.step()
-
-        if i % int(epochs / 10) == 0:
-            print("Epoch {}/{}, loss: {:.3f}".format(i, epochs, loss.item()))
-            holdout_loss = model(od.XR, od.yhR, od.XM, od.yhM)
-            if holdout_loss < holdout_loss_best:
-                holdout_loss_best = holdout_loss
-            print("Holdout loss: {:.3f}".format(holdout_loss.item()))
-    print("Done.")
-    return model, holdout_loss_initial, holdout_loss, holdout_loss_best
+    def configure_optimizers(self):
+        optimizer = Adam(self.parameters(), lr=self.lr)
+        return optimizer
