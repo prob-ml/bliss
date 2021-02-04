@@ -39,8 +39,8 @@ encoder:
       - 32
       - 64
     dropouts:
-      - 0.1
-      - 0.1
-      - 0.1
+      - 0
+      - 0
+      - 0
     hidden: 256
 use_galaxy_encoder: False

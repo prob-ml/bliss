@@ -269,7 +269,7 @@ class ImageEncoder(nn.Module):
         self._cache_tiling_conv_weights()
 
         if channels is None:
-            channels = [16, 32, 64]
+            channels = [8, 16, 32]
         if dropouts is None:
             dropouts = [0, 0, 0]
         self.enc_conv = EncoderCNN(n_bands, channels, dropouts)
@@ -290,9 +290,10 @@ class ImageEncoder(nn.Module):
             + 1
             + self.max_detections
         )
+        dim_enc_conv_out = self.ptile_slen // 2 // 2
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
-            nn.Linear(channels[-1] * 2 * 2, hidden),
+            nn.Linear(channels[-1] * dim_enc_conv_out ** 2, hidden),
             nn.ReLU(True),
             nn.Linear(hidden, hidden),
             nn.ReLU(True),
