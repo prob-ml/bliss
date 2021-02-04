@@ -1,9 +1,6 @@
-import pytest
-
 import torch
 import numpy as np
 from torch.optim import Adam
-from sklearn.preprocessing import StandardScaler
 
 from bliss.models.fnp import (
     DepGraph,
@@ -17,7 +14,7 @@ from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEnco
 
 
 class TestFNP:
-    def test_fnp_onedim(self, paths):
+    def test_fnp_onedim(self):
         # One dimensional example
         od = OneDimDataset()
         vanilla_fnp = make_onedim_model()
@@ -51,7 +48,6 @@ class OneDimDataset:
         N=20,
         num_extra=500,
         seed=1,
-        offset=0.1,
     ):
         ## Generate the first row as in the FNP paper
         np.random.seed(seed)
@@ -65,11 +61,6 @@ class OneDimDataset:
         eps = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
         self.f = lambda x, eps: x + np.sin(4 * (x + eps)) + np.sin(13 * (x + eps)) + eps
         y = self.f(X, eps)
-
-        ## Pick which indices are references or not
-        # self.idxR = idxR
-        # self.idxM = np.array([i for i in idx if i not in idxR.tolist()])
-
         ## Generate more y-values
         ys = [y]
         for _ in range(99):
@@ -79,7 +70,6 @@ class OneDimDataset:
             yi = self.f(Xi, eps_i)
             ys.append(yi)
         y = np.concatenate(ys, axis=1).transpose()
-
         ## Generate holdouts
         ys = []
         for i in range(10):
@@ -89,15 +79,8 @@ class OneDimDataset:
             yi = self.f(Xi, eps_i)
             ys.append(yi)
         yh = np.concatenate(ys, axis=1).transpose()
-
-        self.stdx, self.stdy = StandardScaler().fit(X), StandardScaler().fit(
-            y.reshape(-1, 1)
-        )
-        # X, y = stdx.transform(X), stdy.transform(y)
-        X = self.stdx.transform(X)
         idx = np.arange(X.shape[0])
-        # self.idxR = np.random.choice(idx, size=(10,), replace=False)
-        # self.idxM = np.array([i for i in idx if i not in idxR.tolist()])
+        ## Pick which indicies are reference points
         self.idxR = np.array([2, 16, 9, 6, 17, 12, 4, 15, 1, 14])
         self.idxM = np.array([i for i in idx if i not in self.idxR.tolist()])
 
