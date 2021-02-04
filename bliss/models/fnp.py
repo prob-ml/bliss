@@ -671,18 +671,20 @@ class Conv2DAutoEncoder(nn.Module):
             h_in, w_in = dummy_input.shape[2:]
             dummy_output = conv_net(dummy_input)
             h_out, w_out = dummy_output.shape[2:]
-            pad_h = (
-                0
-                if not ((self.strides[i] * h_out + self.kernel_sizes[i] - 1) == h_in)
+            if (
+                not ((self.strides[i] * h_out + self.kernel_sizes[i] - 1) == h_in)
                 or self.strides[i] == 1
-                else 1
-            )
-            pad_w = (
-                0
-                if not ((self.strides[i] * w_out + self.kernel_sizes[i] - 1) == w_in)
+            ):
+                pad_h = 0
+            else:
+                pad_h = 1
+            if (
+                not ((self.strides[i] * w_out + self.kernel_sizes[i] - 1) == w_in)
                 or self.strides[i] == 1
-                else 1
-            )
+            ):
+                pad_w = 0
+            else:
+                pad_w = 1
             conv_net_t = nn.ConvTranspose2d(
                 self.conv_channels[i],
                 2 if i == 0 else self.conv_channels[i - 1],
