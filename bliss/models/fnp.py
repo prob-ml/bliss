@@ -394,6 +394,14 @@ class SetPooler(nn.Module):
 
 
 class MAB(nn.Module):
+    """
+    A Multihead Attention Block for use in a set transformer.
+    See https://arxiv.org/abs/1810.00825.
+
+    This implementation is from https://github.com/juho-lee/set_transformer/,
+    which comes with the MIT license.
+    """
+
     def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
         super().__init__()
         self.dim_V = dim_V
@@ -426,6 +434,14 @@ class MAB(nn.Module):
 
 
 class SAB(nn.Module):
+    """
+    A Self-Attention Block for use in a set transformer.
+    See https://arxiv.org/abs/1810.00825.
+
+    This implementation is from https://github.com/juho-lee/set_transformer/,
+    which comes with the MIT license.
+    """
+
     def __init__(self, dim_in, dim_out, num_heads, ln=False):
         super().__init__()
         self.mab = MAB(dim_in, dim_in, dim_out, num_heads, ln=ln)
@@ -434,20 +450,15 @@ class SAB(nn.Module):
         return self.mab(X, X)
 
 
-class ISAB(nn.Module):
-    def __init__(self, dim_in, dim_out, num_heads, num_inds, ln=False):
-        super().__init__()
-        self.I = nn.Parameter(torch.Tensor(1, num_inds, dim_out))
-        nn.init.xavier_uniform_(self.I)
-        self.mab0 = MAB(dim_out, dim_in, dim_out, num_heads, ln=ln)
-        self.mab1 = MAB(dim_in, dim_out, dim_out, num_heads, ln=ln)
-
-    def forward(self, X):
-        H = self.mab0(self.I.repeat(X.size(0), 1, 1), X)
-        return self.mab1(X, H)
-
-
 class PMA(nn.Module):
+    """
+    A Pooling by Multihead Attention block for use in a set transformer.
+    See https://arxiv.org/abs/1810.00825.
+
+    This implementation is from https://github.com/juho-lee/set_transformer/,
+    which comes with the MIT license.
+    """
+
     def __init__(self, dim, num_heads, num_seeds, ln=False, squeeze_out=False):
         super().__init__()
         self.S = nn.Parameter(torch.Tensor(num_seeds, dim))
