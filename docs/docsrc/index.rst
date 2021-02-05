@@ -29,6 +29,8 @@ Stars
 .. toctree::
     :maxdepth: 2
     :titlesonly:
+    :caption: Table of Contents
+    :name: mastertoc
 
     Installation
     api/index
