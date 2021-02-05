@@ -197,16 +197,12 @@ class DepGraph(nn.Module):
 
     def __init__(self, dim_u, temperature=0.3):
         super().__init__()
+        ## Dimension of the encoded-input space
+        self.dim_u = dim_u
         ## Temperature for LogitRelaxedBernoulli when training
         self.temperature = temperature
-        ## Initialized the distance function pairwise_g
-        ## This has a single learned parameter
-        self.g_logscale = nn.Parameter(torch.tensor(np.log(dim_u) * 0.5))
-        self.g = lambda x: self.logitexp(
-            -0.5
-            * torch.sum(torch.pow(x[:, dim_u:] - x[:, 0:dim_u], 2), 1, keepdim=True)
-            / self.g_logscale.exp()
-        ).view(x.size(0), 1)
+        ## Learned parameter for self.g, the pairwise distance function
+        self.g_logscale = nn.Parameter(torch.tensor(np.log(self.dim_u) * 0.5))
 
     def sample_G(self, uR):
         # get the indices of an upper triangular adjacency matrix that represents the DAG
@@ -217,10 +213,9 @@ class DepGraph(nn.Module):
         # sort the latents according to the ordering
         sort_idx = torch.sort(torch.squeeze(ordering), 0)[1]
         Y = uR[sort_idx, :]
-        # form the latent pairs for the edges
-        Z_pairs = torch.cat([Y[idx_utr[0]], Y[idx_utr[1]]], 1)
+        # form the latent pairs for the edges, and
         # get the logits for the edges in the DAG
-        logits = self.g(Z_pairs)
+        logits = self.g(Y[idx_utr[0]], Y[idx_utr[1]])
 
         if self.training:
             p_edges = LogitRelaxedBernoulli(temperature=self.temperature, logits=logits)
@@ -243,9 +238,7 @@ class DepGraph(nn.Module):
         for element in product(range(uM.size(0)), range(uR.size(0))):
             indices.append(element)
         indices = np.array(indices)
-        Z_pairs = torch.cat([uM[indices[:, 0]], uR[indices[:, 1]]], 1)
-
-        logits = self.g(Z_pairs)
+        logits = self.g(uM[indices[:, 0]], uR[indices[:, 1]])
         if self.training:
             p_edges = LogitRelaxedBernoulli(temperature=self.temperature, logits=logits)
             A_vals = torch.sigmoid(p_edges.rsample())
@@ -258,6 +251,12 @@ class DepGraph(nn.Module):
         A[indices[:, 0], indices[:, 1]] = A_vals.squeeze()
 
         return A
+
+    def g(self, z1, z2):
+        sq_norm2 = (z2 - z1).pow(2)
+        a = -0.5 * sq_norm2.sum(1, keepdim=True) / self.g_logscale.exp()
+        b = self.logitexp(a).view(z1.size(0), 1)
+        return b
 
     @staticmethod
     def logitexp(logp):
