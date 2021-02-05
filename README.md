@@ -29,7 +29,7 @@ BLISS uses state-of-the-art methods in variational inference including:
 sudo apt-get install libfftw3-dev
 ```
 
-3. Finally, if everything is installed correctly you should be able to run:
+3. If everything is installed correctly you should be able to run the commands below. This will create a poetry environment that contains only the `bliss` dependencies.
 
 ```
 git clone https://github.com/prob-ml/bliss.git
@@ -37,7 +37,7 @@ cd bliss
 poetry install
 ```
 
-This will create a poetry environment that contains only the `bliss` dependencies.
+4. Finally, you should create an environment variable `BLISS_HOME` pointing to the absolute path of the `bliss` directory.
 
 # Latest updates
 ## Galaxies
