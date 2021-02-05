@@ -23,7 +23,7 @@ Galaxies
 
 Stars
 *****
-* BLISS already includes the StarNet functionality from its predecessor repo: `DeblendingStarFields<https://github.com/Runjing-Liu120/DeblendingStarfields>`_.
+* BLISS already includes the StarNet functionality from its predecessor repo: `DeblendingStarFields <https://github.com/Runjing-Liu120/DeblendingStarfields>`_.
 
 
 .. toctree::
