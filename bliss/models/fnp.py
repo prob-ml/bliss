@@ -174,14 +174,14 @@ class FNP(nn.Module):
         if sample_Z:
             z = pz.rsample()
         else:
-            z = pz.means
+            z = pz.mean
         zM = z[:, n_ref:]
 
         py = self.label_vdecoder(zM, uM.unsqueeze(0))
         if sample:
             y_pred = py.sample()
         else:
-            y_pred = py.means
+            y_pred = py.mean
 
         return y_pred
 

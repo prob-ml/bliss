@@ -46,6 +46,9 @@ class TestFNP:
             assert min(model.valid_losses) < model.valid_losses[0] * thresholds[i]
             # Smoke test for prediction
             pred = model.fnp.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
+            pred = model.fnp.predict(
+                od.XM, od.XR, od.yR[0].unsqueeze(0), sample=False, sample_Z=False
+            )
 
 
 ## Onedim example
