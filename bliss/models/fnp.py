@@ -1,4 +1,3 @@
-import math
 from itertools import product
 import torch
 import torch.nn as nn
@@ -65,7 +64,7 @@ class FNP(nn.Module):
         self.fb_z = fb_z
         self.register_buffer("lambda_z", torch.tensor(1e-8))
 
-    def encode(self, XR, yR, XM, G_in=None, A_in=None, mode="infer"):
+    def encode(self, XR, yR, XM, G_in=None, A_in=None):
         """
         This method runs the FNP up to the point the distributions for the latent
         variables are calculated. This is the shared procedure for both model inference
@@ -90,17 +89,12 @@ class FNP(nn.Module):
             A = self.dep_graph.sample_A(uM, uR)
         else:
             A = A_in
-        if mode == "infer":
-            if G_in is None:
-                G = self.dep_graph.sample_G(uR)
-            else:
-                G = G_in
-
-            GA = torch.cat([G, A], 0)
-        elif mode == "predict":
-            GA = A
+        if G_in is None:
+            G = self.dep_graph.sample_G(uR)
         else:
-            raise ValueError("invalid encode mode")
+            G = G_in
+
+        GA = torch.cat([G, A], 0)
         assert torch.isnan(GA).sum() == 0
 
         ## From the dependency graph GA and the encoded
@@ -207,7 +201,7 @@ class DepGraph(nn.Module):
         self.temperature = temperature
         ## Initialized the distance function pairwise_g
         ## This has a single learned parameter
-        self.g_logscale = nn.Parameter(torch.tensor(math.log(dim_u) * 0.5))
+        self.g_logscale = nn.Parameter(torch.tensor(np.log(dim_u) * 0.5))
         self.g = lambda x: self.logitexp(
             -0.5
             * torch.sum(torch.pow(x[:, dim_u:] - x[:, 0:dim_u], 2), 1, keepdim=True)
@@ -280,7 +274,7 @@ class DepGraph(nn.Module):
         if z.size(1) == 1:
             return z
         log_cdf = torch.sum(
-            torch.log(0.5 + 0.5 * torch.erf(z / math.sqrt(2))), dim=1, keepdim=True
+            torch.log(0.5 + 0.5 * torch.erf(z / np.sqrt(2))), dim=1, keepdim=True
         )
         return log_cdf
 
@@ -425,7 +419,7 @@ class MAB(nn.Module):
         K_ = torch.cat(K.split(dim_split, -1), -3)
         V_ = torch.cat(V.split(dim_split, -1), -3)
 
-        A = torch.softmax(Q_.matmul(K_.transpose(-2, -1)) / math.sqrt(self.dim_V), -1)
+        A = torch.softmax(Q_.matmul(K_.transpose(-2, -1)) / np.sqrt(self.dim_V), -1)
         O = torch.cat((Q_ + A.matmul(V_)).split(Q.size(-3), -3), -1)
         O = O if getattr(self, "ln0", None) is None else self.ln0(O)
         O = O + F.relu(self.fc_o(O))
