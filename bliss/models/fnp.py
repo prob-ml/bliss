@@ -260,10 +260,9 @@ class DepGraph(nn.Module):
 
     @staticmethod
     def logitexp(logp):
-        # https: // github.com / pytorch / pytorch / issues / 4007
         pos = torch.clamp(logp, min=-0.69314718056)
         neg = torch.clamp(logp, max=-0.69314718056)
-        neg_val = neg - torch.log(1 - torch.exp(neg))
+        neg_val = neg - torch.log1p(-torch.exp(neg))
         pos_val = -torch.log(torch.clamp(torch.expm1(-pos), min=1e-20))
         return pos_val + neg_val
 
