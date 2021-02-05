@@ -37,7 +37,8 @@ jobs:
       - name: Install Poetry
         run: |
           pip install --upgrade pip
-          pip install "poetry >=1.1.4, <2.0.0"
+          pip install "poetry-core==1.0.0"
+          pip install "poetry==1.1.4"
 
       - name: Install dependencies
         run: |
