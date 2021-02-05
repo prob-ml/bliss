@@ -153,23 +153,23 @@ def _identity_func(x):
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, dropout, downsample=False):
+    def __init__(self, in_channel, out_channel, dropout, downsample=False):
         super().__init__()
         self.downsample = downsample
         stride = 1
         if downsample:
             stride = 2
             self.sc_conv = nn.Conv2d(
-                in_channels, out_channels, kernel_size=1, stride=stride
+                in_channel, out_channel, kernel_size=1, stride=stride
             )
-            self.sc_bn = nn.BatchNorm2d(out_channels)
+            self.sc_bn = nn.BatchNorm2d(out_channel)
         self.conv1 = nn.Conv2d(
-            in_channels, out_channels, kernel_size=3, padding=1, stride=stride
+            in_channel, out_channel, kernel_size=3, padding=1, stride=stride
         )
-        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.bn1 = nn.BatchNorm2d(out_channel)
         self.drop1 = nn.Dropout2d(dropout)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channel)
 
     def forward(self, x):
         identity = x
@@ -191,42 +191,50 @@ class ConvBlock(nn.Module):
 
 
 class EncoderCNN(nn.Module):
-    def __init__(self, n_bands, channels, dropout, downsample_with_pool=True):
+    def __init__(self, n_bands, channel, dropout, downsample_with_pool=True):
         super().__init__()
         if downsample_with_pool:
-            self.layer = self._make_layer_with_pool(n_bands, channels, dropout)
+            self.layer = self._make_layer_with_pool(n_bands, channel, dropout)
         else:
-            self.layer = self._make_layer(n_bands, channels, dropout)
+            self.layer = self._make_layer(n_bands, channel, dropout)
 
     def forward(self, x):
         x = self.layer(x)
         return x
 
-    def _make_layer_with_pool(self, n_bands, channels, dropout):
+    def _make_layer_with_pool(self, n_bands, channel, dropout):
         in_channels = n_bands
         layers = []
-        for i, (v, d) in enumerate(zip(channels, dropout)):
+        for i in range(3):
             layers += [
-                nn.Conv2d(in_channels, v, 3, padding=1),
-                nn.BatchNorm2d(v),
+                nn.Conv2d(in_channels, channel, 3, padding=1),
+                nn.BatchNorm2d(channel),
                 nn.ReLU(True),
             ]
-            layers += [ConvBlock(v, v, d, False), ConvBlock(v, v, d, False)]
-            if i < len(channels) - 1:
+            layers += [
+                ConvBlock(channel, channel, dropout, False),
+                ConvBlock(channel, channel, dropout, False),
+            ]
+            if i < 2:
                 layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
-            in_channels = v
+            in_channels = channel
+            channel = channel * 2
         return nn.Sequential(*layers)
 
-    def _make_layer(self, n_bands, channels, dropout):
+    def _make_layer(self, n_bands, channel, dropout):
         in_channels = n_bands
         layers = []
-        for v, d in zip(channels, dropout):
+        for i in range(3):
             downsample = True
-            if in_channels == 1:
+            if i == 0:
                 downsample = False
-            layers += [ConvBlock(in_channels, v, d, downsample)]
-            layers += [ConvBlock(v, v, d, False), ConvBlock(v, v, d, False)]
-            in_channels = v
+            layers += [ConvBlock(in_channels, channel, dropout, downsample)]
+            layers += [
+                ConvBlock(channel, channel, dropout, False),
+                ConvBlock(channel, channel, dropout, False),
+            ]
+            in_channels = channel
+            channel = channel * 2
         layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         return nn.Sequential(*layers)
 
@@ -238,9 +246,11 @@ class ImageEncoder(nn.Module):
         n_bands=1,
         tile_slen=2,
         ptile_slen=6,
-        channels=None,
-        dropouts=None,
+        channel=16,
+        spatial_dropout=0,
+        dropout=0,
         hidden=256,
+        downsample_with_pool=True,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -268,11 +278,9 @@ class ImageEncoder(nn.Module):
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
 
-        if channels is None:
-            channels = [8, 16, 32]
-        if dropouts is None:
-            dropouts = [0, 0, 0]
-        self.enc_conv = EncoderCNN(n_bands, channels, dropouts)
+        self.enc_conv = EncoderCNN(
+            n_bands, channel, spatial_dropout, downsample_with_pool
+        )
 
         # Number of variational parameters used to characterize each source in an image.
         self.n_params_per_source = sum(
@@ -293,10 +301,14 @@ class ImageEncoder(nn.Module):
         dim_enc_conv_out = self.ptile_slen // 2 // 2
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
-            nn.Linear(channels[-1] * dim_enc_conv_out ** 2, hidden),
+            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
+            nn.BatchNorm1d(hidden),
             nn.ReLU(True),
+            nn.Dropout(dropout),
             nn.Linear(hidden, hidden),
+            nn.BatchNorm1d(hidden),
             nn.ReLU(True),
+            nn.Dropout(dropout),
             nn.Linear(hidden, self.dim_out_all),
         )
         self.log_softmax = nn.LogSoftmax(dim=1)
