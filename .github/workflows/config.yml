@@ -40,9 +40,12 @@ jobs:
           pip install "poetry-core==1.0.0"
           pip install "poetry==1.1.4"
 
-      - name: Install dependencies
+      - name: Install fftw3
         run: |
           sudo apt-get install libfftw3-dev
+
+      - name: Install poetry dependencies
+        run: |
           poetry install
 
       - name: Run pylint
