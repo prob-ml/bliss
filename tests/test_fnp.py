@@ -76,7 +76,6 @@ class OneDimDataset:
         for _ in range(99):
             Xi = X + np.random.normal()
             eps_i = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
-            # f = lambda x, eps: x + np.sin(4 * (x + eps)) + np.sin(13 * (x + eps)) + eps
             yi = self.f(Xi, eps_i)
             ys.append(yi)
         y = np.concatenate(ys, axis=1).transpose()
@@ -85,7 +84,6 @@ class OneDimDataset:
         for i in range(10):
             Xi = X + np.random.normal()
             eps_i = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
-            # f = lambda x, eps: x + np.sin(4 * (x + eps)) + np.sin(13 * (x + eps)) + eps
             yi = self.f(Xi, eps_i)
             ys.append(yi)
         yh = np.concatenate(ys, axis=1).transpose()
@@ -115,8 +113,6 @@ class OneDimDataset:
     def cpu(self):
         for nm in ["XR", "XM", "X", "yR", "yM", "y", "yhR", "yhM", "yh"]:
             setattr(self, nm, getattr(self, nm).cpu())
-
-        # return x, y, dx, f
 
 
 class OneDimFNP(LightningModule):
