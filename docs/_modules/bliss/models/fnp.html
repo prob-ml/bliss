@@ -14,25 +14,24 @@
     <script src="../../../_static/doctools.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-   
+
   <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
-  
-  
+
+
   <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
 
   </head><body>
-  
+
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          
+
 
           <div class="body" role="main">
-            
+
   <h1>Source code for bliss.models.fnp</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">math</span>
-<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">product</span>
+<span></span><span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">product</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
@@ -98,7 +97,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">fb_z</span> <span class="o">=</span> <span class="n">fb_z</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;lambda_z&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1e-8</span><span class="p">))</span>
 
-<div class="viewcode-block" id="FNP.encode"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.FNP.encode">[docs]</a>    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">XR</span><span class="p">,</span> <span class="n">yR</span><span class="p">,</span> <span class="n">XM</span><span class="p">,</span> <span class="n">G_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">A_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;infer&quot;</span><span class="p">):</span>
+<div class="viewcode-block" id="FNP.encode"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.FNP.encode">[docs]</a>    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">XR</span><span class="p">,</span> <span class="n">yR</span><span class="p">,</span> <span class="n">XM</span><span class="p">,</span> <span class="n">G_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">A_in</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        This method runs the FNP up to the point the distributions for the latent</span>
 <span class="sd">        variables are calculated. This is the shared procedure for both model inference</span>
@@ -123,17 +122,12 @@
             <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_graph</span><span class="o">.</span><span class="n">sample_A</span><span class="p">(</span><span class="n">uM</span><span class="p">,</span> <span class="n">uR</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">A</span> <span class="o">=</span> <span class="n">A_in</span>
-        <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;infer&quot;</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">G_in</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">G</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_graph</span><span class="o">.</span><span class="n">sample_G</span><span class="p">(</span><span class="n">uR</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">G</span> <span class="o">=</span> <span class="n">G_in</span>
-
-            <span class="n">GA</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">G</span><span class="p">,</span> <span class="n">A</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;predict&quot;</span><span class="p">:</span>
-            <span class="n">GA</span> <span class="o">=</span> <span class="n">A</span>
+        <span class="k">if</span> <span class="n">G_in</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">G</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_graph</span><span class="o">.</span><span class="n">sample_G</span><span class="p">(</span><span class="n">uR</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;invalid encode mode&quot;</span><span class="p">)</span>
+            <span class="n">G</span> <span class="o">=</span> <span class="n">G_in</span>
+
+        <span class="n">GA</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">G</span><span class="p">,</span> <span class="n">A</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">GA</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span>
 
         <span class="c1">## From the dependency graph GA and the encoded</span>
@@ -207,14 +201,14 @@
         <span class="k">if</span> <span class="n">sample_Z</span><span class="p">:</span>
             <span class="n">z</span> <span class="o">=</span> <span class="n">pz</span><span class="o">.</span><span class="n">rsample</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">z</span> <span class="o">=</span> <span class="n">pz</span><span class="o">.</span><span class="n">means</span>
+            <span class="n">z</span> <span class="o">=</span> <span class="n">pz</span><span class="o">.</span><span class="n">mean</span>
         <span class="n">zM</span> <span class="o">=</span> <span class="n">z</span><span class="p">[:,</span> <span class="n">n_ref</span><span class="p">:]</span>
 
         <span class="n">py</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_vdecoder</span><span class="p">(</span><span class="n">zM</span><span class="p">,</span> <span class="n">uM</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
             <span class="n">y_pred</span> <span class="o">=</span> <span class="n">py</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">y_pred</span> <span class="o">=</span> <span class="n">py</span><span class="o">.</span><span class="n">means</span>
+            <span class="n">y_pred</span> <span class="o">=</span> <span class="n">py</span><span class="o">.</span><span class="n">mean</span>
 
         <span class="k">return</span> <span class="n">y_pred</span></div>
 
@@ -236,16 +230,12 @@
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim_u</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mf">0.3</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="c1">## Dimension of the encoded-input space</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim_u</span> <span class="o">=</span> <span class="n">dim_u</span>
         <span class="c1">## Temperature for LogitRelaxedBernoulli when training</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="n">temperature</span>
-        <span class="c1">## Initialized the distance function pairwise_g</span>
-        <span class="c1">## This has a single learned parameter</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">g_logscale</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">dim_u</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">g</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">logitexp</span><span class="p">(</span>
-            <span class="o">-</span><span class="mf">0.5</span>
-            <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="n">x</span><span class="p">[:,</span> <span class="n">dim_u</span><span class="p">:]</span> <span class="o">-</span> <span class="n">x</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="n">dim_u</span><span class="p">],</span> <span class="mi">2</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">g_logscale</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="c1">## Learned parameter for self.g, the pairwise distance function</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">g_logscale</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim_u</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">))</span>
 
     <span class="k">def</span> <span class="nf">sample_G</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uR</span><span class="p">):</span>
         <span class="c1"># get the indices of an upper triangular adjacency matrix that represents the DAG</span>
@@ -256,10 +246,9 @@
         <span class="c1"># sort the latents according to the ordering</span>
         <span class="n">sort_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">ordering</span><span class="p">),</span> <span class="mi">0</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
         <span class="n">Y</span> <span class="o">=</span> <span class="n">uR</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">,</span> <span class="p">:]</span>
-        <span class="c1"># form the latent pairs for the edges</span>
-        <span class="n">Z_pairs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">Y</span><span class="p">[</span><span class="n">idx_utr</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">Y</span><span class="p">[</span><span class="n">idx_utr</span><span class="p">[</span><span class="mi">1</span><span class="p">]]],</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># form the latent pairs for the edges, and</span>
         <span class="c1"># get the logits for the edges in the DAG</span>
-        <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">g</span><span class="p">(</span><span class="n">Z_pairs</span><span class="p">)</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">g</span><span class="p">(</span><span class="n">Y</span><span class="p">[</span><span class="n">idx_utr</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">Y</span><span class="p">[</span><span class="n">idx_utr</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
             <span class="n">p_edges</span> <span class="o">=</span> <span class="n">LogitRelaxedBernoulli</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span>
@@ -282,9 +271,7 @@
         <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">uM</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span> <span class="nb">range</span><span class="p">(</span><span class="n">uR</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">))):</span>
             <span class="n">indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">element</span><span class="p">)</span>
         <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
-        <span class="n">Z_pairs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">uM</span><span class="p">[</span><span class="n">indices</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">uR</span><span class="p">[</span><span class="n">indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]]],</span> <span class="mi">1</span><span class="p">)</span>
-
-        <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">g</span><span class="p">(</span><span class="n">Z_pairs</span><span class="p">)</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">g</span><span class="p">(</span><span class="n">uM</span><span class="p">[</span><span class="n">indices</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">uR</span><span class="p">[</span><span class="n">indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]])</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
             <span class="n">p_edges</span> <span class="o">=</span> <span class="n">LogitRelaxedBernoulli</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span>
             <span class="n">A_vals</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">p_edges</span><span class="o">.</span><span class="n">rsample</span><span class="p">())</span>
@@ -298,12 +285,17 @@
 
         <span class="k">return</span> <span class="n">A</span>
 
+    <span class="k">def</span> <span class="nf">g</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z1</span><span class="p">,</span> <span class="n">z2</span><span class="p">):</span>
+        <span class="n">sq_norm2</span> <span class="o">=</span> <span class="p">(</span><span class="n">z2</span> <span class="o">-</span> <span class="n">z1</span><span class="p">)</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">sq_norm2</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">g_logscale</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logitexp</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">z1</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">b</span>
+
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">logitexp</span><span class="p">(</span><span class="n">logp</span><span class="p">):</span>
-        <span class="c1"># https: // github.com / pytorch / pytorch / issues / 4007</span>
         <span class="n">pos</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">logp</span><span class="p">,</span> <span class="nb">min</span><span class="o">=-</span><span class="mf">0.69314718056</span><span class="p">)</span>
         <span class="n">neg</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">logp</span><span class="p">,</span> <span class="nb">max</span><span class="o">=-</span><span class="mf">0.69314718056</span><span class="p">)</span>
-        <span class="n">neg_val</span> <span class="o">=</span> <span class="n">neg</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">neg</span><span class="p">))</span>
+        <span class="n">neg_val</span> <span class="o">=</span> <span class="n">neg</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">log1p</span><span class="p">(</span><span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">neg</span><span class="p">))</span>
         <span class="n">pos_val</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">expm1</span><span class="p">(</span><span class="o">-</span><span class="n">pos</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">1e-20</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">pos_val</span> <span class="o">+</span> <span class="n">neg_val</span>
 
@@ -313,7 +305,7 @@
         <span class="k">if</span> <span class="n">z</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">z</span>
         <span class="n">log_cdf</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">erf</span><span class="p">(</span><span class="n">z</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">erf</span><span class="p">(</span><span class="n">z</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">log_cdf</span></div>
 
@@ -458,7 +450,7 @@
         <span class="n">K_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">K</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">dim_split</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="mi">3</span><span class="p">)</span>
         <span class="n">V_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">V</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">dim_split</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="mi">3</span><span class="p">)</span>
 
-        <span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">Q_</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">K_</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim_V</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">Q_</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">K_</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim_V</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">O</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">Q_</span> <span class="o">+</span> <span class="n">A</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">V_</span><span class="p">))</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">Q</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">),</span> <span class="o">-</span><span class="mi">3</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">O</span> <span class="o">=</span> <span class="n">O</span> <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;ln0&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">ln0</span><span class="p">(</span><span class="n">O</span><span class="p">)</span>
         <span class="n">O</span> <span class="o">=</span> <span class="n">O</span> <span class="o">+</span> <span class="n">F</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fc_o</span><span class="p">(</span><span class="n">O</span><span class="p">))</span>
@@ -509,7 +501,7 @@
 </pre></div>
 
           </div>
-          
+
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
@@ -524,9 +516,10 @@
 
 
 <h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Table of Contents</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html#indices-and-tables">Indices and tables</a></li>
 </ul>
 
 <div class="relations">
@@ -562,15 +555,15 @@
     </div>
     <div class="footer">
       &copy;2021, Probabilistic Machine Learning Research Group.
-      
+
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-      
+
     </div>
 
-    
 
-    
+
+
   </body>
 </html>
