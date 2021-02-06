@@ -246,10 +246,10 @@ class ImageEncoder(nn.Module):
         n_bands=1,
         tile_slen=2,
         ptile_slen=6,
-        channel=16,
+        channel=8,
         spatial_dropout=0,
         dropout=0,
-        hidden=256,
+        hidden=128,
         downsample_with_pool=True,
     ):
         """
