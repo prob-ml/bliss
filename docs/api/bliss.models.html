@@ -15,33 +15,33 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="prev" title="bliss.datasets package" href="bliss.datasets.html" />
-   
+
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
-  
-  
+
+
   <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
 
   </head><body>
-  
+
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          
+
 
           <div class="body" role="main">
-            
+
   <div class="section" id="bliss-models-package">
 <h1>bliss.models package<a class="headerlink" href="#bliss-models-package" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="module-bliss.models.decoder">
 <span id="bliss-models-decoder-module"></span><h2>bliss.models.decoder module<a class="headerlink" href="#module-bliss.models.decoder" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
 <dt id="bliss.models.decoder.ImageDecoder">
-<em class="property">class </em><code class="sig-prename descclassname">bliss.models.decoder.</code><code class="sig-name descname">ImageDecoder</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">n_bands</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">slen</span><span class="o">=</span><span class="default_value">50</span></em>, <em class="sig-param"><span class="n">tile_slen</span><span class="o">=</span><span class="default_value">2</span></em>, <em class="sig-param"><span class="n">ptile_slen</span><span class="o">=</span><span class="default_value">10</span></em>, <em class="sig-param"><span class="n">border_padding</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">prob_galaxy</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">n_galaxy_params</span><span class="o">=</span><span class="default_value">8</span></em>, <em class="sig-param"><span class="n">max_sources</span><span class="o">=</span><span class="default_value">2</span></em>, <em class="sig-param"><span class="n">mean_sources</span><span class="o">=</span><span class="default_value">0.4</span></em>, <em class="sig-param"><span class="n">min_sources</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">f_min</span><span class="o">=</span><span class="default_value">10000.0</span></em>, <em class="sig-param"><span class="n">f_max</span><span class="o">=</span><span class="default_value">1000000.0</span></em>, <em class="sig-param"><span class="n">alpha</span><span class="o">=</span><span class="default_value">0.5</span></em>, <em class="sig-param"><span class="n">gal_slen</span><span class="o">=</span><span class="default_value">51</span></em>, <em class="sig-param"><span class="n">psf_slen</span><span class="o">=</span><span class="default_value">25</span></em>, <em class="sig-param"><span class="n">decoder_file</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">psf_params_file</span><span class="o">=</span><span class="default_value">'psf_params.npy'</span></em>, <em class="sig-param"><span class="n">background_values</span><span class="o">=</span><span class="default_value">(686.0, 1123.0)</span></em>, <em class="sig-param"><span class="n">loc_min</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">loc_max</span><span class="o">=</span><span class="default_value">1.0</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/decoder.html#ImageDecoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.decoder.ImageDecoder" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.decoder.</code><code class="sig-name descname">ImageDecoder</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">n_bands</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">slen</span><span class="o">=</span><span class="default_value">50</span></em>, <em class="sig-param"><span class="n">tile_slen</span><span class="o">=</span><span class="default_value">2</span></em>, <em class="sig-param"><span class="n">ptile_slen</span><span class="o">=</span><span class="default_value">10</span></em>, <em class="sig-param"><span class="n">border_padding</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">prob_galaxy</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">n_galaxy_params</span><span class="o">=</span><span class="default_value">8</span></em>, <em class="sig-param"><span class="n">max_sources</span><span class="o">=</span><span class="default_value">2</span></em>, <em class="sig-param"><span class="n">mean_sources</span><span class="o">=</span><span class="default_value">0.4</span></em>, <em class="sig-param"><span class="n">min_sources</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">f_min</span><span class="o">=</span><span class="default_value">10000.0</span></em>, <em class="sig-param"><span class="n">f_max</span><span class="o">=</span><span class="default_value">1000000.0</span></em>, <em class="sig-param"><span class="n">alpha</span><span class="o">=</span><span class="default_value">0.5</span></em>, <em class="sig-param"><span class="n">gal_slen</span><span class="o">=</span><span class="default_value">41</span></em>, <em class="sig-param"><span class="n">psf_slen</span><span class="o">=</span><span class="default_value">25</span></em>, <em class="sig-param"><span class="n">decoder_file</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">psf_params_file</span><span class="o">=</span><span class="default_value">'psf_params.npy'</span></em>, <em class="sig-param"><span class="n">background_values</span><span class="o">=</span><span class="default_value">(686.0, 1123.0)</span></em>, <em class="sig-param"><span class="n">loc_min</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">loc_max</span><span class="o">=</span><span class="default_value">1.0</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/decoder.html#ImageDecoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.decoder.ImageDecoder" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="py method">
 <dt id="bliss.models.decoder.ImageDecoder.forward">
 <code class="sig-name descname">forward</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/decoder.html#ImageDecoder.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.decoder.ImageDecoder.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Same as <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>, however in Lightning you want this to define
+<dd><p>Same as <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>, however in Lightning you want this to define
 the operations you want to use for prediction (i.e.: on a server or as a feature extractor).</p>
 <p>Normally you’d call <code class="docutils literal notranslate"><span class="pre">self()</span></code> from your <code class="xref py py-meth docutils literal notranslate"><span class="pre">training_step()</span></code> method.
 This makes it easy to write a complex system for training with the outputs
@@ -120,6 +120,210 @@ registered hooks while the latter silently ignores them.</p>
 <code class="sig-prename descclassname">bliss.models.encoder.</code><code class="sig-name descname">get_is_on_from_n_sources</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">n_sources</span></em>, <em class="sig-param"><span class="n">max_sources</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#get_is_on_from_n_sources"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.encoder.get_is_on_from_n_sources" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
 whether there are more than l sources on the kth batch.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-bliss.models.fnp">
+<span id="bliss-models-fnp-module"></span><h2>bliss.models.fnp module<a class="headerlink" href="#module-bliss.models.fnp" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="bliss.models.fnp.AveragePooler">
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.fnp.</code><code class="sig-name descname">AveragePooler</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">dim_z</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#AveragePooler"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.AveragePooler" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pools together representations by taking a sum.</p>
+<dl class="py method">
+<dt id="bliss.models.fnp.AveragePooler.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">rep_R</span></em>, <em class="sig-param"><span class="n">GA</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#AveragePooler.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.AveragePooler.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.fnp.DepGraph">
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.fnp.</code><code class="sig-name descname">DepGraph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">dim_u</span></em>, <em class="sig-param"><span class="n">temperature</span><span class="o">=</span><span class="default_value">0.3</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#DepGraph"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.DepGraph" title="Permalink to this definition">¶</a></dt>
+<dd><p>A dependency-graph module for use within FNP.
+For tensors of input encodings from the reference points (uR)
+and dependent points (uM), this module returns matrices
+that represent the dependency structure.</p>
+<p>This implementation is based on <a class="reference external" href="https://github.com/AMLab-Amsterdam/FNP">https://github.com/AMLab-Amsterdam/FNP</a>,
+distributed with the MIT license. Significant changes have been made,
+so any problems or bugs should not be attributed to the original authors.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.fnp.FNP">
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.fnp.</code><code class="sig-name descname">FNP</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">cov_vencoder</span></em>, <em class="sig-param"><span class="n">dep_graph</span></em>, <em class="sig-param"><span class="n">trans_cond_y</span></em>, <em class="sig-param"><span class="n">rep_encoder</span></em>, <em class="sig-param"><span class="n">pooler</span></em>, <em class="sig-param"><span class="n">prop_vencoder</span></em>, <em class="sig-param"><span class="n">label_vdecoder</span></em>, <em class="sig-param"><span class="n">fb_z</span><span class="o">=</span><span class="default_value">0.0</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#FNP"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.FNP" title="Permalink to this definition">¶</a></dt>
+<dd><p>This is an implementation of the Functional Neural Process (FNP)
+from <a class="reference external" href="http://arxiv.org/abs/1906.08324">http://arxiv.org/abs/1906.08324</a>.</p>
+<p>This implementation is based on <a class="reference external" href="https://github.com/AMLab-Amsterdam/FNP">https://github.com/AMLab-Amsterdam/FNP</a>,
+distributed with the MIT license. Significant changes have been made,
+so any problems or bugs should not be attributed to the original authors.</p>
+<p>The FNP is made up of a few different modules. These are all
+application-specific, so they are passed as arguments to the
+class constructor
+* cov_vencoder This is a module which takes input tensor X
+and outputs a probability distribution from which U is sampled.
+* dep_graph: An object of type DepGraph which samples graphs G and A.
+Requires methods .sample_G(uR) and .sample_A(uM, uR)
+* trans_cond_y: A module which takes labels Y and returns a flattened
+representation Y_encoded
+* rep_encoder: This is a module which takes (u, uR, XR, yR_encoded) as input
+and outputs a flattened representation. (see RepEncoder)
+* pooler: This is a module which takes the output of rep_encoder and the dependency matrix
+and returns a sampler for the latent variables Z. (see AveragePooler, SetPooler)
+* prop_vencoder: This is a module which samples a representation
+for an object given X and yR_encoded (only used in training, not prediction)
+* label_vdecoder: This is a module which probabilistically
+decodes the pooled representation into the output
+* fb_z: If non-zero, the amount of “free-bits” regularization to apply while training. This
+encourages learning a better representation and can avoid a local minimum in the prior.</p>
+<dl class="py method">
+<dt id="bliss.models.fnp.FNP.calc_log_pqz">
+<code class="sig-name descname">calc_log_pqz</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pz</span></em>, <em class="sig-param"><span class="n">qz</span></em>, <em class="sig-param"><span class="n">z</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#FNP.calc_log_pqz"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.FNP.calc_log_pqz" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the log difference between pz and qz (with an optional free bits strategy)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="bliss.models.fnp.FNP.encode">
+<code class="sig-name descname">encode</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">XR</span></em>, <em class="sig-param"><span class="n">yR</span></em>, <em class="sig-param"><span class="n">XM</span></em>, <em class="sig-param"><span class="n">G_in</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">A_in</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#FNP.encode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.FNP.encode" title="Permalink to this definition">¶</a></dt>
+<dd><p>This method runs the FNP up to the point the distributions for the latent
+variables are calculated. This is the shared procedure for both model inference
+and prediction.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="bliss.models.fnp.FNP.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">XR</span></em>, <em class="sig-param"><span class="n">yR</span></em>, <em class="sig-param"><span class="n">XM</span></em>, <em class="sig-param"><span class="n">yM</span></em>, <em class="sig-param"><span class="n">G_in</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">A_in</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#FNP.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.FNP.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.fnp.MAB">
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.fnp.</code><code class="sig-name descname">MAB</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">dim_Q</span></em>, <em class="sig-param"><span class="n">dim_K</span></em>, <em class="sig-param"><span class="n">dim_V</span></em>, <em class="sig-param"><span class="n">num_heads</span></em>, <em class="sig-param"><span class="n">ln</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#MAB"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.MAB" title="Permalink to this definition">¶</a></dt>
+<dd><p>A Multihead Attention Block for use in a set transformer.
+See <a class="reference external" href="https://arxiv.org/abs/1810.00825">https://arxiv.org/abs/1810.00825</a>.</p>
+<p>This implementation is from <a class="reference external" href="https://github.com/juho-lee/set_transformer/">https://github.com/juho-lee/set_transformer/</a>,
+which comes with the MIT license.</p>
+<dl class="py method">
+<dt id="bliss.models.fnp.MAB.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">Q</span></em>, <em class="sig-param"><span class="n">K</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#MAB.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.MAB.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.fnp.PMA">
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.fnp.</code><code class="sig-name descname">PMA</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">dim</span></em>, <em class="sig-param"><span class="n">num_heads</span></em>, <em class="sig-param"><span class="n">num_seeds</span></em>, <em class="sig-param"><span class="n">ln</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">squeeze_out</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#PMA"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.PMA" title="Permalink to this definition">¶</a></dt>
+<dd><p>A Pooling by Multihead Attention block for use in a set transformer.
+See <a class="reference external" href="https://arxiv.org/abs/1810.00825">https://arxiv.org/abs/1810.00825</a>.</p>
+<p>This implementation is from <a class="reference external" href="https://github.com/juho-lee/set_transformer/">https://github.com/juho-lee/set_transformer/</a>,
+which comes with the MIT license.</p>
+<dl class="py method">
+<dt id="bliss.models.fnp.PMA.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#PMA.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.PMA.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.fnp.RepEncoder">
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.fnp.</code><code class="sig-name descname">RepEncoder</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">f</span></em>, <em class="sig-param"><span class="n">use_u_diff</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">use_x</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#RepEncoder"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.RepEncoder" title="Permalink to this definition">¶</a></dt>
+<dd><p>Module which forms an encoded representation based on
+the encoded input (U), the reference input (xR),
+and the encoded reference labels (yR).</p>
+<dl class="py method">
+<dt id="bliss.models.fnp.RepEncoder.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">u</span></em>, <em class="sig-param"><span class="n">uR</span></em>, <em class="sig-param"><span class="n">XR</span></em>, <em class="sig-param"><span class="n">yR_encoded</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#RepEncoder.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.RepEncoder.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.fnp.SAB">
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.fnp.</code><code class="sig-name descname">SAB</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">dim_in</span></em>, <em class="sig-param"><span class="n">dim_out</span></em>, <em class="sig-param"><span class="n">num_heads</span></em>, <em class="sig-param"><span class="n">ln</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#SAB"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.SAB" title="Permalink to this definition">¶</a></dt>
+<dd><p>A Self-Attention Block for use in a set transformer.
+See <a class="reference external" href="https://arxiv.org/abs/1810.00825">https://arxiv.org/abs/1810.00825</a>.</p>
+<p>This implementation is from <a class="reference external" href="https://github.com/juho-lee/set_transformer/">https://github.com/juho-lee/set_transformer/</a>,
+which comes with the MIT license.</p>
+<dl class="py method">
+<dt id="bliss.models.fnp.SAB.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#SAB.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.SAB.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.fnp.SetPooler">
+<em class="property">class </em><code class="sig-prename descclassname">bliss.models.fnp.</code><code class="sig-name descname">SetPooler</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">dim_rep_R</span></em>, <em class="sig-param"><span class="n">dim_z</span></em>, <em class="sig-param"><span class="n">pooling_layers</span></em>, <em class="sig-param"><span class="n">set_transformer</span></em>, <em class="sig-param"><span class="n">st_numheads</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#SetPooler"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.SetPooler" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pools together representations using a set transformer architecture.
+See <a class="reference external" href="https://arxiv.org/abs/1810.00825">https://arxiv.org/abs/1810.00825</a>.</p>
+<dl class="py method">
+<dt id="bliss.models.fnp.SetPooler.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">rep_R</span></em>, <em class="sig-param"><span class="n">GA</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/fnp.html#SetPooler.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.fnp.SetPooler.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
 </dd></dl>
 
 </div>
@@ -283,7 +487,7 @@ or want to monitor a custom metric, you can specify these in a lr_dict:</p>
 <dl class="py method">
 <dt id="bliss.models.galaxy_net.OneCenteredGalaxy.forward">
 <code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">image</span></em>, <em class="sig-param"><span class="n">background</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#OneCenteredGalaxy.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxy.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Same as <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>, however in Lightning you want this to define
+<dd><p>Same as <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>, however in Lightning you want this to define
 the operations you want to use for prediction (i.e.: on a server or as a feature extractor).</p>
 <p>Normally you’d call <code class="docutils literal notranslate"><span class="pre">self()</span></code> from your <a class="reference internal" href="#bliss.models.galaxy_net.OneCenteredGalaxy.training_step" title="bliss.models.galaxy_net.OneCenteredGalaxy.training_step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">training_step()</span></code></a> method.
 This makes it easy to write a complex system for training with the outputs
@@ -334,6 +538,89 @@ when using the module outside Lightning in a production setting.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt id="bliss.models.galaxy_net.OneCenteredGalaxy.test_step">
+<code class="sig-name descname">test_step</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">batch</span></em>, <em class="sig-param"><span class="n">batch_idx</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#OneCenteredGalaxy.test_step"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxy.test_step" title="Permalink to this definition">¶</a></dt>
+<dd><p>Operates on a single batch of data from the test set.
+In this step you’d normally generate examples or calculate anything of interest
+such as accuracy.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># the pseudocode for these calls</span>
+<span class="n">test_outs</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">test_batch</span> <span class="ow">in</span> <span class="n">test_data</span><span class="p">:</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">test_step</span><span class="p">(</span><span class="n">test_batch</span><span class="p">)</span>
+    <span class="n">test_outs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+<span class="n">test_epoch_end</span><span class="p">(</span><span class="n">test_outs</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
+<li><p><strong>batch_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – The index of this batch.</p></li>
+<li><p><strong>dataloader_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – The index of the dataloader that produced this batch
+(only if multiple test dataloaders used).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><p>Any of.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Any object or value</p></li>
+<li><p><cite>None</cite> - Testing will skip to the next batch</p></li>
+</ul>
+</div></blockquote>
+</p>
+</dd>
+</dl>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># if you have one test dataloader:</span>
+<span class="k">def</span> <span class="nf">test_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">)</span>
+
+<span class="c1"># if you have multiple test dataloaders:</span>
+<span class="k">def</span> <span class="nf">test_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">dataloader_idx</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Examples</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># CASE 1: A single test dataset</span>
+<span class="k">def</span> <span class="nf">test_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">batch</span>
+
+    <span class="c1"># implement your own</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+
+    <span class="c1"># log 6 example images</span>
+    <span class="c1"># or generated text... or whatever</span>
+    <span class="n">sample_imgs</span> <span class="o">=</span> <span class="n">x</span><span class="p">[:</span><span class="mi">6</span><span class="p">]</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="n">torchvision</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_grid</span><span class="p">(</span><span class="n">sample_imgs</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="s1">&#39;example_images&#39;</span><span class="p">,</span> <span class="n">grid</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># calculate acc</span>
+    <span class="n">labels_hat</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">test_acc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">y</span> <span class="o">==</span> <span class="n">labels_hat</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1.0</span><span class="p">)</span>
+
+    <span class="c1"># log the outputs!</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">log_dict</span><span class="p">({</span><span class="s1">&#39;test_loss&#39;</span><span class="p">:</span> <span class="n">loss</span><span class="p">,</span> <span class="s1">&#39;test_acc&#39;</span><span class="p">:</span> <span class="n">test_acc</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>If you pass in multiple test dataloaders, <a class="reference internal" href="#bliss.models.galaxy_net.OneCenteredGalaxy.test_step" title="bliss.models.galaxy_net.OneCenteredGalaxy.test_step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">test_step()</span></code></a> will have an additional
+argument.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># CASE 2: multiple test dataloaders</span>
+<span class="k">def</span> <span class="nf">test_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">dataloader_idx</span><span class="p">):</span>
+    <span class="c1"># dataloader_idx tells you which dataset this is.</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you don’t need to test you don’t need to implement this method.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When the <a class="reference internal" href="#bliss.models.galaxy_net.OneCenteredGalaxy.test_step" title="bliss.models.galaxy_net.OneCenteredGalaxy.test_step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">test_step()</span></code></a> is called, the model has been put in eval mode and
+PyTorch gradients have been disabled. At the end of the test epoch, the model goes back
+to training mode and gradients are enabled.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt id="bliss.models.galaxy_net.OneCenteredGalaxy.training_step">
 <code class="sig-name descname">training_step</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">batch</span></em>, <em class="sig-param"><span class="n">batch_idx</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#OneCenteredGalaxy.training_step"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxy.training_step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Here you compute and return the training loss and some additional metrics for e.g.
@@ -341,17 +628,17 @@ the progress bar or logger.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
+<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
 <li><p><strong>batch_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – Integer displaying index of this batch</p></li>
 <li><p><strong>optimizer_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – When using multiple optimizers, this argument will also be present.</p></li>
-<li><p><strong>hiddens</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>) – Passed in if
+<li><p><strong>hiddens</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>) – Passed in if
 <a href="#id1"><span class="problematic" id="id2">:paramref:`~pytorch_lightning.trainer.trainer.Trainer.truncated_bptt_steps`</span></a> &gt; 0.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p><p>Any of.</p>
 <ul class="simple">
-<li><p><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> - The loss tensor</p></li>
+<li><p><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> - The loss tensor</p></li>
 <li><p><cite>dict</cite> - A dictionary. Can include any keys, but must include the key ‘loss’</p></li>
 <li><p><cite>None</cite> - Training will skip to the next batch</p></li>
 </ul>
@@ -456,7 +743,7 @@ In this step you’d might generate examples or calculate anything of interest l
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+470e6b3 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
+<li><p><strong>batch</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> | (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …) | [<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a>, …]) – The output of your <a class="reference external" href="https://pytorch.org/docs/master/data.html#torch.utils.data.DataLoader" title="(in PyTorch vmaster (1.8.0a0+5990643 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. A tensor, tuple or list.</p></li>
 <li><p><strong>batch_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – The index of this batch</p></li>
 <li><p><strong>dataloader_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – The index of the dataloader that produced this batch
 (only if multiple val dataloaders used)</p></li>
@@ -535,7 +822,7 @@ the model goes back to training mode and gradients are enabled.</p>
 
 
           </div>
-          
+
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
@@ -552,7 +839,6 @@ the model goes back to training mode and gradients are enabled.</p>
 <h3>Navigation</h3>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="index.html">Bliss API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="index.html#indices-and-tables">Indices and tables</a></li>
 </ul>
 
 <div class="relations">
@@ -591,18 +877,18 @@ the model goes back to training mode and gradients are enabled.</p>
     </div>
     <div class="footer">
       &copy;2021, Probabilistic Machine Learning Research Group.
-      
+
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-      
+
       |
       <a href="../_sources/api/bliss.models.rst.txt"
           rel="nofollow">Page source</a>
     </div>
 
-    
 
-    
+
+
   </body>
 </html>

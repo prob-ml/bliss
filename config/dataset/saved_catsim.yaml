@@ -1,7 +1,0 @@
-# @package _group_
-name: SavedCatsim
-params:
-  filepath: ${paths.root}/data/catsim_images.pt
-  batch_size: 64
-  num_workers: 0
-  tt_split: 0.1

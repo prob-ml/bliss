@@ -119,6 +119,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         kl_z = log_q_z - log_p_z  # log q(z | x) - log p(z)
 
         # reconstructed mean/variances images (per pixel quantities)
+        # no background
         recon_mean, recon_var = self.dec.forward(z)
 
         # kl can behave wildly w/out background.
@@ -169,31 +170,30 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         # metrics
         self.log("val_loss", loss)
-        mad = (images - recon_mean).abs().mean()
-        self.log("per_pixel_mad", mad)
+        residuals = (images - recon_mean) / torch.sqrt(images)
+        self.log("val_max_residual", residuals.abs().max())
         return {"images": images, "recon_mean": recon_mean, "recon_var": recon_var}
 
     def validation_epoch_end(self, outputs):
-        images = outputs[-1]["images"][:5]
-        recon_mean = outputs[-1]["recon_mean"][:5]
-        recon_var = outputs[-1]["recon_var"][:5]
+        images = outputs[-1]["images"][:10]
+        recon_mean = outputs[-1]["recon_mean"][:10]
+        recon_var = outputs[-1]["recon_var"][:10]
         fig = self.plot_reconstruction(images, recon_mean, recon_var)
         if self.logger:
             self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
 
     def plot_reconstruction(self, images, recon_mean, recon_var):
         # only plot i band if available, otherwise the highest band given.
-        assert images.size(0) >= 5
+        assert images.size(0) >= 10
         assert self.enc.n_bands == self.dec.n_bands
         n_bands = self.enc.n_bands
-        num_examples = 5
+        num_examples = 10
         num_cols = 4
         band_idx = min(2, n_bands - 1)
         residuals = (images - recon_mean) / torch.sqrt(images)
         plt.ioff()
 
-        fig = plt.figure(figsize=(20, 20))
-        plt.tight_layout()
+        fig = plt.figure(figsize=(10, 25))
         plt.suptitle("Epoch {:d}".format(self.current_epoch))
 
         for i in range(num_examples):
@@ -218,4 +218,12 @@ class OneCenteredGalaxy(pl.LightningModule):
             plt.imshow(residuals[i, band_idx].data.cpu().numpy())
             plt.colorbar()
 
+        plt.tight_layout()
+
         return fig
+
+    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+        images, background = batch["images"], batch["background"]
+        recon_mean, _, _ = self(images, background)
+        residuals = (images - recon_mean) / torch.sqrt(images)
+        self.log("max_residual", residuals.abs().max())

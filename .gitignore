@@ -21,3 +21,4 @@ trials_result/
 .env
 jupyter/
 outputs/
+bin/

@@ -14,22 +14,22 @@
     <script src="../../../_static/doctools.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-   
+
   <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
-  
-  
+
+
   <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
 
   </head><body>
-  
+
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          
+
 
           <div class="body" role="main">
-            
+
   <h1>Source code for bliss.datasets.sdss</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">pathlib</span>
 <span class="kn">import</span> <span class="nn">pickle</span>
@@ -100,8 +100,6 @@
         <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
         <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
 
-        <span class="c1"># psf = hdu.read()</span>
-
         <span class="n">psfimgs</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="p">(</span><span class="n">outh</span><span class="p">,</span> <span class="n">outw</span><span class="p">)</span> <span class="o">=</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
@@ -134,12 +132,13 @@
 
 
 <div class="viewcode-block" id="SloanDigitalSkySurvey"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.sdss.SloanDigitalSkySurvey">[docs]</a><span class="k">class</span> <span class="nc">SloanDigitalSkySurvey</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="c1"># pylint: disable=dangerous-default-value</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">sdss_dir</span><span class="p">,</span>
         <span class="n">run</span><span class="o">=</span><span class="mi">3900</span><span class="p">,</span>
         <span class="n">camcol</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
-        <span class="n">fields</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="mi">269</span><span class="p">,),</span>
         <span class="n">bands</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
         <span class="n">stampsize</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
         <span class="n">overwrite_fits_cache</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
@@ -165,8 +164,7 @@
         <span class="n">fieldgains</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pf_fits</span><span class="p">[</span><span class="s2">&quot;GAIN&quot;</span><span class="p">]</span>
 
         <span class="c1"># get desired field</span>
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">fieldnums</span><span class="p">)):</span>
-            <span class="n">_field</span> <span class="o">=</span> <span class="n">fieldnums</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_field</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">fieldnums</span><span class="p">):</span>
             <span class="n">gain</span> <span class="o">=</span> <span class="n">fieldgains</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">fields</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
                 <span class="c1"># load the catalog distributed with SDSS</span>
@@ -179,9 +177,8 @@
                         <span class="n">po_fits</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">getdata</span><span class="p">(</span><span class="n">po_path</span><span class="p">)</span>
                     <span class="k">except</span> <span class="ne">IndexError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                         <span class="nb">print</span><span class="p">(</span>
-                            <span class="s2">&quot;INFO: IndexError while accessing field: </span><span class="si">{}</span><span class="s2">. This field will not be included.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                                <span class="n">_field</span>
-                            <span class="p">)</span>
+                            <span class="s2">&quot;INFO: IndexError while accessing field: </span><span class="si">{}</span><span class="s2">. &quot;</span>
+                            <span class="s2">&quot;This field will not be included.</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">_field</span><span class="p">)</span>
                         <span class="p">)</span>
                         <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
                         <span class="n">po_fits</span> <span class="o">=</span> <span class="kc">None</span>
@@ -190,9 +187,8 @@
                     <span class="n">po_fits</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">po_cache_path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;rb+&quot;</span><span class="p">))</span>
                     <span class="k">if</span> <span class="n">po_fits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="nb">print</span><span class="p">(</span>
-                            <span class="s2">&quot;INFO: cached data for field </span><span class="si">{}</span><span class="s2"> is None. This field will not be included&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                                <span class="n">_field</span>
-                            <span class="p">)</span>
+                            <span class="s2">&quot;INFO: cached data for field </span><span class="si">{}</span><span class="s2"> is None. &quot;</span>
+                            <span class="s2">&quot;This field will not be included&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">_field</span><span class="p">)</span>
                         <span class="p">)</span>
 
                 <span class="c1"># Load the PSF produced by SDSS</span>
@@ -206,9 +202,8 @@
                     <span class="n">psf</span> <span class="o">=</span> <span class="n">SdssPSF</span><span class="p">(</span><span class="n">psf_path</span><span class="o">.</span><span class="n">as_posix</span><span class="p">(),</span> <span class="n">bands</span><span class="p">)</span>
                 <span class="k">except</span> <span class="ne">IndexError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                     <span class="nb">print</span><span class="p">(</span>
-                        <span class="s2">&quot;INFO: IndexError while accessing PSF for field: </span><span class="si">{}</span><span class="s2">. This field will not be included.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                            <span class="n">_field</span>
-                        <span class="p">)</span>
+                        <span class="s2">&quot;INFO: IndexError while accessing PSF for field: </span><span class="si">{}</span><span class="s2">. &quot;</span>
+                        <span class="s2">&quot;This field will not be included.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">_field</span><span class="p">),</span>
                     <span class="p">)</span>
                     <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
                     <span class="n">psf</span> <span class="o">=</span> <span class="kc">None</span>
@@ -233,7 +228,8 @@
                 <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
                     <span class="n">p</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">fetch_bright_stars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">po_fits</span><span class="p">,</span> <span class="n">img</span><span class="p">,</span> <span class="n">wcs</span><span class="p">,</span> <span class="n">bg</span><span class="p">,</span> <span class="n">psf</span><span class="p">):</span>
+    <span class="c1"># pylint: disable=too-many-statements</span>
+    <span class="k">def</span> <span class="nf">fetch_bright_stars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">po_fits</span><span class="p">,</span> <span class="n">img</span><span class="p">,</span> <span class="n">wcs</span><span class="p">,</span> <span class="n">bg</span><span class="p">):</span>
         <span class="n">is_star</span> <span class="o">=</span> <span class="n">po_fits</span><span class="p">[</span><span class="s2">&quot;objc_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">6</span>
         <span class="n">is_bright</span> <span class="o">=</span> <span class="n">po_fits</span><span class="p">[</span><span class="s2">&quot;psfflux&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">100</span>
         <span class="n">is_thing</span> <span class="o">=</span> <span class="n">po_fits</span><span class="p">[</span><span class="s2">&quot;thing_id&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span>
@@ -242,7 +238,6 @@
         <span class="n">decs</span> <span class="o">=</span> <span class="n">po_fits</span><span class="p">[</span><span class="s2">&quot;dec&quot;</span><span class="p">][</span><span class="n">is_target</span><span class="p">]</span>
         <span class="n">fluxes</span> <span class="o">=</span> <span class="n">po_fits</span><span class="p">[</span><span class="s2">&quot;psfflux&quot;</span><span class="p">][</span><span class="n">is_target</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
-        <span class="n">band</span> <span class="o">=</span> <span class="mi">2</span>
         <span class="n">stamps</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">pts</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">prs</span> <span class="o">=</span> <span class="p">[]</span>
@@ -250,7 +245,7 @@
         <span class="n">flxs</span> <span class="o">=</span> <span class="p">[]</span>
 
         <span class="n">G</span> <span class="o">=</span> <span class="n">construct_subpixel_grid_base</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stampsize</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">stampsize</span><span class="p">)</span>
-        <span class="k">for</span> <span class="p">(</span><span class="n">ra</span><span class="p">,</span> <span class="n">dec</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">flux</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">ra</span><span class="p">,</span> <span class="n">dec</span><span class="p">,</span> <span class="n">_f</span><span class="p">,</span> <span class="n">flux</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
             <span class="n">ras</span><span class="p">,</span> <span class="n">decs</span><span class="p">,</span> <span class="n">po_fits</span><span class="p">[</span><span class="s2">&quot;thing_id&quot;</span><span class="p">][</span><span class="n">is_target</span><span class="p">],</span> <span class="n">fluxes</span>
         <span class="p">):</span>
             <span class="c1"># pt = &quot;time&quot; in pixel coordinates</span>
@@ -358,7 +353,7 @@
             <span class="n">frame</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
         <span class="n">stamps</span><span class="p">,</span> <span class="n">pts</span><span class="p">,</span> <span class="n">prs</span><span class="p">,</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">stamp_bgs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_bright_stars</span><span class="p">(</span>
-            <span class="n">po_fits</span><span class="p">,</span> <span class="n">image_list</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">wcs_list</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">background_list</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">psf</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+            <span class="n">po_fits</span><span class="p">,</span> <span class="n">image_list</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">wcs_list</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">background_list</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
         <span class="p">)</span>
         <span class="n">stamp_psfs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">psf</span><span class="o">.</span><span class="n">psf_at_points</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">pts</span><span class="p">,</span> <span class="n">prs</span><span class="p">))</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">stamp_bgs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -388,7 +383,7 @@
 </pre></div>
 
           </div>
-          
+
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
@@ -403,9 +398,10 @@
 
 
 <h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Table of Contents</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html#indices-and-tables">Indices and tables</a></li>
 </ul>
 
 <div class="relations">
@@ -441,15 +437,15 @@
     </div>
     <div class="footer">
       &copy;2021, Probabilistic Machine Learning Research Group.
-      
+
       |
       Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-      
+
     </div>
 
-    
 
-    
+
+
   </body>
 </html>
