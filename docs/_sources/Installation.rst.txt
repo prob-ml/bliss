@@ -12,3 +12,6 @@ Installation Guide
     git clone https://github.com/prob-ml/bliss.git
     cd bliss
     poetry install
+    poetry shell
+
+4. Finally, set an environment variable called :code:`BLISS_HOME` to the absolute path of the bliss directory.
