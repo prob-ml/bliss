@@ -203,11 +203,11 @@ class EncoderCNN(nn.Module):
         return x
 
     def _make_layer_with_pool(self, n_bands, channel, dropout):
-        in_channels = n_bands
+        in_channel = n_bands
         layers = []
         for i in range(3):
             layers += [
-                nn.Conv2d(in_channels, channel, 3, padding=1),
+                nn.Conv2d(in_channel, channel, 3, padding=1),
                 nn.BatchNorm2d(channel),
                 nn.ReLU(True),
             ]
@@ -217,25 +217,28 @@ class EncoderCNN(nn.Module):
             ]
             if i < 2:
                 layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
-            in_channels = channel
+            in_channel = channel
             channel = channel * 2
         return nn.Sequential(*layers)
 
     def _make_layer(self, n_bands, channel, dropout):
-        in_channels = n_bands
-        layers = []
+        layers = [
+            nn.Conv2d(n_bands, channel, 3, padding=1),
+            nn.BatchNorm2d(channel),
+            nn.ReLU(True),
+        ]
+        in_channel = channel
         for i in range(3):
             downsample = True
             if i == 0:
                 downsample = False
-            layers += [ConvBlock(in_channels, channel, dropout, downsample)]
+            layers += [ConvBlock(in_channel, channel, dropout, downsample)]
             layers += [
                 ConvBlock(channel, channel, dropout, False),
                 ConvBlock(channel, channel, dropout, False),
             ]
-            in_channels = channel
+            in_channel = channel
             channel = channel * 2
-        layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         return nn.Sequential(*layers)
 
 
