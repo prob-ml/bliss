@@ -13,7 +13,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("./bliss"))
+sys.path.insert(0, os.path.abspath("../../bliss"))
 print(sys.path)
 
 
@@ -35,6 +35,7 @@ author = (
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
+    "sphinx.ext.githubpages",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
 ]
