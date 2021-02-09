@@ -102,7 +102,7 @@ class SloanDigitalSkySurvey(Dataset):
     # pylint: disable=dangerous-default-value
     def __init__(
         self,
-        sdss_dir,
+        sdss_dir="data/sdss",
         run=3900,
         camcol=6,
         fields=(269,),

@@ -266,7 +266,7 @@ class ImageEncoder(nn.Module):
     def _cache_tiling_conv_weights(self):
         # this function sets up weights for the "identity" convolution
         # used to divide a full-image into padded tiles.
-        # (see get_image_in_tiles).
+        # (see get_images_in_tiles).
 
         # It has a for-loop, but only needs to be set up once.
         # These weights are set up and  cached during the __init__.
@@ -566,6 +566,13 @@ class ImageEncoder(nn.Module):
             for key, value in tile_estimate.items()
         }
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
+        return tile_estimate
+
+    def tile_map_n_sources(self, image_ptiles):
+        h = self.get_var_params_all(image_ptiles)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
+        return tile_n_sources
 
     def tile_map_estimate(self, images):
 
@@ -575,9 +582,7 @@ class ImageEncoder(nn.Module):
         n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
 
         # MAP (for n_sources) prediction on var params on each tile
-        h = self.get_var_params_all(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
+        tile_n_sources = self.tile_map_n_sources(image_ptiles)
         pred = self.forward(image_ptiles, tile_n_sources)
 
         return self.tile_map_estimate_from_var_params(
