@@ -482,11 +482,11 @@ class SleepPhase(pl.LightningModule):
         true_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # get params on full image.
-        true_params = get_full_params(slen, true_params)
+        true_params = get_full_params(true_params, slen)
 
         # get map estimates
         tile_estimate = self.tile_map_estimate(batch)
-        estimates = get_full_params(slen, tile_estimate)
+        estimates = get_full_params(tile_estimate, slen)
         recon_images, _ = self.image_decoder.render_images(
             tile_estimate["n_sources"],
             tile_estimate["locs"],
@@ -548,11 +548,11 @@ class SleepPhase(pl.LightningModule):
         slen = int(batch["slen"].unique().item())
         border_padding = int((images.shape[-1] - slen) / 2)
         _true_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(slen, _true_params)
+        true_params = get_full_params(_true_params, slen)
 
         # obtain map estimates
         tile_estimate = self.tile_map_estimate(batch)
-        estimate = get_full_params(slen, tile_estimate)
+        estimate = get_full_params(tile_estimate, slen)
         assert len(estimate["locs"].shape) == 3
         assert estimate["locs"].shape[1] == estimate["n_sources"].max().int().item()
 
