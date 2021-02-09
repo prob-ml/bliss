@@ -458,12 +458,15 @@ class ImageEncoder(nn.Module):
         # h.shape = (n_ptiles x self.dim_out_all)
         h = self.get_var_params_all(image_ptiles)
 
-        # get probability of n_sources and other params.
-        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
-        # loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        n_source_log_probs = self._get_logprob_n_from_var_params(h)
+        # get probability of params except n_sources
+        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
         var_params = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
+
+        # get probability of n_sources
+        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
+        n_source_log_probs = self._get_logprob_n_from_var_params(h)
         var_params["n_source_log_probs"] = n_source_log_probs
+
         return var_params
 
     def forward(self, image_ptiles, tile_n_sources):
@@ -518,21 +521,16 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def tile_map_estimate(self, images):
+    def tile_map_estimate_from_var_params(self, pred, n_tiles_per_image, batch_size):
+        # batch_size = # of images that will be predicted.
+        # n_tiles_per_image = # tiles/padded_tiles each image is subdivided into.
+        # pred = prediction of variational parameters on each tile.
 
-        # extract image_ptiles
-        batch_size = images.shape[0]
-        image_ptiles = self.get_images_in_tiles(images)
-        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
-
-        h = self.get_var_params_all(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-
+        # tile_n_sources based on log_prob per tile.
         # tile_is_on_array shape = (n_ptiles x max_detections)
+        tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-        pred = self.forward(image_ptiles, tile_n_sources)
 
         # galaxy booleans
         tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
@@ -569,7 +567,22 @@ class ImageEncoder(nn.Module):
         }
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
 
-        return tile_estimate
+    def tile_map_estimate(self, images):
+
+        # extract image_ptiles
+        batch_size = images.shape[0]
+        image_ptiles = self.get_images_in_tiles(images)
+        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+
+        # MAP (for n_sources) prediction on var params on each tile
+        h = self.get_var_params_all(image_ptiles)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
+        pred = self.forward(image_ptiles, tile_n_sources)
+
+        return self.tile_map_estimate_from_var_params(
+            pred, n_tiles_per_image, batch_size
+        )
 
     def map_estimate(self, images, height: int, width: int = None):
         # return full estimate of parameters in full image.
