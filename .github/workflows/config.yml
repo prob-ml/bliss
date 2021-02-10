@@ -48,7 +48,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: |
-              ~/.julia
+              ~/.cache/pypoetry
           key: ${{ runner.os }}-${{ hashFiles('./poetry.lock') }}
 
       - name: Install poetry dependencies
