@@ -57,6 +57,18 @@ class ImageDecoder(pl.LightningModule):
     ):
         super().__init__()
 
+        ## Submodules
+        self.star_tile_decoder = StarTileDecoder(
+            n_bands,
+            slen,
+            tile_slen,
+            ptile_slen,
+            border_padding,
+            background_values,
+            psf_params_file,
+            psf_slen,
+        )
+
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
         self.slen = int(slen)
@@ -145,68 +157,11 @@ class ImageDecoder(pl.LightningModule):
             self.galaxy_decoder = dec
 
         # load psf params + grid
-        ext = Path(psf_params_file).suffix
-        if ext == ".npy":
-            psf_params = torch.from_numpy(np.load(psf_params_file))
-            psf_params = psf_params[list(range(n_bands))]
-        elif ext == ".fits":
-            assert n_bands == 2, "only 2 band fit files are supported."
-            bands = (2, 3)
-            psf_params = get_fit_file_psf_params(psf_params_file, bands)
-        else:
-            raise NotImplementedError(
-                "Only .npy and .fits extensions are supported for PSF params files."
-            )
-        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
-        self.psf_slen = psf_slen
-        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        # extra factor to be consistent with old repo
-        # but probably doesn't matter ...
-        grid *= self.psf_slen / (self.psf_slen - 1)
-        self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
 
         # get normalization_constant
-        self.normalization_constant = torch.zeros(self.n_bands)
-        for i in range(self.n_bands):
-            psf_i = self._get_psf_single_band(psf_params[i])
-            self.normalization_constant[i] = 1 / psf_i.sum()
-        self.normalization_constant = self.normalization_constant.detach()
 
     def forward(self):
-        psf = self._get_psf()
-        init_psf_sum = psf.sum(-1).sum(-1).detach()
-        norm = psf.sum(-1).sum(-1)
-        psf *= (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
-        return psf
-
-    def _get_psf(self):
-        psf = torch.tensor([], device=self.device)
-        for i in range(self.n_bands):
-            _psf = self._get_psf_single_band(self.params[i])
-            _psf *= self.normalization_constant[i]
-            psf = torch.cat((psf.type_as(_psf), _psf.unsqueeze(0)))
-
-        assert (psf > 0).all()
-        return psf
-
-    @staticmethod
-    def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
-        term1 = torch.exp(-(r ** 2) / (2 * sigma1))
-        term2 = b * torch.exp(-(r ** 2) / (2 * sigma2))
-        term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
-        return (term1 + term2 + term3) / (1 + b + p0)
-
-    def _get_psf_single_band(self, psf_params):
-        _psf_params = torch.exp(psf_params)
-        return self._psf_fun(
-            self.cached_radii_grid,
-            _psf_params[0],
-            _psf_params[1],
-            _psf_params[2],
-            _psf_params[3],
-            _psf_params[4],
-            _psf_params[5],
-        )
+        return self.star_tile_decoder.psf_forward()
 
     def _sample_n_sources(self, batch_size):
         # returns number of sources for each batch x tile
@@ -405,21 +360,6 @@ class ImageDecoder(pl.LightningModule):
 
         return source_expanded
 
-    def _adjust_psf(self):
-        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
-        # first dimension of psf is number of bands
-        # dimension of the psf/slen should be odd
-        psf = self.forward()
-        psf_slen = psf.shape[2]
-        assert len(psf.shape) == 3
-        assert psf.shape[1] == psf_slen
-        assert (psf_slen % 2) == 1
-        assert self.background.shape[0] == psf.shape[0] == self.n_bands
-
-        if self.ptile_slen >= psf.shape[-1]:
-            return self._expand_source(psf)
-        return self._trim_source(psf)
-
     def _size_galaxy(self, galaxy):
         # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen
         assert len(galaxy.shape) == 4
@@ -465,39 +405,6 @@ class ImageDecoder(pl.LightningModule):
 
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
-
-    def _render_multiple_stars_on_ptile(self, locs, fluxes, star_bool):
-        # locs: is (n_ptiles x max_num_stars x 2)
-        # fluxes: Is (n_ptiles x n_bands x max_stars)
-        # star_bool: Is (n_ptiles x max_stars x 1)
-        # max_sources obtained from locs, allows for more flexibility when rendering.
-
-        psf = self._adjust_psf()
-        n_ptiles = locs.shape[0]
-        max_sources = locs.shape[1]
-        ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=locs.device)
-
-        assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
-        assert psf.shape[0] == self.n_bands
-        assert fluxes.shape[0] == star_bool.shape[0] == n_ptiles
-        assert fluxes.shape[1] == star_bool.shape[1] == max_sources
-        assert fluxes.shape[2] == psf.shape[0] == self.n_bands
-        assert star_bool.shape[2] == 1
-
-        # all stars are just the PSF so we copy it.
-        expanded_psf = psf.expand(n_ptiles, self.n_bands, -1, -1)
-
-        # this loop plots each of the ith star in each of the (n_ptiles) images.
-        for n in range(max_sources):
-            star_bool_n = star_bool[:, n]
-            locs_n = locs[:, n, :]
-            fluxes_n = fluxes[:, n, :] * star_bool_n.view(-1, 1)
-            fluxes_n = fluxes_n.view(n_ptiles, self.n_bands, 1, 1)
-            one_star = self._render_one_source(locs_n, expanded_psf)
-            ptile += one_star * fluxes_n
-
-        return ptile
 
     def _render_single_galaxies(self, galaxy_params, galaxy_bool):
 
@@ -600,7 +507,7 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # draw stars and galaxies
-        stars = self._render_multiple_stars_on_ptile(_locs, _fluxes, _star_bool)
+        stars = self.star_tile_decoder(_locs, _fluxes, _star_bool)
         galaxies = torch.zeros(img_shape, device=locs.device)
         var_images = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_decoder is not None:
@@ -749,3 +656,208 @@ class ImageDecoder(pl.LightningModule):
         x0 = n_tiles_of_padding * tile_slen - border_padding
         x1 = (n_tiles1 + n_tiles_of_padding) * tile_slen + border_padding
         return canvas[:, :, x0:x1, x0:x1]
+
+
+class StarTileDecoder(nn.Module):
+    def __init__(
+        self,
+        n_bands,
+        slen,
+        tile_slen,
+        ptile_slen,
+        border_padding,
+        background_values,
+        psf_params_file,
+        psf_slen,
+    ):
+        super().__init__()
+        self.n_bands = n_bands
+        self.slen = slen
+        self.tile_slen = tile_slen
+        if border_padding is None:
+            # default value matches encoder default.
+            border_padding = (ptile_slen - tile_slen) / 2
+
+        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * tile_slen
+        assert border_padding % 1 == 0, "amount of border padding must be an integer"
+        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
+        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
+        assert tile_slen <= ptile_slen
+        self.border_padding = int(border_padding)
+        self.ptile_slen = ptile_slen
+
+        self.register_buffer(
+            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
+        )
+        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
+
+        assert len(background_values) == n_bands
+        background_shape = (
+            self.n_bands,
+            self.slen + 2 * self.border_padding,
+            self.slen + 2 * self.border_padding,
+        )
+        self.register_buffer(
+            "background", torch.zeros(background_shape), persistent=False
+        )
+        for i in range(n_bands):
+            self.background[i] = background_values[i]
+
+        ext = Path(psf_params_file).suffix
+        if ext == ".npy":
+            psf_params = torch.from_numpy(np.load(psf_params_file))
+            psf_params = psf_params[list(range(n_bands))]
+        elif ext == ".fits":
+            assert n_bands == 2, "only 2 band fit files are supported."
+            bands = (2, 3)
+            psf_params = get_fit_file_psf_params(psf_params_file, bands)
+        else:
+            raise NotImplementedError(
+                "Only .npy and .fits extensions are supported for PSF params files."
+            )
+        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
+        self.psf_slen = psf_slen
+        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+        # extra factor to be consistent with old repo
+        # but probably doesn't matter ...
+        grid *= self.psf_slen / (self.psf_slen - 1)
+        self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
+
+        # get normalization_constant
+        self.normalization_constant = torch.zeros(self.n_bands)
+        for i in range(self.n_bands):
+            psf_i = self._get_psf_single_band(psf_params[i])
+            self.normalization_constant[i] = 1 / psf_i.sum()
+        self.normalization_constant = self.normalization_constant.detach()
+
+    def forward(self, locs, fluxes, star_bool):
+        # locs: is (n_ptiles x max_num_stars x 2)
+        # fluxes: Is (n_ptiles x n_bands x max_stars)
+        # star_bool: Is (n_ptiles x max_stars x 1)
+        # max_sources obtained from locs, allows for more flexibility when rendering.
+
+        psf = self._adjust_psf()
+        n_ptiles = locs.shape[0]
+        max_sources = locs.shape[1]
+        ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
+        ptile = torch.zeros(ptile_shape, device=locs.device)
+
+        assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
+        assert psf.shape[0] == self.n_bands
+        assert fluxes.shape[0] == star_bool.shape[0] == n_ptiles
+        assert fluxes.shape[1] == star_bool.shape[1] == max_sources
+        assert fluxes.shape[2] == psf.shape[0] == self.n_bands
+        assert star_bool.shape[2] == 1
+
+        # all stars are just the PSF so we copy it.
+        expanded_psf = psf.expand(n_ptiles, self.n_bands, -1, -1)
+
+        # this loop plots each of the ith star in each of the (n_ptiles) images.
+        for n in range(max_sources):
+            star_bool_n = star_bool[:, n]
+            locs_n = locs[:, n, :]
+            fluxes_n = fluxes[:, n, :] * star_bool_n.view(-1, 1)
+            fluxes_n = fluxes_n.view(n_ptiles, self.n_bands, 1, 1)
+            one_star = self._render_one_source(locs_n, expanded_psf)
+            ptile += one_star * fluxes_n
+
+        return ptile
+
+    def psf_forward(self):
+        psf = self._get_psf()
+        init_psf_sum = psf.sum(-1).sum(-1).detach()
+        norm = psf.sum(-1).sum(-1)
+        psf *= (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
+        return psf
+
+    def _get_psf(self):
+        psf_list = []
+        for i in range(self.n_bands):
+            _psf = self._get_psf_single_band(self.params[i])
+            _psf *= self.normalization_constant[i]
+            psf_list.append(_psf.unsqueeze(0))
+        psf = torch.cat(psf_list)
+
+        assert (psf > 0).all()
+        return psf
+
+    @staticmethod
+    def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
+        term1 = torch.exp(-(r ** 2) / (2 * sigma1))
+        term2 = b * torch.exp(-(r ** 2) / (2 * sigma2))
+        term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
+        return (term1 + term2 + term3) / (1 + b + p0)
+
+    def _get_psf_single_band(self, psf_params):
+        _psf_params = torch.exp(psf_params)
+        return self._psf_fun(
+            self.cached_radii_grid,
+            _psf_params[0],
+            _psf_params[1],
+            _psf_params[2],
+            _psf_params[3],
+            _psf_params[4],
+            _psf_params[5],
+        )
+
+    def _adjust_psf(self):
+        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
+        # first dimension of psf is number of bands
+        # dimension of the psf/slen should be odd
+        psf = self.psf_forward()
+        psf_slen = psf.shape[2]
+        assert len(psf.shape) == 3
+        assert psf.shape[1] == psf_slen
+        assert (psf_slen % 2) == 1
+        assert self.background.shape[0] == psf.shape[0] == self.n_bands
+
+        if self.ptile_slen >= psf.shape[-1]:
+            return self._expand_source(psf)
+        return self._trim_source(psf)
+
+    def _render_one_source(self, locs, source):
+        """
+        :param locs: is n_ptiles x len((x,y))
+        :param source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
+                        `expanded_psf` (psf repeated multiple times) for the case of of stars.
+                        Or multiple galaxies in the case of galaxies.
+        :return: shape = (n_ptiles x n_bands x slen x slen)
+        """
+        n_ptiles = locs.shape[0]
+        assert source.shape[0] == n_ptiles
+        assert source.shape[1] == self.n_bands
+        assert source.shape[2] == source.shape[3]
+        assert locs.shape[1] == 2
+
+        # scale so that they land in the tile within the padded tile
+        padding = (self.ptile_slen - self.tile_slen) / 2
+        locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
+        # scale locs so they take values between -1 and 1 for grid sample
+        locs = (locs - 0.5) * 2
+        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
+
+        locs_swapped = locs.index_select(1, self.swap)
+        grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
+
+        source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
+        return source_rendered
+
+    def _trim_source(self, source):
+        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
+        assert len(source.shape) == 3
+
+        # if self.ptile_slen is even, we still make source dimension odd.
+        # otherwise, the source won't have a peak in the center pixel.
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+
+        source_slen = source.shape[2]
+        source_center = (source_slen - 1) / 2
+
+        assert source_slen >= _slen
+
+        r = np.floor(_slen / 2)
+        l_indx = int(source_center - r)
+        u_indx = int(source_center + r + 1)
+
+        return source[:, l_indx:u_indx, l_indx:u_indx]
