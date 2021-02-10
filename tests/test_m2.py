@@ -36,7 +36,6 @@ class TestStarSleepEncoderM2:
         # the SDSS image
         test_image = torch.from_numpy(hubble_data["sdss_image"]).unsqueeze(0).to(device)
         slen = 98
-        print(test_image.shape)
 
         # the true parameters
         true_locs = torch.from_numpy(hubble_data["true_locs"]).to(device)
