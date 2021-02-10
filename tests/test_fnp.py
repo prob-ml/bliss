@@ -35,7 +35,7 @@ class TestFNP:
             )
             trainer = Trainer(
                 gpus=devices.gpus,
-                max_epochs=1000,
+                max_epochs=1000 if devices.use_cuda else 2,
                 logger=None,
                 check_val_every_n_epoch=100,
                 checkpoint_callback=False,
@@ -43,7 +43,8 @@ class TestFNP:
             trainer.fit(model, train_loader, val_loader)
             assert model.valid_losses[0] < 70
             assert model.valid_losses[0] > 40
-            assert min(model.valid_losses) < model.valid_losses[0] * thresholds[i]
+            if devices.use_cuda:
+                assert min(model.valid_losses) < model.valid_losses[0] * thresholds[i]
             # Smoke test for prediction
             pred = model.fnp.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
             pred = model.fnp.predict(
