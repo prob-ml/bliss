@@ -182,7 +182,7 @@ class ImageEncoder(nn.Module):
         border_padding = (ptile_slen - tile_slen) / 2
         n_tiles_of_padding = border_padding / tile_slen
         assert ptile_slen >= tile_slen
-        assert border_padding % 1 == 0, "amount of padding should be an integer"
+        assert border_padding % 1 == 0, "amount of border padding should be an integer"
         assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
         self.border_padding = int(border_padding)
 

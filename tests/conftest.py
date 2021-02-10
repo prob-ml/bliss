@@ -10,7 +10,9 @@ from bliss.models import galaxy_net
 
 # command line arguments for tests
 def pytest_addoption(parser):
-    parser.addoption("--gpus", default="0", type=str, help="--gpus option for trainer.")
+    parser.addoption(
+        "--gpus", default="cpu", type=str, help="--gpus option for trainer."
+    )
 
 
 def get_cfg(overrides, devices):
@@ -24,7 +26,7 @@ def get_cfg(overrides, devices):
 
 class DeviceSetup:
     def __init__(self, gpus):
-        self.use_cuda = torch.cuda.is_available() if gpus != "" else False
+        self.use_cuda = torch.cuda.is_available() if gpus != "cpu" else False
         self.gpus = gpus if self.use_cuda else None
 
         # setup device
