@@ -43,6 +43,13 @@ jobs:
       - name: Install fftw3
         run: |
           sudo apt-get install libfftw3-dev
+          
+      - name: Poetry cache
+        uses: actions/cache@v2
+        with:
+          path: |
+              ~/.julia
+          key: ${{ runner.os }}-${{ hashFiles('./poetry.lock') }}
 
       - name: Install poetry dependencies
         run: |
