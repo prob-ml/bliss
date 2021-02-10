@@ -15,7 +15,7 @@ decoder:
     slen: ${model.image.slen}
     tile_slen: 2
     ptile_slen: 26
-    border_padding: 3
+    border_padding: 4
     prob_galaxy: 0.0
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 5
