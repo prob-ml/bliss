@@ -267,7 +267,9 @@ class SloanDigitalSkySurvey(Dataset):
             f"cache_stmpsz{self.stampsize}_ctr{self.center_subpixel}.pkl"
         )
         if cache_path.exists() and not self.overwrite_cache:
-            ret = pickle.load(cache_path.open("rb+"))
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FITSFixedWarning)
+                ret = pickle.load(cache_path.open("rb+"))
             return ret, cache_path
 
         for b, bl in enumerate("ugriz"):
