@@ -41,8 +41,11 @@ def main(cfg: DictConfig):
         ptiles, tile_params["locs"]
     )
 
-    # collect them
+    # collect all parameters into one dictionary
     var_params["galaxy_param_mean"] = galaxy_param_mean
     var_params["gaalxy_param_var"] = galaxy_param_var
+
+    # put everything in the cpu before saving
+    var_params = {key: value.cpu() for key, value in var_params.items()}
 
     torch.save(var_params, cfg.predict.output_file)
