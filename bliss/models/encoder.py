@@ -45,14 +45,14 @@ def get_star_bool(n_sources, galaxy_bool):
     return star_bool
 
 
-def get_full_params(tile_params: dict, height: int, width: int = None):
+def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
 
-    # check height, width
-    if width is None:
-        width = height
-    assert isinstance(height, int) and isinstance(width, dict)
+    # check slen, wlen
+    if wlen is None:
+        wlen = slen
+    assert isinstance(slen, int) and isinstance(wlen, dict)
 
     # dictionary of tile_params is consistent and no extraneous keys.
     required = {"n_sources", "locs"}
@@ -72,12 +72,12 @@ def get_full_params(tile_params: dict, height: int, width: int = None):
     n_ptiles = n_samples * n_tiles_per_image
 
     # calculate tile_slen
-    tile_slen = np.sqrt(height * width / n_tiles_per_image)
+    tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
     assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
     tile_slen = int(tile_slen)
 
     # coordinates on tiles.
-    tile_coords = _get_tile_coords(height, width, tile_slen).type_as(tile_locs)
+    tile_coords = _get_tile_coords(slen, wlen, tile_slen).type_as(tile_locs)
     assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
 
     # get is_on_array
@@ -90,8 +90,8 @@ def get_full_params(tile_params: dict, height: int, width: int = None):
     _tile_locs = tile_locs.view(n_ptiles, -1, 2)
     bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
     _locs = _tile_locs * tile_slen + bias
-    _locs[..., 0] /= height
-    _locs[..., 1] /= width
+    _locs[..., 0] /= slen
+    _locs[..., 1] /= wlen
     _locs *= tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip
@@ -134,11 +134,11 @@ def _sample_class_weights(class_weights, n_samples=1):
     return cat_rv.sample((n_samples,)).squeeze()
 
 
-def _get_tile_coords(height, width, tile_slen):
+def _get_tile_coords(slen, wlen, tile_slen):
     """This records (x0, x1) indices each image tile comes from."""
 
-    n_ptiles1 = int(height / tile_slen)
-    n_ptiles2 = int(width / tile_slen)
+    n_ptiles1 = int(slen / tile_slen)
+    n_ptiles2 = int(wlen / tile_slen)
 
     tile_coords = []
     for i in range(n_ptiles1):
@@ -589,24 +589,24 @@ class ImageEncoder(nn.Module):
             pred, n_tiles_per_image, batch_size
         )
 
-    def map_estimate(self, images, height: int, width: int = None):
+    def map_estimate(self, images, slen: int, wlen: int = None):
         # return full estimate of parameters in full image.
-        # NOTE: height*width is size of the image without border padding
+        # NOTE: slen*wlen is size of the image without border padding
 
-        if width is None:
-            width = height
-        assert isinstance(height, int) and isinstance(width, int)
+        if wlen is None:
+            wlen = slen
+        assert isinstance(slen, int) and isinstance(wlen, int)
         # check image compatibility
-        border1 = (images.shape[-2] - height) / 2
-        border2 = (images.shape[-1] - width) / 2
+        border1 = (images.shape[-2] - slen) / 2
+        border2 = (images.shape[-1] - wlen) / 2
         assert border1 == border2, "border paddings on each dimension differ."
-        assert height % self.tile_slen == 0, "incompatible height"
-        assert width % self.tile_slen == 0, "incompatible width"
+        assert slen % self.tile_slen == 0, "incompatible slen"
+        assert wlen % self.tile_slen == 0, "incompatible wlen"
         assert border1 == self.border_padding, "incompatible border"
 
         # obtained estimates per tile, then on full image.
         tile_estimate = self.tile_map_estimate(images)
-        estimate = get_full_params(tile_estimate, height, width)
+        estimate = get_full_params(tile_estimate, slen, wlen)
         return estimate
 
     @property
