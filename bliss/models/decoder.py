@@ -861,3 +861,25 @@ class StarTileDecoder(nn.Module):
         u_indx = int(source_center + r + 1)
 
         return source[:, l_indx:u_indx, l_indx:u_indx]
+
+    def _expand_source(self, source):
+        """Pad the source with zeros so that it is size ptile_slen,"""
+        assert len(source.shape) == 3
+
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        assert len(source.shape) == 3
+
+        source_slen = source.shape[2]
+
+        assert source_slen <= _slen, "Should be using trim source."
+
+        source_expanded = torch.zeros(
+            source.shape[0], _slen, _slen, device=source.device
+        )
+        offset = int((_slen - source_slen) / 2)
+
+        source_expanded[
+            :, offset : (offset + source_slen), offset : (offset + source_slen)
+        ] = source
+
+        return source_expanded
