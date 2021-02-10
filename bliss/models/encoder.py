@@ -52,7 +52,7 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # check slen, wlen
     if wlen is None:
         wlen = slen
-    assert isinstance(slen, int) and isinstance(wlen, dict)
+    assert isinstance(slen, int) and isinstance(wlen, int)
 
     # dictionary of tile_params is consistent and no extraneous keys.
     required = {"n_sources", "locs"}
