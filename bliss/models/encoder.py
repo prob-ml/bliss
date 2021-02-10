@@ -74,10 +74,13 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # calculate tile_slen
     tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
     assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
+    assert slen % tile_slen == 0 and wlen % tile_slen == 0, "incompatible side lengths."
     tile_slen = int(tile_slen)
 
     # coordinates on tiles.
-    tile_coords = _get_tile_coords(slen, wlen, tile_slen).type_as(tile_locs)
+    x_coords = torch.arange(0, slen, tile_slen, device=tile_n_sources.device).long()
+    y_coords = torch.arange(0, wlen, tile_slen, device=tile_n_sources.device).long()
+    tile_coords = torch.cartesian_prod(x_coords, y_coords)
     assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
 
     # get is_on_array
@@ -132,21 +135,6 @@ def _sample_class_weights(class_weights, n_samples=1):
     """Draw a sample from Categorical variable with probabilities class_weights."""
     cat_rv = categorical.Categorical(probs=class_weights)
     return cat_rv.sample((n_samples,)).squeeze()
-
-
-def _get_tile_coords(slen, wlen, tile_slen):
-    """This records (x0, x1) indices each image tile comes from."""
-
-    n_ptiles1 = int(slen / tile_slen)
-    n_ptiles2 = int(wlen / tile_slen)
-
-    tile_coords = []
-    for i in range(n_ptiles1):
-        for j in range(n_ptiles2):
-            tile_coords.append(
-                ((i % n_ptiles1) * tile_slen, (j % n_ptiles2) * tile_slen)
-            )
-    return torch.LongTensor(tile_coords)
 
 
 def _loc_mean_func(x):
