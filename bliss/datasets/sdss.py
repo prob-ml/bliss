@@ -106,7 +106,7 @@ class SloanDigitalSkySurvey(Dataset):
         run=3900,
         camcol=6,
         fields=(269,),
-        bands=[2],
+        bands=range(5),
         stampsize=5,
         overwrite_fits_cache=False,
         overwrite_cache=False,

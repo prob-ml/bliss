@@ -1,3 +1,4 @@
+# @package _group_
 # image and sdss parameters
 sdss:
   sdss_dir: ${paths.data}/sdss
@@ -5,15 +6,14 @@ sdss:
   camcol: 6
   fields:
     - 269
-  bands: [2]
   stampsize: 5
   overwrite_fits_cache: False
   overwrite_cache: False
   center_subpixel: True
-band:
+bands:
   - 2
 
 # i/o parameters
-checkpoint: ${paths.data}/sleep_galaxy_trained1.ckpt
+checkpoint: ${paths.data}/sleep_galaxy_star_trained1.ckpt
 device: "cuda:${gpus.0}"
 output_file: "${paths.data}/var_params.pt"

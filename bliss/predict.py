@@ -9,43 +9,69 @@ models = {cls.__name__: cls for cls in _models}
 
 
 def main(cfg: DictConfig):
-    assert (
-        isinstance(cfg.predict.band, list) and len(cfg.predict.band) == 1
-    ), "Only 1 band supported"
+    bands = list(cfg.predict.bands)
+    assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 
     sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss)
     sleep_net = sleep.SleepPhase.load_from_checkpoint(cfg.predict.checkpoint)
 
     # image for prediction from SDSS
-    image = sdss_obj[0]["image"][cfg.predict.band[0]]
+    image = sdss_obj[0]["image"][bands[0]]
     h, w = image.shape
-    image = image.reshape(1, 1, h, w)
+    image = torch.from_numpy(image.reshape(1, 1, h, w))
 
     # move everything to specified GPU
-    image.to(cfg.predict.device)
     sleep_net.to(cfg.predict.device)
-    image_encoder = sleep_net.image_encoder
+    sleep_net.eval()
+    image_encoder = sleep_net.image_encoder.eval()
 
-    # tile the image
-    ptiles = image_encoder.get_images_in_tiles(image)
+    list_var_params = []
+    clen = 200  # sdss image is too big so we need to chunk it.
 
-    # use MAP estimate on n_sources and locs (for galaxy encoder)
-    tile_n_sources = image_encoder.tile_map_n_sources(ptiles)
-    tile_params = image_encoder.tile_map_estimate(image)
+    with torch.no_grad():
+        for i in range(h // clen):
+            for j in range(w // clen):
+                chunk = image[
+                    :, :, i * clen : (i + 1) * clen, j * clen : (j + 1) * clen
+                ]
+                chunk = chunk.to(cfg.predict.device)
 
-    # get var_params in tiles (excluding galaxy params)
-    var_params = image_encoder.forward(ptiles, tile_n_sources)
+                # tile the image
+                ptiles = image_encoder.get_images_in_tiles(chunk)
 
-    # get galaxy params per tile
-    galaxy_param_mean, galaxy_param_var = sleep_net.forward_galaxy(
-        ptiles, tile_params["locs"]
-    )
+                # use MAP estimate on n_sources and locs (for galaxy encoder)
+                tile_n_sources = image_encoder.tile_map_n_sources(ptiles)
+                tile_params = image_encoder.tile_map_estimate(chunk)
 
-    # collect all parameters into one dictionary
-    var_params["galaxy_param_mean"] = galaxy_param_mean
-    var_params["gaalxy_param_var"] = galaxy_param_var
+                # get var_params in tiles (excluding galaxy params)
+                var_params = image_encoder.forward(ptiles, tile_n_sources)
 
-    # put everything in the cpu before saving
-    var_params = {key: value.cpu() for key, value in var_params.items()}
+                # get galaxy params per tile
+                galaxy_param_mean, galaxy_param_var = sleep_net.forward_galaxy(
+                    ptiles, tile_params["locs"]
+                )
 
-    torch.save(var_params, cfg.predict.output_file)
+                # collect all parameters into one dictionary
+                var_params["galaxy_param_mean"] = galaxy_param_mean
+                var_params["gaalxy_param_var"] = galaxy_param_var
+
+                # put everything in the cpu before saving
+                var_params = {key: value.cpu() for key, value in var_params.items()}
+                list_var_params.append(var_params)
+
+                # delete extra stuff in GPU and clear cache for next iteration.
+                del chunk
+                del ptiles
+                del tile_params
+                del tile_n_sources
+                torch.cuda.empty_cache()
+
+    all_var_params = {}
+    for var_params in list_var_params:
+        for key in var_params:
+            t1 = all_var_params.get(key, torch.tensor([]))
+            t2 = var_params[key]
+            all_var_params[key] = torch.cat((t1, t2))
+
+    if cfg.predict.output_file is not None:
+        torch.save(var_params, cfg.predict.output_file)
