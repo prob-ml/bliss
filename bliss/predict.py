@@ -64,7 +64,8 @@ def main(cfg: DictConfig):
                 del ptiles
                 del tile_params
                 del tile_n_sources
-                torch.cuda.empty_cache()
+                if "cuda" in cfg.predict.device:
+                    torch.cuda.empty_cache()
 
     all_var_params = {}
     for var_params in list_var_params:
