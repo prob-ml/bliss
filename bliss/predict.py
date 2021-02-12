@@ -67,6 +67,10 @@ def main(cfg: DictConfig):
                 if "cuda" in cfg.predict.device:
                     torch.cuda.empty_cache()
 
+                # just for coverage so only run one index.
+                if cfg.predict.testing:
+                    break
+
     all_var_params = {}
     for var_params in list_var_params:
         for key in var_params:

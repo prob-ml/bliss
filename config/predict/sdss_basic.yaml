@@ -17,3 +17,6 @@ bands:
 checkpoint: ${paths.data}/sleep_galaxy_star_trained1.ckpt
 device: "cuda:${gpus.0}"
 output_file: "${paths.data}/var_params.pt"
+
+# coverage for tests
+testing: False
