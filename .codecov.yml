@@ -7,4 +7,4 @@ coverage:
       default:
         informational: true
 comment:
-  after_n_builds: 15
+  after_n_builds: 20
