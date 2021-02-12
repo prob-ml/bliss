@@ -27,4 +27,4 @@ class TestBasicGalaxyTiles:
 
         # check testing results are sensible.
         assert results["acc_gal_counts"] > 0.7
-        assert results["locs_mae"] < 0.7
+        assert results["locs_mae"] < 0.85

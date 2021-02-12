@@ -15,6 +15,12 @@ class GalsimGalaxies(pl.LightningDataModule, Dataset):
         self.batch_size = cfg.dataset.batch_size
         self.n_batches = cfg.dataset.n_batches
 
+        if self.num_workers > 0:
+            raise NotImplementedError(
+                "There is a problem where seed gets reset with multiple workers,"
+                "resulting in same galaxy in every epoch."
+            )
+
         params = self.cfg.dataset.params
         self.slen = int(params.slen)
         assert self.slen % 2 == 1, "Need divisibility by 2"

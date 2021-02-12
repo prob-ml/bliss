@@ -1,8 +1,9 @@
-import torch
 import numpy as np
-from torch.optim import Adam
 from pytorch_lightning import LightningModule, Trainer
+
+import torch
 from torch.utils.data.dataloader import DataLoader
+from torch.optim import Adam
 
 from bliss.models.fnp import (
     DepGraph,
@@ -24,7 +25,6 @@ class TestFNP:
         attt = OneDimFNP(use_set_pooler=True, use_attention=True)
         poolnp = OneDimFNP(use_set_pooler=True, use_attention=False, fb_z=0.5)
         model_names = ["fnp", "fnp plus", "pool - attention", "pool - deep set"]
-        thresholds = [0.5, 0.75, 0.5, 0.75]
         for (i, model) in enumerate([vanilla_fnp, fnpp, attt, poolnp]):
             print(model_names[i])
             train_loader = DataLoader(
@@ -37,17 +37,18 @@ class TestFNP:
                 gpus=devices.gpus,
                 max_epochs=1000 if devices.use_cuda else 2,
                 logger=None,
-                check_val_every_n_epoch=100,
+                check_val_every_n_epoch=100 if devices.use_cuda else 1,
                 checkpoint_callback=False,
             )
             trainer.fit(model, train_loader, val_loader)
             assert model.valid_losses[0] < 70
             assert model.valid_losses[0] > 40
             if devices.use_cuda:
+                thresholds = [0.5, 0.75, 0.5, 0.75]
                 assert min(model.valid_losses) < model.valid_losses[0] * thresholds[i]
             # Smoke test for prediction
-            pred = model.fnp.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
-            pred = model.fnp.predict(
+            model.fnp.predict(od.XM, od.XR, od.yR[0].unsqueeze(0))
+            model.fnp.predict(
                 od.XM, od.XR, od.yR[0].unsqueeze(0), sample=False, sample_Z=False
             )
 
@@ -128,9 +129,9 @@ class OneDimFNP(LightningModule):
         use_plus=False,
         use_set_pooler=False,
         pooling_rep_size=32,
-        pooling_layers=[64],
+        pooling_layers=(64,),
         use_attention=False,
-        st_numheads=[2, 2],
+        st_numheads=(2, 2),
         lr=1e-4,
     ):
         super().__init__()
@@ -198,7 +199,7 @@ class OneDimFNP(LightningModule):
         self.lr = lr
         self.valid_losses = []
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         XR, yR, XM, yM = batch
         loss = self.fnp(XR, yR, XM, yM)
         return loss
