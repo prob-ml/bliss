@@ -1,8 +1,8 @@
 To rebuild the Sphinx documentation:
-1.  ```cd docsrc```
-2.  ```make github```
+
+1. `cd docsrc`
+2. `make clean`
+3. `make github`
 
 The metadata for each module lives in ```docsrc/api/```.
-A particular file is added to the documentation
-by editing the entries of the ```.rst``` files.
-
+A particular file is added to the documentation by editing the entries of the ```.rst``` files.
