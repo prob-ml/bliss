@@ -9,6 +9,8 @@ def main(cfg):
         from bliss.tune import main as task
     elif cfg.mode == "generate":
         from bliss.generate import main as task
+    elif cfg.mode == "predict":
+        from bliss.predict import main as task
     else:
         raise KeyError
     task(cfg)

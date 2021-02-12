@@ -22,3 +22,4 @@ trials_result/
 jupyter/
 outputs/
 bin/
+.pytest_cache/
