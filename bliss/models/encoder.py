@@ -180,10 +180,8 @@ class ImageEncoder(nn.Module):
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         border_padding = (ptile_slen - tile_slen) / 2
-        n_tiles_of_padding = border_padding / tile_slen
-        assert ptile_slen >= tile_slen
+        assert tile_slen <= ptile_slen
         assert border_padding % 1 == 0, "amount of border padding should be an integer"
-        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
         self.border_padding = int(border_padding)
 
         # cache the weights used for the tiling convolution
@@ -283,6 +281,7 @@ class ImageEncoder(nn.Module):
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x pslen x pslen
         assert images.shape[1] == self.n_bands
+        batch_size = images.shape[0]
 
         output = F.conv2d(
             images,
@@ -292,7 +291,14 @@ class ImageEncoder(nn.Module):
         ).permute([0, 2, 3, 1])
 
         # shape = (n_ptiles x n_bands x ptile_slen, ptile_slen)
-        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
+        # not borded slen
+        pslen, pwlen = images.shape[-2:]
+        slen = pslen - self.border_padding * 2
+        wlen = pwlen - self.border_padding * 2
+        n_ptiles_per_image = slen * wlen / self.tile_slen ** 2
+        assert n_ptiles_per_image % 1 == 0, "n_ptiles_per_image must be an int"
+        n_ptiles = int(n_ptiles_per_image * batch_size)
+        return output.reshape(n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
 
     def center_ptiles(self, image_ptiles, tile_locs):
         # assume there is at most one source per tile
