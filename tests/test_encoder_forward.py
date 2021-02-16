@@ -14,7 +14,7 @@ class TestSourceEncoder:
 
         n_image_tiles = 30
         max_detections = 4
-        ptile_slen = 8
+        ptile_slen = 10
         n_bands = 2
         tile_slen = 2
 
@@ -136,7 +136,7 @@ class TestSourceEncoder:
 
         n_image_tiles = 30
         max_detections = 4
-        ptile_slen = 8
+        ptile_slen = 10
         tile_slen = 2
         n_bands = 2
         n_samples = 10

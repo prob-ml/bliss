@@ -45,14 +45,19 @@ def get_star_bool(n_sources, galaxy_bool):
     return star_bool
 
 
-def get_full_params(slen: int, tile_params: dict):
+def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
+
+    # check slen, wlen
+    if wlen is None:
+        wlen = slen
+    assert isinstance(slen, int) and isinstance(wlen, int)
+
+    # dictionary of tile_params is consistent and no extraneous keys.
     required = {"n_sources", "locs"}
     optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes"}
-    assert isinstance(slen, int) and isinstance(tile_params, dict)
     assert required.issubset(tile_params.keys())
-    # tile_params does not contain extraneous keys
     for param_name in tile_params:
         assert param_name in required or param_name in optional
 
@@ -64,13 +69,18 @@ def get_full_params(slen: int, tile_params: dict):
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
-    tile_slen = slen / np.sqrt(n_tiles_per_image)
     n_ptiles = n_samples * n_tiles_per_image
+
+    # calculate tile_slen
+    tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
     assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
+    assert slen % tile_slen == 0 and wlen % tile_slen == 0, "incompatible side lengths."
     tile_slen = int(tile_slen)
 
     # coordinates on tiles.
-    tile_coords = _get_tile_coords(slen, tile_slen).type_as(tile_locs)
+    x_coords = torch.arange(0, slen, tile_slen, device=tile_n_sources.device).long()
+    y_coords = torch.arange(0, wlen, tile_slen, device=tile_n_sources.device).long()
+    tile_coords = torch.cartesian_prod(x_coords, y_coords)
     assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
 
     # get is_on_array
@@ -82,7 +92,9 @@ def get_full_params(slen: int, tile_params: dict):
     tile_is_on_array = tile_is_on_array_sampled.view(n_ptiles, -1)
     _tile_locs = tile_locs.view(n_ptiles, -1, 2)
     bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
-    _locs = (_tile_locs * tile_slen + bias) / slen
+    _locs = _tile_locs * tile_slen + bias
+    _locs[..., 0] /= slen
+    _locs[..., 1] /= wlen
     _locs *= tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip
@@ -90,7 +102,7 @@ def get_full_params(slen: int, tile_params: dict):
     _indx_sort = _argfront(locs[..., 0], dim=1)
     indx_sort = _indx_sort.unsqueeze(2)
     locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
-    locs = locs[:, 0:max_sources, ...]
+    locs = locs[:, 0:max_sources]
 
     params = {"n_sources": n_sources, "locs": locs}
 
@@ -106,7 +118,6 @@ def get_full_params(slen: int, tile_params: dict):
             param = _param.view(n_samples, -1, param_dim)
             param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
             param = param[:, 0:max_sources, ...]
-
             params[param_name] = param
 
     return params
@@ -124,20 +135,6 @@ def _sample_class_weights(class_weights, n_samples=1):
     """Draw a sample from Categorical variable with probabilities class_weights."""
     cat_rv = categorical.Categorical(probs=class_weights)
     return cat_rv.sample((n_samples,)).squeeze()
-
-
-def _get_tile_coords(slen, tile_slen):
-    """This records (x0, x1) indices each image tile comes from."""
-
-    nptiles1 = int(slen / tile_slen)
-    n_ptiles = nptiles1 ** 2
-
-    def return_coords(i):
-        return [(i // nptiles1) * tile_slen, (i % nptiles1) * tile_slen]
-
-    tile_coords = torch.LongTensor([return_coords(i) for i in range(n_ptiles)])
-
-    return tile_coords
 
 
 def _loc_mean_func(x):
@@ -183,8 +180,8 @@ class ImageEncoder(nn.Module):
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         border_padding = (ptile_slen - tile_slen) / 2
-        assert ptile_slen >= tile_slen
-        assert border_padding % 1 == 0, "amount of padding should be an integer"
+        assert tile_slen <= ptile_slen
+        assert border_padding % 1 == 0, "amount of border padding should be an integer"
         self.border_padding = int(border_padding)
 
         # cache the weights used for the tiling convolution
@@ -255,7 +252,7 @@ class ImageEncoder(nn.Module):
     def _cache_tiling_conv_weights(self):
         # this function sets up weights for the "identity" convolution
         # used to divide a full-image into padded tiles.
-        # (see get_image_in_tiles).
+        # (see get_images_in_tiles).
 
         # It has a for-loop, but only needs to be set up once.
         # These weights are set up and  cached during the __init__.
@@ -284,6 +281,7 @@ class ImageEncoder(nn.Module):
 
         assert len(images.shape) == 4  # should be batch_size x n_bands x pslen x pslen
         assert images.shape[1] == self.n_bands
+        batch_size = images.shape[0]
 
         output = F.conv2d(
             images,
@@ -293,7 +291,14 @@ class ImageEncoder(nn.Module):
         ).permute([0, 2, 3, 1])
 
         # shape = (n_ptiles x n_bands x ptile_slen, ptile_slen)
-        return output.reshape(-1, self.n_bands, self.ptile_slen, self.ptile_slen)
+        # not borded slen
+        pslen, pwlen = images.shape[-2:]
+        slen = pslen - self.border_padding * 2
+        wlen = pwlen - self.border_padding * 2
+        n_ptiles_per_image = slen * wlen / self.tile_slen ** 2
+        assert n_ptiles_per_image % 1 == 0, "n_ptiles_per_image must be an int"
+        n_ptiles = int(n_ptiles_per_image * batch_size)
+        return output.reshape(n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
 
     def center_ptiles(self, image_ptiles, tile_locs):
         # assume there is at most one source per tile
@@ -447,12 +452,15 @@ class ImageEncoder(nn.Module):
         # h.shape = (n_ptiles x self.dim_out_all)
         h = self.get_var_params_all(image_ptiles)
 
-        # get probability of n_sources and other params.
-        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
-        # loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        n_source_log_probs = self._get_logprob_n_from_var_params(h)
+        # get probability of params except n_sources
+        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
         var_params = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
+
+        # get probability of n_sources
+        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
+        n_source_log_probs = self._get_logprob_n_from_var_params(h)
         var_params["n_source_log_probs"] = n_source_log_probs
+
         return var_params
 
     def forward(self, image_ptiles, tile_n_sources):
@@ -507,21 +515,16 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def tile_map_estimate(self, images):
+    def tile_map_estimate_from_var_params(self, pred, n_tiles_per_image, batch_size):
+        # batch_size = # of images that will be predicted.
+        # n_tiles_per_image = # tiles/padded_tiles each image is subdivided into.
+        # pred = prediction of variational parameters on each tile.
 
-        # extract image_ptiles
-        batch_size = images.shape[0]
-        image_ptiles = self.get_images_in_tiles(images)
-        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
-
-        h = self.get_var_params_all(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-
+        # tile_n_sources based on log_prob per tile.
         # tile_is_on_array shape = (n_ptiles x max_detections)
+        tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-        pred = self.forward(image_ptiles, tile_n_sources)
 
         # galaxy booleans
         tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
@@ -557,20 +560,47 @@ class ImageEncoder(nn.Module):
             for key, value in tile_estimate.items()
         }
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
-
         return tile_estimate
 
-    def map_estimate(self, slen, images):
+    def tile_map_n_sources(self, image_ptiles):
+        h = self.get_var_params_all(image_ptiles)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
+        return tile_n_sources
+
+    def tile_map_estimate(self, images):
+
+        # extract image_ptiles
+        batch_size = images.shape[0]
+        image_ptiles = self.get_images_in_tiles(images)
+        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+
+        # MAP (for n_sources) prediction on var params on each tile
+        tile_n_sources = self.tile_map_n_sources(image_ptiles)
+        pred = self.forward(image_ptiles, tile_n_sources)
+
+        return self.tile_map_estimate_from_var_params(
+            pred, n_tiles_per_image, batch_size
+        )
+
+    def map_estimate(self, images, slen: int, wlen: int = None):
         # return full estimate of parameters in full image.
-        # NOTE: slen is size of the image without border padding
+        # NOTE: slen*wlen is size of the image without border padding
 
+        if wlen is None:
+            wlen = slen
+        assert isinstance(slen, int) and isinstance(wlen, int)
         # check image compatibility
-        border_padding = (images.shape[-1] - slen) / 2
-        assert slen % self.tile_slen == 0, "incompatible image"
-        assert border_padding == self.border_padding, "incompatible border"
+        border1 = (images.shape[-2] - slen) / 2
+        border2 = (images.shape[-1] - wlen) / 2
+        assert border1 == border2, "border paddings on each dimension differ."
+        assert slen % self.tile_slen == 0, "incompatible slen"
+        assert wlen % self.tile_slen == 0, "incompatible wlen"
+        assert border1 == self.border_padding, "incompatible border"
 
+        # obtained estimates per tile, then on full image.
         tile_estimate = self.tile_map_estimate(images)
-        estimate = get_full_params(slen, tile_estimate)
+        estimate = get_full_params(tile_estimate, slen, wlen)
         return estimate
 
     @property

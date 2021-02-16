@@ -89,10 +89,7 @@ class ImageDecoder(pl.LightningModule):
         # side-length of an image tile.
         # latent variables (locations, fluxes, etc) are drawn per-tile
         self.tile_slen = tile_slen
-        assert (self.slen % self.tile_slen) == 0, (
-            "We assume that the tiles cover the image."
-            + " So slen must be divisible by tile_slen"
-        )
+        assert self.slen % self.tile_slen == 0, "slen must be divisible by tile_slen"
 
         # Images are first rendered on *padded* tiles (aka ptiles).
         # The padded tile consists of the tile and neighboring tiles

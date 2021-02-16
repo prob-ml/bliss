@@ -98,6 +98,8 @@ class TestWake:
             max_epochs=n_epochs,
             min_epochs=n_epochs,
             gpus=devices.gpus,
+            logger=False,
+            checkpoint_callback=False,
         )
 
         wake_trainer.fit(wake_net)

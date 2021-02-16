@@ -102,11 +102,11 @@ class SloanDigitalSkySurvey(Dataset):
     # pylint: disable=dangerous-default-value
     def __init__(
         self,
-        sdss_dir,
+        sdss_dir="data/sdss",
         run=3900,
         camcol=6,
         fields=(269,),
-        bands=[2],
+        bands=range(5),
         stampsize=5,
         overwrite_fits_cache=False,
         overwrite_cache=False,
