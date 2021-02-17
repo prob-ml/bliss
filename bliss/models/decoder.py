@@ -56,6 +56,7 @@ class ImageDecoder(pl.LightningModule):
         loc_max=1.0,
     ):
         super().__init__()
+        ## Set class attributes
         self.n_bands = n_bands
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
@@ -89,6 +90,7 @@ class ImageDecoder(pl.LightningModule):
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
 
+        ## Border Padding
         # Images are first rendered on *padded* tiles (aka ptiles).
         # The padded tile consists of the tile and neighboring tiles
         # The width of the padding is given by ptile_slen.
@@ -105,7 +107,7 @@ class ImageDecoder(pl.LightningModule):
         assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
         self.border_padding = int(border_padding)
 
-        # background
+        ## Background
         assert len(background_values) == n_bands
         background_shape = (
             self.n_bands,
@@ -118,7 +120,7 @@ class ImageDecoder(pl.LightningModule):
         for i in range(n_bands):
             self.background[i] = background_values[i]
 
-        ## Submodules
+        ## Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
             self.n_bands,
             self.slen,
@@ -129,6 +131,7 @@ class ImageDecoder(pl.LightningModule):
             self.psf_slen,
         )
 
+        ## Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
             assert decoder_file is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
