@@ -132,18 +132,6 @@ class ImageDecoder(pl.LightningModule):
         self.f_max = f_max
         self.alpha = alpha  # pareto parameter.
 
-        # caching the underlying
-        # coordinates on which we simulate source
-        # grid: between -1 and 1,
-        # then scale slightly because of the way f.grid_sample
-        # parameterizes the edges: (0, 0) is center of edge pixel
-        self.register_buffer(
-            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
-        )
-
-        # misc
-        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
-
         # background
         assert len(background_values) == n_bands
         background_shape = (
@@ -520,6 +508,11 @@ class TileDecoder(nn.Module):
         self.ptile_slen = ptile_slen
         self.border_padding = border_padding
 
+        # caching the underlying
+        # coordinates on which we simulate source
+        # grid: between -1 and 1,
+        # then scale slightly because of the way f.grid_sample
+        # parameterizes the edges: (0, 0) is center of edge pixel
         self.register_buffer(
             "cached_grid", get_mgrid(self.ptile_slen), persistent=False
         )
