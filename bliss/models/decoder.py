@@ -13,23 +13,6 @@ from .encoder import get_is_on_from_n_sources, get_mgrid
 from . import galaxy_net
 
 
-def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
-    psfield = fits.open(psf_fit_file, ignore_missing_end=True)
-    psf_params = torch.zeros(len(bands), 6)
-    for i, band in enumerate(bands):
-        sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
-        sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
-        sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
-
-        beta = psfield[6].data["psf_beta"][0][band]
-        b = psfield[6].data["psf_b"][0][band]
-        p0 = psfield[6].data["psf_p0"][0][band]
-
-        psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
-
-    return psf_params
-
-
 class ImageDecoder(pl.LightningModule):
     # pylint: disable=too-many-statements
     def __init__(
@@ -607,7 +590,7 @@ class StarTileDecoder(TileDecoder):
         elif ext == ".fits":
             assert n_bands == 2, "only 2 band fit files are supported."
             bands = (2, 3)
-            psf_params = get_fit_file_psf_params(psf_params_file, bands)
+            psf_params = self.get_fit_file_psf_params(psf_params_file, bands)
         else:
             raise NotImplementedError(
                 "Only .npy and .fits extensions are supported for PSF params files."
@@ -666,6 +649,25 @@ class StarTileDecoder(TileDecoder):
         norm = psf.sum(-1).sum(-1)
         psf *= (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
         return psf
+
+    @staticmethod
+    def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
+        psfield = fits.open(psf_fit_file, ignore_missing_end=True)
+        psf_params = torch.zeros(len(bands), 6)
+        for i, band in enumerate(bands):
+            sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
+            sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
+            sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
+
+            beta = psfield[6].data["psf_beta"][0][band]
+            b = psfield[6].data["psf_b"][0][band]
+            p0 = psfield[6].data["psf_p0"][0][band]
+
+            psf_params[i] = torch.log(
+                torch.tensor([sigma1, sigma2, sigmap, beta, b, p0])
+            )
+
+        return psf_params
 
     def _get_psf(self):
         psf_list = []
