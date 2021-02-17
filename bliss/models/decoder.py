@@ -39,23 +39,55 @@ class ImageDecoder(pl.LightningModule):
         tile_slen=2,
         ptile_slen=10,
         border_padding=None,
-        prob_galaxy=0.0,
-        n_galaxy_params=8,
         max_sources=2,
         mean_sources=0.4,
         min_sources=0,
         f_min=1e4,
         f_max=1e6,
         alpha=0.5,
+        prob_galaxy=0.0,
+        n_galaxy_params=8,
         gal_slen=41,
-        psf_slen=25,
         decoder_file=None,
+        psf_slen=25,
         psf_params_file="psf_params.npy",
         background_values=(686.0, 1123.0),
         loc_min=0.0,
         loc_max=1.0,
     ):
         super().__init__()
+        self.n_bands = n_bands
+        # side-length in pixels of an image (image is assumed to be square)
+        assert slen % 1 == 0, "slen must be an integer."
+        self.slen = int(slen)
+        assert self.slen % tile_slen == 0, "slen must be divisible by tile_slen"
+        # side-length of an image tile.
+        # latent variables (locations, fluxes, etc) are drawn per-tile
+        assert tile_slen <= ptile_slen
+        self.tile_slen = tile_slen
+        self.ptile_slen = ptile_slen
+        # per-tile prior parameters on number (and type) of sources
+        self.max_sources = max_sources
+        self.mean_sources = mean_sources
+        self.min_sources = min_sources
+        # per-tile constraints on the location of sources
+        self.loc_min = loc_min
+        self.loc_max = loc_max
+        # prior parameters on fluxes
+        self.f_min = f_min
+        self.f_max = f_max
+        self.alpha = alpha  # pareto parameter.
+        # Galaxy decoder
+        self.prob_galaxy = float(prob_galaxy)
+        self.n_galaxy_params = n_galaxy_params
+        self.gal_slen = gal_slen
+        self.gal_decoder_file = decoder_file
+        # Star Decoder
+        self.psf_slen = psf_slen
+        self.psf_params_file = psf_params_file
+        # number of tiles per image
+        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
+        self.n_tiles_per_image = int(n_tiles_per_image)
 
         # Images are first rendered on *padded* tiles (aka ptiles).
         # The padded tile consists of the tile and neighboring tiles
@@ -64,71 +96,14 @@ class ImageDecoder(pl.LightningModule):
         # avoiding sources getting too close to the edges.
         if border_padding is None:
             # default value matches encoder default.
-            border_padding = (ptile_slen - tile_slen) / 2
+            border_padding = (self.ptile_slen - self.tile_slen) / 2
 
-        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
-        ptile_padding = n_tiles_of_padding * tile_slen
+        n_tiles_of_padding = (self.ptile_slen / self.tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * self.tile_slen
         assert border_padding % 1 == 0, "amount of border padding must be an integer"
         assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
         assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
-        assert tile_slen <= ptile_slen
-
         self.border_padding = int(border_padding)
-        ## Submodules
-        self.star_tile_decoder = StarTileDecoder(
-            n_bands,
-            slen,
-            tile_slen,
-            ptile_slen,
-            self.border_padding,
-            psf_params_file,
-            psf_slen,
-        )
-        if prob_galaxy > 0.0:
-            assert decoder_file is not None
-            self.galaxy_tile_decoder = GalaxyTileDecoder(
-                n_bands,
-                tile_slen,
-                ptile_slen,
-                self.border_padding,
-                gal_slen,
-                n_galaxy_params,
-                decoder_file,
-            )
-        else:
-            self.galaxy_tile_decoder = None
-
-        # side-length in pixels of an image (image is assumed to be square)
-        assert slen % 1 == 0, "slen must be an integer."
-        self.slen = int(slen)
-
-        # side-length of an image tile.
-        # latent variables (locations, fluxes, etc) are drawn per-tile
-        self.tile_slen = tile_slen
-        assert self.slen % self.tile_slen == 0, "slen must be divisible by tile_slen"
-
-        self.ptile_slen = ptile_slen
-
-        # number of tiles per image
-        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
-        self.n_tiles_per_image = int(n_tiles_per_image)
-
-        self.n_bands = n_bands  # number of bands
-
-        # per-tile prior parameters on number (and type) of sources
-        self.max_sources = max_sources
-        self.mean_sources = mean_sources
-        self.min_sources = min_sources
-        self.prob_galaxy = float(prob_galaxy)
-
-        # per-tile constraints on the location of sources
-        self.loc_min = loc_min
-        self.loc_max = loc_max
-
-        # prior parameters on fluxes
-        self.f_min = f_min
-        self.f_max = f_max
-        self.alpha = alpha  # pareto parameter.
 
         # background
         assert len(background_values) == n_bands
@@ -143,8 +118,30 @@ class ImageDecoder(pl.LightningModule):
         for i in range(n_bands):
             self.background[i] = background_values[i]
 
-        # galaxy decoder
-        self.n_galaxy_params = n_galaxy_params
+        ## Submodules
+        self.star_tile_decoder = StarTileDecoder(
+            self.n_bands,
+            self.slen,
+            self.tile_slen,
+            self.ptile_slen,
+            self.border_padding,
+            self.psf_params_file,
+            self.psf_slen,
+        )
+
+        if prob_galaxy > 0.0:
+            assert decoder_file is not None
+            self.galaxy_tile_decoder = GalaxyTileDecoder(
+                self.n_bands,
+                self.tile_slen,
+                self.ptile_slen,
+                self.border_padding,
+                self.gal_slen,
+                self.n_galaxy_params,
+                self.gal_decoder_file,
+            )
+        else:
+            self.galaxy_tile_decoder = None
 
     @property
     def galaxy_decoder(self):
