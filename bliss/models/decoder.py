@@ -534,6 +534,74 @@ class TileDecoder(nn.Module):
         )
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
+    def _trim_source(self, source):
+        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
+        assert len(source.shape) == 3
+
+        # if self.ptile_slen is even, we still make source dimension odd.
+        # otherwise, the source won't have a peak in the center pixel.
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+
+        source_slen = source.shape[2]
+        source_center = (source_slen - 1) / 2
+
+        assert source_slen >= _slen
+
+        r = np.floor(_slen / 2)
+        l_indx = int(source_center - r)
+        u_indx = int(source_center + r + 1)
+
+        return source[:, l_indx:u_indx, l_indx:u_indx]
+
+    def _render_one_source(self, locs, source):
+        """
+        :param locs: is n_ptiles x len((x,y))
+        :param source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
+                        `expanded_psf` (psf repeated multiple times) for the case of of stars.
+                        Or multiple galaxies in the case of galaxies.
+        :return: shape = (n_ptiles x n_bands x slen x slen)
+        """
+        n_ptiles = locs.shape[0]
+        assert source.shape[0] == n_ptiles
+        assert source.shape[1] == self.n_bands
+        assert source.shape[2] == source.shape[3]
+        assert locs.shape[1] == 2
+
+        # scale so that they land in the tile within the padded tile
+        padding = (self.ptile_slen - self.tile_slen) / 2
+        locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
+        # scale locs so they take values between -1 and 1 for grid sample
+        locs = (locs - 0.5) * 2
+        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
+
+        locs_swapped = locs.index_select(1, self.swap)
+        grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
+
+        source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
+        return source_rendered
+
+    def _expand_source(self, source):
+        """Pad the source with zeros so that it is size ptile_slen,"""
+        assert len(source.shape) == 3
+
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        assert len(source.shape) == 3
+
+        source_slen = source.shape[2]
+
+        assert source_slen <= _slen, "Should be using trim source."
+
+        source_expanded = torch.zeros(
+            source.shape[0], _slen, _slen, device=source.device
+        )
+        offset = int((_slen - source_slen) / 2)
+
+        source_expanded[
+            :, offset : (offset + source_slen), offset : (offset + source_slen)
+        ] = source
+
+        return source_expanded
+
 
 class StarTileDecoder(TileDecoder):
     def __init__(
@@ -675,74 +743,6 @@ class StarTileDecoder(TileDecoder):
             return self._expand_source(psf)
         return self._trim_source(psf)
 
-    def _render_one_source(self, locs, source):
-        """
-        :param locs: is n_ptiles x len((x,y))
-        :param source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
-                        `expanded_psf` (psf repeated multiple times) for the case of of stars.
-                        Or multiple galaxies in the case of galaxies.
-        :return: shape = (n_ptiles x n_bands x slen x slen)
-        """
-        n_ptiles = locs.shape[0]
-        assert source.shape[0] == n_ptiles
-        assert source.shape[1] == self.n_bands
-        assert source.shape[2] == source.shape[3]
-        assert locs.shape[1] == 2
-
-        # scale so that they land in the tile within the padded tile
-        padding = (self.ptile_slen - self.tile_slen) / 2
-        locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
-        # scale locs so they take values between -1 and 1 for grid sample
-        locs = (locs - 0.5) * 2
-        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
-
-        locs_swapped = locs.index_select(1, self.swap)
-        grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
-
-        source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
-        return source_rendered
-
-    def _trim_source(self, source):
-        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
-        assert len(source.shape) == 3
-
-        # if self.ptile_slen is even, we still make source dimension odd.
-        # otherwise, the source won't have a peak in the center pixel.
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-
-        source_slen = source.shape[2]
-        source_center = (source_slen - 1) / 2
-
-        assert source_slen >= _slen
-
-        r = np.floor(_slen / 2)
-        l_indx = int(source_center - r)
-        u_indx = int(source_center + r + 1)
-
-        return source[:, l_indx:u_indx, l_indx:u_indx]
-
-    def _expand_source(self, source):
-        """Pad the source with zeros so that it is size ptile_slen,"""
-        assert len(source.shape) == 3
-
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        assert len(source.shape) == 3
-
-        source_slen = source.shape[2]
-
-        assert source_slen <= _slen, "Should be using trim source."
-
-        source_expanded = torch.zeros(
-            source.shape[0], _slen, _slen, device=source.device
-        )
-        offset = int((_slen - source_slen) / 2)
-
-        source_expanded[
-            :, offset : (offset + source_slen), offset : (offset + source_slen)
-        ] = source
-
-        return source_expanded
-
 
 class GalaxyTileDecoder(TileDecoder):
     def __init__(
@@ -848,71 +848,3 @@ class GalaxyTileDecoder(TileDecoder):
 
         outsize = sized_galaxy.shape[-1]
         return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
-
-    def _trim_source(self, source):
-        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
-        assert len(source.shape) == 3
-
-        # if self.ptile_slen is even, we still make source dimension odd.
-        # otherwise, the source won't have a peak in the center pixel.
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-
-        source_slen = source.shape[2]
-        source_center = (source_slen - 1) / 2
-
-        assert source_slen >= _slen
-
-        r = np.floor(_slen / 2)
-        l_indx = int(source_center - r)
-        u_indx = int(source_center + r + 1)
-
-        return source[:, l_indx:u_indx, l_indx:u_indx]
-
-    def _expand_source(self, source):
-        """Pad the source with zeros so that it is size ptile_slen,"""
-        assert len(source.shape) == 3
-
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        assert len(source.shape) == 3
-
-        source_slen = source.shape[2]
-
-        assert source_slen <= _slen, "Should be using trim source."
-
-        source_expanded = torch.zeros(
-            source.shape[0], _slen, _slen, device=source.device
-        )
-        offset = int((_slen - source_slen) / 2)
-
-        source_expanded[
-            :, offset : (offset + source_slen), offset : (offset + source_slen)
-        ] = source
-
-        return source_expanded
-
-    def _render_one_source(self, locs, source):
-        """
-        :param locs: is n_ptiles x len((x,y))
-        :param source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
-                        `expanded_psf` (psf repeated multiple times) for the case of of stars.
-                        Or multiple galaxies in the case of galaxies.
-        :return: shape = (n_ptiles x n_bands x slen x slen)
-        """
-        n_ptiles = locs.shape[0]
-        assert source.shape[0] == n_ptiles
-        assert source.shape[1] == self.n_bands
-        assert source.shape[2] == source.shape[3]
-        assert locs.shape[1] == 2
-
-        # scale so that they land in the tile within the padded tile
-        padding = (self.ptile_slen - self.tile_slen) / 2
-        locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
-        # scale locs so they take values between -1 and 1 for grid sample
-        locs = (locs - 0.5) * 2
-        _grid = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
-
-        locs_swapped = locs.index_select(1, self.swap)
-        grid_loc = _grid - locs_swapped.view(n_ptiles, 1, 1, 2)
-
-        source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
-        return source_rendered
