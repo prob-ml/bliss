@@ -143,14 +143,72 @@ class ImageDecoder(pl.LightningModule):
         else:
             self.galaxy_tile_decoder = None
 
+    def forward(self):
+        return self.star_tile_decoder.psf_forward()
+
+    def sample_prior(self, batch_size=1):
+        n_sources = self._sample_n_sources(batch_size)
+        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
+        locs = self._sample_locs(is_on_array, batch_size)
+
+        n_galaxies, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
+            n_sources, is_on_array
+        )
+        galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
+        fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
+        log_fluxes = self._get_log_fluxes(fluxes)
+
+        # per tile quantities.
+        return {
+            "n_sources": n_sources,
+            "locs": locs,
+            "galaxy_bool": galaxy_bool,
+            "galaxy_params": galaxy_params,
+            "fluxes": fluxes,
+            "log_fluxes": log_fluxes,
+        }
+
+    def render_images(
+        self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
+    ):
+        # returns the **full** image in shape (batch_size x n_bands x slen x slen)
+
+        # n_sources: is (batch_size x n_tiles_per_image)
+        # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
+        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources x 1)
+        # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
+        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x n_bands)
+
+        assert n_sources.shape[0] == locs.shape[0]
+        assert n_sources.shape[1] == locs.shape[1]
+        assert galaxy_bool.shape[-1] == 1
+
+        # first render the padded tiles
+        image_ptiles, var_ptiles = self._render_ptiles(
+            n_sources, locs, galaxy_bool, galaxy_params, fluxes
+        )
+
+        # render the image from padded tiles
+        images = self._construct_full_image_from_ptiles(
+            image_ptiles, self.tile_slen, self.border_padding
+        )
+        var_images = self._construct_full_image_from_ptiles(
+            var_ptiles, self.tile_slen, self.border_padding
+        )
+
+        # add background and noise
+        images += self.background.unsqueeze(0)
+        var_images += self.background.unsqueeze(0)
+        if add_noise:
+            images = self._apply_noise(images)
+
+        return images, var_images
+
     @property
     def galaxy_decoder(self):
         if self.galaxy_tile_decoder is None:
             return None
         return self.galaxy_tile_decoder.galaxy_decoder
-
-    def forward(self):
-        return self.star_tile_decoder.psf_forward()
 
     def _sample_n_sources(self, batch_size):
         # returns number of sources for each batch x tile
@@ -264,28 +322,6 @@ class ImageDecoder(pl.LightningModule):
         galaxy_params = galaxy_params * galaxy_bool
         return galaxy_params
 
-    def sample_prior(self, batch_size=1):
-        n_sources = self._sample_n_sources(batch_size)
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-        locs = self._sample_locs(is_on_array, batch_size)
-
-        n_galaxies, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
-            n_sources, is_on_array
-        )
-        galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
-        fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
-        log_fluxes = self._get_log_fluxes(fluxes)
-
-        # per tile quantities.
-        return {
-            "n_sources": n_sources,
-            "locs": locs,
-            "galaxy_bool": galaxy_bool,
-            "galaxy_params": galaxy_params,
-            "fluxes": fluxes,
-            "log_fluxes": log_fluxes,
-        }
-
     @staticmethod
     def _get_log_fluxes(fluxes):
         log_fluxes = torch.where(
@@ -354,42 +390,6 @@ class ImageDecoder(pl.LightningModule):
 
         images = galaxies.view(img_shape) + stars.view(img_shape)
         var_images = var_images.view(img_shape)
-
-        return images, var_images
-
-    def render_images(
-        self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
-    ):
-        # returns the **full** image in shape (batch_size x n_bands x slen x slen)
-
-        # n_sources: is (batch_size x n_tiles_per_image)
-        # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
-        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources x 1)
-        # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
-        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x n_bands)
-
-        assert n_sources.shape[0] == locs.shape[0]
-        assert n_sources.shape[1] == locs.shape[1]
-        assert galaxy_bool.shape[-1] == 1
-
-        # first render the padded tiles
-        image_ptiles, var_ptiles = self._render_ptiles(
-            n_sources, locs, galaxy_bool, galaxy_params, fluxes
-        )
-
-        # render the image from padded tiles
-        images = self._construct_full_image_from_ptiles(
-            image_ptiles, self.tile_slen, self.border_padding
-        )
-        var_images = self._construct_full_image_from_ptiles(
-            var_ptiles, self.tile_slen, self.border_padding
-        )
-
-        # add background and noise
-        images += self.background.unsqueeze(0)
-        var_images += self.background.unsqueeze(0)
-        if add_noise:
-            images = self._apply_noise(images)
 
         return images, var_images
 
