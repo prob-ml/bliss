@@ -190,17 +190,8 @@ class SleepPhase(pl.LightningModule):
         assert centered_ptiles.shape[-1] == self.cropped_slen
 
         # remove background before encoding
-        background_values = self.image_decoder.background.mean((1, 2))
-        ptile_background = torch.zeros(
-            1,
-            self.image_encoder.n_bands,
-            self.cropped_slen,
-            self.cropped_slen,
-            device=centered_ptiles.device,
-        )
-        for b in range(ptile_background.shape[1]):
-            ptile_background[:, b] = background_values[b]
-        centered_ptiles -= ptile_background
+        ptile_background = self.image_decoder.get_background(self.cropped_slen)
+        centered_ptiles -= ptile_background.unsqueeze(0)
 
         # TODO: Should we zero out tiles without galaxies during training?
         # we can assume there is one galaxy per_tile and encode each tile independently.
@@ -214,16 +205,12 @@ class SleepPhase(pl.LightningModule):
     def forward(self, image_ptiles, n_sources):
         raise NotImplementedError()
 
-    def tile_map_estimate(self, batch):
-        # NOTE: batch is per tile since it comes from image_decoder
-        images = batch["images"]
-        tile_galaxy_params = batch["galaxy_params"]
-        tile_params = self.image_encoder.tile_map_estimate(images)
-
+    def _tile_images_map_estimate(self, images):
+        tile_est = self.image_encoder.tile_map_estimate(images)
         if self.use_galaxy_encoder:
             batch_size = images.shape[0]
             max_detections = 1
-            tile_locs = tile_params["locs"].reshape(-1, max_detections, 2)
+            tile_locs = tile_est["locs"].reshape(-1, max_detections, 2)
             image_ptiles = self.image_encoder.get_images_in_tiles(images)
             tile_galaxy_params, _ = self.forward_galaxy(image_ptiles, tile_locs)
             n_galaxy_params = tile_galaxy_params.shape[-1]
@@ -234,13 +221,22 @@ class SleepPhase(pl.LightningModule):
                 n_galaxy_params,
             )
 
-        # TODO: True galaxy params are not necessarily consistent with MAP estimated
-        # need to do some matching to ensure correctness of residual images?
-        # maybe doesn't matter because only care about detection if not estimating
-        # galaxy_parameters.
-        max_sources = tile_params["locs"].shape[2]
-        tile_galaxy_params = tile_galaxy_params[:, :, :max_sources].contiguous()
-        tile_est = {**tile_params, "galaxy_params": tile_galaxy_params}
+            # TODO: True galaxy params are not necessarily consistent with MAP estimated
+            # need to do some matching to ensure correctness of residual images?
+            # maybe doesn't matter because only care about detection if not estimating
+            # galaxy_parameters.
+            max_sources = tile_est["locs"].shape[2]
+            tile_galaxy_params = tile_galaxy_params[:, :, :max_sources].contiguous()
+            tile_est["galaxy_params"] = tile_galaxy_params
+
+        return tile_est
+
+    def tile_map_estimate(self, batch):
+        # NOTE: batch is per tile since it comes from image_decoder
+        images = batch["images"]
+        tile_est = self._tile_images_map_estimate(images)
+        if "galaxy_params" not in tile_est:
+            tile_est["galaxy_params"] = batch["galaxy_params"]
         return tile_est
 
     def get_galaxy_loss(self, batch):
