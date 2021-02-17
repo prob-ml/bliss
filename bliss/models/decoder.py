@@ -57,13 +57,30 @@ class ImageDecoder(pl.LightningModule):
     ):
         super().__init__()
 
+        # Images are first rendered on *padded* tiles (aka ptiles).
+        # The padded tile consists of the tile and neighboring tiles
+        # The width of the padding is given by ptile_slen.
+        # border_padding is the amount of padding we leave in the final image. Useful for
+        # avoiding sources getting too close to the edges.
+        if border_padding is None:
+            # default value matches encoder default.
+            border_padding = (ptile_slen - tile_slen) / 2
+
+        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * tile_slen
+        assert border_padding % 1 == 0, "amount of border padding must be an integer"
+        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
+        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
+        assert tile_slen <= ptile_slen
+
+        self.border_padding = int(border_padding)
         ## Submodules
         self.star_tile_decoder = StarTileDecoder(
             n_bands,
             slen,
             tile_slen,
             ptile_slen,
-            border_padding,
+            self.border_padding,
             background_values,
             psf_params_file,
             psf_slen,
@@ -74,7 +91,7 @@ class ImageDecoder(pl.LightningModule):
                 n_bands,
                 tile_slen,
                 ptile_slen,
-                border_padding,
+                self.border_padding,
                 gal_slen,
                 n_galaxy_params,
                 decoder_file,
@@ -91,22 +108,7 @@ class ImageDecoder(pl.LightningModule):
         self.tile_slen = tile_slen
         assert self.slen % self.tile_slen == 0, "slen must be divisible by tile_slen"
 
-        # Images are first rendered on *padded* tiles (aka ptiles).
-        # The padded tile consists of the tile and neighboring tiles
-        # The width of the padding is given by ptile_slen.
-        # border_padding is the amount of padding we leave in the final image. Useful for
-        # avoiding sources getting too close to the edges.
-        if border_padding is None:
-            # default value matches encoder default.
-            border_padding = (ptile_slen - tile_slen) / 2
 
-        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
-        ptile_padding = n_tiles_of_padding * tile_slen
-        assert border_padding % 1 == 0, "amount of border padding must be an integer"
-        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
-        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
-        assert tile_slen <= ptile_slen
-        self.border_padding = int(border_padding)
         self.ptile_slen = ptile_slen
 
         # number of tiles per image
@@ -516,18 +518,7 @@ class TileDecoder(nn.Module):
         self.n_bands = n_bands
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-
-        if border_padding is None:
-            # default value matches encoder default.
-            border_padding = (ptile_slen - tile_slen) / 2
-
-        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
-        ptile_padding = n_tiles_of_padding * tile_slen
-        assert border_padding % 1 == 0, "amount of border padding must be an integer"
-        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
-        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
-        assert tile_slen <= ptile_slen
-        self.border_padding = int(border_padding)
+        self.border_padding = border_padding
 
         self.register_buffer(
             "cached_grid", get_mgrid(self.ptile_slen), persistent=False
