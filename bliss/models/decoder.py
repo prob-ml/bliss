@@ -510,22 +510,13 @@ class ImageDecoder(pl.LightningModule):
         return canvas[:, :, x0:x1, x0:x1]
 
 
-class StarTileDecoder(nn.Module):
-    def __init__(
-        self,
-        n_bands,
-        slen,
-        tile_slen,
-        ptile_slen,
-        border_padding,
-        background_values,
-        psf_params_file,
-        psf_slen,
-    ):
+class TileDecoder(nn.Module):
+    def __init__(self, n_bands, tile_slen, ptile_slen, border_padding):
         super().__init__()
         self.n_bands = n_bands
-        self.slen = slen
         self.tile_slen = tile_slen
+        self.ptile_slen = ptile_slen
+
         if border_padding is None:
             # default value matches encoder default.
             border_padding = (ptile_slen - tile_slen) / 2
@@ -537,14 +528,30 @@ class StarTileDecoder(nn.Module):
         assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
         assert tile_slen <= ptile_slen
         self.border_padding = int(border_padding)
-        self.ptile_slen = ptile_slen
 
         self.register_buffer(
             "cached_grid", get_mgrid(self.ptile_slen), persistent=False
         )
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-        assert len(background_values) == n_bands
+
+class StarTileDecoder(TileDecoder):
+    def __init__(
+        self,
+        n_bands,
+        slen,
+        tile_slen,
+        ptile_slen,
+        border_padding,
+        background_values,
+        psf_params_file,
+        psf_slen,
+    ):
+        super().__init__(n_bands, tile_slen, ptile_slen, border_padding)
+
+        self.slen = slen
+
+        assert len(background_values) == self.n_bands
         background_shape = (
             self.n_bands,
             self.slen + 2 * self.border_padding,
@@ -553,7 +560,7 @@ class StarTileDecoder(nn.Module):
         self.register_buffer(
             "background", torch.zeros(background_shape), persistent=False
         )
-        for i in range(n_bands):
+        for i in range(self.n_bands):
             self.background[i] = background_values[i]
 
         ext = Path(psf_params_file).suffix
@@ -737,7 +744,7 @@ class StarTileDecoder(nn.Module):
         return source_expanded
 
 
-class GalaxyTileDecoder(nn.Module):
+class GalaxyTileDecoder(TileDecoder):
     def __init__(
         self,
         n_bands,
@@ -748,27 +755,7 @@ class GalaxyTileDecoder(nn.Module):
         n_galaxy_params,
         decoder_file,
     ):
-        super().__init__()
-        self.n_bands = n_bands
-        self.tile_slen = tile_slen
-        if border_padding is None:
-            # default value matches encoder default.
-            border_padding = (ptile_slen - tile_slen) / 2
-
-        n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
-        ptile_padding = n_tiles_of_padding * tile_slen
-        assert border_padding % 1 == 0, "amount of border padding must be an integer"
-        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
-        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
-        assert tile_slen <= ptile_slen
-        self.border_padding = int(border_padding)
-        self.ptile_slen = ptile_slen
-
-        self.register_buffer(
-            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
-        )
-        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
-        self.ptile_slen = ptile_slen
+        super().__init__(n_bands, tile_slen, ptile_slen, border_padding)
 
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params
