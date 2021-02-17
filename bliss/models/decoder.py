@@ -81,7 +81,6 @@ class ImageDecoder(pl.LightningModule):
             tile_slen,
             ptile_slen,
             self.border_padding,
-            background_values,
             psf_params_file,
             psf_slen,
         )
@@ -594,25 +593,12 @@ class StarTileDecoder(TileDecoder):
         tile_slen,
         ptile_slen,
         border_padding,
-        background_values,
         psf_params_file,
         psf_slen,
     ):
         super().__init__(n_bands, tile_slen, ptile_slen, border_padding)
 
         self.slen = slen
-
-        assert len(background_values) == self.n_bands
-        background_shape = (
-            self.n_bands,
-            self.slen + 2 * self.border_padding,
-            self.slen + 2 * self.border_padding,
-        )
-        self.register_buffer(
-            "background", torch.zeros(background_shape), persistent=False
-        )
-        for i in range(self.n_bands):
-            self.background[i] = background_values[i]
 
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
@@ -720,7 +706,6 @@ class StarTileDecoder(TileDecoder):
         assert len(psf.shape) == 3
         assert psf.shape[1] == psf_slen
         assert (psf_slen % 2) == 1
-        assert self.background.shape[0] == psf.shape[0] == self.n_bands
 
         if self.ptile_slen >= psf.shape[-1]:
             return self._expand_source(psf)
