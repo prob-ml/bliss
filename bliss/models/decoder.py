@@ -108,7 +108,6 @@ class ImageDecoder(pl.LightningModule):
         self.tile_slen = tile_slen
         assert self.slen % self.tile_slen == 0, "slen must be divisible by tile_slen"
 
-
         self.ptile_slen = ptile_slen
 
         # number of tiles per image
