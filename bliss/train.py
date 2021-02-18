@@ -36,7 +36,7 @@ def setup_paths(cfg: DictConfig, enforce_overwrite=True):
     output.mkdir(parents=False, exist_ok=not enforce_overwrite)
 
     for p in paths.values():
-        assert Path(p).exists(), f"path {p.as_posix()} does not exist"
+        assert Path(p).exists(), f"path {Path(p).as_posix()} does not exist"
 
     return paths
 
