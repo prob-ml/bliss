@@ -13,6 +13,14 @@ def main(cfg: DictConfig):
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 
     sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss)
+
+    ## To regenerate this checkpoint:
+    ## mode="train"
+    ## model="sleep_galaxy_measure_stars1"
+    ## dataset="default"
+    ## optimizer.params.lr=1e-4
+    ## training.n_epochs=201
+    ## Save the output in cfg.predict.checkpoint
     sleep_net = sleep.SleepPhase.load_from_checkpoint(cfg.predict.checkpoint)
 
     # image for prediction from SDSS

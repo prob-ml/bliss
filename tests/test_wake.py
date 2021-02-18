@@ -52,9 +52,11 @@ class TestWake:
 
         # now perturb psf parameters and get new decoder
         image_decoder_perturbed = deepcopy(image_decoder)
-        true_psf_params = image_decoder.params
+        true_psf_params = image_decoder.star_tile_decoder.params
         psf_params_perturbed = true_psf_params * 1.1
-        image_decoder_perturbed.params = nn.Parameter(psf_params_perturbed)
+        image_decoder_perturbed.star_tile_decoder.params = nn.Parameter(
+            psf_params_perturbed
+        )
         psf_init = image_decoder_perturbed.forward().detach()
 
         def eval_decoder_loss(decoder):
