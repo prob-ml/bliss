@@ -785,17 +785,14 @@ class GalaxyTileDecoder(TileDecoder):
         single_galaxies, single_vars = self._render_single_galaxies(
             galaxy_params, galaxy_bool
         )
-        for n in range(max_sources):
-            galaxy_bool_n = galaxy_bool[:, n]
-            locs_n = locs[:, n, :]
-            _galaxy = single_galaxies[:, n, :, :, :]
-            _var = single_vars[:, n, :, :, :]
-            galaxy = _galaxy * galaxy_bool_n.view(-1, 1, 1, 1)
-            var = _var * galaxy_bool_n.view(-1, 1, 1, 1)
-            one_galaxy = self.tiler.render_one_source(locs_n, galaxy)
-            one_var = self.tiler.render_one_source(locs_n, var)
-            ptile += one_galaxy
-            var_ptile += one_var
+
+        ptile = self.tiler.render_tile(
+            locs, single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1)
+        )
+        var_ptile = self.tiler.render_tile(
+            locs, single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1)
+        )
+
 
         return ptile, var_ptile
 
