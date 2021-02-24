@@ -81,7 +81,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
     return checkpoint_callback
 
 
-def main(cfg: DictConfig):
+def train(cfg: DictConfig):
 
     # setup paths and seed
     paths = setup_paths(cfg, enforce_overwrite=False)

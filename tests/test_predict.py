@@ -13,4 +13,4 @@ def test_predict_run(devices):
     overrides = [f"{k}={v}" for k, v in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
-        predict.main(cfg)
+        predict.predict(cfg)
