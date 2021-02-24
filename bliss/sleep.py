@@ -205,8 +205,11 @@ class SleepPhase(pl.LightningModule):
     def forward(self, image_ptiles, n_sources):
         raise NotImplementedError()
 
-    def _tile_images_map_estimate(self, images):
+    def tile_images_map_estimate(self, images):
+        # (1) calculate MAP of detection encoder
         tile_est = self.image_encoder.tile_map_estimate(images)
+
+        # (2) then add galaxy encoder estimate if turned on.
         if self.use_galaxy_encoder:
             batch_size = images.shape[0]
             max_detections = 1
@@ -234,8 +237,8 @@ class SleepPhase(pl.LightningModule):
     def tile_map_estimate(self, batch):
         # NOTE: batch is per tile since it comes from image_decoder
         images = batch["images"]
-        tile_est = self._tile_images_map_estimate(images)
-        if "galaxy_params" not in tile_est:
+        tile_est = self.tile_images_map_estimate(images)
+        if not self.use_galaxy_encoder:
             tile_est["galaxy_params"] = batch["galaxy_params"]
         return tile_est
 
