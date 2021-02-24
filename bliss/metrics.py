@@ -34,7 +34,6 @@ def inner_join_locs(locs1, locs2):
 
 
 def inner_join_locs_and_fluxes(locs1, fluxes1, locs2, fluxes2):
-
     # permutes locations and fluxes using the Hungarian algorithm
     # on locations to find matches.
     # see `inner_join_locs`.

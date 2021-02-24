@@ -107,7 +107,7 @@ class ImageDecoder(pl.LightningModule):
 
         ## Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
-            assert decoder_file is not None
+            assert self.gal_decoder_file is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
                 self.n_bands,
                 self.tile_slen,
