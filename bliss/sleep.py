@@ -511,7 +511,7 @@ class SleepPhase(pl.LightningModule):
             gal_params_mae = errors["galaxy_params_mae_vec"].float().mean()
 
         # image metrics
-        background = self.image_decoder.background
+        background = self.image_decoder.get_background(true_images.shape[-1])
         image_diff = true_images - recon_images
         diff_fluxes = true_images.sum((1, 2, 3)) - recon_images.sum((1, 2, 3))
         # TODO: normalize the expression below?
