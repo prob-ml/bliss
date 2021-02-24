@@ -582,7 +582,7 @@ class StarTileDecoder(TileDecoder):
 
     def forward(self, locs, fluxes, star_bool):
         # locs: is (n_ptiles x max_num_stars x 2)
-        # fluxes: Is (n_ptiles x n_bands x max_stars)
+        # fluxes: Is (n_ptiles x max_stars x n_bands)
         # star_bool: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
@@ -599,8 +599,10 @@ class StarTileDecoder(TileDecoder):
 
         # all stars are just the PSF so we copy it.
         expanded_psf = psf.expand(n_ptiles, max_sources, self.n_bands, -1, -1)
+        sources = expanded_psf * fluxes.unsqueeze(-1).unsqueeze(-1)
+        sources *= star_bool.unsqueeze(-1).unsqueeze(-1)
 
-        return self.tiler.render_tile(locs, expanded_psf, fluxes, star_bool)
+        return self.tiler.render_tile(locs, sources)
 
     def psf_forward(self):
         psf = self._get_psf()
@@ -721,29 +723,25 @@ class Tiler(nn.Module):
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
-    def render_tile(self, locs, sources, fluxes, star_bool):
-        # locs: is (n_ptiles x max_num_stars x 2)
-        # fluxes: Is (n_ptiles x max_nunm_stars x n_bands)
-        # star_bool: Is (n_ptiles x max_stars x 1)
-        # max_sources obtained from locs, allows for more flexibility when rendering.
+    def render_tile(self, locs, sources):
+        """
+        :param locs: is (n_ptiles x max_num_stars x 2)
+        :param sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
 
-        n_ptiles = locs.shape[0]
+        :return: ptile = (n_ptiles x n_bands x slen x slen)
+        """
         max_sources = locs.shape[1]
-        n_bands = fluxes.shape[2]
-        ptile_shape = (n_ptiles, n_bands, self.ptile_slen, self.ptile_slen)
+        ptile_shape = (
+            sources.size(0),
+            sources.size(2),
+            self.ptile_slen,
+            self.ptile_slen,
+        )
         ptile = torch.zeros(ptile_shape, device=locs.device)
 
-        assert fluxes.shape[0] == star_bool.shape[0] == n_ptiles
-        assert fluxes.shape[1] == star_bool.shape[1] == max_sources
-        assert star_bool.shape[2] == 1
-
         for n in range(max_sources):
-            star_bool_n = star_bool[:, n]
-            locs_n = locs[:, n, :]
-            fluxes_n = fluxes[:, n, :] * star_bool_n.view(-1, 1)
-            fluxes_n = fluxes_n.view(n_ptiles, n_bands, 1, 1)
-            one_star = self.render_one_source(locs_n, sources[:, n])
-            ptile += one_star * fluxes_n
+            one_star = self.render_one_source(locs[:, n, :], sources[:, n])
+            ptile += one_star
 
         return ptile
 
