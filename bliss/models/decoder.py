@@ -488,7 +488,7 @@ class TileDecoder(nn.Module):
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         self.border_padding = border_padding
-        self.tiler = Tiler(ptile_slen)
+        self.tiler = Tiler(tile_slen, ptile_slen)
 
         # caching the underlying
         # coordinates on which we simulate source
@@ -689,8 +689,9 @@ class Tiler(nn.Module):
     This class creates an image tile from multiple sources.
     """
 
-    def __init__(self, ptile_slen):
+    def __init__(self, tile_slen, ptile_slen):
         super().__init__()
+        self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
 
         # caching the underlying
@@ -715,8 +716,6 @@ class Tiler(nn.Module):
         :return: shape = (n_ptiles x n_bands x slen x slen)
         """
         n_ptiles = locs.shape[0]
-        assert source.shape[0] == n_ptiles
-        assert source.shape[1] == self.n_bands
         assert source.shape[2] == source.shape[3]
         assert locs.shape[1] == 2
 
