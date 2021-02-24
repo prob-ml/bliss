@@ -478,9 +478,6 @@ class ImageDecoder(pl.LightningModule):
         return canvas[:, :, x0:x1, x0:x1]
 
 
-
-
-
 class Tiler(nn.Module):
     """
     This class creates an image tile from multiple sources.
