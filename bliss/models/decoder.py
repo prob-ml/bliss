@@ -478,59 +478,7 @@ class ImageDecoder(pl.LightningModule):
         return canvas[:, :, x0:x1, x0:x1]
 
 
-class TileDecoder(nn.Module):
-    def __init__(self, n_bands, tile_slen, ptile_slen):
-        super().__init__()
-        self.n_bands = n_bands
-        self.ptile_slen = ptile_slen
-        self.tiler = Tiler(tile_slen, ptile_slen)
 
-        # caching the underlying
-        # coordinates on which we simulate source
-        # grid: between -1 and 1,
-        # then scale slightly because of the way f.grid_sample
-        # parameterizes the edges: (0, 0) is center of edge pixel
-
-    def _trim_source(self, source):
-        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
-        assert len(source.shape) == 3
-
-        # if self.ptile_slen is even, we still make source dimension odd.
-        # otherwise, the source won't have a peak in the center pixel.
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-
-        source_slen = source.shape[2]
-        source_center = (source_slen - 1) / 2
-
-        assert source_slen >= _slen
-
-        r = np.floor(_slen / 2)
-        l_indx = int(source_center - r)
-        u_indx = int(source_center + r + 1)
-
-        return source[:, l_indx:u_indx, l_indx:u_indx]
-
-    def _expand_source(self, source):
-        """Pad the source with zeros so that it is size ptile_slen,"""
-        assert len(source.shape) == 3
-
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        assert len(source.shape) == 3
-
-        source_slen = source.shape[2]
-
-        assert source_slen <= _slen, "Should be using trim source."
-
-        source_expanded = torch.zeros(
-            source.shape[0], _slen, _slen, device=source.device
-        )
-        offset = int((_slen - source_slen) / 2)
-
-        source_expanded[
-            :, offset : (offset + source_slen), offset : (offset + source_slen)
-        ] = source
-
-        return source_expanded
 
 
 class Tiler(nn.Module):
@@ -603,8 +551,56 @@ class Tiler(nn.Module):
 
         return ptile
 
+    def fit_source_to_ptile(self, source):
+        if self.ptile_slen >= source.shape[-1]:
+            fitted_source = self._expand_source(source)
+        else:
+            fitted_source = self._trim_source(source)
+        return fitted_source
 
-class StarTileDecoder(TileDecoder):
+    def _expand_source(self, source):
+        """Pad the source with zeros so that it is size ptile_slen,"""
+        assert len(source.shape) == 3
+
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        assert len(source.shape) == 3
+
+        source_slen = source.shape[2]
+
+        assert source_slen <= _slen, "Should be using trim source."
+
+        source_expanded = torch.zeros(
+            source.shape[0], _slen, _slen, device=source.device
+        )
+        offset = int((_slen - source_slen) / 2)
+
+        source_expanded[
+            :, offset : (offset + source_slen), offset : (offset + source_slen)
+        ] = source
+
+        return source_expanded
+
+    def _trim_source(self, source):
+        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
+        assert len(source.shape) == 3
+
+        # if self.ptile_slen is even, we still make source dimension odd.
+        # otherwise, the source won't have a peak in the center pixel.
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+
+        source_slen = source.shape[2]
+        source_center = (source_slen - 1) / 2
+
+        assert source_slen >= _slen
+
+        r = np.floor(_slen / 2)
+        l_indx = int(source_center - r)
+        u_indx = int(source_center + r + 1)
+
+        return source[:, l_indx:u_indx, l_indx:u_indx]
+
+
+class StarTileDecoder(nn.Module):
     def __init__(
         self,
         n_bands,
@@ -613,7 +609,9 @@ class StarTileDecoder(TileDecoder):
         psf_params_file,
         psf_slen,
     ):
-        super().__init__(n_bands, tile_slen, ptile_slen)
+        super().__init__()
+        self.n_bands = n_bands
+        self.tiler = Tiler(tile_slen, ptile_slen)
 
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
@@ -732,12 +730,10 @@ class StarTileDecoder(TileDecoder):
         assert psf.shape[1] == psf_slen
         assert (psf_slen % 2) == 1
 
-        if self.ptile_slen >= psf.shape[-1]:
-            return self._expand_source(psf)
-        return self._trim_source(psf)
+        return self.tiler.fit_source_to_ptile(psf)
 
 
-class GalaxyTileDecoder(TileDecoder):
+class GalaxyTileDecoder(nn.Module):
     def __init__(
         self,
         n_bands,
@@ -747,7 +743,10 @@ class GalaxyTileDecoder(TileDecoder):
         n_galaxy_params,
         decoder_file,
     ):
-        super().__init__(n_bands, tile_slen, ptile_slen)
+        super().__init__()
+        self.n_bands = n_bands
+        self.tiler = Tiler(tile_slen, ptile_slen)
+        self.ptile_slen = ptile_slen
 
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params
@@ -829,10 +828,7 @@ class GalaxyTileDecoder(TileDecoder):
         galaxy_slen = galaxy.shape[3]
         galaxy = galaxy.view(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
 
-        if self.ptile_slen >= galaxy.shape[-1]:
-            sized_galaxy = self._expand_source(galaxy)
-        else:
-            sized_galaxy = self._trim_source(galaxy)
+        sized_galaxy = self.tiler.fit_source_to_ptile(galaxy)
 
         outsize = sized_galaxy.shape[-1]
         return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
