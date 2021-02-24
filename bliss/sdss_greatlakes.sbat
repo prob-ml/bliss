@@ -1,0 +1,26 @@
+#!/bin/bash
+
+#SBATCH --job-name=bliss_sdss
+#SBATCH --partition=gpu
+#SBATCH --nodes=4
+#SBATCH --ntasks-per-node=4
+#SBATCH --gpus-per-node=4
+#SBATCH --mem-per-gpu=2000m
+##SBATCH --time=00:15:00
+##SBATCH --account=test
+#SBATCH --mail-type=END
+#SBATCH --mail-user=zzhaozhe@umich.edu
+
+# recommend using the following lines to write output to indicate your script is working
+if [[ $SLURM_JOB_NODELIST ]] ; then
+echo "Running on"
+scontrol show hostnames $SLURM_JOB_NODELIST
+fi
+
+# Install bliss
+git clone https://github.com/prob-ml/bliss.git
+cd bliss
+poetry install
+poetry shell
+
+# Run the job
