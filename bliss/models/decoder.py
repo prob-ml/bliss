@@ -103,11 +103,13 @@ class ImageDecoder(pl.LightningModule):
         for i in range(n_bands):
             self.background[i] = background_values[i]
 
+        ## Submodule for managing tiles (no learned parameters)
+        self.tiler = Tiler(tile_slen, ptile_slen)
+
         ## Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
+            self.tiler,
             self.n_bands,
-            self.tile_slen,
-            self.ptile_slen,
             self.psf_params_file,
             self.psf_slen,
         )
@@ -600,15 +602,14 @@ class Tiler(nn.Module):
 class StarTileDecoder(nn.Module):
     def __init__(
         self,
+        tiler,
         n_bands,
-        tile_slen,
-        ptile_slen,
         psf_params_file,
         psf_slen,
     ):
         super().__init__()
+        self.tiler = tiler
         self.n_bands = n_bands
-        self.tiler = Tiler(tile_slen, ptile_slen)
 
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
@@ -757,9 +758,6 @@ class GalaxyTileDecoder(nn.Module):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
-        ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=locs.device)
-        var_ptile = torch.zeros(ptile_shape, device=locs.device)
 
         assert self.galaxy_decoder is not None
         galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
