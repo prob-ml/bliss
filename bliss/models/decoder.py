@@ -106,10 +106,8 @@ class ImageDecoder(pl.LightningModule):
         ## Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
             self.n_bands,
-            self.slen,
             self.tile_slen,
             self.ptile_slen,
-            self.border_padding,
             self.psf_params_file,
             self.psf_slen,
         )
@@ -121,7 +119,6 @@ class ImageDecoder(pl.LightningModule):
                 self.n_bands,
                 self.tile_slen,
                 self.ptile_slen,
-                self.border_padding,
                 self.gal_slen,
                 self.n_galaxy_params,
                 self.gal_decoder_file,
@@ -482,12 +479,10 @@ class ImageDecoder(pl.LightningModule):
 
 
 class TileDecoder(nn.Module):
-    def __init__(self, n_bands, tile_slen, ptile_slen, border_padding):
+    def __init__(self, n_bands, tile_slen, ptile_slen):
         super().__init__()
         self.n_bands = n_bands
-        self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-        self.border_padding = border_padding
         self.tiler = Tiler(tile_slen, ptile_slen)
 
         # caching the underlying
@@ -613,16 +608,12 @@ class StarTileDecoder(TileDecoder):
     def __init__(
         self,
         n_bands,
-        slen,
         tile_slen,
         ptile_slen,
-        border_padding,
         psf_params_file,
         psf_slen,
     ):
-        super().__init__(n_bands, tile_slen, ptile_slen, border_padding)
-
-        self.slen = slen
+        super().__init__(n_bands, tile_slen, ptile_slen)
 
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
@@ -752,12 +743,11 @@ class GalaxyTileDecoder(TileDecoder):
         n_bands,
         tile_slen,
         ptile_slen,
-        border_padding,
         gal_slen,
         n_galaxy_params,
         decoder_file,
     ):
-        super().__init__(n_bands, tile_slen, ptile_slen, border_padding)
+        super().__init__(n_bands, tile_slen, ptile_slen)
 
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params
