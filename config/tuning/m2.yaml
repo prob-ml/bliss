@@ -2,7 +2,7 @@
 search_space:
   channel:
     - 8
-    - 30
+    - 23
   hidden:
     - 64
     - 321

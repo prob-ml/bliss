@@ -253,7 +253,7 @@ class ImageEncoder(nn.Module):
         spatial_dropout=0,
         dropout=0,
         hidden=128,
-        downsample_with_pool=True,
+        downsample_with_pool=False,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
