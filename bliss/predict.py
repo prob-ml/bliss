@@ -8,7 +8,7 @@ _models = [sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
 
 
-def main(cfg: DictConfig):
+def predict(cfg: DictConfig):
     bands = list(cfg.predict.bands)
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 

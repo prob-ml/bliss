@@ -10,4 +10,4 @@ def test_generate_run(devices):
     with initialize(config_path="../config"):
 
         cfg = compose("config", overrides=overrides)
-        generate.main(cfg)
+        generate.generate(cfg)
