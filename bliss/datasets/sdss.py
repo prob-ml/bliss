@@ -321,10 +321,16 @@ class SloanDigitalSkySurvey(Dataset):
 
             frame.close()
 
+        # use 'r' band when possible.
+        if len(self.bands) > 2:
+            band_idx = 2
+        else:
+            band_idx = 0
+
         stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(
-            po_fits, image_list[2], wcs_list[2], background_list[2]
+            po_fits, image_list[band_idx], wcs_list[band_idx], background_list[band_idx]
         )
-        stamp_psfs = np.asarray(psf.psf_at_points(2, pts, prs))
+        stamp_psfs = np.asarray(psf.psf_at_points(band_idx, pts, prs))
         if len(stamp_bgs) > 0:
             psf_center = stamp_psfs.shape[-1] // 2
             psf_lower = psf_center - floor(self.stampsize / 2)
