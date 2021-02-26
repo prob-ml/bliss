@@ -18,9 +18,7 @@ scontrol show hostnames $SLURM_JOB_NODELIST
 fi
 
 # Install bliss
-git clone https://github.com/prob-ml/bliss.git
 cd bliss
-poetry install
 poetry shell
 
 # set up Ray cluster
