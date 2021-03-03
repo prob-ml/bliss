@@ -570,63 +570,56 @@ class SleepPhase(pl.LightningModule):
             plotting.plot_image(fig, true_ax, image)
             true_ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
 
-            # continue only if at least one true source and predicted source.
-            max_sources = true_locs.shape[1]
-            if max_sources > 0 and n_sources.item() > 0:
-                # draw reconstruction image.
-                recon_image, _ = self.image_decoder.render_images(
-                    tile_estimate["n_sources"][None, i],
-                    tile_estimate["locs"][None, i],
-                    tile_estimate["galaxy_bool"][None, i],
-                    tile_estimate["galaxy_params"][None, i],
-                    tile_estimate["fluxes"][None, i],
-                    add_noise=False,
-                )
+            # round up true and estimated parameters.
+            true_star_bool = get_star_bool(true_n_sources, true_galaxy_bool)
+            true_galaxy_locs = true_locs * true_galaxy_bool
+            true_star_locs = true_locs * true_star_bool
 
-                # round up true parameters.
-                true_star_bool = get_star_bool(true_n_sources, true_galaxy_bool)
-                true_galaxy_locs = true_locs * true_galaxy_bool
-                true_star_locs = true_locs * true_star_bool
+            star_bool = get_star_bool(n_sources, galaxy_bool)
+            galaxy_locs = locs * galaxy_bool
+            star_locs = locs * star_bool
 
-                # round up estimated parameters.
-                star_bool = get_star_bool(n_sources, galaxy_bool)
-                galaxy_locs = locs * galaxy_bool
-                star_locs = locs * star_bool
+            # convert everything to numpy + cpu so matplotlib can use it.
+            true_galaxy_locs = true_galaxy_locs.cpu().numpy()[0]
+            true_star_locs = true_star_locs.cpu().numpy()[0]
+            galaxy_locs = galaxy_locs.cpu().numpy()[0]
+            star_locs = star_locs.cpu().numpy()[0]
 
-                # convert everything to numpy + cpu so matplotlib can use it.
-                true_galaxy_locs = true_galaxy_locs.cpu().numpy()[0]
-                true_star_locs = true_star_locs.cpu().numpy()[0]
-                galaxy_locs = galaxy_locs.cpu().numpy()[0]
-                star_locs = star_locs.cpu().numpy()[0]
+            # draw reconstruction image.
+            recon_image, _ = self.image_decoder.render_images(
+                tile_estimate["n_sources"][None, i],
+                tile_estimate["locs"][None, i],
+                tile_estimate["galaxy_bool"][None, i],
+                tile_estimate["galaxy_params"][None, i],
+                tile_estimate["fluxes"][None, i],
+                add_noise=False,
+            )
 
-                recon_image = recon_image[0, 0].cpu().numpy()
-                res_image = (image - recon_image) / np.sqrt(image)
+            recon_image = recon_image[0, 0].cpu().numpy()
+            res_image = (image - recon_image) / np.sqrt(image)
 
-                # plot and add locations.
-                plotting.plot_image_locs(
-                    true_ax,
-                    slen,
-                    border_padding,
-                    true_locs=true_galaxy_locs,
-                    est_locs=galaxy_locs,
-                    markers=("x", "+"),
-                )
-                plotting.plot_image_locs(
-                    true_ax,
-                    slen,
-                    border_padding,
-                    true_locs=true_star_locs,
-                    est_locs=star_locs,
-                    markers=("o", "1"),
-                )
+            # plot these images too.
+            plotting.plot_image(fig, recon_ax, recon_image)
+            plotting.plot_image(fig, res_ax, res_image)
 
-                plotting.plot_image(fig, recon_ax, recon_image)
-                plotting.plot_image(fig, res_ax, res_image)
+            # plot and add locations. assume
+            plotting.plot_image_locs(
+                true_ax,
+                slen,
+                border_padding,
+                true_locs=true_galaxy_locs,
+                est_locs=galaxy_locs,
+                markers=("x", "+"),
+            )
 
-            else:
-                zero_image = np.zeros((images.shape[-1], images.shape[-1]))
-                plotting.plot_image(fig, recon_ax, zero_image)
-                plotting.plot_image(fig, res_ax, zero_image)
+            plotting.plot_image_locs(
+                true_ax,
+                slen,
+                border_padding,
+                true_locs=true_star_locs,
+                est_locs=star_locs,
+                markers=("o", "1"),
+            )
 
         plt.subplots_adjust(hspace=0.2, wspace=0.4)
         if self.logger:
