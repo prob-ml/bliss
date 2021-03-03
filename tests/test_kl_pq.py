@@ -19,22 +19,14 @@ class TestStarEncoderObjective:
         n_source_params = 8
 
         # true parameters
-        true_params = torch.rand(
-            n_ptiles, max_detections, n_source_params, device=device
-        )
+        true_params = torch.rand(n_ptiles, max_detections, n_source_params, device=device)
 
         # estimated parameters
-        param_mean = torch.randn(
-            n_ptiles, max_detections, n_source_params, device=device
-        )
-        param_logvar = torch.randn(
-            n_ptiles, max_detections, n_source_params, device=device
-        )
+        param_mean = torch.randn(n_ptiles, max_detections, n_source_params, device=device)
+        param_logvar = torch.randn(n_ptiles, max_detections, n_source_params, device=device)
 
         # get all losses
-        param_log_probs_all = _get_params_logprob_all_combs(
-            true_params, param_mean, param_logvar
-        )
+        param_log_probs_all = _get_params_logprob_all_combs(true_params, param_mean, param_logvar)
 
         # just for my sanity
         assert list(param_log_probs_all.shape) == [
@@ -74,12 +66,8 @@ class TestStarEncoderObjective:
         max_detections = 4
 
         # true parameters
-        true_n_sources = torch.from_numpy(
-            np.random.choice(max_detections + 1, n_ptiles)
-        ).to(device)
-        true_is_on_array = get_is_on_from_n_sources(
-            true_n_sources, max_detections
-        ).float()
+        true_n_sources = torch.from_numpy(np.random.choice(max_detections + 1, n_ptiles)).to(device)
+        true_is_on_array = get_is_on_from_n_sources(true_n_sources, max_detections).float()
 
         # locations, fluxes and galaxy parameters
         true_locs = torch.rand(
@@ -90,9 +78,7 @@ class TestStarEncoderObjective:
         ) * true_is_on_array.unsqueeze(2)
 
         # boolean indicating whether source is galaxy
-        true_galaxy_bool = (
-            (torch.rand(n_ptiles, max_detections) > 0.5).float().to(device)
-        )
+        true_galaxy_bool = (torch.rand(n_ptiles, max_detections) > 0.5).float().to(device)
 
         # estimated parameters
         loc_mean = torch.randn(
@@ -114,9 +100,7 @@ class TestStarEncoderObjective:
         prob_galaxy = torch.rand(n_ptiles, max_detections, device=device)
 
         # get loss for locations
-        locs_log_probs_all = _get_params_logprob_all_combs(
-            true_locs, loc_mean, loc_logvar
-        )
+        locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
 
         # get loss for fluxes
         star_params_log_probs_all = _get_params_logprob_all_combs(
@@ -136,8 +120,7 @@ class TestStarEncoderObjective:
         assert (star_params_loss[true_n_sources == 0] == 0).all()
         assert (galaxy_bool_loss[true_n_sources == 0] == 0).all()
         assert (
-            locs_loss[true_n_sources == 1]
-            == -locs_log_probs_all[true_n_sources == 1][:, 0, 0]
+            locs_loss[true_n_sources == 1] == -locs_log_probs_all[true_n_sources == 1][:, 0, 0]
         ).all()
 
         # when there are no stars: stars loss should be zero
@@ -147,8 +130,7 @@ class TestStarEncoderObjective:
         # when there is only one source, and that source is a star
         which_one_star = (true_n_sources == 1) & (true_galaxy_bool[:, 0] == 0)
         assert (
-            star_params_loss[which_one_star]
-            == -star_params_log_probs_all[which_one_star][:, 0, 0]
+            star_params_loss[which_one_star] == -star_params_log_probs_all[which_one_star][:, 0, 0]
         ).all()
 
         # a more thorough check for all possible true_n_sources
@@ -196,9 +178,7 @@ class TestStarEncoderObjective:
 
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_locs_loss = locs_loss_perm.sum()
-                    min_star_params_loss = (
-                        star_params_loss_perm * (1 - _true_galaxy_bool)
-                    ).sum()
+                    min_star_params_loss = (star_params_loss_perm * (1 - _true_galaxy_bool)).sum()
                     min_galaxy_bool_loss = galaxy_bool_loss_perm.sum()
 
             assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5

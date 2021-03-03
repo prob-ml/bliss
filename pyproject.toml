@@ -41,3 +41,7 @@ bliss = "bliss.main:main"
 [build-system]
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']

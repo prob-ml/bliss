@@ -9,3 +9,4 @@ results of our publications.
 
 `psfxc` -- Code for implementing an exchangeable (but not iid) psf model
 
+`sdss_galaxies` -- Jupyter notebooks to reproduces results of running the BLISS galaxy deblender on SDSS images.

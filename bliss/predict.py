@@ -39,9 +39,7 @@ def predict(cfg: DictConfig):
     with torch.no_grad():
         for i in range(h // clen):
             for j in range(w // clen):
-                chunk = image[
-                    :, :, i * clen : (i + 1) * clen, j * clen : (j + 1) * clen
-                ]
+                chunk = image[:, :, i * clen : (i + 1) * clen, j * clen : (j + 1) * clen]
                 chunk = chunk.to(cfg.predict.device)
 
                 # tile the image

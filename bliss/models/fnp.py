@@ -144,13 +144,9 @@ class FNP(nn.Module):
 
             if self.training:
                 if log_qpz.item() > self.fb_z * z.size(0) * z.size(1) * (1 + 0.05):
-                    self.lambda_z = torch.clamp(
-                        self.lambda_z * (1 + 0.1), min=1e-8, max=1.0
-                    )
+                    self.lambda_z = torch.clamp(self.lambda_z * (1 + 0.1), min=1e-8, max=1.0)
                 elif log_qpz.item() < self.fb_z * z.size(0) * z.size(1):
-                    self.lambda_z = torch.clamp(
-                        self.lambda_z * (1 - 0.1), min=1e-8, max=1.0
-                    )
+                    self.lambda_z = torch.clamp(self.lambda_z * (1 - 0.1), min=1e-8, max=1.0)
 
             log_pqz = self.lambda_z * pqz_all.sum()
 
@@ -271,9 +267,7 @@ class DepGraph(nn.Module):
         # scalar ordering function
         if z.size(1) == 1:
             return z
-        log_cdf = torch.sum(
-            torch.log(0.5 + 0.5 * torch.erf(z / np.sqrt(2))), dim=1, keepdim=True
-        )
+        log_cdf = torch.sum(torch.log(0.5 + 0.5 * torch.erf(z / np.sqrt(2))), dim=1, keepdim=True)
         return log_cdf
 
 

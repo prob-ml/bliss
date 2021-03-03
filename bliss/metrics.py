@@ -34,7 +34,6 @@ def inner_join_locs(locs1, locs2):
 
 
 def inner_join_locs_and_fluxes(locs1, fluxes1, locs2, fluxes2):
-
     # permutes locations and fluxes using the Hungarian algorithm
     # on locations to find matches.
     # see `inner_join_locs`.
@@ -129,9 +128,7 @@ def eval_error_on_batch(true_params, est_params, slen):
             est_fluxes = est_params["fluxes"][i, 0:nest].view(nest, n_bands)
 
             # prepare galaxy params.
-            true_galaxy_params = true_params["galaxy_params"][i, 0:ntrue].view(
-                ntrue, -1
-            )
+            true_galaxy_params = true_params["galaxy_params"][i, 0:ntrue].view(ntrue, -1)
             est_galaxy_params = est_params["galaxy_params"][i, 0:nest].view(nest, -1)
 
             # convert fluxes to magnitude (off by a constant, but
@@ -146,9 +143,7 @@ def eval_error_on_batch(true_params, est_params, slen):
             ppv_vec[i] = ppv_i
 
             # get l1 error in locations and fluxes
-            locs_mae_i, fluxes_mae_i = get_l1_error(
-                true_locs, true_mag, est_locs, est_mag
-            )
+            locs_mae_i, fluxes_mae_i = get_l1_error(true_locs, true_mag, est_locs, est_mag)
 
             # get l1 error in galaxy_params
             _, galaxy_params_mae_i = get_l1_error(

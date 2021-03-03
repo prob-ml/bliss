@@ -25,9 +25,7 @@ class GalsimGalaxies(pl.LightningDataModule, Dataset):
         self.slen = int(params.slen)
         assert self.slen % 2 == 1, "Need divisibility by 2"
         self.n_bands = 1
-        self.background = np.zeros(
-            (self.n_bands, self.slen, self.slen), dtype=np.float32
-        )
+        self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
         self.background[...] = params.background
         self.pixel_scale = params.pixel_scale
         self.snr = params.snr
@@ -48,9 +46,7 @@ class GalsimGalaxies(pl.LightningDataModule, Dataset):
         theta = np.random.uniform(0, 2 * np.pi)
         g1 = l * np.cos(theta)
         g2 = l * np.sin(theta)
-        galaxy = (
-            galsim.Gaussian(half_light_radius=hlr).shear(g1=g1, g2=g2).withFlux(flux)
-        )
+        galaxy = galsim.Gaussian(half_light_radius=hlr).shear(g1=g1, g2=g2).withFlux(flux)
         gal_conv = galsim.Convolution(galaxy, self.psf)
         image = gal_conv.drawImage(
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
@@ -70,16 +66,10 @@ class GalsimGalaxies(pl.LightningDataModule, Dataset):
         return self.batch_size * self.n_batches
 
     def train_dataloader(self):
-        return DataLoader(
-            self, batch_size=self.batch_size, num_workers=self.num_workers
-        )
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(
-            self, batch_size=self.batch_size, num_workers=self.num_workers
-        )
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return DataLoader(
-            self, batch_size=self.batch_size, num_workers=self.num_workers
-        )
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
