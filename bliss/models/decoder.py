@@ -51,6 +51,7 @@ class ImageDecoder(pl.LightningModule):
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         # per-tile prior parameters on number (and type) of sources
+        assert max_sources > 0, "No sources will be drawn."
         self.max_sources = max_sources
         self.mean_sources = mean_sources
         self.min_sources = min_sources
