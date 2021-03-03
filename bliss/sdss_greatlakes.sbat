@@ -2,9 +2,9 @@
 
 #SBATCH --job-name=bliss_sdss
 #SBATCH --partition=gpu
-#SBATCH --nodes=4
+#SBATCH --nodes=20
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=4
+#SBATCH --gpus-per-node=1
 #SBATCH --mem-per-gpu=2000m
 ##SBATCH --time=00:15:00
 ##SBATCH --account=test
@@ -53,3 +53,4 @@ for ((i = 1; i <= worker_num; i++)); do
 done
 
 # Run the job
+poetry run bliss mode='precict'
