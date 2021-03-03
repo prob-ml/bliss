@@ -51,14 +51,7 @@ def load_data(
     wcs_list = []
     for i in range(n_bands):
         hdulist = fits.open(
-            sdss_dir
-            + str(run)
-            + "/"
-            + str(camcol)
-            + "/"
-            + str(field)
-            + "/"
-            + frame_names[i]
+            sdss_dir + str(run) + "/" + str(camcol) + "/" + str(field) + "/" + frame_names[i]
         )
         wcs_list.append(WCS(hdulist["primary"].header))
 

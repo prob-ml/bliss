@@ -172,9 +172,7 @@ class SleepPhase(pl.LightningModule):
             self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(
                 **cfg.model.galaxy_encoder.params
             )
-            self.cropped_slen = (
-                self.image_encoder.ptile_slen - 4 * self.image_encoder.tile_slen
-            )
+            self.cropped_slen = self.image_encoder.ptile_slen - 4 * self.image_encoder.tile_slen
             assert self.cropped_slen >= 20, "Cropped slen not reasonable"
             assert self.galaxy_encoder.slen == self.cropped_slen
             assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params
@@ -249,9 +247,7 @@ class SleepPhase(pl.LightningModule):
         # shape = (n_ptiles x band x ptile_slen x ptile_slen)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         n_galaxy_params = self.image_decoder.n_galaxy_params
-        galaxy_param_mean, galaxy_param_var = self.forward_galaxy(
-            image_ptiles, batch["locs"]
-        )
+        galaxy_param_mean, galaxy_param_var = self.forward_galaxy(image_ptiles, batch["locs"])
 
         galaxy_param_mean = galaxy_param_mean.view(batch_size, -1, 1, n_galaxy_params)
         galaxy_param_var = galaxy_param_var.view(batch_size, -1, 1, n_galaxy_params)
@@ -338,9 +334,7 @@ class SleepPhase(pl.LightningModule):
         true_tile_log_fluxes = true_tile_log_fluxes.view(n_ptiles, max_sources, n_bands)
         true_tile_galaxy_bool = true_tile_galaxy_bool.view(n_ptiles, max_sources)
         true_tile_n_sources = true_tile_n_sources.view(n_ptiles)
-        true_tile_is_on_array = encoder.get_is_on_from_n_sources(
-            true_tile_n_sources, max_sources
-        )
+        true_tile_is_on_array = encoder.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
@@ -359,9 +353,7 @@ class SleepPhase(pl.LightningModule):
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
-        locs_log_probs_all = _get_params_logprob_all_combs(
-            true_tile_locs, loc_mean, loc_logvar
-        )
+        locs_log_probs_all = _get_params_logprob_all_combs(true_tile_locs, loc_mean, loc_logvar)
         star_params_log_probs_all = _get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
@@ -403,9 +395,7 @@ class SleepPhase(pl.LightningModule):
 
         return opt
 
-    def training_step(
-        self, batch, batch_idx, optimizer_idx=0
-    ):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
         loss = 0.0
 
         if optimizer_idx == 0:  # image_encoder
@@ -518,9 +508,7 @@ class SleepPhase(pl.LightningModule):
         # TODO: normalize the expression below?
         image_fluxes_mae = diff_fluxes.abs().mean()
         norm_pp_mae = (
-            (image_diff.sum((1, 2, 3)) / (true_images - background).sum((1, 2, 3)))
-            .abs()
-            .mean()
+            (image_diff.sum((1, 2, 3)) / (true_images - background).sum((1, 2, 3))).abs().mean()
         )
 
         return {
@@ -580,9 +568,7 @@ class SleepPhase(pl.LightningModule):
             # plot true image + number of sources first.
             image = image[0, 0].cpu().numpy()  # only first band will be plotted.
             plotting.plot_image(fig, true_ax, image)
-            true_ax.set_xlabel(
-                f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}"
-            )
+            true_ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
 
             # continue only if at least one true source and predicted source.
             max_sources = true_locs.shape[1]

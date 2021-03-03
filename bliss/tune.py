@@ -111,9 +111,7 @@ def tune(cfg: DictConfig, local_mode=False):
     else:
         search_alg = HyperOptSearch(random_state_seed=cfg.tuning.seed)
 
-    search_alg = ConcurrencyLimiter(
-        search_alg, max_concurrent=cfg.tuning.max_concurrent
-    )
+    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=cfg.tuning.max_concurrent)
 
     # define how to report the results
     reporter = CLIReporter(
@@ -153,6 +151,4 @@ def tune(cfg: DictConfig, local_mode=False):
     if cfg.tuning.save:
         best_result = analysis.best_result
         conf = OmegaConf.create(best_result)
-        OmegaConf.save(
-            conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path)
-        )
+        OmegaConf.save(conf, hydra.utils.to_absolute_path(cfg.tuning.best_config_save_path))

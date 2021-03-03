@@ -70,9 +70,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             test_dataset = BlissDataset(self.cfg.testing.file)
             batch_size = self.cfg.testing.batch_size
             num_workers = self.cfg.testing.num_workers
-            dl = DataLoader(
-                test_dataset, batch_size=batch_size, num_workers=num_workers
-            )
+            dl = DataLoader(test_dataset, batch_size=batch_size, num_workers=num_workers)
 
         return dl
 

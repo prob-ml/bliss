@@ -34,15 +34,11 @@ def plot_image_locs(
 
     assert isinstance(border_padding, int)
     if true_locs is not None:
-        _plot_locs(
-            ax, slen, border_padding, true_locs, color=colors[0], marker=markers[0], s=s
-        )
+        _plot_locs(ax, slen, border_padding, true_locs, color=colors[0], marker=markers[0], s=s)
 
     if est_locs is not None:
         s2 = 2 * s
-        _plot_locs(
-            ax, slen, border_padding, est_locs, color=colors[1], marker=markers[1], s=s2
-        )
+        _plot_locs(ax, slen, border_padding, est_locs, color=colors[1], marker=markers[1], s=s2)
 
 
 def plot_image(

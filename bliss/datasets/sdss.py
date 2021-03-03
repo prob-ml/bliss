@@ -212,9 +212,7 @@ class SloanDigitalSkySurvey(Dataset):
         flxs = []
 
         G = construct_subpixel_grid_base(self.stampsize, self.stampsize)
-        for (ra, dec, _f, flux) in zip(
-            ras, decs, po_fits["thing_id"][is_target], fluxes
-        ):
+        for (ra, dec, _f, flux) in zip(ras, decs, po_fits["thing_id"][is_target], fluxes):
             # pt = "time" in pixel coordinates
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
             pti, pri = int(pt + 0.5), int(pr + 0.5)
@@ -276,9 +274,7 @@ class SloanDigitalSkySurvey(Dataset):
             if b not in self.bands:
                 continue
 
-            frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(
-                bl, run, camcol, field
-            )
+            frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(bl, run, camcol, field)
             frame_path = str(field_dir.joinpath(frame_name))
             if verbose:
                 print("loading sdss image from", frame_path)

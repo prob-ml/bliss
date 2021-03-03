@@ -91,9 +91,7 @@ class WakeNet(pl.LightningModule):
         image_indx_start = self.border_padding
         image_indx_end = self.border_padding + self.slen
         loss = (
-            error[
-                :, :, image_indx_start:image_indx_end, image_indx_start:image_indx_end
-            ]
+            error[:, :, image_indx_start:image_indx_end, image_indx_start:image_indx_end]
             .sum((1, 2, 3))
             .mean()
         )

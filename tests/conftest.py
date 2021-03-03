@@ -10,9 +10,7 @@ from bliss.models import galaxy_net
 
 # command line arguments for tests
 def pytest_addoption(parser):
-    parser.addoption(
-        "--gpus", default="cpu", type=str, help="--gpus option for trainer."
-    )
+    parser.addoption("--gpus", default="cpu", type=str, help="--gpus option for trainer.")
 
 
 def get_cfg(overrides, devices):
