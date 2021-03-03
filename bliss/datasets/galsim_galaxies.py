@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 
 
-class GalsimGalaxies(pl.LightningDataModule, Dataset):
+class ToyGaussian(pl.LightningDataModule, Dataset):
     def __init__(self, cfg: DictConfig):
         super().__init__()
         # assume 1 band everytime.
