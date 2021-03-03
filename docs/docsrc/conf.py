@@ -22,9 +22,7 @@ print(sys.path)
 # pylint: disable=redefined-builtin
 project = "bliss"
 copyright = "2021, Probabilistic Machine Learning Research Group"
-author = (
-    "Derek Hansen, Bryan Liu, Ismael Mendoza, Ziteng Pang, Jeffrey Regier, Zhe Zhao"
-)
+author = "Derek Hansen, Bryan Liu, Ismael Mendoza, Ziteng Pang, Jeffrey Regier, Zhe Zhao"
 
 
 # -- General configuration ---------------------------------------------------

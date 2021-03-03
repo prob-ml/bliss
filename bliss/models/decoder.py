@@ -92,16 +92,7 @@ class ImageDecoder(pl.LightningModule):
 
         ## Background
         assert len(background_values) == n_bands
-        background_shape = (
-            self.n_bands,
-            self.slen + 2 * self.border_padding,
-            self.slen + 2 * self.border_padding,
-        )
-        self.register_buffer(
-            "background", torch.zeros(background_shape), persistent=False
-        )
-        for i in range(n_bands):
-            self.background[i] = background_values[i]
+        self.background_values = background_values
 
         ## Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
@@ -116,7 +107,7 @@ class ImageDecoder(pl.LightningModule):
 
         ## Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
-            assert decoder_file is not None
+            assert self.gal_decoder_file is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
                 self.n_bands,
                 self.tile_slen,
@@ -128,6 +119,10 @@ class ImageDecoder(pl.LightningModule):
             )
         else:
             self.galaxy_tile_decoder = None
+
+        # background
+        assert len(background_values) == n_bands
+        self.background_values = background_values
 
     def forward(self):
         return self.star_tile_decoder.psf_forward()
@@ -154,9 +149,7 @@ class ImageDecoder(pl.LightningModule):
             "log_fluxes": log_fluxes,
         }
 
-    def render_images(
-        self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True
-    ):
+    def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True):
         # returns the **full** image in shape (batch_size x n_bands x slen x slen)
 
         # n_sources: is (batch_size x n_tiles_per_image)
@@ -183,8 +176,9 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # add background and noise
-        images += self.background.unsqueeze(0)
-        var_images += self.background.unsqueeze(0)
+        background = self.get_background(images.shape[-1])
+        images += background.unsqueeze(0)
+        var_images += background.unsqueeze(0)
         if add_noise:
             images = self._apply_noise(images)
 
@@ -195,6 +189,14 @@ class ImageDecoder(pl.LightningModule):
         if self.galaxy_tile_decoder is None:
             return None
         return self.galaxy_tile_decoder.galaxy_decoder
+
+    def get_background(self, slen):
+        background_shape = (self.n_bands, slen, slen)
+        background = torch.zeros(*background_shape, device=self.device)
+        for i in range(self.n_bands):
+            background[i] = self.background_values[i]
+
+        return background
 
     def _sample_n_sources(self, batch_size):
         # returns number of sources for each batch x tile
@@ -337,12 +339,13 @@ class ImageDecoder(pl.LightningModule):
         # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
         # fluxes: Is (batch_size x n_tiles_per_image x max_sources x 2)
 
-        # returns the ptiles in
-        # shape = (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
+        # returns the ptiles with shape =
+        # (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
+        n_tiles_per_image = n_sources.shape[1]
         max_sources = locs.shape[2]
         assert (n_sources <= max_sources).all()
         batch_size = n_sources.shape[0]
-        n_ptiles = batch_size * self.n_tiles_per_image
+        n_ptiles = batch_size * n_tiles_per_image
 
         # view parameters being explicit about shapes
         _n_sources = n_sources.view(n_ptiles)
@@ -359,7 +362,7 @@ class ImageDecoder(pl.LightningModule):
         # final shapes of images.
         img_shape = (
             batch_size,
-            self.n_tiles_per_image,
+            n_tiles_per_image,
             self.n_bands,
             self.ptile_slen,
             self.ptile_slen,
@@ -370,9 +373,7 @@ class ImageDecoder(pl.LightningModule):
         galaxies = torch.zeros(img_shape, device=locs.device)
         var_images = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_tile_decoder is not None:
-            galaxies, var_images = self.galaxy_tile_decoder(
-                _locs, galaxy_params, _galaxy_bool
-            )
+            galaxies, var_images = self.galaxy_tile_decoder(_locs, galaxy_params, _galaxy_bool)
 
         images = galaxies.view(img_shape) + stars.view(img_shape)
         var_images = var_images.view(img_shape)
@@ -494,9 +495,7 @@ class TileDecoder(nn.Module):
         # grid: between -1 and 1,
         # then scale slightly because of the way f.grid_sample
         # parameterizes the edges: (0, 0) is center of edge pixel
-        self.register_buffer(
-            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
-        )
+        self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
     def _trim_source(self, source):
@@ -556,9 +555,7 @@ class TileDecoder(nn.Module):
 
         assert source_slen <= _slen, "Should be using trim source."
 
-        source_expanded = torch.zeros(
-            source.shape[0], _slen, _slen, device=source.device
-        )
+        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=source.device)
         offset = int((_slen - source_slen) / 2)
 
         source_expanded[
@@ -603,7 +600,7 @@ class StarTileDecoder(TileDecoder):
         grid *= self.psf_slen / (self.psf_slen - 1)
         self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
 
-        # get normalization_constant
+        # get psf normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
             psf_i = self._get_psf_single_band(psf_params[i])
@@ -663,9 +660,7 @@ class StarTileDecoder(TileDecoder):
             b = psfield[6].data["psf_b"][0][band]
             p0 = psfield[6].data["psf_p0"][0][band]
 
-            psf_params[i] = torch.log(
-                torch.tensor([sigma1, sigma2, sigmap, beta, b, p0])
-            )
+            psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
 
         return psf_params
 
@@ -706,6 +701,7 @@ class StarTileDecoder(TileDecoder):
         psf = self.psf_forward()
         psf_slen = psf.shape[2]
         assert len(psf.shape) == 3
+        assert psf.shape[0] == self.n_bands
         assert psf.shape[1] == psf_slen
         assert (psf_slen % 2) == 1
 
@@ -750,9 +746,7 @@ class GalaxyTileDecoder(TileDecoder):
         assert galaxy_params.shape[2] == self.n_galaxy_params
         assert galaxy_bool.shape[2] == 1
 
-        single_galaxies, single_vars = self._render_single_galaxies(
-            galaxy_params, galaxy_bool
-        )
+        single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bool)
         for n in range(max_sources):
             galaxy_bool_n = galaxy_bool[:, n]
             locs_n = locs[:, n, :]
@@ -775,12 +769,8 @@ class GalaxyTileDecoder(TileDecoder):
 
         # allocate memory
         _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        gal = torch.zeros(
-            z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device
-        )
-        var = torch.zeros(
-            z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device
-        )
+        gal = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device)
+        var = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device)
 
         # forward only galaxies that are on!
         gal_on, var_on = self.galaxy_decoder.forward(z[b == 1])
