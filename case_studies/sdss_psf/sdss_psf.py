@@ -147,12 +147,33 @@ trainloader = DataLoader([[X, G, S, Y]], batch_size=None, batch_sampler=None)
 
 m = SDSS_HNP(25, 4)
 # %%
-trainer = Trainer(max_epochs=100, checkpoint_callback=False)
+trainer = Trainer(max_epochs=400, checkpoint_callback=False)
 trainer.fit(m, trainloader)
 # %%
 x = m.hnp.predict(X, G, S)
 # %%
-plt.imshow(x[29].reshape(5, 5))
+plt.imshow(x[20].reshape(5, 5))
 # %%
-plt.imshow(Y[29].reshape(5, 5))
+plt.imshow(Y[20].reshape(5, 5))
+# %%
+def plot_cluster_images(c, y_true, y_pred):
+    n_max = 0
+    for i in np.unique(c):
+        if sum(c == i) > n_max:
+            n_max = sum(c == i)
+    figsize = (20, 20)
+    plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_max * 2, figsize=figsize)
+    for i in np.unique(c):
+        ytc = y_true[c == i]
+        ypc = y_pred[c == i]
+        for j in range(ytc.shape[0]):
+            ax = axes[i, 2 * j]
+            ax.imshow(ytc[j].reshape(5, 5))
+            ax = axes[i, 2 * j + 1]
+            ax.imshow(ypc[j].reshape(5, 5))
+    return plot, axes
+
+
+p, a = plot_cluster_images(c, Y, x)
+p.savefig("test.png")
 # %%
