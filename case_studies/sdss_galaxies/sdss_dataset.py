@@ -1,0 +1,197 @@
+from collections import namedtuple
+import galsim
+from speclite.filters import load_filter, ab_reference_flux
+import astropy.units as u
+from astropy.table import Table
+
+import numpy as np
+from omegaconf import DictConfig
+
+from torch.utils.data import Dataset, DataLoader
+import pytorch_lightning as pl
+
+
+def get_catsim_galaxy(entry, filt, survey, no_disk=False, no_bulge=False, no_agn=False):
+    """Credit: WeakLensingDeblending (https://github.com/LSSTDESC/WeakLensingDeblending)"""
+
+    components = []
+    total_flux = get_flux(entry[filt.band + "_ab"], filt, survey)
+    # Calculate the flux of each component in detected electrons.
+    total_fluxnorm = entry["fluxnorm_disk"] + entry["fluxnorm_bulge"] + entry["fluxnorm_agn"]
+    disk_flux = 0.0 if no_disk else entry["fluxnorm_disk"] / total_fluxnorm * total_flux
+    bulge_flux = 0.0 if no_bulge else entry["fluxnorm_bulge"] / total_fluxnorm * total_flux
+    agn_flux = 0.0 if no_agn else entry["fluxnorm_agn"] / total_fluxnorm * total_flux
+
+    if disk_flux + bulge_flux + agn_flux == 0:
+        raise ValueError("Source not visible, check catalog values.")
+
+    if disk_flux > 0:
+        beta_radians = np.radians(entry["pa_disk"])
+        if bulge_flux > 0:
+            assert entry["pa_disk"] == entry["pa_bulge"], "Sersic components have different beta."
+        a_d, b_d = entry["a_d"], entry["b_d"]
+        disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+        disk_q = b_d / a_d
+        disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
+            q=disk_q, beta=beta_radians * galsim.radians
+        )
+        components.append(disk)
+
+    if bulge_flux > 0:
+        beta_radians = np.radians(entry["pa_bulge"])
+        a_b, b_b = entry["a_b"], entry["b_b"]
+        bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+        bulge_q = b_b / a_b
+        bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs).shear(
+            q=bulge_q, beta=beta_radians * galsim.radians
+        )
+        components.append(bulge)
+
+    if agn_flux > 0:
+        agn = galsim.Gaussian(flux=agn_flux, sigma=1e-8)
+        components.append(agn)
+
+    profile = galsim.Add(components)
+    return profile
+
+
+def get_flux(ab_mag, filt, survey, B0=24):
+    """Convert source magnitude to flux.
+    The calculation includes the effects of atmospheric extinction.
+    Args:
+        ab_magnitude(float): AB magnitude of source.
+    Returns:
+        float: Flux in detected electrons.
+    """
+    zeropoint = filt.zeropoint * survey.effective_area  # [s^-1]
+    ab_mag += filt.extinction * (survey.airmass - survey.zeropoint_airmass)
+    return filt.exp_time * zeropoint * 10 ** (-0.4 * (ab_mag - B0))
+
+
+def calculate_zero_point(band_name="sdss2010-r", B0=24):
+    # Credit: https://github.com/LSSTDESC/WeakLensingDeblending/issues/19
+    filt = load_filter(band_name)
+    return (
+        (filt.convolve_with_function(ab_reference_flux) * 10 ** (-0.4 * B0))
+        .to(1 / (u.s * u.m ** 2))
+        .value
+    )
+
+
+Survey = namedtuple(
+    "Survey",
+    [
+        "effective_area",  #  [m^2]
+        "pixel_scale",  #  [arcsec/pixel]
+        "airmass",
+        "zeropoint_airmass",  # airmass at which zeropoint is calculated
+        "filters",  # list of filters.
+    ],
+)
+
+Filter = namedtuple(
+    "Filter",
+    [
+        "band",
+        "exp_time",  #  [s]
+        "extinction",
+        "median_psf_fwhm",  #  [arcsec]
+        "effective_wavelength",  # [Angstroms]
+        "limit_mag",
+        "zeropoint",  # [s^-1 * m^-2]
+        "sky_brightness",  # [mag]
+    ],
+)
+
+# exp_time, pixel_scale, psf_fwhm, effective_wavelength, limit_mag from:
+# https://www.sdss.org/dr12/scope/
+# effective area from Gunn et al 2006 (https://arxiv.org/pdf/astro-ph/0602326.pdf, pg. 8)
+# airmass from https://arxiv.org/pdf/1105.2320.pdf (table 1)
+# extinction coefficent from https://iopscience.iop.org/article/10.1086/324741/pdf (table 24)
+# zeropoint_airmass from https://speclite.readthedocs.io/en/latest/filters.html
+# sky brighntess from: https://www.sdss.org/dr12/imaging/other_info/
+# corresponds to a single exposure/filter.
+sdss_survey = Survey(
+    effective_area=3.58,
+    pixel_scale=0.396,
+    airmass=1.16,
+    zeropoint_airmass=1.3,
+    filters=[
+        Filter(
+            band="r",
+            exp_time=53.9,
+            extinction=0.1,
+            median_psf_fwhm=1.3,
+            effective_wavelength=6165,
+            limit_mag=22.2,
+            zeropoint=calculate_zero_point("sdss2010-r"),
+            sky_brightness=21.06,  # stripe-82 specific.
+        )
+    ],
+)
+
+
+class SDSSGalaxies(pl.LightningDataModule, Dataset):
+    def __init__(self, cfg: DictConfig):
+        super().__init__()
+        # assume 1 band everytime for now ('r' band).
+
+        # general dataset parameters.
+        self.cfg = cfg
+        self.num_workers = cfg.dataset.num_workers
+        self.batch_size = cfg.dataset.batch_size
+        self.n_batches = cfg.dataset.n_batches
+
+        if self.num_workers > 0:
+            raise NotImplementedError(
+                "There is a problem where seed gets reset with multiple workers,"
+                "resulting in same galaxy in every epoch."
+            )
+
+        # image paraemters.
+        params = self.cfg.dataset.params
+        self.slen = int(params.slen)
+        assert self.slen % 2 == 1, "Need divisibility by 2"
+        self.n_bands = 1
+        self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
+        self.background[...] = params.background
+        self.noise_factor = params.noise_factor
+
+        # directly from survey + filter.
+        assert len(sdss_survey.filters) == 1
+        assert sdss_survey.filters[0].band == "r"
+        self.survey = sdss_survey
+        self.filt = self.survey.filters[0]
+        self.pixel_scale = self.survey.pixel_scale
+        self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
+
+        # read cosmodc2 table of entries.
+        self.catalog = Table.read(cfg.dataset.cosmoDC2_file)
+
+    def __getitem__(self, idx):
+        entry = self.catalog[idx]
+        galaxy = get_catsim_galaxy(entry, self.filt, self.survey)
+        gal_conv = galsim.Convolution(galaxy, self.psf)
+        image = gal_conv.drawImage(
+            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
+        )
+        image = image.array.reshape(1, self.slen, self.slen).astype(np.float32)
+
+        # add noise and background.
+        image += self.background.mean()
+        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        image += noise
+
+        return {"images": image, "background": self.background}
+
+    def __len__(self):
+        return self.batch_size * self.n_batches
+
+    def train_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def test_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)

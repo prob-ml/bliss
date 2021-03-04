@@ -1,11 +1,23 @@
-# @package _group_
-name: "ToyGaussian"
-n_batches: 10
+---
 batch_size: 128
+cosmoDC2_file: 'cosmoDC2_wld_sdss_10_sq_deg.fits'
+n_batches: 10
+name: 'ToyGaussian'
 num_workers: 0
-cosmoDC2_file: "cosmoDC2_wld_sdss_10_sq_deg.fits"
 params:
-  slen: 51
-  deviate_center: False
   background: 633
+  deviate_center: false
   noise_factor: 0.01
+  slen: 51
+sdss:
+  bands:
+    - 2
+  camcol: 1
+  center_subpixel: true
+  fields:
+    - 12
+  overwrite_cache: false
+  overwrite_fits_cache: false
+  run: 94
+  sdss_dir: '${paths.data}/sdss'
+  stampsize: 5
