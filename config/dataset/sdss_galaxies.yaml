@@ -3,8 +3,9 @@ name: "ToyGaussian"
 n_batches: 10
 batch_size: 128
 num_workers: 0
+cosmoDC2_file: "cosmoDC2_wld_sdss_10_sq_deg.fits"
 params:
-  slen: 41
+  slen: 51
   deviate_center: False
   background: 633
-  snr: 300
+  noise_factor: 0.01
