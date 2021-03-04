@@ -17,6 +17,7 @@ python = "^3.8"
 pytorch-lightning = "^1.0.8"
 scipy = "^1.4.1"
 torch = "1.7.1"
+sklearn = "^0.0"
 
 [tool.poetry.dev-dependencies]
 Cython = "^0.29.21"
