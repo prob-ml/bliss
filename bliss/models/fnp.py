@@ -175,6 +175,7 @@ class FNP(nn.Module):
 
         return y_pred
 
+
 class HNP(nn.Module):
     """
     This is an implementation of the Hierarchical Neural Process (HNP), a new model.
@@ -201,36 +202,38 @@ class HNP(nn.Module):
         self.register_buffer("lambda_z", torch.tensor(1e-8))
 
     def encode(self, X, G, S):
-        n_inputs = S.size()
+        n_inputs = S.size(0)
         ## Sample the latent variables for which observations are available (S)
-        qZi = self.z_inference(X, S)
+        qZi = self.z_inference(X[n_inputs:], S)
         Zi = qZi.rsample()
 
         ## Calculate the prior distribution for the H
         pH = self.h_prior(X, G)
 
         ## Sample the hierarchical latent variables from the latent variables
-        qH = self.h_pooler(X, G, Zi)
-        H  = qH.rsample()
+        # qH = self.h_pooler(X, G, Zi)
+        qH = self.h_pooler(torch.cat([qZi.loc, qZi.scale], dim=1), G[:n_inputs].transpose(1, 0))
+        H = qH.rsample()
 
         ## Conditional on the H, calculate the prior of the Z
-        pZ = self.z_prior(X, G, H)
+        pZ = self.z_prior(H, G)
+        # pZ = self.z_prior(X, G, H)
 
         ## Sample the remaining Z which did not have observations available
         Z = pZ.rsample()
         Z = torch.cat([Zi, Z[n_inputs:]])
 
-        ## Calculate pY
-        pY = self.label_vdecoder(Z, X)
+        ## Calculate pYh
+        pY = self.y_decoder(Z, X)
 
         return pH, pZ, qH, qZi, pY, H, Z
 
     def log_prob(self, X, G, S, Y):
-        n_inputs = S.size()
+        n_inputs = S.size(0)
         pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
         log_pqh = pH.log_prob(H) - qH.log_prob(H)
-        log_pqz = pZ.log_prob(Z)[n_inputs:] - qZi.log_prob(Z[n_inputs:])
-        log_py  = pY(Y)
+        log_pqz = pZ.log_prob(Z)[n_inputs] - qZi.log_prob(Z[:n_inputs])
+        log_py = pY.log_prob(Y)
         elbo = log_pqh.sum() + log_pqz.sum() + log_py.sum()
         return elbo
 
@@ -238,13 +241,11 @@ class HNP(nn.Module):
         return -self.log_prob(X, G, S, Y)
 
     def predict(self, X, G, S):
-        n_inputs = S.size()
+        n_inputs = S.size(0)
         pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
         Y = pY.sample()
         Y[:n_inputs] = S
         return Y
-
-
 
 
 ## ***********************
@@ -384,15 +385,19 @@ class AveragePooler(nn.Module):
     def __init__(
         self,
         dim_z,
+        f=None,
     ):
         super().__init__()
         self.dim_z = dim_z
+        self.f = f
 
         # normalizes the graph such that inner products correspond to averages of the parents
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
     def forward(self, rep_R, GA):
         W = self.norm_graph(GA)
+        if self.f:
+            rep_R = self.f(rep_R)
         pz_all = torch.matmul(W, rep_R)
         return pz_all
 
