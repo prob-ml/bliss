@@ -175,6 +175,77 @@ class FNP(nn.Module):
 
         return y_pred
 
+class HNP(nn.Module):
+    """
+    This is an implementation of the Hierarchical Neural Process (HNP), a new model.
+    """
+
+    def __init__(
+        self,
+        z_inference,
+        z_prior,
+        h_prior,
+        h_pooler,
+        y_decoder,
+        fb_z=0.0,
+    ):
+        super().__init__()
+        ## Learned Submodules
+        self.z_inference = z_inference
+        self.z_prior = z_prior
+        self.h_prior = h_prior
+        self.h_pooler = h_pooler
+        self.y_decoder = y_decoder
+        ## Initialize free-bits regularization
+        self.fb_z = fb_z
+        self.register_buffer("lambda_z", torch.tensor(1e-8))
+
+    def encode(self, X, G, S):
+        n_inputs = S.size()
+        ## Sample the latent variables for which observations are available (S)
+        qZi = self.z_inference(X, S)
+        Zi = qZi.rsample()
+
+        ## Calculate the prior distribution for the H
+        pH = self.h_prior(X, G)
+
+        ## Sample the hierarchical latent variables from the latent variables
+        qH = self.h_pooler(X, G, Zi)
+        H  = qH.rsample()
+
+        ## Conditional on the H, calculate the prior of the Z
+        pZ = self.z_prior(X, G, H)
+
+        ## Sample the remaining Z which did not have observations available
+        Z = pZ.rsample()
+        Z = torch.cat([Zi, Z[n_inputs:]])
+
+        ## Calculate pY
+        pY = self.label_vdecoder(Z, X)
+
+        return pH, pZ, qH, qZi, pY, H, Z
+
+    def log_prob(self, X, G, S, Y):
+        n_inputs = S.size()
+        pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
+        log_pqh = pH.log_prob(H) - qH.log_prob(H)
+        log_pqz = pZ.log_prob(Z)[n_inputs:] - qZi.log_prob(Z[n_inputs:])
+        log_py  = pY(Y)
+        elbo = log_pqh.sum() + log_pqz.sum() + log_py.sum()
+        return elbo
+
+    def forward(self, X, G, S, Y):
+        return -self.log_prob(X, G, S, Y)
+
+    def predict(self, X, G, S):
+        n_inputs = S.size()
+        pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
+        Y = pY.sample()
+        Y[:n_inputs] = S
+        return Y
+
+
+
 
 ## ***********************
 ## FNP-specific submodules
