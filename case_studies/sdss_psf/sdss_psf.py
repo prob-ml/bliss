@@ -93,9 +93,10 @@ class SDSS_HNP(LightningModule):
             torch.zeros(G.size(1), dh, device=G.device), torch.ones(G.size(1), dh, device=G.device)
         )
 
-        h_pooler = SequentialVarg(
-            fnp.AveragePooler(dh, f=Linear(2 * dz, 2 * dh)), SplitLayer(dh, -1), NormalEncoder()
-        )
+        # h_pooler = SequentialVarg(
+        #     fnp.AveragePooler(dh, f=Linear(2 * dz, 2 * dh)), SplitLayer(dh, -1), NormalEncoder()
+        # )
+        h_pooler = SimpleHPooler(dh)
 
         y_decoder = SequentialVarg(
             ConcatLayer([0]),
@@ -119,6 +120,21 @@ class SDSS_HNP(LightningModule):
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-3)
+
+
+from torch.nn import Module
+
+
+class SimpleHPooler(Module):
+    def __init__(self, dh):
+        super().__init__()
+        self.ap = fnp.AveragePooler(dh)
+
+    def forward(self, Z, G):
+        z_pooled = self.ap(Z, G)
+        precis = 1.0 + G.sum(1)
+        std = precis.reciprocal().sqrt().unsqueeze(1).repeat(1, z_pooled.size(1))
+        return Normal(z_pooled, std)
 
 
 def make_G_from_clust(c, nclust=None):
