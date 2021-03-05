@@ -209,38 +209,51 @@ def plot_cluster_images(c, y_true, y_pred, n_S=0):
     return plot, axes
 
 
-def plot_cluster_representatives(m, X, G, S, c, n_samples=7):
-    Ys = torch.stack([m.hnp.predict(X, G, S) for i in range(n_samples)])
+def plot_cluster_representatives(m, X, G, S, c, n_show=10, n_samples=100):
+    Ys = torch.stack([m.hnp.predict(X, G, S, mean_Y=True) for i in range(n_samples)])
     n_S = S.size(0)
-    figsize = (2 * n_samples, 10)
-    plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_samples, figsize=figsize)
+    figsize = (2 * (n_show + 1), 10)
+    plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_show + 1, figsize=figsize)
     in_posterior = np.array([False] * n_S + [True] * (len(c) - n_S))
     for i in np.unique(c):
         idx = np.argmax(np.array(c == i) * in_posterior)
-        for j in range(n_samples):
+        for j in range(n_show):
             ax = axes[i, j]
             ax.imshow(Ys[j, idx].reshape(5, 5), interpolation="nearest")
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)
+        ax = axes[i, n_show]
+        avg = Ys[:, idx].mean(0)
+        ax.imshow(avg.reshape(5, 5), interpolation="nearest")
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_title("Average")
+
     return plot, axes
 
 
-def plot_cluster_stars(Y, c, n_samples=7):
-    figsize = (2 * n_samples, 10)
-    plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_samples, figsize=figsize)
+def plot_cluster_stars(Y, c, n_show=7):
+    figsize = (2 * (n_show + 1), 10)
+    plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_show + 1, figsize=figsize)
     for i in np.unique(c):
         # idx = np.argmax(np.array(c==i) * in_posterior)
         Yc = Y[c == i]
-        for j in range(n_samples):
+        for j in range(n_show):
             ax = axes[i, j]
             ax.imshow(Yc[j].reshape(5, 5), interpolation="nearest")
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)
+        ax = axes[i, n_show]
+        ax.imshow(Yc.mean(0).reshape(5, 5), interpolation="nearest")
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_title("Average")
+
     return plot, axes
 
 
 def pred_mean(m, X, G, S, n_samples):
-    return torch.stack([m.hnp.predict(X, G, S) for i in range(n_samples)]).mean(0)
+    return torch.stack([m.hnp.predict(X, G, S, mean_Y=True) for i in range(n_samples)]).mean(0)
 
 
 #%%
@@ -260,7 +273,7 @@ p.savefig("test0.png")
 # %%
 # Plot the "cluster" representatives for each star
 # With no data (sample from prior)
-p, a = plot_cluster_representatives(m, X, G, S[:0], c, 10)
+p, a = plot_cluster_representatives(m, X, G, S[:0], c)
 p.savefig("cluster_reps0.png")
 # %%
 # With a lot of data

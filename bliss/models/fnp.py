@@ -240,10 +240,13 @@ class HNP(nn.Module):
     def forward(self, X, G, S, Y):
         return -self.log_prob(X, G, S, Y)
 
-    def predict(self, X, G, S, cond_output=False):
+    def predict(self, X, G, S, mean_Y=False, cond_output=False):
         n_inputs = S.size(0)
         pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
-        Y = pY.sample()
+        if mean_Y:
+            Y = pY.loc.detach()
+        else:
+            Y = pY.sample()
         if cond_output:
             Y[:n_inputs] = S
         return Y
