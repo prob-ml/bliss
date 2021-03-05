@@ -70,7 +70,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
         checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
         checkpoint_dir = output.joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
-            filepath=checkpoint_dir,
+            dirpath=checkpoint_dir,
             save_top_k=True,
             verbose=True,
             monitor="val_loss",
