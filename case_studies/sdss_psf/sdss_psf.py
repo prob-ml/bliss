@@ -23,10 +23,10 @@ import matplotlib.pyplot as plt
 
 sdss_data = sdss.SloanDigitalSkySurvey(
     # sdss_dir=sdss_dir,
-    Path(bliss.__file__).parents[1].joinpath("data/sdss"),
+    Path(bliss.__file__).parents[1].joinpath("data/sdss_all"),
     run=3900,
     camcol=6,
-    fields=(269,),
+    fields=(808,),
     bands=range(5),
 )
 
@@ -34,7 +34,7 @@ image = torch.Tensor(sdss_data[0]["image"])
 slen0 = image.shape[-2]
 slen1 = image.shape[-1]
 
-plt.imshow(image[2, :100, :100])
+plt.imshow(image[2].log())
 
 #%%
 fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(4, 4))
@@ -178,39 +178,96 @@ def plot_cluster_images(c, y_true, y_pred, n_S=0):
     for i in np.unique(c):
         if sum(c == i) > n_max:
             n_max = sum(c == i)
-    figsize = (20, 20)
+    figsize = (2 * n_max * 2, 10)
     plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_max * 2, figsize=figsize)
     in_posterior = np.array([False] * n_S + [True] * (len(c) - n_S))
     for i in np.unique(c):
         ytc = y_true[c == i]
         ypc = y_pred[c == i]
         ipc = in_posterior[c == i]
-        for j in range(ytc.shape[0]):
-            ax = axes[i, 2 * j]
-            ax.imshow(ytc[j].reshape(5, 5))
-            ax = axes[i, 2 * j + 1]
-            ax.imshow(ypc[j].reshape(5, 5))
-            ax = axes[i, 2 * j + 1]
-            color = "w" if ipc[j] else "r"
-            ax.axhline(0, color=color)
-            ax.axhline(4, color=color)
-            ax.axvline(0, color=color)
-            ax.axvline(4, color=color)
+        for j in range(n_max):
+            if j < len(ipc):
+                ax = axes[i, 2 * j]
+                ax.imshow(ytc[j].reshape(5, 5), interpolation="nearest")
+                ax.set_title("real")
+                ax.get_xaxis().set_visible(False)
+                ax.get_yaxis().set_visible(False)
+                ax = axes[i, 2 * j + 1]
+                ax.imshow(ypc[j].reshape(5, 5), interpolation="nearest")
+                title = "post" if ipc[j] else "recn"
+                ax.get_xaxis().set_visible(False)
+                ax.get_yaxis().set_visible(False)
+                ax.set_title(title)
+            else:
+                axes[i, 2 * j].axis("off")
+                axes[i, 2 * j + 1].axis("off")
+            # ax.axhline(0, color=color)
+            # ax.axhline(4, color=color)
+            # ax.axvline(0, color=color)
+            # ax.axvline(4, color=color)
+    # plot.tight_layout()
     return plot, axes
 
 
-#%%
+def plot_cluster_representatives(m, X, G, S, c, n_samples=7):
+    Ys = torch.stack([m.hnp.predict(X, G, S) for i in range(n_samples)])
+    n_S = S.size(0)
+    figsize = (2 * n_samples, 10)
+    plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_samples, figsize=figsize)
+    in_posterior = np.array([False] * n_S + [True] * (len(c) - n_S))
+    for i in np.unique(c):
+        idx = np.argmax(np.array(c == i) * in_posterior)
+        for j in range(n_samples):
+            ax = axes[i, j]
+            ax.imshow(Ys[j, idx].reshape(5, 5), interpolation="nearest")
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+    return plot, axes
 
+
+def plot_cluster_stars(Y, c, n_samples=7):
+    figsize = (2 * n_samples, 10)
+    plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_samples, figsize=figsize)
+    for i in np.unique(c):
+        # idx = np.argmax(np.array(c==i) * in_posterior)
+        Yc = Y[c == i]
+        for j in range(n_samples):
+            ax = axes[i, j]
+            ax.imshow(Yc[j].reshape(5, 5), interpolation="nearest")
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+    return plot, axes
+
+
+def pred_mean(m, X, G, S, n_samples):
+    return torch.stack([m.hnp.predict(X, G, S) for i in range(n_samples)]).mean(0)
+
+
+#%%
+xall = pred_mean(m, X, G, S, 100)
 p, a = plot_cluster_images(c, Y, x, n_S=Y.size(0))
-p.savefig("test.png")
+p.savefig("test.png", transparent=False)
 # %%
-x20 = m.hnp.predict(X, G, S[:20])
+x20 = pred_mean(m, X, G, S[:20], 100)
 p, a = plot_cluster_images(c, Y, x20, n_S=20)
 p.savefig("test20.png")
 # %%
 # No input (just predict from catalog)
-x0 = m.hnp.predict(X, G, S[:0])
+x0 = pred_mean(m, X, G, S[:0], 100)
 p, a = plot_cluster_images(c, Y, x0, n_S=0)
 p.savefig("test0.png")
 
+# %%
+# Plot the "cluster" representatives for each star
+# With no data (sample from prior)
+p, a = plot_cluster_representatives(m, X, G, S[:0], c, 10)
+p.savefig("cluster_reps0.png")
+# %%
+# With a lot of data
+p, a = plot_cluster_representatives(m, X, G, S[:200], c, 10)
+p.savefig("cluster_reps200.png")
+#%%
+# Plot some random samples from each cluster
+p, a = plot_cluster_stars(Y, c, 10)
+p.savefig("cluster_stars.png")
 # %%
