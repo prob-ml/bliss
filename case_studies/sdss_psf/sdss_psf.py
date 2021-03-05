@@ -84,7 +84,7 @@ class SDSS_HNP(LightningModule):
         dh = 2 * dz
         super().__init__()
         z_inference = SequentialVarg(
-            ConcatLayer([1]), MLP(dy, [64, 32, 16], 2 * dz), SplitLayer(dz, -1), NormalEncoder()
+            ConcatLayer([1]), MLP(dy, [16, 8], 2 * dz), SplitLayer(dz, -1), NormalEncoder()
         )
 
         z_prior = SequentialVarg(fnp.AveragePooler(dz), SplitLayer(dz, -1), NormalEncoder())
@@ -99,7 +99,7 @@ class SDSS_HNP(LightningModule):
 
         y_decoder = SequentialVarg(
             ConcatLayer([0]),
-            MLP(dz, [16, 32, 64, 128], 2 * dy),
+            MLP(dz, [8, 16, 32], 2 * dy),
             SplitLayer(dy, -1),
             NormalEncoder(),
         )
@@ -140,7 +140,8 @@ X = X[idxs]
 G = G[idxs]
 Y = torch.from_numpy(sdss_data[0]["bright_stars"])[idxs].reshape(-1, 25)
 Y = (Y - Y.mean(1, keepdim=True)) / Y.std(1, keepdim=True)
-S = Y[0:20]
+# S = Y[0:20]
+S = Y
 # %%
 
 trainloader = DataLoader([[X, G, S, Y]], batch_size=None, batch_sampler=None)

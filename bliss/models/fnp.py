@@ -232,7 +232,7 @@ class HNP(nn.Module):
         n_inputs = S.size(0)
         pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
         log_pqh = pH.log_prob(H) - qH.log_prob(H)
-        log_pqz = pZ.log_prob(Z)[n_inputs] - qZi.log_prob(Z[:n_inputs])
+        log_pqz = pZ.log_prob(Z)[:n_inputs] - qZi.log_prob(Z[:n_inputs])
         log_py = pY.log_prob(Y)
         elbo = log_pqh.sum() + log_pqz.sum() + log_py.sum()
         return elbo
@@ -240,11 +240,12 @@ class HNP(nn.Module):
     def forward(self, X, G, S, Y):
         return -self.log_prob(X, G, S, Y)
 
-    def predict(self, X, G, S):
+    def predict(self, X, G, S, cond_output=False):
         n_inputs = S.size(0)
         pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
         Y = pY.sample()
-        Y[:n_inputs] = S
+        if cond_output:
+            Y[:n_inputs] = S
         return Y
 
 
