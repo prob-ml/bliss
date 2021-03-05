@@ -10,6 +10,8 @@ from omegaconf import DictConfig
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 
+from bliss.datasets.sdss import SloanDigitalSkySurvey
+
 
 def get_catsim_galaxy(entry, filt, survey, no_disk=False, no_bulge=False, no_agn=False):
     """Credit: WeakLensingDeblending (https://github.com/LSSTDESC/WeakLensingDeblending)"""
@@ -163,10 +165,23 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         self.survey = sdss_survey
         self.filt = self.survey.filters[0]
         self.pixel_scale = self.survey.pixel_scale
-        self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
 
         # read cosmodc2 table of entries.
         self.catalog = Table.read(cfg.dataset.cosmoDC2_file)
+
+        # setup sdss object and psf at a given point.
+        assert len(list(cfg.dataset.sdss.bands)) == 1
+        assert cfg.dataset.sdss.bands[0] == 2
+        assert len(list(cfg.dataset.sdss.psf_points)) == 2
+        sdss_data = SloanDigitalSkySurvey(**cfg.dataset.sdss)
+        _psf = sdss_data.rcfgcs[0][-1]
+        x, y = cfg.dataset.sdss.psf_points
+        psf = _psf.psf_at_points(0, x, y)
+        psf_image = galsim.Image(psf, scale=0.396)  # sdss pixel_scale.
+        self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+        self.psf_fwhm = psf.calculateFWHM()
+
+        # self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
 
     def __getitem__(self, idx):
         entry = self.catalog[idx]
