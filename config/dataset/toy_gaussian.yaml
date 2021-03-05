@@ -8,3 +8,4 @@ params:
   deviate_center: False
   background: 633
   snr: 300
+  pixel_scale: 0.2
