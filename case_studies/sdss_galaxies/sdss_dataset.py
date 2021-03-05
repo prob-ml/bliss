@@ -172,14 +172,14 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         # setup sdss object and psf at a given point.
         assert len(list(cfg.dataset.sdss.bands)) == 1
         assert cfg.dataset.sdss.bands[0] == 2
-        assert len(list(cfg.dataset.sdss.psf_points)) == 2
+        assert len(list(cfg.dataset.psf.psf_points)) == 2
         sdss_data = SloanDigitalSkySurvey(**cfg.dataset.sdss)
         _psf = sdss_data.rcfgcs[0][-1]
-        x, y = cfg.dataset.sdss.psf_points
+        x, y = cfg.dataset.psf.psf_points
         psf = _psf.psf_at_points(0, x, y)
         psf_image = galsim.Image(psf, scale=0.396)  # sdss pixel_scale.
         self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
-        self.psf_fwhm = psf.calculateFWHM()
+        self.psf_fwhm = self.psf.calculateFWHM()  # arcsecs
 
         # self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
 
