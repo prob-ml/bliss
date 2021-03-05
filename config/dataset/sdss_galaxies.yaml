@@ -1,8 +1,9 @@
+# @package _group_
 ---
 batch_size: 128
-cosmoDC2_file: 'cosmoDC2_wld_sdss_10_sq_deg.fits'
+cosmoDC2_file: "cosmoDC2_wld_sdss_10_sq_deg.fits"
 n_batches: 10
-name: 'ToyGaussian'
+name: "ToyGaussian"
 num_workers: 0
 params:
   background: 633
@@ -19,5 +20,8 @@ sdss:
   overwrite_cache: false
   overwrite_fits_cache: false
   run: 94
-  sdss_dir: '${paths.data}/sdss'
+  sdss_dir: "${paths.data}/sdss"
   stampsize: 5
+  psf_points:
+    - 450
+    - 550
