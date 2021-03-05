@@ -148,7 +148,7 @@ trainloader = DataLoader([[X, G, S, Y]], batch_size=None, batch_sampler=None)
 
 m = SDSS_HNP(25, 4)
 # %%
-trainer = Trainer(max_epochs=400, checkpoint_callback=False)
+trainer = Trainer(max_epochs=1000, checkpoint_callback=False)
 trainer.fit(m, trainloader)
 # %%
 x = m.hnp.predict(X, G, S)
@@ -157,24 +157,44 @@ plt.imshow(x[20].reshape(5, 5))
 # %%
 plt.imshow(Y[20].reshape(5, 5))
 # %%
-def plot_cluster_images(c, y_true, y_pred):
+def plot_cluster_images(c, y_true, y_pred, n_S=0):
     n_max = 0
     for i in np.unique(c):
         if sum(c == i) > n_max:
             n_max = sum(c == i)
     figsize = (20, 20)
     plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_max * 2, figsize=figsize)
+    in_posterior = np.array([False] * n_S + [True] * (len(c) - n_S))
     for i in np.unique(c):
         ytc = y_true[c == i]
         ypc = y_pred[c == i]
+        ipc = in_posterior[c == i]
         for j in range(ytc.shape[0]):
             ax = axes[i, 2 * j]
             ax.imshow(ytc[j].reshape(5, 5))
             ax = axes[i, 2 * j + 1]
             ax.imshow(ypc[j].reshape(5, 5))
+            ax = axes[i, 2 * j + 1]
+            color = "w" if ipc[j] else "r"
+            ax.axhline(0, color=color)
+            ax.axhline(4, color=color)
+            ax.axvline(0, color=color)
+            ax.axvline(4, color=color)
     return plot, axes
 
 
-p, a = plot_cluster_images(c, Y, x)
+#%%
+
+p, a = plot_cluster_images(c, Y, x, n_S=Y.size(0))
 p.savefig("test.png")
+# %%
+x20 = m.hnp.predict(X, G, S[:20])
+p, a = plot_cluster_images(c, Y, x20, n_S=20)
+p.savefig("test20.png")
+# %%
+# No input (just predict from catalog)
+x0 = m.hnp.predict(X, G, S[:0])
+p, a = plot_cluster_images(c, Y, x0, n_S=0)
+p.savefig("test0.png")
+
 # %%
