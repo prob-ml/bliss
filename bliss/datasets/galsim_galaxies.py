@@ -183,7 +183,8 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         # self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
 
     def __getitem__(self, idx):
-        entry = self.catalog[idx]
+        _indx = np.random.randint(len(self.catalog))
+        entry = self.catalog[_indx]
         galaxy = get_catsim_galaxy(entry, self.filt, self.survey)
         gal_conv = galsim.Convolution(galaxy, self.psf)
         image = gal_conv.drawImage(
