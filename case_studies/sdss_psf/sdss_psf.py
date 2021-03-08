@@ -1,6 +1,7 @@
 # %%
 from pytorch_lightning import LightningModule, Trainer
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.dataset import Dataset
 from bliss.utils import ConcatLayer, MLP, NormalEncoder, SequentialVarg, SplitLayer
 from bliss.models.fnp import AveragePooler, HNP
 import numpy as np
@@ -20,8 +21,76 @@ import bliss.models.fnp as fnp
 from torch.distributions import Normal
 
 import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
 
-sdss_data = sdss.SloanDigitalSkySurvey(
+#%%
+class SDSS(Dataset):
+    def __init__(self, sdss_source):
+        super().__init__()
+        self.sdss_source = sdss_source
+        self.cached_items = [None] * len(self.sdss_source)
+
+    def __getitem__(self, idx):
+        return self.get_full_item(idx)[0:4]
+
+    def __len__(self):
+        return len(self.cached_items)
+
+    def get_full_item(self, idx):
+        if self.cached_items[idx] is None:
+            out = self.makeitem(idx)
+            self.cached_items[idx] = out
+        else:
+            out = self.cached_items[idx]
+        return out
+
+    def makeitem(self, idx):
+        data = self.sdss_source[idx]
+        locs = torch.stack((torch.from_numpy(data["prs"]), torch.from_numpy(data["pts"])), dim=1)
+        X = (locs - locs.mean(0)) / locs.std(0)
+
+        ## Construct dependency matrix with K-means clustering
+        km = KMeans(n_clusters=5)
+        c = torch.from_numpy(km.fit_predict(locs))
+        G = self.make_G_from_clust(c)
+
+        ## Reshape and normalize stamps
+        Y = torch.from_numpy(data["bright_stars"]).reshape(-1, 25)
+        Y = (Y - Y.mean(1, keepdim=True)) / Y.std(1, keepdim=True)
+
+        ## Randomize order
+        idxs = np.random.choice(len(c), len(c), replace=False)
+        X = X[idxs]
+        G = G[idxs]
+        Y = Y[idxs]
+        S = Y
+        return (X, G, S, Y, locs, km, c)
+
+    @staticmethod
+    def make_G_from_clust(c, nclust=None):
+        if not nclust:
+            nclust = len(np.unique(c))
+        G = torch.zeros((len(c), nclust))
+        for i in range(nclust):
+            G[c == i, i] = 1.0
+        return G
+
+    def plot_clustered_locs(self, idx):
+        pl, axes = plt.subplots(nrows=1, ncols=1, figsize=(4, 4))
+        plot_image(pl, axes, self.sdss_source[idx]["image"][2])
+        _, _, _, _, locs, _, clst = self.get_full_item(idx)
+        colors = ["red", "green", "blue", "orange", "yellow"]
+        for i, cl in enumerate(np.unique(clst)):
+            _plot_locs(axes, 1, 0, locs[clst == cl], color=colors[i], s=3)
+
+        plot_image_locs(
+            axes, 1, 0, sdss_dataset.get_full_item(0)[5].cluster_centers_, colors=("white",)
+        )
+        return pl
+
+
+#%%
+sdss_source = sdss.SloanDigitalSkySurvey(
     # sdss_dir=sdss_dir,
     Path(bliss.__file__).parents[1].joinpath("data/sdss_all"),
     run=3900,
@@ -30,57 +99,16 @@ sdss_data = sdss.SloanDigitalSkySurvey(
     bands=range(5),
 )
 
-image = torch.Tensor(sdss_data[0]["image"])
-slen0 = image.shape[-2]
-slen1 = image.shape[-1]
-
-plt.imshow(image[2].log())
+sdss_dataset = SDSS(sdss_source)
 
 #%%
-fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(4, 4))
-plot_image(fig, axes, image[2])
-locs = torch.stack(
-    (torch.from_numpy(sdss_data[0]["prs"]), torch.from_numpy(sdss_data[0]["pts"])), dim=1
-)
-plot_image_locs(axes, slen=1, border_padding=0, true_locs=locs)
-
-# %%
-fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(4, 4))
-plot_image(fig, axes, image[2])
-locs = torch.stack(
-    (torch.from_numpy(sdss_data[0]["prs"]), torch.from_numpy(sdss_data[0]["pts"])), dim=1
-)
-# plot_image_locs(axes, slen=1, border_padding=0, true_locs=locs)
-axes.set_xlim(1200, 1400)
-axes.set_ylim(1050, 1200)
-# %%
-sdss_data[0]["bright_stars"]
-# %%
-from sklearn.cluster import KMeans
-
-# %%
-km = KMeans(n_clusters=5)
-c = km.fit_predict(locs)
-
-
-def plot_clustered_locs(axes, clst, locs):
-    colors = ["red", "green", "blue", "orange", "yellow"]
-    for i, cl in enumerate(np.unique(clst)):
-        _plot_locs(axes, 1, 0, locs[clst == cl], color=colors[i], s=3)
-
-
-# %%
-c
-# %%
-# %%
-fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(4, 4))
-plot_image(fig, axes, image[2])
-plot_clustered_locs(axes, c, locs)
-plot_image_locs(axes, 1, 0, km.cluster_centers_, colors=("white",))
+pl = sdss_dataset.plot_clustered_locs(0)
+pl.savefig("clustered_locs.png")
 # %%
 ## Estimate this image
 class SDSS_HNP(LightningModule):
-    def __init__(self, dy=81, dz=4):
+    def __init__(self, dy=81, dz=4, sdss_dataset=None):
+        self.sdss_dataset = sdss_dataset
         dh = 2 * dz
         super().__init__()
         z_inference = SequentialVarg(
@@ -93,9 +121,6 @@ class SDSS_HNP(LightningModule):
             torch.zeros(G.size(1), dh, device=G.device), torch.ones(G.size(1), dh, device=G.device)
         )
 
-        # h_pooler = SequentialVarg(
-        #     fnp.AveragePooler(dh, f=Linear(2 * dz, 2 * dh)), SplitLayer(dh, -1), NormalEncoder()
-        # )
         h_pooler = SimpleHPooler(dh)
 
         y_decoder = SequentialVarg(
@@ -121,6 +146,9 @@ class SDSS_HNP(LightningModule):
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-3)
 
+    def train_dataloader(self):
+        return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None)
+
 
 from torch.nn import Module
 
@@ -137,36 +165,13 @@ class SimpleHPooler(Module):
         return Normal(z_pooled, std)
 
 
-def make_G_from_clust(c, nclust=None):
-    if not nclust:
-        nclust = len(np.unique(c))
-    G = torch.zeros((len(c), nclust))
-    for i in range(nclust):
-        G[c == i, i] = 1.0
-    return G
-
-
 # %%
-## Prepare dataset
-X = (locs - locs.mean(0)) / locs.std(0)
-G = make_G_from_clust(c)
-## Randomize order
-idxs = np.random.choice(len(c), len(c), replace=False)
-X = X[idxs]
-G = G[idxs]
-Y = torch.from_numpy(sdss_data[0]["bright_stars"])[idxs].reshape(-1, 25)
-Y = (Y - Y.mean(1, keepdim=True)) / Y.std(1, keepdim=True)
-# S = Y[0:20]
-S = Y
-# %%
-
-trainloader = DataLoader([[X, G, S, Y]], batch_size=None, batch_sampler=None)
-
-m = SDSS_HNP(25, 4)
-# %%
+m = SDSS_HNP(25, 4, sdss_dataset)
 trainer = Trainer(max_epochs=1000, checkpoint_callback=False)
-trainer.fit(m, trainloader)
+trainer.fit(m)
 # %%
+X, G, S, Y, locs, _, c = sdss_dataset.get_full_item(0)
+c = c.numpy()
 x = m.hnp.predict(X, G, S)
 # %%
 plt.imshow(x[20].reshape(5, 5))
