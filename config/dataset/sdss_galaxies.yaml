@@ -1,6 +1,6 @@
 # @package _group_
 ---
-batch_size: 64
+batch_size: 128
 cosmoDC2_file: "${paths.data}/cosmoDC2_wld_sdss_10_sq_deg.fits"
 n_batches: 10
 name: "SDSSGalaxies"
@@ -9,7 +9,7 @@ params:
   background: 633
   deviate_center: false
   noise_factor: 0.05
-  slen: 51
+  slen: 41
 sdss:
   bands:
     - 2
