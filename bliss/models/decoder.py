@@ -95,13 +95,13 @@ class ImageDecoder(pl.LightningModule):
         assert len(background_values) == n_bands
         self.background_values = background_values
 
+        ## Submodule for managing tiles (no learned parameters)
+        self.tiler = Tiler(tile_slen, ptile_slen)
+
         ## Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
+            self.tiler,
             self.n_bands,
-            self.slen,
-            self.tile_slen,
-            self.ptile_slen,
-            self.border_padding,
             self.psf_params_file,
             self.psf_slen,
         )
@@ -113,7 +113,6 @@ class ImageDecoder(pl.LightningModule):
                 self.n_bands,
                 self.tile_slen,
                 self.ptile_slen,
-                self.border_padding,
                 self.gal_slen,
                 self.n_galaxy_params,
                 self.gal_decoder_file,
@@ -483,13 +482,15 @@ class ImageDecoder(pl.LightningModule):
         return canvas[:, :, x0:x1, x0:x1]
 
 
-class TileDecoder(nn.Module):
-    def __init__(self, n_bands, tile_slen, ptile_slen, border_padding):
+class Tiler(nn.Module):
+    """
+    This class creates an image tile from multiple sources.
+    """
+
+    def __init__(self, tile_slen, ptile_slen):
         super().__init__()
-        self.n_bands = n_bands
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-        self.border_padding = border_padding
 
         # caching the underlying
         # coordinates on which we simulate source
@@ -499,26 +500,10 @@ class TileDecoder(nn.Module):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def _trim_source(self, source):
-        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
-        assert len(source.shape) == 3
+    def forward(self, locs, source):
+        return self.render_one_source(locs, source)
 
-        # if self.ptile_slen is even, we still make source dimension odd.
-        # otherwise, the source won't have a peak in the center pixel.
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-
-        source_slen = source.shape[2]
-        source_center = (source_slen - 1) / 2
-
-        assert source_slen >= _slen
-
-        r = np.floor(_slen / 2)
-        l_indx = int(source_center - r)
-        u_indx = int(source_center + r + 1)
-
-        return source[:, l_indx:u_indx, l_indx:u_indx]
-
-    def _render_one_source(self, locs, source):
+    def render_one_source(self, locs, source):
         """
         :param locs: is n_ptiles x len((x,y))
         :param source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
@@ -527,8 +512,6 @@ class TileDecoder(nn.Module):
         :return: shape = (n_ptiles x n_bands x slen x slen)
         """
         n_ptiles = locs.shape[0]
-        assert source.shape[0] == n_ptiles
-        assert source.shape[1] == self.n_bands
         assert source.shape[2] == source.shape[3]
         assert locs.shape[1] == 2
 
@@ -544,6 +527,35 @@ class TileDecoder(nn.Module):
 
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
+
+    def render_tile(self, locs, sources):
+        """
+        :param locs: is (n_ptiles x max_num_stars x 2)
+        :param sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
+
+        :return: ptile = (n_ptiles x n_bands x slen x slen)
+        """
+        max_sources = locs.shape[1]
+        ptile_shape = (
+            sources.size(0),
+            sources.size(2),
+            self.ptile_slen,
+            self.ptile_slen,
+        )
+        ptile = torch.zeros(ptile_shape, device=locs.device)
+
+        for n in range(max_sources):
+            one_star = self.render_one_source(locs[:, n, :], sources[:, n])
+            ptile += one_star
+
+        return ptile
+
+    def fit_source_to_ptile(self, source):
+        if self.ptile_slen >= source.shape[-1]:
+            fitted_source = self._expand_source(source)
+        else:
+            fitted_source = self._trim_source(source)
+        return fitted_source
 
     def _expand_source(self, source):
         """Pad the source with zeros so that it is size ptile_slen,"""
@@ -565,21 +577,37 @@ class TileDecoder(nn.Module):
 
         return source_expanded
 
+    def _trim_source(self, source):
+        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
+        assert len(source.shape) == 3
 
-class StarTileDecoder(TileDecoder):
+        # if self.ptile_slen is even, we still make source dimension odd.
+        # otherwise, the source won't have a peak in the center pixel.
+        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+
+        source_slen = source.shape[2]
+        source_center = (source_slen - 1) / 2
+
+        assert source_slen >= _slen
+
+        r = np.floor(_slen / 2)
+        l_indx = int(source_center - r)
+        u_indx = int(source_center + r + 1)
+
+        return source[:, l_indx:u_indx, l_indx:u_indx]
+
+
+class StarTileDecoder(nn.Module):
     def __init__(
         self,
+        tiler,
         n_bands,
-        slen,
-        tile_slen,
-        ptile_slen,
-        border_padding,
         psf_params_file,
         psf_slen,
     ):
-        super().__init__(n_bands, tile_slen, ptile_slen, border_padding)
-
-        self.slen = slen
+        super().__init__()
+        self.tiler = tiler
+        self.n_bands = n_bands
 
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
@@ -610,15 +638,13 @@ class StarTileDecoder(TileDecoder):
 
     def forward(self, locs, fluxes, star_bool):
         # locs: is (n_ptiles x max_num_stars x 2)
-        # fluxes: Is (n_ptiles x n_bands x max_stars)
+        # fluxes: Is (n_ptiles x max_stars x n_bands)
         # star_bool: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
         psf = self._adjust_psf()
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
-        ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=locs.device)
 
         assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
@@ -628,18 +654,11 @@ class StarTileDecoder(TileDecoder):
         assert star_bool.shape[2] == 1
 
         # all stars are just the PSF so we copy it.
-        expanded_psf = psf.expand(n_ptiles, self.n_bands, -1, -1)
+        expanded_psf = psf.expand(n_ptiles, max_sources, self.n_bands, -1, -1)
+        sources = expanded_psf * fluxes.unsqueeze(-1).unsqueeze(-1)
+        sources *= star_bool.unsqueeze(-1).unsqueeze(-1)
 
-        # this loop plots each of the ith star in each of the (n_ptiles) images.
-        for n in range(max_sources):
-            star_bool_n = star_bool[:, n]
-            locs_n = locs[:, n, :]
-            fluxes_n = fluxes[:, n, :] * star_bool_n.view(-1, 1)
-            fluxes_n = fluxes_n.view(n_ptiles, self.n_bands, 1, 1)
-            one_star = self._render_one_source(locs_n, expanded_psf)
-            ptile += one_star * fluxes_n
-
-        return ptile
+        return self.tiler.render_tile(locs, sources)
 
     def psf_forward(self):
         psf = self._get_psf()
@@ -706,23 +725,23 @@ class StarTileDecoder(TileDecoder):
         assert psf.shape[1] == psf_slen
         assert (psf_slen % 2) == 1
 
-        if self.ptile_slen >= psf.shape[-1]:
-            return self._expand_source(psf)
-        return self._trim_source(psf)
+        return self.tiler.fit_source_to_ptile(psf)
 
 
-class GalaxyTileDecoder(TileDecoder):
+class GalaxyTileDecoder(nn.Module):
     def __init__(
         self,
         n_bands,
         tile_slen,
         ptile_slen,
-        border_padding,
         gal_slen,
         n_galaxy_params,
         decoder_file,
     ):
-        super().__init__(n_bands, tile_slen, ptile_slen, border_padding)
+        super().__init__()
+        self.n_bands = n_bands
+        self.tiler = Tiler(tile_slen, ptile_slen)
+        self.ptile_slen = ptile_slen
 
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params
@@ -736,9 +755,6 @@ class GalaxyTileDecoder(TileDecoder):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
-        ptile_shape = (n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
-        ptile = torch.zeros(ptile_shape, device=locs.device)
-        var_ptile = torch.zeros(ptile_shape, device=locs.device)
 
         assert self.galaxy_decoder is not None
         galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
@@ -748,17 +764,13 @@ class GalaxyTileDecoder(TileDecoder):
         assert galaxy_bool.shape[2] == 1
 
         single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bool)
-        for n in range(max_sources):
-            galaxy_bool_n = galaxy_bool[:, n]
-            locs_n = locs[:, n, :]
-            _galaxy = single_galaxies[:, n, :, :, :]
-            _var = single_vars[:, n, :, :, :]
-            galaxy = _galaxy * galaxy_bool_n.view(-1, 1, 1, 1)
-            var = _var * galaxy_bool_n.view(-1, 1, 1, 1)
-            one_galaxy = self._render_one_source(locs_n, galaxy)
-            one_var = self._render_one_source(locs_n, var)
-            ptile += one_galaxy
-            var_ptile += one_var
+
+        ptile = self.tiler.render_tile(
+            locs, single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1)
+        )
+        var_ptile = self.tiler.render_tile(
+            locs, single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1)
+        )
 
         return ptile, var_ptile
 
@@ -802,10 +814,7 @@ class GalaxyTileDecoder(TileDecoder):
         galaxy_slen = galaxy.shape[3]
         galaxy = galaxy.view(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
 
-        if self.ptile_slen >= galaxy.shape[-1]:
-            sized_galaxy = self._expand_source(galaxy)
-        else:
-            sized_galaxy = self._trim_source(galaxy)
+        sized_galaxy = self.tiler.fit_source_to_ptile(galaxy)
 
         outsize = sized_galaxy.shape[-1]
         return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
