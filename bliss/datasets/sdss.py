@@ -12,35 +12,90 @@ from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
 
 
-def construct_subpixel_grid_base(size_x, size_y):
-    grid_x = np.linspace(-1.0, 1.0, num=size_x)
-    grid_y = np.linspace(-1.0, 1.0, num=size_y)
+class StarStamper:
+    def __init__(self, img, stampsize, center_subpixel=True, bg=None):
+        self.img = img
+        self.bg = bg  # Background
+        self.stampsize = stampsize
+        self.center_subpixel = center_subpixel
+        self.G = self._construct_subpixel_grid_base()
 
-    G_x = torch.stack([torch.from_numpy(grid_x)] * size_y, dim=0)
-    G_y = torch.stack([torch.from_numpy(grid_y)] * size_x, dim=1)
+    def fetch_bright_stars(self, ras, decs, fluxes, wcs):
+        stamps = []
+        bgs = []
+        pts = []
+        prs = []
+        flxs = []
 
-    G = torch.stack([G_x, G_y], dim=2)
+        for (ra, dec, flx) in zip(ras, decs, fluxes):
+            # pt = "time" in pixel coordinates
+            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
+            pti, pri = int(pt + 0.5), int(pr + 0.5)
 
-    return G
+            row_lower = pri - self.stampsize // 2
+            row_upper = pri + self.stampsize // 2 + 1
+            col_lower = pti - self.stampsize // 2
+            col_upper = pti + self.stampsize // 2 + 1
 
+            edge_stamp = (
+                (row_lower < 0)
+                or (row_upper > self.img.shape[0])
+                or (col_lower < 0)
+                or (col_upper > self.img.shape[1])
+            )
 
-def construct_subpixel_grid(G, shift_x, shift_y):
-    G_shift = G.clone()
-    G_shift[:, :, 0] += shift_x
-    G_shift[:, :, 1] += shift_y
-    return G_shift
+            if not edge_stamp:
+                stamp = self.img[row_lower:row_upper, col_lower:col_upper]
+                if self.center_subpixel:
+                    stamp = self._center_stamp_subpixel(stamp, pt, pr)
+                stamps.append(stamp)
+                pts.append(pt)
+                prs.append(pr)
+                flxs.append(flx)
+                if self.bg:
+                    stamp_bg = self.bg[row_lower:row_upper, col_lower:col_upper]
+                    bgs.append(stamp_bg)
 
+        return (
+            np.asarray(stamps),
+            np.asarray(pts),
+            np.asarray(prs),
+            np.asarray(flxs),
+            np.asarray(bgs),
+        )
 
-def center_stamp_subpixel(stamp, pt, pr, G):
-    stamp_torch = torch.from_numpy(stamp)
-    size_y, size_x = stamp.shape
-    shift_x = 2 * (pt - int(pt + 0.5)) / size_x
-    shift_y = 2 * (pr - int(pr + 0.5)) / size_y
-    G_shift = construct_subpixel_grid(G, shift_x, shift_y).float()
-    stamp_shifted = F.grid_sample(
-        stamp_torch.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False
-    )
-    return stamp_shifted.squeeze(0).squeeze(0).numpy()
+    def _construct_subpixel_grid_base(self):
+        grid_x = np.linspace(-1.0, 1.0, num=self.stampsize)
+        grid_y = np.linspace(-1.0, 1.0, num=self.stampsize)
+
+        G_x = torch.stack([torch.from_numpy(grid_x)] * self.stampsize, dim=0)
+        G_y = torch.stack([torch.from_numpy(grid_y)] * self.stampsize, dim=1)
+
+        G = torch.stack([G_x, G_y], dim=2)
+
+        return G
+
+    def _construct_subpixel_grid(self, shift_x, shift_y):
+        G_shift = self.G.clone()
+        G_shift[:, :, 0] += shift_x
+        G_shift[:, :, 1] += shift_y
+        return G_shift
+
+    def _center_stamp_subpixel(
+        self,
+        stamp,
+        pt,
+        pr,
+    ):
+        stamp_torch = torch.from_numpy(stamp)
+        size_y, size_x = stamp.shape
+        shift_x = 2 * (pt - int(pt + 0.5)) / size_x
+        shift_y = 2 * (pr - int(pr + 0.5)) / size_y
+        G_shift = self._construct_subpixel_grid(shift_x, shift_y).float()
+        stamp_shifted = F.grid_sample(
+            stamp_torch.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False
+        )
+        return stamp_shifted.squeeze(0).squeeze(0).numpy()
 
 
 class SdssPSF:
@@ -205,46 +260,9 @@ class SloanDigitalSkySurvey(Dataset):
         decs = po_fits["dec"][is_target]
         fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
-        stamps = []
-        pts = []
-        prs = []
-        bgs = []
-        flxs = []
+        stamper = StarStamper(img, self.stampsize, self.center_subpixel, bg=bg)
+        return stamper.fetch_bright_stars(ras, decs, fluxes, wcs)
 
-        G = construct_subpixel_grid_base(self.stampsize, self.stampsize)
-        for (ra, dec, _f, flux) in zip(ras, decs, po_fits["thing_id"][is_target], fluxes):
-            # pt = "time" in pixel coordinates
-            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
-            pti, pri = int(pt + 0.5), int(pr + 0.5)
-
-            row_lower = pri - self.stampsize // 2
-            row_upper = pri + self.stampsize // 2 + 1
-            col_lower = pti - self.stampsize // 2
-            col_upper = pti + self.stampsize // 2 + 1
-            edge_stamp = (
-                (row_lower < 0)
-                or (row_upper > img.shape[0])
-                or (col_lower < 0)
-                or (col_upper > img.shape[1])
-            )
-            if not edge_stamp:
-                stamp = img[row_lower:row_upper, col_lower:col_upper]
-                if self.center_subpixel:
-                    stamp = center_stamp_subpixel(stamp, pt, pr, G)
-                stamps.append(stamp)
-                pts.append(pt)
-                prs.append(pr)
-                stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
-                bgs.append(stamp_bg)
-                flxs.append(flux)
-
-        return (
-            np.asarray(stamps),
-            np.asarray(pts),
-            np.asarray(prs),
-            np.asarray(flxs),
-            np.asarray(bgs),
-        )
 
     def get_from_disk(self, idx, verbose=False):
         if self.rcfgcs[idx] is None:
