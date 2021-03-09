@@ -20,14 +20,14 @@ class StarStamper:
         self.center_subpixel = center_subpixel
         self.G = self._construct_subpixel_grid_base()
 
-    def fetch_bright_stars(self, ras, decs, fluxes, wcs):
+    def fetch_bright_stars(self, ras, decs, wcs):
         stamps = []
+        is_edge = []
         bgs = []
         pts = []
         prs = []
-        flxs = []
 
-        for (ra, dec, flx) in zip(ras, decs, fluxes):
+        for (ra, dec) in zip(ras, decs):
             # pt = "time" in pixel coordinates
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
             pti, pri = int(pt + 0.5), int(pr + 0.5)
@@ -44,6 +44,8 @@ class StarStamper:
                 or (col_upper > self.img.shape[1])
             )
 
+            is_edge.append(edge_stamp)
+
             if not edge_stamp:
                 stamp = self.img[row_lower:row_upper, col_lower:col_upper]
                 if self.center_subpixel:
@@ -51,7 +53,6 @@ class StarStamper:
                 stamps.append(stamp)
                 pts.append(pt)
                 prs.append(pr)
-                flxs.append(flx)
                 if self.bg is not None:
                     stamp_bg = self.bg[row_lower:row_upper, col_lower:col_upper]
                     bgs.append(stamp_bg)
@@ -60,8 +61,8 @@ class StarStamper:
             np.asarray(stamps),
             np.asarray(pts),
             np.asarray(prs),
-            np.asarray(flxs),
             np.asarray(bgs),
+            np.asarray(is_edge),
         )
 
     def _construct_subpixel_grid_base(self):
@@ -261,7 +262,14 @@ class SloanDigitalSkySurvey(Dataset):
         fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
         stamper = StarStamper(img, self.stampsize, self.center_subpixel, bg=bg)
-        return stamper.fetch_bright_stars(ras, decs, fluxes, wcs)
+        stamps, pts, prs, bgs, is_edge = stamper.fetch_bright_stars(ras, decs, wcs)
+        return (
+            stamps,
+            pts,
+            prs,
+            fluxes[~is_edge],
+            bgs,
+        )
 
     def get_from_disk(self, idx, verbose=False):
         if self.rcfgcs[idx] is None:
