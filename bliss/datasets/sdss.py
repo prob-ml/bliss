@@ -13,14 +13,15 @@ from astropy.wcs import WCS, FITSFixedWarning
 
 
 class StarStamper:
-    def __init__(self, img, stampsize, center_subpixel=True, bg=None):
-        self.img = img
-        self.bg = bg  # Background
+    def __init__(self, stampsize, center_subpixel=True):
         self.stampsize = stampsize
         self.center_subpixel = center_subpixel
-        self.G = self._construct_subpixel_grid_base()
+        if self.center_subpixel:
+            self.G = self._construct_subpixel_grid_base()
+        else:
+            self.G = None
 
-    def fetch_bright_stars(self, ras, decs, wcs):
+    def __call__(self, img, ras, decs, wcs, bg=None):
         stamps = []
         is_edge = []
         bgs = []
@@ -39,22 +40,22 @@ class StarStamper:
 
             edge_stamp = (
                 (row_lower < 0)
-                or (row_upper > self.img.shape[0])
+                or (row_upper > img.shape[0])
                 or (col_lower < 0)
-                or (col_upper > self.img.shape[1])
+                or (col_upper > img.shape[1])
             )
 
             is_edge.append(edge_stamp)
 
             if not edge_stamp:
-                stamp = self.img[row_lower:row_upper, col_lower:col_upper]
+                stamp = img[row_lower:row_upper, col_lower:col_upper]
                 if self.center_subpixel:
                     stamp = self._center_stamp_subpixel(stamp, pt, pr)
                 stamps.append(stamp)
                 pts.append(pt)
                 prs.append(pr)
-                if self.bg is not None:
-                    stamp_bg = self.bg[row_lower:row_upper, col_lower:col_upper]
+                if bg is not None:
+                    stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
                     bgs.append(stamp_bg)
 
         return (
@@ -176,7 +177,7 @@ class SloanDigitalSkySurvey(Dataset):
         self.stampsize = stampsize
         self.overwrite_cache = overwrite_cache
         self.center_subpixel = center_subpixel
-
+        self.stamper = StarStamper(stampsize, center_subpixel=center_subpixel)
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
         camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
@@ -261,8 +262,7 @@ class SloanDigitalSkySurvey(Dataset):
         decs = po_fits["dec"][is_target]
         fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
-        stamper = StarStamper(img, self.stampsize, self.center_subpixel, bg=bg)
-        stamps, pts, prs, bgs, is_edge = stamper.fetch_bright_stars(ras, decs, wcs)
+        stamps, pts, prs, bgs, is_edge = self.stamper(img, ras, decs, wcs, bg=bg)
         return (
             stamps,
             pts,
