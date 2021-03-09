@@ -25,9 +25,9 @@ from sklearn.cluster import KMeans
 
 #%%
 class SDSS(Dataset):
-    def __init__(self, sdss_source):
+    def __init__(self, sdss_source, min_stars_in_field=100):
         super().__init__()
-        self.sdss_source = sdss_source
+        self.sdss_source = [s for s in sdss_source if len(s["prs"]) > min_stars_in_field]
         self.cached_items = [None] * len(self.sdss_source)
 
     def __getitem__(self, idx):
@@ -95,11 +95,19 @@ sdss_source = sdss.SloanDigitalSkySurvey(
     Path(bliss.__file__).parents[1].joinpath("data/sdss_all"),
     run=3900,
     camcol=6,
-    fields=(808,),
+    fields=range(300,1000),
     bands=range(5),
 )
 
-sdss_dataset = SDSS(sdss_source)
+
+#%%
+# Pickle
+sdss_dataset_file = Path("sdss_source.pkl")
+if sdss_dataset_file.exists() is False:
+    sdss_dataset = SDSS(sdss_source)
+    torch.save(sdss_dataset, sdss_dataset_file)
+else:
+    sdss_dataset = torch.load(sdss_dataset_file)
 
 #%%
 pl = sdss_dataset.plot_clustered_locs(0)
@@ -134,7 +142,7 @@ class SDSS_HNP(LightningModule):
 
     def training_step(self, batch, batch_idx):
         X, G, S, Y = batch
-        loss = self.hnp(X, G, S, Y)
+        loss = self.hnp(X, G, S, Y) / X.size(0)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -167,10 +175,10 @@ class SimpleHPooler(Module):
 
 # %%
 m = SDSS_HNP(25, 4, sdss_dataset)
-trainer = Trainer(max_epochs=1000, checkpoint_callback=False)
+trainer = Trainer(max_epochs=10, checkpoint_callback=False)
 trainer.fit(m)
 # %%
-X, G, S, Y, locs, _, c = sdss_dataset.get_full_item(0)
+X, G, S, Y, locs, _, c = sdss_dataset.get_full_item(50)
 c = c.numpy()
 x = m.hnp.predict(X, G, S)
 # %%
