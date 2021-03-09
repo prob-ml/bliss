@@ -252,7 +252,6 @@ class SloanDigitalSkySurvey(Dataset):
                 if p.exists():
                     p.unlink()
 
-    # pylint: disable=too-many-statements
     def fetch_bright_stars(self, po_fits, img, wcs, bg):
         is_star = po_fits["objc_type"] == 6
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
@@ -272,6 +271,7 @@ class SloanDigitalSkySurvey(Dataset):
         )
 
     def get_from_disk(self, idx, verbose=False):
+        # pylint: disable=too-many-statements
         if self.rcfgcs[idx] is None:
             return None
         run, camcol, field, gain, po_fits, psf = self.rcfgcs[idx]
