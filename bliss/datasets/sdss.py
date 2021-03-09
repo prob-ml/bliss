@@ -263,7 +263,6 @@ class SloanDigitalSkySurvey(Dataset):
         stamper = StarStamper(img, self.stampsize, self.center_subpixel, bg=bg)
         return stamper.fetch_bright_stars(ras, decs, fluxes, wcs)
 
-
     def get_from_disk(self, idx, verbose=False):
         if self.rcfgcs[idx] is None:
             return None
