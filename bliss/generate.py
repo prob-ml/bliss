@@ -33,7 +33,7 @@ def visualize(batch, path, n_samples, figsize=(12, 12)):
     fig.savefig(path, bbox_inches="tight")
 
 
-def main(cfg: DictConfig):
+def generate(cfg: DictConfig):
     # setup
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
     output = Path(paths["root"]).joinpath(paths["output"])

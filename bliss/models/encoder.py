@@ -220,10 +220,7 @@ class ImageEncoder(nn.Module):
         # For each param, for each possible number of detection d, there are d ways of assignment.
         # NOTE: Dimensions correspond to the probabilities in ONE tile.
         self.dim_out_all = int(
-            0.5
-            * self.max_detections
-            * (self.max_detections + 1)
-            * self.n_params_per_source
+            0.5 * self.max_detections * (self.max_detections + 1) * self.n_params_per_source
             + 1
             + self.max_detections
         )
@@ -242,9 +239,7 @@ class ImageEncoder(nn.Module):
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
         # grid for center cropped tiles
-        self.register_buffer(
-            "cached_grid", get_mgrid(self.ptile_slen), persistent=False
-        )
+        self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
 
         # misc
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
@@ -326,9 +321,7 @@ class ImageEncoder(nn.Module):
         # center tiles on the corresponding source given by locs.
         locs = (locs - 0.5) * 2
         locs = locs.index_select(2, self.swap)  # trps (x,y) coords
-        grid_loc = self.cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(
-            -1, 1, 1, 2
-        )
+        grid_loc = self.cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
         shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
 
         # now that everything is center we can crop easily
@@ -360,9 +353,9 @@ class ImageEncoder(nn.Module):
             for k in self.variational_params:
                 param_dim = self.variational_params[k]["dim"]
                 new_indx = (param_dim * n_detections) + curr_indx
-                indx_mats[k][
-                    n_detections, 0 : (param_dim * n_detections)
-                ] = torch.arange(curr_indx, new_indx)
+                indx_mats[k][n_detections, 0 : (param_dim * n_detections)] = torch.arange(
+                    curr_indx, new_indx
+                )
                 curr_indx = new_indx
 
         return indx_mats, curr_indx
@@ -500,9 +493,7 @@ class ImageEncoder(nn.Module):
         tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
-        tile_locs = self._get_normal_samples(
-            pred["loc_mean"], pred["loc_sd"], tile_is_on_array
-        )
+        tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
         tile_log_fluxes = self._get_normal_samples(
             pred["log_flux_mean"], pred["log_flux_sd"], tile_star_bool
         )
@@ -533,9 +524,7 @@ class ImageEncoder(nn.Module):
         # set sd so we return map estimates.
         # first locs
         locs_sd = torch.zeros_like(pred["loc_logvar"])
-        tile_locs = self._get_normal_samples(
-            pred["loc_mean"], locs_sd, tile_is_on_array
-        )
+        tile_locs = self._get_normal_samples(pred["loc_mean"], locs_sd, tile_is_on_array)
         tile_locs = tile_locs.clamp(0, 1)
 
         # then log_fluxes
@@ -579,9 +568,7 @@ class ImageEncoder(nn.Module):
         tile_n_sources = self.tile_map_n_sources(image_ptiles)
         pred = self.forward(image_ptiles, tile_n_sources)
 
-        return self.tile_map_estimate_from_var_params(
-            pred, n_tiles_per_image, batch_size
-        )
+        return self.tile_map_estimate_from_var_params(pred, n_tiles_per_image, batch_size)
 
     def map_estimate(self, images, slen: int, wlen: int = None):
         # return full estimate of parameters in full image.

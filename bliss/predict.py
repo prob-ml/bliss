@@ -8,7 +8,7 @@ _models = [sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
 
 
-def main(cfg: DictConfig):
+def predict(cfg: DictConfig):
     bands = list(cfg.predict.bands)
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 
@@ -39,9 +39,7 @@ def main(cfg: DictConfig):
     with torch.no_grad():
         for i in range(h // clen):
             for j in range(w // clen):
-                chunk = image[
-                    :, :, i * clen : (i + 1) * clen, j * clen : (j + 1) * clen
-                ]
+                chunk = image[:, :, i * clen : (i + 1) * clen, j * clen : (j + 1) * clen]
                 chunk = chunk.to(cfg.predict.device)
 
                 # tile the image
