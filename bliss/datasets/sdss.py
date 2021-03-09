@@ -52,7 +52,7 @@ class StarStamper:
                 pts.append(pt)
                 prs.append(pr)
                 flxs.append(flx)
-                if self.bg:
+                if self.bg is not None:
                     stamp_bg = self.bg[row_lower:row_upper, col_lower:col_upper]
                     bgs.append(stamp_bg)
 
