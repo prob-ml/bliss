@@ -21,16 +21,11 @@ class StarStamper:
         else:
             self.G = None
 
-    def __call__(self, img, ras, decs, wcs, bg=None):
+    def __call__(self, img, pts, prs, bg=None):
         stamps = []
         is_edge = []
         bgs = []
-        pts = []
-        prs = []
-
-        for (ra, dec) in zip(ras, decs):
-            # pt = "time" in pixel coordinates
-            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
+        for (pt, pr) in zip(pts, prs):
             pti, pri = int(pt + 0.5), int(pr + 0.5)
 
             row_lower = pri - self.stampsize // 2
@@ -52,16 +47,12 @@ class StarStamper:
                 if self.center_subpixel:
                     stamp = self._center_stamp_subpixel(stamp, pt, pr)
                 stamps.append(stamp)
-                pts.append(pt)
-                prs.append(pr)
                 if bg is not None:
                     stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
                     bgs.append(stamp_bg)
 
         return (
             np.asarray(stamps),
-            np.asarray(pts),
-            np.asarray(prs),
             np.asarray(bgs),
             np.asarray(is_edge),
         )
@@ -257,15 +248,24 @@ class SloanDigitalSkySurvey(Dataset):
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
         is_thing = po_fits["thing_id"] != -1
         is_target = is_star & is_bright & is_thing
+
         ras = po_fits["ra"][is_target]
         decs = po_fits["dec"][is_target]
+        pts = []
+        prs = []
+        for ra, dec in zip(ras, decs):
+            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
+            pts.append(pt)
+            prs.append(pr)
+        pts = np.asarray(pts)
+        prs = np.asarray(prs)
         fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
-        stamps, pts, prs, bgs, is_edge = self.stamper(img, ras, decs, wcs, bg=bg)
+        stamps, bgs, is_edge = self.stamper(img, pts, prs, bg=bg)
         return (
             stamps,
-            pts,
-            prs,
+            pts[~is_edge],
+            prs[~is_edge],
             fluxes[~is_edge],
             bgs,
         )
