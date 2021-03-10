@@ -79,7 +79,13 @@ class StarStamper:
         prs,
     ):
         locs = torch.stack([pts, prs], dim=1)
-        shifts = 2 * (locs - (locs + 0.5).trunc()) / torch.tensor(stamps.shape[1:]).unsqueeze(0)
+        shifts = (
+            2
+            * (locs - (locs + 0.5).trunc())
+            / torch.tensor(stamps.shape[1:], device=stamps.device).unsqueeze(0)
+        )
+        if self.G.device is not shifts.device:
+            self.G = self.G.to(shifts.device)
         shifts = shifts.type(self.G.dtype)
         G_shift = self.G + shifts.unsqueeze(1).unsqueeze(1)
         stamps_shifted = F.grid_sample(stamps.unsqueeze(1), G_shift, align_corners=False)
