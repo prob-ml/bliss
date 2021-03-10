@@ -52,9 +52,9 @@ class StarStamper:
                     bgs.append(stamp_bg)
 
         return (
-            np.asarray(stamps),
-            np.asarray(bgs),
-            np.asarray(is_edge),
+            torch.stack(stamps),
+            None if bg is None else torch.stack(bgs),
+            torch.tensor(is_edge, device=img.device),
         )
 
     def _construct_subpixel_grid_base(self):
@@ -80,15 +80,14 @@ class StarStamper:
         pt,
         pr,
     ):
-        stamp_torch = torch.from_numpy(stamp)
         size_y, size_x = stamp.shape
         shift_x = 2 * (pt - int(pt + 0.5)) / size_x
         shift_y = 2 * (pr - int(pr + 0.5)) / size_y
         G_shift = self._construct_subpixel_grid(shift_x, shift_y).float()
         stamp_shifted = F.grid_sample(
-            stamp_torch.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False
+            stamp.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False
         )
-        return stamp_shifted.squeeze(0).squeeze(0).numpy()
+        return stamp_shifted.squeeze(0).squeeze(0)
 
 
 class SdssPSF:
@@ -261,13 +260,19 @@ class SloanDigitalSkySurvey(Dataset):
         prs = np.asarray(prs)
         fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
-        stamps, bgs, is_edge = self.stamper(img, pts, prs, bg=bg)
+        stamps, bgs, is_edge = self.stamper(
+            torch.from_numpy(img),
+            torch.from_numpy(pts),
+            torch.from_numpy(prs),
+            bg=torch.from_numpy(bg),
+        )
+        is_edge = is_edge.numpy()
         return (
-            stamps,
+            stamps.numpy(),
             pts[~is_edge],
             prs[~is_edge],
             fluxes[~is_edge],
-            bgs,
+            bgs.numpy(),
         )
 
     def get_from_disk(self, idx, verbose=False):
