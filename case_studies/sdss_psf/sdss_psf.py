@@ -25,18 +25,16 @@ from sklearn.cluster import KMeans
 
 #%%
 class SDSS(Dataset):
-    def __init__(self, sdss_source, min_stars_in_field=100):
+    def __init__(self, sdss_source, band=2, min_stars_in_field=100):
         super().__init__()
+        self.band = band
         self.sdss_source = [s for s in sdss_source if len(s["prs"]) > min_stars_in_field]
         self.cached_items = [None] * len(self.sdss_source)
-
-    def __getitem__(self, idx):
-        return self.get_full_item(idx)[0:4]
 
     def __len__(self):
         return len(self.cached_items)
 
-    def get_full_item(self, idx):
+    def __getitem__(self, idx):
         if self.cached_items[idx] is None:
             out = self.makeitem(idx)
             self.cached_items[idx] = out
@@ -46,6 +44,7 @@ class SDSS(Dataset):
 
     def makeitem(self, idx):
         data = self.sdss_source[idx]
+        img = data["image"][self.band]
         locs = torch.stack((torch.from_numpy(data["prs"]), torch.from_numpy(data["pts"])), dim=1)
         X = (locs - locs.mean(0)) / locs.std(0)
 
@@ -64,7 +63,7 @@ class SDSS(Dataset):
         G = G[idxs]
         Y = Y[idxs]
         S = Y
-        return (X, G, S, Y, locs, km, c)
+        return (X, G, S, Y, img, locs, km, c)
 
     @staticmethod
     def make_G_from_clust(c, nclust=None):
@@ -78,14 +77,12 @@ class SDSS(Dataset):
     def plot_clustered_locs(self, idx):
         pl, axes = plt.subplots(nrows=1, ncols=1, figsize=(4, 4))
         plot_image(pl, axes, self.sdss_source[idx]["image"][2])
-        _, _, _, _, locs, _, clst = self.get_full_item(idx)
+        _, _, _, _, _, locs, km, clst = self[idx]
         colors = ["red", "green", "blue", "orange", "yellow"]
         for i, cl in enumerate(np.unique(clst)):
             _plot_locs(axes, 1, 0, locs[clst == cl], color=colors[i], s=3)
 
-        plot_image_locs(
-            axes, 1, 0, sdss_dataset.get_full_item(0)[5].cluster_centers_, colors=("white",)
-        )
+        plot_image_locs(axes, 1, 0, km.cluster_centers_, colors=("white",))
         return pl
 
 
@@ -95,19 +92,20 @@ sdss_source = sdss.SloanDigitalSkySurvey(
     Path(bliss.__file__).parents[1].joinpath("data/sdss_all"),
     run=3900,
     camcol=6,
-    fields=range(300, 1000),
+    # fields=range(300, 1000),
+    fields=(808,),
     bands=range(5),
 )
 
 
 #%%
 # Pickle
-sdss_dataset_file = Path("sdss_source.pkl")
-if sdss_dataset_file.exists() is False:
-    sdss_dataset = SDSS(sdss_source)
-    torch.save(sdss_dataset, sdss_dataset_file)
-else:
-    sdss_dataset = torch.load(sdss_dataset_file)
+# sdss_dataset_file = Path("sdss_source.pkl")
+# if sdss_dataset_file.exists() is False:
+sdss_dataset = SDSS(sdss_source)
+#     torch.save(sdss_dataset, sdss_dataset_file)
+# else:
+#     sdss_dataset = torch.load(sdss_dataset_file)
 
 #%%
 pl = sdss_dataset.plot_clustered_locs(0)
@@ -115,8 +113,10 @@ pl.savefig("clustered_locs.png")
 # %%
 ## Estimate this image
 class SDSS_HNP(LightningModule):
-    def __init__(self, dy=81, dz=4, sdss_dataset=None):
+    def __init__(self, stampsize=5, dz=4, sdss_dataset=None):
         self.sdss_dataset = sdss_dataset
+        self.stamper = sdss.StarStamper(stampsize)
+        dy = stampsize ** 2
         dh = 2 * dz
         super().__init__()
         z_inference = SequentialVarg(
@@ -141,8 +141,12 @@ class SDSS_HNP(LightningModule):
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):
-        X, G, S, Y = batch
-        loss = self.hnp(X, G, S, Y) / X.size(0)
+        X, G, S, Y, img, locs, km, c = batch
+        YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
+        YY = YY.reshape(-1, 25)
+        YY = (YY - YY.mean(1, keepdim=True)) / YY.std(1, keepdim=True)
+        S = YY[: S.size(0)]
+        loss = self.hnp(X, G, S, YY) / X.size(0)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -174,11 +178,11 @@ class SimpleHPooler(Module):
 
 
 # %%
-m = SDSS_HNP(25, 4, sdss_dataset)
-trainer = Trainer(max_epochs=10, checkpoint_callback=False)
+m = SDSS_HNP(5, 4, sdss_dataset)
+trainer = Trainer(max_epochs=1000, checkpoint_callback=False)
 trainer.fit(m)
 # %%
-X, G, S, Y, locs, _, c = sdss_dataset.get_full_item(50)
+X, G, S, Y, img, locs, km, c = sdss_dataset[0]
 c = c.numpy()
 x = m.hnp.predict(X, G, S)
 # %%
