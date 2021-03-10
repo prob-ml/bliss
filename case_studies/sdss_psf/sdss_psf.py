@@ -113,9 +113,10 @@ pl.savefig("clustered_locs.png")
 # %%
 ## Estimate this image
 class SDSS_HNP(LightningModule):
-    def __init__(self, stampsize=5, dz=4, sdss_dataset=None):
+    def __init__(self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000):
         self.sdss_dataset = sdss_dataset
         self.stamper = sdss.StarStamper(stampsize)
+        self.max_cond_inputs = max_cond_inputs
         dy = stampsize ** 2
         dh = 2 * dz
         super().__init__()
@@ -141,11 +142,11 @@ class SDSS_HNP(LightningModule):
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):
-        X, G, S, Y, img, locs, km, c = batch
+        X, G, _, _, img, locs, km, c = batch
         YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
         YY = YY.reshape(-1, 25)
         YY = (YY - YY.mean(1, keepdim=True)) / YY.std(1, keepdim=True)
-        S = YY[: S.size(0)]
+        S = YY[: min(YY.size(0), self.max_cond_inputs)]
         loss = self.hnp(X, G, S, YY) / X.size(0)
         return loss
 
