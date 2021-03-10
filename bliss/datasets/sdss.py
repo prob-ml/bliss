@@ -13,9 +13,10 @@ from astropy.wcs import WCS, FITSFixedWarning
 
 
 class StarStamper:
-    def __init__(self, stampsize, center_subpixel=True):
+    def __init__(self, stampsize, center_subpixel=True, grid_dtype=torch.float):
         self.stampsize = stampsize
         self.center_subpixel = center_subpixel
+        self.grid_dtype = grid_dtype
         if self.center_subpixel:
             self.G = self._construct_subpixel_grid_base()
         else:
@@ -44,17 +45,20 @@ class StarStamper:
 
             if not edge_stamp:
                 stamp = img[row_lower:row_upper, col_lower:col_upper]
-                if self.center_subpixel:
-                    stamp = self._center_stamp_subpixel(stamp, pt, pr)
                 stamps.append(stamp)
                 if bg is not None:
                     stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
                     bgs.append(stamp_bg)
 
+        stamps = torch.stack(stamps)
+        is_edge = torch.tensor(is_edge, device=img.device)
+        if self.center_subpixel:
+            stamps = self._center_stamps_subpixel(stamps, pts[~is_edge], prs[~is_edge])
+
         return (
-            torch.stack(stamps),
+            stamps,
             None if bg is None else torch.stack(bgs),
-            torch.tensor(is_edge, device=img.device),
+            is_edge,
         )
 
     def _construct_subpixel_grid_base(self):
@@ -64,26 +68,22 @@ class StarStamper:
         G_x = torch.stack([torch.from_numpy(grid_x)] * self.stampsize, dim=0)
         G_y = torch.stack([torch.from_numpy(grid_y)] * self.stampsize, dim=1)
 
-        G = torch.stack([G_x, G_y], dim=2)
+        G = torch.stack([G_x, G_y], dim=2).unsqueeze(0)
 
-        return G
+        return G.type(self.grid_dtype)
 
-    def _center_stamp_subpixel(
+    def _center_stamps_subpixel(
         self,
-        stamp,
-        pt,
-        pr,
+        stamps,
+        pts,
+        prs,
     ):
-        size_y, size_x = stamp.shape
-        shift_x = 2 * (pt - int(pt + 0.5)) / size_x
-        shift_y = 2 * (pr - int(pr + 0.5)) / size_y
-        G_shift = self.G.clone()
-        G_shift[:, :, 0] += shift_x
-        G_shift[:, :, 1] += shift_y
-        stamp_shifted = F.grid_sample(
-            stamp.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False
-        )
-        return stamp_shifted.squeeze(0).squeeze(0)
+        locs = torch.stack([pts, prs], dim=1)
+        shifts = 2 * (locs - (locs + 0.5).trunc()) / torch.tensor(stamps.shape[1:]).unsqueeze(0)
+        shifts = shifts.type(self.G.dtype)
+        G_shift = self.G + shifts.unsqueeze(1).unsqueeze(1)
+        stamps_shifted = F.grid_sample(stamps.unsqueeze(1), G_shift, align_corners=False)
+        return stamps_shifted.squeeze(1)
 
 
 class SdssPSF:
