@@ -180,7 +180,7 @@ class SimpleHPooler(Module):
 
 # %%
 m = SDSS_HNP(5, 4, sdss_dataset)
-trainer = Trainer(max_epochs=1000, checkpoint_callback=False)
+trainer = Trainer(max_epochs=1000, checkpoint_callback=False, gpus=[4])
 trainer.fit(m)
 # %%
 X, G, S, Y, img, locs, km, c = sdss_dataset[0]
