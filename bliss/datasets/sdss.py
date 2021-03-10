@@ -68,12 +68,6 @@ class StarStamper:
 
         return G
 
-    def _construct_subpixel_grid(self, shift_x, shift_y):
-        G_shift = self.G.clone()
-        G_shift[:, :, 0] += shift_x
-        G_shift[:, :, 1] += shift_y
-        return G_shift
-
     def _center_stamp_subpixel(
         self,
         stamp,
@@ -83,7 +77,9 @@ class StarStamper:
         size_y, size_x = stamp.shape
         shift_x = 2 * (pt - int(pt + 0.5)) / size_x
         shift_y = 2 * (pr - int(pr + 0.5)) / size_y
-        G_shift = self._construct_subpixel_grid(shift_x, shift_y).float()
+        G_shift = self.G.clone()
+        G_shift[:, :, 0] += shift_x
+        G_shift[:, :, 1] += shift_y
         stamp_shifted = F.grid_sample(
             stamp.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False
         )
