@@ -242,7 +242,7 @@ class HNP(nn.Module):
 
     def predict(self, X, G, S, mean_Y=False, cond_output=False):
         n_inputs = S.size(0)
-        pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
+        pY = self.encode(X, G, S)[4]
         if mean_Y:
             Y = pY.loc.detach()
         else:

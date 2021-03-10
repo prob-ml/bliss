@@ -95,7 +95,7 @@ sdss_source = sdss.SloanDigitalSkySurvey(
     Path(bliss.__file__).parents[1].joinpath("data/sdss_all"),
     run=3900,
     camcol=6,
-    fields=range(300,1000),
+    fields=range(300, 1000),
     bands=range(5),
 )
 
