@@ -1,5 +1,0 @@
-# @package _group_
-file: ${paths.root}/temp/catsim_example.pt
-n_plots: 25
-common:
-  - background
