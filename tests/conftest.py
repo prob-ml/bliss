@@ -78,7 +78,7 @@ class GalaxyVAESetup:
 
     def get_trained_vae(self, overrides):
         cfg = self.get_cfg(overrides)
-        dataset = galsim_galaxies.GalsimGalaxies(cfg)
+        dataset = galsim_galaxies.ToyGaussian(cfg)
         galaxy_vae = galaxy_net.OneCenteredGalaxy(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
         trainer.fit(galaxy_vae, datamodule=dataset)
@@ -86,7 +86,7 @@ class GalaxyVAESetup:
 
     def test_vae(self, overrides, galaxy_net):
         cfg = self.get_cfg(overrides)
-        test_module = galsim_galaxies.GalsimGalaxies(cfg)
+        test_module = galsim_galaxies.ToyGaussian(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
         return trainer.test(galaxy_net, datamodule=test_module)[0]
 

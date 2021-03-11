@@ -1,5 +1,5 @@
 # @package _group_
-file: ${paths.root}/temp/catsim_example.pt
+file: ${paths.data}/gold_sdss_galaxy_images.pt
 n_plots: 25
 common:
   - background

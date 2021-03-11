@@ -100,6 +100,8 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.enc = CenteredGalaxyEncoder(**cfg.model.params)
         self.dec = CenteredGalaxyDecoder(**cfg.model.params)
 
+        self.warm_up = cfg.model.warm_up
+
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
@@ -128,15 +130,20 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         return recon_mean, recon_var, kl_z
 
-    @staticmethod
-    def get_loss(image, recon_mean, recon_var, kl_z):
+    def get_loss(self, image, recon_mean, recon_var, kl_z):
+        # use a "deterministic warm-up" scheme to see if we get better results
+        # on realistic galaxies. It involves "turning on" the prior penalty term slowly.
+        # see: https://arxiv.org/pdf/1602.02282.pdf
+        pwr = max(min(-self.warm_up + self.current_epoch, 0), -6)
+        pr_penalty = kl_z * 10 ** pwr
+
         # return ELBO
         # NOTE: image includes background.
         # Covariance is diagonal in latent variables.
         # recon_loss = -log p(x | z), shape: torch.Size([ nsamples, n_bands, slen, slen])
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
-        loss = (recon_losses + kl_z).sum()
+        loss = (recon_losses + pr_penalty).sum()
 
         return loss
 
@@ -175,9 +182,9 @@ class OneCenteredGalaxy(pl.LightningModule):
         return {"images": images, "recon_mean": recon_mean, "recon_var": recon_var}
 
     def validation_epoch_end(self, outputs):
-        images = outputs[-1]["images"][:10]
-        recon_mean = outputs[-1]["recon_mean"][:10]
-        recon_var = outputs[-1]["recon_var"][:10]
+        images = outputs[0]["images"][:10]
+        recon_mean = outputs[0]["recon_mean"][:10]
+        recon_var = outputs[0]["recon_var"][:10]
         fig = self.plot_reconstruction(images, recon_mean, recon_var)
         if self.logger:
             self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)

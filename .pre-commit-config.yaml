@@ -3,9 +3,11 @@ repos:
     rev: v3.4.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^.*fits
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: end-of-file-fixer
+        exclude: ^.*fits
   - repo: https://github.com/psf/black
     rev: 20.8b1
     hooks:

@@ -13,8 +13,13 @@ from bliss import sleep
 from bliss.datasets import simulated, galsim_galaxies
 from bliss.models import galaxy_net
 
-# compatible datasets and models.
-_datasets = [simulated.SimulatedDataset, galsim_galaxies.GalsimGalaxies]
+# available datasets and models.
+_datasets = [
+    simulated.SimulatedDataset,
+    galsim_galaxies.ToyGaussian,
+    galsim_galaxies.SDSSGalaxies,
+    galsim_galaxies.SavedGalaxies,
+]
 datasets = {cls.__name__: cls for cls in _datasets}
 
 _models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxy]
@@ -70,7 +75,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
         checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
         checkpoint_dir = output.joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
-            filepath=checkpoint_dir,
+            dirpath=checkpoint_dir,
             save_top_k=True,
             verbose=True,
             monitor="val_loss",
