@@ -6,17 +6,18 @@ import torch
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 
-from bliss.datasets import simulated
+from bliss.datasets import simulated, galsim_galaxies
 from bliss import plotting
 
 datasets = {
     "SimulatedDataset": simulated.SimulatedDataset,
+    "SDSSGalaxies": galsim_galaxies.SDSSGalaxies,
 }
 
 
 def visualize(batch, path, n_samples, figsize=(12, 12)):
     # visualize in a pdf format 30 images from the batch
-    assert int(math.sqrt(n_samples)) == math.sqrt(n_samples)
+    assert math.sqrt(n_samples) % 1 == 0
     nrows = int(math.sqrt(n_samples))
 
     fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)

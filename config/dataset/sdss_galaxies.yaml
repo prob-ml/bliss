@@ -1,0 +1,28 @@
+# @package _group_
+---
+name: "SDSSGalaxies"
+cosmoDC2_file: "${paths.data}/gold_dc2_catalog.fits"
+batch_size: 128
+n_batches: 10
+num_workers: 0
+params:
+  background: 633
+  deviate_center: false
+  noise_factor: 0.05
+  slen: 41
+sdss:
+  bands:
+    - 2
+  camcol: 1
+  center_subpixel: true
+  fields:
+    - 12
+  overwrite_cache: false
+  overwrite_fits_cache: false
+  run: 94
+  sdss_dir: "${paths.data}/sdss"
+  stampsize: 5
+psf:
+  psf_points:
+    - 450
+    - 550

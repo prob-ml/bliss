@@ -1,5 +1,5 @@
 # @package _group_
-name: "GalsimGalaxies"
+name: "ToyGaussian"
 n_batches: 10
 batch_size: 128
 num_workers: 0
@@ -7,5 +7,5 @@ params:
   slen: 41
   deviate_center: False
   background: 633
-  pixel_scale: 0.2
   snr: 300
+  pixel_scale: 0.2

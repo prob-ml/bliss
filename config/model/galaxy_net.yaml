@@ -1,5 +1,6 @@
 # @package _group_
 name: OneCenteredGalaxy
+warm_up: 0
 params:
   slen: 41
   latent_dim: 8
