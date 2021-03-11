@@ -4,7 +4,7 @@ name: "SDSSGalaxies"
 cosmoDC2_file: "${paths.data}/gold_dc2_catalog.fits"
 batch_size: 128
 n_batches: 10
-num_workers: 10
+num_workers: 0
 params:
   background: 633
   deviate_center: false
