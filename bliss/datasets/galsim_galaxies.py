@@ -3,6 +3,7 @@ from speclite.filters import load_filter, ab_reference_flux
 import numpy as np
 from omegaconf import DictConfig
 import galsim
+import torch
 
 import astropy.units as u
 from astropy.table import Table
@@ -10,6 +11,29 @@ from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey
+
+
+def get_flux(ab_mag, filt, survey, B0=24):
+    """Convert source magnitude to flux.
+    The calculation includes the effects of atmospheric extinction.
+    Args:
+        ab_magnitude(float): AB magnitude of source.
+    Returns:
+        float: Flux in detected electrons.
+    """
+    zeropoint = filt.zeropoint * survey.effective_area  # [s^-1]
+    ab_mag += filt.extinction * (survey.airmass - survey.zeropoint_airmass)
+    return filt.exp_time * zeropoint * 10 ** (-0.4 * (ab_mag - B0))
+
+
+def calculate_zero_point(band_name="sdss2010-r", B0=24):
+    # Credit: https://github.com/LSSTDESC/WeakLensingDeblending/issues/19
+    filt = load_filter(band_name)
+    return (
+        (filt.convolve_with_function(ab_reference_flux) * 10 ** (-0.4 * B0))
+        .to(1 / (u.s * u.m ** 2))
+        .value
+    )
 
 
 def get_catsim_galaxy(entry, filt, survey, no_disk=False, no_bulge=False, no_agn=False):
@@ -54,29 +78,6 @@ def get_catsim_galaxy(entry, filt, survey, no_disk=False, no_bulge=False, no_agn
 
     profile = galsim.Add(components)
     return profile
-
-
-def get_flux(ab_mag, filt, survey, B0=24):
-    """Convert source magnitude to flux.
-    The calculation includes the effects of atmospheric extinction.
-    Args:
-        ab_magnitude(float): AB magnitude of source.
-    Returns:
-        float: Flux in detected electrons.
-    """
-    zeropoint = filt.zeropoint * survey.effective_area  # [s^-1]
-    ab_mag += filt.extinction * (survey.airmass - survey.zeropoint_airmass)
-    return filt.exp_time * zeropoint * 10 ** (-0.4 * (ab_mag - B0))
-
-
-def calculate_zero_point(band_name="sdss2010-r", B0=24):
-    # Credit: https://github.com/LSSTDESC/WeakLensingDeblending/issues/19
-    filt = load_filter(band_name)
-    return (
-        (filt.convolve_with_function(ab_reference_flux) * 10 ** (-0.4 * B0))
-        .to(1 / (u.s * u.m ** 2))
-        .value
-    )
 
 
 Survey = namedtuple(
@@ -176,15 +177,15 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         _psf = sdss_data.rcfgcs[0][-1]
         x, y = cfg.dataset.psf.psf_points
         psf = _psf.psf_at_points(0, x, y)
-        psf_image = galsim.Image(psf, scale=0.396)  # sdss pixel_scale.
+        psf_image = galsim.Image(psf, scale=self.pixel_scale)
         self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
         self.psf_fwhm = self.psf.calculateFWHM()  # arcsecs
 
         # self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
 
     def __getitem__(self, idx):
-        _indx = np.random.randint(len(self.catalog))
-        entry = self.catalog[_indx]
+        _idx = np.random.randint(len(self.catalog))
+        entry = self.catalog[_idx]
         galaxy = get_catsim_galaxy(entry, self.filt, self.survey)
         gal_conv = galsim.Convolution(galaxy, self.psf)
         image = gal_conv.drawImage(
@@ -279,3 +280,28 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+
+class SavedGalaxies(pl.LightningDataModule, Dataset):
+    def __init__(self, cfg: DictConfig):
+        super().__init__()
+
+        self.cfg = cfg
+        self.batch_size = cfg.dataset.batch_size
+
+        self.data = torch.load(cfg.dataset.data_file)
+
+    def __len__(self):
+        return len(self.data["images"])
+
+    def __getitem__(self, idx):
+        return {"images": self.data["images"][idx], "background": self.data["background"]}
+
+    def train_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
+
+    def val_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
+
+    def test_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
