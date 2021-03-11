@@ -3,3 +3,4 @@
 data/sdss/2583/* filter=lfs diff=lfs merge=lfs -text
 data/hubble/* filter=lfs diff=lfs merge=lfs -text
 data/cosmoDC2_wld_sdss_10_sq_deg.fits filter=lfs diff=lfs merge=lfs -text
+data/gold_dc2_catalog.fits filter=lfs diff=lfs merge=lfs -text
