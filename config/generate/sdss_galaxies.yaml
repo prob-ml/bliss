@@ -1,5 +1,5 @@
 # @package _group_
-file: ${paths.root}/temp/sdss_galaxies_example2.pt
+file: ${paths.root}/temp/sdss_galaxies_example.pt
 n_plots: 25
 common:
   - background

@@ -1,5 +1,5 @@
 # @package _group_
 ---
 batch_size: 64
-data_file: "${paths.root}/temp/sdss_galaxies_example2.pt"
+data_file: "${paths.root}/temp/sdss_galaxies_example.pt"
 name: "SavedGalaxies"
