@@ -1,10 +1,10 @@
 # @package _group_
 ---
 batch_size: 128
-cosmoDC2_file: "${paths.data}/cosmoDC2_wld_sdss_10_sq_deg.fits"
+cosmoDC2_file: "${paths.data}/gold_dc2_catalog.fits"
 n_batches: 10
 name: "SDSSGalaxies"
-num_workers: 0
+num_workers: 10
 params:
   background: 633
   deviate_center: false
