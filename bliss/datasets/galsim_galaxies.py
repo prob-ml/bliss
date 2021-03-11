@@ -31,7 +31,7 @@ def calculate_zero_point(band_name="sdss2010-r", B0=24):
     filt = load_filter(band_name)
     return (
         (filt.convolve_with_function(ab_reference_flux) * 10 ** (-0.4 * B0))
-        .to(1 / (u.s * u.m ** 2))
+        .to(1 / (u.s * u.m ** 2))  # pylint: disable=no-member
         .value
     )
 
