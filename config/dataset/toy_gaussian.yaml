@@ -7,5 +7,5 @@ params:
   slen: 41
   deviate_center: False
   background: 633
-  snr: 300
+  noise_factor: 0.01
   pixel_scale: 0.2
