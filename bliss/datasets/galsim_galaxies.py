@@ -235,10 +235,7 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
         self.background[...] = params.background
         self.pixel_scale = params.pixel_scale
-        self.snr = params.snr
-
-        # for adding noise to galsim images.
-        self.rng = galsim.BaseDeviate(seed=999999)
+        self.noise_factor = params.noise_factor
 
         # small dummy psf
         self.psf = galsim.Gaussian(half_light_radius=0.2).withFlux(1.0)
@@ -259,13 +256,11 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
 
-        # add noise.
-        poisson_noise = galsim.PoissonNoise(self.rng, sky_level=self.background.mean())
-        image.addNoiseSNR(poisson_noise, snr=self.snr, preserve_flux=True)
-
-        # add background
+        # add noise and background.
         image = image.array.reshape(1, self.slen, self.slen).astype(np.float32)
         image += self.background
+        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        image += noise
 
         return {"images": image, "background": self.background}
 
