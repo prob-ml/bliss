@@ -2,7 +2,7 @@
 name: OneCenteredGalaxy
 warm_up: 0
 params:
-  slen: 41
+  slen: 51
   latent_dim: 8
   n_bands: 1
   hidden: 256

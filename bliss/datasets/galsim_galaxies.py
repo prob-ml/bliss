@@ -238,15 +238,20 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         self.noise_factor = params.noise_factor
 
         # small dummy psf
-        self.psf = galsim.Gaussian(half_light_radius=0.2).withFlux(1.0)
+        self.psf = galsim.Gaussian(fwhm=params.psf_fwhm).withFlux(1.0)
+        self.min_flux = params.min_flux
+        self.max_flux = params.max_flux
+        self.min_hlr = params.min_hlr
+        self.max_hlr = params.max_hlr
+        self.max_e = params.max_e
 
     def __getitem__(self, idx):
-        flux_avg = np.random.uniform(100, 1000)
-        hlr = np.random.uniform(0.4, 1.0)  # arcseconds
+        flux_avg = np.random.uniform(self.min_flux, self.max_flux)
+        hlr = np.random.uniform(self.min_hlr, self.max_hlr)  # arcseconds
         flux = (hlr / self.pixel_scale) ** 2 * np.pi * flux_avg  # approx
 
         # sample ellipticity
-        l = np.random.uniform(0, 0.5)
+        l = np.random.uniform(0, self.max_e)
         theta = np.random.uniform(0, 2 * np.pi)
         g1 = l * np.cos(theta)
         g2 = l * np.sin(theta)
@@ -286,11 +291,21 @@ class SavedGalaxies(pl.LightningDataModule, Dataset):
 
         self.data = torch.load(cfg.dataset.data_file)
 
+        assert self.data["images"].shape[1] == 1, "Only 1 band supported"
+        self.n_images = len(self.data["images"])
+        self.beta = 2.5
+        self.norm = self.data["images"].reshape(self.n_images, 1, -1).max(axis=-1).values.mean()
+
     def __len__(self):
         return len(self.data["images"])
 
     def __getitem__(self, idx):
-        return {"images": self.data["images"][idx], "background": self.data["background"]}
+        image = self.data["images"][idx]
+        background = self.data["background"]
+        # norm_image = torch.tanh(torch.arcsinh(self.beta * image / self.norm))
+        # norm_background = torch.tanh(torch.arcsinh(self.beta * background / self.norm))
+
+        return {"images": image, "background": background}
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=0)
