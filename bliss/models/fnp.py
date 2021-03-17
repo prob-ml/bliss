@@ -184,7 +184,7 @@ class HNP(nn.Module):
     def __init__(
         self,
         z_inference,
-        z_prior,
+        z_pooler,
         h_prior,
         h_pooler,
         y_decoder,
@@ -193,7 +193,7 @@ class HNP(nn.Module):
         super().__init__()
         ## Learned Submodules
         self.z_inference = z_inference
-        self.z_prior = z_prior
+        self.z_pooler = z_pooler
         self.h_prior = h_prior
         self.h_pooler = h_pooler
         self.y_decoder = y_decoder
@@ -203,42 +203,38 @@ class HNP(nn.Module):
 
     def encode(self, X, G, S):
         n_inputs = S.size(0)
-        ## Sample the latent variables for which observations are available (S)
-        qZi = self.z_inference(X[n_inputs:], S)
-        Zi = qZi.rsample()
+        ## Encode the available stamps
+        Zi = self.z_inference(X[n_inputs:], S)
 
         ## Calculate the prior distribution for the H
         pH = self.h_prior(X, G)
 
         ## Sample the hierarchical latent variables from the latent variables
         # qH = self.h_pooler(X, G, Zi)
-        qH = self.h_pooler(torch.cat([qZi.loc, qZi.scale], dim=1), G[:n_inputs].transpose(1, 0))
+        qH = self.h_pooler(Zi, G[:n_inputs].transpose(1, 0))
         H = qH.rsample()
 
         ## Conditional on the H, calculate the prior of the Z
-        pZ = self.z_prior(H, G)
+        Z = self.z_pooler(H, G)
         # pZ = self.z_prior(X, G, H)
 
         ## Sample the remaining Z which did not have observations available
-        Z = pZ.rsample()
-        Z = torch.cat([Zi, Z[n_inputs:]])
 
-        ## Calculate pYh
+        ## Calculate predicted stamp
         pY = self.y_decoder(Z, X)
 
-        return pH, pZ, qH, qZi, pY, H, Z
+        return pH, qH, H, Z, pY
 
     def log_prob(self, X, G, S, Y):
         n_inputs = S.size(0)
-        pH, pZ, qH, qZi, pY, H, Z = self.encode(X, G, S)
+        pH, qH, H, _, pY = self(X, G, S)
         log_pqh = pH.log_prob(H) - qH.log_prob(H)
-        log_pqz = pZ.log_prob(Z)[:n_inputs] - qZi.log_prob(Z[:n_inputs])
-        log_py = pY.log_prob(Y)
-        elbo = log_pqh.sum() + log_pqz.sum() + log_py.sum()
+        log_y = pY.log_prob(Y)
+        elbo = log_pqh.sum() + log_y.sum()
         return elbo
 
-    def forward(self, X, G, S, Y):
-        return -self.log_prob(X, G, S, Y)
+    def forward(self, X, G, S):
+        return self.encode(X, G, S)
 
     def predict(self, X, G, S, mean_Y=False, cond_output=False):
         n_inputs = S.size(0)

@@ -103,8 +103,11 @@ class NormalEncoder(nn.Module):
         super().__init__()
         self.minscale = minscale
 
-    def forward(self, mean_z, logscale_z):
+    def forward(self, mean_z, logscale_z=None):
+        if logscale_z is None:
+            logscale_z = mean_z
         if self.minscale is not None:
             logscale_z = torch.log(self.minscale + (1 - self.minscale) * F.softplus(logscale_z))
-        pz = Normal(mean_z, logscale_z.exp())
+        scale_z = logscale_z.exp()
+        pz = Normal(mean_z, scale_z)
         return pz

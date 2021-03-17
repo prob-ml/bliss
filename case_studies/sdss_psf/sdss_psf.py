@@ -111,36 +111,37 @@ class SDSS_HNP(LightningModule):
         self.max_cond_inputs = max_cond_inputs
         self.n_clusters = n_clusters
         dy = stampsize ** 2
-        dh = 2 * dz
         super().__init__()
-        z_inference = SequentialVarg(
-            ConcatLayer([1]), MLP(dy, [16, 8], 2 * dz), SplitLayer(dz, -1), NormalEncoder()
-        )
+        z_inference = SequentialVarg(ConcatLayer([1]), MLP(dy, [16, 8], dz))
 
-        z_prior = SequentialVarg(fnp.AveragePooler(dz), SplitLayer(dz, -1), NormalEncoder())
+        z_pooler = fnp.AveragePooler(dz)
 
         h_prior = lambda X, G: Normal(
-            torch.zeros(G.size(1), dh, device=G.device), torch.ones(G.size(1), dh, device=G.device)
+            torch.zeros(G.size(1), dz, device=G.device), torch.ones(G.size(1), dz, device=G.device)
         )
 
-        h_pooler = SimpleHPooler(dh)
+        h_pooler = SimpleHPooler(dz)
 
         y_decoder = SequentialVarg(
             ConcatLayer([0]),
             MLP(dz, [8, 16, 32], 2 * dy),
             SplitLayer(dy, -1),
-            NormalEncoder(),
+            NormalEncoder(minscale=1e-7),
         )
-        self.hnp = fnp.HNP(z_inference, z_prior, h_prior, h_pooler, y_decoder)
+        self.hnp = fnp.HNP(z_inference, z_pooler, h_prior, h_pooler, y_decoder)
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):
         X, G, S, YY = self.prepare_batch(batch)
-        loss = self.hnp(X, G, S, YY) / X.size(0)
+        loss = -self.hnp.log_prob(X, G, S, YY) / X.size(0)
         return loss
 
     def prepare_batch(self, batch, num_cond_inputs=None):
         X, img, locs = batch
+        if not isinstance(img, torch.Tensor):
+            img = torch.from_numpy(img)
+        if not isinstance(locs, torch.Tensor):
+            locs = torch.from_numpy(locs)
         G = self.make_G(locs)
         YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
         YY = YY.reshape(-1, 25)
@@ -151,7 +152,7 @@ class SDSS_HNP(LightningModule):
         return X, G, S, YY
 
     def predict(self, X, G, S):
-        out = self.hnp.predict(X, G, S)
+        out = self.hnp.predict(X, G, S, mean_Y=True)
         return out
 
     def validation_step(self, batch, batch_idx):
@@ -192,14 +193,14 @@ class SimpleHPooler(Module):
 
 # %%
 m = SDSS_HNP(5, 4, sdss_dataset)
-trainer = Trainer(max_epochs=1000, checkpoint_callback=False, gpus=[4])
+trainer = Trainer(max_epochs=400, checkpoint_callback=False, gpus=[4])
+# %%
 trainer.fit(m)
 # %%
 X, img, locs = sdss_dataset[0]
 X, G, S, Y = m.prepare_batch(sdss_dataset[0])
 km = KMeans(n_clusters=m.n_clusters)
 c = km.fit_predict(locs.cpu().numpy())
-c = c.numpy()
 x = m.predict(X, G, S)
 # %%
 plt.imshow(x[20].reshape(5, 5))
@@ -280,7 +281,7 @@ def plot_cluster_stars(Y, c, n_show=7):
 
 
 def pred_mean(m, X, G, S, n_samples):
-    return torch.stack([m.hnp.predict(X, G, S, mean_Y=True) for i in range(n_samples)]).mean(0)
+    return torch.stack([m.predict(X, G, S) for i in range(n_samples)]).mean(0)
 
 
 #%%
