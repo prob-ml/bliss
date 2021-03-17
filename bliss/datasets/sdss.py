@@ -13,24 +13,20 @@ from astropy.wcs import WCS, FITSFixedWarning
 
 
 class StarStamper:
-    def __init__(self, stampsize, center_subpixel=True):
+    def __init__(self, stampsize, center_subpixel=True, grid_dtype=torch.float):
         self.stampsize = stampsize
         self.center_subpixel = center_subpixel
+        self.grid_dtype = grid_dtype
         if self.center_subpixel:
             self.G = self._construct_subpixel_grid_base()
         else:
             self.G = None
 
-    def __call__(self, img, ras, decs, wcs, bg=None):
+    def __call__(self, img, pts, prs, bg=None):
         stamps = []
         is_edge = []
         bgs = []
-        pts = []
-        prs = []
-
-        for (ra, dec) in zip(ras, decs):
-            # pt = "time" in pixel coordinates
-            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
+        for (pt, pr) in zip(pts, prs):
             pti, pri = int(pt + 0.5), int(pr + 0.5)
 
             row_lower = pri - self.stampsize // 2
@@ -49,21 +45,20 @@ class StarStamper:
 
             if not edge_stamp:
                 stamp = img[row_lower:row_upper, col_lower:col_upper]
-                if self.center_subpixel:
-                    stamp = self._center_stamp_subpixel(stamp, pt, pr)
                 stamps.append(stamp)
-                pts.append(pt)
-                prs.append(pr)
                 if bg is not None:
                     stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
                     bgs.append(stamp_bg)
 
+        stamps = torch.stack(stamps)
+        is_edge = torch.tensor(is_edge, device=img.device)
+        if self.center_subpixel:
+            stamps = self._center_stamps_subpixel(stamps, pts[~is_edge], prs[~is_edge])
+
         return (
-            np.asarray(stamps),
-            np.asarray(pts),
-            np.asarray(prs),
-            np.asarray(bgs),
-            np.asarray(is_edge),
+            stamps,
+            None if bg is None else torch.stack(bgs),
+            is_edge,
         )
 
     def _construct_subpixel_grid_base(self):
@@ -73,31 +68,28 @@ class StarStamper:
         G_x = torch.stack([torch.from_numpy(grid_x)] * self.stampsize, dim=0)
         G_y = torch.stack([torch.from_numpy(grid_y)] * self.stampsize, dim=1)
 
-        G = torch.stack([G_x, G_y], dim=2)
+        G = torch.stack([G_x, G_y], dim=2).unsqueeze(0)
 
-        return G
+        return G.type(self.grid_dtype)
 
-    def _construct_subpixel_grid(self, shift_x, shift_y):
-        G_shift = self.G.clone()
-        G_shift[:, :, 0] += shift_x
-        G_shift[:, :, 1] += shift_y
-        return G_shift
-
-    def _center_stamp_subpixel(
+    def _center_stamps_subpixel(
         self,
-        stamp,
-        pt,
-        pr,
+        stamps,
+        pts,
+        prs,
     ):
-        stamp_torch = torch.from_numpy(stamp)
-        size_y, size_x = stamp.shape
-        shift_x = 2 * (pt - int(pt + 0.5)) / size_x
-        shift_y = 2 * (pr - int(pr + 0.5)) / size_y
-        G_shift = self._construct_subpixel_grid(shift_x, shift_y).float()
-        stamp_shifted = F.grid_sample(
-            stamp_torch.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False
+        locs = torch.stack([pts, prs], dim=1)
+        shifts = (
+            2
+            * (locs - (locs + 0.5).trunc())
+            / torch.tensor(stamps.shape[1:], device=stamps.device).unsqueeze(0)
         )
-        return stamp_shifted.squeeze(0).squeeze(0).numpy()
+        if self.G.device is not shifts.device:
+            self.G = self.G.to(shifts.device)
+        shifts = shifts.type(self.G.dtype)
+        G_shift = self.G + shifts.unsqueeze(1).unsqueeze(1)
+        stamps_shifted = F.grid_sample(stamps.unsqueeze(1), G_shift, align_corners=False)
+        return stamps_shifted.squeeze(1)
 
 
 class SdssPSF:
@@ -257,17 +249,32 @@ class SloanDigitalSkySurvey(Dataset):
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
         is_thing = po_fits["thing_id"] != -1
         is_target = is_star & is_bright & is_thing
+
         ras = po_fits["ra"][is_target]
         decs = po_fits["dec"][is_target]
+        pts = []
+        prs = []
+        for ra, dec in zip(ras, decs):
+            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
+            pts.append(pt)
+            prs.append(pr)
+        pts = np.asarray(pts)
+        prs = np.asarray(prs)
         fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
-        stamps, pts, prs, bgs, is_edge = self.stamper(img, ras, decs, wcs, bg=bg)
+        stamps, bgs, is_edge = self.stamper(
+            torch.from_numpy(img),
+            torch.from_numpy(pts),
+            torch.from_numpy(prs),
+            bg=torch.from_numpy(bg),
+        )
+        is_edge = is_edge.numpy()
         return (
-            stamps,
-            pts,
-            prs,
+            stamps.numpy(),
+            pts[~is_edge],
+            prs[~is_edge],
             fluxes[~is_edge],
-            bgs,
+            bgs.numpy(),
         )
 
     def get_from_disk(self, idx, verbose=False):
