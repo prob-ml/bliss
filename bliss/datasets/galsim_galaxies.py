@@ -13,6 +13,10 @@ import pytorch_lightning as pl
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 
 
+def get_background(sky_brightness, filt, survey, B0=24):
+    return get_flux(sky_brightness, filt, survey, B0=B0) * survey.pixel_scale ** 2
+
+
 def get_flux(ab_mag, filt, survey, B0=24):
     """Convert source magnitude to flux.
     The calculation includes the effects of atmospheric extinction.
@@ -127,7 +131,7 @@ sdss_survey = Survey(
             effective_wavelength=6165,
             limit_mag=22.2,
             zeropoint=calculate_zero_point("sdss2010-r"),
-            sky_brightness=21.06,  # stripe-82 specific.
+            sky_brightness=21.06,  # stripe-82 specific, low surface brightness.
         )
     ],
 )
