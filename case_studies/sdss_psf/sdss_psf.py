@@ -48,22 +48,12 @@ class SDSS(Dataset):
         locs = torch.stack((torch.from_numpy(data["prs"]), torch.from_numpy(data["pts"])), dim=1)
         X = (locs - locs.mean(0)) / locs.std(0)
 
-        ## Construct dependency matrix with K-means clustering
-        km = KMeans(n_clusters=5)
-        c = torch.from_numpy(km.fit_predict(locs))
-        G = self.make_G_from_clust(c)
-
-        ## Reshape and normalize stamps
-        Y = torch.from_numpy(data["bright_stars"]).reshape(-1, 25)
-        Y = (Y - Y.mean(1, keepdim=True)) / Y.std(1, keepdim=True)
-
         ## Randomize order
-        idxs = np.random.choice(len(c), len(c), replace=False)
+        idxs = np.random.choice(X.size(0), X.size(0), replace=False)
         X = X[idxs]
-        G = G[idxs]
-        Y = Y[idxs]
-        S = Y
-        return (X, G, S, Y, img, locs, km, c)
+        locs = locs[idxs]
+
+        return (X, img, locs)
 
     @staticmethod
     def make_G_from_clust(c, nclust=None):
@@ -77,7 +67,9 @@ class SDSS(Dataset):
     def plot_clustered_locs(self, idx):
         pl, axes = plt.subplots(nrows=1, ncols=1, figsize=(4, 4))
         plot_image(pl, axes, self.sdss_source[idx]["image"][2])
-        _, _, _, _, _, locs, km, clst = self[idx]
+        _, _, locs = self[idx]
+        km = KMeans(n_clusters=5)
+        clst = km.fit_predict(locs.numpy())
         colors = ["red", "green", "blue", "orange", "yellow"]
         for i, cl in enumerate(np.unique(clst)):
             _plot_locs(axes, 1, 0, locs[clst == cl], color=colors[i], s=3)
@@ -113,10 +105,11 @@ pl.savefig("clustered_locs.png")
 # %%
 ## Estimate this image
 class SDSS_HNP(LightningModule):
-    def __init__(self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000):
+    def __init__(self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000, n_clusters=5):
         self.sdss_dataset = sdss_dataset
         self.stamper = sdss.StarStamper(stampsize)
         self.max_cond_inputs = max_cond_inputs
+        self.n_clusters = n_clusters
         dy = stampsize ** 2
         dh = 2 * dz
         super().__init__()
@@ -142,16 +135,24 @@ class SDSS_HNP(LightningModule):
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):
-        X, G, _, _, img, locs, _, _ = batch
-        km = KMeans(n_clusters=5)
-        c = km.fit_predict(locs.cpu().numpy())
-        G = self.make_G_from_clust(c).to(locs.device)
+        X, G, S, YY = self.prepare_batch(batch)
+        loss = self.hnp(X, G, S, YY) / X.size(0)
+        return loss
+
+    def prepare_batch(self, batch, num_cond_inputs=None):
+        X, img, locs = batch
+        G = self.make_G(locs)
         YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
         YY = YY.reshape(-1, 25)
         YY = (YY - YY.mean(1, keepdim=True)) / YY.std(1, keepdim=True)
-        S = YY[: min(YY.size(0), self.max_cond_inputs)]
-        loss = self.hnp(X, G, S, YY) / X.size(0)
-        return loss
+        if num_cond_inputs is None:
+            num_cond_inputs = self.max_cond_inputs
+        S = YY[: min(YY.size(0), num_cond_inputs)]
+        return X, G, S, YY
+
+    def predict(self, X, G, S):
+        out = self.hnp.predict(X, G, S)
+        return out
 
     def validation_step(self, batch, batch_idx):
         loss = self.training_step(batch, batch_idx)
@@ -165,12 +166,11 @@ class SDSS_HNP(LightningModule):
     def train_dataloader(self):
         return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None)
 
-    @staticmethod
-    def make_G_from_clust(c, nclust=None):
-        if not nclust:
-            nclust = len(np.unique(c))
-        G = torch.zeros((len(c), nclust))
-        for i in range(nclust):
+    def make_G(self, locs):
+        km = KMeans(n_clusters=self.n_clusters)
+        c = km.fit_predict(locs.cpu().numpy())
+        G = torch.zeros((len(c), self.n_clusters)).to(locs.device)
+        for i in range(self.n_clusters):
             G[c == i, i] = 1.0
         return G
 
@@ -195,9 +195,12 @@ m = SDSS_HNP(5, 4, sdss_dataset)
 trainer = Trainer(max_epochs=1000, checkpoint_callback=False, gpus=[4])
 trainer.fit(m)
 # %%
-X, G, S, Y, img, locs, km, c = sdss_dataset[0]
+X, img, locs = sdss_dataset[0]
+X, G, S, Y = m.prepare_batch(sdss_dataset[0])
+km = KMeans(n_clusters=m.n_clusters)
+c = km.fit_predict(locs.cpu().numpy())
 c = c.numpy()
-x = m.hnp.predict(X, G, S)
+x = m.predict(X, G, S)
 # %%
 plt.imshow(x[20].reshape(5, 5))
 # %%
@@ -231,11 +234,6 @@ def plot_cluster_images(c, y_true, y_pred, n_S=0):
             else:
                 axes[i, 2 * j].axis("off")
                 axes[i, 2 * j + 1].axis("off")
-            # ax.axhline(0, color=color)
-            # ax.axhline(4, color=color)
-            # ax.axvline(0, color=color)
-            # ax.axvline(4, color=color)
-    # plot.tight_layout()
     return plot, axes
 
 
@@ -266,7 +264,6 @@ def plot_cluster_stars(Y, c, n_show=7):
     figsize = (2 * (n_show + 1), 10)
     plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_show + 1, figsize=figsize)
     for i in np.unique(c):
-        # idx = np.argmax(np.array(c==i) * in_posterior)
         Yc = Y[c == i]
         for j in range(n_show):
             ax = axes[i, j]
