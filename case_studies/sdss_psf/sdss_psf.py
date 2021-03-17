@@ -142,7 +142,10 @@ class SDSS_HNP(LightningModule):
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):
-        X, G, _, _, img, locs, km, c = batch
+        X, G, _, _, img, locs, _, _ = batch
+        km = KMeans(n_clusters=5)
+        c = km.fit_predict(locs.cpu().numpy())
+        G = self.make_G_from_clust(c).to(locs.device)
         YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
         YY = YY.reshape(-1, 25)
         YY = (YY - YY.mean(1, keepdim=True)) / YY.std(1, keepdim=True)
@@ -161,6 +164,15 @@ class SDSS_HNP(LightningModule):
 
     def train_dataloader(self):
         return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None)
+
+    @staticmethod
+    def make_G_from_clust(c, nclust=None):
+        if not nclust:
+            nclust = len(np.unique(c))
+        G = torch.zeros((len(c), nclust))
+        for i in range(nclust):
+            G[c == i, i] = 1.0
+        return G
 
 
 from torch.nn import Module
