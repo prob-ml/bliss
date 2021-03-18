@@ -43,6 +43,10 @@ jobs:
       - name: Install fftw3
         run: |
           sudo apt-get install libfftw3-dev
+          
+      - name: dummy test
+        run: |
+          echo "hello world"
 
       - name: Poetry cache
         uses: actions/cache@v2
