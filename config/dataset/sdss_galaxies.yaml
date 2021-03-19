@@ -6,10 +6,10 @@ batch_size: 128
 n_batches: 10
 num_workers: 0
 params:
-  background: 633
+  background: 865
   deviate_center: false
   noise_factor: 0.05
-  slen: 41
+  slen: 51
 sdss:
   bands:
     - 2

@@ -4,7 +4,7 @@ image:
   slen: 40
   n_bands: 1
   background:
-    - 874.0
+    - 865.0
 galaxy:
   slen: 51
   latent_dim: 8
