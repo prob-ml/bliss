@@ -22,3 +22,4 @@ paths:
   data: ${paths.root}/data
   models: ${paths.root}/models
   output: ${paths.root}/temp/default
+  sdss: ${paths.root}/data/sdss
