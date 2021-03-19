@@ -21,7 +21,7 @@ decoder:
     mean_sources: 0.015
     min_sources: 0
     gal_slen: ${model.galaxy.slen}
-    decoder_file: ${paths.root}/data/sdss_gal_decoder_1_band.dat
+    decoder_file: ${paths.root}/models/sdss_toy_gaussian_simple.dat
     psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
     background_values: ${model.image.background}
 encoder:

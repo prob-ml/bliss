@@ -24,7 +24,7 @@ decoder:
     f_max: 1e5
     alpha: 0.5
     gal_slen: ${model.galaxy.slen}
-    decoder_file: ${paths.root}/models/sdss_toy_gaussian_decoder1.dat
+    decoder_file: ${paths.root}/models/sdss_toy_gaussian_simple.dat
     psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
     background_values: ${model.image.background}
 encoder:
