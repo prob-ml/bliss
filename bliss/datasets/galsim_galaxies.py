@@ -295,7 +295,9 @@ class SavedGalaxies(pl.LightningDataModule, Dataset):
 
         self.data = torch.load(cfg.dataset.data_file)
 
+        # Source Equation (4) in: https://arxiv.org/abs/2005.12039
         assert self.data["images"].shape[1] == 1, "Only 1 band supported"
+        self.do_norm = cfg.dataset.do_norm
         self.n_images = len(self.data["images"])
         self.beta = 2.5
         self.norm = self.data["images"].reshape(self.n_images, 1, -1).max(axis=-1).values.mean()
@@ -306,8 +308,10 @@ class SavedGalaxies(pl.LightningDataModule, Dataset):
     def __getitem__(self, idx):
         image = self.data["images"][idx]
         background = self.data["background"]
-        # norm_image = torch.tanh(torch.arcsinh(self.beta * image / self.norm))
-        # norm_background = torch.tanh(torch.arcsinh(self.beta * background / self.norm))
+
+        if self.do_norm:
+            image = torch.tanh(torch.arcsinh(self.beta * image / self.norm))
+            background = torch.tanh(torch.arcsinh(self.beta * background / self.norm))
 
         return {"images": image, "background": background}
 
