@@ -3,3 +3,4 @@
 batch_size: 64
 data_file: "${paths.data}/gold_sdss_galaxy_images.pt"
 name: "SavedGalaxies"
+do_norm: False

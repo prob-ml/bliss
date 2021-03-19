@@ -4,8 +4,14 @@ n_batches: 10
 batch_size: 128
 num_workers: 0
 params:
-  slen: 41
+  slen: 51
   deviate_center: False
-  background: 633
-  snr: 300
-  pixel_scale: 0.2
+  background: 865
+  noise_factor: 0.01
+  pixel_scale: 0.396
+  psf_fwhm: 1.426
+  min_flux: 300 # to be observable it cannot be too below background.
+  max_flux: 10000
+  min_hlr: 0.8
+  max_hlr: 4.0
+  max_e: 0.6

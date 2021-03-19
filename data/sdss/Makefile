@@ -1,7 +1,7 @@
 URLBASE := https://data.sdss.org/sas/dr12/boss
-RUN := 2583
-CAMCOL := 2
-FIELD := 136
+RUN := 94
+CAMCOL := 1
+FIELD := 12
 
 # strip leading zeros
 RUN_STRIPPED := $(shell echo $(RUN) | sed 's/^0*//')
@@ -53,4 +53,3 @@ $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits :
 
 $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits :
 	curl --create-dirs -o $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits $(URLBASE)/photoObj/301/$(RUN_STRIPPED)/photoField-$(RUN6)-$(CAMCOL).fits
-

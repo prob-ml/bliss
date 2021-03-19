@@ -13,6 +13,10 @@ import pytorch_lightning as pl
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 
 
+def get_background(sky_brightness, filt, survey, B0=24):
+    return get_flux(sky_brightness, filt, survey, B0=B0) * survey.pixel_scale ** 2
+
+
 def get_flux(ab_mag, filt, survey, B0=24):
     """Convert source magnitude to flux.
     The calculation includes the effects of atmospheric extinction.
@@ -127,7 +131,7 @@ sdss_survey = Survey(
             effective_wavelength=6165,
             limit_mag=22.2,
             zeropoint=calculate_zero_point("sdss2010-r"),
-            sky_brightness=21.06,  # stripe-82 specific.
+            sky_brightness=21.06,  # stripe-82 specific, low surface brightness.
         )
     ],
 )
@@ -235,21 +239,23 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
         self.background[...] = params.background
         self.pixel_scale = params.pixel_scale
-        self.snr = params.snr
-
-        # for adding noise to galsim images.
-        self.rng = galsim.BaseDeviate(seed=999999)
+        self.noise_factor = params.noise_factor
 
         # small dummy psf
-        self.psf = galsim.Gaussian(half_light_radius=0.2).withFlux(1.0)
+        self.psf = galsim.Gaussian(fwhm=params.psf_fwhm).withFlux(1.0)
+        self.min_flux = params.min_flux
+        self.max_flux = params.max_flux
+        self.min_hlr = params.min_hlr
+        self.max_hlr = params.max_hlr
+        self.max_e = params.max_e
 
     def __getitem__(self, idx):
-        flux_avg = np.random.uniform(100, 1000)
-        hlr = np.random.uniform(0.4, 1.0)  # arcseconds
+        flux_avg = np.random.uniform(self.min_flux, self.max_flux)
+        hlr = np.random.uniform(self.min_hlr, self.max_hlr)  # arcseconds
         flux = (hlr / self.pixel_scale) ** 2 * np.pi * flux_avg  # approx
 
         # sample ellipticity
-        l = np.random.uniform(0, 0.5)
+        l = np.random.uniform(0, self.max_e)
         theta = np.random.uniform(0, 2 * np.pi)
         g1 = l * np.cos(theta)
         g2 = l * np.sin(theta)
@@ -259,13 +265,11 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
 
-        # add noise.
-        poisson_noise = galsim.PoissonNoise(self.rng, sky_level=self.background.mean())
-        image.addNoiseSNR(poisson_noise, snr=self.snr, preserve_flux=True)
-
-        # add background
+        # add noise and background.
         image = image.array.reshape(1, self.slen, self.slen).astype(np.float32)
         image += self.background
+        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        image += noise
 
         return {"images": image, "background": self.background}
 
@@ -291,11 +295,25 @@ class SavedGalaxies(pl.LightningDataModule, Dataset):
 
         self.data = torch.load(cfg.dataset.data_file)
 
+        # Source Equation (4) in: https://arxiv.org/abs/2005.12039
+        assert self.data["images"].shape[1] == 1, "Only 1 band supported"
+        self.do_norm = cfg.dataset.do_norm
+        self.n_images = len(self.data["images"])
+        self.beta = 2.5
+        self.norm = self.data["images"].reshape(self.n_images, 1, -1).max(axis=-1).values.mean()
+
     def __len__(self):
         return len(self.data["images"])
 
     def __getitem__(self, idx):
-        return {"images": self.data["images"][idx], "background": self.data["background"]}
+        image = self.data["images"][idx]
+        background = self.data["background"]
+
+        if self.do_norm:
+            image = torch.tanh(torch.arcsinh(self.beta * image / self.norm))
+            background = torch.tanh(torch.arcsinh(self.beta * background / self.norm))
+
+        return {"images": image, "background": background}
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=0)
