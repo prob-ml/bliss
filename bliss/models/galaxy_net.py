@@ -127,6 +127,10 @@ class OneCenteredGalaxy(pl.LightningModule):
         # kl can behave wildly w/out background.
         recon_mean = recon_mean + background
         recon_var = recon_var + background
+        
+        # NOTE: setting variance manually
+        recon_var = recon_mean * 0.05**2 # 0.05 was the noise factor
+        # recon_var = torch.ones_like(recon_mean)
 
         return recon_mean, recon_var, kl_z
 
@@ -144,9 +148,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         # NOTE: image includes background.
         # Covariance is diagonal in latent variables.
         # recon_loss = -log p(x | z), shape: torch.Size([ nsamples, n_bands, slen, slen])
-        
-        # NOTE: setting variance to 1. 
-        recon_var = torch.ones_like(recon_mean)
+                
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
         loss = (recon_losses + pr_penalty).sum()

@@ -190,7 +190,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
     def __getitem__(self, idx):
         
         # _idx = np.random.randint(len(self.catalog))
-        # NOTE: just use the first ten galaxies
+        # NOTE: just use the first ten few galaxies
         # just a few galaxies
         assert idx < 10
         _idx = idx 
@@ -208,8 +208,9 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         
         # add noise and background.
         image += self.background.mean()
-        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        
         # NOTE: no noise
+        # noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
         # image += noise
 
         return {"images": image, "background": self.background}
