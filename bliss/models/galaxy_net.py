@@ -129,8 +129,8 @@ class OneCenteredGalaxy(pl.LightningModule):
         recon_var = recon_var + background
         
         # NOTE: setting variance manually
-        recon_var = recon_mean * 0.05**2 # 0.05 was the noise factor
-        # recon_var = torch.ones_like(recon_mean)
+        # recon_var = recon_mean * 0.05**2 # 0.05 was the noise factor
+        recon_var = torch.ones_like(recon_mean)
 
         return recon_mean, recon_var, kl_z
 
