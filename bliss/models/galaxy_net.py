@@ -134,13 +134,19 @@ class OneCenteredGalaxy(pl.LightningModule):
         # use a "deterministic warm-up" scheme to see if we get better results
         # on realistic galaxies. It involves "turning on" the prior penalty term slowly.
         # see: https://arxiv.org/pdf/1602.02282.pdf
-        pwr = max(min(-self.warm_up + self.current_epoch, 0), -6)
-        pr_penalty = kl_z * 10 ** pwr
+        # pwr = max(min(-self.warm_up + self.current_epoch, 0), -6)
+        # pr_penalty = kl_z * 10 ** pwr
+        
+        # NOTE no warm-up steps
+        pr_penalty = kl_z
 
         # return ELBO
         # NOTE: image includes background.
         # Covariance is diagonal in latent variables.
         # recon_loss = -log p(x | z), shape: torch.Size([ nsamples, n_bands, slen, slen])
+        
+        # NOTE: setting variance to 1. 
+        recon_var = torch.ones_like(recon_mean)
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
         loss = (recon_losses + pr_penalty).sum()
@@ -191,43 +197,44 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     def plot_reconstruction(self, images, recon_mean, recon_var):
         # only plot i band if available, otherwise the highest band given.
-        assert images.size(0) >= 10
-        assert self.enc.n_bands == self.dec.n_bands
-        n_bands = self.enc.n_bands
-        num_examples = 10
-        num_cols = 4
-        band_idx = min(2, n_bands - 1)
-        residuals = (images - recon_mean) / torch.sqrt(images)
-        plt.ioff()
+#         assert images.size(0) >= 10
+#         assert self.enc.n_bands == self.dec.n_bands
+#         n_bands = self.enc.n_bands
+#         num_examples = 10
+#         num_cols = 4
+#         band_idx = min(2, n_bands - 1)
+#         residuals = (images - recon_mean) / torch.sqrt(images)
+#         plt.ioff()
 
-        fig = plt.figure(figsize=(10, 25))
-        plt.suptitle("Epoch {:d}".format(self.current_epoch))
+#         fig = plt.figure(figsize=(10, 25))
+#         plt.suptitle("Epoch {:d}".format(self.current_epoch))
 
-        for i in range(num_examples):
+#         for i in range(num_examples):
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 1)
-            plt.title("images")
-            plt.imshow(images[i, band_idx].data.cpu().numpy())
-            plt.colorbar()
+#             plt.subplot(num_examples, num_cols, num_cols * i + 1)
+#             plt.title("images")
+#             plt.imshow(images[i, band_idx].data.cpu().numpy())
+#             plt.colorbar()
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 2)
-            plt.title("recon_mean")
-            plt.imshow(recon_mean[i, band_idx].data.cpu().numpy())
-            plt.colorbar()
+#             plt.subplot(num_examples, num_cols, num_cols * i + 2)
+#             plt.title("recon_mean")
+#             plt.imshow(recon_mean[i, band_idx].data.cpu().numpy())
+#             plt.colorbar()
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 3)
-            plt.title("recon_var")
-            plt.imshow(recon_var[i, band_idx].data.cpu().numpy())
-            plt.colorbar()
+#             plt.subplot(num_examples, num_cols, num_cols * i + 3)
+#             plt.title("recon_var")
+#             plt.imshow(recon_var[i, band_idx].data.cpu().numpy())
+#             plt.colorbar()
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 4)
-            plt.title("residuals")
-            plt.imshow(residuals[i, band_idx].data.cpu().numpy())
-            plt.colorbar()
+#             plt.subplot(num_examples, num_cols, num_cols * i + 4)
+#             plt.title("residuals")
+#             plt.imshow(residuals[i, band_idx].data.cpu().numpy())
+#             plt.colorbar()
 
-        plt.tight_layout()
+#         plt.tight_layout()
 
-        return fig
+#         return fig
+        pass
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
