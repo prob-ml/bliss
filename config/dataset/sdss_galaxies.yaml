@@ -9,7 +9,7 @@ params:
   background: 865
   deviate_center: false
   noise_factor: 0.05
-  slen: 41
+  slen: 64
 sdss:
   bands:
     - 2
