@@ -4,7 +4,7 @@ n_batches: 10
 batch_size: 128
 num_workers: 0
 params:
-  slen: 51
+  slen: 41
   deviate_center: False
   background: 865
   noise_factor: 0.01
