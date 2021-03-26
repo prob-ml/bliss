@@ -12,28 +12,38 @@ plt.switch_backend("Agg")
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=41, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=64, latent_dim=8, n_bands=1, hidden=256):
+        # assert slen % 1 == 0
+
         super().__init__()
 
         self.slen = slen
         self.latent_dim = latent_dim
         self.n_bands = n_bands
 
+        dim_func = lambda x: (x - 3) // 2 + 1
+        convout_dim = dim_func(dim_func(slen)) ** 2 * 16
+        assert convout_dim < 2000, f"Dimension of conv output: {convout_dim}, is too large."
         self.features = nn.Sequential(
-            nn.Conv2d(self.n_bands, 16, 3, padding=1),
+            nn.BatchNorm2d(self.n_bands, momentum=0.5),
+            nn.Conv2d(self.n_bands, 32, 3, stride=1, padding=1),  # e.g. input=64, 64x64
             nn.ReLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
+            nn.Conv2d(32, 32, 3, stride=2, padding=1),  # 32x32
             nn.ReLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
+            nn.Conv2d(32, 64, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, 3, stride=2, padding=1),  # 16x16
+            nn.ReLU(),
+            nn.Conv2d(64, 128, 3, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, 3, stride=2, padding=1),  # 8x8
+            nn.ReLU(),
+            nn.Conv2d(128, 256, 3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, 3, stride=2, padding=1),  # 4x4
             nn.ReLU(),
             nn.Flatten(1, -1),
-            nn.Linear(16 * self.slen ** 2, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, hidden),
-            nn.BatchNorm1d(hidden),
-            nn.ReLU(),
-            nn.Dropout(p=0.1),
-            nn.Linear(hidden, hidden),
+            nn.Linear(256 * 4 ** 2, hidden),
             nn.ReLU(),
             nn.Linear(hidden, hidden),
             nn.ReLU(),
@@ -52,33 +62,45 @@ class CenteredGalaxyEncoder(nn.Module):
 class CenteredGalaxyDecoder(nn.Module):
     def __init__(self, slen=41, latent_dim=8, n_bands=1, hidden=256):
         super().__init__()
+        # assert slen % 1 == 0
 
         self.slen = slen
         self.latent_dim = latent_dim
         self.n_bands = n_bands
 
+        # dim_func = lambda x: (x - 3) // 2 + 1
+        # dim_func2 = lambda x: (x - 1) * 2 + 3
+        # self.convout_slen = dim_func(dim_func(slen))
+
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
             nn.ReLU(),
-            nn.Linear(hidden, 64 * (slen // 2 + 1) ** 2),
+            nn.Linear(hidden, 256 * 4 ** 2),
             nn.ReLU(),
         )
 
         self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(64, 64, 3, padding=1),
+            nn.ConvTranspose2d(256, 256, 3, padding=1, stride=2, output_padding=1),  # 8x8
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 64, 3, padding=1),
+            nn.ConvTranspose2d(256, 256, 3, padding=1, stride=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 64, 3, padding=1),
+            nn.ConvTranspose2d(256, 128, 3, padding=1, stride=2, output_padding=1),  # 16x16
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 64, 3, padding=0, stride=2),
-            nn.ConvTranspose2d(64, 2 * self.n_bands, 3, padding=0),
+            nn.ConvTranspose2d(128, 128, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, 3, padding=1, stride=2, output_padding=2),  # 32x32
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 64, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 3, padding=1, stride=2, output_padding=1),  # 64x64
+            nn.ConvTranspose2d(32, 2 * self.n_bands, 3, padding=1, stride=1),  # 6x64x64
         )
 
     def forward(self, z):
         z = self.fc(z)
-        z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
+        z = z.view(-1, 256, 4, 4)
         z = self.deconv(z)
+        assert z.shape[-1] >= self.slen and z.shape[-2] >= self.slen
         z = z[:, :, : self.slen, : self.slen]
         recon_mean = F.relu(z[:, : self.n_bands])
         var_multiplier = 1 + 10 * torch.sigmoid(z[:, self.n_bands : (2 * self.n_bands)])
