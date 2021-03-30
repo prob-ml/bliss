@@ -81,7 +81,7 @@ class CenteredGalaxyDecoder(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(128, 128, 3, padding=1, stride=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, 3, padding=1, stride=2, output_padding=2),  # 32x32
+            nn.ConvTranspose2d(128, 64, 3, padding=1, stride=2, output_padding=1),  # 32x32
             nn.ReLU(),
             nn.ConvTranspose2d(64, 64, 3, padding=1, stride=1),
             nn.ReLU(),

@@ -157,7 +157,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         # image paraemters.
         params = self.cfg.dataset.params
         self.slen = int(params.slen)
-        assert self.slen % 2 == 1, "Need divisibility by 2"
+        assert self.slen % 2 == 0, "Need divisibility by 2"
         self.n_bands = 1
         self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
         self.background[...] = params.background
@@ -234,7 +234,7 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
         params = self.cfg.dataset.params
         self.slen = int(params.slen)
-        assert self.slen % 2 == 1, "Need divisibility by 2"
+        assert self.slen % 2 == 0, "Need divisibility by 2"
         self.n_bands = 1
         self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
         self.background[...] = params.background
