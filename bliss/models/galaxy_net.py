@@ -21,9 +21,6 @@ class CenteredGalaxyEncoder(nn.Module):
         self.latent_dim = latent_dim
         self.n_bands = n_bands
 
-        dim_func = lambda x: (x - 3) // 2 + 1
-        convout_dim = dim_func(dim_func(slen)) ** 2 * 16
-        assert convout_dim < 2000, f"Dimension of conv output: {convout_dim}, is too large."
         self.features = nn.Sequential(
             nn.BatchNorm2d(self.n_bands, momentum=0.5),
             nn.Conv2d(self.n_bands, 32, 3, stride=1, padding=1),  # e.g. input=64, 64x64
@@ -68,10 +65,6 @@ class CenteredGalaxyDecoder(nn.Module):
         self.latent_dim = latent_dim
         self.n_bands = n_bands
 
-        # dim_func = lambda x: (x - 3) // 2 + 1
-        # dim_func2 = lambda x: (x - 1) * 2 + 3
-        # self.convout_slen = dim_func(dim_func(slen))
-
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
             nn.ReLU(),
@@ -100,7 +93,7 @@ class CenteredGalaxyDecoder(nn.Module):
         z = self.fc(z)
         z = z.view(-1, 256, 4, 4)
         z = self.deconv(z)
-        assert z.shape[-1] >= self.slen and z.shape[-2] >= self.slen
+        assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
         z = z[:, :, : self.slen, : self.slen]
         recon_mean = F.relu(z[:, : self.n_bands])
         var_multiplier = 1 + 10 * torch.sigmoid(z[:, self.n_bands : (2 * self.n_bands)])
