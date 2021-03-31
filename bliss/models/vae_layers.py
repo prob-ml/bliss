@@ -23,7 +23,6 @@ class SimpleEncoder(nn.Module):
     def __init__(self, slen=41, latent_dim=8, n_bands=1, hidden=256):
         super().__init__()
 
-        assert slen % 2 == 1
         self.slen = slen
         self.latent_dim = latent_dim
         self.n_bands = n_bands
