@@ -1,20 +1,14 @@
-import os
 import torch
 from omegaconf import DictConfig
-import ray
 
 from bliss.datasets import sdss
 from bliss import sleep
 
 
-# start ray at head node
-ray.init(address=os.environ["ip_head"])
-
 _models = [sleep.SleepPhase]
 models = {cls.__name__: cls for cls in _models}
 
 
-@ray.remote
 def predict(cfg: DictConfig):
     bands = list(cfg.predict.bands)
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
