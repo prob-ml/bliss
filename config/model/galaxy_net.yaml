@@ -2,6 +2,7 @@
 name: OneCenteredGalaxy
 warm_up: 0
 beta: 1
+enc_dec_name: jeff
 params:
   slen: 64
   latent_dim: 8
