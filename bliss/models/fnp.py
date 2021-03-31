@@ -543,14 +543,9 @@ class PMA(nn.Module):
         return out
 
 
-class SDSS_HNP(LightningModule):
-    def __init__(self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000, n_clusters=5):
-        self.sdss_dataset = sdss_dataset
-        self.stamper = StarStamper(stampsize)
-        self.max_cond_inputs = max_cond_inputs
-        self.n_clusters = n_clusters
+class StarHNP(HNP):
+    def __init__(self, stampsize, dz=4, fb_z=0.0):
         dy = stampsize ** 2
-        super().__init__()
         z_inference = SequentialVarg(ConcatLayer([1]), MLP(dy, [16, 8], dz))
 
         z_pooler = AveragePooler(dz)
@@ -567,7 +562,17 @@ class SDSS_HNP(LightningModule):
             SplitLayer(dy, -1),
             NormalEncoder(minscale=1e-7),
         )
-        self.hnp = HNP(z_inference, z_pooler, h_prior, h_pooler, y_decoder)
+        super().__init__(z_inference, z_pooler, h_prior, h_pooler, y_decoder, fb_z)
+
+
+class SDSS_HNP(LightningModule):
+    def __init__(self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000, n_clusters=5):
+        super().__init__()
+        self.sdss_dataset = sdss_dataset
+        self.stamper = StarStamper(stampsize)
+        self.max_cond_inputs = max_cond_inputs
+        self.n_clusters = n_clusters
+        self.hnp = StarHNP(stampsize, dz, fb_z=0.0)
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):
