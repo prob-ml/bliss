@@ -1,3 +1,4 @@
+from bliss.models.fnp import SDSS_HNP, StarHNP
 import warnings
 from pathlib import Path
 
@@ -595,6 +596,41 @@ class Tiler(nn.Module):
         u_indx = int(source_center + r + 1)
 
         return source[:, l_indx:u_indx, l_indx:u_indx]
+
+
+class HNPStarTileDecoder(nn.Module):
+    def __init__(
+        self,
+        tiler,
+        n_bands,
+        psf_params_file,
+        psf_slen,
+    ):
+        super().__init__()
+        self.tiler = tiler
+        self.n_bands = n_bands
+        self.psf_slen = psf_slen
+        self.star_hnp = StarHNP(stampsize=self.psf_slen, dz=4, fb_z=0.0)
+
+    def forward(self, locs, fluxes, star_bool):
+        # locs: is (n_ptiles x max_num_stars x 2)
+        # fluxes: Is (n_ptiles x max_stars x n_bands)
+        # star_bool: Is (n_ptiles x max_stars x 1)
+        # max_sources obtained from locs, allows for more flexibility when rendering.
+
+        X = locs
+        G = make_cluster(X)
+        S = []
+        _, _, _, _, pY = self.star_hnp(X, G, S)
+        sources = pY.loc
+        return self.tiler.render_tile(locs, sources)
+
+    def psf_forward(self):
+        psf = self._get_psf()
+        init_psf_sum = psf.sum(-1).sum(-1).detach()
+        norm = psf.sum(-1).sum(-1)
+        psf *= (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
+        return psf
 
 
 class StarTileDecoder(nn.Module):
