@@ -37,5 +37,4 @@ encoder:
     spatial_dropout: 0.031456
     dropout: 0.031369
     hidden: 303
-    downsample_with_pool: False
 use_galaxy_encoder: False

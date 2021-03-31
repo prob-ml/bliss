@@ -184,35 +184,13 @@ class ConvBlock(nn.Module):
 
 
 class EncoderCNN(nn.Module):
-    def __init__(self, n_bands, channel, dropout, downsample_with_pool=True):
+    def __init__(self, n_bands, channel, dropout):
         super().__init__()
-        if downsample_with_pool:
-            self.layer = self._make_layer_with_pool(n_bands, channel, dropout)
-        else:
-            self.layer = self._make_layer(n_bands, channel, dropout)
+        self.layer = self._make_layer(n_bands, channel, dropout)
 
     def forward(self, x):
         x = self.layer(x)
         return x
-
-    def _make_layer_with_pool(self, n_bands, channel, dropout):
-        in_channel = n_bands
-        layers = []
-        for i in range(3):
-            layers += [
-                nn.Conv2d(in_channel, channel, 3, padding=1),
-                nn.BatchNorm2d(channel),
-                nn.ReLU(True),
-            ]
-            layers += [
-                ConvBlock(channel, channel, dropout, False),
-                ConvBlock(channel, channel, dropout, False),
-            ]
-            if i < 2:
-                layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
-            in_channel = channel
-            channel = channel * 2
-        return nn.Sequential(*layers)
 
     def _make_layer(self, n_bands, channel, dropout):
         layers = [
@@ -246,7 +224,6 @@ class ImageEncoder(nn.Module):
         spatial_dropout=0,
         dropout=0,
         hidden=128,
-        downsample_with_pool=False,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -274,7 +251,7 @@ class ImageEncoder(nn.Module):
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
 
-        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout, downsample_with_pool)
+        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
 
         # Number of variational parameters used to characterize each source in an image.
         self.n_params_per_source = sum(
