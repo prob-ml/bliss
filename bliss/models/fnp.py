@@ -224,10 +224,9 @@ class HNP(nn.Module):
             ## Sample the hierarchical latent variables from the latent variables
             # qH = self.h_pooler(X, G, Zi)
             qH = self.h_pooler(Zi, G[:n_inputs].transpose(1, 0))
-            H = qH.rsample()
         else:
-            H = pH.rsample()
-
+            qH = pH
+        H = qH.rsample()
         ## Conditional on the H, calculate  Z
         Z = self.z_pooler(H, G)
 

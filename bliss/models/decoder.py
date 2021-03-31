@@ -619,7 +619,7 @@ class HNPStarTileDecoder(nn.Module):
         self.tiler = tiler
         self.n_bands = n_bands
         self.psf_slen = psf_slen
-        self.star_hnp = StarHNP(stampsize=self.psf_slen, dz=4, fb_z=0.0, n_clusters=5)
+        self.star_hnp = StarHNP(stampsize=self.psf_slen, dz=4, fb_z=0.0, n_clusters=2)
 
     def forward(self, locs, fluxes, star_bool):
         # locs: is (n_ptiles x max_num_stars x 2)
@@ -627,10 +627,10 @@ class HNPStarTileDecoder(nn.Module):
         # star_bool: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
-        X = locs
-        S = []
+        X = locs.reshape(-1, locs.size(-1))
+        S = torch.tensor([])
         _, _, _, _, pY = self.star_hnp(X, S)
-        sources = pY.loc
+        sources = pY.loc.reshape(*locs.shape[0:2], 1, self.psf_slen, self.psf_slen)
         return self.tiler.render_tile(locs, sources)
 
     def psf_forward(self):

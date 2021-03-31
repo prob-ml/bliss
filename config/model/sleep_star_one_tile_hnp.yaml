@@ -27,7 +27,7 @@ decoder:
     background_values: ${model.image.background}
     loc_min: 0.
     loc_max: 1.0
-    use_hnp: True
+    use_star_hnp: True
 encoder:
   params:
     n_bands: ${model.image.n_bands}
