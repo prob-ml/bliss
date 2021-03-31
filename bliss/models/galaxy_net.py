@@ -76,17 +76,17 @@ class CenteredGalaxyDecoder(nn.Module):
         self.deconv = nn.Sequential(
             nn.ConvTranspose2d(256, 256, 3, padding=1, stride=2, output_padding=1),  # 8x8
             nn.ReLU(),
-            nn.ConvTranspose2d(256, 256, 3, padding=1, stride=1),
+            nn.ConvTranspose2d(256, 128, 3, padding=1, stride=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(256, 128, 3, padding=1, stride=2, output_padding=1),  # 16x16
+            nn.ConvTranspose2d(128, 128, 3, padding=1, stride=2, output_padding=1),  # 16x16
             nn.ReLU(),
-            nn.ConvTranspose2d(128, 128, 3, padding=1, stride=1),
+            nn.ConvTranspose2d(128, 64, 3, padding=1, stride=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, 3, padding=1, stride=2, output_padding=1),  # 32x32
+            nn.ConvTranspose2d(64, 64, 3, padding=1, stride=2, output_padding=1),  # 32x32
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 64, 3, padding=1, stride=1),
+            nn.ConvTranspose2d(64, 32, 3, padding=1, stride=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, 3, padding=1, stride=2, output_padding=1),  # 64x64
+            nn.ConvTranspose2d(32, 32, 3, padding=1, stride=2, output_padding=1),  # 64x64
             nn.ConvTranspose2d(32, 2 * self.n_bands, 3, padding=1, stride=1),  # 6x64x64
         )
 
