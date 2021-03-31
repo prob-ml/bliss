@@ -3,14 +3,18 @@ repos:
     rev: v3.4.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^.*fits
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: end-of-file-fixer
+        exclude: ^.*fits
   - repo: https://github.com/psf/black
     rev: 20.8b1
     hooks:
       - id: black
         language_version: python3.8
+        args:
+          - "--line-length=100"
   - repo: https://github.com/pycqa/pylint
     rev: pylint-2.6.0
     hooks:

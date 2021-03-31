@@ -44,13 +44,20 @@ jobs:
         run: |
           sudo apt-get install libfftw3-dev
 
+      - name: Poetry cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-${{ hashFiles('./poetry.lock') }}
+
       - name: Install poetry dependencies
         run: |
           poetry install
 
       - name: Run pylint
         run: |
-          poetry run pylint bliss
+          poetry run pylint bliss/ tests/
 
       - name: Run black
         run: |

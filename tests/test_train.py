@@ -10,4 +10,4 @@ def test_train_run():
     overrides = [f"{k}={v}" for k, v in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
-        train.main(cfg)
+        train.train(cfg)

@@ -12,35 +12,84 @@ from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
 
 
-def construct_subpixel_grid_base(size_x, size_y):
-    grid_x = np.linspace(-1.0, 1.0, num=size_x)
-    grid_y = np.linspace(-1.0, 1.0, num=size_y)
+class StarStamper:
+    def __init__(self, stampsize, center_subpixel=True, grid_dtype=torch.float):
+        self.stampsize = stampsize
+        self.center_subpixel = center_subpixel
+        self.grid_dtype = grid_dtype
+        if self.center_subpixel:
+            self.G = self._construct_subpixel_grid_base()
+        else:
+            self.G = None
 
-    G_x = torch.stack([torch.from_numpy(grid_x)] * size_y, dim=0)
-    G_y = torch.stack([torch.from_numpy(grid_y)] * size_x, dim=1)
+    def __call__(self, img, pts, prs, bg=None):
+        stamps = []
+        is_edge = []
+        bgs = []
+        for (pt, pr) in zip(pts, prs):
+            pti, pri = int(pt + 0.5), int(pr + 0.5)
 
-    G = torch.stack([G_x, G_y], dim=2)
+            row_lower = pri - self.stampsize // 2
+            row_upper = pri + self.stampsize // 2 + 1
+            col_lower = pti - self.stampsize // 2
+            col_upper = pti + self.stampsize // 2 + 1
 
-    return G
+            edge_stamp = (
+                (row_lower < 0)
+                or (row_upper > img.shape[0])
+                or (col_lower < 0)
+                or (col_upper > img.shape[1])
+            )
 
+            is_edge.append(edge_stamp)
 
-def construct_subpixel_grid(G, shift_x, shift_y):
-    G_shift = G.clone()
-    G_shift[:, :, 0] += shift_x
-    G_shift[:, :, 1] += shift_y
-    return G_shift
+            if not edge_stamp:
+                stamp = img[row_lower:row_upper, col_lower:col_upper]
+                stamps.append(stamp)
+                if bg is not None:
+                    stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
+                    bgs.append(stamp_bg)
 
+        stamps = torch.stack(stamps)
+        is_edge = torch.tensor(is_edge, device=img.device)
+        if self.center_subpixel:
+            stamps = self._center_stamps_subpixel(stamps, pts[~is_edge], prs[~is_edge])
 
-def center_stamp_subpixel(stamp, pt, pr, G):
-    stamp_torch = torch.from_numpy(stamp)
-    size_y, size_x = stamp.shape
-    shift_x = 2 * (pt - int(pt + 0.5)) / size_x
-    shift_y = 2 * (pr - int(pr + 0.5)) / size_y
-    G_shift = construct_subpixel_grid(G, shift_x, shift_y).float()
-    stamp_shifted = F.grid_sample(
-        stamp_torch.unsqueeze(0).unsqueeze(0), G_shift.unsqueeze(0), align_corners=False
-    )
-    return stamp_shifted.squeeze(0).squeeze(0).numpy()
+        return (
+            stamps,
+            None if bg is None else torch.stack(bgs),
+            is_edge,
+        )
+
+    def _construct_subpixel_grid_base(self):
+        grid_x = np.linspace(-1.0, 1.0, num=self.stampsize)
+        grid_y = np.linspace(-1.0, 1.0, num=self.stampsize)
+
+        G_x = torch.stack([torch.from_numpy(grid_x)] * self.stampsize, dim=0)
+        G_y = torch.stack([torch.from_numpy(grid_y)] * self.stampsize, dim=1)
+
+        G = torch.stack([G_x, G_y], dim=2).unsqueeze(0)
+
+        return G.type(self.grid_dtype)
+
+    def _center_stamps_subpixel(
+        self,
+        stamps,
+        pts,
+        prs,
+    ):
+        locs = torch.stack([pts, prs], dim=1)
+        shifts = (
+            2
+            * (locs - (locs + 0.5).trunc())
+            / torch.tensor(stamps.shape[1:], device=stamps.device).unsqueeze(0)
+        )
+        if self.G.device is not shifts.device:
+            self.G = self.G.to(shifts.device)
+        shifts = shifts.type(self.G.dtype)
+        G_shift = self.G + shifts.unsqueeze(1).unsqueeze(1)
+        stamps_shifted = F.grid_sample(stamps.unsqueeze(1), G_shift, align_corners=False)
+        return stamps_shifted.squeeze(1)
 
 
 class SdssPSF:
@@ -102,11 +151,11 @@ class SloanDigitalSkySurvey(Dataset):
     # pylint: disable=dangerous-default-value
     def __init__(
         self,
-        sdss_dir,
+        sdss_dir="data/sdss",
         run=3900,
         camcol=6,
         fields=(269,),
-        bands=[2],
+        bands=range(5),
         stampsize=5,
         overwrite_fits_cache=False,
         overwrite_cache=False,
@@ -120,7 +169,7 @@ class SloanDigitalSkySurvey(Dataset):
         self.stampsize = stampsize
         self.overwrite_cache = overwrite_cache
         self.center_subpixel = center_subpixel
-
+        self.stamper = StarStamper(stampsize, center_subpixel=center_subpixel)
         # meta data for the run + camcol
         pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
         camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
@@ -195,60 +244,41 @@ class SloanDigitalSkySurvey(Dataset):
                 if p.exists():
                     p.unlink()
 
-    # pylint: disable=too-many-statements
     def fetch_bright_stars(self, po_fits, img, wcs, bg):
         is_star = po_fits["objc_type"] == 6
         is_bright = po_fits["psfflux"].sum(axis=1) > 100
         is_thing = po_fits["thing_id"] != -1
         is_target = is_star & is_bright & is_thing
+
         ras = po_fits["ra"][is_target]
         decs = po_fits["dec"][is_target]
-        fluxes = po_fits["psfflux"][is_target].sum(axis=1)
-
-        stamps = []
         pts = []
         prs = []
-        bgs = []
-        flxs = []
-
-        G = construct_subpixel_grid_base(self.stampsize, self.stampsize)
-        for (ra, dec, _f, flux) in zip(
-            ras, decs, po_fits["thing_id"][is_target], fluxes
-        ):
-            # pt = "time" in pixel coordinates
+        for ra, dec in zip(ras, decs):
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
-            pti, pri = int(pt + 0.5), int(pr + 0.5)
+            pts.append(pt)
+            prs.append(pr)
+        pts = np.asarray(pts)
+        prs = np.asarray(prs)
+        fluxes = po_fits["psfflux"][is_target].sum(axis=1)
 
-            row_lower = pri - self.stampsize // 2
-            row_upper = pri + self.stampsize // 2 + 1
-            col_lower = pti - self.stampsize // 2
-            col_upper = pti + self.stampsize // 2 + 1
-            edge_stamp = (
-                (row_lower < 0)
-                or (row_upper > img.shape[0])
-                or (col_lower < 0)
-                or (col_upper > img.shape[1])
-            )
-            if not edge_stamp:
-                stamp = img[row_lower:row_upper, col_lower:col_upper]
-                if self.center_subpixel:
-                    stamp = center_stamp_subpixel(stamp, pt, pr, G)
-                stamps.append(stamp)
-                pts.append(pt)
-                prs.append(pr)
-                stamp_bg = bg[row_lower:row_upper, col_lower:col_upper]
-                bgs.append(stamp_bg)
-                flxs.append(flux)
-
+        stamps, bgs, is_edge = self.stamper(
+            torch.from_numpy(img),
+            torch.from_numpy(pts),
+            torch.from_numpy(prs),
+            bg=torch.from_numpy(bg),
+        )
+        is_edge = is_edge.numpy()
         return (
-            np.asarray(stamps),
-            np.asarray(pts),
-            np.asarray(prs),
-            np.asarray(flxs),
-            np.asarray(bgs),
+            stamps.numpy(),
+            pts[~is_edge],
+            prs[~is_edge],
+            fluxes[~is_edge],
+            bgs.numpy(),
         )
 
     def get_from_disk(self, idx, verbose=False):
+        # pylint: disable=too-many-statements
         if self.rcfgcs[idx] is None:
             return None
         run, camcol, field, gain, po_fits, psf = self.rcfgcs[idx]
@@ -267,16 +297,16 @@ class SloanDigitalSkySurvey(Dataset):
             f"cache_stmpsz{self.stampsize}_ctr{self.center_subpixel}.pkl"
         )
         if cache_path.exists() and not self.overwrite_cache:
-            ret = pickle.load(cache_path.open("rb+"))
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FITSFixedWarning)
+                ret = pickle.load(cache_path.open("rb+"))
             return ret, cache_path
 
         for b, bl in enumerate("ugriz"):
             if b not in self.bands:
                 continue
 
-            frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(
-                bl, run, camcol, field
-            )
+            frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(bl, run, camcol, field)
             frame_path = str(field_dir.joinpath(frame_name))
             if verbose:
                 print("loading sdss image from", frame_path)
@@ -319,10 +349,16 @@ class SloanDigitalSkySurvey(Dataset):
 
             frame.close()
 
+        # use 'r' band when possible.
+        if len(self.bands) > 2:
+            band_idx = 2
+        else:
+            band_idx = 0
+
         stamps, pts, prs, fluxes, stamp_bgs = self.fetch_bright_stars(
-            po_fits, image_list[2], wcs_list[2], background_list[2]
+            po_fits, image_list[band_idx], wcs_list[band_idx], background_list[band_idx]
         )
-        stamp_psfs = np.asarray(psf.psf_at_points(2, pts, prs))
+        stamp_psfs = np.asarray(psf.psf_at_points(band_idx, pts, prs))
         if len(stamp_bgs) > 0:
             psf_center = stamp_psfs.shape[-1] // 2
             psf_lower = psf_center - floor(self.stampsize / 2)

@@ -14,7 +14,7 @@ class TestSourceEncoder:
 
         n_image_tiles = 30
         max_detections = 4
-        ptile_slen = 8
+        ptile_slen = 10
         n_bands = 2
         tile_slen = 2
 
@@ -33,9 +33,9 @@ class TestSourceEncoder:
             star_encoder.eval()
 
             # simulate image padded tiles
-            image_ptiles = (
-                torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0
-            ).to(device)
+            image_ptiles = (torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0).to(
+                device
+            )
 
             n_star_per_tile = (
                 torch.from_numpy(np.random.choice(max_detections, n_image_tiles))
@@ -56,14 +56,10 @@ class TestSourceEncoder:
             assert ((pred["loc_logvar"] != 0).sum(1)[:, 1] == n_star_per_tile).all()
 
             for i in range(2):
-                assert (
-                    (pred["loc_mean"][:, :, i] != 0).sum(1) == n_star_per_tile
-                ).all()
+                assert ((pred["loc_mean"][:, :, i] != 0).sum(1) == n_star_per_tile).all()
 
             for b in range(n_bands):
-                assert (
-                    (pred["log_flux_mean"][:, :, b] != 0).sum(1) == n_star_per_tile
-                ).all()
+                assert ((pred["log_flux_mean"][:, :, b] != 0).sum(1) == n_star_per_tile).all()
 
             # check pattern of zeros
             is_on_array = encoder.get_is_on_from_n_sources(
@@ -137,7 +133,7 @@ class TestSourceEncoder:
 
         n_image_tiles = 30
         max_detections = 4
-        ptile_slen = 8
+        ptile_slen = 10
         tile_slen = 2
         n_bands = 2
         n_samples = 10
@@ -155,10 +151,7 @@ class TestSourceEncoder:
 
             # simulate image padded tiles
             image_ptiles = (
-                torch.randn(
-                    n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device
-                )
-                + 10.0
+                torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device) + 10.0
             )
             n_star_per_tile_sampled = torch.from_numpy(
                 np.random.choice(max_detections, (n_samples, n_image_tiles))
@@ -173,6 +166,4 @@ class TestSourceEncoder:
                 assert (pred_i["loc_mean"] - pred["loc_mean"][i]).abs().max() < 1e-6
                 assert torch.all(pred_i["loc_logvar"].eq(pred["loc_logvar"][i]))
                 assert torch.all(pred_i["log_flux_mean"].eq(pred["log_flux_mean"][i]))
-                assert torch.all(
-                    pred_i["log_flux_logvar"].eq(pred["log_flux_logvar"][i])
-                )
+                assert torch.all(pred_i["log_flux_logvar"].eq(pred["log_flux_logvar"][i]))

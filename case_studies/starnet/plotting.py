@@ -10,7 +10,7 @@ def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
     vmin = subimage.min()
     vmax = subimage.max()
 
-    im = axarr.matshow(image.cpu(), cmap=plt.cm.gray, vmin=vmin, vmax=vmax)
+    im = axarr.matshow(image.cpu(), cmap=plt.cm.get_cmap("gray"), vmin=vmin, vmax=vmax)
     axarr.set_ylim(x0 + slen0, x0)
     axarr.set_xlim(x1, x1 + slen1)
 
@@ -46,13 +46,10 @@ def get_params_in_tiles(tile_coords, locs, fluxes, slen, subimage_slen, edge_pad
         & (locs.unsqueeze(1) < tile_coords - 0.5 + subimage_slen - edge_padding)
         & (locs.unsqueeze(1) != 0)
     )
-    which_locs_array = (
-        which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]
-    ).float()
+    which_locs_array = (which_locs_array[:, :, :, 0] * which_locs_array[:, :, :, 1]).float()
 
     tile_locs = (
-        which_locs_array.unsqueeze(3) * locs.unsqueeze(1)
-        - (tile_coords + edge_padding - 0.5)
+        which_locs_array.unsqueeze(3) * locs.unsqueeze(1) - (tile_coords + edge_padding - 0.5)
     ).view(subimage_batchsize, max_stars, 2) / (subimage_slen - 2 * edge_padding)
     tile_locs = torch.relu(
         tile_locs
@@ -72,9 +69,7 @@ def get_params_in_tiles(tile_coords, locs, fluxes, slen, subimage_slen, edge_pad
     is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool)
     n_stars_per_tile = is_on_array.float().sum(dim=1).type(torch.LongTensor)
 
-    is_on_array_sorted = get_is_on_from_n_sources(
-        n_stars_per_tile, n_stars_per_tile.max()
-    )
+    is_on_array_sorted = get_is_on_from_n_sources(n_stars_per_tile, n_stars_per_tile.max())
 
     indx = is_on_array_sorted.clone().long()
     indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]

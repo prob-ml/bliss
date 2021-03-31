@@ -34,7 +34,8 @@ class TestTune:
         return overrides
 
     @pytest.mark.filterwarnings("ignore:.*PytestUnhandledThreadExceptionWarning.*")
+    @pytest.mark.filterwarnings("ignore:.*Relying on `self.log.*:DeprecationWarning")
     def test_tune_run(self, overrides, devices):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            tune.main(cfg, local_mode=(not devices.use_cuda))
+            tune.tune(cfg, local_mode=(not devices.use_cuda))

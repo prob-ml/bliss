@@ -1,0 +1,42 @@
+# @package _group_
+name: SleepPhase
+image:
+  slen: 40
+  n_bands: 1
+  background:
+    - 865.0
+galaxy:
+  slen: 51
+  latent_dim: 8
+decoder:
+  params:
+    n_bands: ${model.image.n_bands}
+    slen: ${model.image.slen}
+    tile_slen: 4
+    ptile_slen: 52
+    border_padding: 24
+    prob_galaxy: 0.7
+    n_galaxy_params: ${model.galaxy.latent_dim}
+    max_sources: 1
+    mean_sources: 0.05
+    min_sources: 0
+    f_min: 1e3
+    f_max: 1e5
+    alpha: 0.5
+    gal_slen: ${model.galaxy.slen}
+    decoder_file: ${paths.models}/sdss_toy_gaussian_diverse.dat
+    psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
+    background_values: ${model.image.background}
+encoder:
+  params:
+    n_bands: ${model.image.n_bands}
+    tile_slen: ${model.decoder.params.tile_slen}
+    ptile_slen: 52
+    max_detections: ${model.decoder.params.max_sources}
+galaxy_encoder:
+  params:
+    latent_dim: ${model.galaxy.latent_dim}
+    slen: 36
+    n_bands: 1
+    hidden: 256
+use_galaxy_encoder: True

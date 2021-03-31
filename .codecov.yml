@@ -6,3 +6,5 @@ coverage:
     patch:
       default:
         informational: true
+comment:
+  after_n_builds: 1

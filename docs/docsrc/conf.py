@@ -13,7 +13,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("./bliss"))
+sys.path.insert(0, os.path.abspath("../../bliss"))
 print(sys.path)
 
 
@@ -22,9 +22,7 @@ print(sys.path)
 # pylint: disable=redefined-builtin
 project = "bliss"
 copyright = "2021, Probabilistic Machine Learning Research Group"
-author = (
-    "Derek Hansen, Bryan Liu, Ismael Mendoza, Ziteng Pang, Jeffrey Regier, Zhe Zhao"
-)
+author = "Derek Hansen, Bryan Liu, Ismael Mendoza, Ziteng Pang, Jeffrey Regier, Zhe Zhao"
 
 
 # -- General configuration ---------------------------------------------------
@@ -35,6 +33,7 @@ author = (
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
+    "sphinx.ext.githubpages",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
 ]

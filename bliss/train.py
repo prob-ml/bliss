@@ -13,8 +13,13 @@ from bliss import sleep
 from bliss.datasets import simulated, galsim_galaxies
 from bliss.models import galaxy_net
 
-# compatible datasets and models.
-_datasets = [simulated.SimulatedDataset, galsim_galaxies.GalsimGalaxies]
+# available datasets and models.
+_datasets = [
+    simulated.SimulatedDataset,
+    galsim_galaxies.ToyGaussian,
+    galsim_galaxies.SDSSGalaxies,
+    galsim_galaxies.SavedGalaxies,
+]
 datasets = {cls.__name__: cls for cls in _datasets}
 
 _models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxy]
@@ -36,7 +41,7 @@ def setup_paths(cfg: DictConfig, enforce_overwrite=True):
     output.mkdir(parents=False, exist_ok=not enforce_overwrite)
 
     for p in paths.values():
-        assert Path(p).exists(), f"path {p.as_posix()} does not exist"
+        assert Path(p).exists(), f"path {Path(p).as_posix()} does not exist"
 
     return paths
 
@@ -70,7 +75,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
         checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
         checkpoint_dir = output.joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
-            filepath=checkpoint_dir,
+            dirpath=checkpoint_dir,
             save_top_k=True,
             verbose=True,
             monitor="val_loss",
@@ -81,7 +86,7 @@ def setup_checkpoint_callback(cfg, paths, logger):
     return checkpoint_callback
 
 
-def main(cfg: DictConfig):
+def train(cfg: DictConfig):
 
     # setup paths and seed
     paths = setup_paths(cfg, enforce_overwrite=False)

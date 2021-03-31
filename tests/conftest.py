@@ -10,7 +10,7 @@ from bliss.models import galaxy_net
 
 # command line arguments for tests
 def pytest_addoption(parser):
-    parser.addoption("--gpus", default="0", type=str, help="--gpus option for trainer.")
+    parser.addoption("--gpus", default="cpu", type=str, help="--gpus option for trainer.")
 
 
 def get_cfg(overrides, devices):
@@ -24,7 +24,7 @@ def get_cfg(overrides, devices):
 
 class DeviceSetup:
     def __init__(self, gpus):
-        self.use_cuda = torch.cuda.is_available() if gpus != "" else False
+        self.use_cuda = torch.cuda.is_available() if gpus != "cpu" else False
         self.gpus = gpus if self.use_cuda else None
 
         # setup device
@@ -78,7 +78,7 @@ class GalaxyVAESetup:
 
     def get_trained_vae(self, overrides):
         cfg = self.get_cfg(overrides)
-        dataset = galsim_galaxies.GalsimGalaxies(cfg)
+        dataset = galsim_galaxies.ToyGaussian(cfg)
         galaxy_vae = galaxy_net.OneCenteredGalaxy(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
         trainer.fit(galaxy_vae, datamodule=dataset)
@@ -86,7 +86,7 @@ class GalaxyVAESetup:
 
     def test_vae(self, overrides, galaxy_net):
         cfg = self.get_cfg(overrides)
-        test_module = galsim_galaxies.GalsimGalaxies(cfg)
+        test_module = galsim_galaxies.ToyGaussian(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
         return trainer.test(galaxy_net, datamodule=test_module)[0]
 

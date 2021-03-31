@@ -25,11 +25,12 @@ Stars
 *****
 * BLISS already includes the StarNet functionality from its predecessor repo: `DeblendingStarFields <https://github.com/Runjing-Liu120/DeblendingStarfields>`_.
 
+Table of Contents
+#################
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
     :titlesonly:
-    :caption: Table of Contents
     :name: mastertoc
 
     Installation

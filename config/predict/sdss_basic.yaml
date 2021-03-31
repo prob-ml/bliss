@@ -1,0 +1,22 @@
+# @package _group_
+# image and sdss parameters
+sdss:
+  sdss_dir: ${paths.data}/sdss
+  run: 3900
+  camcol: 6
+  fields:
+    - 269
+  stampsize: 5
+  overwrite_fits_cache: False
+  overwrite_cache: False
+  center_subpixel: True
+bands:
+  - 2
+
+# i/o parameters
+checkpoint: ${paths.root}/models/sleep_sdss_simple_gaussian_galaxies.ckpt
+device: "cuda:${gpus.0}"
+output_file: "${paths.data}/var_params.pt"
+
+# coverage for tests
+testing: False
