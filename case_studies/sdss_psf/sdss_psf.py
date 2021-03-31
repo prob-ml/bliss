@@ -102,10 +102,10 @@ trainer = Trainer(max_epochs=400, checkpoint_callback=False, gpus=[4])
 trainer.fit(m)
 # %%
 X, img, locs = sdss_dataset[0]
-X, G, S, Y = m.prepare_batch(sdss_dataset[0])
+X, S, Y = m.prepare_batch(sdss_dataset[0])
 km = KMeans(n_clusters=m.n_clusters)
 c = km.fit_predict(locs.cpu().numpy())
-x = m.predict(X, G, S)
+x = m.predict(X, S)
 # %%
 plt.imshow(x[20].reshape(5, 5))
 # %%

@@ -38,6 +38,7 @@ class ImageDecoder(pl.LightningModule):
         background_values=(686.0, 1123.0),
         loc_min=0.0,
         loc_max=1.0,
+        use_star_hnp=False,
     ):
         super().__init__()
         ## Set class attributes
@@ -100,12 +101,20 @@ class ImageDecoder(pl.LightningModule):
         self.tiler = Tiler(tile_slen, ptile_slen)
 
         ## Submodule for rendering stars on a tile
-        self.star_tile_decoder = StarTileDecoder(
-            self.tiler,
-            self.n_bands,
-            self.psf_params_file,
-            self.psf_slen,
-        )
+        if use_star_hnp:
+            self.star_tile_decoder = HNPStarTileDecoder(
+                self.tiler,
+                self.n_bands,
+                self.psf_params_file,
+                self.psf_slen,
+            )
+        else:
+            self.star_tile_decoder = StarTileDecoder(
+                self.tiler,
+                self.n_bands,
+                self.psf_params_file,
+                self.psf_slen,
+            )
 
         ## Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
@@ -610,7 +619,7 @@ class HNPStarTileDecoder(nn.Module):
         self.tiler = tiler
         self.n_bands = n_bands
         self.psf_slen = psf_slen
-        self.star_hnp = StarHNP(stampsize=self.psf_slen, dz=4, fb_z=0.0)
+        self.star_hnp = StarHNP(stampsize=self.psf_slen, dz=4, fb_z=0.0, n_clusters=5)
 
     def forward(self, locs, fluxes, star_bool):
         # locs: is (n_ptiles x max_num_stars x 2)
@@ -619,9 +628,8 @@ class HNPStarTileDecoder(nn.Module):
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
         X = locs
-        G = make_cluster(X)
         S = []
-        _, _, _, _, pY = self.star_hnp(X, G, S)
+        _, _, _, _, pY = self.star_hnp(X, S)
         sources = pY.loc
         return self.tiler.render_tile(locs, sources)
 

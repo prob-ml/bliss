@@ -189,6 +189,7 @@ class HNP(nn.Module):
 
     def __init__(
         self,
+        dep_graph,
         z_inference,
         z_pooler,
         h_prior,
@@ -198,6 +199,7 @@ class HNP(nn.Module):
     ):
         super().__init__()
         ## Learned Submodules
+        self.dep_graph = dep_graph
         self.z_inference = z_inference
         self.z_pooler = z_pooler
         self.h_prior = h_prior
@@ -207,8 +209,12 @@ class HNP(nn.Module):
         self.fb_z = fb_z
         self.register_buffer("lambda_z", torch.tensor(1e-8))
 
-    def encode(self, X, G, S):
+    def encode(self, X, S):
         n_inputs = S.size(0)
+
+        ## Calculate dependency graph
+        G = self.dep_graph(X)
+
         ## Encode the available stamps
         Zi = self.z_inference(X[n_inputs:], S)
 
@@ -231,20 +237,20 @@ class HNP(nn.Module):
 
         return pH, qH, H, Z, pY
 
-    def log_prob(self, X, G, S, Y):
+    def log_prob(self, X, S, Y):
         n_inputs = S.size(0)
-        pH, qH, H, _, pY = self(X, G, S)
+        pH, qH, H, _, pY = self(X, S)
         log_pqh = pH.log_prob(H) - qH.log_prob(H)
         log_y = pY.log_prob(Y)
         elbo = log_pqh.sum() + log_y.sum()
         return elbo
 
-    def forward(self, X, G, S):
-        return self.encode(X, G, S)
+    def forward(self, X, S):
+        return self.encode(X, S)
 
-    def predict(self, X, G, S, mean_Y=False, cond_output=False):
+    def predict(self, X, S, mean_Y=False, cond_output=False):
         n_inputs = S.size(0)
-        pY = self.encode(X, G, S)[4]
+        pY = self.encode(X, S)[4]
         if mean_Y:
             Y = pY.loc.detach()
         else:
@@ -252,6 +258,20 @@ class HNP(nn.Module):
         if cond_output:
             Y[:n_inputs] = S
         return Y
+
+
+class KMeansDepGraph(nn.Module):
+    def __init__(self, n_clusters):
+        super().__init__()
+        self.n_clusters = n_clusters
+
+    def forward(self, X):
+        km = KMeans(n_clusters=self.n_clusters)
+        c = km.fit_predict(X.cpu().numpy())
+        G = torch.zeros((len(c), self.n_clusters)).to(X.device)
+        for i in range(self.n_clusters):
+            G[c == i, i] = 1.0
+        return G
 
 
 ## ***********************
@@ -544,8 +564,9 @@ class PMA(nn.Module):
 
 
 class StarHNP(HNP):
-    def __init__(self, stampsize, dz=4, fb_z=0.0):
+    def __init__(self, stampsize, dz=4, fb_z=0.0, n_clusters=5):
         dy = stampsize ** 2
+        dep_graph = KMeansDepGraph(n_clusters=n_clusters)
         z_inference = SequentialVarg(ConcatLayer([1]), MLP(dy, [16, 8], dz))
 
         z_pooler = AveragePooler(dz)
@@ -562,7 +583,7 @@ class StarHNP(HNP):
             SplitLayer(dy, -1),
             NormalEncoder(minscale=1e-7),
         )
-        super().__init__(z_inference, z_pooler, h_prior, h_pooler, y_decoder, fb_z)
+        super().__init__(dep_graph, z_inference, z_pooler, h_prior, h_pooler, y_decoder, fb_z)
 
 
 class SDSS_HNP(LightningModule):
@@ -572,12 +593,12 @@ class SDSS_HNP(LightningModule):
         self.stamper = StarStamper(stampsize)
         self.max_cond_inputs = max_cond_inputs
         self.n_clusters = n_clusters
-        self.hnp = StarHNP(stampsize, dz, fb_z=0.0)
+        self.hnp = StarHNP(stampsize, dz, fb_z=0.0, n_clusters=n_clusters)
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):
-        X, G, S, YY = self.prepare_batch(batch)
-        loss = -self.hnp.log_prob(X, G, S, YY) / X.size(0)
+        X, S, YY = self.prepare_batch(batch)
+        loss = -self.hnp.log_prob(X, S, YY) / X.size(0)
         return loss
 
     def prepare_batch(self, batch, num_cond_inputs=None):
@@ -586,17 +607,16 @@ class SDSS_HNP(LightningModule):
             img = torch.from_numpy(img)
         if not isinstance(locs, torch.Tensor):
             locs = torch.from_numpy(locs)
-        G = self.make_G(locs)
         YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
         YY = YY.reshape(-1, 25)
         YY = (YY - YY.mean(1, keepdim=True)) / YY.std(1, keepdim=True)
         if num_cond_inputs is None:
             num_cond_inputs = self.max_cond_inputs
         S = YY[: min(YY.size(0), num_cond_inputs)]
-        return X, G, S, YY
+        return X, S, YY
 
-    def predict(self, X, G, S):
-        out = self.hnp.predict(X, G, S, mean_Y=True)
+    def predict(self, X, S):
+        out = self.hnp.predict(X, S, mean_Y=True)
         return out
 
     def validation_step(self, batch, batch_idx):
@@ -610,14 +630,6 @@ class SDSS_HNP(LightningModule):
 
     def train_dataloader(self):
         return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None)
-
-    def make_G(self, locs):
-        km = KMeans(n_clusters=self.n_clusters)
-        c = km.fit_predict(locs.cpu().numpy())
-        G = torch.zeros((len(c), self.n_clusters)).to(locs.device)
-        for i in range(self.n_clusters):
-            G[c == i, i] = 1.0
-        return G
 
 
 class SimpleHPooler(nn.Module):
