@@ -4,6 +4,7 @@ from omegaconf import DictConfig
 
 import torch
 from torch.distributions import Normal
+from torch.nn import L1Loss
 
 from bliss.optimizer import get_optimizer
 from bliss.models.vae_layers import get_enc_dec
@@ -26,6 +27,7 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         self.warm_up = cfg.model.warm_up
         self.beta = cfg.model.beta
+        self.loss_type = cfg.model.loss_type
 
         assert self.warm_up == 0 or self.beta == 1, "Only one of 'warm_up'/'beta' can be active."
 
@@ -58,21 +60,28 @@ class OneCenteredGalaxy(pl.LightningModule):
         return recon_mean, recon_var, kl_z
 
     def get_loss(self, image, recon_mean, recon_var, kl_z):
-        # use a "deterministic warm-up" scheme to see if we get better results
-        # on realistic galaxies. It involves "turning on" the prior penalty term slowly.
-        # see: https://arxiv.org/pdf/1602.02282.pdf
-        pwr = max(min(-self.warm_up + self.current_epoch, 0), -6)
-        pr_penalty = self.beta * kl_z * 10 ** pwr
 
-        # return ELBO
-        # NOTE: image includes background.
-        # Covariance is diagonal in latent variables.
-        # recon_loss = -log p(x | z), shape: torch.Size([ nsamples, n_bands, slen, slen])
-        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
-        recon_losses = recon_losses.view(image.size(0), -1).sum(1)
-        loss = (recon_losses + pr_penalty).sum()
+        if self.loss_type == "L2":
+            # use a "deterministic warm-up" scheme to see if we get better results
+            # on realistic galaxies. It involves "turning on" the prior penalty term slowly.
+            # see: https://arxiv.org/pdf/1602.02282.pdf
+            pwr = max(min(-self.warm_up + self.current_epoch, 0), -6)
+            pr_penalty = self.beta * kl_z * 10 ** pwr
 
-        return loss
+            # return ELBO
+            # NOTE: image includes background.
+            # Covariance is diagonal in latent variables.
+            # recon_loss = -log p(x | z), shape: torch.Size([ nsamples, n_bands, slen, slen])
+            recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
+            recon_losses = recon_losses.view(image.size(0), -1).sum(1)
+            loss = (recon_losses + pr_penalty).sum()
+
+            return loss
+
+        if self.loss_type == "L1":
+            return L1Loss(reduction="sum")(image, recon_mean)
+
+        raise NotImplementedError("Loss not implemented.")
 
     # ---------------
     # Optimizer
