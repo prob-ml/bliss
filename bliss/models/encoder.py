@@ -266,7 +266,7 @@ class ImageEncoder(nn.Module):
             + 1
             + self.max_detections
         )
-        dim_enc_conv_out = self.ptile_slen // 2 // 2
+        dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
