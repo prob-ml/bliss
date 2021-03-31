@@ -151,7 +151,6 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         # image parameters.
         params = self.cfg.dataset.params
         self.slen = int(params.slen)
-        assert self.slen % 2 == 0, "Need divisibility by 2"
         self.n_bands = 1
         self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
         self.background[...] = params.background
@@ -228,7 +227,6 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
         params = self.cfg.dataset.params
         self.slen = int(params.slen)
-        assert self.slen % 2 == 0, "Need divisibility by 2"
         self.n_bands = 1
         self.pixel_scale = params.pixel_scale
         self.noise_factor = params.noise_factor
