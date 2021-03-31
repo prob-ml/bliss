@@ -822,6 +822,7 @@ class GalaxyTileDecoder(nn.Module):
         var = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device)
 
         # forward only galaxies that are on!
+        # no background
         gal_on, var_on = self.galaxy_decoder.forward(z[b == 1])
 
         # size the galaxy (either trims or crops to the size of ptile)
