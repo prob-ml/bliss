@@ -1,18 +1,18 @@
-from bliss.datasets.sdss import StarStamper
 from itertools import product
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from torch.distributions import Bernoulli
-from torch.distributions.relaxed_bernoulli import LogitRelaxedBernoulli
-from bliss.utils import MLP, ConcatLayer
-from sklearn.cluster import KMeans
-from pytorch_lightning import LightningModule
-from ..utils import SequentialVarg, SplitLayer, NormalEncoder
-from torch.distributions import Normal
+from torch.distributions import Bernoulli, Normal
 from torch.utils.data import DataLoader
 from torch.optim import Adam
+from torch.distributions.relaxed_bernoulli import LogitRelaxedBernoulli
+from sklearn.cluster import KMeans
+from pytorch_lightning import LightningModule
+
+from ..datasets.sdss import StarStamper
+from ..utils import SequentialVarg, SplitLayer, NormalEncoder, MLP, ConcatLayer
 
 
 class FNP(nn.Module):
@@ -236,7 +236,6 @@ class HNP(nn.Module):
         return pH, qH, H, Z, pY
 
     def log_prob(self, X, S, Y):
-        n_inputs = S.size(0)
         pH, qH, H, _, pY = self(X, S)
         log_pqh = pH.log_prob(H) - qH.log_prob(H)
         log_y = pY.log_prob(Y)
@@ -594,7 +593,7 @@ class SDSS_HNP(LightningModule):
         self.hnp = StarHNP(stampsize, dz, fb_z=0.0, n_clusters=n_clusters)
         self.valid_losses = []
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         X, S, YY = self.prepare_batch(batch)
         loss = -self.hnp.log_prob(X, S, YY) / X.size(0)
         return loss

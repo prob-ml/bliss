@@ -1,4 +1,3 @@
-from bliss.models.fnp import SDSS_HNP, StarHNP
 import warnings
 from pathlib import Path
 
@@ -11,6 +10,7 @@ from torch.distributions import Poisson, Normal
 import pytorch_lightning as pl
 
 from .encoder import get_is_on_from_n_sources, get_mgrid
+from .fnp import StarHNP
 from . import galaxy_net
 
 
@@ -105,7 +105,6 @@ class ImageDecoder(pl.LightningModule):
             self.star_tile_decoder = HNPStarTileDecoder(
                 self.tiler,
                 self.n_bands,
-                self.psf_params_file,
                 self.psf_slen,
             )
         else:
@@ -612,7 +611,6 @@ class HNPStarTileDecoder(nn.Module):
         self,
         tiler,
         n_bands,
-        psf_params_file,
         psf_slen,
     ):
         super().__init__()
@@ -621,7 +619,7 @@ class HNPStarTileDecoder(nn.Module):
         self.psf_slen = psf_slen
         self.star_hnp = StarHNP(stampsize=self.psf_slen, dz=4, fb_z=0.0, n_clusters=2)
 
-    def forward(self, locs, fluxes, star_bool):
+    def forward(self, locs, fluxes, star_bool):  # pylint: disable=unused-argument
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
         # star_bool: Is (n_ptiles x max_stars x 1)
@@ -631,6 +629,8 @@ class HNPStarTileDecoder(nn.Module):
         S = torch.tensor([])
         _, _, _, _, pY = self.star_hnp(X, S)
         sources = pY.loc.reshape(*locs.shape[0:2], 1, self.psf_slen, self.psf_slen)
+        # sources = expanded_psf * fluxes.unsqueeze(-1).unsqueeze(-1)
+        # sources *= star_bool.unsqueeze(-1).unsqueeze(-1)
         return self.tiler.render_tile(locs, sources)
 
     def psf_forward(self):
