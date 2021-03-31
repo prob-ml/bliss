@@ -3,7 +3,7 @@ def test_binary(sleep_setup, devices):
         "model": "sleep_1galaxy_1star",
         "dataset": "default" if devices.use_cuda else "cpu",
         "training": "unittest" if devices.use_cuda else "cpu",
-        "training.n_epochs": 201 if devices.use_cuda else 1,
+        "training.n_epochs": 200 if devices.use_cuda else 1,
     }
     trained_sleep = sleep_setup.get_trained_sleep(overrides)
 
