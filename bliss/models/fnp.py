@@ -1,3 +1,4 @@
+from bliss.datasets.sdss import StarStamper
 from itertools import product
 import torch
 import torch.nn as nn
@@ -5,8 +6,13 @@ import torch.nn.functional as F
 import numpy as np
 from torch.distributions import Bernoulli
 from torch.distributions.relaxed_bernoulli import LogitRelaxedBernoulli
-
 from bliss.utils import MLP, ConcatLayer
+from sklearn.cluster import KMeans
+from pytorch_lightning import LightningModule
+from ..utils import SequentialVarg, SplitLayer, NormalEncoder
+from torch.distributions import Normal
+from torch.utils.data import DataLoader
+from torch.optim import Adam
 
 
 class FNP(nn.Module):
@@ -535,3 +541,87 @@ class PMA(nn.Module):
         if self.squeeze_out:
             out = out.squeeze(-2)
         return out
+
+
+class SDSS_HNP(LightningModule):
+    def __init__(self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000, n_clusters=5):
+        self.sdss_dataset = sdss_dataset
+        self.stamper = StarStamper(stampsize)
+        self.max_cond_inputs = max_cond_inputs
+        self.n_clusters = n_clusters
+        dy = stampsize ** 2
+        super().__init__()
+        z_inference = SequentialVarg(ConcatLayer([1]), MLP(dy, [16, 8], dz))
+
+        z_pooler = AveragePooler(dz)
+
+        h_prior = lambda X, G: Normal(
+            torch.zeros(G.size(1), dz, device=G.device), torch.ones(G.size(1), dz, device=G.device)
+        )
+
+        h_pooler = SimpleHPooler(dz)
+
+        y_decoder = SequentialVarg(
+            ConcatLayer([0]),
+            MLP(dz, [8, 16, 32], 2 * dy),
+            SplitLayer(dy, -1),
+            NormalEncoder(minscale=1e-7),
+        )
+        self.hnp = HNP(z_inference, z_pooler, h_prior, h_pooler, y_decoder)
+        self.valid_losses = []
+
+    def training_step(self, batch, batch_idx):
+        X, G, S, YY = self.prepare_batch(batch)
+        loss = -self.hnp.log_prob(X, G, S, YY) / X.size(0)
+        return loss
+
+    def prepare_batch(self, batch, num_cond_inputs=None):
+        X, img, locs = batch
+        if not isinstance(img, torch.Tensor):
+            img = torch.from_numpy(img)
+        if not isinstance(locs, torch.Tensor):
+            locs = torch.from_numpy(locs)
+        G = self.make_G(locs)
+        YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
+        YY = YY.reshape(-1, 25)
+        YY = (YY - YY.mean(1, keepdim=True)) / YY.std(1, keepdim=True)
+        if num_cond_inputs is None:
+            num_cond_inputs = self.max_cond_inputs
+        S = YY[: min(YY.size(0), num_cond_inputs)]
+        return X, G, S, YY
+
+    def predict(self, X, G, S):
+        out = self.hnp.predict(X, G, S, mean_Y=True)
+        return out
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.training_step(batch, batch_idx)
+        self.log("val_loss", loss)
+        self.valid_losses.append(loss.item())
+        return loss
+
+    def configure_optimizers(self):
+        return Adam(self.parameters(), lr=1e-3)
+
+    def train_dataloader(self):
+        return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None)
+
+    def make_G(self, locs):
+        km = KMeans(n_clusters=self.n_clusters)
+        c = km.fit_predict(locs.cpu().numpy())
+        G = torch.zeros((len(c), self.n_clusters)).to(locs.device)
+        for i in range(self.n_clusters):
+            G[c == i, i] = 1.0
+        return G
+
+
+class SimpleHPooler(nn.Module):
+    def __init__(self, dh):
+        super().__init__()
+        self.ap = AveragePooler(dh)
+
+    def forward(self, Z, G):
+        z_pooled = self.ap(Z, G)
+        precis = 1.0 + G.sum(1)
+        std = precis.reciprocal().sqrt().unsqueeze(1).repeat(1, z_pooled.size(1))
+        return Normal(z_pooled, std)
