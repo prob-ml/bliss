@@ -134,8 +134,10 @@ class JeffDecoder(SimpleDecoder):
 
     def __init__(self, slen, latent_dim, n_bands, hidden):
         super().__init__(slen=slen, latent_dim=latent_dim, n_bands=n_bands, hidden=hidden)
-        self.min_slen = slen / 2 ** 4  # e.g. slen = 64, min_slen = 4
-        assert self.min_slen % 1 == 0
+
+        min_slen = slen / 2 ** 4  # e.g. slen = 64, min_slen = 4
+        assert min_slen % 1 == 0
+        self.min_slen = int(min_slen)
 
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
@@ -196,8 +198,10 @@ class BastienDecoder(SimpleDecoder):
 
     def __init__(self, slen, latent_dim, n_bands, hidden):
         super().__init__(slen=slen, latent_dim=latent_dim, n_bands=n_bands, hidden=hidden)
-        self.min_slen = slen / 2 ** 4  # e.g. slen = 64, min_slen = 4
-        assert self.min_slen % 1 == 0
+
+        min_slen = slen / 2 ** 4  # e.g. slen = 64, min_slen = 4
+        assert min_slen % 1 == 0
+        self.min_slen = int(min_slen)
 
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
