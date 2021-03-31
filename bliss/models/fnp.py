@@ -215,22 +215,21 @@ class HNP(nn.Module):
         ## Calculate dependency graph
         G = self.dep_graph(X)
 
-        ## Encode the available stamps
-        Zi = self.z_inference(X[:n_inputs], S)
-
         ## Calculate the prior distribution for the H
         pH = self.h_prior(X, G)
 
-        ## Sample the hierarchical latent variables from the latent variables
-        # qH = self.h_pooler(X, G, Zi)
-        qH = self.h_pooler(Zi, G[:n_inputs].transpose(1, 0))
-        H = qH.rsample()
+        if n_inputs > 0:
+            ## Encode the available stamps
+            Zi = self.z_inference(X[:n_inputs], S)
+            ## Sample the hierarchical latent variables from the latent variables
+            # qH = self.h_pooler(X, G, Zi)
+            qH = self.h_pooler(Zi, G[:n_inputs].transpose(1, 0))
+            H = qH.rsample()
+        else:
+            H = pH.rsample()
 
-        ## Conditional on the H, calculate the prior of the Z
+        ## Conditional on the H, calculate  Z
         Z = self.z_pooler(H, G)
-        # pZ = self.z_prior(X, G, H)
-
-        ## Sample the remaining Z which did not have observations available
 
         ## Calculate predicted stamp
         pY = self.y_decoder(Z, X)
