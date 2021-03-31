@@ -6,7 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
-from torch.optim import Adam
+
+from bliss.optimizer import get_optimizer
 
 plt.switch_backend("Agg")
 
@@ -116,6 +117,9 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.dec = CenteredGalaxyDecoder(**cfg.model.params)
 
         self.warm_up = cfg.model.warm_up
+        self.beta = cfg.model.beta
+
+        assert self.warm_up == 0 or self.beta == 1, "Only one of 'warm_up'/'beta' can be active."
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
@@ -150,7 +154,7 @@ class OneCenteredGalaxy(pl.LightningModule):
         # on realistic galaxies. It involves "turning on" the prior penalty term slowly.
         # see: https://arxiv.org/pdf/1602.02282.pdf
         pwr = max(min(-self.warm_up + self.current_epoch, 0), -6)
-        pr_penalty = kl_z * 10 ** pwr
+        pr_penalty = self.beta * kl_z * 10 ** pwr
 
         # return ELBO
         # NOTE: image includes background.
@@ -167,8 +171,9 @@ class OneCenteredGalaxy(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        params = self.hparams.optimizer.params
-        return Adam(self.parameters(), **params)
+        name = self.hparams.optimizer.name
+        optim_params = self.hparams.optimizer.params
+        return get_optimizer(name, self.parameters(), optim_params)
 
     # ---------------
     # Training
