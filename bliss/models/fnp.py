@@ -216,7 +216,7 @@ class HNP(nn.Module):
         G = self.dep_graph(X)
 
         ## Encode the available stamps
-        Zi = self.z_inference(X[n_inputs:], S)
+        Zi = self.z_inference(X[:n_inputs], S)
 
         ## Calculate the prior distribution for the H
         pH = self.h_prior(X, G)
