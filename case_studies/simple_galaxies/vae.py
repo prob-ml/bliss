@@ -105,7 +105,7 @@ class VAE(nn.Module):
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
         
-        return recon_losses + kl_q
+        return recon_losses + kl_q 
 
 
 def get_kl_q_standard_normal(mu, log_sigma):
