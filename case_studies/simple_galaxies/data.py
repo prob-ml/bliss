@@ -45,17 +45,20 @@ class GaussianGalaxies(Dataset):
         # range for angle 
         # (between 0 and pi)
         self.a_range = a_range
-                 
+        
+        # sky background
         self.background = background
         
+        # number of images in the dataset
         self.n_images = n_images
         
+        # set grid
         self.slen = slen
         self.mgrid = _get_mgrid(slen)
         
+        # create the dataset
         self._set_images()
         
-       
     def _set_images(self): 
 
         # generate the images in this dataset

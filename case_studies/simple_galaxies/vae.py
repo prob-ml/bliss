@@ -104,6 +104,9 @@ class Decoder(nn.Module):
         z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
         z = self.deconv(z)
         
+        # the output of deconv isnt exactly "slen"
+        # we just take what we need
+        
         recon_mean = z[:, :, :self.slen, :self.slen]
         return recon_mean
 
@@ -153,7 +156,7 @@ class VAE(nn.Module):
         kl_q = get_kl_q_standard_normal(latent_mean, latent_log_std)
 
         # gaussian likelihood
-        recon_var = recon_mean.clamp(min = 1)
+        recon_var = recon_mean.clamp(min = 1) # variance equals mean
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
         
