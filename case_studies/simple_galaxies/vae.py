@@ -11,8 +11,10 @@ class Flatten(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, latent_dim = 5,
-                    slen = 51):
+    def __init__(self, 
+                 slen = 51,
+                 num_bands = 1, 
+                 latent_dim = 5):
 
         super(Encoder, self).__init__()
 
@@ -21,11 +23,10 @@ class Encoder(nn.Module):
         self.n_pixels = self.slen ** 2
         self.latent_dim = latent_dim
 
-        self.num_bands = 1
         hidden = 256
         
         self.features = nn.Sequential(
-            nn.Conv2d(self.num_bands, 16, 3, padding=1),
+            nn.Conv2d(num_bands, 16, 3, padding=1),
             nn.ReLU(),
 
             nn.Conv2d(16, 16, 3, padding=1),
@@ -64,8 +65,9 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(self, 
-                 latent_dim = 5,
-                 slen = 51):
+                 slen = 51,
+                 num_bands = 1, 
+                 latent_dim = 5):
 
         super(Decoder, self).__init__()
 
@@ -74,7 +76,6 @@ class Decoder(nn.Module):
         self.n_pixels = self.slen ** 2
         self.latent_dim = latent_dim
         
-        self.num_bands = 1
         hidden = 64
 
         self.fc = nn.Sequential(
@@ -92,7 +93,7 @@ class Decoder(nn.Module):
             nn.ConvTranspose2d(64, 64, 3, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(64, 64, 3, padding=0, stride=2),
-            nn.ConvTranspose2d(64, self.num_bands, 3, padding=0))
+            nn.ConvTranspose2d(64, num_bands, 3, padding=0))
 
 
         self.tanh = torch.nn.Tanh()
@@ -108,17 +109,24 @@ class Decoder(nn.Module):
 
 class VAE(nn.Module):
     def __init__(self,
-                 latent_dim = 8,
                  slen = 51,
+                 num_bands = 1, 
+                 latent_dim = 8,
                  background = 686.):
 
         super(VAE, self).__init__()
-
-        self.latent_dim = latent_dim
+        
         self.slen = slen
-
-        self.encoder = Encoder(self.latent_dim, self.slen)
-        self.decoder = Decoder(self.latent_dim, self.slen)
+        self.num_bands = num_bands
+        self.latent_dim = latent_dim
+        
+        self.encoder = Encoder(slen = self.slen,
+                               num_bands = self.num_bands, 
+                               latent_dim = self.latent_dim)
+        
+        self.decoder = Decoder(slen = self.slen,
+                               num_bands = self.num_bands, 
+                               latent_dim = self.latent_dim)
         
         self.background = background
 
