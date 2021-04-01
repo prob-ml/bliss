@@ -14,7 +14,7 @@ bands:
   - 2
 
 # i/o parameters
-checkpoint: ${paths.root}/models/sleep_sdss_simple_gaussian_galaxies.ckpt
+checkpoint: ${paths.root}/models/sdss_sleep_measure_simple_tiny.ckpt
 device: "cuda:${gpus.0}"
 output_file: "${paths.data}/var_params.pt"
 
