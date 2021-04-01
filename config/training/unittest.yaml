@@ -1,7 +1,7 @@
 # @package _group_
 deterministic: False
 plotting: False
-n_epochs: 50
+n_epochs: 100
 trainer:
   profiler: null
   logger: False

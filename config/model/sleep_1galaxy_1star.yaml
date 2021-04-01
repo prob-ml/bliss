@@ -31,7 +31,7 @@ encoder:
     ptile_slen: 12
     max_detections: ${model.decoder.params.max_sources}
     channel: 16
-    spatial_dropout: 0.11399
-    dropout: 0.037305
-    hidden: 235
+    spatial_dropout: 0
+    dropout: 0
+    hidden: 256
 use_galaxy_encoder: False
