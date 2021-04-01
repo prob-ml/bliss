@@ -5,62 +5,106 @@ from torch.distributions.normal import Normal
 
 device = 'cuda:0'
 
+class Flatten(nn.Module):
+    def forward(self, tensor):
+        return tensor.view(tensor.size(0), -1)
 
-class MLPEncoder(nn.Module):
+
+class Encoder(nn.Module):
     def __init__(self, latent_dim = 5,
                     slen = 51):
 
-        super(MLPEncoder, self).__init__()
+        super(Encoder, self).__init__()
 
         # image / model parameters
         self.slen = slen
         self.n_pixels = self.slen ** 2
         self.latent_dim = latent_dim
 
-        self.fc1 = nn.Linear(self.n_pixels, 528)
-        self.fc2 = nn.Linear(528, 528)
-        self.fc3 = nn.Linear(528, self.latent_dim * 2)
+        self.num_bands = 1
+        hidden = 256
+        
+        self.features = nn.Sequential(
+            nn.Conv2d(self.num_bands, 16, 3, padding=1),
+            nn.ReLU(),
 
-        self.tanh = torch.nn.Tanh()
+            nn.Conv2d(16, 16, 3, padding=1),
+            nn.ReLU(),
+
+            nn.Conv2d(16, 16, 3, padding=1),
+            nn.ReLU(),
+
+            Flatten(),
+            nn.Linear(16 * self.slen ** 2, hidden),
+            nn.ReLU(),
+
+            nn.Linear(hidden, hidden),
+            nn.BatchNorm1d(hidden, track_running_stats=False),
+            nn.ReLU(),
+            nn.Dropout(p=0.1),
+
+            nn.Linear(hidden, hidden),
+            nn.ReLU(),
+
+            nn.Linear(hidden, hidden),
+            nn.ReLU(),
+        )
+        
+        self.fc1 = nn.Linear(hidden, self.latent_dim)
+        self.fc2 = nn.Linear(hidden, self.latent_dim)
 
     def forward(self, image):
 
-        h = image.view(-1, self.n_pixels)
-
-        h = self.tanh(self.fc1(h))
-        h = self.tanh(self.fc2(h))
-        h = self.fc3(h)
-
-        latent_mean = h[:, 0:self.latent_dim]
-        latent_log_std = h[:, self.latent_dim:(2 * self.latent_dim)]
+        z = self.features(image)
+        
+        latent_mean = self.fc1(z)
+        latent_log_std = self.fc2(z)
 
         return latent_mean, latent_log_std
 
-class MLPDecoder(nn.Module):
+class Decoder(nn.Module):
     def __init__(self, 
                  latent_dim = 5,
                  slen = 51):
 
-        super(MLPDecoder, self).__init__()
+        super(Decoder, self).__init__()
 
         # image / model parameters
         self.slen = slen
         self.n_pixels = self.slen ** 2
         self.latent_dim = latent_dim
+        
+        self.num_bands = 1
+        hidden = 64
 
-        self.fc1 = nn.Linear(self.latent_dim, 528)
-        self.fc2 = nn.Linear(528, 528)
-        self.fc3 = nn.Linear(528, self.n_pixels)
+        self.fc = nn.Sequential(
+            nn.Linear(latent_dim, hidden),
+            nn.ReLU(),
+
+            nn.Linear(hidden, 64 * (slen // 2 + 1) ** 2),
+            nn.ReLU())
+
+        self.deconv = nn.Sequential(
+            nn.ConvTranspose2d(64, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 64, 3, padding=0, stride=2),
+            nn.ConvTranspose2d(64, self.num_bands, 3, padding=0))
+
 
         self.tanh = torch.nn.Tanh()
 
     def forward(self, latent_samples):
 
-        h = self.tanh(self.fc1(latent_samples))
-        h = self.tanh(self.fc2(h))
-        h = self.fc3(h)
-
-        return h.view(-1, self.slen, self.slen)
+        z = self.fc(latent_samples)
+        z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
+        z = self.deconv(z)
+        
+        recon_mean = z[:, :, :self.slen, :self.slen]
+        return recon_mean
 
 class VAE(nn.Module):
     def __init__(self,
@@ -73,8 +117,8 @@ class VAE(nn.Module):
         self.latent_dim = latent_dim
         self.slen = slen
 
-        self.encoder = MLPEncoder(self.latent_dim, self.slen)
-        self.decoder = MLPDecoder(self.latent_dim, self.slen)
+        self.encoder = Encoder(self.latent_dim, self.slen)
+        self.decoder = Decoder(self.latent_dim, self.slen)
         
         self.background = background
 
