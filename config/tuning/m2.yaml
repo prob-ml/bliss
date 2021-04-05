@@ -2,10 +2,10 @@
 search_space:
   channel:
     - 8
-    - 23
+    - 19
   hidden:
-    - 64
-    - 321
+    - 32
+    - 257
   spatial_dropout:
     - 0
     - 0.5
@@ -18,7 +18,7 @@ search_space:
   weight_decay:
     - 1e-6
     - 1e-2
-n_epochs: 200
+n_epochs: 400
 gpus_per_trial: 1
 allocated_gpus: 4
 grace_period: 10

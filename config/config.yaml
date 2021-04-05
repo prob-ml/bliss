@@ -15,7 +15,7 @@ general:
   overwrite: False
 
 gpus:
-  - 0
+  - 4
 
 paths:
   root: ${env:BLISS_HOME}
