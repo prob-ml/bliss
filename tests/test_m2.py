@@ -16,6 +16,7 @@ def trained_star_encoder_m2(sleep_setup, devices):
         "model": "m2",
         "dataset": "m2" if devices.use_cuda else "cpu",
         "training": "m2" if devices.use_cuda else "cpu",
+        "training.trainer.check_val_every_n_epoch": 9999,
         "training.n_epochs": 50 if devices.use_cuda else 1,
         "optimizer": "m2",
     }
