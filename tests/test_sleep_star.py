@@ -38,7 +38,6 @@ class TestSleepStarTiles:
             "model": "sleep_star_basic",
             "dataset": "default" if devices.use_cuda else "cpu",
             "training": "unittest" if devices.use_cuda else "cpu",
-            "training.n_epochs": 50 if devices.use_cuda else 1,
             "optimizer": "m2",
         }
         return overrides
