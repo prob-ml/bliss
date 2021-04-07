@@ -617,7 +617,8 @@ class HNPStarTileDecoder(nn.Module):
         self.tiler = tiler
         self.n_bands = n_bands
         self.psf_slen = psf_slen
-        self.star_hnp = StarHNP(stampsize=self.psf_slen, dz=4, fb_z=0.0, n_clusters=2)
+        self.stampsize = 11
+        self.star_hnp = StarHNP(stampsize=self.stampsize, dz=4, fb_z=0.0, n_clusters=2)
         if not (hnp_state_file is None):
             self.star_hnp.load_state_dict(torch.load(hnp_state_file))
 
@@ -630,9 +631,9 @@ class HNPStarTileDecoder(nn.Module):
         X = locs.reshape(-1, locs.size(-1))
         S = torch.tensor([])
         _, _, _, _, pY = self.star_hnp(X, S)
-        sources = pY.loc.reshape(*locs.shape[0:2], 1, self.psf_slen * self.psf_slen)
+        sources = pY.loc.reshape(*locs.shape[0:2], 1, self.stampsize ** 2)
         sources = F.softmax(sources, dim=-1)
-        sources = sources.reshape(*sources.shape[0:3], self.psf_slen, self.psf_slen)
+        sources = sources.reshape(*sources.shape[0:3], self.stampsize, self.stampsize)
         sources *= fluxes.unsqueeze(-1).unsqueeze(-1)
         sources *= star_bool.unsqueeze(-1).unsqueeze(-1)
         # sources = expanded_psf * fluxes.unsqueeze(-1).unsqueeze(-1)

@@ -14,7 +14,8 @@ from bliss.plotting import plot_image, plot_image_locs, _plot_locs
 
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
-STAMPSIZE=11
+
+STAMPSIZE = 11
 
 #%%
 class SDSS(Dataset):
