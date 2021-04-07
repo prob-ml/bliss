@@ -105,6 +105,7 @@ X, img, locs = sdss_dataset[0]
 X, S, Y = m.prepare_batch(sdss_dataset[0])
 km = KMeans(n_clusters=m.n_clusters)
 c = km.fit_predict(locs.cpu().numpy())
+G = sdss_dataset.make_G_from_clust(c)
 x = m.predict(X, S)
 # %%
 plt.imshow(x[20].reshape(5, 5))
@@ -142,8 +143,8 @@ def plot_cluster_images(c, y_true, y_pred, n_S=0):
     return plot, axes
 
 
-def plot_cluster_representatives(m, X, G, S, c, n_show=10, n_samples=100):
-    Ys = torch.stack([m.hnp.predict(X, G, S, mean_Y=True) for i in range(n_samples)])
+def plot_cluster_representatives(m, X, S, c, n_show=10, n_samples=100):
+    Ys = torch.stack([m.hnp.predict(X, S, mean_Y=True) for i in range(n_samples)])
     n_S = S.size(0)
     figsize = (2 * (n_show + 1), 10)
     plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_show + 1, figsize=figsize)
@@ -205,11 +206,11 @@ p.savefig("test0.png")
 # %%
 # Plot the "cluster" representatives for each star
 # With no data (sample from prior)
-p, a = plot_cluster_representatives(m, X, G, S[:0], c)
+p, a = plot_cluster_representatives(m, X, S[:0], c)
 p.savefig("cluster_reps0.png")
 # %%
 # With a lot of data
-p, a = plot_cluster_representatives(m, X, G, S[:200], c, 10)
+p, a = plot_cluster_representatives(m, X, S[:200], c, 10)
 p.savefig("cluster_reps200.png")
 #%%
 # Plot some random samples from each cluster
