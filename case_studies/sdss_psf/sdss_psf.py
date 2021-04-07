@@ -14,6 +14,7 @@ from bliss.plotting import plot_image, plot_image_locs, _plot_locs
 
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
+STAMPSIZE=11
 
 #%%
 class SDSS(Dataset):
@@ -96,7 +97,7 @@ pl = sdss_dataset.plot_clustered_locs(0)
 pl.savefig("clustered_locs.png")
 
 # %%
-m = SDSS_HNP(11, 4, sdss_dataset)
+m = SDSS_HNP(STAMPSIZE, 4, sdss_dataset)
 trainer = Trainer(max_epochs=400, checkpoint_callback=False, gpus=[4])
 # %%
 trainer.fit(m)
@@ -110,9 +111,9 @@ c = km.fit_predict(locs.cpu().numpy())
 G = sdss_dataset.make_G_from_clust(c)
 x = m.predict(X, S)
 # %%
-plt.imshow(x[20].reshape(5, 5))
+plt.imshow(x[20].reshape(STAMPSIZE, STAMPSIZE))
 # %%
-plt.imshow(Y[20].reshape(5, 5))
+plt.imshow(Y[20].reshape(STAMPSIZE, STAMPSIZE))
 # %%
 def plot_cluster_images(c, y_true, y_pred, n_S=0):
     n_max = 0
@@ -129,12 +130,12 @@ def plot_cluster_images(c, y_true, y_pred, n_S=0):
         for j in range(n_max):
             if j < len(ipc):
                 ax = axes[i, 2 * j]
-                ax.imshow(ytc[j].reshape(5, 5), interpolation="nearest")
+                ax.imshow(ytc[j].reshape(STAMPSIZE, STAMPSIZE), interpolation="nearest")
                 ax.set_title("real")
                 ax.get_xaxis().set_visible(False)
                 ax.get_yaxis().set_visible(False)
                 ax = axes[i, 2 * j + 1]
-                ax.imshow(ypc[j].reshape(5, 5), interpolation="nearest")
+                ax.imshow(ypc[j].reshape(STAMPSIZE, STAMPSIZE), interpolation="nearest")
                 title = "post" if ipc[j] else "recn"
                 ax.get_xaxis().set_visible(False)
                 ax.get_yaxis().set_visible(False)
@@ -155,12 +156,12 @@ def plot_cluster_representatives(m, X, S, c, n_show=10, n_samples=100):
         idx = np.argmax(np.array(c == i) * in_posterior)
         for j in range(n_show):
             ax = axes[i, j]
-            ax.imshow(Ys[j, idx].reshape(5, 5), interpolation="nearest")
+            ax.imshow(Ys[j, idx].reshape(STAMPSIZE, STAMPSIZE), interpolation="nearest")
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)
         ax = axes[i, n_show]
         avg = Ys[:, idx].mean(0)
-        ax.imshow(avg.reshape(5, 5), interpolation="nearest")
+        ax.imshow(avg.reshape(STAMPSIZE, STAMPSIZE), interpolation="nearest")
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
         ax.set_title("Average")
@@ -175,11 +176,11 @@ def plot_cluster_stars(Y, c, n_show=7):
         Yc = Y[c == i]
         for j in range(n_show):
             ax = axes[i, j]
-            ax.imshow(Yc[j].reshape(5, 5), interpolation="nearest")
+            ax.imshow(Yc[j].reshape(STAMPSIZE, STAMPSIZE), interpolation="nearest")
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)
         ax = axes[i, n_show]
-        ax.imshow(Yc.mean(0).reshape(5, 5), interpolation="nearest")
+        ax.imshow(Yc.mean(0).reshape(STAMPSIZE, STAMPSIZE), interpolation="nearest")
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
         ax.set_title("Average")
