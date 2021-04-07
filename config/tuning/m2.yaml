@@ -1,26 +1,28 @@
 # @package _group_
 search_space:
-  enc_conv_c:
+  channel:
     - 8
-    - 33
-  enc_kern:
-    - 3
-    - 4
-  enc_hidden:
-    - 64
-    - 321
+    - 19
+  hidden:
+    - 32
+    - 257
+  spatial_dropout:
+    - 0
+    - 0.5
+  dropout:
+    - 0
+    - 0.5
   lr:
     - 1e-7
     - 1e-3
   weight_decay:
     - 1e-6
     - 1e-2
-n_epochs: 200
+n_epochs: 400
 gpus_per_trial: 1
 allocated_gpus: 4
-max_concurrent: 4
 grace_period: 10
-n_samples: 20
+n_samples: 500
 verbose: 1
 seed: 42
 save: True

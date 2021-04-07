@@ -6,8 +6,8 @@ def test_galaxy_vae(galaxy_vae_setup, devices):
         "dataset.batch_size": 128 if use_cuda else 10,
         "dataset.n_batches": 10 if use_cuda else 1,
         "training": "unittest",
-        "training.n_epochs": 121 if use_cuda else 2,
-        "training.trainer.check_val_every_n_epoch": 100 if use_cuda else 1,
+        "training.n_epochs": 51 if use_cuda else 2,
+        "training.trainer.check_val_every_n_epoch": 50 if use_cuda else 1,
         "optimizer": "adam",
     }
 

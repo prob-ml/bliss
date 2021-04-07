@@ -34,11 +34,12 @@ class TestSleepStarOneTile:
 class TestSleepStarTiles:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        overrides = dict(
-            model="sleep_star_basic",
-            dataset="default" if devices.use_cuda else "cpu",
-            training="unittest" if devices.use_cuda else "cpu",
-        )
+        overrides = {
+            "model": "sleep_star_basic",
+            "dataset": "default" if devices.use_cuda else "cpu",
+            "training": "unittest" if devices.use_cuda else "cpu",
+            "optimizer": "m2",
+        }
         return overrides
 
     @pytest.fixture(scope="class")

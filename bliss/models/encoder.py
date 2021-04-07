@@ -149,6 +149,70 @@ def _identity_func(x):
     return x
 
 
+class ConvBlock(nn.Module):
+    def __init__(self, in_channel, out_channel, dropout, downsample=False):
+        super().__init__()
+        self.downsample = downsample
+        stride = 1
+        if downsample:
+            stride = 2
+            self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
+            self.sc_bn = nn.BatchNorm2d(out_channel)
+        self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride)
+        self.bn1 = nn.BatchNorm2d(out_channel)
+        self.drop1 = nn.Dropout2d(dropout)
+        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channel)
+
+    def forward(self, x):
+        identity = x
+
+        x = self.conv1(x)
+        x = F.relu(self.bn1(x))
+
+        x = self.drop1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+
+        if self.downsample:
+            identity = self.sc_bn(self.sc_conv(identity))
+
+        out = x + identity
+        out = F.relu(out)
+        return out
+
+
+class EncoderCNN(nn.Module):
+    def __init__(self, n_bands, channel, dropout):
+        super().__init__()
+        self.layer = self._make_layer(n_bands, channel, dropout)
+
+    def forward(self, x):
+        x = self.layer(x)
+        return x
+
+    def _make_layer(self, n_bands, channel, dropout):
+        layers = [
+            nn.Conv2d(n_bands, channel, 3, padding=1),
+            nn.BatchNorm2d(channel),
+            nn.ReLU(True),
+        ]
+        in_channel = channel
+        for i in range(3):
+            downsample = True
+            if i == 0:
+                downsample = False
+            layers += [ConvBlock(in_channel, channel, dropout, downsample)]
+            layers += [
+                ConvBlock(channel, channel, dropout, False),
+                ConvBlock(channel, channel, dropout, False),
+            ]
+            in_channel = channel
+            channel = channel * 2
+        return nn.Sequential(*layers)
+
+
 class ImageEncoder(nn.Module):
     def __init__(
         self,
@@ -156,10 +220,10 @@ class ImageEncoder(nn.Module):
         n_bands=1,
         tile_slen=2,
         ptile_slen=6,
-        enc_conv_c=20,
-        enc_kern=3,
-        enc_hidden=256,
-        momentum=0.5,
+        channel=8,
+        spatial_dropout=0,
+        dropout=0,
+        hidden=128,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -187,29 +251,7 @@ class ImageEncoder(nn.Module):
         # cache the weights used for the tiling convolution
         self._cache_tiling_conv_weights()
 
-        conv_out_dim = enc_conv_c * ptile_slen ** 2
-        self.enc_conv = nn.Sequential(
-            nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
-            nn.ReLU(),
-            nn.Flatten(1, -1),
-            nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-        )
+        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
 
         # Number of variational parameters used to characterize each source in an image.
         self.n_params_per_source = sum(
@@ -224,7 +266,19 @@ class ImageEncoder(nn.Module):
             + 1
             + self.max_detections
         )
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+        dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
+        self.enc_final = nn.Sequential(
+            nn.Flatten(1),
+            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
+            nn.BatchNorm1d(hidden),
+            nn.ReLU(True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, hidden),
+            nn.BatchNorm1d(hidden),
+            nn.ReLU(True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, self.dim_out_all),
+        )
         self.log_softmax = nn.LogSoftmax(dim=1)
 
         # get index for prob_n_sources, assigned indices that were not used.
