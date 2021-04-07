@@ -39,6 +39,7 @@ class ImageDecoder(pl.LightningModule):
         loc_min=0.0,
         loc_max=1.0,
         use_star_hnp=False,
+        hnp_state_file=None,
     ):
         super().__init__()
         ## Set class attributes
@@ -103,9 +104,7 @@ class ImageDecoder(pl.LightningModule):
         ## Submodule for rendering stars on a tile
         if use_star_hnp:
             self.star_tile_decoder = HNPStarTileDecoder(
-                self.tiler,
-                self.n_bands,
-                self.psf_slen,
+                self.tiler, self.n_bands, self.psf_slen, hnp_state_file=hnp_state_file
             )
         else:
             self.star_tile_decoder = StarTileDecoder(
@@ -612,12 +611,15 @@ class HNPStarTileDecoder(nn.Module):
         tiler,
         n_bands,
         psf_slen,
+        hnp_state_file=None,
     ):
         super().__init__()
         self.tiler = tiler
         self.n_bands = n_bands
         self.psf_slen = psf_slen
         self.star_hnp = StarHNP(stampsize=self.psf_slen, dz=4, fb_z=0.0, n_clusters=2)
+        if not (hnp_state_file is None):
+            self.star_hnp.load_state_dict(torch.load(hnp_state_file))
 
     def forward(self, locs, fluxes, star_bool):  # pylint: disable=unused-argument
         # locs: is (n_ptiles x max_num_stars x 2)
@@ -628,7 +630,9 @@ class HNPStarTileDecoder(nn.Module):
         X = locs.reshape(-1, locs.size(-1))
         S = torch.tensor([])
         _, _, _, _, pY = self.star_hnp(X, S)
-        sources = pY.loc.reshape(*locs.shape[0:2], 1, self.psf_slen, self.psf_slen)
+        sources = pY.loc.reshape(*locs.shape[0:2], 1, self.psf_slen * self.psf_slen)
+        sources = F.softmax(sources, dim=-1)
+        sources = sources.reshape(*sources.shape[0:3], self.psf_slen, self.psf_slen)
         sources *= fluxes.unsqueeze(-1).unsqueeze(-1)
         sources *= star_bool.unsqueeze(-1).unsqueeze(-1)
         # sources = expanded_psf * fluxes.unsqueeze(-1).unsqueeze(-1)

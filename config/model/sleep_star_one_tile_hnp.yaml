@@ -28,6 +28,8 @@ decoder:
     loc_min: 0.
     loc_max: 1.0
     use_star_hnp: True
+    hnp_state_file : ${paths.root}/data/star_hnp_state_dict.pt
+    psf_slen: 5
 encoder:
   params:
     n_bands: ${model.image.n_bands}

@@ -101,6 +101,8 @@ trainer = Trainer(max_epochs=400, checkpoint_callback=False, gpus=[4])
 # %%
 trainer.fit(m)
 # %%
+torch.save(m.hnp.state_dict(), "star_hnp_state_dict.pt")
+# %%
 X, img, locs = sdss_dataset[0]
 X, S, Y = m.prepare_batch(sdss_dataset[0])
 km = KMeans(n_clusters=m.n_clusters)
