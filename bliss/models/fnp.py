@@ -587,10 +587,11 @@ class SDSS_HNP(LightningModule):
     def __init__(self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000, n_clusters=5):
         super().__init__()
         self.sdss_dataset = sdss_dataset
-        self.stamper = StarStamper(stampsize)
+        self.stampsize = stampsize
+        self.stamper = StarStamper(self.stampsize)
         self.max_cond_inputs = max_cond_inputs
         self.n_clusters = n_clusters
-        self.hnp = StarHNP(stampsize, dz, fb_z=0.0, n_clusters=n_clusters)
+        self.hnp = StarHNP(self.stampsize, dz, fb_z=0.0, n_clusters=n_clusters)
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
@@ -605,7 +606,7 @@ class SDSS_HNP(LightningModule):
         if not isinstance(locs, torch.Tensor):
             locs = torch.from_numpy(locs)
         YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
-        YY = YY.reshape(-1, 25)
+        YY = YY.reshape(-1, self.stampsize ** 2)
         YY = (YY - YY.mean(1, keepdim=True)) / YY.std(1, keepdim=True)
         if num_cond_inputs is None:
             num_cond_inputs = self.max_cond_inputs

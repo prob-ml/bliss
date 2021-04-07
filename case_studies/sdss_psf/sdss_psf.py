@@ -96,7 +96,7 @@ pl = sdss_dataset.plot_clustered_locs(0)
 pl.savefig("clustered_locs.png")
 
 # %%
-m = SDSS_HNP(5, 4, sdss_dataset)
+m = SDSS_HNP(11, 4, sdss_dataset)
 trainer = Trainer(max_epochs=400, checkpoint_callback=False, gpus=[4])
 # %%
 trainer.fit(m)
