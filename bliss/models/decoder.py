@@ -629,6 +629,8 @@ class HNPStarTileDecoder(nn.Module):
         S = torch.tensor([])
         _, _, _, _, pY = self.star_hnp(X, S)
         sources = pY.loc.reshape(*locs.shape[0:2], 1, self.psf_slen, self.psf_slen)
+        sources *= fluxes.unsqueeze(-1).unsqueeze(-1)
+        sources *= star_bool.unsqueeze(-1).unsqueeze(-1)
         # sources = expanded_psf * fluxes.unsqueeze(-1).unsqueeze(-1)
         # sources *= star_bool.unsqueeze(-1).unsqueeze(-1)
         return self.tiler.render_tile(locs, sources)
