@@ -30,4 +30,8 @@ encoder:
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: 12
     max_detections: ${model.decoder.params.max_sources}
+    channel: 17
+    spatial_dropout: 0.11399
+    dropout: 0.013123
+    hidden: 185
 use_galaxy_encoder: False

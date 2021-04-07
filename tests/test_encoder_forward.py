@@ -20,8 +20,9 @@ class TestSourceEncoder:
 
         # get encoder
         star_encoder = encoder.ImageEncoder(
-            enc_conv_c=20,
-            enc_hidden=256,
+            channel=8,
+            dropout=0,
+            hidden=64,
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             n_bands=n_bands,

@@ -31,7 +31,8 @@ encoder:
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: ${model.decoder.params.ptile_slen}
     max_detections: ${model.decoder.params.max_sources}
-    enc_conv_c: 20
-    enc_kern: 3
-    enc_hidden: 256
+    channel: 17
+    spatial_dropout: 0.11399
+    dropout: 0.013123
+    hidden: 185
 use_galaxy_encoder: False
