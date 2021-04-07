@@ -1,5 +1,6 @@
 # @package _group_
-deterministic: False
+deterministic: True
+seed: 42
 plotting: False
 n_epochs: 100
 trainer:

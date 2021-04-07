@@ -6,9 +6,6 @@ import numpy as np
 
 from bliss import metrics as metrics_lib
 
-torch.manual_seed(841)
-np.random.seed(431)
-
 
 @pytest.fixture(scope="module")
 def trained_star_encoder_m2(sleep_setup, devices):
