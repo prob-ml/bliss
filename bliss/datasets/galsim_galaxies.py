@@ -188,13 +188,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         # self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
 
     def __getitem__(self, idx):
-        
-        # _idx = np.random.randint(len(self.catalog))
-        # NOTE: just use the first ten few galaxies
-        # just a few galaxies
-        assert idx < 10
-        _idx = idx 
-
+        _idx = np.random.randint(len(self.catalog))
         entry = self.catalog[_idx]
         galaxy = get_catsim_galaxy(entry, self.filt, self.survey)
         gal_conv = galsim.Convolution(galaxy, self.psf)
@@ -202,16 +196,11 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
         image = image.array.reshape(1, self.slen, self.slen).astype(np.float32)
-        
-        # NOTE: normalizing here
-        image = image / image.max() * 1000
-        
+
         # add noise and background.
         image += self.background.mean()
-        
-        # NOTE: no noise
-        # noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
-        # image += noise
+        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        image += noise
 
         return {"images": image, "background": self.background}
 
