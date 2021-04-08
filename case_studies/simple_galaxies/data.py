@@ -50,7 +50,7 @@ def _transform_mgrid_to_radius_grid(mgrid, theta, ell):
     precision = torch.einsum('nij, nkj -> nik', rotated_basis, rotated_basis)
     
     r2_grid = torch.einsum('xyi, nij, xyj -> nxy', 
-                        mgrid, precision, mgrid)
+                           mgrid, precision, mgrid)
     
     return r2_grid
 
@@ -72,17 +72,19 @@ def render_exponential_galaxies(r2_grid, half_light_radii):
     batchsize = len(half_light_radii)
     
     scale = half_light_radii.view(batchsize, 1, 1) / np.log(2)
+    r_grid = torch.sqrt(r2_grid)
     
-    return torch.exp(-torch.sqrt(r2_grid) / scale)
+    return torch.exp(- r_grid / scale)
 
 def render_devaucouleurs_galaxies(r2_grid, half_light_radii): 
     
     assert r2_grid.shape[0] == len(half_light_radii)
     batchsize = len(half_light_radii)
 
-    scale = (half_light_radii.view(batchsize, 1, 1)**(0.25) / np.log(2))**4
+    scale = half_light_radii.view(batchsize, 1, 1)**(0.25) / np.log(2)
+    r_grid = torch.sqrt(r2_grid)
     
-    return torch.exp(-torch.sqrt(r2_grid / scale)**(0.25))
+    return torch.exp(-r_grid**0.25 / scale)
 
 #################
 # function to sample unformly
@@ -99,8 +101,8 @@ class SimulatedGalaxies(Dataset):
     def __init__(self, 
                  slen = 51,
                  flux_range = [1000, 5000.],
-                 ell_range = [0.5, 1], 
-                 theta_range = [0, np.pi],
+                 ell_range = [0.25, 1], 
+                 theta_range = [0, 2 * np.pi],
                  hlr_range = [1, 5],
                  background = 686., 
                  n_images = 50000):
@@ -191,7 +193,7 @@ class SimulatedGalaxies(Dataset):
                                  self.slen)
             
          
-        
+        # add background
         image_mean = galaxies + self.background
         
         # add noise
