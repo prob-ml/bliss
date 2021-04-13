@@ -3,7 +3,7 @@ def test_galaxy_vae(galaxy_vae_setup, devices):
     overrides = {
         "model": "galaxy_net",
         "dataset": "toy_gaussian",
-        "dataset.batch_size": 128 if use_cuda else 10,
+        "dataset.batch_size": 64 if use_cuda else 10,
         "dataset.n_batches": 10 if use_cuda else 1,
         "training": "unittest",
         "training.n_epochs": 51 if use_cuda else 2,
