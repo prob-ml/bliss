@@ -2,14 +2,14 @@
 ---
 name: "SDSSGalaxies"
 cosmoDC2_file: "${paths.data}/gold_dc2_catalog.fits"
-batch_size: 128
+batch_size: 64
 n_batches: 10
-num_workers: 0
+num_workers: 10
 params:
   background: 865
   deviate_center: false
   noise_factor: 0.05
-  slen: 64
+  slen: 48
 sdss:
   bands:
     - 2
