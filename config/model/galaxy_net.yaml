@@ -2,10 +2,9 @@
 name: OneCenteredGalaxy
 warm_up: 0
 beta: 1
-enc_dec_name: jeff
 loss_type: L2
 params:
-  slen: 64
+  slen: 48
   latent_dim: 8
   n_bands: 1
   hidden: 256

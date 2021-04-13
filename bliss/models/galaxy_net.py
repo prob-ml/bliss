@@ -3,13 +3,107 @@ import matplotlib.pyplot as plt
 from omegaconf import DictConfig
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions import Normal
 from torch.nn import L1Loss
 
 from bliss.optimizer import get_optimizer
-from bliss.models.vae_layers import get_enc_dec
 
 plt.switch_backend("Agg")
+
+
+class GalaxyEncoder(nn.Module):
+    def __init__(self, slen=48, latent_dim=8, n_bands=1, hidden=256):
+        super().__init__()
+
+        self.slen = slen
+        self.latent_dim = latent_dim
+        self.n_bands = n_bands
+
+        min_slen = slen / 2 ** 4  # e.g. slen = 64, min_slen = 4
+        assert min_slen % 1 == 0
+        min_slen = int(min_slen)
+
+        self.features = nn.Sequential(
+            nn.Conv2d(self.n_bands, 8, 3, stride=1, padding=1),  # e.g. input=64, 64x64
+            nn.LeakyReLU(),
+            nn.Conv2d(8, 8, 3, stride=2, padding=1),  # 32x32
+            nn.LeakyReLU(),
+            nn.Conv2d(8, 16, 3, stride=1, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(16, 16, 3, stride=2, padding=1),  # 16x16
+            nn.LeakyReLU(),
+            nn.Conv2d(16, 32, 3, stride=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(32, 32, 3, stride=2, padding=1),  # 8x8
+            nn.LeakyReLU(),
+            nn.Conv2d(32, 64, 3, stride=1, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 64, 3, stride=2, padding=1),  # 4x4
+            nn.LeakyReLU(),
+            nn.Flatten(1, -1),
+            nn.Linear(64 * min_slen ** 2, hidden),
+            nn.LeakyReLU(),
+        )
+
+        self.fc_mean = nn.Linear(hidden, self.latent_dim)
+        self.fc_var = nn.Linear(hidden, self.latent_dim)
+
+    def forward(self, subimage):
+        z = self.features(subimage)
+        z_mean = self.fc_mean(z)
+        z_var = 1e-4 + torch.exp(self.fc_var(z))
+        return z_mean, z_var
+
+
+class GalaxyDecoder(nn.Module):
+    def __init__(self, slen=48, latent_dim=8, n_bands=1, hidden=256):
+        super().__init__()
+
+        self.slen = slen
+        self.latent_dim = latent_dim
+        self.n_bands = n_bands
+
+        min_slen = slen / 2 ** 4  # e.g. slen = 64, min_slen = 4
+        assert min_slen % 1 == 0
+        self.min_slen = int(min_slen)
+
+        self.fc = nn.Sequential(
+            nn.Linear(latent_dim, hidden),
+            nn.LeakyReLU(),
+            nn.Linear(hidden, 64 * self.min_slen ** 2),
+            nn.LeakyReLU(),
+        )
+
+        self.deconv = nn.Sequential(
+            nn.ConvTranspose2d(64, 64, 3, padding=1, stride=2, output_padding=1),  # 8x8
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(64, 32, 3, padding=1, stride=1),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(32, 32, 3, padding=1, stride=2, output_padding=1),  # 16x16
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(32, 16, 3, padding=1, stride=1),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(16, 16, 3, padding=1, stride=2, output_padding=1),  # 32x32
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(16, 8, 3, padding=1, stride=1),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(8, 8, 3, padding=1, stride=2, output_padding=1),  # 64x64
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(8, 2 * self.n_bands, 3, padding=1, stride=1),  # 2x64x64
+        )
+
+    def forward(self, z):
+        z = self.fc(z)
+        z = z.view(-1, 64, self.min_slen, self.min_slen)
+        z = self.deconv(z)
+        z = z[:, :, : self.slen, : self.slen]
+        assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
+        recon_mean = F.relu(z[:, : self.n_bands])
+        var_multiplier = 1 + 10 * torch.sigmoid(z[:, self.n_bands : (2 * self.n_bands)])
+        recon_var = 1e-4 + var_multiplier * recon_mean
+        return recon_mean, recon_var
 
 
 class OneCenteredGalaxy(pl.LightningModule):
@@ -23,7 +117,8 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.cfg = cfg
         self.save_hyperparameters(cfg)
 
-        self.enc, self.dec = get_enc_dec(cfg.model.enc_dec_name, cfg.model.params)
+        self.enc = GalaxyEncoder(**cfg.model.params)
+        self.dec = GalaxyDecoder(**cfg.model.params)
 
         self.warm_up = cfg.model.warm_up
         self.beta = cfg.model.beta

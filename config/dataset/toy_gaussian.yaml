@@ -9,7 +9,7 @@ params:
   background: 865
   noise_factor: 0.01
   pixel_scale: 0.396
-  psf_fwhm: 1.426
+  psf_fwhm: 1.426 #sdss at stripe-82
   min_flux: 300 # to be observable it cannot be too below background.
   max_flux: 10000
   min_hlr: 0.8
