@@ -166,7 +166,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         # read cosmodc2 table of entries.
         self.catalog = Table.read(cfg.dataset.cosmoDC2_file)
 
-        # setup sdss object and psf at a given point.
+        # setup sdss object and obtain psf at a given point.
         assert len(list(cfg.dataset.sdss.bands)) == 1
         assert cfg.dataset.sdss.bands[0] == 2
         assert len(list(cfg.dataset.psf.psf_points)) == 2
@@ -177,8 +177,6 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         psf_image = galsim.Image(psf, scale=self.pixel_scale)
         self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
         self.psf_fwhm = self.psf.calculateFWHM()  # arcsecs
-
-        # self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
 
     def __getitem__(self, idx):
         _idx = torch.randint(0, len(self.catalog), (1,)).item()
@@ -198,7 +196,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         return {"images": image, "background": self.background}
 
     def __len__(self):
-        return self.batch_size * self.n_batches
+        return len(self.catalog)
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
@@ -293,21 +291,20 @@ class SavedGalaxies(pl.LightningDataModule, Dataset):
 
         self.cfg = cfg
         self.batch_size = cfg.dataset.batch_size
-
         self.data = torch.load(cfg.dataset.data_file)
 
         # Source Equation (4) in: https://arxiv.org/abs/2005.12039
         assert self.data["images"].shape[1] == 1, "Only 1 band supported"
         self.do_norm = cfg.dataset.do_norm
-        self.n_images = len(self.data["images"])
         self.beta = 2.5
-        self.norm = self.data["images"].reshape(self.n_images, 1, -1).max(axis=-1).values.mean()
+        self.norm = self.data["images"].reshape(len(self), 1, -1).max(axis=-1).values.mean()
 
     def __len__(self):
         return len(self.data["images"])
 
     def __getitem__(self, idx):
-        image = self.data["images"][idx]
+        _idx = np.random.randint(len(self))
+        image = self.data["images"][_idx]
         background = self.data["background"]
 
         if self.do_norm:
