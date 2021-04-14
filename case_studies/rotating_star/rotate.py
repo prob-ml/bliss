@@ -25,7 +25,150 @@ from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEnco
 from utils import IdentityEncoder, Conv2DAutoEncoder, ReshapeWrapper
 
 
-class ConvPoolingFNP(FNP):
+
+class HFNP(nn.Module):
+    """
+    This is an reframing of the FNP in terms of the HNP
+    """
+
+    def __init__(
+        self,
+        cov_vencoder,
+        dep_graph,
+        trans_cond_y,
+        rep_encoder,
+        pooler,
+        prop_vencoder,
+        label_vdecoder,
+        fb_z=0.0,
+    ):
+        super().__init__()
+        ## Learned Submodules
+        self.cov_vencoder = cov_vencoder
+        self.dep_graph = dep_graph
+        self.trans_cond_y = trans_cond_y
+        self.rep_encoder = rep_encoder
+        self.pooler = pooler
+        self.prop_vencoder = prop_vencoder
+        self.label_vdecoder = label_vdecoder
+
+        ## Initialize free-bits regularization
+        self.fb_z = fb_z
+        self.register_buffer("lambda_z", torch.tensor(1e-8))
+
+    def encode(self, XR, yR, XM, G_in=None, A_in=None):
+        """
+        This method runs the FNP up to the point the distributions for the latent
+        variables are calculated. This is the shared procedure for both model inference
+        and prediction.
+        """
+        n_ref = XR.size(0)
+        X_all = torch.cat([XR, XM], dim=0)
+
+        ## Sample covariate representation U
+        pu = self.cov_vencoder(X_all)
+        u = pu.rsample()
+        uR = u[:n_ref]
+        uM = u[n_ref:]
+        assert torch.isnan(u).sum() == 0
+
+        ## Sample the dependency matrices
+        ## If we are training ("infer"), the entire dependency
+        ## graph (A and G) is generated.
+        ## If we are predicting ("predict"), only the dependent
+        ## graph (A) is used.
+        if A_in is None:
+            A = self.dep_graph.sample_A(uM, uR)
+        else:
+            A = A_in
+        if G_in is None:
+            G = self.dep_graph.sample_G(uR)
+        else:
+            G = G_in
+
+        GA = torch.cat([G, A], 0)
+        assert torch.isnan(GA).sum() == 0
+
+        ## From the dependency graph GA and the encoded
+        ## representative set, we calculate the distribution
+        ## of the latent representations Z
+        yR_encoded = self.trans_cond_y(yR)
+        rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
+        pz = self.pooler(rep_R, GA)
+        return u, pz
+
+    def log_prob(self, XR, yR, XM, yM, G_in=None, A_in=None):
+        ## Get the distribution of the latent representations Z
+        ## and the encoding U of the covariates
+        u, pz = self.encode(XR, yR, XM, G_in, A_in)
+
+        X_all = torch.cat([XR, XM], dim=0)
+
+        ## Sample Z from the proposal distribution (which
+        ## is allowed to look at the labels of all points)
+        y_all = torch.cat([yR, yM], dim=1)
+        y_all_encoded = self.trans_cond_y(y_all)
+        qz = self.prop_vencoder(X_all.unsqueeze(0), y_all_encoded)
+        z = qz.rsample()
+
+        ## Calculate the difference between the "prior" pz and the
+        ## variational distribution qz with an optional "free-bits" strategy.
+        ## This free-bits strategy is a lower bound that solves the problem
+        ## of posterior collapse.
+        log_pqz = self.calc_log_pqz(pz, qz, z)
+
+        ## Calculate the conditional likelihood of the labels y conditional on Z
+        py = self.label_vdecoder(z, u.unsqueeze(0))
+        log_py = py.log_prob(y_all).sum() / XM.size(0)
+        assert not torch.isnan(log_py)
+        obj = log_pqz + log_py
+        return obj
+
+    def calc_log_pqz(self, pz, qz, z):
+        # pylint: disable=attribute-defined-outside-init
+        """
+        Calculates the log difference between pz and qz (with an optional free bits strategy)
+        """
+        pqz_all = pz.log_prob(z) - qz.log_prob(z)
+        assert torch.isnan(pqz_all).sum() == 0
+        if self.fb_z > 0:
+            log_qpz = -torch.sum(pqz_all)
+
+            if self.training:
+                if log_qpz.item() > self.fb_z * z.size(0) * z.size(1) * (1 + 0.05):
+                    self.lambda_z = torch.clamp(self.lambda_z * (1 + 0.1), min=1e-8, max=1.0)
+                elif log_qpz.item() < self.fb_z * z.size(0) * z.size(1):
+                    self.lambda_z = torch.clamp(self.lambda_z * (1 - 0.1), min=1e-8, max=1.0)
+
+            log_pqz = self.lambda_z * pqz_all.sum()
+
+        else:
+            log_pqz = pqz_all.sum()
+        return log_pqz
+
+    def forward(self, XR, yR, XM, yM, G_in=None, A_in=None):
+        return -self.log_prob(XR, yR, XM, yM, G_in, A_in)
+
+    def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
+        n_ref = XR.size(0)
+        u, pz = self.encode(XR, yR, x_new, None, A_in)
+        uM = u[n_ref:]
+        if sample_Z:
+            z = pz.rsample()
+        else:
+            z = pz.mean
+        zM = z[:, n_ref:]
+
+        py = self.label_vdecoder(zM, uM.unsqueeze(0))
+        if sample:
+            y_pred = py.sample()
+        else:
+            y_pred = py.mean
+
+        return y_pred
+
+
+class ConvPoolingFNP(HFNP):
     def __init__(
         self,
         dim_x=1,
