@@ -299,13 +299,13 @@ class ImageEncoder(nn.Module):
         # misc
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def get_images_in_tiles_new(self, image):
-        channels = image.shape[1]
+    def get_images_in_tiles_new(self, images):
+        channel = images.shape[1]
         window = self.ptile_slen
         stride = self.tile_slen
-        tiles = F.unfold(image, kernel_size=window, stride=stride)
-        # b=batch, c=channel, h=tile_height, w=tiles_width, n=num_of_tiles_for_each_batch
-        tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=channels, h=window, w=window)
+        tiles = F.unfold(images, kernel_size=window, stride=stride)
+        # b=batch, c=channel, h=tile_height, w=tile_width, n=num_of_tiles_for_each_batch
+        tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=channel, h=window, w=window)
         return tiles
 
     def _cache_tiling_conv_weights(self):
