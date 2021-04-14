@@ -17,10 +17,8 @@ from bliss.models.fnp import (
     DepGraph,
     FNP,
     AveragePooler,
-    HPooler,
     SetPooler,
     RepEncoder,
-    HNP,
 )
 
 from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEncoder
@@ -201,108 +199,6 @@ class ConvPoolingFNP(FNP):
             SplitLayer(dim_z, -1),
             NormalEncoder(minscale=1e-8),
         )
-
-    def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
-        y_pred = super().predict(x_new, XR, yR, sample=sample, A_in=A_in, sample_Z=sample_Z)
-        if self.transf_y is not None:
-            y_pred = self.inverse_transform(y_pred)
-        return y_pred
-
-    def inverse_transform(self, y):
-        y = y.squeeze(-3)
-        y_flat = y.reshape(*y.shape[0:2], -1).cpu().detach().numpy()
-        y_flat_invt = self.transf_y.inverse_transform(y_flat)
-        y_out = torch.from_numpy(y_flat_invt).resize_(y.size())
-        return y_out
-
-
-from torch.distributions import Normal
-
-
-class RotatingStarHNP(HNP):
-    def __init__(
-        self,
-        dim_x=1,
-        dim_y=1,
-        dim_h=8,
-        transf_y=None,
-        n_layers=1,
-        use_plus=True,
-        dim_u=1,
-        dim_z=1,
-        fb_z=0.0,
-        y_encoder_layers=[128],
-        mu_nu_layers=[128],
-        use_x_mu_nu=True,
-        use_direction_mu_nu=False,
-        output_layers=[128],
-        x_as_u=False,
-        pooler=None,
-        pooling_layers=[64],
-        pooling_rep_size=32,
-        set_transformer=False,
-        st_numheads=[2, 2],
-        size_h=10,
-        size_w=10,
-        kernel_sizes=[3, 3],
-        strides=[1, 1],
-        conv_channels=[20, 20],
-    ):
-        self.dim_h = dim_h
-        self.num_h = 50
-        dep_graph = self._make_dep_graph
-        conv_autoencoder = Conv2DAutoEncoder(
-            size_h,
-            size_w,
-            conv_channels,
-            kernel_sizes,
-            strides,
-            last_decoder_channel=1,
-        )
-        z_inference = nn.Sequential(
-            conv_autoencoder.encoder, nn.Linear(conv_autoencoder.dim_rep, conv_autoencoder.dim_rep)
-        )
-        z_pooler = SetPooler(
-            self.dim_h, conv_autoencoder.dim_rep, pooling_layers, True, st_numheads
-        )
-
-        h_prior = lambda X, G: Normal(
-            torch.zeros(X.size(0), self.dim_h, device=X.device),
-            torch.ones(X.size(0), self.dim_h, device=X.device),
-        )
-
-        h_pooler = SequentialVarg(
-            SetPooler(conv_autoencoder.dim_rep, 2 * self.dim_h, pooling_layers, True, st_numheads),
-            SplitLayer(self.dim_h, -1),
-            NormalEncoder(minscale=1e-7),
-        )
-
-        y_decoder = nn.Sequential(
-            MLP(self.dim_z, output_layers, conv_autoencoder.dim_rep), conv_autoencoder.decoder
-        )
-
-        super().__init__(
-            dep_graph,
-            z_inference,
-            z_pooler,
-            h_prior,
-            h_pooler,
-            y_decoder,
-            fb_z=fb_z,
-        )
-
-    @staticmethod
-    def _make_dep_graph(X):
-        G = torch.zeros(X.size(0), X.size(0), device=X.device)
-        G[0, 0] = 0.5
-        G[0, 1] = 0.5
-        G[-1, -2] = 0.5
-        G[-1, -1] = 0.5
-        for i in range(1, G.size(0) - 1):
-            G[i, i - 1] = 1 / 3
-            G[i, i] = 1 / 3
-            G[i, i + 1] = 1 / 3
-        return G
 
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
         y_pred = super().predict(x_new, XR, yR, sample=sample, A_in=A_in, sample_Z=sample_Z)
