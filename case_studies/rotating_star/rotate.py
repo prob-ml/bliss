@@ -58,7 +58,7 @@ class HFNP(nn.Module):
         self.fb_z = fb_z
         self.register_buffer("lambda_z", torch.tensor(1e-8))
 
-    def encode(self, XR, yR, XM, G_in=None, A_in=None):
+    def encode(self, XR, yR, XM, yM=None, G_in=None, A_in=None):
         """
         This method runs the FNP up to the point the distributions for the latent
         variables are calculated. This is the shared procedure for both model inference
@@ -106,16 +106,22 @@ class HFNP(nn.Module):
 
         rep_R = self.rep_encoder(u, uR, XR, h)
         pz = self.pooler(rep_R, GA)
-        z_M = pz.rsample()[:, n_ref:]
+        if yM is None:
+            z_M = pz.rsample()[:, n_ref:]
+            qz_M = None
+        else:
+            yM_encoded = self.trans_cond_y(yM)
+            qz_M = self.prop_vencoder(XM.unsqueeze(0), yM_encoded)
+            z_M = qz_M.rsample()
         z = torch.cat([z_R, z_M], dim=1)
 
-        return u, h, ph, qh, z, pz, qz_R
+        return u, h, ph, qh, z, pz, qz_R, qz_M
 
     def log_prob(self, XR, yR, XM, yM, G_in=None, A_in=None):
         n_ref = XR.size(0)
         ## Get the distribution of the latent representations Z
         ## and the encoding U of the covariates
-        u, h, ph, qh, z, pz, qz_R = self.encode(XR, yR, XM, G_in, A_in)
+        u, h, ph, qh, z, pz, qz_R, qz_M = self.encode(XR, yR, XM, yM=yM, G_in=G_in, A_in=A_in)
 
         y_all = torch.cat([yR, yM], dim=1)
 
@@ -126,7 +132,14 @@ class HFNP(nn.Module):
         log_pqh = (ph.log_prob(h) - qh.log_prob(h)).sum() / XM.size(0)
 
         pqz_R = pz.log_prob(z)[:, :n_ref] - qz_R.log_prob(z[:, :n_ref])
-        log_pqz_R = self.calc_log_pqz(pqz_R) / XM.size(0)
+
+        if qz_M is not None:
+            pqz_M = pz.log_prob(z)[:, n_ref:] - qz_M.log_prob(z[:, n_ref:])
+            pqz = torch.cat((pqz_R, pqz_M), dim=1)
+        else:
+            pqz = pqz_R
+
+        log_pqz_R = self.calc_log_pqz(pqz) / XM.size(0)
 
         ## Calculate the conditional likelihood of the labels y conditional on Z
         py = self.label_vdecoder(z, u.unsqueeze(0))
@@ -161,7 +174,7 @@ class HFNP(nn.Module):
 
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
         n_ref = XR.size(0)
-        u, pz = self.encode(XR, yR, x_new, None, A_in)
+        u, pz = self.encode(XR, yR, x_new, yM=None, G_in=None, A_in=A_in)
         uM = u[n_ref:]
         if sample_Z:
             z = pz.rsample()
