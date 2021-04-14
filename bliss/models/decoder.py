@@ -619,7 +619,7 @@ class HNPStarTileDecoder(nn.Module):
         self.psf_slen = psf_slen
         self.stampsize = 11
         self.star_hnp = StarHNP(stampsize=self.stampsize, dz=4, fb_z=0.0, n_clusters=2)
-        if not (hnp_state_file is None):
+        if not hnp_state_file is None:
             self.star_hnp.load_state_dict(torch.load(hnp_state_file))
 
     def forward(self, locs, fluxes, star_bool):  # pylint: disable=unused-argument
