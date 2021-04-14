@@ -1,4 +1,5 @@
 import numpy as np
+from einops import rearrange
 
 import torch
 import torch.nn as nn
@@ -298,6 +299,14 @@ class ImageEncoder(nn.Module):
         # misc
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
+    def make_patch(self, image):
+        channels = image.shape[1]
+        window = self.ptile_slen
+        stride = self.tile_slen
+        tiles = F.unfold(image, kernel_size=window, stride=stride)
+        tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=channels, h=window, w=window)
+        return tiles
+
     def _cache_tiling_conv_weights(self):
         # this function sets up weights for the "identity" convolution
         # used to divide a full-image into padded tiles.
@@ -347,7 +356,12 @@ class ImageEncoder(nn.Module):
         n_ptiles_per_image = slen * wlen / self.tile_slen ** 2
         assert n_ptiles_per_image % 1 == 0, "n_ptiles_per_image must be an int"
         n_ptiles = int(n_ptiles_per_image * batch_size)
-        return output.reshape(n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
+        old_implementation = output.reshape(
+            n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen
+        )
+        new_implementation = self.make_patch(images)
+        assert torch.allclose(old_implementation, new_implementation)
+        return new_implementation
 
     def center_ptiles(self, image_ptiles, tile_locs):
         # assume there is at most one source per tile
