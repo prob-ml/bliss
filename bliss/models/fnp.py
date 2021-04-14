@@ -223,12 +223,12 @@ class HNP(nn.Module):
             Zi = self.z_inference(X[:n_inputs], S)
             ## Sample the hierarchical latent variables from the latent variables
             # qH = self.h_pooler(X, G, Zi)
-            qH = self.h_pooler(Zi, G[:n_inputs].transpose(1, 0))
+            qH = self.h_pooler(X, Zi, G[:n_inputs].transpose(1, 0))
         else:
             qH = pH
         H = qH.rsample()
         ## Conditional on the H, calculate  Z
-        Z = self.z_pooler(H, G)
+        Z = self.z_pooler(X, H, G)
 
         ## Calculate predicted stamp
         pY = self.y_decoder(Z, X)
@@ -630,12 +630,21 @@ class SDSS_HNP(LightningModule):
         return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None)
 
 
+class SimpleZPooler(nn.Module):
+    def __init__(self, dh):
+        super().__init__()
+        self.ap = AveragePooler
+
+    def forward(self, X, H, G):
+        return self.ap(H, G)
+
+
 class SimpleHPooler(nn.Module):
     def __init__(self, dh):
         super().__init__()
         self.ap = AveragePooler(dh)
 
-    def forward(self, Z, G):
+    def forward(self, X, Z, G):
         z_pooled = self.ap(Z, G)
         precis = 1.0 + G.sum(1)
         std = precis.reciprocal().sqrt().unsqueeze(1).repeat(1, z_pooled.size(1))
