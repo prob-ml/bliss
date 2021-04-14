@@ -299,11 +299,12 @@ class ImageEncoder(nn.Module):
         # misc
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def make_patch(self, image):
+    def get_images_in_tiles_new(self, image):
         channels = image.shape[1]
         window = self.ptile_slen
         stride = self.tile_slen
         tiles = F.unfold(image, kernel_size=window, stride=stride)
+        # b=batch, c=channel, h=tile_height, w=tiles_width, n=num_of_tiles_for_each_batch
         tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=channels, h=window, w=window)
         return tiles
 
@@ -359,7 +360,7 @@ class ImageEncoder(nn.Module):
         old_implementation = output.reshape(
             n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen
         )
-        new_implementation = self.make_patch(images)
+        new_implementation = self.get_images_in_tiles_new(images)
         assert torch.allclose(old_implementation, new_implementation)
         return new_implementation
 
