@@ -17,8 +17,10 @@ from bliss.models.fnp import (
     DepGraph,
     FNP,
     AveragePooler,
+    HPooler,
     SetPooler,
     RepEncoder,
+    HNP,
 )
 
 from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEncoder
@@ -201,9 +203,109 @@ class ConvPoolingFNP(FNP):
         )
 
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
-        y_pred = super().predict(
-            x_new, XR, yR, sample=sample, A_in=A_in, sample_Z=sample_Z
+        y_pred = super().predict(x_new, XR, yR, sample=sample, A_in=A_in, sample_Z=sample_Z)
+        if self.transf_y is not None:
+            y_pred = self.inverse_transform(y_pred)
+        return y_pred
+
+    def inverse_transform(self, y):
+        y = y.squeeze(-3)
+        y_flat = y.reshape(*y.shape[0:2], -1).cpu().detach().numpy()
+        y_flat_invt = self.transf_y.inverse_transform(y_flat)
+        y_out = torch.from_numpy(y_flat_invt).resize_(y.size())
+        return y_out
+
+
+from torch.distributions import Normal
+
+
+class RotatingStarHNP(HNP):
+    def __init__(
+        self,
+        dim_x=1,
+        dim_y=1,
+        dim_h=8,
+        transf_y=None,
+        n_layers=1,
+        use_plus=True,
+        dim_u=1,
+        dim_z=1,
+        fb_z=0.0,
+        y_encoder_layers=[128],
+        mu_nu_layers=[128],
+        use_x_mu_nu=True,
+        use_direction_mu_nu=False,
+        output_layers=[128],
+        x_as_u=False,
+        pooler=None,
+        pooling_layers=[64],
+        pooling_rep_size=32,
+        set_transformer=False,
+        st_numheads=[2, 2],
+        size_h=10,
+        size_w=10,
+        kernel_sizes=[3, 3],
+        strides=[1, 1],
+        conv_channels=[20, 20],
+    ):
+        self.dim_h = dim_h
+        self.num_h = 50
+        dep_graph = self._make_dep_graph
+        conv_autoencoder = Conv2DAutoEncoder(
+            size_h,
+            size_w,
+            conv_channels,
+            kernel_sizes,
+            strides,
+            last_decoder_channel=1,
         )
+        z_inference = nn.Sequential(
+            conv_autoencoder.encoder, nn.Linear(conv_autoencoder.dim_rep, conv_autoencoder.dim_rep)
+        )
+        z_pooler = SetPooler(
+            self.dim_h, conv_autoencoder.dim_rep, pooling_layers, True, st_numheads
+        )
+
+        h_prior = lambda X, G: Normal(
+            torch.zeros(X.size(0), self.dim_h, device=X.device),
+            torch.ones(X.size(0), self.dim_h, device=X.device),
+        )
+
+        h_pooler = SequentialVarg(
+            SetPooler(conv_autoencoder.dim_rep, 2 * self.dim_h, pooling_layers, True, st_numheads),
+            SplitLayer(self.dim_h, -1),
+            NormalEncoder(minscale=1e-7),
+        )
+
+        y_decoder = nn.Sequential(
+            MLP(self.dim_z, output_layers, conv_autoencoder.dim_rep), conv_autoencoder.decoder
+        )
+
+        super().__init__(
+            dep_graph,
+            z_inference,
+            z_pooler,
+            h_prior,
+            h_pooler,
+            y_decoder,
+            fb_z=fb_z,
+        )
+
+    @staticmethod
+    def _make_dep_graph(X):
+        G = torch.zeros(X.size(0), X.size(0), device=X.device)
+        G[0, 0] = 0.5
+        G[0, 1] = 0.5
+        G[-1, -2] = 0.5
+        G[-1, -1] = 0.5
+        for i in range(1, G.size(0) - 1):
+            G[i, i - 1] = 1 / 3
+            G[i, i] = 1 / 3
+            G[i, i + 1] = 1 / 3
+        return G
+
+    def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
+        y_pred = super().predict(x_new, XR, yR, sample=sample, A_in=A_in, sample_Z=sample_Z)
         if self.transf_y is not None:
             y_pred = self.inverse_transform(y_pred)
         return y_pred
@@ -255,9 +357,7 @@ class PSFRotate:
         self.bright_skip = bright_skip
         self.star_width = star_width
 
-        self.base_cov = (
-            torch.tensor([[1.0, 0.0], [0.0, self.star_width]]) * self.cov_multiplier
-        )
+        self.base_cov = torch.tensor([[1.0, 0.0], [0.0, self.star_width]]) * self.cov_multiplier
         self.I = self.X.size(0)
 
         self.h = torch.tensor(range(self.size_h), dtype=torch.float32)
@@ -273,14 +373,9 @@ class PSFRotate:
     def generate(self, N, device=None):
         start = torch.rand(N, device=device) * math.pi
         eps = torch.randn(N, self.I, device=device) * self.angle_stdev
-        phi = start.unsqueeze(1) + (self.X.to(device).unsqueeze(0) + eps) * (
-            self.base_angle
-        )
+        phi = start.unsqueeze(1) + (self.X.to(device).unsqueeze(0) + eps) * (self.base_angle)
 
-        idx_brights = (
-            torch.fmod(torch.tensor(range(self.I), device=device), self.bright_skip)
-            == 0
-        )
+        idx_brights = torch.fmod(torch.tensor(range(self.I), device=device), self.bright_skip) == 0
         l = torch.ones(N, self.I, device=device)
         l[:, idx_brights] = self.bright_val
 
@@ -295,9 +390,9 @@ class PSFRotate:
         )
         pixel_dist = MultivariateNormal(mu, covs)
 
-        brights = pixel_dist.log_prob(
-            self.grid.to(device).unsqueeze(0)
-        ).exp() * l.unsqueeze(-1).unsqueeze(-1)
+        brights = pixel_dist.log_prob(self.grid.to(device).unsqueeze(0)).exp() * l.unsqueeze(
+            -1
+        ).unsqueeze(-1)
         return brights
 
     @staticmethod
@@ -323,9 +418,7 @@ class PsfFnpData:
         else:
             self.N_valid = N_valid
 
-        self.X_ref, self.X_dep, self.X_all, self.idx_ref, self.idx_dep = self.make_X(
-            n_ref, Ks
-        )
+        self.X_ref, self.X_dep, self.X_all, self.idx_ref, self.idx_dep = self.make_X(n_ref, Ks)
         self.G, self.A = self.make_graphs(n_ref, Ks)
 
         self.dgp = PSFRotate(self.X_all, **kwargs)
@@ -340,9 +433,7 @@ class PsfFnpData:
             self.y,
         ) = self.split_reference_dependent(X, y)
 
-        self.images_valid, _, _, X, y = self.generate(
-            self.N_valid, self.stdx, self.stdy
-        )
+        self.images_valid, _, _, X, y = self.generate(self.N_valid, self.stdx, self.stdy)
         (
             self.X_r_valid,
             self.y_r_valid,
@@ -413,9 +504,7 @@ class PsfFnpData:
 
         if self.conv:
             y_r = y_r.reshape(N, self.n_ref, 1, self.dgp.size_h, self.dgp.size_w)
-            y_m = y_m.reshape(
-                N, self.dgp.I - self.n_ref, 1, self.dgp.size_h, self.dgp.size_w
-            )
+            y_m = y_m.reshape(N, self.dgp.I - self.n_ref, 1, self.dgp.size_h, self.dgp.size_w)
             y = y.reshape(N, self.dgp.I, 1, self.dgp.size_h, self.dgp.size_w)
 
         return X_r, y_r, X_m, y_m, X, y
@@ -431,18 +520,14 @@ class PsfFnpData:
 
     @staticmethod
     def make_X_ref_pair(x1, x2, K):
-        X = x1 + (x2 - x1) / (K + 1) * (
-            torch.tensor(range(K), dtype=torch.float32) + 1.0
-        )
+        X = x1 + (x2 - x1) / (K + 1) * (torch.tensor(range(K), dtype=torch.float32) + 1.0)
         return X
 
     def make_X(self, n_ref, Ks):
         X_ref = torch.tensor(range(0, n_ref * 2, 2), dtype=torch.float32)
         X_dep = torch.tensor([], dtype=torch.float32)
         for i in range(n_ref - 1):
-            X_dep = torch.cat(
-                [X_dep, self.make_X_ref_pair(X_ref[i], X_ref[i + 1], Ks[i])]
-            )
+            X_dep = torch.cat([X_dep, self.make_X_ref_pair(X_ref[i], X_ref[i + 1], Ks[i])])
         X_all, idxs = torch.cat([X_ref, X_dep], 0).sort()
 
         Is = torch.tensor(range(X_all.size(0)))
@@ -568,9 +653,7 @@ class PsfFnpData:
 
         quants = []
         for i in Ns:
-            quanti = self.quantiles_n(
-                i, fnp_model, quantiles=quantiles, samples=samples
-            )
+            quanti = self.quantiles_n(i, fnp_model, quantiles=quantiles, samples=samples)
             quants.append(quanti)
 
         quantimgs = []
@@ -607,9 +690,7 @@ class PsfFnpData:
                 y_r = self.y_r_valid[i : (i + 1)]
             else:
                 y_r = self.y_r[i : (i + 1)]
-            predi = self.mean_n(
-                y_r, fnp_model, X=X, A=A, samples=samples, sample_Z=sample_Z
-            )
+            predi = self.mean_n(y_r, fnp_model, X=X, A=A, samples=samples, sample_Z=sample_Z)
             if X_nostd is None:
                 X_dep = self.X_dep.cpu()
             else:
@@ -621,9 +702,7 @@ class PsfFnpData:
         return myimg
 
     def make_fnp_single_image(self, fnp_model, N=None, valid=True, sample_Z=True):
-        return self.make_fnp_mean_image(
-            fnp_model, N=N, samples=1, valid=valid, sample_Z=sample_Z
-        )
+        return self.make_fnp_mean_image(fnp_model, N=N, samples=1, valid=valid, sample_Z=sample_Z)
 
     def make_fnp_var_image(self, fnp_model, N=None, samples=1000, valid=True):
         imgs = []
@@ -810,9 +889,7 @@ def main(args):
     )
     vmin = star_data.images.min()
     vmax = star_data.images.max()
-    plt.imsave(
-        outdir.joinpath("rotating_star_fnp_dgp_valid.png"), myimg, vmin=vmin, vmax=vmax
-    )
+    plt.imsave(outdir.joinpath("rotating_star_fnp_dgp_valid.png"), myimg, vmin=vmin, vmax=vmax)
 
     myimgvar = star_data.make_fnp_var_image(fnp_model, samples=10, valid=True)
 
@@ -838,12 +915,7 @@ def main(args):
         imgnames.append(imgname)
     apngasm = which("apngasm")
     if apngasm is not None:
-        sp.call(
-            [apngasm]
-            + ["--force"]
-            + imgnames
-            + ["-o", outdir.joinpath("fnp_valid_anim.png")]
-        )
+        sp.call([apngasm] + ["--force"] + imgnames + ["-o", outdir.joinpath("fnp_valid_anim.png")])
 
     for i in range(many_images.size(0)):
         imgname = sampledir.joinpath("fnp_valid_{:02d}_small.png".format(i))
@@ -854,10 +926,7 @@ def main(args):
     apngasm = which("apngasm")
     if apngasm is not None:
         sp.call(
-            [apngasm]
-            + ["--force"]
-            + imgnames
-            + ["-o", outdir.joinpath("fnp_valid_anim_small.png")]
+            [apngasm] + ["--force"] + imgnames + ["-o", outdir.joinpath("fnp_valid_anim_small.png")]
         )
 
     mean_Z_img = star_data.make_fnp_single_image(fnp_model, valid=True, sample_Z=False)
@@ -869,9 +938,7 @@ def main(args):
     myimg = star_data.make_fnp_mean_image(fnp_model, samples=10, valid=False, N=10)
     vmin = star_data.images.min()
     vmax = star_data.images.max()
-    plt.imsave(
-        outdir.joinpath("rotating_star_fnp_dgp_train.png"), myimg, vmin=vmin, vmax=vmax
-    )
+    plt.imsave(outdir.joinpath("rotating_star_fnp_dgp_train.png"), myimg, vmin=vmin, vmax=vmax)
 
 
 if __name__ == "__main__":
