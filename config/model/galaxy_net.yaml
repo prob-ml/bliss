@@ -2,6 +2,7 @@
 name: OneCenteredGalaxy
 warm_up: 0
 beta: 1
+free_bits: -1e20
 loss_type: L2
 params:
   slen: 48

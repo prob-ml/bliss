@@ -128,6 +128,7 @@ class OneCenteredGalaxy(pl.LightningModule):
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
+        self.register_buffer("free_bits", torch.tensor([cfg.model.free_bits]))
 
     def forward(self, image, background):
         # sampling images from the real distribution
@@ -161,7 +162,7 @@ class OneCenteredGalaxy(pl.LightningModule):
             # on realistic galaxies. It involves "turning on" the prior penalty term slowly.
             # see: https://arxiv.org/pdf/1602.02282.pdf
             pwr = max(min(-self.warm_up + self.current_epoch, 0), -6)
-            pr_penalty = self.beta * kl_z * 10 ** pwr
+            pr_penalty = torch.max(self.beta * kl_z * 10 ** pwr, self.free_bits)
 
             # return ELBO
             # NOTE: image includes background.
