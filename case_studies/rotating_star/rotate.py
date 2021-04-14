@@ -2,6 +2,7 @@ import os
 import subprocess as sp
 from shutil import which
 import time
+from numpy.core.numeric import zeros_like
 import torch
 import math
 import argparse
@@ -24,6 +25,7 @@ from bliss.models.fnp import (
 from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEncoder
 from utils import IdentityEncoder, Conv2DAutoEncoder, ReshapeWrapper
 
+from torch.distributions import Normal
 
 
 class HFNP(nn.Module):
@@ -93,51 +95,59 @@ class HFNP(nn.Module):
         ## representative set, we calculate the distribution
         ## of the latent representations Z
         yR_encoded = self.trans_cond_y(yR)
-        rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
+        qz_R = self.prop_vencoder(XR.unsqueeze(0), yR_encoded)
+        z_R = qz_R.rsample()
+
+        ## Get H
+        rep_Z = self.z_rep_encoder(u, uR, XR, z_R)
+        qh = self.h_pooler(rep_Z.transpose(2, 1), GA.t())
+        h = qh.rsample()
+        ph = Normal(torch.zeros_like(h), torch.ones_like(h))
+
+        rep_R = self.rep_encoder(u, uR, XR, h)
         pz = self.pooler(rep_R, GA)
-        return u, pz
+        z_M = pz.rsample()[:, n_ref:]
+        z = torch.cat([z_R, z_M], dim=1)
+
+        return u, h, ph, qh, z, pz, qz_R
 
     def log_prob(self, XR, yR, XM, yM, G_in=None, A_in=None):
+        n_ref = XR.size(0)
         ## Get the distribution of the latent representations Z
         ## and the encoding U of the covariates
-        u, pz = self.encode(XR, yR, XM, G_in, A_in)
+        u, h, ph, qh, z, pz, qz_R = self.encode(XR, yR, XM, G_in, A_in)
 
-        X_all = torch.cat([XR, XM], dim=0)
-
-        ## Sample Z from the proposal distribution (which
-        ## is allowed to look at the labels of all points)
         y_all = torch.cat([yR, yM], dim=1)
-        y_all_encoded = self.trans_cond_y(y_all)
-        qz = self.prop_vencoder(X_all.unsqueeze(0), y_all_encoded)
-        z = qz.rsample()
 
         ## Calculate the difference between the "prior" pz and the
         ## variational distribution qz with an optional "free-bits" strategy.
         ## This free-bits strategy is a lower bound that solves the problem
         ## of posterior collapse.
-        log_pqz = self.calc_log_pqz(pz, qz, z)
+        log_pqh = (ph.log_prob(h) - qh.log_prob(h)).sum() / XM.size(0)
+
+        pqz_R = pz.log_prob(z)[:, :n_ref] - qz_R.log_prob(z[:, :n_ref])
+        log_pqz_R = self.calc_log_pqz(pqz_R) / XM.size(0)
 
         ## Calculate the conditional likelihood of the labels y conditional on Z
         py = self.label_vdecoder(z, u.unsqueeze(0))
         log_py = py.log_prob(y_all).sum() / XM.size(0)
         assert not torch.isnan(log_py)
-        obj = log_pqz + log_py
+        obj = log_pqh + log_pqz_R + log_py
         return obj
 
-    def calc_log_pqz(self, pz, qz, z):
+    def calc_log_pqz(self, pqz_all):
         # pylint: disable=attribute-defined-outside-init
         """
         Calculates the log difference between pz and qz (with an optional free bits strategy)
         """
-        pqz_all = pz.log_prob(z) - qz.log_prob(z)
         assert torch.isnan(pqz_all).sum() == 0
         if self.fb_z > 0:
             log_qpz = -torch.sum(pqz_all)
 
             if self.training:
-                if log_qpz.item() > self.fb_z * z.size(0) * z.size(1) * (1 + 0.05):
+                if log_qpz.item() > self.fb_z * pqz_all.size(0) * pqz_all.size(1) * (1 + 0.05):
                     self.lambda_z = torch.clamp(self.lambda_z * (1 + 0.1), min=1e-8, max=1.0)
-                elif log_qpz.item() < self.fb_z * z.size(0) * z.size(1):
+                elif log_qpz.item() < self.fb_z * pqz_all.size(0) * pqz_all.size(1):
                     self.lambda_z = torch.clamp(self.lambda_z * (1 - 0.1), min=1e-8, max=1.0)
 
             log_pqz = self.lambda_z * pqz_all.sum()
@@ -274,12 +284,25 @@ class ConvPoolingFNP(HFNP):
         dim_y_enc = 2 * dim_z
         mu_nu_in = dim_y_enc + dim_u
         mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, pooling_rep_size)
-        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
+        self.z_rep_encoder = RepEncoder(
+            MLP(dim_z + dim_u, [16, 16, 16], pooling_rep_size), use_u_diff=True, use_x=False
+        )
 
         self.pooler = SequentialVarg(
             SetPooler(
                 mu_nu_theta.out_features,
                 dim_z,
+                pooling_layers,
+                set_transformer,
+                st_numheads,
+            ),
+            SplitLayer(dim_z, -1),
+            NormalEncoder(minscale=1e-8),
+        )
+        self.h_pooler = SequentialVarg(
+            SetPooler(
+                pooling_rep_size,
+                dim_z,  # = dim_h
                 pooling_layers,
                 set_transformer,
                 st_numheads,
@@ -301,7 +324,7 @@ class ConvPoolingFNP(HFNP):
             nn.Linear(conv_autoencoder.dim_rep, conv_autoencoder.dim_rep),
         )
         dim_y_enc = conv_autoencoder.dim_rep
-        mu_nu_in = dim_y_enc
+        mu_nu_in = dim_z  # =dim_h
         if use_x_mu_nu is True:
             mu_nu_in += dim_x
         if use_direction_mu_nu:
