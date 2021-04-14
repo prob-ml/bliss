@@ -566,7 +566,7 @@ class StarHNP(HNP):
         dep_graph = KMeansDepGraph(n_clusters=n_clusters)
         z_inference = SequentialVarg(ConcatLayer([1]), MLP(dy, [16, 8], dz))
 
-        z_pooler = AveragePooler(dz)
+        z_pooler = SimpleZPooler(dz)
 
         h_prior = lambda X, G: Normal(
             torch.zeros(G.size(1), dz, device=G.device), torch.ones(G.size(1), dz, device=G.device)
@@ -633,7 +633,7 @@ class SDSS_HNP(LightningModule):
 class SimpleZPooler(nn.Module):
     def __init__(self, dh):
         super().__init__()
-        self.ap = AveragePooler
+        self.ap = AveragePooler(dh)
 
     def forward(self, X, H, G):
         return self.ap(H, G)
