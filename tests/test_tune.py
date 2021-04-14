@@ -9,12 +9,10 @@ class TestTune:
     def overrides(self, devices):
         allocated_gpus = 0
         gpus_per_trial = 0
-        max_concurrent = 1
         if devices.use_cuda:
             gpus_per_trial = 1
             if torch.cuda.device_count() >= 2:
                 allocated_gpus = 2
-                max_concurrent = 2
             else:
                 allocated_gpus = 1
 
@@ -27,7 +25,6 @@ class TestTune:
             "tuning.n_epochs": 2 if devices.use_cuda else 1,
             "tuning.allocated_gpus": allocated_gpus,
             "tuning.gpus_per_trial": gpus_per_trial,
-            "tuning.max_concurrent": max_concurrent,
             "tuning.grace_period": 1,
             "tuning.verbose": 0,
             "tuning.save": False,
@@ -36,9 +33,8 @@ class TestTune:
         overrides = [f"{k}={v}" for k, v in overrides.items()]
         return overrides
 
-    @pytest.mark.filterwarnings("ignore:.*PytestUnhandledThreadExceptionWarning.*")
     @pytest.mark.filterwarnings("ignore:.*Relying on `self.log.*:DeprecationWarning")
-    def test_tune_run(self, overrides, devices):
+    def test_tune_run(self, overrides):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            tune.tune(cfg, local_mode=(not devices.use_cuda))
+            tune.tune(cfg)

@@ -49,6 +49,9 @@ class SleepSetup:
 
     def get_trainer(self, overrides):
         cfg = self.get_cfg(overrides)
+        if cfg.training.deterministic:
+            pl.seed_everything(cfg.training.seed)
+            return pl.Trainer(**cfg.training.trainer, deterministic=True)
         return pl.Trainer(**cfg.training.trainer)
 
     def get_sleep(self, overrides):
