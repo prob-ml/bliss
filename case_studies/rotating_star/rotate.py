@@ -42,6 +42,8 @@ class HFNP(nn.Module):
         pooler,
         prop_vencoder,
         label_vdecoder,
+        z_rep_encoder,
+        h_pooler,
         fb_z=0.0,
     ):
         super().__init__()
@@ -53,6 +55,8 @@ class HFNP(nn.Module):
         self.pooler = pooler
         self.prop_vencoder = prop_vencoder
         self.label_vdecoder = label_vdecoder
+        self.z_rep_encoder = z_rep_encoder
+        self.h_pooler = h_pooler
 
         ## Initialize free-bits regularization
         self.fb_z = fb_z
@@ -236,83 +240,16 @@ class ConvPoolingFNP(HFNP):
         # self.q_z = nn.Linear(self.dim_h, 2 * self.dim_z)
         # for p(z|A, XR, yR)
 
-        dim_y_enc = 2 * dim_z
-        trans_cond_y = MLP(
-            dim_y,
-            y_encoder_layers,
-            2 * dim_z,
-        )
-        mu_nu_in = dim_y_enc
-        if use_x_mu_nu is True:
-            mu_nu_in += dim_x
-        if use_direction_mu_nu:
-            mu_nu_in += 1
         # self.mu_nu_in = mu_nu_in
-        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, 2 * dim_z)
-        rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=False, use_x=use_x_mu_nu)
-        if pooler is None:
-            pooler = SequentialVarg(
-                AveragePooler(dim_z),
-                SplitLayer(dim_z, -1),
-                NormalEncoder(minscale=1e-8),
-            )
-        prop_inputs = [1]
-        prop_mlp_in = dim_y_enc
-        if use_x_mu_nu:
-            prop_inputs += [0]
-            prop_mlp_in += dim_x
-        prop_vencoder = SequentialVarg(
-            ConcatLayer(prop_inputs),
-            MLP(
-                prop_mlp_in,
-                mu_nu_layers,
-                2 * dim_z,
-            ),
-            SplitLayer(dim_z, -1),
-            NormalEncoder(minscale=1e-8),
-        )
         # for p(y|z)
-        output_inputs = [0] if not use_plus else [0, 1]
-        output_insize = dim_z if not use_plus else dim_z + dim_u
-        label_vdecoder = SequentialVarg(
-            ConcatLayer(output_inputs),
-            MLP(output_insize, output_layers, 2 * dim_y),
-            SplitLayer(dim_y, -1),
-            NormalEncoder(minscale=0.1),
-        )
-        super().__init__(
-            cov_vencoder,
-            dep_graph,
-            trans_cond_y,
-            rep_encoder,
-            pooler,
-            prop_vencoder,
-            label_vdecoder,
-            fb_z=fb_z,
-        )
-        self.transf_y = transf_y
         # dim_z = kwargs["dim_z"]
         # dim_u = kwargs["dim_u"]
         # mu_nu_layers = kwargs.get("mu_nu_layers", [128])
-        dim_y_enc = 2 * dim_z
-        mu_nu_in = dim_y_enc + dim_u
-        mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, pooling_rep_size)
-        self.z_rep_encoder = RepEncoder(
+        z_rep_encoder = RepEncoder(
             MLP(dim_z + dim_u, [16, 16, 16], pooling_rep_size), use_u_diff=True, use_x=False
         )
 
-        self.pooler = SequentialVarg(
-            SetPooler(
-                mu_nu_theta.out_features,
-                dim_z,
-                pooling_layers,
-                set_transformer,
-                st_numheads,
-            ),
-            SplitLayer(dim_z, -1),
-            NormalEncoder(minscale=1e-8),
-        )
-        self.h_pooler = SequentialVarg(
+        h_pooler = SequentialVarg(
             SetPooler(
                 pooling_rep_size,
                 dim_z,  # = dim_h
@@ -332,7 +269,7 @@ class ConvPoolingFNP(HFNP):
             strides,
         )
 
-        self.trans_cond_y = nn.Sequential(
+        trans_cond_y = nn.Sequential(
             ReshapeWrapper(conv_autoencoder.encoder, k=2),
             nn.Linear(conv_autoencoder.dim_rep, conv_autoencoder.dim_rep),
         )
@@ -345,13 +282,13 @@ class ConvPoolingFNP(HFNP):
         # self.mu_nu_in = mu_nu_in
         ## This is a quick fix, but pooling_rep_size should not be used
         mu_nu_theta = MLP(mu_nu_in, mu_nu_layers, pooling_rep_size)
-        self.rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
+        rep_encoder = RepEncoder(mu_nu_theta, use_u_diff=True, use_x=False)
         prop_inputs = [1]
         prop_mlp_in = dim_y_enc
         if use_x_mu_nu:
             prop_inputs += [0]
             prop_mlp_in += dim_x
-        self.prop_vencoder = SequentialVarg(
+        prop_vencoder = SequentialVarg(
             ConcatLayer(prop_inputs),
             MLP(prop_mlp_in, mu_nu_layers, 2 * dim_z),
             SplitLayer(dim_z, -1),
@@ -359,7 +296,7 @@ class ConvPoolingFNP(HFNP):
         )
         output_inputs = [0] if not use_plus else [0, 1]
         output_insize = dim_z if not use_plus else dim_z + dim_u
-        self.label_vdecoder = SequentialVarg(
+        label_vdecoder = SequentialVarg(
             ConcatLayer(output_inputs),
             MLP(output_insize, output_layers, conv_autoencoder.dim_rep),
             ReshapeWrapper(conv_autoencoder.decoder, k=2),
@@ -367,7 +304,7 @@ class ConvPoolingFNP(HFNP):
             NormalEncoder(minscale=0.1),
         )
 
-        self.pooler = SequentialVarg(
+        pooler = SequentialVarg(
             SetPooler(
                 mu_nu_theta.out_features,
                 dim_z,
@@ -378,6 +315,20 @@ class ConvPoolingFNP(HFNP):
             SplitLayer(dim_z, -1),
             NormalEncoder(minscale=1e-8),
         )
+
+        super().__init__(
+            cov_vencoder,
+            dep_graph,
+            trans_cond_y,
+            rep_encoder,
+            pooler,
+            prop_vencoder,
+            label_vdecoder,
+            z_rep_encoder,
+            h_pooler,
+            fb_z=fb_z,
+        )
+        self.transf_y = transf_y
 
     def predict(self, x_new, XR, yR, sample=True, G_in=None, A_in=None, sample_Z=True):
         y_pred = super().predict(
