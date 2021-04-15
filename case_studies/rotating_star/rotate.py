@@ -28,175 +28,11 @@ from utils import IdentityEncoder, Conv2DAutoEncoder, ReshapeWrapper
 from torch.distributions import Normal
 
 
-class HFNP(nn.Module):
+class ConvPoolingFNP(nn.Module):
     """
     This is an reframing of the FNP in terms of the HNP
     """
 
-    def __init__(
-        self,
-        cov_vencoder,
-        dep_graph,
-        trans_cond_y,
-        rep_encoder,
-        pooler,
-        prop_vencoder,
-        label_vdecoder,
-        z_rep_encoder,
-        h_pooler,
-        fb_z=0.0,
-    ):
-        super().__init__()
-        ## Learned Submodules
-        self.cov_vencoder = cov_vencoder
-        self.dep_graph = dep_graph
-        self.trans_cond_y = trans_cond_y
-        self.rep_encoder = rep_encoder
-        self.pooler = pooler
-        self.prop_vencoder = prop_vencoder
-        self.label_vdecoder = label_vdecoder
-        self.z_rep_encoder = z_rep_encoder
-        self.h_pooler = h_pooler
-
-        ## Initialize free-bits regularization
-        self.fb_z = fb_z
-        self.register_buffer("lambda_z", torch.tensor(1e-8))
-
-    def encode(self, XR, yR, XM, yM=None, G_in=None, A_in=None):
-        """
-        This method runs the FNP up to the point the distributions for the latent
-        variables are calculated. This is the shared procedure for both model inference
-        and prediction.
-        """
-        n_ref = XR.size(0)
-        X_all = torch.cat([XR, XM], dim=0)
-
-        ## Sample covariate representation U
-        pu = self.cov_vencoder(X_all)
-        u = pu.rsample()
-        uR = u[:n_ref]
-        uM = u[n_ref:]
-        assert torch.isnan(u).sum() == 0
-
-        ## Sample the dependency matrices
-        ## If we are training ("infer"), the entire dependency
-        ## graph (A and G) is generated.
-        ## If we are predicting ("predict"), only the dependent
-        ## graph (A) is used.
-        if A_in is None:
-            A = self.dep_graph.sample_A(uM, uR)
-        else:
-            A = A_in
-        if G_in is None:
-            G = self.dep_graph.sample_G(uR)
-        else:
-            G = G_in
-
-        # GA = torch.cat([G, A], 0)
-        GA = torch.ones(X_all.size(1), X_all.size(1), device=X_all.device)
-        assert torch.isnan(GA).sum() == 0
-
-        ## From the dependency graph GA and the encoded
-        ## representative set, we calculate the distribution
-        ## of the latent representations Z
-        yR_encoded = self.trans_cond_y(yR)
-        qz_R = self.prop_vencoder(XR.unsqueeze(0), yR_encoded)
-        z_R = qz_R.rsample()
-
-        ## Get H
-        rep_Z = self.z_rep_encoder(u, uR, XR, yR_encoded)
-        qh = self.h_pooler(rep_Z.transpose(2, 1), GA.t())
-        h = qh.rsample()
-        ph = Normal(torch.zeros_like(h), torch.ones_like(h))
-
-        rep_R = self.rep_encoder(u, uR, XR, h)
-        pz = self.pooler(rep_R, GA)
-        if yM is None:
-            z_M = pz.rsample()[:, n_ref:]
-            qz_M = None
-        else:
-            yM_encoded = self.trans_cond_y(yM)
-            qz_M = self.prop_vencoder(XM.unsqueeze(0), yM_encoded)
-            z_M = qz_M.rsample()
-        z = torch.cat([z_R, z_M], dim=1)
-
-        return u, h, ph, qh, z, pz, qz_R, qz_M
-
-    def log_prob(self, XR, yR, XM, yM, G_in=None, A_in=None):
-        n_ref = XR.size(0)
-        ## Get the distribution of the latent representations Z
-        ## and the encoding U of the covariates
-        u, h, ph, qh, z, pz, qz_R, qz_M = self.encode(XR, yR, XM, yM=yM, G_in=G_in, A_in=A_in)
-
-        y_all = torch.cat([yR, yM], dim=1)
-
-        ## Calculate the difference between the "prior" pz and the
-        ## variational distribution qz with an optional "free-bits" strategy.
-        ## This free-bits strategy is a lower bound that solves the problem
-        ## of posterior collapse.
-        log_pqh = (ph.log_prob(h) - qh.log_prob(h)).sum() / XM.size(0)
-
-        pqz_R = pz.log_prob(z)[:, :n_ref] - qz_R.log_prob(z[:, :n_ref])
-
-        if qz_M is not None:
-            pqz_M = pz.log_prob(z)[:, n_ref:] - qz_M.log_prob(z[:, n_ref:])
-            pqz = torch.cat((pqz_R, pqz_M), dim=1)
-        else:
-            pqz = pqz_R
-
-        log_pqz_R = self.calc_log_pqz(pqz) / XM.size(0)
-
-        ## Calculate the conditional likelihood of the labels y conditional on Z
-        py = self.label_vdecoder(z, u.unsqueeze(0))
-        log_py = py.log_prob(y_all).sum() / XM.size(0)
-        assert not torch.isnan(log_py)
-        obj = log_pqh + log_pqz_R + log_py
-        return obj
-
-    def calc_log_pqz(self, pqz_all):
-        # pylint: disable=attribute-defined-outside-init
-        """
-        Calculates the log difference between pz and qz (with an optional free bits strategy)
-        """
-        assert torch.isnan(pqz_all).sum() == 0
-        if self.fb_z > 0:
-            log_qpz = -torch.sum(pqz_all)
-
-            if self.training:
-                if log_qpz.item() > self.fb_z * pqz_all.size(0) * pqz_all.size(1) * (1 + 0.05):
-                    self.lambda_z = torch.clamp(self.lambda_z * (1 + 0.1), min=1e-8, max=1.0)
-                elif log_qpz.item() < self.fb_z * pqz_all.size(0) * pqz_all.size(1):
-                    self.lambda_z = torch.clamp(self.lambda_z * (1 - 0.1), min=1e-8, max=1.0)
-
-            log_pqz = self.lambda_z * pqz_all.sum()
-
-        else:
-            log_pqz = pqz_all.sum()
-        return log_pqz
-
-    def forward(self, XR, yR, XM, yM, G_in=None, A_in=None):
-        return -self.log_prob(XR, yR, XM, yM, G_in, A_in)
-
-    def predict(self, x_new, XR, yR, sample=True, G_in=None, A_in=None, sample_Z=True):
-        n_ref = XR.size(0)
-        u, h, ph, qh, z, pz, qz_R, qz_M = self.encode(XR, yR, x_new, yM=None, G_in=G_in, A_in=A_in)
-        uM = u[n_ref:]
-        if sample_Z:
-            z = pz.rsample()
-        else:
-            z = pz.mean
-        zM = z[:, n_ref:]
-
-        py = self.label_vdecoder(zM, uM.unsqueeze(0))
-        if sample:
-            y_pred = py.sample()
-        else:
-            y_pred = py.mean
-
-        return y_pred
-
-
-class ConvPoolingFNP(HFNP):
     def __init__(
         self,
         dim_x=1,
@@ -225,6 +61,7 @@ class ConvPoolingFNP(HFNP):
         strides=[1, 1],
         conv_channels=[20, 20],
     ):
+        super().__init__()
         dim_u = dim_u if not x_as_u else dim_x
         if not x_as_u:
             cov_vencoder = SequentialVarg(
@@ -320,24 +157,154 @@ class ConvPoolingFNP(HFNP):
             NormalEncoder(minscale=1e-8),
         )
 
-        super().__init__(
-            cov_vencoder,
-            dep_graph,
-            trans_cond_y,
-            rep_encoder,
-            pooler,
-            prop_vencoder,
-            label_vdecoder,
-            z_rep_encoder,
-            h_pooler,
-            fb_z=fb_z,
-        )
         self.transf_y = transf_y
+        ## Learned Submodules
+        self.cov_vencoder = cov_vencoder
+        self.dep_graph = dep_graph
+        self.trans_cond_y = trans_cond_y
+        self.rep_encoder = rep_encoder
+        self.pooler = pooler
+        self.prop_vencoder = prop_vencoder
+        self.label_vdecoder = label_vdecoder
+        self.z_rep_encoder = z_rep_encoder
+        self.h_pooler = h_pooler
+
+        ## Initialize free-bits regularization
+        self.fb_z = fb_z
+        self.register_buffer("lambda_z", torch.tensor(1e-8))
+
+    def encode(self, XR, yR, XM, yM=None, G_in=None, A_in=None):
+        """
+        This method runs the FNP up to the point the distributions for the latent
+        variables are calculated. This is the shared procedure for both model inference
+        and prediction.
+        """
+        n_ref = XR.size(0)
+        X_all = torch.cat([XR, XM], dim=0)
+
+        ## Sample covariate representation U
+        pu = self.cov_vencoder(X_all)
+        u = pu.rsample()
+        uR = u[:n_ref]
+        uM = u[n_ref:]
+        assert torch.isnan(u).sum() == 0
+
+        ## Sample the dependency matrices
+        ## If we are training ("infer"), the entire dependency
+        ## graph (A and G) is generated.
+        ## If we are predicting ("predict"), only the dependent
+        ## graph (A) is used.
+        if A_in is None:
+            A = self.dep_graph.sample_A(uM, uR)
+        else:
+            A = A_in
+        if G_in is None:
+            G = self.dep_graph.sample_G(uR)
+        else:
+            G = G_in
+
+        # GA = torch.cat([G, A], 0)
+        GA = torch.ones(X_all.size(1), X_all.size(1), device=X_all.device)
+        assert torch.isnan(GA).sum() == 0
+
+        ## From the dependency graph GA and the encoded
+        ## representative set, we calculate the distribution
+        ## of the latent representations Z
+        yR_encoded = self.trans_cond_y(yR)
+        qz_R = self.prop_vencoder(XR.unsqueeze(0), yR_encoded)
+        z_R = qz_R.rsample()
+
+        ## Get H
+        # rep_Z = self.z_rep_encoder(u, uR, XR, z_R)
+        rep_Z = self.z_rep_encoder(u, uR, XR, yR_encoded)
+        qh = self.h_pooler(rep_Z.transpose(2, 1), GA.t())
+        h = qh.rsample()
+        ph = Normal(torch.zeros_like(h), torch.ones_like(h))
+
+        rep_R = self.rep_encoder(u, uR, XR, h)
+        pz = self.pooler(rep_R, GA)
+        if yM is None:
+            z_M = pz.rsample()[:, n_ref:]
+            qz_M = None
+        else:
+            yM_encoded = self.trans_cond_y(yM)
+            qz_M = self.prop_vencoder(XM.unsqueeze(0), yM_encoded)
+            z_M = qz_M.rsample()
+        z = torch.cat([z_R, z_M], dim=1)
+
+        return u, h, ph, qh, z, pz, qz_R, qz_M
+
+    def log_prob(self, XR, yR, XM, yM, G_in=None, A_in=None):
+        n_ref = XR.size(0)
+        ## Get the distribution of the latent representations Z
+        ## and the encoding U of the covariates
+        u, h, ph, qh, z, pz, qz_R, qz_M = self.encode(XR, yR, XM, yM=yM, G_in=G_in, A_in=A_in)
+
+        y_all = torch.cat([yR, yM], dim=1)
+
+        ## Calculate the difference between the "prior" pz and the
+        ## variational distribution qz with an optional "free-bits" strategy.
+        ## This free-bits strategy is a lower bound that solves the problem
+        ## of posterior collapse.
+        log_pqh = (ph.log_prob(h) - qh.log_prob(h)).sum() / XM.size(0)
+
+        pqz_R = pz.log_prob(z)[:, :n_ref] - qz_R.log_prob(z[:, :n_ref])
+
+        if qz_M is not None:
+            pqz_M = pz.log_prob(z)[:, n_ref:] - qz_M.log_prob(z[:, n_ref:])
+            pqz = torch.cat((pqz_R, pqz_M), dim=1)
+        else:
+            pqz = pqz_R
+
+        log_pqz_R = self.calc_log_pqz(pqz) / XM.size(0)
+
+        ## Calculate the conditional likelihood of the labels y conditional on Z
+        py = self.label_vdecoder(z, u.unsqueeze(0))
+        log_py = py.log_prob(y_all).sum() / XM.size(0)
+        assert not torch.isnan(log_py)
+        obj = log_pqh + log_pqz_R + log_py
+        return obj
+
+    def calc_log_pqz(self, pqz_all):
+        # pylint: disable=attribute-defined-outside-init
+        """
+        Calculates the log difference between pz and qz (with an optional free bits strategy)
+        """
+        assert torch.isnan(pqz_all).sum() == 0
+        if self.fb_z > 0:
+            log_qpz = -torch.sum(pqz_all)
+
+            if self.training:
+                if log_qpz.item() > self.fb_z * pqz_all.size(0) * pqz_all.size(1) * (1 + 0.05):
+                    self.lambda_z = torch.clamp(self.lambda_z * (1 + 0.1), min=1e-8, max=1.0)
+                elif log_qpz.item() < self.fb_z * pqz_all.size(0) * pqz_all.size(1):
+                    self.lambda_z = torch.clamp(self.lambda_z * (1 - 0.1), min=1e-8, max=1.0)
+
+            log_pqz = self.lambda_z * pqz_all.sum()
+
+        else:
+            log_pqz = pqz_all.sum()
+        return log_pqz
+
+    def forward(self, XR, yR, XM, yM, G_in=None, A_in=None):
+        return -self.log_prob(XR, yR, XM, yM, G_in, A_in)
 
     def predict(self, x_new, XR, yR, sample=True, G_in=None, A_in=None, sample_Z=True):
-        y_pred = super().predict(
-            x_new, XR, yR, sample=sample, G_in=G_in, A_in=A_in, sample_Z=sample_Z
-        )
+        n_ref = XR.size(0)
+        u, h, ph, qh, z, pz, qz_R, qz_M = self.encode(XR, yR, x_new, yM=None, G_in=G_in, A_in=A_in)
+        uM = u[n_ref:]
+        if sample_Z:
+            z = pz.rsample()
+        else:
+            z = pz.mean
+        zM = z[:, n_ref:]
+
+        py = self.label_vdecoder(zM, uM.unsqueeze(0))
+        if sample:
+            y_pred = py.sample()
+        else:
+            y_pred = py.mean
+
         if self.transf_y is not None:
             y_pred = self.inverse_transform(y_pred)
         return y_pred
