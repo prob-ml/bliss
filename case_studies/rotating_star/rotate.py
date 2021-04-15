@@ -172,9 +172,9 @@ class HFNP(nn.Module):
     def forward(self, XR, yR, XM, yM, G_in=None, A_in=None):
         return -self.log_prob(XR, yR, XM, yM, G_in, A_in)
 
-    def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
+    def predict(self, x_new, XR, yR, sample=True, G_in=None, A_in=None, sample_Z=True):
         n_ref = XR.size(0)
-        u, pz = self.encode(XR, yR, x_new, yM=None, G_in=None, A_in=A_in)
+        u, h, ph, qh, z, pz, qz_R, qz_M = self.encode(XR, yR, x_new, yM=None, G_in=G_in, A_in=A_in)
         uM = u[n_ref:]
         if sample_Z:
             z = pz.rsample()
@@ -379,8 +379,10 @@ class ConvPoolingFNP(HFNP):
             NormalEncoder(minscale=1e-8),
         )
 
-    def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
-        y_pred = super().predict(x_new, XR, yR, sample=sample, A_in=A_in, sample_Z=sample_Z)
+    def predict(self, x_new, XR, yR, sample=True, G_in=None, A_in=None, sample_Z=True):
+        y_pred = super().predict(
+            x_new, XR, yR, sample=sample, G_in=G_in, A_in=A_in, sample_Z=sample_Z
+        )
         if self.transf_y is not None:
             y_pred = self.inverse_transform(y_pred)
         return y_pred
@@ -652,7 +654,7 @@ class PsfFnpData:
         self.A = self.A.cpu()
         self.G = self.G.cpu()
 
-    def predict_n(self, y_r, fnp_model, X=None, A=None, sample_Z=True):
+    def predict_n(self, y_r, fnp_model, X=None, A=None, sample_Z=True, G=None):
         """
         Make a prediction using the generating X_dep
         :param n: The index of the Ys to use
@@ -662,7 +664,9 @@ class PsfFnpData:
             X = self.X_m
         if A is None:
             A = self.A.cuda()
-        pred_np = fnp_model.predict(X, self.X_r, y_r, A_in=A, sample_Z=sample_Z)
+        if G is None:
+            G = self.G.cuda()
+        pred_np = fnp_model.predict(X, self.X_r, y_r, G_in=G, A_in=A, sample_Z=sample_Z)
         # pred    = torch.from_numpy(pred_np)
         # newsize = torch.Size([pred.size(0), self.dgp.size_h, self.dgp.size_w])
         return pred_np[0]
