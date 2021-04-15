@@ -103,7 +103,7 @@ class HFNP(nn.Module):
         z_R = qz_R.rsample()
 
         ## Get H
-        rep_Z = self.z_rep_encoder(u, uR, XR, z_R)
+        rep_Z = self.z_rep_encoder(u, uR, XR, yR_encoded)
         qh = self.h_pooler(rep_Z.transpose(2, 1), GA.t())
         h = qh.rsample()
         ph = Normal(torch.zeros_like(h), torch.ones_like(h))
@@ -245,9 +245,6 @@ class ConvPoolingFNP(HFNP):
         # dim_z = kwargs["dim_z"]
         # dim_u = kwargs["dim_u"]
         # mu_nu_layers = kwargs.get("mu_nu_layers", [128])
-        z_rep_encoder = RepEncoder(
-            MLP(dim_z + dim_u, [16, 16, 16], pooling_rep_size), use_u_diff=True, use_x=False
-        )
 
         h_pooler = SequentialVarg(
             SetPooler(
@@ -273,7 +270,11 @@ class ConvPoolingFNP(HFNP):
             ReshapeWrapper(conv_autoencoder.encoder, k=2),
             nn.Linear(conv_autoencoder.dim_rep, conv_autoencoder.dim_rep),
         )
+
         dim_y_enc = conv_autoencoder.dim_rep
+        z_rep_encoder = RepEncoder(
+            MLP(dim_y_enc + dim_u, [16, 16, 16], pooling_rep_size), use_u_diff=True, use_x=False
+        )
         mu_nu_in = dim_z  # =dim_h
         if use_x_mu_nu is True:
             mu_nu_in += dim_x
@@ -493,8 +494,8 @@ class PsfFnpData:
         :param Ks: List of integers indicated number of interpolated points in that gap
         """
         G = torch.zeros(n_ref, n_ref, dtype=torch.float32)
-        for j in range(n_ref - 1):
-            G[j + 1, j] = 1.0
+        for j in range(n_ref):
+            G[j, j] = 1.0
 
         A = torch.tensor([], dtype=torch.float32)
         for j in range(n_ref - 1):
