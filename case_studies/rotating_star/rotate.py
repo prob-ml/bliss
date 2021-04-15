@@ -274,7 +274,9 @@ class ConvPoolingFNP(HFNP):
 
         dim_y_enc = conv_autoencoder.dim_rep
         z_rep_encoder = RepEncoder(
-            MLP(dim_y_enc + dim_u, [16, 16, 16], pooling_rep_size), use_u_diff=True, use_x=False
+            MLP(dim_y_enc + dim_u, [1024, 512, 256, 128, 64], pooling_rep_size),
+            use_u_diff=True,
+            use_x=False,
         )
         mu_nu_in = dim_z  # =dim_h
         if use_x_mu_nu is True:
@@ -495,6 +497,8 @@ class PsfFnpData:
         :param Ks: List of integers indicated number of interpolated points in that gap
         """
         G = torch.zeros(n_ref, n_ref, dtype=torch.float32)
+        # for j in range(n_ref - 1):
+        #     G[j + 1, j] = 1.0
         for j in range(n_ref):
             G[j, j] = 1.0
 
