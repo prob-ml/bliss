@@ -373,12 +373,13 @@ class RepEncoder(nn.Module):
     and the encoded reference labels (yR).
     """
 
-    def __init__(self, f, use_u_diff=False, use_x=False):
+    def __init__(self, f, use_u_diff=False, use_x=False, u_diff_skip=True):
         super().__init__()
         self.f = f
         self.cat = ConcatLayer()
         self.use_u_diff = use_u_diff
         self.use_x = use_x
+        self.u_diff_skip = u_diff_skip
 
     def forward(self, u, uR, XR, yR_encoded):
         input_list = [yR_encoded]
@@ -394,6 +395,8 @@ class RepEncoder(nn.Module):
             input_list.append(u_diff.unsqueeze(0))
 
         rep_R = self.f(self.cat(*input_list))
+        if self.use_u_diff and self.u_diff_skip:
+            self.cat(rep_R, input_list[-1])
         return rep_R
 
 
