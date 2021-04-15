@@ -216,18 +216,22 @@ class ConvPoolingFNP(nn.Module):
 
         ## Get H
         # rep_Z = self.z_rep_encoder(u, uR, XR, z_R)
-        rep_Z = self.z_rep_encoder(u, uR, XR, yR_encoded)
+        if yM is not None:
+            yM_encoded = self.trans_cond_y(yM)
+            y_all_encoded = torch.cat([yR_encoded, yM_encoded], dim=1)
+            rep_Z = self.z_rep_encoder(u, u, X_all, y_all_encoded)
+        else:
+            rep_Z = self.z_rep_encoder(u, uR, XR, yR_encoded)
         qh = self.h_pooler(rep_Z.transpose(2, 1), GA.t())
         h = qh.rsample()
         ph = Normal(torch.zeros_like(h), torch.ones_like(h))
 
-        rep_R = self.rep_encoder(u, uR, XR, h)
+        rep_R = self.rep_encoder(u, u, X_all, h)
         pz = self.pooler(rep_R, GA)
         if yM is None:
             z_M = pz.rsample()[:, n_ref:]
             qz_M = None
         else:
-            yM_encoded = self.trans_cond_y(yM)
             qz_M = self.prop_vencoder(XM.unsqueeze(0), yM_encoded)
             z_M = qz_M.rsample()
         z = torch.cat([z_R, z_M], dim=1)
@@ -979,7 +983,7 @@ if __name__ == "__main__":
         type=int,
         nargs=1,
         help="Minibatch size for SGD",
-        default=[10],
+        default=[5],
     )
     parser.add_argument(
         "--learnrate",
