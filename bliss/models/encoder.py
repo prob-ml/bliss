@@ -1,4 +1,5 @@
 import numpy as np
+from einops import rearrange
 
 import torch
 import torch.nn as nn
@@ -249,7 +250,6 @@ class ImageEncoder(nn.Module):
         self.border_padding = int(border_padding)
 
         # cache the weights used for the tiling convolution
-        self._cache_tiling_conv_weights()
 
         self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
 
@@ -298,56 +298,16 @@ class ImageEncoder(nn.Module):
         # misc
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def _cache_tiling_conv_weights(self):
-        # this function sets up weights for the "identity" convolution
-        # used to divide a full-image into padded tiles.
-        # (see get_images_in_tiles).
-
-        # It has a for-loop, but only needs to be set up once.
-        # These weights are set up and  cached during the __init__.
-
-        ptile_slen2 = self.ptile_slen ** 2
-        self.register_buffer(
-            "tile_conv_weights",
-            torch.zeros(
-                ptile_slen2 * self.n_bands,
-                self.n_bands,
-                self.ptile_slen,
-                self.ptile_slen,
-            ),
-            persistent=False,
-        )
-
-        for b in range(self.n_bands):
-            for i in range(ptile_slen2):
-                self.tile_conv_weights[
-                    i + b * ptile_slen2, b, i // self.ptile_slen, i % self.ptile_slen
-                ] = 1
-
     def get_images_in_tiles(self, images):
-        # divide a full-image into padded tiles using conv2d
-        # and weights cached in `_cache_tiling_conv_weights`.
-
-        assert len(images.shape) == 4  # should be batch_size x n_bands x pslen x pslen
-        assert images.shape[1] == self.n_bands
-        batch_size = images.shape[0]
-
-        output = F.conv2d(
-            images,
-            self.tile_conv_weights,
-            stride=self.tile_slen,
-            padding=0,
-        ).permute([0, 2, 3, 1])
-
-        # shape = (n_ptiles x n_bands x ptile_slen, ptile_slen)
-        # not borded slen
-        pslen, pwlen = images.shape[-2:]
-        slen = pslen - self.border_padding * 2
-        wlen = pwlen - self.border_padding * 2
-        n_ptiles_per_image = slen * wlen / self.tile_slen ** 2
-        assert n_ptiles_per_image % 1 == 0, "n_ptiles_per_image must be an int"
-        n_ptiles = int(n_ptiles_per_image * batch_size)
-        return output.reshape(n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
+        """
+        Divide a batch of full images into padded tiles similar to nn.conv2d
+        with a sliding window=self.ptile_slen and stride=self.tile_slen
+        """
+        window = self.ptile_slen
+        tiles = F.unfold(images, kernel_size=window, stride=self.tile_slen)
+        # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
+        tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=self.n_bands, h=window, w=window)
+        return tiles
 
     def center_ptiles(self, image_ptiles, tile_locs):
         # assume there is at most one source per tile
