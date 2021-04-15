@@ -92,7 +92,8 @@ class HFNP(nn.Module):
         else:
             G = G_in
 
-        GA = torch.cat([G, A], 0)
+        # GA = torch.cat([G, A], 0)
+        GA = torch.ones(X_all.size(1), X_all.size(1), device=X_all.device)
         assert torch.isnan(GA).sum() == 0
 
         ## From the dependency graph GA and the encoded
