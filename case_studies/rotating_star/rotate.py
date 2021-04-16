@@ -226,7 +226,10 @@ class ConvPoolingFNP(nn.Module):
         h = qh.rsample()
         ph = Normal(torch.zeros_like(h), torch.ones_like(h))
 
-        rep_R = self.rep_encoder(u, u, X_all, h)
+        if yM is not None:
+            rep_R = self.rep_encoder(u, u, X_all, h)
+        else:
+            rep_R = self.rep_encoder(u, uR, XR, h)
         pz = self.pooler(rep_R, GA)
         if yM is None:
             z_M = pz.rsample()[:, n_ref:]
