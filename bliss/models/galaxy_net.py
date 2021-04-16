@@ -225,6 +225,6 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
-        recon_mean, _, _ = self(images, background)
+        recon_mean = self(images, background)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("max_residual", residuals.abs().max())
