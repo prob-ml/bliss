@@ -110,8 +110,8 @@ else:
 # %%
 # torch.save(m.hnp.state_dict(), "star_hnp_state_dict.pt")
 # %%
-X, img, locs = sdss_dataset[0]
-X, S, Y = m.prepare_batch(sdss_dataset[0])
+X, img, locs = sdss_dataset[-1]
+X, S, Y = m.prepare_batch(sdss_dataset[-1])
 km = KMeans(n_clusters=m.n_clusters)
 c = km.fit_predict(locs.cpu().numpy())
 G = sdss_dataset.make_G_from_clust(c)
@@ -175,6 +175,31 @@ def plot_cluster_representatives(m, X, S, c, n_show=10, n_samples=100):
     return plot, axes
 
 
+def compare_cluster_representatives(m, X, S1, S2, c, n_show=10, n_samples=100):
+    Ys_1 = torch.stack([m.hnp.predict(X, S1, mean_Y=True) for i in range(n_samples)])
+    Ys_2 = torch.stack([m.hnp.predict(X, S2, mean_Y=True) for i in range(n_samples)])
+    Ys = Ys_1 - Ys_2
+    n_S = S.size(0)
+    figsize = (2 * (n_show + 1), 10)
+    plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_show + 1, figsize=figsize)
+    in_posterior = np.array([False] * n_S + [True] * (len(c) - n_S))
+    for i in np.unique(c):
+        idx = np.argmax(np.array(c == i) * in_posterior)
+        for j in range(n_show):
+            ax = axes[i, j]
+            ax.imshow(Ys[j, idx].reshape(STAMPSIZE, STAMPSIZE), interpolation="nearest")
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+        ax = axes[i, n_show]
+        avg = Ys[:, idx].mean(0)
+        ax.imshow(avg.reshape(STAMPSIZE, STAMPSIZE), interpolation="nearest")
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_title("Average")
+
+    return plot, axes
+
+
 def plot_cluster_stars(Y, c, n_show=7):
     figsize = (2 * (n_show + 1), 10)
     plot, axes = plt.subplots(nrows=len(np.unique(c)), ncols=n_show + 1, figsize=figsize)
@@ -196,6 +221,25 @@ def plot_cluster_stars(Y, c, n_show=7):
 
 def pred_mean(m, X, S, n_samples):
     return torch.stack([m.predict(X, S) for i in range(n_samples)]).mean(0)
+
+
+#%%
+import pandas as pd
+
+
+def calc_mse(sdss_dataset, m):
+    fields = []
+    mses = []
+    for (i, data) in enumerate(sdss_dataset):
+        field = sdss_dataset.sdss_source[i]["field"]
+        X, S, Y = m.prepare_batch(data)
+        n_s = S.size(0)
+        Y_hat = m.predict(X, S)
+        mse = (Y - Y_hat).pow(2).mean()
+        fields.append(field)
+        mses.append(mse.item())
+    # fields, mses = list(zip(res))
+    return pd.DataFrame({"field": fields, "mses": mses})
 
 
 #%%
@@ -226,3 +270,8 @@ p.savefig("cluster_reps200.png")
 p, a = plot_cluster_stars(Y, c, 10)
 p.savefig("cluster_stars.png")
 # %%
+p, a = compare_cluster_representatives(m, X, S[:0], S[:200], c, 10)
+p.savefig("cluster_compare_0_200.png")
+# %%
+mses = calc_mse(sdss_dataset, m)
+mses.to_csv("mses_sdss.csv")

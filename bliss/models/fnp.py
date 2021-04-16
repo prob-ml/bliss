@@ -637,10 +637,11 @@ from sklearn.decomposition import PCA
 
 
 class StarPCA:
-    def __init__(self, k, n_clusters) -> None:
+    def __init__(self, k, n_clusters, stampsize) -> None:
         self.k = k
         self.n_clusters = n_clusters
-
+        self.stampsize = stampsize
+        self.stamper = StarStamper(self.stampsize)
         self.pca = PCA(n_components=self.k)
         self.mean = None
         self.dep_graph = KMeansDepGraph(n_clusters=self.n_clusters)
@@ -649,13 +650,13 @@ class StarPCA:
         self.mean = Y.mean(0)
         self.pca.fit(Y.numpy())
 
-    def predict(self, X, S):
+    def predict(self, X, S, inverse_transform=True):
         n_inputs = S.size(0)
         # Get dependency graph
         G = self.dep_graph(X)
 
         # Transform S
-        S_rep = torch.from_numpy(self.pca.transform(S))
+        S_rep = torch.from_numpy(self.pca.transform(S)).float()
 
         # Average S based on cluster
         GT = G[:n_inputs].transpose(1, 0)
@@ -664,7 +665,32 @@ class StarPCA:
 
         pred = G.matmul(cluster_rep)
 
+        if inverse_transform:
+            pred = self.pca.inverse_transform(pred)
+
         return pred
+
+    def prepare_batch(self, batch, num_cond_inputs=None):
+        X, img, locs = batch
+        if not isinstance(img, torch.Tensor):
+            img = torch.from_numpy(img)
+        if not isinstance(locs, torch.Tensor):
+            locs = torch.from_numpy(locs)
+        YY = self.stamper(img, locs[:, 1], locs[:, 0])[0]
+        YY = YY.reshape(-1, self.stampsize ** 2)
+        YY = (YY - YY.mean(1, keepdim=True)) / YY.std(1, keepdim=True)
+        if num_cond_inputs is None:
+            num_cond_inputs = YY.size(0)
+        S = YY[: min(YY.size(0), num_cond_inputs)]
+        return X, S, YY
+
+    def fit_dataset(self, star_dataset):
+        Ys = []
+        for d in star_dataset:
+            _, _, Y = self.prepare_batch(d)
+            Ys.append(Y)
+        Y = torch.cat(Ys, dim=0)
+        self.fit(Y)
 
 
 class SimpleZPooler(nn.Module):
