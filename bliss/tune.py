@@ -20,9 +20,10 @@ from bliss.datasets.simulated import SimulatedDataset
 
 def sleep_trainable(search_space, cfg: DictConfig):
     # set up the config for SleepPhase
-    cfg.model.encoder.params.enc_conv_c = search_space["enc_conv_c"]
-    cfg.model.encoder.params.enc_kern = search_space["enc_kern"]
-    cfg.model.encoder.params.enc_hidden = search_space["enc_hidden"]
+    cfg.model.encoder.params.channel = search_space["channel"]
+    cfg.model.encoder.params.hidden = search_space["hidden"]
+    cfg.model.encoder.params.spatial_dropout = search_space["spatial_dropout"]
+    cfg.model.encoder.params.dropout = search_space["dropout"]
     cfg.optimizer.params.lr = search_space["lr"]
     cfg.optimizer.params.weight_decay = search_space["weight_decay"]
 
@@ -67,18 +68,18 @@ def tune(cfg: DictConfig, local_mode=False):
     ray.init(num_gpus=cfg.tuning.allocated_gpus, local_mode=local_mode)
 
     discrete_search_space = {
-        "enc_conv_c": list(range(*cfg.tuning.search_space.enc_conv_c)),
-        "enc_kern": list(range(*cfg.tuning.search_space.enc_kern)),
-        "enc_hidden": list(range(*cfg.tuning.search_space.enc_hidden)),
+        "channel": list(range(*cfg.tuning.search_space.channel)),
+        "hidden": list(range(*cfg.tuning.search_space.hidden)),
     }
 
     search_space = {
         # Not as clean as tune.randint(*cfg.tuning...)
         # Work around solution so that these values are correctly displayed in tensorboard
         # This also creats primitive dtype supported by omegaconf
-        "enc_conv_c": ray.tune.choice(discrete_search_space["enc_conv_c"]),
-        "enc_kern": ray.tune.choice(discrete_search_space["enc_kern"]),
-        "enc_hidden": ray.tune.choice(discrete_search_space["enc_hidden"]),
+        "channel": ray.tune.choice(discrete_search_space["channel"]),
+        "hidden": ray.tune.choice(discrete_search_space["hidden"]),
+        "spatial_dropout": ray.tune.uniform(*cfg.tuning.search_space.spatial_dropout),
+        "dropout": ray.tune.uniform(*cfg.tuning.search_space.dropout),
         "lr": ray.tune.loguniform(*cfg.tuning.search_space.lr),
         "weight_decay": ray.tune.loguniform(*cfg.tuning.search_space.weight_decay),
     }
@@ -111,16 +112,17 @@ def tune(cfg: DictConfig, local_mode=False):
     else:
         search_alg = HyperOptSearch(random_state_seed=cfg.tuning.seed)
 
-    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=cfg.tuning.max_concurrent)
+    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=max(1, cfg.tuning.allocated_gpus))
 
     # define how to report the results
     reporter = CLIReporter(
         parameter_columns={
-            "enc_conv_c": "conv_c",
-            "enc_kern": "kern",
-            "enc_hidden": "hidden",
+            "channel": "c",
+            "hidden": "h",
+            "dropout": "d",
+            "spatial_dropout": "sd",
             "lr": "lr",
-            "weight_decay": "weight_decay",
+            "weight_decay": "wd",
         },
         metric_columns={
             "loss": "loss",

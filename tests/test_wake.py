@@ -16,6 +16,7 @@ class TestWake:
             model="sleep_star_basic",
             dataset="default" if devices.use_cuda else "cpu",
             training="unittest" if devices.use_cuda else "cpu",
+            optimizer="m2",
         )
         return overrides
 
@@ -98,6 +99,7 @@ class TestWake:
             gpus=devices.gpus,
             logger=False,
             checkpoint_callback=False,
+            deterministic=True,
         )
 
         wake_trainer.fit(wake_net)

@@ -33,6 +33,10 @@ encoder:
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: 52
     max_detections: ${model.decoder.params.max_sources}
+    channel: 8
+    spatial_dropout: 0.0
+    dropout: 0.0
+    hidden: 128
 galaxy_encoder:
   params:
     latent_dim: ${model.galaxy.latent_dim}

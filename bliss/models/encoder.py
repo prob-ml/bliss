@@ -1,4 +1,5 @@
 import numpy as np
+from einops import rearrange
 
 import torch
 import torch.nn as nn
@@ -149,6 +150,70 @@ def _identity_func(x):
     return x
 
 
+class ConvBlock(nn.Module):
+    def __init__(self, in_channel, out_channel, dropout, downsample=False):
+        super().__init__()
+        self.downsample = downsample
+        stride = 1
+        if downsample:
+            stride = 2
+            self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
+            self.sc_bn = nn.BatchNorm2d(out_channel)
+        self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride)
+        self.bn1 = nn.BatchNorm2d(out_channel)
+        self.drop1 = nn.Dropout2d(dropout)
+        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channel)
+
+    def forward(self, x):
+        identity = x
+
+        x = self.conv1(x)
+        x = F.relu(self.bn1(x))
+
+        x = self.drop1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+
+        if self.downsample:
+            identity = self.sc_bn(self.sc_conv(identity))
+
+        out = x + identity
+        out = F.relu(out)
+        return out
+
+
+class EncoderCNN(nn.Module):
+    def __init__(self, n_bands, channel, dropout):
+        super().__init__()
+        self.layer = self._make_layer(n_bands, channel, dropout)
+
+    def forward(self, x):
+        x = self.layer(x)
+        return x
+
+    def _make_layer(self, n_bands, channel, dropout):
+        layers = [
+            nn.Conv2d(n_bands, channel, 3, padding=1),
+            nn.BatchNorm2d(channel),
+            nn.ReLU(True),
+        ]
+        in_channel = channel
+        for i in range(3):
+            downsample = True
+            if i == 0:
+                downsample = False
+            layers += [ConvBlock(in_channel, channel, dropout, downsample)]
+            layers += [
+                ConvBlock(channel, channel, dropout, False),
+                ConvBlock(channel, channel, dropout, False),
+            ]
+            in_channel = channel
+            channel = channel * 2
+        return nn.Sequential(*layers)
+
+
 class ImageEncoder(nn.Module):
     def __init__(
         self,
@@ -156,10 +221,10 @@ class ImageEncoder(nn.Module):
         n_bands=1,
         tile_slen=2,
         ptile_slen=6,
-        enc_conv_c=20,
-        enc_kern=3,
-        enc_hidden=256,
-        momentum=0.5,
+        channel=8,
+        spatial_dropout=0,
+        dropout=0,
+        hidden=128,
     ):
         """
         This class implements the source encoder, which is supposed to take in a synthetic image of
@@ -185,31 +250,8 @@ class ImageEncoder(nn.Module):
         self.border_padding = int(border_padding)
 
         # cache the weights used for the tiling convolution
-        self._cache_tiling_conv_weights()
 
-        conv_out_dim = enc_conv_c * ptile_slen ** 2
-        self.enc_conv = nn.Sequential(
-            nn.Conv2d(self.n_bands, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(enc_conv_c, enc_conv_c, enc_kern, stride=1, padding=1),
-            nn.BatchNorm2d(enc_conv_c, momentum=momentum),
-            nn.ReLU(),
-            nn.Flatten(1, -1),
-            nn.Linear(conv_out_dim, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-            nn.Linear(enc_hidden, enc_hidden),
-            nn.BatchNorm1d(enc_hidden, momentum=momentum),
-            nn.ReLU(),
-        )
+        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
 
         # Number of variational parameters used to characterize each source in an image.
         self.n_params_per_source = sum(
@@ -224,7 +266,19 @@ class ImageEncoder(nn.Module):
             + 1
             + self.max_detections
         )
-        self.enc_final = nn.Linear(enc_hidden, self.dim_out_all)
+        dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
+        self.enc_final = nn.Sequential(
+            nn.Flatten(1),
+            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
+            nn.BatchNorm1d(hidden),
+            nn.ReLU(True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, hidden),
+            nn.BatchNorm1d(hidden),
+            nn.ReLU(True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, self.dim_out_all),
+        )
         self.log_softmax = nn.LogSoftmax(dim=1)
 
         # get index for prob_n_sources, assigned indices that were not used.
@@ -244,56 +298,16 @@ class ImageEncoder(nn.Module):
         # misc
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def _cache_tiling_conv_weights(self):
-        # this function sets up weights for the "identity" convolution
-        # used to divide a full-image into padded tiles.
-        # (see get_images_in_tiles).
-
-        # It has a for-loop, but only needs to be set up once.
-        # These weights are set up and  cached during the __init__.
-
-        ptile_slen2 = self.ptile_slen ** 2
-        self.register_buffer(
-            "tile_conv_weights",
-            torch.zeros(
-                ptile_slen2 * self.n_bands,
-                self.n_bands,
-                self.ptile_slen,
-                self.ptile_slen,
-            ),
-            persistent=False,
-        )
-
-        for b in range(self.n_bands):
-            for i in range(ptile_slen2):
-                self.tile_conv_weights[
-                    i + b * ptile_slen2, b, i // self.ptile_slen, i % self.ptile_slen
-                ] = 1
-
     def get_images_in_tiles(self, images):
-        # divide a full-image into padded tiles using conv2d
-        # and weights cached in `_cache_tiling_conv_weights`.
-
-        assert len(images.shape) == 4  # should be batch_size x n_bands x pslen x pslen
-        assert images.shape[1] == self.n_bands
-        batch_size = images.shape[0]
-
-        output = F.conv2d(
-            images,
-            self.tile_conv_weights,
-            stride=self.tile_slen,
-            padding=0,
-        ).permute([0, 2, 3, 1])
-
-        # shape = (n_ptiles x n_bands x ptile_slen, ptile_slen)
-        # not borded slen
-        pslen, pwlen = images.shape[-2:]
-        slen = pslen - self.border_padding * 2
-        wlen = pwlen - self.border_padding * 2
-        n_ptiles_per_image = slen * wlen / self.tile_slen ** 2
-        assert n_ptiles_per_image % 1 == 0, "n_ptiles_per_image must be an int"
-        n_ptiles = int(n_ptiles_per_image * batch_size)
-        return output.reshape(n_ptiles, self.n_bands, self.ptile_slen, self.ptile_slen)
+        """
+        Divide a batch of full images into padded tiles similar to nn.conv2d
+        with a sliding window=self.ptile_slen and stride=self.tile_slen
+        """
+        window = self.ptile_slen
+        tiles = F.unfold(images, kernel_size=window, stride=self.tile_slen)
+        # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
+        tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=self.n_bands, h=window, w=window)
+        return tiles
 
     def center_ptiles(self, image_ptiles, tile_locs):
         # assume there is at most one source per tile

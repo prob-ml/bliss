@@ -16,10 +16,10 @@ def predict(cfg: DictConfig):
 
     ## To regenerate this checkpoint:
     ## mode="train"
-    ## model="sleep_galaxy_measure_stars1"
+    ## model="sleep_galaxy_measure_simple"
     ## dataset="default"
     ## optimizer.params.lr=1e-4
-    ## training.n_epochs=201
+    ## training.n_epochs=11
     ## Save the output in cfg.predict.checkpoint
     sleep_net = sleep.SleepPhase.load_from_checkpoint(cfg.predict.checkpoint)
 
