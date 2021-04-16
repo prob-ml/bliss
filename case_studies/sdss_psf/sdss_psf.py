@@ -78,20 +78,20 @@ sdss_source = sdss.SloanDigitalSkySurvey(
     Path(bliss.__file__).parents[1].joinpath("data/sdss_all"),
     run=3900,
     camcol=6,
-    # fields=range(300, 1000),
-    fields=(808,),
+    fields=range(300, 1000),
+    # fields=(808,),
     bands=range(5),
 )
 
 
 #%%
 # Pickle
-# sdss_dataset_file = Path("sdss_source.pkl")
-# if sdss_dataset_file.exists() is False:
-sdss_dataset = SDSS(sdss_source)
-#     torch.save(sdss_dataset, sdss_dataset_file)
-# else:
-#     sdss_dataset = torch.load(sdss_dataset_file)
+sdss_dataset_file = Path("sdss_source.pkl")
+if sdss_dataset_file.exists() is False:
+    sdss_dataset = SDSS(sdss_source)
+    torch.save(sdss_dataset, sdss_dataset_file)
+else:
+    sdss_dataset = torch.load(sdss_dataset_file)
 
 #%%
 pl = sdss_dataset.plot_clustered_locs(0)
@@ -99,11 +99,16 @@ pl.savefig("clustered_locs.png")
 
 # %%
 m = SDSS_HNP(STAMPSIZE, 4, sdss_dataset)
-trainer = Trainer(max_epochs=400, checkpoint_callback=False, gpus=[4])
+trainer = Trainer(max_epochs=100, checkpoint_callback=False, gpus=[4])
 # %%
-trainer.fit(m)
+state_location = Path("hnp_state.pt")
+if state_location.exists():
+    m.hnp.load_state_dict(torch.load(state_location))
+else:
+    trainer.fit(m)
+    torch.save(m.hnp.state_dict(), state_location)
 # %%
-torch.save(m.hnp.state_dict(), "star_hnp_state_dict.pt")
+# torch.save(m.hnp.state_dict(), "star_hnp_state_dict.pt")
 # %%
 X, img, locs = sdss_dataset[0]
 X, S, Y = m.prepare_batch(sdss_dataset[0])
@@ -189,21 +194,21 @@ def plot_cluster_stars(Y, c, n_show=7):
     return plot, axes
 
 
-def pred_mean(m, X, G, S, n_samples):
-    return torch.stack([m.predict(X, G, S) for i in range(n_samples)]).mean(0)
+def pred_mean(m, X, S, n_samples):
+    return torch.stack([m.predict(X, S) for i in range(n_samples)]).mean(0)
 
 
 #%%
-xall = pred_mean(m, X, G, S, 100)
+xall = pred_mean(m, X, S, 100)
 p, a = plot_cluster_images(c, Y, x, n_S=Y.size(0))
 p.savefig("test.png", transparent=False)
 # %%
-x20 = pred_mean(m, X, G, S[:20], 100)
+x20 = pred_mean(m, X, S[:20], 100)
 p, a = plot_cluster_images(c, Y, x20, n_S=20)
 p.savefig("test20.png")
 # %%
 # No input (just predict from catalog)
-x0 = pred_mean(m, X, G, S[:0], 100)
+x0 = pred_mean(m, X, S[:0], 100)
 p, a = plot_cluster_images(c, Y, x0, n_S=0)
 p.savefig("test0.png")
 

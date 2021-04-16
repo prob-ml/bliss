@@ -633,6 +633,40 @@ class SDSS_HNP(LightningModule):
         return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None)
 
 
+from sklearn.decomposition import PCA
+
+
+class StarPCA:
+    def __init__(self, k, n_clusters) -> None:
+        self.k = k
+        self.n_clusters = n_clusters
+
+        self.pca = PCA(n_components=self.k)
+        self.mean = None
+        self.dep_graph = KMeansDepGraph(n_clusters=self.n_clusters)
+
+    def fit(self, Y):
+        self.mean = Y.mean(0)
+        self.pca.fit(Y.numpy())
+
+    def predict(self, X, S):
+        n_inputs = S.size(0)
+        # Get dependency graph
+        G = self.dep_graph(X)
+
+        # Transform S
+        S_rep = torch.from_numpy(self.pca.transform(S))
+
+        # Average S based on cluster
+        GT = G[:n_inputs].transpose(1, 0)
+        GT = GT / GT.sum(dim=1, keepdim=True)
+        cluster_rep = GT.matmul(S_rep)
+
+        pred = G.matmul(cluster_rep)
+
+        return pred
+
+
 class SimpleZPooler(nn.Module):
     def __init__(self, dh):
         super().__init__()
