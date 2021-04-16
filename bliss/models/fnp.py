@@ -195,7 +195,7 @@ class HNP(nn.Module):
         h_prior,
         h_pooler,
         y_decoder,
-        fb_z=0.0,
+        fb_z=None,
     ):
         super().__init__()
         ## Learned Submodules
@@ -207,7 +207,6 @@ class HNP(nn.Module):
         self.y_decoder = y_decoder
         ## Initialize free-bits regularization
         self.fb_z = fb_z
-        self.register_buffer("lambda_z", torch.tensor(1e-8))
 
     def encode(self, X, S):
         n_inputs = S.size(0)
@@ -238,6 +237,9 @@ class HNP(nn.Module):
     def log_prob(self, X, S, Y):
         pH, qH, H, _, pY = self(X, S)
         log_pqh = pH.log_prob(H) - qH.log_prob(H)
+        if self.fb_z is not None:
+            log_pqh = log_pqh.clamp_max(self.fb_z)
+
         log_y = pY.log_prob(Y)
         elbo = log_pqh.sum() + log_y.sum()
         return elbo
@@ -564,7 +566,7 @@ class PMA(nn.Module):
 
 
 class StarHNP(HNP):
-    def __init__(self, stampsize, dz=4, fb_z=0.0, n_clusters=5):
+    def __init__(self, stampsize, dz=4, fb_z=None, n_clusters=5):
         dy = stampsize ** 2
         dep_graph = KMeansDepGraph(n_clusters=n_clusters)
         z_inference = SequentialVarg(ConcatLayer([1]), MLP(dy, [16, 8], dz))
@@ -587,14 +589,16 @@ class StarHNP(HNP):
 
 
 class SDSS_HNP(LightningModule):
-    def __init__(self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000, n_clusters=5):
+    def __init__(
+        self, stampsize=5, dz=4, sdss_dataset=None, max_cond_inputs=1000, n_clusters=5, fb_z=None
+    ):
         super().__init__()
         self.sdss_dataset = sdss_dataset
         self.stampsize = stampsize
         self.stamper = StarStamper(self.stampsize)
         self.max_cond_inputs = max_cond_inputs
         self.n_clusters = n_clusters
-        self.hnp = StarHNP(self.stampsize, dz, fb_z=0.0, n_clusters=n_clusters)
+        self.hnp = StarHNP(self.stampsize, dz, fb_z=fb_z, n_clusters=n_clusters)
         self.valid_losses = []
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
@@ -627,10 +631,10 @@ class SDSS_HNP(LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return Adam(self.parameters(), lr=1e-3)
+        return Adam(self.parameters(), lr=1e-4)
 
     def train_dataloader(self):
-        return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None)
+        return DataLoader(self.sdss_dataset, batch_size=None, batch_sampler=None, shuffle=True)
 
 
 from sklearn.decomposition import PCA

@@ -98,8 +98,8 @@ pl = sdss_dataset.plot_clustered_locs(0)
 pl.savefig("clustered_locs.png")
 
 # %%
-m = SDSS_HNP(STAMPSIZE, 4, sdss_dataset)
-trainer = Trainer(max_epochs=100, checkpoint_callback=False, gpus=[4])
+m = SDSS_HNP(STAMPSIZE, 4, sdss_dataset, fb_z=0.5)
+trainer = Trainer(max_epochs=1000, checkpoint_callback=False, gpus=[4])
 # %%
 state_location = Path("hnp_state.pt")
 if state_location.exists():
@@ -110,8 +110,8 @@ else:
 # %%
 # torch.save(m.hnp.state_dict(), "star_hnp_state_dict.pt")
 # %%
-X, img, locs = sdss_dataset[-1]
-X, S, Y = m.prepare_batch(sdss_dataset[-1])
+X, img, locs = sdss_dataset[20]
+X, S, Y = m.prepare_batch(sdss_dataset[20])
 km = KMeans(n_clusters=m.n_clusters)
 c = km.fit_predict(locs.cpu().numpy())
 G = sdss_dataset.make_G_from_clust(c)
