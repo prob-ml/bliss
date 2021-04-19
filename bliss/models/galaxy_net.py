@@ -12,39 +12,67 @@ from bliss.optimizer import get_optimizer
 plt.switch_backend("Agg")
 
 
+def conv_block(c, use_batch=False):
+    extra = lambda c: nn.Identity() if not use_batch else nn.BatchNorm2d(c)
+    return (
+        nn.Conv2d(c, c, 3, padding=1, stride=2),
+        extra(c),
+        nn.LeakyReLU(),
+        nn.Conv2d(c, c * 2, 3, padding=1, stride=1),
+        extra(c * 2),
+        nn.LeakyReLU(),
+    )
+
+
+def conv_block_transpose(c=8, use_batch=False):
+    assert c / 2 % 1 == 0
+    extra = lambda c: nn.Identity() if not use_batch else nn.BatchNorm2d(c)
+    return (
+        nn.ConvTranspose2d(c, c, 3, padding=1, output_padding=1, stride=2),
+        extra(c),
+        nn.LeakyReLU(),
+        nn.ConvTranspose2d(c, c // 2, 3, padding=1, output_padding=1, stride=1),
+        extra(c // 2),
+        nn.LeakyReLU(),
+    )
+
+
+def get_conv_blocks(mode="dec", sizes=(2, 4, 8), use_batchnorm=False):
+    if len(sizes) == 0:
+        return (nn.Identity(),)
+
+    if mode == "dec":
+        return [b for c in sizes for b in conv_block(c, use_batchnorm)]
+
+    if mode == "enc":
+        return [b for c in sizes[::-1] for b in conv_block_transpose(c, use_batchnorm)]
+
+    raise ValueError("mode is not supported.")
+
+
 class GalaxyEncoder(nn.Module):
-    def __init__(self, slen=48, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(
+        self, slen=48, latent_dim=8, n_bands=1, hidden=256, start=2, n_sizes=3, use_batchnorm=False
+    ):
         super().__init__()
-
-        self.slen = slen
-        self.latent_dim = latent_dim
-        self.n_bands = n_bands
-
-        min_slen = slen / 2 ** 4  # e.g. slen = 64, min_slen = 4
+        min_slen = slen / 2 ** (n_sizes + 1)  # e.g. slen = 64, min_slen = 4
         assert min_slen % 1 == 0
         min_slen = int(min_slen)
 
+        sizes = [start * 2 ** i for i in range(n_sizes)]
+        end = start * 2 ** n_sizes
         self.features = nn.Sequential(
-            nn.Conv2d(self.n_bands, 8, 3, stride=1, padding=1),  # e.g. input=64, 64x64
+            nn.Conv2d(n_bands, start, 3, stride=1, padding=1),
+            nn.Identity() if not use_batchnorm else nn.BatchNorm2d(start),
             nn.LeakyReLU(),
-            nn.Conv2d(8, 8, 3, stride=2, padding=1),  # 32x32
-            nn.LeakyReLU(),
-            nn.Conv2d(8, 16, 3, stride=1, padding=1),
-            nn.LeakyReLU(),
-            nn.Conv2d(16, 16, 3, stride=2, padding=1),  # 16x16
-            nn.LeakyReLU(),
-            nn.Conv2d(16, 32, 3, stride=1),
-            nn.LeakyReLU(),
-            nn.Conv2d(32, 32, 3, stride=2, padding=1),  # 8x8
-            nn.LeakyReLU(),
-            nn.Conv2d(32, 64, 3, stride=1, padding=1),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, 3, stride=2, padding=1),  # 4x4
+            *get_conv_blocks(mode="dec", sizes=sizes),
+            nn.Conv2d(end, end, 3, padding=1, stride=2),
+            nn.Identity() if not use_batchnorm else nn.BatchNorm2d(end),
             nn.LeakyReLU(),
             nn.Flatten(1, -1),
-            nn.Linear(64 * min_slen ** 2, hidden),
+            nn.Linear(end * min_slen ** 2, hidden),
             nn.LeakyReLU(),
-            nn.Linear(hidden, self.latent_dim),
+            nn.Linear(hidden, latent_dim),
         )
 
     def forward(self, image):
@@ -52,45 +80,34 @@ class GalaxyEncoder(nn.Module):
 
 
 class GalaxyDecoder(nn.Module):
-    def __init__(self, slen=48, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=48, latent_dim=8, n_bands=1, hidden=256, start=2, n_sizes=3):
         super().__init__()
 
         self.slen = slen
-        self.latent_dim = latent_dim
-        self.n_bands = n_bands
 
-        min_slen = slen / 2 ** 4  # e.g. slen = 64, min_slen = 4
+        min_slen = slen / 2 ** (n_sizes + 1)  # e.g. slen = 64, min_slen = 4
         assert min_slen % 1 == 0
         self.min_slen = int(min_slen)
+        self.end = start * 2 ** n_sizes
+        sizes = [start * 2 ** i for i in range(n_sizes)]
 
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
             nn.LeakyReLU(),
-            nn.Linear(hidden, 64 * self.min_slen ** 2),
+            nn.Linear(hidden, self.end * self.min_slen ** 2),
             nn.LeakyReLU(),
         )
 
         self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(64, 64, 3, padding=1, stride=2, output_padding=1),  # 8x8
+            *get_conv_blocks(mode="enc", sizes=sizes),
+            nn.ConvTranspose2d(start, start, 3, padding=1, stride=2, output_padding=1),
             nn.LeakyReLU(),
-            nn.ConvTranspose2d(64, 32, 3, padding=1, stride=1),
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(32, 32, 3, padding=1, stride=2, output_padding=1),  # 16x16
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(32, 16, 3, padding=1, stride=1),
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(16, 16, 3, padding=1, stride=2, output_padding=1),  # 32x32
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(16, 8, 3, padding=1, stride=1),
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(8, 8, 3, padding=1, stride=2, output_padding=1),  # 64x64
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(8, self.n_bands, 3, padding=1, stride=1),  # 2x64x64
+            nn.ConvTranspose2d(start, n_bands, 3, padding=1, stride=1),
         )
 
     def forward(self, z):
         z = self.fc(z)
-        z = z.view(-1, 64, self.min_slen, self.min_slen)
+        z = z.view(-1, self.end, self.min_slen, self.min_slen)
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
         assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
