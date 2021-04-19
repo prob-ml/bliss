@@ -303,7 +303,7 @@ class SavedGalaxies(pl.LightningDataModule, Dataset):
         return len(self.data["images"])
 
     def __getitem__(self, idx):
-        _idx = np.random.randint(len(self))
+        _idx = torch.randint(0, len(self.catalog), (1,)).item()
         image = self.data["images"][_idx]
         background = self.data["background"]
 
