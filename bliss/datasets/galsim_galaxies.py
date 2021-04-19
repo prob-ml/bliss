@@ -140,7 +140,7 @@ sdss_survey = Survey(
 class SDSSGalaxies(pl.LightningDataModule, Dataset):
     def __init__(self, cfg: DictConfig):
         super().__init__()
-        # assume 1 band everytime for now ('r' band).
+        # NOTE: assume 1 band everytime for now ('r' band).
 
         # general dataset parameters.
         self.cfg = cfg
@@ -148,18 +148,12 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         self.batch_size = cfg.dataset.batch_size
         self.n_batches = cfg.dataset.n_batches
 
-        if self.num_workers > 0:
-            raise NotImplementedError(
-                "There is a problem where seed gets reset with multiple workers,"
-                "resulting in same galaxy in every epoch."
-            )
-
-        # image paraemters.
+        # image parameters.
         params = self.cfg.dataset.params
         self.slen = int(params.slen)
         assert self.slen % 2 == 1, "Need divisibility by 2"
         self.n_bands = 1
-        self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
+        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
         self.background[...] = params.background
         self.noise_factor = params.noise_factor
 
@@ -188,18 +182,18 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         # self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
 
     def __getitem__(self, idx):
-        _idx = np.random.randint(len(self.catalog))
+        _idx = torch.randint(0, len(self.catalog), (1,)).item()
         entry = self.catalog[_idx]
         galaxy = get_catsim_galaxy(entry, self.filt, self.survey)
         gal_conv = galsim.Convolution(galaxy, self.psf)
         image = gal_conv.drawImage(
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
-        image = image.array.reshape(1, self.slen, self.slen).astype(np.float32)
+        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
         # add noise and background.
         image += self.background.mean()
-        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        noise = image.sqrt() * torch.randn(*image.shape) * self.noise_factor
         image += noise
 
         return {"images": image, "background": self.background}
@@ -236,10 +230,12 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         self.slen = int(params.slen)
         assert self.slen % 2 == 1, "Need divisibility by 2"
         self.n_bands = 1
-        self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
-        self.background[...] = params.background
         self.pixel_scale = params.pixel_scale
         self.noise_factor = params.noise_factor
+
+        # create background
+        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
+        self.background[...] = params.background
 
         # small dummy psf
         self.psf = galsim.Gaussian(fwhm=params.psf_fwhm).withFlux(1.0)
@@ -249,14 +245,19 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         self.max_hlr = params.max_hlr
         self.max_e = params.max_e
 
+    def _uniform(self, a, b):
+        # uses pytorch to return a single float ~ U(a, b)
+        u = (a - b) * torch.rand(1) + b
+        return u.item()
+
     def __getitem__(self, idx):
-        flux_avg = np.random.uniform(self.min_flux, self.max_flux)
-        hlr = np.random.uniform(self.min_hlr, self.max_hlr)  # arcseconds
+        flux_avg = self._uniform(self.min_flux, self.max_flux)
+        hlr = self._uniform(self.min_hlr, self.max_hlr)  # arcseconds
         flux = (hlr / self.pixel_scale) ** 2 * np.pi * flux_avg  # approx
 
         # sample ellipticity
-        l = np.random.uniform(0, self.max_e)
-        theta = np.random.uniform(0, 2 * np.pi)
+        l = self._uniform(0, self.max_e)
+        theta = self._uniform(0, 2 * np.pi)
         g1 = l * np.cos(theta)
         g2 = l * np.sin(theta)
         galaxy = galsim.Gaussian(half_light_radius=hlr).shear(g1=g1, g2=g2).withFlux(flux)
@@ -265,10 +266,12 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
 
+        # convert image to pytorch and reshape
+        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
+
         # add noise and background.
-        image = image.array.reshape(1, self.slen, self.slen).astype(np.float32)
         image += self.background
-        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        noise = np.sqrt(image) * torch.randn(*image.shape) * self.noise_factor
         image += noise
 
         return {"images": image, "background": self.background}
