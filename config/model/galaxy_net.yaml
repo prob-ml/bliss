@@ -5,7 +5,7 @@ beta: 1
 free_bits: -1e20
 loss_type: L2
 params:
-  slen: 48
+  slen: 44
   latent_dim: 8
   n_bands: 1
   hidden: 256
