@@ -7,86 +7,68 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
 from torch.optim import Adam
+from torch.nn import L1Loss, MSELoss
 
 plt.switch_backend("Agg")
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=41, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=44, latent_dim=8, n_bands=1, hidden=256):
         super().__init__()
 
-        self.slen = slen
-        self.latent_dim = latent_dim
-        self.n_bands = n_bands
+        f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
+        min_slen = f(f(slen))
 
         self.features = nn.Sequential(
-            nn.Conv2d(self.n_bands, 16, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
-            nn.ReLU(),
+            nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
+            nn.LeakyReLU(),
+            nn.Conv2d(4, 8, 5, stride=3, padding=0),
+            nn.LeakyReLU(),
             nn.Flatten(1, -1),
-            nn.Linear(16 * self.slen ** 2, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, hidden),
-            nn.BatchNorm1d(hidden),
-            nn.ReLU(),
-            nn.Dropout(p=0.1),
-            nn.Linear(hidden, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, hidden),
-            nn.ReLU(),
+            nn.Linear(8 * min_slen ** 2, hidden),
+            nn.LeakyReLU(),
+            nn.Linear(hidden, latent_dim),
         )
 
-        self.fc_mean = nn.Linear(hidden, self.latent_dim)
-        self.fc_var = nn.Linear(hidden, self.latent_dim)
-
-    def forward(self, subimage):
-        z = self.features(subimage)
-        z_mean = self.fc_mean(z)
-        z_var = 1e-4 + torch.exp(self.fc_var(z))
-        return z_mean, z_var
+    def forward(self, image):
+        return self.features(image)
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=41, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=44, latent_dim=8, n_bands=1, hidden=256):
         super().__init__()
 
         self.slen = slen
-        self.latent_dim = latent_dim
-        self.n_bands = n_bands
+
+        f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
+        g = lambda x: (x - 1) * 3 + 5
+        self.min_slen = f(f(slen))
+        assert g(g(self.min_slen)) == slen
 
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, 64 * (slen // 2 + 1) ** 2),
-            nn.ReLU(),
+            nn.LeakyReLU(),
+            nn.Linear(hidden, 8 * self.min_slen ** 2),
+            nn.LeakyReLU(),
         )
 
         self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(64, 64, 3, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, 64, 3, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, 64, 3, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, 64, 3, padding=0, stride=2),
-            nn.ConvTranspose2d(64, 2 * self.n_bands, 3, padding=0),
+            nn.ConvTranspose2d(8, 4, 5, stride=3),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(4, n_bands, 5, stride=3),
         )
 
     def forward(self, z):
         z = self.fc(z)
-        z = z.view(-1, 64, self.slen // 2 + 1, self.slen // 2 + 1)
+        z = z.view(-1, 8, self.min_slen, self.min_slen)
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
-        recon_mean = F.relu(z[:, : self.n_bands])
-        var_multiplier = 1 + 10 * torch.sigmoid(z[:, self.n_bands : (2 * self.n_bands)])
-        recon_var = 1e-4 + var_multiplier * recon_mean
-        return recon_mean, recon_var
+        assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
+        recon_mean = F.relu(z)
+        return recon_mean
 
 
-class OneCenteredGalaxy(pl.LightningModule):
+class OneCenteredGalaxyAE(pl.LightningModule):
 
     # ---------------
     # Model
@@ -100,52 +82,29 @@ class OneCenteredGalaxy(pl.LightningModule):
         self.enc = CenteredGalaxyEncoder(**cfg.model.params)
         self.dec = CenteredGalaxyDecoder(**cfg.model.params)
 
-        self.warm_up = cfg.model.warm_up
+        self.loss_type = cfg.model.loss_type
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
     def forward(self, image, background):
-        # sampling images from the real distribution
-        # z | x ~ decoder
-
-        # shape = [nsamples, latent_dim]
-        z_mean, z_var = self.enc.forward(image - background)
-
-        q_z = Normal(z_mean, z_var.sqrt())
-        z = q_z.rsample()
-
-        log_q_z = q_z.log_prob(z).sum(1)
-        p_z = Normal(self.zero, self.one)  # prior on z.
-        log_p_z = p_z.log_prob(z).sum(1)
-        kl_z = log_q_z - log_p_z  # log q(z | x) - log p(z)
-
-        # reconstructed mean/variances images (per pixel quantities)
-        # no background
-        recon_mean, recon_var = self.dec.forward(z)
-
-        # kl can behave wildly w/out background.
+        z = self.enc.forward(image - background)
+        recon_mean = self.dec.forward(z)
         recon_mean = recon_mean + background
-        recon_var = recon_var + background
+        return recon_mean
 
-        return recon_mean, recon_var, kl_z
+    def get_loss(self, image, recon_mean):
 
-    def get_loss(self, image, recon_mean, recon_var, kl_z):
-        # use a "deterministic warm-up" scheme to see if we get better results
-        # on realistic galaxies. It involves "turning on" the prior penalty term slowly.
-        # see: https://arxiv.org/pdf/1602.02282.pdf
-        pwr = max(min(-self.warm_up + self.current_epoch, 0), -6)
-        pr_penalty = kl_z * 10 ** pwr
+        if self.loss_type == "gauss":
+            return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
 
-        # return ELBO
-        # NOTE: image includes background.
-        # Covariance is diagonal in latent variables.
-        # recon_loss = -log p(x | z), shape: torch.Size([ nsamples, n_bands, slen, slen])
-        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(image)
-        recon_losses = recon_losses.view(image.size(0), -1).sum(1)
-        loss = (recon_losses + pr_penalty).sum()
+        if self.loss_type == "L2":
+            return MSELoss(reduction="sum")(image, recon_mean)
 
-        return loss
+        if self.loss_type == "L1":
+            return L1Loss(reduction="sum")(image, recon_mean)
+
+        raise NotImplementedError("Loss not implemented.")
 
     # ---------------
     # Optimizer
@@ -161,8 +120,8 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
-        recon_mean, recon_var, kl_z = self(images, background)
-        loss = self.get_loss(images, recon_mean, recon_var, kl_z)
+        recon_mean = self(images, background)
+        loss = self.get_loss(images, recon_mean)
         self.log("train_loss", loss)
         return loss
 
@@ -172,31 +131,27 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
-        recon_mean, recon_var, kl_z = self(images, background)
-        loss = self.get_loss(images, recon_mean, recon_var, kl_z)
+        recon_mean = self(images, background)
+        loss = self.get_loss(images, recon_mean)
 
         # metrics
         self.log("val_loss", loss)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("val_max_residual", residuals.abs().max())
-        return {"images": images, "recon_mean": recon_mean, "recon_var": recon_var}
+        return {"images": images, "recon_mean": recon_mean}
 
     def validation_epoch_end(self, outputs):
         images = outputs[0]["images"][:10]
         recon_mean = outputs[0]["recon_mean"][:10]
-        recon_var = outputs[0]["recon_var"][:10]
-        fig = self.plot_reconstruction(images, recon_mean, recon_var)
+        fig = self.plot_reconstruction(images, recon_mean)
         if self.logger:
             self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
 
-    def plot_reconstruction(self, images, recon_mean, recon_var):
+    def plot_reconstruction(self, images, recon_mean):
         # only plot i band if available, otherwise the highest band given.
         assert images.size(0) >= 10
-        assert self.enc.n_bands == self.dec.n_bands
-        n_bands = self.enc.n_bands
         num_examples = 10
-        num_cols = 4
-        band_idx = min(2, n_bands - 1)
+        num_cols = 3
         residuals = (images - recon_mean) / torch.sqrt(images)
         plt.ioff()
 
@@ -207,22 +162,17 @@ class OneCenteredGalaxy(pl.LightningModule):
 
             plt.subplot(num_examples, num_cols, num_cols * i + 1)
             plt.title("images")
-            plt.imshow(images[i, band_idx].data.cpu().numpy())
+            plt.imshow(images[i, 0].data.cpu().numpy())
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 2)
             plt.title("recon_mean")
-            plt.imshow(recon_mean[i, band_idx].data.cpu().numpy())
+            plt.imshow(recon_mean[i, 0].data.cpu().numpy())
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 3)
-            plt.title("recon_var")
-            plt.imshow(recon_var[i, band_idx].data.cpu().numpy())
-            plt.colorbar()
-
-            plt.subplot(num_examples, num_cols, num_cols * i + 4)
             plt.title("residuals")
-            plt.imshow(residuals[i, band_idx].data.cpu().numpy())
+            plt.imshow(residuals[i, 0].data.cpu().numpy())
             plt.colorbar()
 
         plt.tight_layout()
@@ -231,6 +181,6 @@ class OneCenteredGalaxy(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
-        recon_mean, _, _ = self(images, background)
+        recon_mean = self(images, background)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("max_residual", residuals.abs().max())
