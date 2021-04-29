@@ -2,14 +2,20 @@
 ---
 name: "SDSSGalaxies"
 cosmoDC2_file: "${paths.data}/gold_dc2_catalog.fits"
-batch_size: 128
+batch_size: 64
 n_batches: 10
 num_workers: 0
 params:
   background: 865
   deviate_center: false
   noise_factor: 0.05
-  slen: 51
+  slen: 44
+  min_flux: 1e3
+  max_flux: 3.5e5
+  min_a_d: 0.8
+  max_a_d: 6.5
+  min_a_b: 0.8
+  max_a_b: 3.6 # from catalog with mag < 22.2 cut.
 sdss:
   bands:
     - 2
