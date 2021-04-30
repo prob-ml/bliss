@@ -1,6 +1,5 @@
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
-from omegaconf import DictConfig
 
 import torch
 import torch.nn as nn
@@ -75,18 +74,31 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # Model
     # ----------------
 
-    def __init__(self, cfg: DictConfig):
+    def __init__(
+        self,
+        slen=44,
+        latent_dim=8,
+        hidden=256,
+        n_bands=1,
+        loss_type="gauss",
+        optimizer_params: dict = None,
+    ):
         super().__init__()
-        self.cfg = cfg
-        self.save_hyperparameters(cfg)
+        self.save_hyperparameters()
 
-        self.enc = CenteredGalaxyEncoder(**cfg.model.params)
-        self.dec = CenteredGalaxyDecoder(**cfg.model.params)
+        self.enc = CenteredGalaxyEncoder(
+            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+        )
+        self.dec = CenteredGalaxyDecoder(
+            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+        )
 
-        self.loss_type = cfg.model.loss_type
+        self.loss_type = loss_type
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
+
+        self.optimizer_params = optimizer_params
 
     def forward(self, image, background):
         z = self.enc.forward(image - background)
@@ -112,9 +124,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        name = self.hparams.optimizer.name
-        optim_params = self.hparams.optimizer.params
-        return get_optimizer(name, self.parameters(), optim_params)
+        assert self.optimizer_params is not None, "Need to specify `optimizer_params`."
+        name = self.optimizer_params["name"]
+        kwargs = self.optimizer_params["kwargs"]
+        return get_optimizer(name, self.parameters(), kwargs)
 
     # ---------------
     # Training

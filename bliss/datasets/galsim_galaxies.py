@@ -1,7 +1,6 @@
 from collections import namedtuple
 from speclite.filters import load_filter, ab_reference_flux
 import numpy as np
-from omegaconf import DictConfig
 import galsim
 import torch
 
@@ -93,31 +92,45 @@ sdss_survey = Survey(
 
 
 class ToyGaussian(pl.LightningDataModule, Dataset):
-    def __init__(self, cfg: DictConfig):
+    def __init__(
+        self,
+        num_workers=0,
+        batch_size=64,
+        n_batches=10,
+        slen=44,
+        n_bands=1,
+        pixel_scale=0.396,
+        noise_factor=0.05,
+        background=845,
+        psf_fwhm=1.4,
+        min_flux=300,
+        max_flux=10000,
+        min_hlr=0.8,
+        max_hlr=4.0,
+        max_e=0.6,
+    ):
         super().__init__()
-        # assume 1 band everytime.
-        self.cfg = cfg
-        self.num_workers = cfg.dataset.num_workers
-        self.batch_size = cfg.dataset.batch_size
-        self.n_batches = cfg.dataset.n_batches
+        assert n_bands == 1, "Only 1 band is supported"
+        self.num_workers = num_workers
+        self.batch_size = batch_size
+        self.n_batches = n_batches
 
-        params = self.cfg.dataset.params
-        self.slen = int(params.slen)
-        self.n_bands = 1
-        self.pixel_scale = params.pixel_scale
-        self.noise_factor = params.noise_factor
+        self.slen = slen
+        self.n_bands = n_bands
+        self.pixel_scale = pixel_scale
+        self.noise_factor = noise_factor
 
         # create background
         self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
-        self.background[...] = params.background
+        self.background[...] = background
 
         # small dummy psf
-        self.psf = galsim.Gaussian(fwhm=params.psf_fwhm).withFlux(1.0)
-        self.min_flux = params.min_flux
-        self.max_flux = params.max_flux
-        self.min_hlr = params.min_hlr
-        self.max_hlr = params.max_hlr
-        self.max_e = params.max_e
+        self.psf = galsim.Gaussian(fwhm=psf_fwhm).withFlux(1.0)
+        self.min_flux = min_flux
+        self.max_flux = max_flux
+        self.min_hlr = min_hlr
+        self.max_hlr = max_hlr
+        self.max_e = max_e
 
     def _uniform(self, a, b):
         # uses pytorch to return a single float ~ U(a, b)
@@ -164,19 +177,36 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
 
 class SDSSGalaxies(pl.LightningDataModule, Dataset):
-    def __init__(self, cfg: DictConfig):
+    def __init__(
+        self,
+        sdss_kwargs: dict,  # for obtaining PSF at points.
+        num_workers=0,
+        batch_size=64,
+        n_batches=10,
+        n_bands=1,
+        slen=44,
+        background=865.0,
+        noise_factor=0.05,
+        min_flux=1e3,
+        max_flux=3.5e5,
+        min_a_d=0.8,
+        max_a_d=6.5,
+        min_a_b=0.8,
+        max_a_b=3.6,
+        psf_points=(450, 550),  # points in the SDSS frame.
+    ):
         super().__init__()
+        assert n_bands == 1, "Only 1 band is supported"
 
-        self.n_batches = cfg.dataset.n_batches
-        self.batch_size = cfg.dataset.batch_size
-        self.num_workers = cfg.dataset.num_workers
+        self.n_batches = n_batches
+        self.batch_size = batch_size
+        self.num_workers = num_workers
 
         self.n_bands = 1
-        params = cfg.dataset.params
-        self.slen = params.slen
+        self.slen = slen
         self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
-        self.background[...] = params.background
-        self.noise_factor = params.noise_factor
+        self.background[...] = background
+        self.noise_factor = noise_factor
 
         # directly from survey + filter.
         assert len(sdss_survey.filters) == 1
@@ -185,20 +215,20 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         self.filt = self.survey.filters[0]
         self.pixel_scale = self.survey.pixel_scale
 
-        self.min_flux = params.min_flux
-        self.max_flux = params.max_flux
-        self.min_a_d = params.min_a_d
-        self.max_a_d = params.max_a_d
-        self.min_a_b = params.min_a_b
-        self.max_a_b = params.max_a_b
+        self.min_flux = min_flux
+        self.max_flux = max_flux
+        self.min_a_d = min_a_d
+        self.max_a_d = max_a_d
+        self.min_a_b = min_a_b
+        self.max_a_b = max_a_b
 
         # setup sdss object and psf at a given point.
-        assert len(list(cfg.dataset.sdss.bands)) == 1
-        assert cfg.dataset.sdss.bands[0] == 2
-        assert len(list(cfg.dataset.psf.psf_points)) == 2
-        sdss_data = SloanDigitalSkySurvey(**cfg.dataset.sdss)
+        assert len(list(sdss_kwargs["bands"])) == 1
+        assert sdss_kwargs["bands"][0] == 2
+        assert len(list(psf_points)) == 2
+        sdss_data = SloanDigitalSkySurvey(**sdss_kwargs)
         _psf = sdss_data.rcfgcs[0][-1]
-        x, y = cfg.dataset.psf.psf_points
+        x, y = psf_points
         psf = _psf.psf_at_points(0, x, y)
         psf_image = galsim.Image(psf, scale=self.pixel_scale)
         self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
@@ -271,13 +301,12 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
 
 class SavedGalaxies(pl.LightningDataModule, Dataset):
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, data_file, batch_size=128):
         super().__init__()
 
-        self.cfg = cfg
-        self.batch_size = cfg.dataset.batch_size
+        self.batch_size = batch_size
 
-        self.data = torch.load(cfg.dataset.data_file)
+        self.data = torch.load(data_file)
 
         # Source Equation (4) in: https://arxiv.org/abs/2005.12039
         assert self.data["images"].shape[1] == 1, "Only 1 band supported"
