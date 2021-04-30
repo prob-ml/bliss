@@ -1,5 +1,5 @@
 # @package _group_
 name: Adam
-params:
+kwargs:
   lr: 1e-3
   weight_decay: 0

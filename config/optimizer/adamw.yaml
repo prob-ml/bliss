@@ -1,6 +1,6 @@
 # @package _group_
 name: AdamW
-params:
+kwargs:
   lr: 1e-3
   weight_decay: 1e-2
   betas:
