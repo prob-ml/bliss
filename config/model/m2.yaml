@@ -14,7 +14,6 @@ kwargs:
     ptile_slen: 26
     border_padding: 3
     prob_galaxy: 0.0
-    n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 5
     mean_sources: 0.48
     min_sources: 0

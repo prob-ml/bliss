@@ -12,7 +12,6 @@ kwargs:
     tile_slen: 2
     ptile_slen: 6
     prob_galaxy: 0.0
-    n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 1
     mean_sources: 0.015
     min_sources: 0
