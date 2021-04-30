@@ -3,4 +3,4 @@
 name: "SavedGalaxies"
 kwargs:
   batch_size: 64
-  data_file: "${paths.data}/gold_sdss_galaxy_images.pt"
+  data_file: "${paths.data}/small_sample_simulated_sdss_galaxies.pt"
