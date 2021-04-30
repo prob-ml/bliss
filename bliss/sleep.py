@@ -11,7 +11,6 @@ from itertools import permutations
 
 import numpy as np
 import matplotlib.pyplot as plt
-from omegaconf import DictConfig
 import pytorch_lightning as pl
 
 import torch
@@ -147,31 +146,36 @@ class SleepPhase(pl.LightningModule):
             trainer.fit(model, data=dataset)
     """
 
-    def __init__(self, cfg: DictConfig):
+    def __init__(
+        self,
+        encoder_kwargs,
+        decoder_kwargs,
+        gal_encoder_kwargs: dict = None,
+        use_galaxy_encoder=False,
+        optimizer_params: dict = None,
+    ):
         super().__init__()
-        self.save_hyperparameters(cfg)
+        self.save_hyperparameters()
 
-        self.image_encoder = encoder.ImageEncoder(**cfg.model.encoder.params)
-        self.image_decoder = decoder.ImageDecoder(**cfg.model.decoder.params)
+        self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
+        self.image_decoder = decoder.ImageDecoder(**decoder_kwargs)
         self.image_decoder.requires_grad_(False)
-
-        self.plotting: bool = cfg.training.plotting
+        self.optimizer_params = optimizer_params
 
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
         assert self.image_decoder.border_padding == self.image_encoder.border_padding
         assert self.image_encoder.max_detections <= self.image_decoder.max_sources
 
-        self.use_galaxy_encoder = cfg.model.use_galaxy_encoder
+        self.use_galaxy_encoder = use_galaxy_encoder
         self.galaxy_encoder = None
         if self.use_galaxy_encoder:
+            assert isinstance(gal_encoder_kwargs, dict), "Galaxy Encoder kwargs not provided."
             # NOTE: We crop and center each padded tile before passing it on to the galaxy_encoder
             #       assume that crop_slen = 2*tile_slen (on each side)
             # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per
             #       tile should work but there is no easy way to enforce this.
-            self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(
-                **cfg.model.galaxy_encoder.params
-            )
+            self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(**gal_encoder_kwargs)
             self.cropped_slen = self.image_encoder.ptile_slen - 4 * self.image_encoder.tile_slen
             assert self.cropped_slen >= 20, "Cropped slen not reasonable"
             assert self.galaxy_encoder.slen == self.cropped_slen
@@ -386,12 +390,13 @@ class SleepPhase(pl.LightningModule):
         )
 
     def configure_optimizers(self):
-        name = self.hparams.optimizer.name
-        params = self.hparams.optimizer.params
-        opt = get_optimizer(name, self.image_encoder.parameters(), **params)
+        assert self.optimizer_params is not None, "Need to specify `optimizer_params`."
+        name = self.optimizer_params["name"]
+        kwargs = self.optimizer_params["kwargs"]
+        opt = get_optimizer(name, self.image_encoder.parameters(), kwargs)
 
         if self.use_galaxy_encoder:
-            galaxy_opt = get_optimizer(name, self.galaxy_encoder.parameters(), **params)
+            galaxy_opt = get_optimizer(name, self.galaxy_encoder.parameters(), kwargs)
             opt = (opt, galaxy_opt)
 
         return opt
