@@ -158,7 +158,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         plt.ioff()
 
         fig = plt.figure(figsize=(10, 25))
-        plt.suptitle("Epoch {:d}".format(self.current_epoch))
 
         for i in range(num_examples):
 
