@@ -197,12 +197,10 @@ class SleepPhase(pl.LightningModule):
 
         # TODO: Should we zero out tiles without galaxies during training?
         # we can assume there is one galaxy per_tile and encode each tile independently.
-        encoding = self.galaxy_encoder.forward(centered_ptiles)
-        galaxy_param_mean, galaxy_param_var = encoding
-        assert galaxy_param_mean.shape[0] == n_ptiles
-        assert galaxy_param_var.shape[0] == n_ptiles
+        z = self.galaxy_encoder.forward(centered_ptiles)
+        assert z.shape[0] == n_ptiles
 
-        return galaxy_param_mean, galaxy_param_var
+        return z
 
     def forward(self, image_ptiles, n_sources):
         raise NotImplementedError()
@@ -217,7 +215,7 @@ class SleepPhase(pl.LightningModule):
             max_detections = 1
             tile_locs = tile_est["locs"].reshape(-1, max_detections, 2)
             image_ptiles = self.image_encoder.get_images_in_tiles(images)
-            tile_galaxy_params, _ = self.forward_galaxy(image_ptiles, tile_locs)
+            tile_galaxy_params = self.forward_galaxy(image_ptiles, tile_locs)
             n_galaxy_params = tile_galaxy_params.shape[-1]
             tile_galaxy_params = tile_galaxy_params.reshape(
                 batch_size,
@@ -251,34 +249,24 @@ class SleepPhase(pl.LightningModule):
         # shape = (n_ptiles x band x ptile_slen x ptile_slen)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         n_galaxy_params = self.image_decoder.n_galaxy_params
-        galaxy_param_mean, galaxy_param_var = self.forward_galaxy(image_ptiles, batch["locs"])
+        galaxy_params = self.forward_galaxy(image_ptiles, batch["locs"])
+        galaxy_params = galaxy_params.view(batch_size, -1, 1, n_galaxy_params)
 
-        galaxy_param_mean = galaxy_param_mean.view(batch_size, -1, 1, n_galaxy_params)
-        galaxy_param_var = galaxy_param_var.view(batch_size, -1, 1, n_galaxy_params)
-
-        # start calculating kl_qp loss.
-        q_z = Normal(galaxy_param_mean, galaxy_param_var.sqrt())
-        z = q_z.rsample()
-        log_q_z = q_z.log_prob(z).sum((1, 2, 3))
-        p_z = Normal(torch.zeros_like(z), torch.ones_like(z))
-        log_p_z = p_z.log_prob(z).sum((1, 2, 3))
-
-        # now draw a full reconstructed image.
+        # draw fully reconstructed image.
+        # NOTE: Assume recon_mean = recon_var per poisson approximation.
         recon_mean, recon_var = self.image_decoder.render_images(
             batch["n_sources"],
             batch["locs"],
             batch["galaxy_bool"],
-            z,
+            galaxy_params,
             batch["fluxes"],
             add_noise=False,
         )
 
-        kl_z = log_q_z - log_p_z  # log q(z | x) - log p(z)
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
-        recon_losses = recon_losses.view(batch_size, -1).sum(1)
-        kl_qp = (recon_losses + kl_z).sum()
+        recon_losses = recon_losses.view(batch_size, -1).sum()
 
-        return kl_qp
+        return recon_losses
 
     def get_detection_loss(self, batch):
         """
