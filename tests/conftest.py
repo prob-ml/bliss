@@ -45,7 +45,7 @@ class SleepSetup:
 
     def get_dataset(self, overrides):
         cfg = self.get_cfg(overrides)
-        return simulated.SimulatedDataset(cfg)
+        return simulated.SimulatedDataset(**cfg.dataset.kwargs)
 
     def get_trainer(self, overrides):
         cfg = self.get_cfg(overrides)
@@ -56,13 +56,13 @@ class SleepSetup:
 
     def get_sleep(self, overrides):
         cfg = self.get_cfg(overrides)
-        return sleep.SleepPhase(cfg)
+        return sleep.SleepPhase(**cfg.model.kwargs, optimizer_params=cfg.optimizer)
 
     def get_trained_sleep(self, overrides):
         cfg = self.get_cfg(overrides)
         dataset = self.get_dataset(overrides)
         trainer = self.get_trainer(overrides)
-        sleep_net = sleep.SleepPhase(cfg)
+        sleep_net = sleep.SleepPhase(**cfg.model.kwargs, optimizer_params=cfg.optimizer)
         trainer.fit(sleep_net, datamodule=dataset)
         return sleep_net
 
@@ -79,32 +79,31 @@ class GalaxyAESetup:
     def get_cfg(self, overrides):
         return get_cfg(overrides, self.devices)
 
+    @staticmethod
+    def get_dataset(cfg):
+        if cfg.dataset.name == "ToyGaussian":
+            return galsim_galaxies.ToyGaussian(**cfg.dataset.kwargs)
+        if cfg.dataset.name == "SDSSGalaxies":
+            return galsim_galaxies.SDSSGalaxies(**cfg.dataset.kwargs)
+
+        raise NotImplementedError("Dataset no available")
+
     def get_trained_ae(self, overrides):
         cfg = self.get_cfg(overrides)
 
-        if cfg.dataset.name == "ToyGaussian":
-            dataset = galsim_galaxies.ToyGaussian(cfg)
-        elif cfg.dataset.name == "SDSSGalaxies":
-            dataset = galsim_galaxies.SDSSGalaxies(cfg)
-        else:
-            raise NotImplementedError("Dataset no available")
-
-        galaxy_ae = galaxy_net.OneCenteredGalaxyAE(cfg)
+        ds = self.get_dataset(cfg)
+        galaxy_ae = galaxy_net.OneCenteredGalaxyAE(
+            **cfg.model.kwargs, optimizer_params=cfg.optimizer
+        )
         trainer = pl.Trainer(**cfg.training.trainer)
-        trainer.fit(galaxy_ae, datamodule=dataset)
+        trainer.fit(galaxy_ae, datamodule=ds)
         return galaxy_ae.to(self.devices.device)
 
     def test_ae(self, overrides, galaxy_net):
         cfg = self.get_cfg(overrides)
-        if cfg.dataset.name == "ToyGaussian":
-            test_module = galsim_galaxies.ToyGaussian(cfg)
-        elif cfg.dataset.name == "SDSSGalaxies":
-            test_module = galsim_galaxies.SDSSGalaxies(cfg)
-        else:
-            raise NotImplementedError("Dataset no available")
-
+        ds = self.get_dataset(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
-        return trainer.test(galaxy_net, datamodule=test_module)[0]
+        return trainer.test(galaxy_net, datamodule=ds)[0]
 
 
 @pytest.fixture(scope="session")
