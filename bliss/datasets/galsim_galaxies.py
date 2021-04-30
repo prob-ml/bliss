@@ -109,7 +109,6 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
         params = self.cfg.dataset.params
         self.slen = int(params.slen)
-        assert self.slen % 2 == 1, "Need divisibility by 2"
         self.n_bands = 1
         self.pixel_scale = params.pixel_scale
         self.noise_factor = params.noise_factor
