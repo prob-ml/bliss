@@ -30,7 +30,7 @@ class ImageDecoder(pl.LightningModule):
         alpha=0.5,
         prob_galaxy=0.0,
         n_galaxy_params=8,
-        gal_slen=44,
+        gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
         psf_slen=25,
@@ -110,7 +110,7 @@ class ImageDecoder(pl.LightningModule):
 
         ## Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
-            assert self.gal_decoder_file is not None and self.latents_file is not None
+            assert self.autoencoder_ckpt is not None and self.latents_file is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
                 self.n_bands,
                 self.tile_slen,
