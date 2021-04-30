@@ -101,12 +101,6 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         self.batch_size = cfg.dataset.batch_size
         self.n_batches = cfg.dataset.n_batches
 
-        if self.num_workers > 0:
-            raise NotImplementedError(
-                "There is a problem where seed gets reset with multiple workers,"
-                "resulting in same galaxy in every epoch."
-            )
-
         params = self.cfg.dataset.params
         self.slen = int(params.slen)
         self.n_bands = 1
@@ -175,6 +169,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
         self.n_batches = cfg.dataset.n_batches
         self.batch_size = cfg.dataset.batch_size
+        self.num_workers = cfg.dataset.num_workers
 
         self.n_bands = 1
         params = cfg.dataset.params
@@ -266,13 +261,13 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         return self.batch_size * self.n_batches
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
 class SavedGalaxies(pl.LightningDataModule, Dataset):
