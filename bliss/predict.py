@@ -53,13 +53,10 @@ def predict(cfg: DictConfig):
                 var_params = image_encoder.forward(ptiles, tile_n_sources)
 
                 # get galaxy params per tile
-                galaxy_param_mean, galaxy_param_var = sleep_net.forward_galaxy(
-                    ptiles, tile_params["locs"]
-                )
+                galaxy_param_mean = sleep_net.forward_galaxy(ptiles, tile_params["locs"])
 
                 # collect all parameters into one dictionary
                 var_params["galaxy_param_mean"] = galaxy_param_mean
-                var_params["gaalxy_param_var"] = galaxy_param_var
 
                 # put everything in the cpu before saving
                 var_params = {key: value.cpu() for key, value in var_params.items()}
