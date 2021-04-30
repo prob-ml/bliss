@@ -17,9 +17,9 @@ import pytorch_lightning as pl
 import torch
 from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
-from torch.optim import Adam
 
 from bliss import plotting
+from bliss.optimizer import get_optimizer
 from bliss.models import encoder, decoder, galaxy_net
 from bliss.models.encoder import get_star_bool, get_full_params
 from bliss.metrics import eval_error_on_batch
@@ -386,11 +386,12 @@ class SleepPhase(pl.LightningModule):
         )
 
     def configure_optimizers(self):
+        name = self.hparams.optimizer.name
         params = self.hparams.optimizer.params
-        opt = Adam(self.image_encoder.parameters(), **params)
+        opt = get_optimizer(name, self.image_encoder.parameters(), **params)
 
         if self.use_galaxy_encoder:
-            galaxy_opt = Adam(self.galaxy_encoder.parameters(), **params)
+            galaxy_opt = get_optimizer(name, self.galaxy_encoder.parameters(), **params)
             opt = (opt, galaxy_opt)
 
         return opt

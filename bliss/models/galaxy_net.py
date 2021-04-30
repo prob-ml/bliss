@@ -6,8 +6,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
-from torch.optim import Adam
 from torch.nn import L1Loss, MSELoss
+
+from bliss.optimizer import get_optimizer
 
 plt.switch_backend("Agg")
 
@@ -111,8 +112,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        params = self.hparams.optimizer.params
-        return Adam(self.parameters(), **params)
+        name = self.hparams.optimizer.name
+        optim_params = self.hparams.optimizer.params
+        return get_optimizer(name, self.parameters(), optim_params)
 
     # ---------------
     # Training
