@@ -6,7 +6,6 @@ kwargs:
   batch_size: 64
   n_batches: 10
   background: 865
-  deviate_center: false
   noise_factor: 0.05
   slen: 44
   min_flux: 1e3
