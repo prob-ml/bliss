@@ -12,7 +12,7 @@ def predict(cfg: DictConfig):
     bands = list(cfg.predict.bands)
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 
-    sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss)
+    sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss_kwargs)
 
     ## To regenerate this checkpoint:
     ## mode="train"
