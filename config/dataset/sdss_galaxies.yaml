@@ -1,11 +1,10 @@
 # @package _group_
 ---
 name: "SDSSGalaxies"
-cosmoDC2_file: "${paths.data}/gold_dc2_catalog.fits"
-batch_size: 64
-n_batches: 10
-num_workers: 0
 kwargs:
+  num_workers: 0
+  batch_size: 64
+  n_batches: 10
   background: 865
   deviate_center: false
   noise_factor: 0.05
