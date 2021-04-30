@@ -8,4 +8,4 @@ def get_optimizer(name, model_params, optim_params):
     if name == "AdamW":
         return AdamW(model_params, **optim_params)
 
-    raise NotImplementedError(f"The optimizer {name} is not implemented.")
+    raise NotImplementedError(f"The requested optimizer '{name}' is not implemented.")
