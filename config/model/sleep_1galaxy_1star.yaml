@@ -6,7 +6,7 @@ image:
   background:
     - 633.0
 galaxy:
-  slen: 44
+  slen: 53
   latent_dim: 8
 kwargs:
   decoder_kwargs:

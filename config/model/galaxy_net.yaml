@@ -1,7 +1,7 @@
 # @package _group_
 name: OneCenteredGalaxyAE
 kwargs:
-  slen: 44
+  slen: 53
   latent_dim: 8
   n_bands: 1
   hidden: 256

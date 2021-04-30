@@ -4,7 +4,7 @@ kwargs:
   num_workers: 0
   n_batches: 10
   batch_size: 64
-  slen: 44
+  slen: 53
   background: 865
   noise_factor: 0.01
   pixel_scale: 0.396
