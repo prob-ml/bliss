@@ -72,22 +72,22 @@ class SleepSetup:
         return trainer.test(sleep_net, datamodule=test_module)[0]
 
 
-class GalaxyVAESetup:
+class GalaxyAESetup:
     def __init__(self, devices):
         self.devices = devices
 
     def get_cfg(self, overrides):
         return get_cfg(overrides, self.devices)
 
-    def get_trained_vae(self, overrides):
+    def get_trained_ae(self, overrides):
         cfg = self.get_cfg(overrides)
         dataset = galsim_galaxies.ToyGaussian(cfg)
-        galaxy_vae = galaxy_net.OneCenteredGalaxy(cfg)
+        galaxy_ae = galaxy_net.OneCenteredGalaxyAE(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
-        trainer.fit(galaxy_vae, datamodule=dataset)
-        return galaxy_vae.to(self.devices.device)
+        trainer.fit(galaxy_ae, datamodule=dataset)
+        return galaxy_ae.to(self.devices.device)
 
-    def test_vae(self, overrides, galaxy_net):
+    def test_ae(self, overrides, galaxy_net):
         cfg = self.get_cfg(overrides)
         test_module = galsim_galaxies.ToyGaussian(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
@@ -113,5 +113,5 @@ def sleep_setup(devices):
 
 
 @pytest.fixture(scope="session")
-def galaxy_vae_setup(devices):
-    return GalaxyVAESetup(devices)
+def galaxy_ae_setup(devices):
+    return GalaxyAESetup(devices)
