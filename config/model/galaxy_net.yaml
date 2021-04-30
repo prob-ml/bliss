@@ -1,5 +1,5 @@
 # @package _group_
-name: OneCenteredGalaxy
+name: OneCenteredGalaxyAE
 loss_type: gauss
 params:
   slen: 44

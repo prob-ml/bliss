@@ -22,7 +22,7 @@ _datasets = [
 ]
 datasets = {cls.__name__: cls for cls in _datasets}
 
-_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxy]
+_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxyAE]
 models = {cls.__name__: cls for cls in _models}
 
 
