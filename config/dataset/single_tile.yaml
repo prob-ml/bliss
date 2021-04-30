@@ -1,6 +1,7 @@
 # @package _group_
 name: SimulatedDataset
-params:
+kwargs:
+  decoder_kwargs: ${model.kwargs.decoder_kwargs}
   n_batches: 10
   batch_size: 6400
   num_workers: 0
