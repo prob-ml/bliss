@@ -19,7 +19,7 @@ class TestTune:
         overrides = {
             "model": "m2",
             "dataset": "m2" if devices.use_cuda else "cpu",
-            "dataset.params.n_batches": 2 if devices.use_cuda else 10,
+            "dataset.kwargs.n_batches": 2 if devices.use_cuda else 10,
             "training": "m2" if devices.use_cuda else "cpu",
             "optimizer": "m2",
             "tuning.n_epochs": 2 if devices.use_cuda else 1,
