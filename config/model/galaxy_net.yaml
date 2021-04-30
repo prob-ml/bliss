@@ -1,8 +1,8 @@
 # @package _group_
 name: OneCenteredGalaxyAE
-loss_type: gauss
-params:
+kwargs:
   slen: 44
   latent_dim: 8
   n_bands: 1
   hidden: 256
+  loss_type: gauss

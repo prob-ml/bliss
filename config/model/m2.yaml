@@ -6,11 +6,8 @@ image:
   background:
     - 686.0
     - 1123.0
-galaxy:
-  slen: 41
-  latent_dim: 8
-decoder:
-  params:
+kwargs:
+  decoder_kwargs:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
     tile_slen: 2
@@ -24,12 +21,9 @@ decoder:
     f_min: 1e3
     f_max: 1e6
     alpha: 0.5
-    gal_slen: ${model.galaxy.slen}
-    decoder_file: null
     psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
     background_values: ${model.image.background}
-encoder:
-  params:
+  encoder_kwargs:
     n_bands: ${model.image.n_bands}
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: 8
@@ -38,4 +32,4 @@ encoder:
     spatial_dropout: 0.11399
     dropout: 0.013123
     hidden: 185
-use_galaxy_encoder: False
+  use_galaxy_encoder: False

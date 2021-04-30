@@ -5,11 +5,8 @@ image:
   n_bands: 1
   background:
     - 633.0
-galaxy:
-  slen: 41
-  latent_dim: 8
-decoder:
-  params:
+kwargs:
+  decoder_kwargs:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
     tile_slen: ${model.image.slen}
@@ -22,13 +19,11 @@ decoder:
     f_min: 1e5
     f_max: 1e6
     gal_slen: ${model.galaxy.slen}
-    decoder_file: null
     psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
     background_values: ${model.image.background}
     loc_min: 0.
     loc_max: 1.0
-encoder:
-  params:
+  encoder_kwargs:
     n_bands: ${model.image.n_bands}
     tile_slen: ${model.decoder.params.tile_slen}
     ptile_slen: ${model.decoder.params.tile_slen}
@@ -37,4 +32,4 @@ encoder:
     spatial_dropout: 0.11399
     dropout: 0.013123
     hidden: 185
-use_galaxy_encoder: False
+  use_galaxy_encoder: False

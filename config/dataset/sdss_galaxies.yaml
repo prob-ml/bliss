@@ -5,7 +5,7 @@ cosmoDC2_file: "${paths.data}/gold_dc2_catalog.fits"
 batch_size: 64
 n_batches: 10
 num_workers: 0
-params:
+kwargs:
   background: 865
   deviate_center: false
   noise_factor: 0.05
@@ -16,19 +16,18 @@ params:
   max_a_d: 6.5
   min_a_b: 0.8
   max_a_b: 3.6 # from catalog with mag < 22.2 cut.
-sdss:
-  bands:
-    - 2
-  camcol: 1
-  center_subpixel: true
-  fields:
-    - 12
-  overwrite_cache: false
-  overwrite_fits_cache: false
-  run: 94
-  sdss_dir: "${paths.data}/sdss"
-  stampsize: 5
-psf:
   psf_points:
     - 450
     - 550
+  sdss_kwargs:
+    bands:
+      - 2
+    camcol: 1
+    center_subpixel: true
+    fields:
+      - 12
+    overwrite_cache: false
+    overwrite_fits_cache: false
+    run: 94
+    sdss_dir: "${paths.data}/sdss"
+    stampsize: 5
