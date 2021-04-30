@@ -81,7 +81,14 @@ class GalaxyAESetup:
 
     def get_trained_ae(self, overrides):
         cfg = self.get_cfg(overrides)
-        dataset = galsim_galaxies.ToyGaussian(cfg)
+
+        if cfg.dataset.name == "ToyGaussian":
+            dataset = galsim_galaxies.ToyGaussian(cfg)
+        elif cfg.dataset.name == "SDSSGalaxies":
+            dataset = galsim_galaxies.SDSSGalaxies(cfg)
+        else:
+            raise NotImplementedError("Dataset no available")
+
         galaxy_ae = galaxy_net.OneCenteredGalaxyAE(cfg)
         trainer = pl.Trainer(**cfg.training.trainer)
         trainer.fit(galaxy_ae, datamodule=dataset)
@@ -89,7 +96,13 @@ class GalaxyAESetup:
 
     def test_ae(self, overrides, galaxy_net):
         cfg = self.get_cfg(overrides)
-        test_module = galsim_galaxies.ToyGaussian(cfg)
+        if cfg.dataset.name == "ToyGaussian":
+            test_module = galsim_galaxies.ToyGaussian(cfg)
+        elif cfg.dataset.name == "SDSSGalaxies":
+            test_module = galsim_galaxies.SDSSGalaxies(cfg)
+        else:
+            raise NotImplementedError("Dataset no available")
+
         trainer = pl.Trainer(**cfg.training.trainer)
         return trainer.test(galaxy_net, datamodule=test_module)[0]
 

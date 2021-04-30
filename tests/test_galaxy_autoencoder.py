@@ -1,4 +1,4 @@
-def test_galaxy_autoencoder(galaxy_ae_setup, devices):
+def test_galaxy_autoencoder_toy_gaussian(galaxy_ae_setup, devices):
     use_cuda = devices.use_cuda
     overrides = {
         "model": "galaxy_net",
@@ -20,3 +20,27 @@ def test_galaxy_autoencoder(galaxy_ae_setup, devices):
         return
 
     assert results["max_residual"] < 25
+
+
+def test_galaxy_autoencoder_bulge_disk(galaxy_ae_setup, devices):
+    use_cuda = devices.use_cuda
+    overrides = {
+        "model": "galaxy_net",
+        "dataset": "sdss_galaxies",
+        "dataset.batch_size": 128 if use_cuda else 10,
+        "dataset.n_batches": 5 if use_cuda else 1,
+        "training": "unittest",
+        "training.n_epochs": 101 if use_cuda else 2,
+        "dataset.num_workers": 10 if use_cuda else 0,
+        "optimizer": "adam",
+    }
+
+    # train galaxy_vae
+    galaxy_ae = galaxy_ae_setup.get_trained_ae(overrides)
+    results = galaxy_ae_setup.test_ae(overrides, galaxy_ae)
+
+    # only expect tests to pass in cuda:
+    if not devices.use_cuda:
+        return
+
+    assert results["max_residual"] < 20
