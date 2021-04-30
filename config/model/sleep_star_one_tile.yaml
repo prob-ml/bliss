@@ -23,9 +23,9 @@ kwargs:
     loc_max: 1.0
   encoder_kwargs:
     n_bands: ${model.image.n_bands}
-    tile_slen: ${model.decoder.params.tile_slen}
-    ptile_slen: ${model.decoder.params.tile_slen}
-    max_detections: ${model.decoder.params.max_sources}
+    tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
+    ptile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
+    max_detections: ${model.kwargs.decoder_kwargs.max_sources}
     channel: 17
     spatial_dropout: 0.11399
     dropout: 0.013123

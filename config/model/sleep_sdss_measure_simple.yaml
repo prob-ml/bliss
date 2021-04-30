@@ -29,9 +29,9 @@ kwargs:
     background_values: ${model.image.background}
   encoder_kwargs:
     n_bands: ${model.image.n_bands}
-    tile_slen: ${model.decoder.params.tile_slen}
+    tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
     ptile_slen: 52
-    max_detections: ${model.decoder.params.max_sources}
+    max_detections: ${model.kwargs.decoder_kwargs.max_sources}
     channel: 8
     spatial_dropout: 0.0
     dropout: 0.0
