@@ -448,7 +448,7 @@ class SleepPhase(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         # NOTE: outputs is a list containing all validation step batches.
-        if self.plotting and self.current_epoch > 1:
+        if self.current_epoch > 1:
             self.make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
@@ -467,8 +467,7 @@ class SleepPhase(pl.LightningModule):
 
     def test_epoch_end(self, outputs):
         batch = outputs[-1]
-        if self.plotting:
-            self.make_plots(batch, kind="testing")
+        self.make_plots(batch, kind="testing")
 
     def get_metrics(self, batch):
         # get images and properties
