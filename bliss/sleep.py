@@ -19,10 +19,10 @@ from torch.nn import CrossEntropyLoss
 from torch.distributions import Normal
 from torch.optim import Adam
 
-from . import plotting
-from .models import encoder, decoder, galaxy_net
-from .models.encoder import get_star_bool, get_full_params
-from .metrics import eval_error_on_batch
+from bliss import plotting
+from bliss.models import encoder, decoder, galaxy_net
+from bliss.models.encoder import get_star_bool, get_full_params
+from bliss.metrics import eval_error_on_batch
 
 plt.switch_backend("Agg")
 
