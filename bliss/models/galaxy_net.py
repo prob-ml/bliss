@@ -16,6 +16,9 @@ class CenteredGalaxyEncoder(nn.Module):
     def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256):
         super().__init__()
 
+        self.slen = slen
+        self.latent_dim = latent_dim
+
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
         min_slen = f(f(slen))
 
