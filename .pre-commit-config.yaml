@@ -5,6 +5,8 @@ repos:
       - id: trailing-whitespace
         exclude: ^.*fits
       - id: check-added-large-files
+        args:
+          - "--maxkb=15000"
       - id: check-merge-conflict
       - id: end-of-file-fixer
         exclude: ^.*fits
