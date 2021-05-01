@@ -6,7 +6,7 @@ from astropy.io import fits
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Poisson, Normal
+from torch.distributions import Poisson
 import pytorch_lightning as pl
 
 from .encoder import get_is_on_from_n_sources, get_mgrid
@@ -30,11 +30,12 @@ class ImageDecoder(pl.LightningModule):
         alpha=0.5,
         prob_galaxy=0.0,
         n_galaxy_params=8,
-        gal_slen=41,
-        decoder_file=None,
-        psf_slen=25,
+        gal_slen=53,
+        autoencoder_ckpt=None,
+        latents_file=None,
         psf_params_file="psf_params.npy",
-        background_values=(686.0, 1123.0),
+        psf_slen=25,
+        background_values=(686.0,),
         loc_min=0.0,
         loc_max=1.0,
     ):
@@ -66,7 +67,8 @@ class ImageDecoder(pl.LightningModule):
         self.prob_galaxy = float(prob_galaxy)
         self.n_galaxy_params = n_galaxy_params
         self.gal_slen = gal_slen
-        self.gal_decoder_file = decoder_file
+        self.autoencoder_ckpt = autoencoder_ckpt
+        self.latents_file = latents_file
         # Star Decoder
         self.psf_slen = psf_slen
         self.psf_params_file = psf_params_file
@@ -108,17 +110,20 @@ class ImageDecoder(pl.LightningModule):
 
         ## Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
-            assert self.gal_decoder_file is not None
+            assert self.autoencoder_ckpt is not None and self.latents_file is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
                 self.n_bands,
                 self.tile_slen,
                 self.ptile_slen,
                 self.gal_slen,
                 self.n_galaxy_params,
-                self.gal_decoder_file,
+                self.autoencoder_ckpt,
             )
+            # load dataset of encoded simulated galaxies.
+            self.register_buffer("latents", torch.load(latents_file))
         else:
             self.galaxy_tile_decoder = None
+            self.register_buffer("latents", torch.zeros(1, 8))
 
         # background
         assert len(background_values) == n_bands
@@ -132,10 +137,8 @@ class ImageDecoder(pl.LightningModule):
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
         locs = self._sample_locs(is_on_array, batch_size)
 
-        n_galaxies, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(
-            n_sources, is_on_array
-        )
-        galaxy_params = self._sample_galaxy_params(n_galaxies, galaxy_bool)
+        _, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(n_sources, is_on_array)
+        galaxy_params = self._sample_galaxy_params(galaxy_bool)
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
         log_fluxes = self._get_log_fluxes(fluxes)
 
@@ -232,7 +235,7 @@ class ImageDecoder(pl.LightningModule):
     def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
         # the counts returned (n_galaxies, n_stars) are of shape (batch_size x n_tiles_per_image)
         # the booleans returned (galaxy_bool, star_bool) are of shape
-        # (batch_size x n_tiles_per_image x max_detections x 1)
+        # (batch_size x n_tiles_per_image x max_sources x 1)
         # this last dimension is so it is parallel to other galaxy/star params.
 
         batch_size = n_sources.size(0)
@@ -288,27 +291,25 @@ class ImageDecoder(pl.LightningModule):
 
         return fluxes
 
-    def _sample_galaxy_params(self, n_galaxies, galaxy_bool):
-        # galaxy params are just Normal(0,1) variables.
+    def _sample_galaxy_params(self, galaxy_bool):
+        # galaxy latent variables are obtaind from previously encoded variables from
+        # large dataset of simulated galaxies stored in `self.latents`
+        # NOTE: These latent variables DO NOT follow a specific distribution.
 
-        assert len(n_galaxies.shape) == 2
-        batch_size = n_galaxies.size(0)
-        mean = torch.zeros(1, dtype=torch.float, device=n_galaxies.device)
-        std = torch.ones(1, dtype=torch.float, device=n_galaxies.device)
-        p_z = Normal(mean, std)
+        assert galaxy_bool.shape[1:] == (self.n_tiles_per_image, self.max_sources, 1)
+        batch_size = galaxy_bool.size(0)
+        total_latent = batch_size * self.n_tiles_per_image * self.max_sources
         shape = (
             batch_size,
             self.n_tiles_per_image,
             self.max_sources,
             self.n_galaxy_params,
         )
-        sample_shape = torch.tensor(shape)
-        galaxy_params = p_z.rsample(sample_shape)
-        galaxy_params = galaxy_params.view(*shape)
 
-        # zero out excess according to galaxy_bool.
-        galaxy_params = galaxy_params * galaxy_bool
-        return galaxy_params
+        # first get random subset of indices to extract from self.latents
+        indices = torch.randint(0, len(self.latents), (total_latent,), device=galaxy_bool.device)
+        galaxy_params = self.latents[indices].reshape(shape)
+        return galaxy_params * galaxy_bool
 
     @staticmethod
     def _get_log_fluxes(fluxes):
@@ -608,7 +609,6 @@ class StarTileDecoder(nn.Module):
         super().__init__()
         self.tiler = tiler
         self.n_bands = n_bands
-
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
             psf_params = torch.from_numpy(np.load(psf_params_file))
@@ -736,27 +736,29 @@ class GalaxyTileDecoder(nn.Module):
         ptile_slen,
         gal_slen,
         n_galaxy_params,
-        decoder_file,
+        autoencoder_ckpt,
     ):
         super().__init__()
         self.n_bands = n_bands
         self.tiler = Tiler(tile_slen, ptile_slen)
         self.ptile_slen = ptile_slen
 
-        self.gal_slen = gal_slen
-        self.n_galaxy_params = n_galaxy_params
-        self.galaxy_decoder = None
-        dec = galaxy_net.CenteredGalaxyDecoder(gal_slen, n_galaxy_params, n_bands)
-        dec.load_state_dict(torch.load(decoder_file))
+        # load decoder after loading autoencoder from checkpoint.
+        autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        assert gal_slen == autoencoder.hparams.slen
+        assert n_galaxy_params == autoencoder.hparams.latent_dim
+        dec = autoencoder.dec
         dec.eval().requires_grad_(False)
         self.galaxy_decoder = dec
+
+        self.gal_slen = gal_slen
+        self.n_galaxy_params = n_galaxy_params
 
     def forward(self, locs, galaxy_params, galaxy_bool):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
 
-        assert self.galaxy_decoder is not None
         galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
@@ -787,7 +789,8 @@ class GalaxyTileDecoder(nn.Module):
 
         # forward only galaxies that are on!
         # no background
-        gal_on, var_on = self.galaxy_decoder.forward(z[b == 1])
+        gal_on = self.galaxy_decoder(z[b == 1])
+        var_on = gal_on  # poisson approximation, mean = var.
 
         # size the galaxy (either trims or crops to the size of ptile)
         gal_on = self._size_galaxy(gal_on)

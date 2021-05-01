@@ -1,8 +1,7 @@
 # @package _group_
-name: OneCenteredGalaxy
-warm_up: 0
-params:
-  slen: 51
+name: OneCenteredGalaxyAE
+kwargs:
+  slen: 53
   latent_dim: 8
   n_bands: 1
   hidden: 256
