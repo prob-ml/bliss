@@ -1,6 +1,6 @@
 # @package _group_
 ---
-batch_size: 64
-data_file: "${paths.data}/gold_sdss_galaxy_images.pt"
 name: "SavedGalaxies"
-do_norm: False
+kwargs:
+  batch_size: 64
+  data_file: "${paths.data}/small_sample_simulated_sdss_galaxies.pt"

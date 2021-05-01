@@ -12,16 +12,13 @@ def predict(cfg: DictConfig):
     bands = list(cfg.predict.bands)
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 
-    sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss)
+    sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss_kwargs)
 
-    ## To regenerate this checkpoint:
-    ## mode="train"
-    ## model="sleep_galaxy_measure_simple"
-    ## dataset="default"
-    ## optimizer.params.lr=1e-4
-    ## training.n_epochs=11
-    ## Save the output in cfg.predict.checkpoint
-    sleep_net = sleep.SleepPhase.load_from_checkpoint(cfg.predict.checkpoint)
+    if cfg.predict.checkpoint is not None:
+        sleep_net = sleep.SleepPhase.load_from_checkpoint(cfg.predict.checkpoint)
+    else:
+        # for unit testing.
+        sleep_net = sleep.SleepPhase(**cfg.model.kwargs)
 
     # image for prediction from SDSS
     image = sdss_obj[0]["image"][bands[0]]
@@ -53,13 +50,10 @@ def predict(cfg: DictConfig):
                 var_params = image_encoder.forward(ptiles, tile_n_sources)
 
                 # get galaxy params per tile
-                galaxy_param_mean, galaxy_param_var = sleep_net.forward_galaxy(
-                    ptiles, tile_params["locs"]
-                )
+                galaxy_param_mean = sleep_net.forward_galaxy(ptiles, tile_params["locs"])
 
                 # collect all parameters into one dictionary
                 var_params["galaxy_param_mean"] = galaxy_param_mean
-                var_params["gaalxy_param_var"] = galaxy_param_var
 
                 # put everything in the cpu before saving
                 var_params = {key: value.cpu() for key, value in var_params.items()}

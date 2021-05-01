@@ -1,5 +1,4 @@
 import warnings
-from omegaconf import DictConfig
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import IterableDataset, Dataset, DataLoader
@@ -12,16 +11,16 @@ warnings.filterwarnings(
 
 
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
-    def __init__(self, cfg: DictConfig):
+    def __init__(
+        self, decoder_kwargs, n_batches=10, batch_size=32, generate_device="cpu", testing_file=None
+    ):
         super().__init__()
-        self.cfg = cfg
 
-        self.n_batches = cfg.dataset.params.n_batches
-        self.batch_size = cfg.dataset.params.batch_size
-        self.image_decoder = ImageDecoder(**cfg.model.decoder.params).to(
-            cfg.dataset.params.generate_device
-        )
+        self.n_batches = n_batches
+        self.batch_size = batch_size
+        self.image_decoder = ImageDecoder(**decoder_kwargs).to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
+        self.testing_file = testing_file
 
         # check sleep training will work.
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
@@ -66,11 +65,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def test_dataloader(self):
         dl = DataLoader(self, batch_size=None, num_workers=0)
 
-        if self.cfg.testing.file is not None:
-            test_dataset = BlissDataset(self.cfg.testing.file)
-            batch_size = self.cfg.testing.batch_size
-            num_workers = self.cfg.testing.num_workers
-            dl = DataLoader(test_dataset, batch_size=batch_size, num_workers=num_workers)
+        if self.testing_file:
+            test_dataset = BlissDataset(self.testing_file)
+            dl = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
 
         return dl
 

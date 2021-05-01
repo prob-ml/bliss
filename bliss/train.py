@@ -22,7 +22,7 @@ _datasets = [
 ]
 datasets = {cls.__name__: cls for cls in _datasets}
 
-_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxy]
+_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxyAE]
 models = {cls.__name__: cls for cls in _models}
 
 
@@ -93,10 +93,10 @@ def train(cfg: DictConfig):
     setup_seed(cfg)
 
     # setup dataset.
-    dataset = datasets[cfg.dataset.name](cfg)
+    dataset = datasets[cfg.dataset.name](**cfg.dataset.kwargs)
 
     # setup model
-    model = models[cfg.model.name](cfg)
+    model = models[cfg.model.name](**cfg.model.kwargs, optimizer_params=cfg.optimizer)
 
     # setup trainer
     profiler = setup_profiler(cfg, paths)

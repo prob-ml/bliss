@@ -1,6 +1,6 @@
 # @package _group_
 # image and sdss parameters
-sdss:
+sdss_kwargs:
   sdss_dir: ${paths.data}/sdss
   run: 3900
   camcol: 6
@@ -14,7 +14,7 @@ bands:
   - 2
 
 # i/o parameters
-checkpoint: ${paths.root}/models/sdss_sleep_measure_simple_tiny.ckpt
+checkpoint: ${paths.root}/models/sleep_sdss_measure.ckpt
 device: "cuda:${gpus.0}"
 output_file: "${paths.data}/var_params.pt"
 

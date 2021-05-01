@@ -20,18 +20,18 @@ from bliss.datasets.simulated import SimulatedDataset
 
 def sleep_trainable(search_space, cfg: DictConfig):
     # set up the config for SleepPhase
-    cfg.model.encoder.params.channel = search_space["channel"]
-    cfg.model.encoder.params.hidden = search_space["hidden"]
-    cfg.model.encoder.params.spatial_dropout = search_space["spatial_dropout"]
-    cfg.model.encoder.params.dropout = search_space["dropout"]
-    cfg.optimizer.params.lr = search_space["lr"]
-    cfg.optimizer.params.weight_decay = search_space["weight_decay"]
+    cfg.model.kwargs.encoder_kwargs.channel = search_space["channel"]
+    cfg.model.kwargs.encoder_kwargs.hidden = search_space["hidden"]
+    cfg.model.kwargs.encoder_kwargs.spatial_dropout = search_space["spatial_dropout"]
+    cfg.model.kwargs.encoder_kwargs.dropout = search_space["dropout"]
+    cfg.optimizer.kwargs.lr = search_space["lr"]
+    cfg.optimizer.kwargs.weight_decay = search_space["weight_decay"]
 
     # model
-    model = sleep.SleepPhase(cfg)
+    model = sleep.SleepPhase(**cfg.model.kwargs, optimizer_params=cfg.optimizer)
 
     # data module
-    dataset = SimulatedDataset(cfg)
+    dataset = SimulatedDataset(**cfg.dataset.kwargs)
 
     # set up trainer
     logging.getLogger("lightning").setLevel(0)

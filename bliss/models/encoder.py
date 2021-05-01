@@ -236,7 +236,7 @@ class ImageEncoder(nn.Module):
                            image padded tiles (usually 8 for stars, and _ for galaxies).
         n_bands (int): number of bands
         max_detections (int): Number of maximum detections in a single tile.
-        n_galaxy_params (int): Number of latent dimensions in the galaxy VAE network.
+        n_galaxy_params (int): Number of latent dimensions in the galaxy AE network.
 
         """
         super().__init__()
