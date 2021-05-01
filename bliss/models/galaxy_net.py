@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
-from torch.nn import L1Loss, MSELoss
 
 from bliss.optimizer import get_optimizer
 
@@ -83,7 +82,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim=8,
         hidden=256,
         n_bands=1,
-        loss_type="gauss",
         optimizer_params: dict = None,
     ):
         super().__init__()
@@ -95,8 +93,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.dec = CenteredGalaxyDecoder(
             slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
         )
-
-        self.loss_type = loss_type
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
@@ -110,17 +106,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return recon_mean
 
     def get_loss(self, image, recon_mean):
-
-        if self.loss_type == "gauss":
-            return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
-
-        if self.loss_type == "L2":
-            return MSELoss(reduction="sum")(image, recon_mean)
-
-        if self.loss_type == "L1":
-            return L1Loss(reduction="sum")(image, recon_mean)
-
-        raise NotImplementedError("Loss not implemented.")
+        return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
 
     # ---------------
     # Optimizer
