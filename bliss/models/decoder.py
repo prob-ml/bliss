@@ -33,9 +33,9 @@ class ImageDecoder(pl.LightningModule):
         gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
-        psf_slen=25,
         psf_params_file="psf_params.npy",
-        background_values=(686.0, 1123.0),
+        psf_slen=25,
+        background_values=(686.0,),
         loc_min=0.0,
         loc_max=1.0,
     ):
@@ -609,7 +609,6 @@ class StarTileDecoder(nn.Module):
         super().__init__()
         self.tiler = tiler
         self.n_bands = n_bands
-
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
             psf_params = torch.from_numpy(np.load(psf_params_file))

@@ -14,14 +14,11 @@ def predict(cfg: DictConfig):
 
     sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss_kwargs)
 
-    ## To regenerate this checkpoint:
-    ## mode="train"
-    ## model="sleep_galaxy_measure_simple"
-    ## dataset="default"
-    ## optimizer.params.lr=1e-4
-    ## training.n_epochs=11
-    ## Save the output in cfg.predict.checkpoint
-    sleep_net = sleep.SleepPhase.load_from_checkpoint(cfg.predict.checkpoint)
+    if cfg.predict.checkpoint is not None:
+        sleep_net = sleep.SleepPhase.load_from_checkpoint(cfg.predict.checkpoint)
+    else:
+        # for unit testing.
+        sleep_net = sleep.SleepPhase(**cfg.model.kwargs)
 
     # image for prediction from SDSS
     image = sdss_obj[0]["image"][bands[0]]
