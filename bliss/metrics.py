@@ -1,5 +1,6 @@
 import torch
 from scipy import optimize as sp_optim
+from einops import reduce
 
 
 def inner_join_locs(locs1, locs2):
@@ -107,8 +108,14 @@ def eval_error_on_batch(true_params, est_params, slen):
     count_bool = true_params["n_sources"].eq(est_params["n_sources"])
 
     # accuracy of galaxy counts
-    est_n_gal = est_params["galaxy_bool"].view(batch_size, -1).sum(-1)
-    true_n_gal = true_params["galaxy_bool"].view(batch_size, -1).sum(-1)
+    est_n_gal_old = est_params["galaxy_bool"].view(batch_size, -1).sum(-1)
+    est_n_gal = reduce(est_params["galaxy_bool"], "b n 1 -> b", "sum")
+    assert torch.allclose(est_n_gal, est_n_gal_old)
+
+    true_n_gal_old = true_params["galaxy_bool"].view(batch_size, -1).sum(-1)
+    true_n_gal = reduce(true_params["galaxy_bool"], "b n 1 -> b", "sum")
+    assert torch.allclose(true_n_gal, true_n_gal_old)
+
     galaxy_counts_bool = est_n_gal.eq(true_n_gal)
 
     for i in range(batch_size):
