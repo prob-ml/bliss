@@ -1,8 +1,13 @@
 import numpy as np
+
 import torch
 from torch.utils.data import Dataset
+import torch.nn.functional as F
 
-from bliss.models.decoder import Tiler
+from bliss.models.decoder import Tiler, get_is_on_from_n_sources
+
+from torch.distributions import Poisson
+
 
 import galaxy_simulator_lib
 
@@ -37,11 +42,10 @@ def _convolve_w_psf(images, psf):
     # need to flip based on how the pytorch convolution works ... 
     _psf = psf.flip(-1).flip(1).unsqueeze(0)
     padding = int((psf.shape[-1] - 1) / 2)
-    images = \
-        torch.nn.functional.conv2d(images, 
-                                   _psf, 
-                                   stride = 1,
-                                   padding = padding)
+    images = F.conv2d(images, 
+                      _psf, 
+                      stride = 1,
+                      padding = padding)
     
     return images
 
@@ -55,22 +59,27 @@ class SimulatedImages(Dataset):
                  ptile_slen = 52, 
                  mean_sources_per_tile = 0.05,
                  max_sources_per_tile = 2, 
+                 prob_galaxy = 0.5, 
                  flux_range = [1000, 5000.],
                  ell_range = [0.25, 1], 
                  theta_range = [0, 2 * np.pi],
                  hlr_range = [0, 3],
                  background = 686., 
-                 batchsize = 64):
+                 n_images = 64):
         
         # some constants
-        self.batchsize = batchsize
-        n_tiles_per_image = slen / tile_slen
+        self.n_images = n_images
+        self.slen = slen 
+        self.tile_slen = tile_slen 
+        self.ptile_slen = ptile_slen
+        
+        n_tiles_per_image = (self.slen / self.tile_slen)**2
         assert n_tiles_per_image % 1 == 0
         self.n_tiles_per_image = int(n_tiles_per_image)
         
         self.max_sources_per_tile = max_sources_per_tile
         
-        self.n_sources = self.batchsize * self.n_tiles_per_image * \
+        self.n_sources = self.n_images * self.n_tiles_per_image * \
                             self.max_sources_per_tile
 
         
@@ -102,6 +111,12 @@ class SimulatedImages(Dataset):
         # range for half light radius
         # (in pixels)
         self.hlr_range = hlr_range
+        
+        # probability of galaxy
+        self.prob_galaxy = prob_galaxy
+        
+        # mean number of sources
+        self.mean_sources_per_tile = mean_sources_per_tile
                 
         # sky background
         self.background = background
@@ -113,7 +128,7 @@ class SimulatedImages(Dataset):
                                        normalize = False)
         
         # the tiler
-        self.tiler = Tiler(tile_slen, ptile_slen)
+        self.tiler = Tiler(tile_slen, ptile_slen).to(device)
         
     def _sample_galaxies(self): 
         
@@ -158,8 +173,82 @@ class SimulatedImages(Dataset):
                                                self.nbands, 
                                                1, 1)
         return stars, fluxes
-        
     
+    def _sample_ptiles(self): 
+        
+        # sample number of sources 
+        m = Poisson(self.mean_sources_per_tile)
+        n_sources = m.sample([self.n_images, self.n_tiles_per_image])
+
+        # long() here is necessary because used for indexing and one_hot encoding.
+        n_sources = n_sources.clamp(max=self.max_sources_per_tile)
+        n_sources = n_sources.long().view(self.n_images * self.n_tiles_per_image)
+        
+        is_on_array = get_is_on_from_n_sources(n_sources, 
+                                               self.max_sources_per_tile).to(device)
+        
+        # sample galaxies
+        u = _sample_uniform((0, 1), is_on_array.shape)
+        galaxy_bool = is_on_array * (u < self.prob_galaxy)
+        
+        # sample locations 
+        locs = _sample_uniform((0, 1), (self.n_sources, 2))
+        
+        # sample stars
+        stars, fluxes = self._sample_stars()
+        star_ptiles = self.tiler(locs, stars).view(-1, 
+                                                   self.max_sources_per_tile, 
+                                                   self.nbands, 
+                                                   self.ptile_slen, 
+                                                   self.ptile_slen)
+        
+        # sample galaxies 
+        gals = self._sample_galaxies()
+        gal_ptiles = self.tiler(locs, gals).view(-1, 
+                                                 self.max_sources_per_tile, 
+                                                 self.nbands, 
+                                                 self.ptile_slen, 
+                                                 self.ptile_slen)
+        
+        # combine 
+        _is_on = is_on_array.view(-1, self.max_sources_per_tile, 1, 1, 1)
+        _galaxy_bool = galaxy_bool.view(-1, self.max_sources_per_tile, 1, 1, 1)
+        image_ptiles = ((gal_ptiles * _galaxy_bool + star_ptiles * (1 - _galaxy_bool)) * _is_on).sum(1)
+        
+        # reshape appropriately 
+        image_ptiles = image_ptiles.view(self.n_images, 
+                                         self.n_tiles_per_image, 
+                                         self.nbands, 
+                                         self.ptile_slen, 
+                                         self.ptile_slen)
+        
+        _is_on2 = is_on_array.view(self.n_images, 
+                                   self.n_tiles_per_image, 
+                                   self.max_sources_per_tile, 
+                                   1)
+        
+        locs = locs.view(self.n_images, 
+                         self.n_tiles_per_image, 
+                         self.max_sources_per_tile, 
+                         2) * _is_on2
+        
+        fluxes = fluxes.view(self.n_images, 
+                             self.n_tiles_per_image, 
+                             self.max_sources_per_tile, 
+                             self.nbands) * _is_on2
+        
+        n_sources = n_sources.view(self.n_images, self.n_tiles_per_image)
+        
+        galaxy_bool = galaxy_bool.view(self.n_images, 
+                                       self.n_tiles_per_image, 
+                                       self.max_sources_per_tile, 
+                                       1)
+                                   
+        
+        
+        return image_ptiles, n_sources, locs, fluxes, galaxy_bool
+        
+        
     def __len__(self):
         return self.n_images
 
