@@ -85,7 +85,7 @@ class WakeNet(pl.LightningModule):
 
     def get_loss(self, batch):
         img = batch.unsqueeze(0)
-        recon_mean = self.forward(img)
+        recon_mean = self(img)
         error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
 
         image_indx_start = self.border_padding

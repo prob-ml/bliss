@@ -612,7 +612,7 @@ class ImageEncoder(nn.Module):
 
         # MAP (for n_sources) prediction on var params on each tile
         tile_n_sources = self.tile_map_n_sources(image_ptiles)
-        pred = self.forward(image_ptiles, tile_n_sources)
+        pred = self(image_ptiles, tile_n_sources)
 
         return self.tile_map_estimate_from_var_params(pred, n_tiles_per_image, batch_size)
 
