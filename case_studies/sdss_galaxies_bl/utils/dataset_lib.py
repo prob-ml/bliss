@@ -3,12 +3,12 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from bliss.models.decoder import Tiler, get_is_on_from_n_sources
+from bliss.models.decoder import Tiler, get_is_on_from_n_sources, ImageDecoder
 
 from torch.distributions import Poisson
 
 
-import source_simulator_lib
+from source_simulator_lib import SourceSimulator
 from which_device import device
 
 
@@ -38,37 +38,39 @@ class SimulatedImages(Dataset):
                  theta_range = [0, 2 * np.pi],
                  hlr_range = [0, 3],
                  background = 686., 
+                 border_padding = 0, 
                  n_images = 64):
         
         # some constants
         self.n_images = n_images
         self.slen = slen 
-        
+        self.tile_slen = tile_slen
+        self.ptile_slen = ptile_slen
         
         n_tiles_per_image = (self.slen / self.tile_slen)**2
         assert n_tiles_per_image % 1 == 0
         self.n_tiles_per_image = int(n_tiles_per_image)
         
+        self.n_ptiles = self.n_images * self.n_tiles_per_image
+        
         self.max_sources_per_tile = max_sources_per_tile
         
         self.n_sources = self.n_images * self.n_tiles_per_image * \
                             self.max_sources_per_tile
-
         
-        # first dimension is bands 
-        self.nbands = psf.shape[0]
-        if self.nbands > 1: 
+        self.border_padding = border_padding
+        
+        self.n_bands = psf.shape[0]
+        if self.n_bands > 1: 
             raise NotImplementedError()
         
-        # the psf
-        psf_slen = psf.shape[1]
-        assert psf.shape[2] == psf.shape[1]
-        self.psf = psf
-        self.psf_expanded = psf.expand(self.n_sources, 
-                                       self.nbands, 
-                                       psf_slen, 
-                                       psf_slen)
-                
+        # the source simulator 
+        self.background = background
+        self.source_simulator = SourceSimulator(psf,
+                                                tile_slen = tile_slen,
+                                                ptile_slen = ptile_slen, 
+                                                gal_slen = gal_slen)
+
         # range for fluxes
         self.flux_range = flux_range 
         
@@ -89,138 +91,123 @@ class SimulatedImages(Dataset):
         
         # mean number of sources
         self.mean_sources_per_tile = mean_sources_per_tile
-                
-        # sky background
-        self.background = background
+
         
-        # grid for galaxy
-        self.gal_slen = gal_slen
-        assert (self.gal_slen % 2 == 1)
-        self.galaxy_mgrid = _get_mgrid(self.gal_slen, 
-                                       normalize = False)
-        
-        # the tiler
-        self.tiler = Tiler(tile_slen, ptile_slen).to(device)
-        
-    def _sample_galaxies(self): 
+    def _sample_galaxy_params(self): 
         
         # sample fluxes 
-        fluxes = _sample_uniform(self.flux_range, self.n_sources)
+        flux = _sample_uniform(self.flux_range, self.n_sources)
         
         # sample ellipticity
-        ells = _sample_uniform(self.ell_range, self.n_sources)
+        ell = _sample_uniform(self.ell_range, self.n_sources)
 
         # sample angle
-        thetas = _sample_uniform(self.theta_range, self.n_sources)
+        theta = _sample_uniform(self.theta_range, self.n_sources)
         
         # sample half-light radii
-        # one for each profile
-        r_dev = _sample_uniform(self.hlr_range, self.n_sources)
-        r_exp = _sample_uniform(self.hlr_range, self.n_sources)
+        rad = _sample_uniform(self.hlr_range, self.n_sources)
+        
+        galaxy_params = dict(flux = flux, 
+                             theta = theta, 
+                             ell = ell, 
+                             rad = rad)
+        
+        # flatten so that its n_ptiles x max_sources x -1
+        for key in galaxy_params:
+            galaxy_params[key] = galaxy_params[key].view(self.n_ptiles, 
+                                                         self.max_sources_per_tile, 
+                                                         -1)
 
-        # mixture weights 
-        p_dev = _sample_uniform((0, 1), self.n_sources)
-                
-        # render gaussians 
-        centered_galaxies = \
-            galaxy_simulator_lib.render_centered_galaxy(flux = fluxes, 
-                                                        theta = thetas, 
-                                                        ell = ells, 
-                                                        r_dev = r_dev, 
-                                                        r_exp = r_exp,
-                                                        p_dev = p_dev, 
-                                                        galaxy_mgrid = self.galaxy_mgrid)
         
-        centered_galaxies = _convolve_w_psf(centered_galaxies, self.psf)
-        
-        
-        return centered_galaxies
+        return galaxy_params
     
     
-    def _sample_stars(self): 
+    def _sample_star_fluxes(self): 
                 
-        fluxes = _sample_uniform(self.flux_range, (self.n_sources, self.nbands))
+        fluxes = _sample_uniform(self.flux_range, (self.n_ptiles, 
+                                                   self.max_sources_per_tile,
+                                                   self.n_bands))
         
-        stars = self.psf_expanded * fluxes.view(self.n_sources, 
-                                               self.nbands, 
-                                               1, 1)
-        return stars, fluxes
+        return fluxes
     
     def _sample_ptiles(self): 
         
         # sample number of sources 
         m = Poisson(self.mean_sources_per_tile)
-        n_sources = m.sample([self.n_images, self.n_tiles_per_image])
+        n_sources = m.sample([self.n_ptiles])
 
         # long() here is necessary because used for indexing and one_hot encoding.
-        n_sources = n_sources.clamp(max=self.max_sources_per_tile)
-        n_sources = n_sources.long().view(self.n_images * self.n_tiles_per_image)
+        n_sources = n_sources.clamp(max=self.max_sources_per_tile).long()
         
         is_on_array = get_is_on_from_n_sources(n_sources, 
                                                self.max_sources_per_tile).to(device)
+        is_on_array = is_on_array.unsqueeze(-1)
         
         # sample galaxies
         u = _sample_uniform((0, 1), is_on_array.shape)
         galaxy_bool = is_on_array * (u < self.prob_galaxy)
+        star_bool = is_on_array * (1 - galaxy_bool)
         
         # sample locations 
-        locs = _sample_uniform((0, 1), (self.n_sources, 2))
+        locs = _sample_uniform((0, 1), (self.n_ptiles, 
+                                        self.max_sources_per_tile, 
+                                        2))
         
         # sample stars
-        stars, fluxes = self._sample_stars()
-        star_ptiles = self.tiler(locs, stars).view(-1, 
-                                                   self.max_sources_per_tile, 
-                                                   self.nbands, 
-                                                   self.ptile_slen, 
-                                                   self.ptile_slen)
+        star_fluxes = self._sample_star_fluxes()
         
-        # sample galaxies 
-        gals = self._sample_galaxies()
-        gal_ptiles = self.tiler(locs, gals).view(-1, 
-                                                 self.max_sources_per_tile, 
-                                                 self.nbands, 
-                                                 self.ptile_slen, 
-                                                 self.ptile_slen)
+        stars = self.source_simulator.render_stars(locs, 
+                                              star_fluxes,
+                                              star_bool)
         
-        # combine 
-        _is_on = is_on_array.view(-1, self.max_sources_per_tile, 1, 1, 1)
-        _galaxy_bool = galaxy_bool.view(-1, self.max_sources_per_tile, 1, 1, 1)
-        image_ptiles = ((gal_ptiles * _galaxy_bool + star_ptiles * (1 - _galaxy_bool)) * _is_on).sum(1)
+        # sample galaxies
+        galaxy_params = self._sample_galaxy_params()
+        galaxies = self.source_simulator.render_galaxies(locs, 
+                                                         galaxy_params,
+                                                         galaxy_bool)
+    
+        image_ptiles = stars + galaxies        
         
-        # reshape appropriately 
+        return image_ptiles, locs, star_fluxes, n_sources, galaxy_bool
+        
+    
+    def sample_batch(self): 
+        image_ptiles, locs, star_fluxes, n_sources, galaxy_bool = \
+            self._sample_ptiles()
+        
         image_ptiles = image_ptiles.view(self.n_images, 
                                          self.n_tiles_per_image, 
-                                         self.nbands, 
+                                         self.n_bands, 
                                          self.ptile_slen, 
                                          self.ptile_slen)
         
-        _is_on2 = is_on_array.view(self.n_images, 
-                                   self.n_tiles_per_image, 
-                                   self.max_sources_per_tile, 
-                                   1)
+        images = ImageDecoder._construct_full_image_from_ptiles(image_ptiles, 
+                                                  tile_slen = self.tile_slen, 
+                                                  border_padding = self.border_padding)
         
-        locs = locs.view(self.n_images, 
-                         self.n_tiles_per_image, 
-                         self.max_sources_per_tile, 
-                         2) * _is_on2
+        images += self.background
         
-        fluxes = fluxes.view(self.n_images, 
-                             self.n_tiles_per_image, 
-                             self.max_sources_per_tile, 
-                             self.nbands) * _is_on2
-        
-        n_sources = n_sources.view(self.n_images, self.n_tiles_per_image)
-        
-        galaxy_bool = galaxy_bool.view(self.n_images, 
-                                       self.n_tiles_per_image, 
-                                       self.max_sources_per_tile, 
-                                       1)
-                                   
+        # add noise
+        images += torch.randn(images.shape, device = device) * torch.sqrt(images)
         
         
-        return image_ptiles, n_sources, locs, fluxes, galaxy_bool
+        def _reshape_params(param): 
+            return param.view(self.n_images, 
+                              self.n_tiles_per_image,
+                              self.max_sources_per_tile, 
+                              -1)
         
+        batch = dict(images = images, 
+                     locs = _reshape_params(locs), 
+                     log_fluxes = _reshape_params(torch.log(star_fluxes)), 
+                     n_sources = n_sources.view(self.n_images, 
+                                                self.n_tiles_per_image), 
+                     galaxy_bool = _reshape_params(galaxy_bool))
+                     
+        return batch
+                     
         
+    
     def __len__(self):
         return self.n_images
 

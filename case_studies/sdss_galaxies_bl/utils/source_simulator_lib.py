@@ -150,8 +150,7 @@ class SourceSimulator:
                  psf,
                  tile_slen,
                  ptile_slen,
-                 gal_slen = 51,
-                 background = 686.): 
+                 gal_slen = 51): 
         
         self.tile_slen = tile_slen 
         self.ptile_slen = ptile_slen
@@ -164,10 +163,7 @@ class SourceSimulator:
             raise NotImplementedError()
         self.psf = self.tiler.fit_source_to_ptile(psf)
         self.psf_slen = self.psf.shape[-1]
-        
-        # sky background
-        self.background = background
-        
+                
         # grid on which we render galaxies
         assert (gal_slen % 2) == 1
         self.gal_slen = gal_slen
