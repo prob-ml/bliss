@@ -69,10 +69,14 @@ def render_gaussian_galaxies(r2_grid, half_light_radii):
     assert r2_grid.shape[0] == len(half_light_radii)
     batchsize = len(half_light_radii)
     
-    scale = half_light_radii.view(batchsize, 1, 1)**2 / np.log(2)
+    var = half_light_radii.view(batchsize, 1, 1)**2 / np.log(2)
     
-    return torch.exp(-r2_grid / scale)
+    return torch.exp(-0.5 * r2_grid / var) / (torch.sqrt(2 * np.pi * var))
 
+
+# TODO: I think we need to the profiles below ... 
+# other fluxes wont be in the correct units    
+    
 def render_exponential_galaxies(r2_grid, half_light_radii): 
     
     assert r2_grid.shape[0] == len(half_light_radii)
@@ -96,7 +100,7 @@ def render_devaucouleurs_galaxies(r2_grid, half_light_radii):
 ###############
 # function to render centered galaxies
 ###############
-def render_centered_galaxy(flux, theta, ell, r_dev, r_exp, p_dev, 
+def render_centered_galaxy(flux, theta, ell, rad, 
                            galaxy_mgrid): 
     
     # number of galaxies
@@ -107,22 +111,15 @@ def render_centered_galaxy(flux, theta, ell, r_dev, r_exp, p_dev,
                                               theta = theta,  
                                               ell = ell)
     
-    # exponential profile
-    exp_profile = render_exponential_galaxies(r2_grid, 
-                                              half_light_radii = r_exp) 
+    # gaussian profile
+    gauss_profile = render_gaussian_galaxies(r2_grid, 
+                                             half_light_radii = rad) 
     
-    # dev. profile 
-    dev_profile = render_exponential_galaxies(r2_grid, 
-                                              half_light_radii = r_dev)
-    
-    # mixture weight and fluxes
-    p_dev = p_dev.view(n_galaxies, 1, 1)
     flux = flux.view(n_galaxies, 1, 1)
     
-    centered_galaxy = exp_profile * (1 - p_dev) + exp_profile * p_dev
-    centered_galaxy *= flux
+    gauss_profile *= flux
     
-    return centered_galaxy.unsqueeze(1)
+    return gauss_profile.unsqueeze(1)
 
 ##################
 # function to convolve w psf
@@ -153,6 +150,7 @@ class SourceSimulator:
                  psf,
                  tile_slen,
                  ptile_slen,
+                 gal_slen = 51,
                  background = 686.): 
         
         self.tile_slen = tile_slen 
@@ -171,7 +169,8 @@ class SourceSimulator:
         self.background = background
         
         # grid on which we render galaxies
-        self.gal_slen = ptile_slen + (ptile_slen % 2 == 0)
+        assert (gal_slen % 2) == 1
+        self.gal_slen = gal_slen
         self.galaxy_mgrid = get_mgrid(self.gal_slen) 
         
         # this is so that the radius are in pixels
@@ -203,9 +202,8 @@ class SourceSimulator:
         # keys giving the "fluxes"
         # theta : rotation angle 
         # ell : ellipticity 
-        # r_dev : de Vaucouleurs galaxy radius 
-        # r_exp : exponential galaxy radius 
-        # all shapres are (n_ptiles x max_stars x 1)
+        # rad : half light galaxy radius 
+        # all shapes are (n_ptiles x max_stars x 1)
         
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
@@ -213,30 +211,32 @@ class SourceSimulator:
         flux = galaxy_params['flux'].view(n_ptiles * max_sources)
         theta = galaxy_params['theta'].view(n_ptiles * max_sources)
         ell = galaxy_params['ell'].view(n_ptiles * max_sources)
-        r_dev = galaxy_params['r_dev'].view(n_ptiles * max_sources)
-        r_exp = galaxy_params['r_exp'].view(n_ptiles * max_sources)
-        p_dev = galaxy_params['p_dev'].view(n_ptiles * max_sources)
+        rad = galaxy_params['rad'].view(n_ptiles * max_sources)
         
         # render centered galaxies
         centered_galaxies = \
             render_centered_galaxy(flux = flux, 
                                    theta = theta, 
                                    ell = ell, 
-                                   r_dev = r_dev, 
-                                   r_exp = r_exp,
-                                   p_dev = p_dev, 
+                                   rad = rad, 
                                    galaxy_mgrid = self.galaxy_mgrid)
-        
+                
         # convolve w psf 
         centered_galaxies = _convolve_w_psf(centered_galaxies, self.psf)
-                
+        
+        # fit to size on ptile 
+        centered_galaxies = self.tiler.fit_source_to_ptile(\
+                                centered_galaxies.view(n_ptiles * max_sources * self.n_bands, 
+                                                       self.gal_slen, 
+                                                       self.gal_slen))
+        
         # reshape and turn off galaxies       
         centered_galaxies = centered_galaxies.view(n_ptiles, 
                                                    max_sources, 
                                                    self.n_bands,
-                                                   self.gal_slen, 
-                                                   self.gal_slen) * \
+                                                   centered_galaxies.shape[-1], 
+                                                   centered_galaxies.shape[-1]) * \
             galaxy_bool.unsqueeze(-1).unsqueeze(-1)       
-        
+                
         return self.tiler.render_tile(locs, centered_galaxies)
         

@@ -6,6 +6,7 @@ from torch.distributions import Normal
 
 import numpy as np
 
+
 # define parameters for the catalog
 class CatalogParameters(nn.Module):
     def __init__(self, init_locs, init_fluxes): 
@@ -24,15 +25,14 @@ class CatalogParameters(nn.Module):
                                   init_locs.shape[1], 
                                   1)
         # star parameters
-        self.star_flux_param_free = nn.Parameter(init_fluxes.clone())
+        init_free_fluxes = torch.log(init_fluxes).contiguous()
+        self.star_flux_param_free = nn.Parameter(init_free_fluxes.clone())
         
         # galaxy parameters
-        self.gal_flux_param_free = nn.Parameter(init_fluxes.clone())
+        self.gal_flux_param_free = nn.Parameter(init_free_fluxes.clone())
         self.theta_param_free = nn.Parameter(init_params.clone())
         self.ell_param_free = nn.Parameter(init_params.clone())
-        self.rdev_free = nn.Parameter(init_params.clone())
-        self.rexp_free = nn.Parameter(init_params.clone())
-        self.pdev_dev_free = nn.Parameter(init_params.clone())
+        self.rad_free = nn.Parameter(init_params.clone())
         
     def get_locations(self): 
         # return locations
@@ -54,18 +54,12 @@ class CatalogParameters(nn.Module):
         ell = torch.sigmoid(self.ell_param_free) 
         
         # radii are positive 
-        r_dev = self.rdev_free.exp()
-        r_exp = self.rexp_free.exp()
-        
-        # between zero and 1
-        p_dev = torch.sigmoid(self.pdev_dev_free)
+        rad = self.rad_free.exp()
         
         return dict(flux = flux, 
                     theta = theta, 
                     ell = ell, 
-                    r_dev = r_dev, 
-                    r_exp = r_exp,
-                    p_dev = p_dev)
+                    rad = rad)
     
 def get_loss(image, 
              background,
