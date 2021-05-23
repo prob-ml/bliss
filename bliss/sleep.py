@@ -214,6 +214,7 @@ class SleepPhase(pl.LightningModule):
         if self.use_galaxy_encoder:
             batch_size = images.shape[0]
             max_detections = 1
+            # NOTE: tile_est["locs"].shape = (2, 100, 1, 2)
             tile_locs = tile_est["locs"].reshape(-1, max_detections, 2)
             image_ptiles = self.image_encoder.get_images_in_tiles(images)
             tile_galaxy_params = self.forward_galaxy(image_ptiles, tile_locs)
@@ -224,6 +225,7 @@ class SleepPhase(pl.LightningModule):
                 max_detections,
                 n_galaxy_params,
             )
+            # NOTE: tile_est["locs"].shape = (2, 100, 1, 8)
             tile_est["galaxy_params"] = tile_galaxy_params
 
         return tile_est
@@ -265,7 +267,10 @@ class SleepPhase(pl.LightningModule):
         )
 
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
-        recon_losses = recon_losses.view(batch_size, -1).sum()
+        recon_losses_old = recon_losses.view(batch_size, -1).sum()
+        # NOTE: why do we need .view here
+        recon_losses = recon_losses.sum()
+        assert torch.allclose(recon_losses_old, recon_losses)
 
         return recon_losses
 
