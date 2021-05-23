@@ -86,7 +86,7 @@ def get_loss(image,
                                                 my_catalog.get_galaxy_params(), 
                                                 gal_bool)
     
-    recon_mean = background + stars # + galaxies
+    recon_mean = background + stars + galaxies
     
     normal = Normal(loc = recon_mean, scale = torch.sqrt(recon_mean))
     

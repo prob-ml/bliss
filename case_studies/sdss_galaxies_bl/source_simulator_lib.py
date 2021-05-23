@@ -153,7 +153,6 @@ class SourceSimulator:
                  psf,
                  tile_slen,
                  ptile_slen,
-                 gal_slen = 51,
                  background = 686.): 
         
         self.tile_slen = tile_slen 
@@ -165,14 +164,14 @@ class SourceSimulator:
         self.n_bands = psf.shape[0]
         if self.n_bands > 1: 
             raise NotImplementedError()
-        self.psf = psf
+        self.psf = self.tiler.fit_source_to_ptile(psf)
+        self.psf_slen = self.psf.shape[-1]
         
         # sky background
         self.background = background
         
         # grid on which we render galaxies
-        self.gal_slen = gal_slen
-        assert (self.gal_slen % 2 == 1)
+        self.gal_slen = ptile_slen + (ptile_slen % 2 == 0)
         self.galaxy_mgrid = get_mgrid(self.gal_slen) 
         
         # this is so that the radius are in pixels
@@ -188,7 +187,11 @@ class SourceSimulator:
         max_sources = locs.shape[1]
         
         # all stars are just the PSF so we copy it.
-        expanded_psf = self.psf.expand(n_ptiles, max_sources, self.n_bands, -1, -1)
+        expanded_psf = self.psf.expand(n_ptiles,
+                                       max_sources,
+                                       self.n_bands,
+                                       self.psf_slen,
+                                       self.psf_slen)
         sources = expanded_psf * fluxes.unsqueeze(-1).unsqueeze(-1)
         sources *= star_bool.unsqueeze(-1).unsqueeze(-1)
         
@@ -207,12 +210,12 @@ class SourceSimulator:
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
         
-        flux = galaxy_params['flux'].reshape(n_ptiles * max_sources)
-        theta = galaxy_params['theta'].reshape(n_ptiles * max_sources)
-        ell = galaxy_params['ell'].reshape(n_ptiles * max_sources)
-        r_dev = galaxy_params['r_dev'].reshape(n_ptiles * max_sources)
-        r_exp = galaxy_params['r_exp'].reshape(n_ptiles * max_sources)
-        p_dev = galaxy_params['p_dev'].reshape(n_ptiles * max_sources)
+        flux = galaxy_params['flux'].view(n_ptiles * max_sources)
+        theta = galaxy_params['theta'].view(n_ptiles * max_sources)
+        ell = galaxy_params['ell'].view(n_ptiles * max_sources)
+        r_dev = galaxy_params['r_dev'].view(n_ptiles * max_sources)
+        r_exp = galaxy_params['r_exp'].view(n_ptiles * max_sources)
+        p_dev = galaxy_params['p_dev'].view(n_ptiles * max_sources)
         
         # render centered galaxies
         centered_galaxies = \
@@ -226,13 +229,13 @@ class SourceSimulator:
         
         # convolve w psf 
         centered_galaxies = _convolve_w_psf(centered_galaxies, self.psf)
-        
+                
         # reshape and turn off galaxies       
-        centered_galaxies = centered_galaxies.reshape(n_ptiles, 
-                                                      max_sources, 
-                                                      self.n_bands,
-                                                      self.gal_slen, 
-                                                      self.gal_slen) * \
+        centered_galaxies = centered_galaxies.view(n_ptiles, 
+                                                   max_sources, 
+                                                   self.n_bands,
+                                                   self.gal_slen, 
+                                                   self.gal_slen) * \
             galaxy_bool.unsqueeze(-1).unsqueeze(-1)       
         
         return self.tiler.render_tile(locs, centered_galaxies)
