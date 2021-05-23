@@ -30,7 +30,7 @@ class SimulatedImages(Dataset):
                  gal_slen = 51,
                  tile_slen = 4, 
                  ptile_slen = 52, 
-                 mean_sources_per_tile = 0.05,
+                 mean_sources_per_tile = 1e-2,
                  max_sources_per_tile = 2, 
                  prob_galaxy = 0.5, 
                  flux_range = [1000, 5000.],
@@ -137,7 +137,7 @@ class SimulatedImages(Dataset):
         n_sources = m.sample([self.n_ptiles])
 
         # long() here is necessary because used for indexing and one_hot encoding.
-        n_sources = n_sources.clamp(max=self.max_sources_per_tile).long()
+        n_sources = n_sources.clamp(max=self.max_sources_per_tile).long().to(device)
         
         is_on_array = get_is_on_from_n_sources(n_sources, 
                                                self.max_sources_per_tile).to(device)
