@@ -2,29 +2,17 @@ import numpy as np
 
 import torch
 from torch.utils.data import Dataset
-import torch.nn.functional as F
 
 from bliss.models.decoder import Tiler, get_is_on_from_n_sources
 
 from torch.distributions import Poisson
 
 
-import galaxy_simulator_lib
+import source_simulator_lib
+from which_device import device
 
-device = 'cuda:4'
 
-def _get_mgrid(slen, normalize = True):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
-    
-    mgrid = torch.Tensor(np.dstack((x, y))).to(device)
-    
-    if normalize: 
-        mgrid = mgrid / offset
-    
-    return mgrid
-
-def convert_mag_to_nmgy(mag):
+def _convert_mag_to_nmgy(mag):
     return 10**((22.5 - mag) / 2.5)
 
 def _sample_uniform(unif_range, shape): 
@@ -33,21 +21,6 @@ def _sample_uniform(unif_range, shape):
     assert unif_range[0] <= unif_range[1]
 
     return torch.rand(shape, device = device) * (unif_range[1] - unif_range[0]) + unif_range[0]
-
-def _convolve_w_psf(images, psf): 
-    
-    # first dimension is number of bands
-    assert len(psf.shape) == 3 
-    
-    # need to flip based on how the pytorch convolution works ... 
-    _psf = psf.flip(-1).flip(1).unsqueeze(0)
-    padding = int((psf.shape[-1] - 1) / 2)
-    images = F.conv2d(images, 
-                      _psf, 
-                      stride = 1,
-                      padding = padding)
-    
-    return images
 
 class SimulatedImages(Dataset):
 
@@ -70,8 +43,7 @@ class SimulatedImages(Dataset):
         # some constants
         self.n_images = n_images
         self.slen = slen 
-        self.tile_slen = tile_slen 
-        self.ptile_slen = ptile_slen
+        
         
         n_tiles_per_image = (self.slen / self.tile_slen)**2
         assert n_tiles_per_image % 1 == 0
