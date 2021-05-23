@@ -33,7 +33,7 @@ class SimulatedImages(Dataset):
                  mean_sources_per_tile = 1e-2,
                  max_sources_per_tile = 2, 
                  prob_galaxy = 0.5, 
-                 flux_range = [1000, 5000.],
+                 lflux_range = [3, 5.],
                  ell_range = [0.25, 1], 
                  theta_range = [0, 2 * np.pi],
                  hlr_range = [0, 3],
@@ -71,8 +71,8 @@ class SimulatedImages(Dataset):
                                                 ptile_slen = ptile_slen, 
                                                 gal_slen = gal_slen)
 
-        # range for fluxes
-        self.flux_range = flux_range 
+        # range for log fluxes
+        self.lflux_range = lflux_range 
         
         # range for ellipticity 
         # (between 0 and 1)
@@ -96,7 +96,8 @@ class SimulatedImages(Dataset):
     def _sample_galaxy_params(self): 
         
         # sample fluxes 
-        flux = _sample_uniform(self.flux_range, self.n_sources)
+        lflux = _sample_uniform(self.lflux_range, self.n_sources)
+        flux = 10**lflux
         
         # sample ellipticity
         ell = _sample_uniform(self.ell_range, self.n_sources)
@@ -124,11 +125,11 @@ class SimulatedImages(Dataset):
     
     def _sample_star_fluxes(self): 
                 
-        fluxes = _sample_uniform(self.flux_range, (self.n_ptiles, 
+        lfluxes = _sample_uniform(self.lflux_range, (self.n_ptiles, 
                                                    self.max_sources_per_tile,
                                                    self.n_bands))
         
-        return fluxes
+        return 10**lfluxes
     
     def _sample_ptiles(self): 
         
@@ -186,6 +187,8 @@ class SimulatedImages(Dataset):
                                                   border_padding = self.border_padding)
         
         images += self.background
+        
+        images = images.clip(min = 1.)
         
         # add noise
         images += torch.randn(images.shape, device = device) * torch.sqrt(images)
