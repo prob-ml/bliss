@@ -19,3 +19,29 @@ def plot_residuals(image, recon_mean):
     fig.colorbar(im2, ax = ax[2])
     
     return fig, ax
+
+
+
+def scatter_plot(locs, ax, color = 'r', marker = 'x', label = None): 
+    ax.scatter(locs[:, 0], 
+               locs[:, 1], 
+               color = color, 
+               marker = marker, 
+               label = label)
+    
+    
+def plot_locations(locs, is_gal, n, ax): 
+    is_gal = is_gal[0:n]
+    locs = locs[0:n]
+
+    scatter_plot(locs[is_gal == 1],
+                   ax, 
+                   marker = 'x', 
+                   color = 'red', 
+                   label = 'galaxy')
+
+    scatter_plot(locs[is_gal == 0],
+                   ax, 
+                   marker = '+', 
+                   color = 'blue', 
+                   label = 'star')

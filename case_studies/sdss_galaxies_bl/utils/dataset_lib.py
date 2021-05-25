@@ -34,9 +34,9 @@ class SimulatedImages(Dataset):
                  max_sources_per_tile = 2, 
                  prob_galaxy = 0.5, 
                  lflux_range = [3, 5.],
-                 ell_range = [0.25, 1], 
+                 ell_range = [0.4, 1], 
                  theta_range = [0, 2 * np.pi],
-                 hlr_range = [0, 3],
+                 hlr_range = [0, 2.5],
                  background = 686., 
                  border_padding = 0, 
                  n_images = 64):
