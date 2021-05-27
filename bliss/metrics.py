@@ -25,11 +25,8 @@ def inner_join_locs(locs1, locs2):
     # mse of locs:
     # entry (i,j) is l1 distance between of ith loc in locs1
     # and to jth loc in locs2
-    locs_err_old = (locs1.view(-1, 1, 2) - locs2.view(1, -1, 2)).abs().sum(2)
     locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
     locs_err = reduce(locs_err, "i j k -> i j", "sum")
-
-    assert torch.allclose(locs_err, locs_err_old)
 
     # find minimal permutation
     row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
@@ -112,13 +109,9 @@ def eval_error_on_batch(true_params, est_params, slen):
     count_bool = true_params["n_sources"].eq(est_params["n_sources"])
 
     # accuracy of galaxy counts
-    est_n_gal_old = est_params["galaxy_bool"].view(batch_size, -1).sum(-1)
     est_n_gal = reduce(est_params["galaxy_bool"], "b n 1 -> b", "sum")
-    assert torch.allclose(est_n_gal, est_n_gal_old)
 
-    true_n_gal_old = true_params["galaxy_bool"].view(batch_size, -1).sum(-1)
     true_n_gal = reduce(true_params["galaxy_bool"], "b n 1 -> b", "sum")
-    assert torch.allclose(true_n_gal, true_n_gal_old)
 
     galaxy_counts_bool = est_n_gal.eq(true_n_gal)
 

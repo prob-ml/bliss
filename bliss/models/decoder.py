@@ -213,9 +213,7 @@ class ImageDecoder(pl.LightningModule):
 
         # long() here is necessary because used for indexing and one_hot encoding.
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
-        n_sources_old = n_sources.long().view(batch_size, self.n_tiles_per_image)
         n_sources = rearrange(n_sources.long(), "b n 1 -> b n")
-        assert torch.allclose(n_sources, n_sources_old)
         return n_sources
 
     def _sample_locs(self, is_on_array, batch_size):
@@ -302,16 +300,9 @@ class ImageDecoder(pl.LightningModule):
         assert galaxy_bool.shape[1:] == (self.n_tiles_per_image, self.max_sources, 1)
         batch_size = galaxy_bool.size(0)
         total_latent = batch_size * self.n_tiles_per_image * self.max_sources
-        shape = (
-            batch_size,
-            self.n_tiles_per_image,
-            self.max_sources,
-            self.n_galaxy_params,
-        )
 
         # first get random subset of indices to extract from self.latents
         indices = torch.randint(0, len(self.latents), (total_latent,), device=galaxy_bool.device)
-        galaxy_params_old = self.latents[indices].reshape(shape)
         galaxy_params = rearrange(
             self.latents[indices],
             "(b n s) g -> b n s g",
@@ -319,7 +310,6 @@ class ImageDecoder(pl.LightningModule):
             s=self.max_sources,
             g=self.n_galaxy_params,
         )
-        assert torch.allclose(galaxy_params, galaxy_params_old)
         return galaxy_params * galaxy_bool
 
     @staticmethod
@@ -362,27 +352,14 @@ class ImageDecoder(pl.LightningModule):
         n_ptiles = batch_size * n_tiles_per_image
 
         # view parameters being explicit about shapes
-        _n_sources_old = n_sources.view(n_ptiles)
         _n_sources = rearrange(n_sources, "b t -> (b t)")
-        assert torch.allclose(_n_sources, _n_sources_old)
-
-        _locs_old = locs.view(n_ptiles, max_sources, 2)
         _locs = rearrange(locs, "b t s xy -> (b t) s xy", xy=2)
-        assert torch.allclose(_locs, _locs_old)
-
-        _galaxy_bool_old = galaxy_bool.view(n_ptiles, max_sources, 1)
         _galaxy_bool = rearrange(galaxy_bool, "b t s 1 -> (b t) s 1")
-        assert torch.allclose(_galaxy_bool, _galaxy_bool_old)
-
-        _fluxes_old = fluxes.view(n_ptiles, max_sources, self.n_bands)
         _fluxes = rearrange(fluxes, "b t s band -> (b t) s band")
-        assert torch.allclose(_fluxes, _fluxes_old)
 
         # draw stars and galaxies
         _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)
-        _is_on_array_old = _is_on_array.view(n_ptiles, max_sources, 1)
         _is_on_array = rearrange(_is_on_array, "bt s -> bt s 1")
-        assert torch.allclose(_is_on_array, _is_on_array_old)
 
         _star_bool = (1 - _galaxy_bool) * _is_on_array
         # _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
@@ -494,13 +471,9 @@ class ImageDecoder(pl.LightningModule):
 
                 image_tile_rows = image_tiles_4d[:, indx_vec1]
                 image_tile_cols = image_tile_rows[:, :, indx_vec2]
-                image_tile_cols_old = image_tile_cols.permute(0, 3, 1, 4, 2, 5).reshape(
-                    batch_size, n_bands, canvas_len, canvas_len
-                )
                 image_tile_cols = rearrange(
                     image_tile_cols, "b x1 y1 band x2 y2 -> b band (x1 x2) (y1 y2)"
                 )
-                assert torch.allclose(image_tile_cols, image_tile_cols_old)
 
                 # get canvas
                 canvas[
@@ -545,7 +518,6 @@ class Tiler(nn.Module):
                         Or multiple galaxies in the case of galaxies.
         :return: shape = (n_ptiles x n_bands x slen x slen)
         """
-        n_ptiles = locs.shape[0]
         assert source.shape[2] == source.shape[3]
         assert locs.shape[1] == 2
 
@@ -554,14 +526,12 @@ class Tiler(nn.Module):
         locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
-        _grid_old = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2)
-        _grid = rearrange(self.cached_grid, "s1 s2 xy -> 1 s1 s2 xy")
-        assert torch.allclose(_grid, _grid_old)
+        _grid = rearrange(
+            self.cached_grid, "s1 s2 xy -> 1 s1 s2 xy", s1=self.ptile_slen, s2=self.ptile_slen, xy=2
+        )
 
         locs_swapped = locs.index_select(1, self.swap)
-        locs_swapped_old = locs_swapped.view(n_ptiles, 1, 1, 2)
         locs_swapped = rearrange(locs_swapped, "np xy -> np 1 1 xy")
-        assert torch.allclose(locs_swapped_old, locs_swapped)
 
         grid_loc = _grid - locs_swapped
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
@@ -693,29 +663,16 @@ class StarTileDecoder(nn.Module):
 
         # all stars are just the PSF so we copy it.
         expanded_psf = psf.expand(n_ptiles, max_sources, self.n_bands, -1, -1)
-
-        sources_old = expanded_psf * fluxes.unsqueeze(-1).unsqueeze(-1)
-        sources_old *= star_bool.unsqueeze(-1).unsqueeze(-1)
-
         sources = expanded_psf * rearrange(fluxes, "np ms nb -> np ms nb 1 1")
         sources *= rearrange(star_bool, "np ms 1 -> np ms 1 1 1")
-        assert torch.allclose(sources, sources_old)
 
         return self.tiler.render_tile(locs, sources)
 
     def psf_forward(self):
         psf = self._get_psf()
-        init_psf_sum_old = psf.sum(-1).sum(-1).detach()
         init_psf_sum = reduce(psf, "n m k -> n", "sum").detach()
-        assert torch.allclose(init_psf_sum, init_psf_sum_old)
-
-        norm_old = psf.sum(-1).sum(-1)
         norm = reduce(psf, "n m k -> n", "sum")
-        assert torch.allclose(norm_old, norm)
-
-        psf_old = psf * (init_psf_sum / norm).unsqueeze(-1).unsqueeze(-1)
         psf *= rearrange(init_psf_sum / norm, "n -> n 1 1")
-        assert torch.allclose(psf, psf_old)
         return psf
 
     @staticmethod

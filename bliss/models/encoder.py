@@ -70,7 +70,6 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
-    n_ptiles = n_samples * n_tiles_per_image
 
     # calculate tile_slen
     tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
@@ -90,17 +89,9 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     max_sources = n_sources.max().int().item()
 
     # recenter and renormalize locations.
-    tile_is_on_array_old = tile_is_on_array_sampled.view(n_ptiles, -1)
     tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
-    assert torch.allclose(tile_is_on_array_old, tile_is_on_array)
-
-    _tile_locs_old = tile_locs.view(n_ptiles, -1, 2)
     _tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
-    assert torch.allclose(_tile_locs, _tile_locs_old)
-
-    bias_old = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
     bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
-    assert torch.allclose(bias_old, bias)
 
     _locs = _tile_locs * tile_slen + bias
     _locs[..., 0] /= slen
@@ -110,12 +101,7 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # sort locs and clip
     locs = _locs.view(n_samples, -1, 2)
     _indx_sort = _argfront(locs[..., 0], dim=1)
-
-    indx_sort = _indx_sort.unsqueeze(2)
-    locs_old = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
     locs = torch.gather(locs, 1, repeat(_indx_sort, "b n -> b n r", r=2))
-    assert torch.allclose(locs_old, locs)
-
     locs = locs[:, 0:max_sources]
     params = {"n_sources": n_sources, "locs": locs}
 
@@ -127,17 +113,10 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
             tile_param = tile_params[param_name]
             assert len(tile_param.shape) == 4
 
-            _param = tile_param.view(n_samples, n_tiles_per_image, max_detections, -1)
-            param_dim = _param.size(-1)
-            param_old = _param.view(n_samples, -1, param_dim)
             param = rearrange(tile_param, "b t d k -> b (t d) k")
-            assert torch.allclose(param, param_old)
-
-            param_old = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
             param = torch.gather(
                 param, 1, repeat(_indx_sort, "b n -> b n r", r=tile_param.shape[-1])
             )
-            assert torch.allclose(param, param_old)
 
             param = param[:, 0:max_sources, ...]
             params[param_name] = param
@@ -409,7 +388,6 @@ class ImageEncoder(nn.Module):
         assert h.size(0) == n_sources.size(1)
         assert h.size(1) == self.dim_out_all
         n_ptiles = h.size(0)
-        n_samples = n_sources.size(0)
 
         # append null column, return zero if indx_mat returns null index (dim_out_all)
         _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
@@ -421,9 +399,6 @@ class ImageEncoder(nn.Module):
             indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
         )
 
-        var_param_old = var_param.view(
-            n_ptiles, n_samples, self.max_detections, param_dim
-        ).transpose(0, 1)
         # np: n_ptiles, ns: n_samples
         var_param = rearrange(
             var_param,
@@ -433,7 +408,6 @@ class ImageEncoder(nn.Module):
             d=self.max_detections,
             pd=param_dim,
         )
-        assert torch.allclose(var_param_old, var_param)
         return var_param
 
     def get_var_params_all(self, image_ptiles):

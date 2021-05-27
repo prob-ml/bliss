@@ -69,9 +69,7 @@ class StarStamper:
         G_x = torch.stack([torch.from_numpy(grid_x)] * self.stampsize, dim=0)
         G_y = torch.stack([torch.from_numpy(grid_y)] * self.stampsize, dim=1)
 
-        G_old = torch.stack([G_x, G_y], dim=2).unsqueeze(0)
         G = rearrange([G_x, G_y], "n x y -> 1 x y n")
-        assert torch.allclose(G_old, G)
 
         return G.type(self.grid_dtype)
 

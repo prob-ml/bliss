@@ -40,7 +40,6 @@ disable=too-many-ancestors,
 	too-many-arguments,
 	too-many-locals,
 	too-many-instance-attributes,
-	too-many-statements,
 
 	# we should remove fixme comments
 	fixme,

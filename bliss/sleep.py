@@ -214,25 +214,15 @@ class SleepPhase(pl.LightningModule):
         if self.use_galaxy_encoder:
             batch_size = images.shape[0]
             max_detections = 1
-            tile_locs_old = tile_est["locs"].reshape(-1, max_detections, 2)
             tile_locs = rearrange(
                 tile_est["locs"], "b n d xy -> (b n) d xy", b=batch_size, d=max_detections
             )
-            assert torch.allclose(tile_locs_old, tile_locs)
             image_ptiles = self.image_encoder.get_images_in_tiles(images)
             tile_galaxy_params = self.forward_galaxy(image_ptiles, tile_locs)
 
-            n_galaxy_params = tile_galaxy_params.shape[-1]
-            tile_galaxy_params_old = tile_galaxy_params.reshape(
-                batch_size,
-                -1,
-                max_detections,
-                n_galaxy_params,
-            )
             tile_galaxy_params = rearrange(
                 tile_galaxy_params, "(b n d) p -> b n d p", b=batch_size, d=max_detections
             )
-            assert torch.allclose(tile_galaxy_params, tile_galaxy_params_old)
 
             tile_est["galaxy_params"] = tile_galaxy_params
 
@@ -275,9 +265,7 @@ class SleepPhase(pl.LightningModule):
         )
 
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
-        recon_losses_old = recon_losses.view(batch_size, -1).sum()
         recon_losses = recon_losses.sum()
-        assert torch.allclose(recon_losses_old, recon_losses)
 
         return recon_losses
 
@@ -326,7 +314,6 @@ class SleepPhase(pl.LightningModule):
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
         n_ptiles = batch_size * n_tiles_per_image
         max_sources = self.image_encoder.max_detections
-        n_bands = self.image_decoder.n_bands
 
         # clip decoder output since constraint is: max_detections <= max_sources (per tile)
         true_tile_locs = true_tile_locs[:, :, 0:max_sources]
@@ -336,21 +323,13 @@ class SleepPhase(pl.LightningModule):
 
         # flatten so first dimension is ptile
         # b: batch, s: n_tiles_per_image
-        true_tile_locs_old = true_tile_locs.view(n_ptiles, max_sources, 2)
         true_tile_locs = rearrange(true_tile_locs, "b n s xy -> (b n) s xy", xy=2)
-        assert torch.allclose(true_tile_locs, true_tile_locs_old)
 
-        true_tile_log_fluxes_old = true_tile_log_fluxes.view(n_ptiles, max_sources, n_bands)
         true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
-        assert torch.allclose(true_tile_log_fluxes, true_tile_log_fluxes_old)
 
-        true_tile_galaxy_bool_old = true_tile_galaxy_bool.view(n_ptiles, max_sources)
         true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
-        assert torch.allclose(true_tile_galaxy_bool, true_tile_galaxy_bool_old)
 
-        true_tile_n_sources_old = true_tile_n_sources.view(n_ptiles)
         true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
-        assert torch.allclose(true_tile_n_sources, true_tile_n_sources_old)
 
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
@@ -375,9 +354,7 @@ class SleepPhase(pl.LightningModule):
         star_params_log_probs_all = _get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
-        prob_galaxy_old = pred["prob_galaxy"].view(n_ptiles, max_sources)
         prob_galaxy = rearrange(pred["prob_galaxy"], "bn s 1 -> bn s")
-        assert torch.allclose(prob_galaxy, prob_galaxy_old)
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source

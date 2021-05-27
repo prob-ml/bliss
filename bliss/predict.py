@@ -24,9 +24,7 @@ def predict(cfg: DictConfig):
     # image for prediction from SDSS
     image = sdss_obj[0]["image"][bands[0]]
     h, w = image.shape
-    image_old = torch.from_numpy(image.reshape(1, 1, h, w))
     image = rearrange(torch.from_numpy(image), "h w -> 1 1 h w")
-    assert torch.allclose(image_old, image)
 
     # move everything to specified GPU
     sleep_net.to(cfg.predict.device)
