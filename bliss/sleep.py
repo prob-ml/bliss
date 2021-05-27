@@ -338,19 +338,19 @@ class SleepPhase(pl.LightningModule):
         # b: batch, s: n_tiles_per_image
         true_tile_locs_old = true_tile_locs.view(n_ptiles, max_sources, 2)
         true_tile_locs = rearrange(true_tile_locs, "b n s xy -> (b n) s xy", xy=2)
-        torch.allclose(true_tile_locs, true_tile_locs_old)
+        assert torch.allclose(true_tile_locs, true_tile_locs_old)
 
         true_tile_log_fluxes_old = true_tile_log_fluxes.view(n_ptiles, max_sources, n_bands)
         true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
-        torch.allclose(true_tile_log_fluxes, true_tile_log_fluxes_old)
+        assert torch.allclose(true_tile_log_fluxes, true_tile_log_fluxes_old)
 
         true_tile_galaxy_bool_old = true_tile_galaxy_bool.view(n_ptiles, max_sources)
         true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
-        torch.allclose(true_tile_galaxy_bool, true_tile_galaxy_bool_old)
+        assert torch.allclose(true_tile_galaxy_bool, true_tile_galaxy_bool_old)
 
         true_tile_n_sources_old = true_tile_n_sources.view(n_ptiles)
         true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
-        torch.allclose(true_tile_n_sources, true_tile_n_sources_old)
+        assert torch.allclose(true_tile_n_sources, true_tile_n_sources_old)
 
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
@@ -377,7 +377,7 @@ class SleepPhase(pl.LightningModule):
         )
         prob_galaxy_old = pred["prob_galaxy"].view(n_ptiles, max_sources)
         prob_galaxy = rearrange(pred["prob_galaxy"], "bn s 1 -> bn s")
-        torch.allclose(prob_galaxy, prob_galaxy_old)
+        assert torch.allclose(prob_galaxy, prob_galaxy_old)
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
