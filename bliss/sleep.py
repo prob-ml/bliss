@@ -223,7 +223,6 @@ class SleepPhase(pl.LightningModule):
             tile_galaxy_params = rearrange(
                 tile_galaxy_params, "(b n d) p -> b n d p", b=batch_size, d=max_detections
             )
-
             tile_est["galaxy_params"] = tile_galaxy_params
 
         return tile_est
@@ -324,13 +323,9 @@ class SleepPhase(pl.LightningModule):
         # flatten so first dimension is ptile
         # b: batch, s: n_tiles_per_image
         true_tile_locs = rearrange(true_tile_locs, "b n s xy -> (b n) s xy", xy=2)
-
         true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
-
         true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
-
         true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
-
         true_tile_is_on_array = encoder.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles

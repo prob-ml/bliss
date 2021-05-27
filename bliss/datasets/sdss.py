@@ -328,9 +328,7 @@ class SloanDigitalSkySurvey(Dataset):
 
             sky_y = sky_y.clip(0, sky_small.shape[0] - 1)
             sky_x = sky_x.clip(0, sky_small.shape[1] - 1)
-            large_points_old = np.stack(np.meshgrid(sky_y, sky_x)).transpose()
             large_points = rearrange(np.meshgrid(sky_y, sky_x), "n x y -> y x n")
-            assert np.allclose(large_points, large_points_old)
             large_sky = sky_interp(large_points)
             large_sky_nelec = large_sky * gain[b]
 

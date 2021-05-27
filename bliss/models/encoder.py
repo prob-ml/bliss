@@ -112,12 +112,10 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
             # make sure works galaxy bool has same format as well.
             tile_param = tile_params[param_name]
             assert len(tile_param.shape) == 4
-
             param = rearrange(tile_param, "b t d k -> b (t d) k")
             param = torch.gather(
                 param, 1, repeat(_indx_sort, "b n -> b n r", r=tile_param.shape[-1])
             )
-
             param = param[:, 0:max_sources, ...]
             params[param_name] = param
     return params
@@ -388,8 +386,6 @@ class ImageEncoder(nn.Module):
         assert h.size(0) == n_sources.size(1)
         assert h.size(1) == self.dim_out_all
         n_ptiles = h.size(0)
-
-        # append null column, return zero if indx_mat returns null index (dim_out_all)
         _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
@@ -403,7 +399,7 @@ class ImageEncoder(nn.Module):
         var_param = rearrange(
             var_param,
             "np (ns d pd) -> ns np d pd",
-            np=h.size(0),
+            np=n_ptiles,
             ns=n_sources.size(0),
             d=self.max_detections,
             pd=param_dim,

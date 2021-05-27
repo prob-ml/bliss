@@ -360,7 +360,6 @@ class ImageDecoder(pl.LightningModule):
         # draw stars and galaxies
         _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)
         _is_on_array = rearrange(_is_on_array, "bt s -> bt s 1")
-
         _star_bool = (1 - _galaxy_bool) * _is_on_array
         # _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
         assert _star_bool.shape == (n_ptiles, max_sources, 1)
