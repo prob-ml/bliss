@@ -14,16 +14,6 @@ from which_device import device
 # Functions to set up and transform (aka rotate or stretch)
 # coordinate system 
 #################
-def _get_mgrid(slen, normalize = True):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset:(offset + 1), -offset:(offset + 1)]
-    
-    mgrid = torch.Tensor(np.dstack((x, y))).to(device)
-    
-    if normalize: 
-        mgrid = mgrid / offset
-    
-    return mgrid
 
 def _get_rotation_matrix(theta): 
     
@@ -74,8 +64,9 @@ def render_gaussian_galaxies(r2_grid, half_light_radii):
     return torch.exp(-0.5 * r2_grid / var) / (torch.sqrt(2 * np.pi * var))
 
 
-# TODO: I think we need to the profiles below ... 
-# other fluxes wont be in the correct units    
+# TODO: we need to normalize the profiles below 
+# so they integrate to 1 over the real plane. 
+# otherwise, fluxes wont be in the correct units.  
     
 def render_exponential_galaxies(r2_grid, half_light_radii): 
     
@@ -102,6 +93,20 @@ def render_devaucouleurs_galaxies(r2_grid, half_light_radii):
 ###############
 def render_centered_galaxy(flux, theta, ell, rad, 
                            galaxy_mgrid): 
+    """
+    Returns centered galaxies without PSF. Right now, only the gaussian 
+    profile is used. 
+    
+    Parameters flux, theta, ell, rad, vectors of length n_images. 
+    
+    galaxy_mgrid is a slen x slen x 2 grid on which we render galaxies. 
+    note! this grid is in units of pixels, not constrained to be 
+    between -1 and 1. this is so that the radius can also be 
+    interpreted in pixel units. 
+    
+    returns a n_image x 1 x slen x slen tensor of centered galaxies. 
+    
+    """
     
     # number of galaxies
     n_galaxies = len(flux)

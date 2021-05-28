@@ -41,20 +41,58 @@ class SimulatedImages(Dataset):
                  border_padding = 0, 
                  n_images = 64):
         
+        """
+        Parameters 
+        ----------
+        psf : torch.Tensor 
+            A n_bands x psf_slen x psf_slen tensor with the PSF. 
+        slen : int
+            Size of the simulated images
+        gal_slen : int 
+            Size of the stamp on which galaxies are generated
+        tile_slen : int 
+            Size of the tiles 
+        ptile_slen : int 
+            Size of the padded tiles 
+        mean_sources_per_tile : float 
+            Average sources (either star or galaxy) on a tile
+        max_sources_per_tile : int
+            Maximum sources (either star or galaxy) on a tile
+        lflux_range : list 
+            list of length 2 giving the range of the log10 fluxes. 
+            This flux range is used for both stars and galaxies. 
+        ell_range : list 
+            list of length 2 giving the range of galaxy ellipticities 
+            Entries are between 0 and 1, with 1 being perfectly circular
+        theta_range : list 
+            list of length 2 giving the range of galaxy rotations
+        hlr_range : list
+            list of length 2 giving range of galaxy half-light radius (in pixels)
+        background : float 
+            background intensity 
+        border_padding : int 
+            number of pixels in the border padding
+        n_images : int
+            number of images to simulate per epoch
+        """
+        
         # some constants
         self.n_images = n_images
         self.slen = slen 
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         
+        # number of tiles in an image
         n_tiles_per_image = (self.slen / self.tile_slen)**2
         assert n_tiles_per_image % 1 == 0
         self.n_tiles_per_image = int(n_tiles_per_image)
         
+        # number of total ptiles that we have to simulated
         self.n_ptiles = self.n_images * self.n_tiles_per_image
         
         self.max_sources_per_tile = max_sources_per_tile
         
+        # total number of sources we will simulate (some will end up being off). 
         self.n_sources = self.n_images * self.n_tiles_per_image * \
                             self.max_sources_per_tile
         
@@ -62,6 +100,7 @@ class SimulatedImages(Dataset):
         
         self.n_bands = psf.shape[0]
         if self.n_bands > 1: 
+            # only single band implemented for the galaxy models right now
             raise NotImplementedError()
         
         # the source simulator 
@@ -94,6 +133,7 @@ class SimulatedImages(Dataset):
 
         
     def _sample_galaxy_params(self): 
+        # sample galaxy parameters uniformly from their ranges
         
         # sample fluxes 
         lflux = _sample_uniform(self.lflux_range, self.n_sources)
@@ -124,6 +164,7 @@ class SimulatedImages(Dataset):
     
     
     def _sample_star_fluxes(self): 
+        # sample star parameters: the only ones are fluxes
                 
         lfluxes = _sample_uniform(self.lflux_range, (self.n_ptiles, 
                                                    self.max_sources_per_tile,
@@ -132,6 +173,7 @@ class SimulatedImages(Dataset):
         return 10**lfluxes
     
     def _sample_ptiles(self): 
+        # samples all the padded tiles
         
         # sample number of sources 
         m = Poisson(self.mean_sources_per_tile)
@@ -173,6 +215,10 @@ class SimulatedImages(Dataset):
         
     
     def sample_batch(self): 
+        
+        # samples all the padded tiles and combines them 
+        # into a batch of full images
+        
         image_ptiles, locs, star_fluxes, n_sources, galaxy_bool = \
             self._sample_ptiles()
         
