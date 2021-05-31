@@ -1,5 +1,5 @@
 import numpy as np
-from einops import rearrange
+from einops import rearrange, repeat
 
 import torch
 import torch.nn as nn
@@ -70,7 +70,6 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
-    n_ptiles = n_samples * n_tiles_per_image
 
     # calculate tile_slen
     tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
@@ -90,9 +89,10 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     max_sources = n_sources.max().int().item()
 
     # recenter and renormalize locations.
-    tile_is_on_array = tile_is_on_array_sampled.view(n_ptiles, -1)
-    _tile_locs = tile_locs.view(n_ptiles, -1, 2)
-    bias = tile_coords.repeat(n_samples, 1).unsqueeze(1).float()
+    tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
+    _tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
+    bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
+
     _locs = _tile_locs * tile_slen + bias
     _locs[..., 0] /= slen
     _locs[..., 1] /= wlen
@@ -101,10 +101,8 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # sort locs and clip
     locs = _locs.view(n_samples, -1, 2)
     _indx_sort = _argfront(locs[..., 0], dim=1)
-    indx_sort = _indx_sort.unsqueeze(2)
-    locs = torch.gather(locs, 1, indx_sort.repeat(1, 1, 2))
+    locs = torch.gather(locs, 1, repeat(_indx_sort, "b n -> b n r", r=2))
     locs = locs[:, 0:max_sources]
-
     params = {"n_sources": n_sources, "locs": locs}
 
     # now do the same for the rest of the parameters (without scaling or biasing)
@@ -114,13 +112,12 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
             # make sure works galaxy bool has same format as well.
             tile_param = tile_params[param_name]
             assert len(tile_param.shape) == 4
-            _param = tile_param.view(n_samples, n_tiles_per_image, max_detections, -1)
-            param_dim = _param.size(-1)
-            param = _param.view(n_samples, -1, param_dim)
-            param = torch.gather(param, 1, indx_sort.repeat(1, 1, param_dim))
+            param = rearrange(tile_param, "b t d k -> b (t d) k")
+            param = torch.gather(
+                param, 1, repeat(_indx_sort, "b n -> b n r", r=tile_param.shape[-1])
+            )
             param = param[:, 0:max_sources, ...]
             params[param_name] = param
-
     return params
 
 
@@ -389,9 +386,6 @@ class ImageEncoder(nn.Module):
         assert h.size(0) == n_sources.size(1)
         assert h.size(1) == self.dim_out_all
         n_ptiles = h.size(0)
-        n_samples = n_sources.size(0)
-
-        # append null column, return zero if indx_mat returns null index (dim_out_all)
         _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
@@ -401,8 +395,16 @@ class ImageEncoder(nn.Module):
             indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
         )
 
-        var_param = var_param.view(n_ptiles, n_samples, self.max_detections, param_dim)
-        return var_param.transpose(0, 1)
+        # np: n_ptiles, ns: n_samples
+        var_param = rearrange(
+            var_param,
+            "np (ns d pd) -> ns np d pd",
+            np=n_ptiles,
+            ns=n_sources.size(0),
+            d=self.max_detections,
+            pd=param_dim,
+        )
+        return var_param
 
     def get_var_params_all(self, image_ptiles):
         # get h matrix.
@@ -580,7 +582,7 @@ class ImageEncoder(nn.Module):
 
         # MAP (for n_sources) prediction on var params on each tile
         tile_n_sources = self.tile_map_n_sources(image_ptiles)
-        pred = self.forward(image_ptiles, tile_n_sources)
+        pred = self(image_ptiles, tile_n_sources)
 
         return self.tile_map_estimate_from_var_params(pred, n_tiles_per_image, batch_size)
 

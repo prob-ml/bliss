@@ -1,5 +1,6 @@
 import torch
 from omegaconf import DictConfig
+from einops import rearrange
 
 from bliss.datasets import sdss
 from bliss import sleep
@@ -23,7 +24,7 @@ def predict(cfg: DictConfig):
     # image for prediction from SDSS
     image = sdss_obj[0]["image"][bands[0]]
     h, w = image.shape
-    image = torch.from_numpy(image.reshape(1, 1, h, w))
+    image = rearrange(torch.from_numpy(image), "h w -> 1 1 h w")
 
     # move everything to specified GPU
     sleep_net.to(cfg.predict.device)
