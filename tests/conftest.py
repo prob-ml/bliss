@@ -10,29 +10,29 @@ from bliss.models import galaxy_net
 
 # command line arguments for tests
 def pytest_addoption(parser):
-    parser.addoption("--gpus", default="cpu", type=str, help="--gpus option for trainer.")
+    parser.addoption(
+        "--gpu",
+        action="store_true",
+        default=False,
+        help="Run tests using gpu.",
+    )
 
 
-def get_cfg(overrides, devices):
+def get_cfg(overrides):
     assert "model" in overrides
     overrides = [f"{key}={value}" for key, value in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
-        cfg.training.trainer.update({"gpus": devices.gpus})
+        cfg.training.trainer.update({"gpus": 1})
     return cfg
 
 
 class DeviceSetup:
-    def __init__(self, gpus):
-        self.use_cuda = torch.cuda.is_available() if gpus != "cpu" else False
-        self.gpus = gpus if self.use_cuda else None
-
-        # setup device
+    def __init__(self, use_gpu):
+        self.use_cuda = torch.cuda.is_available() if use_gpu else False
         self.device = torch.device("cpu")
-        if self.gpus and self.use_cuda:
-            assert isinstance(self.gpus, str) and len(self.gpus) == 1
-            device_id = int(self.gpus[0])
-            self.device = torch.device(f"cuda:{device_id}")
+        if self.use_cuda:
+            self.device = torch.device("cuda")
             torch.cuda.set_device(self.device)
 
 
@@ -41,7 +41,7 @@ class SleepSetup:
         self.devices = devices
 
     def get_cfg(self, overrides):
-        return get_cfg(overrides, self.devices)
+        return get_cfg(overrides)
 
     def get_dataset(self, overrides):
         cfg = self.get_cfg(overrides)
@@ -77,7 +77,7 @@ class GalaxyAESetup:
         self.devices = devices
 
     def get_cfg(self, overrides):
-        return get_cfg(overrides, self.devices)
+        return get_cfg(overrides)
 
     @staticmethod
     def get_dataset(cfg):
@@ -115,8 +115,8 @@ def paths():
 
 @pytest.fixture(scope="session")
 def devices(pytestconfig):
-    gpus = pytestconfig.getoption("gpus")
-    return DeviceSetup(gpus)
+    use_gpu = pytestconfig.getoption("gpu")
+    return DeviceSetup(use_gpu)
 
 
 @pytest.fixture(scope="session")
