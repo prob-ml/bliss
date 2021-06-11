@@ -18,21 +18,22 @@ def pytest_addoption(parser):
     )
 
 
-def get_cfg(overrides):
+def get_cfg(overrides, devices):
     assert "model" in overrides
     overrides = [f"{key}={value}" for key, value in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
-        cfg.training.trainer.update({"gpus": 1})
+        cfg.training.trainer.update({"gpus": devices.gpus})
     return cfg
 
 
 class DeviceSetup:
     def __init__(self, use_gpu):
         self.use_cuda = torch.cuda.is_available() if use_gpu else False
+        self.gpus = 1 if self.use_cuda else None
         self.device = torch.device("cpu")
         if self.use_cuda:
-            self.device = torch.device("cuda")
+            self.device = torch.device("cuda:0")
             torch.cuda.set_device(self.device)
 
 
@@ -41,7 +42,7 @@ class SleepSetup:
         self.devices = devices
 
     def get_cfg(self, overrides):
-        return get_cfg(overrides)
+        return get_cfg(overrides, self.devices)
 
     def get_dataset(self, overrides):
         cfg = self.get_cfg(overrides)
@@ -77,7 +78,7 @@ class GalaxyAESetup:
         self.devices = devices
 
     def get_cfg(self, overrides):
-        return get_cfg(overrides)
+        return get_cfg(overrides, self.devices)
 
     @staticmethod
     def get_dataset(cfg):
