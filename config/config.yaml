@@ -17,7 +17,7 @@ gpus:
   - 0
 
 paths:
-  root: ${env:BLISS_HOME}
+  root: ${oc.env:BLISS_HOME}
   data: ${paths.root}/data
   models: ${paths.root}/models
   output: ${paths.root}/temp/default
