@@ -1,4 +1,3 @@
-# @package _group_
 deterministic: False
 seed: 42
 plotting: False

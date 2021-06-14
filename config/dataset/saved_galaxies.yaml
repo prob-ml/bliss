@@ -1,5 +1,3 @@
-# @package _group_
----
 name: "SavedGalaxies"
 kwargs:
   batch_size: 64

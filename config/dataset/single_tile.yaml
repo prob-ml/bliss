@@ -1,4 +1,3 @@
-# @package _group_
 name: SimulatedDataset
 kwargs:
   decoder_kwargs: ${model.kwargs.decoder_kwargs}
