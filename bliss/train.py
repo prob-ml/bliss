@@ -80,7 +80,6 @@ def setup_checkpoint_callback(cfg, paths, logger):
             verbose=True,
             monitor="val_loss",
             mode="min",
-            prefix="",
         )
 
     return checkpoint_callback

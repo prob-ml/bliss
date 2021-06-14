@@ -1,4 +1,3 @@
-# @package _group_
 search_space:
   channel:
     - 8

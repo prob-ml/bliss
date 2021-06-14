@@ -5,8 +5,7 @@ defaults:
   - dataset: default
   - testing: default
   - generate: default
-  - tuning: ${defaults.1.model}
-    optional: true
+  - optional tuning: ${model}
   - predict: sdss_basic
 
 mode: train
@@ -18,7 +17,7 @@ gpus:
   - 0
 
 paths:
-  root: ${env:BLISS_HOME}
+  root: ${oc.env:BLISS_HOME}
   data: ${paths.root}/data
   models: ${paths.root}/models
   output: ${paths.root}/temp/default

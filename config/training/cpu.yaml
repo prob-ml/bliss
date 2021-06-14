@@ -1,4 +1,3 @@
-# @package _group_
 deterministic: False
 plotting: False
 n_epochs: 1
