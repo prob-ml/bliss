@@ -1,18 +1,19 @@
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
-def _plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=1):
+def _plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=20, prob_galaxy=None):
     assert len(locs.shape) == 2
     assert locs.shape[1] == 2
     assert isinstance(slen, int)
     assert isinstance(border_padding, int)
-    ax.scatter(
-        x=locs[:, 1] * slen - 0.5 + border_padding,
-        y=locs[:, 0] * slen - 0.5 + border_padding,
-        color=color,
-        marker=marker,
-        s=s,
-    )
+    if prob_galaxy:
+        assert len(prob_galaxy.shape) == 1
+
+    x = locs[:, 1] * slen - 0.5 + border_padding
+    y = locs[:, 0] * slen - 0.5 + border_padding
+    for i, (xi, yi) in enumerate(zip(x, y)):
+        s = s if not prob_galaxy else s * (1 + 2 * abs(0.5 - prob_galaxy[i]))
+        ax.scatter(xi, yi, color=color, marker=marker, s=s)
 
 
 def plot_image_locs(
@@ -21,13 +22,15 @@ def plot_image_locs(
     border_padding,
     true_locs=None,
     est_locs=None,
+    prob_galaxy=None,
     colors=("r", "b"),
     s=20,
     markers=("x", "+"),
     borders=True,
 ):
+    # prob_galaxy is used to indicate confidence on prediction via marker size.
 
-    # mark border
+    # delineate border
     if borders:
         ax.axvline(border_padding, color="w")
         ax.axvline(border_padding + slen, color="w")
@@ -39,8 +42,16 @@ def plot_image_locs(
         _plot_locs(ax, slen, border_padding, true_locs, color=colors[0], marker=markers[0], s=s)
 
     if est_locs is not None:
-        s2 = 2 * s
-        _plot_locs(ax, slen, border_padding, est_locs, color=colors[1], marker=markers[1], s=s2)
+        _plot_locs(
+            ax,
+            slen,
+            border_padding,
+            est_locs,
+            color=colors[1],
+            marker=markers[1],
+            s=s,
+            prob_galaxy=prob_galaxy,
+        )
 
 
 def plot_image(
