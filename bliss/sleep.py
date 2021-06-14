@@ -603,6 +603,7 @@ class SleepPhase(pl.LightningModule):
                 true_locs=true_galaxy_locs,
                 est_locs=galaxy_locs,
                 markers=("x", "+"),
+                colors=("r", "b"),
             )
 
             plotting.plot_image_locs(
@@ -611,7 +612,8 @@ class SleepPhase(pl.LightningModule):
                 border_padding,
                 true_locs=true_star_locs,
                 est_locs=star_locs,
-                markers=("o", "1"),
+                markers=("x", "+"),
+                colors=("salmon", "cyan"),
             )
 
         plt.subplots_adjust(hspace=0.2, wspace=0.4)
