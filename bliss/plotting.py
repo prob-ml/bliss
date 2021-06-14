@@ -18,7 +18,7 @@ def _plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=1):
 def plot_image_locs(
     ax,
     slen,
-    border_padding,
+    border_padding=None,
     true_locs=None,
     est_locs=None,
     colors=("r", "b"),
@@ -27,10 +27,11 @@ def plot_image_locs(
 ):
 
     # mark border
-    ax.axvline(border_padding, color="w")
-    ax.axvline(border_padding + slen, color="w")
-    ax.axhline(border_padding, color="w")
-    ax.axhline(border_padding + slen, color="w")
+    if border_padding is not None:
+        ax.axvline(border_padding, color="w")
+        ax.axvline(border_padding + slen, color="w")
+        ax.axhline(border_padding, color="w")
+        ax.axhline(border_padding + slen, color="w")
 
     assert isinstance(border_padding, int)
     if true_locs is not None:
