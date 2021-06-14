@@ -109,7 +109,6 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # for same reason no need to multiply times is_on_array
     for param_name in tile_params:
         if param_name in optional:
-            # make sure works galaxy bool has same format as well.
             tile_param = tile_params[param_name]
             assert len(tile_param.shape) == 4
             param = rearrange(tile_param, "b t d k -> b (t d) k")
@@ -557,6 +556,7 @@ class ImageEncoder(nn.Module):
             "galaxy_bool": tile_galaxy_bool,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
+            "prob_galaxy": pred["prob_galaxy"],
         }
 
         # reshape with images' batch_size.
