@@ -57,7 +57,7 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
 
     # dictionary of tile_params is consistent and no extraneous keys.
     required = {"n_sources", "locs"}
-    optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes"}
+    optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes", "prob_galaxy"}
     assert required.issubset(tile_params.keys())
     for param_name in tile_params:
         assert param_name in required or param_name in optional
