@@ -14,7 +14,7 @@ bands:
 
 # i/o parameters
 checkpoint: ${paths.root}/models/sleep_sdss_measure.ckpt
-device: "cuda"
+device: "cuda:0"
 output_file: "${paths.data}/var_params.pt"
 
 # coverage for tests
