@@ -1,7 +1,7 @@
 import pytest
 import torch
 import pytorch_lightning as pl
-from hydra.experimental import initialize, compose
+from hydra import initialize, compose
 
 from bliss import sleep
 from bliss.datasets import simulated, galsim_galaxies

@@ -1,4 +1,4 @@
-from hydra.experimental import initialize, compose
+from hydra import initialize, compose
 from bliss import train
 
 
