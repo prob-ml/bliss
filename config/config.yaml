@@ -5,7 +5,7 @@ defaults:
   - dataset: default
   - testing: default
   - generate: default
-  - optional tuning: ${defaults.1.model}
+  - optional tuning: ${model}
   - predict: sdss_basic
 
 mode: train
