@@ -18,16 +18,17 @@ def _plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=1):
 def plot_image_locs(
     ax,
     slen,
-    border_padding=None,
+    border_padding,
     true_locs=None,
     est_locs=None,
     colors=("r", "b"),
     s=20,
     markers=("x", "+"),
+    borders=True,
 ):
 
     # mark border
-    if border_padding is not None:
+    if borders:
         ax.axvline(border_padding, color="w")
         ax.axvline(border_padding + slen, color="w")
         ax.axhline(border_padding, color="w")
