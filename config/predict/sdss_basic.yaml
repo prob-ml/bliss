@@ -1,4 +1,3 @@
-# @package _group_
 # image and sdss parameters
 sdss_kwargs:
   sdss_dir: ${paths.data}/sdss
