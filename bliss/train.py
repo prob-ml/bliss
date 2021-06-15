@@ -68,8 +68,8 @@ def setup_logger(cfg, paths):
     return logger
 
 
-def setup_checkpoint_callback(cfg, paths, logger):
-    checkpoint_callback = False
+def setup_callbacks(cfg, paths, logger):
+    callbacks = []
     output = Path(paths["output"])
     if cfg.training.trainer.checkpoint_callback:
         checkpoint_dir = f"lightning_logs/version_{logger.version}"
@@ -82,8 +82,9 @@ def setup_checkpoint_callback(cfg, paths, logger):
             monitor="val_loss",
             mode="min",
         )
+        callbacks.append(checkpoint_callback)
 
-    return checkpoint_callback
+    return callbacks
 
 
 def train(cfg: DictConfig):
@@ -101,9 +102,9 @@ def train(cfg: DictConfig):
     # setup trainer
     profiler = setup_profiler(cfg, paths)
     logger = setup_logger(cfg, paths)
-    checkpoint_callback = setup_checkpoint_callback(cfg, paths, logger)
+    callbacks = setup_callbacks(cfg, paths, logger)
     trainer_dict = OmegaConf.to_container(cfg.training.trainer, resolve=True)
-    trainer_dict.update(dict(logger=logger, profiler=profiler, callbacks=[checkpoint_callback]))
+    trainer_dict.update(dict(logger=logger, profiler=profiler, callbacks=callbacks))
     trainer = pl.Trainer(**trainer_dict)
 
     # train!
