@@ -6,13 +6,13 @@ def _plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=20, prob
     assert locs.shape[1] == 2
     assert isinstance(slen, int)
     assert isinstance(border_padding, int)
-    if prob_galaxy:
+    if prob_galaxy is not None:
         assert len(prob_galaxy.shape) == 1
 
     x = locs[:, 1] * slen - 0.5 + border_padding
     y = locs[:, 0] * slen - 0.5 + border_padding
     for i, (xi, yi) in enumerate(zip(x, y)):
-        s = s if not prob_galaxy else s * (1 + 2 * abs(0.5 - prob_galaxy[i]))
+        s = s if prob_galaxy is None else s * (1 + abs(0.5 - prob_galaxy[i]))
         ax.scatter(xi, yi, color=color, marker=marker, s=s)
 
 
