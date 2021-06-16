@@ -617,7 +617,7 @@ class SleepPhase(pl.LightningModule):
                 est_locs=star_locs,
                 prob_galaxy=prob_galaxy,
                 markers=("x", "+"),
-                colors=("orangered", "deepskyblue"),
+                colors=("orange", "deepskyblue"),
             )
 
         plt.subplots_adjust(hspace=0.2, wspace=0.4)
