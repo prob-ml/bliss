@@ -5,7 +5,7 @@ import torch
 from torch.distributions import Normal
 
 from bliss.sleep import _get_params_logprob_all_combs, _get_min_perm_loss
-from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.models.encoder import get_mask_from_n_sources
 
 
 class TestStarEncoderObjective:
@@ -67,15 +67,15 @@ class TestStarEncoderObjective:
 
         # true parameters
         true_n_sources = torch.from_numpy(np.random.choice(max_detections + 1, n_ptiles)).to(device)
-        true_is_on_array = get_is_on_from_n_sources(true_n_sources, max_detections).float()
+        true_source_mask = get_mask_from_n_sources(true_n_sources, max_detections).float()
 
         # locations, fluxes and galaxy parameters
         true_locs = torch.rand(
             n_ptiles, max_detections, 2, device=device
-        ) * true_is_on_array.unsqueeze(2)
+        ) * true_source_mask.unsqueeze(2)
         true_log_fluxes = torch.randn(
             n_ptiles, max_detections, n_bands, device=device
-        ) * true_is_on_array.unsqueeze(2)
+        ) * true_source_mask.unsqueeze(2)
 
         # boolean indicating whether source is galaxy
         true_galaxy_bool = (torch.rand(n_ptiles, max_detections) > 0.5).float().to(device)
@@ -83,18 +83,18 @@ class TestStarEncoderObjective:
         # estimated parameters
         loc_mean = torch.randn(
             n_ptiles, max_detections, 2, device=device
-        ) * true_is_on_array.unsqueeze(2)
-        loc_mean = loc_mean + (true_is_on_array == 0).float().unsqueeze(-1) * 1e16
+        ) * true_source_mask.unsqueeze(2)
+        loc_mean = loc_mean + (true_source_mask == 0).float().unsqueeze(-1) * 1e16
         loc_logvar = torch.randn(
             n_ptiles, max_detections, 2, device=device
-        ) * true_is_on_array.unsqueeze(2)
+        ) * true_source_mask.unsqueeze(2)
 
         log_flux_mean = torch.randn(
             n_ptiles, max_detections, n_bands, device=device
-        ) * true_is_on_array.unsqueeze(2)
+        ) * true_source_mask.unsqueeze(2)
         log_flux_logvar = torch.randn(
             n_ptiles, max_detections, n_bands, device=device
-        ) * true_is_on_array.unsqueeze(2)
+        ) * true_source_mask.unsqueeze(2)
 
         # for each detection, prob that it is a galaxy
         prob_galaxy = torch.rand(n_ptiles, max_detections, device=device)
@@ -112,7 +112,7 @@ class TestStarEncoderObjective:
             star_params_log_probs_all,
             prob_galaxy,
             true_galaxy_bool,
-            true_is_on_array,
+            true_source_mask,
         )
 
         # when no sources, all losses should be zero
@@ -124,7 +124,7 @@ class TestStarEncoderObjective:
         ).all()
 
         # when there are no stars: stars loss should be zero
-        which_no_stars = ((1 - true_galaxy_bool) * true_is_on_array).sum(1) == 0
+        which_no_stars = ((1 - true_galaxy_bool) * true_source_mask).sum(1) == 0
         assert (star_params_loss[which_no_stars] == 0).all()
 
         # when there is only one source, and that source is a star

@@ -10,7 +10,7 @@ from torch.distributions import Poisson
 import pytorch_lightning as pl
 from einops import rearrange, reduce
 
-from .encoder import get_is_on_from_n_sources, get_mgrid
+from .encoder import get_mask_from_n_sources, get_mgrid
 from . import galaxy_net
 
 
@@ -135,10 +135,10 @@ class ImageDecoder(pl.LightningModule):
 
     def sample_prior(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-        locs = self._sample_locs(is_on_array, batch_size)
+        source_mask = get_mask_from_n_sources(n_sources, self.max_sources)
+        locs = self._sample_locs(source_mask, batch_size)
 
-        _, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(n_sources, is_on_array)
+        _, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(n_sources, source_mask)
         galaxy_params = self._sample_galaxy_params(galaxy_bool)
         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
         log_fluxes = self._get_log_fluxes(fluxes)
@@ -216,7 +216,7 @@ class ImageDecoder(pl.LightningModule):
         n_sources = rearrange(n_sources.long(), "b n 1 -> b n")
         return n_sources
 
-    def _sample_locs(self, is_on_array, batch_size):
+    def _sample_locs(self, source_mask, batch_size):
         # output dimension is batch_size x n_tiles_per_image x max_sources x 2
 
         # 2 = (x,y)
@@ -226,14 +226,14 @@ class ImageDecoder(pl.LightningModule):
             self.max_sources,
             2,
         )
-        locs = torch.rand(*shape, device=is_on_array.device)
+        locs = torch.rand(*shape, device=source_mask.device)
         locs *= self.loc_max - self.loc_min
         locs += self.loc_min
-        locs *= is_on_array.unsqueeze(-1)
+        locs *= source_mask.unsqueeze(-1)
 
         return locs
 
-    def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
+    def _sample_n_galaxies_and_stars(self, n_sources, source_mask):
         # the counts returned (n_galaxies, n_stars) are of shape (batch_size x n_tiles_per_image)
         # the booleans returned (galaxy_bool, star_bool) are of shape
         # (batch_size x n_tiles_per_image x max_sources x 1)
@@ -245,11 +245,11 @@ class ImageDecoder(pl.LightningModule):
             self.n_tiles_per_image,
             self.max_sources,
             1,
-            device=is_on_array.device,
+            device=source_mask.device,
         )
         galaxy_bool = uniform < self.prob_galaxy
-        galaxy_bool = (galaxy_bool * is_on_array.unsqueeze(-1)).float()
-        star_bool = (1 - galaxy_bool) * is_on_array.unsqueeze(-1)
+        galaxy_bool = (galaxy_bool * source_mask.unsqueeze(-1)).float()
+        star_bool = (1 - galaxy_bool) * source_mask.unsqueeze(-1)
         n_galaxies = galaxy_bool.sum((-2, -1))
         n_stars = star_bool.sum((-2, -1))
         assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
@@ -358,9 +358,9 @@ class ImageDecoder(pl.LightningModule):
         _fluxes = rearrange(fluxes, "b t s band -> (b t) s band")
 
         # draw stars and galaxies
-        _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)
-        _is_on_array = rearrange(_is_on_array, "bt s -> bt s 1")
-        _star_bool = (1 - _galaxy_bool) * _is_on_array
+        _source_mask = get_mask_from_n_sources(_n_sources, max_sources)
+        _source_mask = rearrange(_source_mask, "bt s -> bt s 1")
+        _star_bool = (1 - _galaxy_bool) * _source_mask
         # _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
         assert _star_bool.shape == (n_ptiles, max_sources, 1)
 

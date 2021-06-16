@@ -1,7 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 
-from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.models.encoder import get_mask_from_n_sources
 
 
 def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
@@ -66,21 +66,21 @@ def get_params_in_tiles(tile_coords, locs, fluxes, slen, subimage_slen, edge_pad
         n_bands = 1
 
     # sort locs so all the zeros are at the end
-    is_on_array = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool)
-    n_stars_per_tile = is_on_array.float().sum(dim=1).type(torch.LongTensor)
+    source_mask = which_locs_array.view(subimage_batchsize, max_stars).type(torch.bool)
+    n_stars_per_tile = source_mask.float().sum(dim=1).type(torch.LongTensor)
 
-    is_on_array_sorted = get_is_on_from_n_sources(n_stars_per_tile, n_stars_per_tile.max())
+    source_mask_sorted = get_mask_from_n_sources(n_stars_per_tile, n_stars_per_tile.max())
 
-    indx = is_on_array_sorted.clone().long()
-    indx[indx == 1] = torch.nonzero(is_on_array, as_tuple=False)[:, 1]
+    indx = source_mask_sorted.clone().long()
+    indx[indx == 1] = torch.nonzero(source_mask, as_tuple=False)[:, 1]
 
     tile_fluxes = torch.gather(
         tile_fluxes, dim=1, index=indx.unsqueeze(2).repeat(1, 1, n_bands)
-    ) * is_on_array_sorted.float().unsqueeze(2)
+    ) * source_mask_sorted.float().unsqueeze(2)
     tile_locs = torch.gather(
         tile_locs, dim=1, index=indx.unsqueeze(2).repeat(1, 1, 2)
-    ) * is_on_array_sorted.float().unsqueeze(2)
+    ) * source_mask_sorted.float().unsqueeze(2)
 
-    tile_is_on_array = is_on_array_sorted
+    tile_source_mask = source_mask_sorted
 
-    return tile_locs, tile_fluxes, n_stars_per_tile, tile_is_on_array
+    return tile_locs, tile_fluxes, n_stars_per_tile, tile_source_mask

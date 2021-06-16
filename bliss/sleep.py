@@ -39,7 +39,7 @@ def _get_log_probs_all_perms(
     star_params_log_probs_all,
     prob_galaxy,
     true_galaxy_bool,
-    is_on_array,
+    source_mask,
 ):
     # get log-probability under every possible matching of estimated source to true source
     n_ptiles = star_params_log_probs_all.size(0)
@@ -53,9 +53,9 @@ def _get_log_probs_all_perms(
     galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
 
     for i, perm in enumerate(permutations(range(max_detections))):
-        # note that we multiply is_on_array, we only evaluate the loss if the source is on.
+        # note that we multiply source_mask, we only evaluate the loss if the source is on.
         locs_log_probs_all_perm[:, i] = (
-            locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
+            locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * source_mask
         ).sum(1)
 
         # if star, evaluate the star parameters,
@@ -64,14 +64,14 @@ def _get_log_probs_all_perms(
         # of mean/var with second index of true_param etc.)
         star_params_log_probs_all_perm[:, i] = (
             star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
-            * is_on_array
+            * source_mask
             * (1 - true_galaxy_bool)
         ).sum(1)
 
         _prob_galaxy = prob_galaxy[:, perm]
         galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
         galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - _prob_galaxy)
-        galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
+        galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * source_mask).sum(1)
 
     return (
         locs_log_probs_all_perm,
@@ -85,7 +85,7 @@ def _get_min_perm_loss(
     star_params_log_probs_all,
     prob_galaxy,
     true_galaxy_bool,
-    is_on_array,
+    source_mask,
 ):
     # get log-probability under every possible matching of estimated star to true star
     (
@@ -97,7 +97,7 @@ def _get_min_perm_loss(
         star_params_log_probs_all,
         prob_galaxy,
         true_galaxy_bool,
-        is_on_array,
+        source_mask,
     )
 
     # find the permutation that minimizes the location losses
@@ -275,13 +275,13 @@ class SleepPhase(pl.LightningModule):
         log_flux_mean shape = (n_ptiles x max_detections x n_bands)
 
         the *_logvar inputs should the same shape as their respective means
-        the true_tile_* inputs, except for true_tile_is_on_array,
+        the true_tile_* inputs, except for true_tile_source_mask,
         should have same shape as their respective means, e.g.
         true_locs should have the same shape as loc_mean
 
         In true_locs, the off sources must have parameter value = 0
 
-        true_is_on_array shape = (n_ptiles x max_detections)
+        true_source_mask shape = (n_ptiles x max_detections)
             Indicates if sources is on (1) or off (0)
 
         true_galaxy_bool shape = (n_ptiles x max_detections x 1)
@@ -326,10 +326,11 @@ class SleepPhase(pl.LightningModule):
         true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
         true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
         true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
-        true_tile_is_on_array = encoder.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
+        true_tile_source_mask = encoder.get_mask_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
+        # TODO: change to self.image_encoder(image_ptiles, true_tile_n_sources)?
         pred = self.image_encoder.forward(image_ptiles, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
@@ -344,7 +345,7 @@ class SleepPhase(pl.LightningModule):
 
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
-        loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
+        loc_mean = loc_mean + (true_tile_source_mask == 0).float().unsqueeze(-1) * 1e16
         locs_log_probs_all = _get_params_logprob_all_combs(true_tile_locs, loc_mean, loc_logvar)
         star_params_log_probs_all = _get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
@@ -358,7 +359,7 @@ class SleepPhase(pl.LightningModule):
             star_params_log_probs_all,
             prob_galaxy,
             true_tile_galaxy_bool,
-            true_tile_is_on_array,
+            true_tile_source_mask,
         )
 
         loss_vec = (

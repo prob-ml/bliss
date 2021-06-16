@@ -62,11 +62,11 @@ class TestSourceEncoder:
                 assert ((pred["log_flux_mean"][:, :, b] != 0).sum(1) == n_star_per_tile).all()
 
             # check pattern of zeros
-            is_on_array = encoder.get_is_on_from_n_sources(
+            source_mask = encoder.get_mask_from_n_sources(
                 n_star_per_tile, star_encoder.max_detections
             )
-            _loc_mean = pred["loc_mean"] * is_on_array.unsqueeze(2).float()
-            _log_flux_mean = pred["log_flux_mean"] * is_on_array.unsqueeze(2).float()
+            _loc_mean = pred["loc_mean"] * source_mask.unsqueeze(2).float()
+            _log_flux_mean = pred["log_flux_mean"] * source_mask.unsqueeze(2).float()
             assert torch.all(_loc_mean == pred["loc_mean"])
             assert torch.all(_log_flux_mean == pred["log_flux_mean"])
 
