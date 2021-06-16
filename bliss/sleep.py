@@ -329,9 +329,9 @@ class SleepPhase(pl.LightningModule):
         true_tile_source_mask = encoder.get_mask_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
-        image_ptiles = self.image_encoder.get_images_in_tiles(images)
+        # image_ptiles = self.image_encoder.get_images_in_tiles(images)
         # TODO: change to self.image_encoder(image_ptiles, true_tile_n_sources)?
-        pred = self.image_encoder.forward(image_ptiles, true_tile_n_sources)
+        pred = self.image_encoder.forward(images, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)

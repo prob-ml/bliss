@@ -197,7 +197,7 @@ class EncoderCNN(nn.Module):
             nn.ReLU(True),
         ]
         in_channel = channel
-        for i in range(3):
+        for i in range(2):
             downsample = True
             if i == 0:
                 downsample = False
@@ -246,8 +246,6 @@ class ImageEncoder(nn.Module):
         assert border_padding % 1 == 0, "amount of border padding should be an integer"
         self.border_padding = int(border_padding)
 
-        # cache the weights used for the tiling convolution
-
         self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
 
         # Number of variational parameters used to characterize each source in an image.
@@ -263,10 +261,10 @@ class ImageEncoder(nn.Module):
             + 1
             + self.max_detections
         )
-        dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
+        # dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
+        hidden = 64
         self.enc_final = nn.Sequential(
-            nn.Flatten(1),
-            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
+            nn.Linear(34, hidden),
             nn.BatchNorm1d(hidden),
             nn.ReLU(True),
             nn.Dropout(dropout),
@@ -406,14 +404,18 @@ class ImageEncoder(nn.Module):
         )
         return var_param
 
-    def get_latent(self, image_ptiles):
+    def get_latent(self, images):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        log_img = torch.log(images - images.min() + 1.0)
         h = self.enc_conv(log_img)
 
-        # Concatenate all output parameters for all possible n_sources
-        return self.enc_final(h)
+        h = F.adaptive_avg_pool2d(h, (50, 50))
+        h = rearrange(h, "b c h w -> (b h w) c")
+
+        h = self.enc_final(h)
+
+        return h
 
     def _get_var_params_for_n_sources(self, h, n_sources):
         """
@@ -453,36 +455,36 @@ class ImageEncoder(nn.Module):
         free_probs = h[:, self.prob_n_source_indx]
         return self.log_softmax(free_probs)
 
-    def get_var_params_for_all(self, h, tile_n_sources_sampled):
+    def get_var_params_for_all(self, h, n_sources_sampled):
         # get probability of params except n_sources
         # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        var_params = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
+        var_params = self._get_var_params_for_n_sources(h, n_sources_sampled)
         # get probability of n_sources
         # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
         n_source_log_probs = self._get_logprob_n_from_var_params(h)
         var_params["n_source_log_probs"] = n_source_log_probs
         return var_params
 
-    def forward_sampled(self, image_ptiles, tile_n_sources_sampled):
-        # images shape = (n_ptiles x n_bands x pslen x pslen)
+    def forward_sampled(self, images, tile_n_sources_sampled):
+        # images shape = (batch x n_bands x h x w)
         # tile_n_sources shape = (n_samples x n_ptiles)
         assert len(tile_n_sources_sampled.shape) == 2
-        assert image_ptiles.shape[0] == tile_n_sources_sampled.shape[1]
+        # assert images.shape[0] == tile_n_sources_sampled.shape[1]
         # h.shape = (n_ptiles x self.dim_out_all)
-        h = self.get_latent(image_ptiles)
+        h = self.get_latent(images)
 
         var_params = self.get_var_params_for_all(h, tile_n_sources_sampled)
 
         return var_params
 
-    def forward(self, image_ptiles, tile_n_sources):
-        # images shape = (n_ptiles x n_bands x pslen x pslen)
+    def forward(self, images, tile_n_sources):
+        # images shape = (batch x n_bands x h x w)
         # tile_n_sources shape = (n_ptiles)
         assert len(tile_n_sources.shape) == 1
-        assert len(image_ptiles.shape) == 4
-        assert image_ptiles.shape[0] == tile_n_sources.shape[0]
+        assert len(images.shape) == 4
+        # assert images.shape[0] == tile_n_sources.shape[0]
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections).unsqueeze(0)
-        var_params = self.forward_sampled(image_ptiles, tile_n_sources)
+        var_params = self.forward_sampled(images, tile_n_sources)
         var_params = {key: value.squeeze(0) for key, value in var_params.items()}
         return var_params
 
@@ -570,8 +572,8 @@ class ImageEncoder(nn.Module):
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
         return tile_estimate
 
-    def tile_map_n_sources(self, image_ptiles):
-        h = self.get_latent(image_ptiles)
+    def tile_map_n_sources(self, images):
+        h = self.get_latent(images)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
         return tile_n_sources
@@ -580,12 +582,13 @@ class ImageEncoder(nn.Module):
 
         # extract image_ptiles
         batch_size = images.shape[0]
-        image_ptiles = self.get_images_in_tiles(images)
-        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+        # image_ptiles = self.get_image_in_tiles(images)
+        # n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+        n_tiles_per_image = 2500
 
         # MAP (for n_sources) prediction on var params on each tile
-        tile_n_sources = self.tile_map_n_sources(image_ptiles)
-        pred = self(image_ptiles, tile_n_sources)
+        tile_n_sources = self.tile_map_n_sources(images)
+        pred = self(images, tile_n_sources)
 
         return self.tile_map_estimate_from_var_params(pred, n_tiles_per_image, batch_size)
 
