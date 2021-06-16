@@ -406,7 +406,7 @@ class ImageEncoder(nn.Module):
         )
         return var_param
 
-    def get_var_params_all(self, image_ptiles):
+    def get_latent(self, image_ptiles):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
@@ -453,22 +453,25 @@ class ImageEncoder(nn.Module):
         free_probs = h[:, self.prob_n_source_indx]
         return self.log_softmax(free_probs)
 
+    def get_var_params_for_all(self, h, tile_n_sources_sampled):
+        # get probability of params except n_sources
+        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
+        var_params = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
+        # get probability of n_sources
+        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
+        n_source_log_probs = self._get_logprob_n_from_var_params(h)
+        var_params["n_source_log_probs"] = n_source_log_probs
+        return var_params
+
     def forward_sampled(self, image_ptiles, tile_n_sources_sampled):
         # images shape = (n_ptiles x n_bands x pslen x pslen)
         # tile_n_sources shape = (n_samples x n_ptiles)
         assert len(tile_n_sources_sampled.shape) == 2
         assert image_ptiles.shape[0] == tile_n_sources_sampled.shape[1]
         # h.shape = (n_ptiles x self.dim_out_all)
-        h = self.get_var_params_all(image_ptiles)
+        h = self.get_latent(image_ptiles)
 
-        # get probability of params except n_sources
-        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        var_params = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
-
-        # get probability of n_sources
-        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
-        n_source_log_probs = self._get_logprob_n_from_var_params(h)
-        var_params["n_source_log_probs"] = n_source_log_probs
+        var_params = self.get_var_params_for_all(h, tile_n_sources_sampled)
 
         return var_params
 
@@ -487,7 +490,7 @@ class ImageEncoder(nn.Module):
         assert len(images.shape) == 4
         assert images.shape[0] == 1, "Only works for 1 image"
         image_ptiles = self.get_images_in_tiles(images)
-        h = self.get_var_params_all(image_ptiles)
+        h = self.get_latent(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
         # sample number of sources.
@@ -568,7 +571,7 @@ class ImageEncoder(nn.Module):
         return tile_estimate
 
     def tile_map_n_sources(self, image_ptiles):
-        h = self.get_var_params_all(image_ptiles)
+        h = self.get_latent(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
         tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
         return tile_n_sources
