@@ -13,8 +13,7 @@ mode: train
 general:
   overwrite: False
 
-gpus:
-  - 0
+gpus: 1 # use a single gpu by default.
 
 paths:
   root: ${oc.env:BLISS_HOME}

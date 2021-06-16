@@ -10,7 +10,22 @@ from bliss.models import galaxy_net
 
 # command line arguments for tests
 def pytest_addoption(parser):
-    parser.addoption("--gpus", default="cpu", type=str, help="--gpus option for trainer.")
+    parser.addoption(
+        "--gpu",
+        action="store_true",
+        default=False,
+        help="Run tests using gpu.",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    # skip `multi_gpu` required tests when running on cpu or only single gpu is avaiable
+    if config.getoption("--gpu") and torch.cuda.device_count() >= 2:
+        return
+    skip = pytest.mark.skip(reason="need --gpu option and more than 2 available gpus to run")
+    for item in items:
+        if "multi_gpu" in item.keywords:
+            item.add_marker(skip)
 
 
 def get_cfg(overrides, devices):
@@ -23,16 +38,12 @@ def get_cfg(overrides, devices):
 
 
 class DeviceSetup:
-    def __init__(self, gpus):
-        self.use_cuda = torch.cuda.is_available() if gpus != "cpu" else False
-        self.gpus = gpus if self.use_cuda else None
-
-        # setup device
+    def __init__(self, use_gpu):
+        self.use_cuda = torch.cuda.is_available() if use_gpu else False
+        self.gpus = 1 if self.use_cuda else None
         self.device = torch.device("cpu")
-        if self.gpus and self.use_cuda:
-            assert isinstance(self.gpus, str) and len(self.gpus) == 1
-            device_id = int(self.gpus[0])
-            self.device = torch.device(f"cuda:{device_id}")
+        if self.use_cuda:
+            self.device = torch.device("cuda:0")
             torch.cuda.set_device(self.device)
 
 
@@ -115,8 +126,8 @@ def paths():
 
 @pytest.fixture(scope="session")
 def devices(pytestconfig):
-    gpus = pytestconfig.getoption("gpus")
-    return DeviceSetup(gpus)
+    use_gpu = pytestconfig.getoption("gpu")
+    return DeviceSetup(use_gpu)
 
 
 @pytest.fixture(scope="session")
