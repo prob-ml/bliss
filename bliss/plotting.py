@@ -44,6 +44,7 @@ def plot_image_locs(
         _plot_locs(ax, slen, border_padding, true_locs, color=colors[0], marker=markers[0], s=s)
 
     if est_locs is not None:
+        s2 = 2 * s if markers[1] == "x" else s
         _plot_locs(
             ax,
             slen,
@@ -51,7 +52,7 @@ def plot_image_locs(
             est_locs,
             color=colors[1],
             marker=markers[1],
-            s=2 * s if markers[1] == "x" else s,
+            s=s2,
             prob_galaxy=prob_galaxy,
         )
 
