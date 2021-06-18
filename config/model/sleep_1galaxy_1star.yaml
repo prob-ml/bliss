@@ -12,12 +12,12 @@ kwargs:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
     tile_slen: 4
-    ptile_slen: 36
+    ptile_slen: 52
     border_padding: 4
     prob_galaxy: 0.5
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 1
-    mean_sources: 0.015
+    mean_sources: 0.035
     min_sources: 0
     gal_slen: ${model.galaxy.slen}
     autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt

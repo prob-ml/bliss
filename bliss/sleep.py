@@ -557,6 +557,7 @@ class SleepPhase(pl.LightningModule):
             n_sources = estimate["n_sources"][None, i]
             locs = estimate["locs"][None, i]
             galaxy_bool = estimate["galaxy_bool"][None, i]
+            prob_galaxy = estimate["prob_galaxy"][None, i]
 
             # plot true image + number of sources first.
             image = image[0, 0].cpu().numpy()  # only first band will be plotted.
@@ -577,6 +578,7 @@ class SleepPhase(pl.LightningModule):
             true_star_locs = true_star_locs.cpu().numpy()[0]
             galaxy_locs = galaxy_locs.cpu().numpy()[0]
             star_locs = star_locs.cpu().numpy()[0]
+            prob_galaxy = prob_galaxy.cpu().numpy()[0].reshape(-1)
 
             # draw reconstruction image.
             recon_image, _ = self.image_decoder.render_images(
@@ -602,7 +604,9 @@ class SleepPhase(pl.LightningModule):
                 border_padding,
                 true_locs=true_galaxy_locs,
                 est_locs=galaxy_locs,
+                prob_galaxy=prob_galaxy,
                 markers=("x", "+"),
+                colors=("r", "b"),
             )
 
             plotting.plot_image_locs(
@@ -611,7 +615,9 @@ class SleepPhase(pl.LightningModule):
                 border_padding,
                 true_locs=true_star_locs,
                 est_locs=star_locs,
-                markers=("o", "1"),
+                prob_galaxy=prob_galaxy,
+                markers=("x", "+"),
+                colors=("orange", "deepskyblue"),
             )
 
         plt.subplots_adjust(hspace=0.2, wspace=0.4)

@@ -12,6 +12,7 @@ from bliss import plotting
 datasets = {
     "SimulatedDataset": simulated.SimulatedDataset,
     "SDSSGalaxies": galsim_galaxies.SDSSGalaxies,
+    "ToyGaussian": galsim_galaxies.ToyGaussian,
 }
 
 
