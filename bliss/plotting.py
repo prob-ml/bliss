@@ -12,8 +12,10 @@ def _plot_locs(ax, slen, border_padding, locs, color="r", marker="x", s=20, prob
     x = locs[:, 1] * slen - 0.5 + border_padding
     y = locs[:, 0] * slen - 0.5 + border_padding
     for i, (xi, yi) in enumerate(zip(x, y)):
-        s = s if prob_galaxy is None else s * (1 + abs(0.5 - prob_galaxy[i]))
-        ax.scatter(xi, yi, color=color, marker=marker, s=s)
+        if xi > border_padding and yi > border_padding:
+            ax.scatter(xi, yi, color=color, marker=marker, s=s)
+            if prob_galaxy is not None:
+                ax.annotate(f"{prob_galaxy[i]:.2f}", (xi, yi), color=color, fontsize=8)
 
 
 def plot_image_locs(
@@ -49,7 +51,7 @@ def plot_image_locs(
             est_locs,
             color=colors[1],
             marker=markers[1],
-            s=s,
+            s=2 * s if markers[1] == "x" else s,
             prob_galaxy=prob_galaxy,
         )
 
