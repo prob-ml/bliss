@@ -25,8 +25,10 @@ kwargs:
     gal_slen: ${model.galaxy.slen}
     autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt
     latents_file: ${paths.data}/latents_simulated_sdss_galaxies.pt
-    psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
+    psf_params_file: ${paths.root}/data/psField-000094-1-0012.fits
     background_values: ${model.image.background}
+    sdss_bands:
+      - 2
   encoder_kwargs:
     n_bands: ${model.image.n_bands}
     tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
