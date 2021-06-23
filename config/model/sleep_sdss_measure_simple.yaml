@@ -17,7 +17,7 @@ kwargs:
     prob_galaxy: 0.7
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 1
-    mean_sources: 0.05
+    mean_sources: 0.03
     min_sources: 0
     f_min: 1e3
     f_max: 1e5
