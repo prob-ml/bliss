@@ -564,7 +564,6 @@ class ImageEncoder(nn.Module):
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
             "prob_galaxy": pred["prob_galaxy"],
-            "prob_n_sources": torch.exp(pred["n_source_log_probs"]),
         }
 
         # reshape with images' batch_size.
@@ -572,6 +571,9 @@ class ImageEncoder(nn.Module):
             key: value.view(batch_size, n_tiles_per_image, self.max_detections, -1)
             for key, value in tile_estimate.items()
         }
+        tile_estimate["prob_n_sources"] = torch.exp(pred["n_source_log_probs"]).reshape(
+            batch_size, n_tiles_per_image, self.max_detections + 1, -1
+        )
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
         return tile_estimate
 
