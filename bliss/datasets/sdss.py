@@ -380,6 +380,7 @@ class SloanDigitalSkySurvey(Dataset):
             "fluxes": fluxes,
             "bright_star_bgs": stamp_bgs,
             "sdss_psfs": stamp_psfs,
+            "po_fits": po_fits,
         }
         pickle.dump(ret, cache_path.open("wb+"))
 
