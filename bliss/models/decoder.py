@@ -74,7 +74,7 @@ class ImageDecoder(pl.LightningModule):
         # Star Decoder
         self.psf_slen = psf_slen
         self.psf_params_file = psf_params_file
-        self.sdss_bands = sdss_bands
+        self.sdss_bands = tuple(sdss_bands)
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
