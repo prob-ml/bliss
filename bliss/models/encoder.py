@@ -57,7 +57,14 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
 
     # dictionary of tile_params is consistent and no extraneous keys.
     required = {"n_sources", "locs"}
-    optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes", "prob_galaxy"}
+    optional = {
+        "galaxy_bool",
+        "galaxy_params",
+        "fluxes",
+        "log_fluxes",
+        "prob_galaxy",
+        "prob_n_sources",
+    }
     assert required.issubset(tile_params.keys())
     for param_name in tile_params:
         assert param_name in required or param_name in optional
@@ -564,6 +571,9 @@ class ImageEncoder(nn.Module):
             key: value.view(batch_size, n_tiles_per_image, self.max_detections, -1)
             for key, value in tile_estimate.items()
         }
+        tile_estimate["prob_n_sources"] = torch.exp(pred["n_source_log_probs"]).reshape(
+            batch_size, n_tiles_per_image, self.max_detections + 1, -1
+        )
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
         return tile_estimate
 

@@ -39,6 +39,7 @@ class ImageDecoder(pl.LightningModule):
         background_values=(686.0,),
         loc_min=0.0,
         loc_max=1.0,
+        sdss_bands=(2,),
     ):
         super().__init__()
         ## Set class attributes
@@ -73,6 +74,7 @@ class ImageDecoder(pl.LightningModule):
         # Star Decoder
         self.psf_slen = psf_slen
         self.psf_params_file = psf_params_file
+        self.sdss_bands = tuple(sdss_bands)
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
@@ -103,10 +105,7 @@ class ImageDecoder(pl.LightningModule):
 
         ## Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
-            self.tiler,
-            self.n_bands,
-            self.psf_params_file,
-            self.psf_slen,
+            self.tiler, self.n_bands, self.psf_params_file, self.psf_slen, self.sdss_bands
         )
 
         ## Submodule for rendering galaxies on a tile
@@ -606,13 +605,7 @@ class Tiler(nn.Module):
 
 
 class StarTileDecoder(nn.Module):
-    def __init__(
-        self,
-        tiler,
-        n_bands,
-        psf_params_file,
-        psf_slen,
-    ):
+    def __init__(self, tiler, n_bands, psf_params_file, psf_slen, sdss_bands=(2,)):
         super().__init__()
         self.tiler = tiler
         self.n_bands = n_bands
@@ -621,9 +614,8 @@ class StarTileDecoder(nn.Module):
             psf_params = torch.from_numpy(np.load(psf_params_file))
             psf_params = psf_params[list(range(n_bands))]
         elif ext == ".fits":
-            assert n_bands == 2, "only 2 band fit files are supported."
-            bands = (2, 3)
-            psf_params = self.get_fit_file_psf_params(psf_params_file, bands)
+            assert len(sdss_bands) == n_bands
+            psf_params = self.get_fit_file_psf_params(psf_params_file, sdss_bands)
         else:
             raise NotImplementedError(
                 "Only .npy and .fits extensions are supported for PSF params files."
