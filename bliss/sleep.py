@@ -249,7 +249,7 @@ class SleepPhase(pl.LightningModule):
         # shape = (n_ptiles x band x ptile_slen x ptile_slen)
         image_ptiles = self.image_encoder.get_images_in_tiles(images)
         n_galaxy_params = self.image_decoder.n_galaxy_params
-        galaxy_params = self.forward_galaxy(image_ptiles, batch["locs"])
+        galaxy_params = self.forward_galaxy(image_ptiles, batch["locs"])  # use true locations.
         galaxy_params = galaxy_params.view(batch_size, -1, 1, n_galaxy_params)
 
         # draw fully reconstructed image.
@@ -396,7 +396,7 @@ class SleepPhase(pl.LightningModule):
             loss = self.get_detection_loss(batch)[0]
             self.log("train_detection_loss", loss)
 
-        if optimizer_idx == 1:  # galaxy_encoder:
+        if optimizer_idx == 1:  # galaxy_encoder
             loss = self.get_galaxy_loss(batch)
             self.log("train_galaxy_loss", loss)
 
