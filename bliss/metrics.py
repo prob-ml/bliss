@@ -1,5 +1,6 @@
 import torch
 from scipy import optimize as sp_optim
+from einops import reduce, rearrange
 
 
 def inner_join_locs(locs1, locs2):
@@ -12,7 +13,7 @@ def inner_join_locs(locs1, locs2):
     # which implements the Hungarian algorithm.
 
     # if locs1 is less than locs2, not every locs2 is returned;
-    # if locs2 is less than locs1, not every locs1 is return.
+    # if locs2 is less than locs1, not every locs1 is returned.
     # Only those with a match is returned, hence the "inner_join."
 
     assert len(locs1.shape) == 2
@@ -24,7 +25,8 @@ def inner_join_locs(locs1, locs2):
     # mse of locs:
     # entry (i,j) is l1 distance between of ith loc in locs1
     # and to jth loc in locs2
-    locs_err = (locs1.view(-1, 1, 2) - locs2.view(1, -1, 2)).abs().sum(2)
+    locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+    locs_err = reduce(locs_err, "i j k -> i j", "sum")
 
     # find minimal permutation
     row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
@@ -107,8 +109,10 @@ def eval_error_on_batch(true_params, est_params, slen):
     count_bool = true_params["n_sources"].eq(est_params["n_sources"])
 
     # accuracy of galaxy counts
-    est_n_gal = est_params["galaxy_bool"].view(batch_size, -1).sum(-1)
-    true_n_gal = true_params["galaxy_bool"].view(batch_size, -1).sum(-1)
+    est_n_gal = reduce(est_params["galaxy_bool"], "b n 1 -> b", "sum")
+
+    true_n_gal = reduce(true_params["galaxy_bool"], "b n 1 -> b", "sum")
+
     galaxy_counts_bool = est_n_gal.eq(true_n_gal)
 
     for i in range(batch_size):

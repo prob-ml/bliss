@@ -1,4 +1,4 @@
-from hydra.experimental import initialize, compose
+from hydra import initialize, compose
 from bliss import predict
 
 
@@ -9,6 +9,8 @@ def test_predict_run(devices):
         "predict.output_file": "null",
         "predict.device": f"cuda:{devices.device.index}" if devices.use_cuda else "cpu",
         "predict.testing": True,
+        "predict.checkpoint": "null",
+        "model": "sleep_sdss_measure_simple",
     }
     overrides = [f"{k}={v}" for k, v in overrides.items()]
     with initialize(config_path="../config"):

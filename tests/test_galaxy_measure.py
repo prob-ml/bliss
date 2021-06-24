@@ -5,7 +5,7 @@ class TestBasicGalaxyMeasure:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
         overrides = dict(
-            model="sleep_galaxy_measure_basic",
+            model="sleep_sdss_measure_simple",
             dataset="default" if devices.use_cuda else "cpu",
             training="cpu",
         )

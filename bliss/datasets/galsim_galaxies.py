@@ -1,12 +1,10 @@
 from collections import namedtuple
 from speclite.filters import load_filter, ab_reference_flux
 import numpy as np
-from omegaconf import DictConfig
 import galsim
 import torch
 
 import astropy.units as u
-from astropy.table import Table
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 
@@ -38,50 +36,6 @@ def calculate_zero_point(band_name="sdss2010-r", B0=24):
         .to(1 / (u.s * u.m ** 2))  # pylint: disable=no-member
         .value
     )
-
-
-def get_catsim_galaxy(entry, filt, survey, no_disk=False, no_bulge=False, no_agn=False):
-    """Credit: WeakLensingDeblending (https://github.com/LSSTDESC/WeakLensingDeblending)"""
-
-    components = []
-    total_flux = get_flux(entry[filt.band + "_ab"], filt, survey)
-    # Calculate the flux of each component in detected electrons.
-    total_fluxnorm = entry["fluxnorm_disk"] + entry["fluxnorm_bulge"] + entry["fluxnorm_agn"]
-    disk_flux = 0.0 if no_disk else entry["fluxnorm_disk"] / total_fluxnorm * total_flux
-    bulge_flux = 0.0 if no_bulge else entry["fluxnorm_bulge"] / total_fluxnorm * total_flux
-    agn_flux = 0.0 if no_agn else entry["fluxnorm_agn"] / total_fluxnorm * total_flux
-
-    if disk_flux + bulge_flux + agn_flux == 0:
-        raise ValueError("Source not visible, check catalog values.")
-
-    if disk_flux > 0:
-        beta_radians = np.radians(entry["pa_disk"])
-        if bulge_flux > 0:
-            assert entry["pa_disk"] == entry["pa_bulge"], "Sersic components have different beta."
-        a_d, b_d = entry["a_d"], entry["b_d"]
-        disk_hlr_arcsecs = np.sqrt(a_d * b_d)
-        disk_q = b_d / a_d
-        disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
-            q=disk_q, beta=beta_radians * galsim.radians
-        )
-        components.append(disk)
-
-    if bulge_flux > 0:
-        beta_radians = np.radians(entry["pa_bulge"])
-        a_b, b_b = entry["a_b"], entry["b_b"]
-        bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
-        bulge_q = b_b / a_b
-        bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs).shear(
-            q=bulge_q, beta=beta_radians * galsim.radians
-        )
-        components.append(bulge)
-
-    if agn_flux > 0:
-        agn = galsim.Gaussian(flux=agn_flux, sigma=1e-8)
-        components.append(agn)
-
-    profile = galsim.Add(components)
-    return profile
 
 
 Survey = namedtuple(
@@ -137,69 +91,74 @@ sdss_survey = Survey(
 )
 
 
-class SDSSGalaxies(pl.LightningDataModule, Dataset):
-    def __init__(self, cfg: DictConfig):
+class ToyGaussian(pl.LightningDataModule, Dataset):
+    def __init__(
+        self,
+        num_workers=0,
+        batch_size=64,
+        n_batches=10,
+        slen=53,
+        n_bands=1,
+        pixel_scale=0.396,
+        noise_factor=0.05,
+        background=845,
+        psf_fwhm=1.4,
+        min_flux=300,
+        max_flux=10000,
+        min_hlr=0.8,
+        max_hlr=4.0,
+        max_e=0.6,
+    ):
         super().__init__()
-        # assume 1 band everytime for now ('r' band).
+        assert n_bands == 1, "Only 1 band is supported"
+        self.num_workers = num_workers
+        self.batch_size = batch_size
+        self.n_batches = n_batches
 
-        # general dataset parameters.
-        self.cfg = cfg
-        self.num_workers = cfg.dataset.num_workers
-        self.batch_size = cfg.dataset.batch_size
-        self.n_batches = cfg.dataset.n_batches
+        self.slen = slen
+        self.n_bands = n_bands
+        self.pixel_scale = pixel_scale
+        self.noise_factor = noise_factor
 
-        if self.num_workers > 0:
-            raise NotImplementedError(
-                "There is a problem where seed gets reset with multiple workers,"
-                "resulting in same galaxy in every epoch."
-            )
+        # create background
+        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
+        self.background[...] = background
 
-        # image paraemters.
-        params = self.cfg.dataset.params
-        self.slen = int(params.slen)
-        assert self.slen % 2 == 1, "Need divisibility by 2"
-        self.n_bands = 1
-        self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
-        self.background[...] = params.background
-        self.noise_factor = params.noise_factor
+        # small dummy psf
+        self.psf = galsim.Gaussian(fwhm=psf_fwhm).withFlux(1.0)
+        self.min_flux = min_flux
+        self.max_flux = max_flux
+        self.min_hlr = min_hlr
+        self.max_hlr = max_hlr
+        self.max_e = max_e
 
-        # directly from survey + filter.
-        assert len(sdss_survey.filters) == 1
-        assert sdss_survey.filters[0].band == "r"
-        self.survey = sdss_survey
-        self.filt = self.survey.filters[0]
-        self.pixel_scale = self.survey.pixel_scale
-
-        # read cosmodc2 table of entries.
-        self.catalog = Table.read(cfg.dataset.cosmoDC2_file)
-
-        # setup sdss object and psf at a given point.
-        assert len(list(cfg.dataset.sdss.bands)) == 1
-        assert cfg.dataset.sdss.bands[0] == 2
-        assert len(list(cfg.dataset.psf.psf_points)) == 2
-        sdss_data = SloanDigitalSkySurvey(**cfg.dataset.sdss)
-        _psf = sdss_data.rcfgcs[0][-1]
-        x, y = cfg.dataset.psf.psf_points
-        psf = _psf.psf_at_points(0, x, y)
-        psf_image = galsim.Image(psf, scale=self.pixel_scale)
-        self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
-        self.psf_fwhm = self.psf.calculateFWHM()  # arcsecs
-
-        # self.psf = galsim.Gaussian(fwhm=self.filt.median_psf_fwhm).withFlux(1.0)
+    def _uniform(self, a, b):
+        # uses pytorch to return a single float ~ U(a, b)
+        u = (a - b) * torch.rand(1) + b
+        return u.item()
 
     def __getitem__(self, idx):
-        _idx = np.random.randint(len(self.catalog))
-        entry = self.catalog[_idx]
-        galaxy = get_catsim_galaxy(entry, self.filt, self.survey)
+        flux_avg = self._uniform(self.min_flux, self.max_flux)
+        hlr = self._uniform(self.min_hlr, self.max_hlr)  # arcseconds
+        flux = (hlr / self.pixel_scale) ** 2 * np.pi * flux_avg  # approx
+
+        # sample ellipticity
+        l = self._uniform(0, self.max_e)
+        theta = self._uniform(0, 2 * np.pi)
+        g1 = l * np.cos(theta)
+        g2 = l * np.sin(theta)
+        galaxy = galsim.Gaussian(half_light_radius=hlr).shear(g1=g1, g2=g2).withFlux(flux)
         gal_conv = galsim.Convolution(galaxy, self.psf)
         image = gal_conv.drawImage(
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
-        image = image.array.reshape(1, self.slen, self.slen).astype(np.float32)
+
+        # convert image to pytorch and reshape
+        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
         # add noise and background.
-        image += self.background.mean()
-        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        image += self.background
+        noise = np.sqrt(image) * torch.randn(*image.shape) * self.noise_factor
         image += noise
 
         return {"images": image, "background": self.background}
@@ -217,58 +176,113 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
-class ToyGaussian(pl.LightningDataModule, Dataset):
-    def __init__(self, cfg: DictConfig):
+class SDSSGalaxies(pl.LightningDataModule, Dataset):
+    def __init__(
+        self,
+        sdss_kwargs: dict,  # for obtaining PSF at points.
+        num_workers=0,
+        batch_size=64,
+        n_batches=10,
+        n_bands=1,
+        slen=53,
+        background=865.0,
+        noise_factor=0.05,
+        min_flux=1e3,
+        max_flux=3.5e5,
+        min_a_d=0.8,
+        max_a_d=6.5,
+        min_a_b=0.8,
+        max_a_b=3.6,
+        psf_points=(450, 550),  # points in the SDSS frame.
+    ):
         super().__init__()
-        # assume 1 band everytime.
-        self.cfg = cfg
-        self.num_workers = cfg.dataset.num_workers
-        self.batch_size = cfg.dataset.batch_size
-        self.n_batches = cfg.dataset.n_batches
+        assert n_bands == 1, "Only 1 band is supported"
 
-        if self.num_workers > 0:
-            raise NotImplementedError(
-                "There is a problem where seed gets reset with multiple workers,"
-                "resulting in same galaxy in every epoch."
-            )
+        self.n_batches = n_batches
+        self.batch_size = batch_size
+        self.num_workers = num_workers
 
-        params = self.cfg.dataset.params
-        self.slen = int(params.slen)
-        assert self.slen % 2 == 1, "Need divisibility by 2"
         self.n_bands = 1
-        self.background = np.zeros((self.n_bands, self.slen, self.slen), dtype=np.float32)
-        self.background[...] = params.background
-        self.pixel_scale = params.pixel_scale
-        self.noise_factor = params.noise_factor
+        self.slen = slen
+        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
+        self.background[...] = background
+        self.noise_factor = noise_factor
 
-        # small dummy psf
-        self.psf = galsim.Gaussian(fwhm=params.psf_fwhm).withFlux(1.0)
-        self.min_flux = params.min_flux
-        self.max_flux = params.max_flux
-        self.min_hlr = params.min_hlr
-        self.max_hlr = params.max_hlr
-        self.max_e = params.max_e
+        # directly from survey + filter.
+        assert len(sdss_survey.filters) == 1
+        assert sdss_survey.filters[0].band == "r"
+        self.survey = sdss_survey
+        self.filt = self.survey.filters[0]
+        self.pixel_scale = self.survey.pixel_scale
+
+        self.min_flux = min_flux
+        self.max_flux = max_flux
+        self.min_a_d = min_a_d
+        self.max_a_d = max_a_d
+        self.min_a_b = min_a_b
+        self.max_a_b = max_a_b
+
+        # setup sdss object and psf at a given point.
+        assert len(list(sdss_kwargs["bands"])) == 1
+        assert sdss_kwargs["bands"][0] == 2
+        assert len(list(psf_points)) == 2
+        sdss_data = SloanDigitalSkySurvey(**sdss_kwargs)
+        _psf = sdss_data.rcfgcs[0][-1]
+        x, y = psf_points
+        psf = _psf.psf_at_points(0, x, y)
+        psf_image = galsim.Image(psf, scale=self.pixel_scale)
+        self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+
+    def _uniform(self, a, b):
+        # uses pytorch to return a single float ~ U(a, b)
+        u = (a - b) * torch.rand(1) + b
+        return u.item()
 
     def __getitem__(self, idx):
-        flux_avg = np.random.uniform(self.min_flux, self.max_flux)
-        hlr = np.random.uniform(self.min_hlr, self.max_hlr)  # arcseconds
-        flux = (hlr / self.pixel_scale) ** 2 * np.pi * flux_avg  # approx
 
-        # sample ellipticity
-        l = np.random.uniform(0, self.max_e)
-        theta = np.random.uniform(0, 2 * np.pi)
-        g1 = l * np.cos(theta)
-        g2 = l * np.sin(theta)
-        galaxy = galsim.Gaussian(half_light_radius=hlr).shear(g1=g1, g2=g2).withFlux(flux)
+        # create galaxy as mixture of Exponential + DeVacauleurs
+        total_flux = self._uniform(self.min_flux, self.max_flux)
+        disk_frac = self._uniform(0, 1)
+        bulge_frac = 1 - disk_frac
+
+        disk_flux = total_flux * disk_frac
+        bulge_flux = total_flux * bulge_frac
+
+        beta_radians = self._uniform(0, 2 * np.pi)
+
+        components = []
+        if disk_flux > 0:
+            disk_q = self._uniform(0, 1)
+            a_d = self._uniform(self.min_a_d, self.max_a_d)
+            b_d = a_d * disk_q
+            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
+                q=disk_q, beta=beta_radians * galsim.radians
+            )
+            components.append(disk)
+
+        if bulge_flux > 0:
+            bulge_q = self._uniform(0, 1)
+            a_b = self._uniform(self.min_a_b, self.max_a_b)
+            b_b = bulge_q * a_b
+            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+            bulge = galsim.DeVaucouleurs(
+                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
+            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
+            components.append(bulge)
+
+        galaxy = galsim.Add(components)
+
+        # convolve with PSF
         gal_conv = galsim.Convolution(galaxy, self.psf)
         image = gal_conv.drawImage(
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
+        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
         # add noise and background.
-        image = image.array.reshape(1, self.slen, self.slen).astype(np.float32)
-        image += self.background
-        noise = np.sqrt(image) * np.random.randn(*image.shape) * self.noise_factor
+        image += self.background.mean()
+        noise = image.sqrt() * torch.randn(*image.shape) * self.noise_factor
         image += noise
 
         return {"images": image, "background": self.background}
@@ -287,20 +301,16 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
 
 class SavedGalaxies(pl.LightningDataModule, Dataset):
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, data_file, batch_size=128):
         super().__init__()
 
-        self.cfg = cfg
-        self.batch_size = cfg.dataset.batch_size
+        self.batch_size = batch_size
 
-        self.data = torch.load(cfg.dataset.data_file)
+        self.data = torch.load(data_file)
 
         # Source Equation (4) in: https://arxiv.org/abs/2005.12039
         assert self.data["images"].shape[1] == 1, "Only 1 band supported"
-        self.do_norm = cfg.dataset.do_norm
         self.n_images = len(self.data["images"])
-        self.beta = 2.5
-        self.norm = self.data["images"].reshape(self.n_images, 1, -1).max(axis=-1).values.mean()
 
     def __len__(self):
         return len(self.data["images"])
@@ -308,10 +318,6 @@ class SavedGalaxies(pl.LightningDataModule, Dataset):
     def __getitem__(self, idx):
         image = self.data["images"][idx]
         background = self.data["background"]
-
-        if self.do_norm:
-            image = torch.tanh(torch.arcsinh(self.beta * image / self.norm))
-            background = torch.tanh(torch.arcsinh(self.beta * background / self.norm))
 
         return {"images": image, "background": background}
 

@@ -22,7 +22,7 @@ _datasets = [
 ]
 datasets = {cls.__name__: cls for cls in _datasets}
 
-_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxy]
+_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxyAE]
 models = {cls.__name__: cls for cls in _models}
 
 
@@ -68,22 +68,23 @@ def setup_logger(cfg, paths):
     return logger
 
 
-def setup_checkpoint_callback(cfg, paths, logger):
-    checkpoint_callback = False
+def setup_callbacks(cfg, paths, logger):
+    callbacks = []
     output = Path(paths["output"])
     if cfg.training.trainer.checkpoint_callback:
-        checkpoint_dir = f"lightning_logs/version_{logger.version}/checkpoints"
+        checkpoint_dir = f"lightning_logs/version_{logger.version}"
         checkpoint_dir = output.joinpath(checkpoint_dir)
         checkpoint_callback = ModelCheckpoint(
             dirpath=checkpoint_dir,
-            save_top_k=True,
+            filename="{epoch}",
+            save_top_k=1,
             verbose=True,
             monitor="val_loss",
             mode="min",
-            prefix="",
         )
+        callbacks.append(checkpoint_callback)
 
-    return checkpoint_callback
+    return callbacks
 
 
 def train(cfg: DictConfig):
@@ -93,19 +94,17 @@ def train(cfg: DictConfig):
     setup_seed(cfg)
 
     # setup dataset.
-    dataset = datasets[cfg.dataset.name](cfg)
+    dataset = datasets[cfg.dataset.name](**cfg.dataset.kwargs)
 
     # setup model
-    model = models[cfg.model.name](cfg)
+    model = models[cfg.model.name](**cfg.model.kwargs, optimizer_params=cfg.optimizer)
 
     # setup trainer
     profiler = setup_profiler(cfg, paths)
     logger = setup_logger(cfg, paths)
-    checkpoint_callback = setup_checkpoint_callback(cfg, paths, logger)
+    callbacks = setup_callbacks(cfg, paths, logger)
     trainer_dict = OmegaConf.to_container(cfg.training.trainer, resolve=True)
-    trainer_dict.update(
-        dict(logger=logger, profiler=profiler, checkpoint_callback=checkpoint_callback)
-    )
+    trainer_dict.update(dict(logger=logger, profiler=profiler, callbacks=callbacks))
     trainer = pl.Trainer(**trainer_dict)
 
     # train!

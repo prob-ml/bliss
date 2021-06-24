@@ -1,4 +1,3 @@
-# @package _group_
 file: ${paths.data}/gold_sdss_galaxy_images.pt
 n_plots: 25
 common:
