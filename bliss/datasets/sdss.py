@@ -6,6 +6,7 @@ from math import floor, ceil
 import numpy as np
 import torch
 import torch.nn.functional as F
+from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
 from astropy.io import fits
@@ -68,7 +69,7 @@ class StarStamper:
         G_x = torch.stack([torch.from_numpy(grid_x)] * self.stampsize, dim=0)
         G_y = torch.stack([torch.from_numpy(grid_y)] * self.stampsize, dim=1)
 
-        G = torch.stack([G_x, G_y], dim=2).unsqueeze(0)
+        G = rearrange([G_x, G_y], "n x y -> 1 x y n")
 
         return G.type(self.grid_dtype)
 
@@ -327,7 +328,7 @@ class SloanDigitalSkySurvey(Dataset):
 
             sky_y = sky_y.clip(0, sky_small.shape[0] - 1)
             sky_x = sky_x.clip(0, sky_small.shape[1] - 1)
-            large_points = np.stack(np.meshgrid(sky_y, sky_x)).transpose()
+            large_points = rearrange(np.meshgrid(sky_y, sky_x), "n x y -> y x n")
             large_sky = sky_interp(large_points)
             large_sky_nelec = large_sky * gain[b]
 
@@ -379,6 +380,7 @@ class SloanDigitalSkySurvey(Dataset):
             "fluxes": fluxes,
             "bright_star_bgs": stamp_bgs,
             "sdss_psfs": stamp_psfs,
+            "po_fits": po_fits,
         }
         pickle.dump(ret, cache_path.open("wb+"))
 

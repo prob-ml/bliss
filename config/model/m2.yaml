@@ -1,4 +1,3 @@
-# @package _group_
 name: SleepPhase
 image:
   slen: 100
@@ -22,6 +21,9 @@ kwargs:
     alpha: 0.5
     psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
     background_values: ${model.image.background}
+    sdss_bands:
+      - 2
+      - 3
   encoder_kwargs:
     n_bands: ${model.image.n_bands}
     tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}

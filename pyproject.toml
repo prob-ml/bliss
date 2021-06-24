@@ -8,16 +8,15 @@ version = "0.1.0"
 [tool.poetry.dependencies]
 astropy = "^4.2"
 # galsim = "^2.2.4"
+einops = "^0.3.0"
 hydra-core = "^1.0.4"
 hyperopt = "^0.2.5"
 matplotlib = "^3.3.3"
 numpy = "^1.18.5"
-omegaconf = "^2.0.5"
 python = "^3.8"
 pytorch-lightning = "^1.0.8"
 scipy = "^1.4.1"
 torch = "1.7.1"
-einops = "^0.3.0"
 
 [tool.poetry.dev-dependencies]
 Cython = "^0.29.21"
@@ -32,10 +31,11 @@ pre-commit = "^2.9.2"
 pylint = "^2.6.0"
 pytest = "^6.1.2"
 pytest-cov = "^2.10"
-ray = {extras = ["tune"], version = "^1.0.1"}
+ray = {extras = ["tune", "default"], version = "^1.0.1"}
 rope = "^0.18.0"
 speclite = "^0.13"
 tox = "^3.20.1"
+plotly = "^4.14.3"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
