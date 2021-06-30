@@ -572,7 +572,7 @@ class ImageEncoder(nn.Module):
             for key, value in tile_estimate.items()
         }
         tile_estimate["prob_n_sources"] = torch.exp(pred["n_source_log_probs"]).reshape(
-            batch_size, n_tiles_per_image, self.max_detections + 1, -1
+            batch_size, n_tiles_per_image, -1, self.max_detections + 1
         )
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
         return tile_estimate
