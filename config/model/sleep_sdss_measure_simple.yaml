@@ -40,7 +40,7 @@ kwargs:
     hidden: 128
   galaxy_encoder_kwargs:
     latent_dim: ${model.galaxy.latent_dim}
-    slen: 36
+    slen: 44
     n_bands: 1
     hidden: 256
   use_galaxy_encoder: True

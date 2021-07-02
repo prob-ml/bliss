@@ -320,7 +320,7 @@ class ImageEncoder(nn.Module):
         assert tile_locs.shape[1] == 1
         assert image_ptiles.shape[-1] == self.ptile_slen
         n_ptiles = image_ptiles.shape[0]
-        crop_slen = 2 * self.tile_slen
+        crop_slen = self.tile_slen
         ptile_slen = self.ptile_slen
         assert tile_locs.shape[0] == n_ptiles
 
