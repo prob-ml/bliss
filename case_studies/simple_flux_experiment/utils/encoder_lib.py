@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 
+from bliss.models.encoder import ImageEncoder
+
 class MLPEncoder(nn.Module):
     def __init__(self, 
                  slen = 51, 
@@ -29,6 +31,34 @@ class MLPEncoder(nn.Module):
         h = self.fc2(h)
         
         mean = h[:, 0]
-        sd = self.softplus(h[:, 1]) + 0.001
+        sd_scale = torch.sigmoid(h[:, 1])
+        
+        # clip the sd at the mean
+        sd = mean * sd_scale
     
         return mean, sd
+
+    
+class StarNetEncoder(nn.Module):
+    def __init__(self, 
+                 slen = 51):
+
+        super(StarNetEncoder, self).__init__()
+
+        # image / model parameters
+        self.slen = slen
+        
+        self.encoder = ImageEncoder(tile_slen=self.slen,
+                                    ptile_slen=self.slen)
+        
+        self.softplus = torch.nn.Softplus()
+        
+    def forward(self, image):
+        
+        h = self.encoder.get_var_params_all(image)
+        
+        mean = h[:, 0]
+        sd = self.softplus(h[:, 1]) + 0.001
+        
+        return mean, sd
+        

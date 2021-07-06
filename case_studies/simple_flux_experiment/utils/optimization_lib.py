@@ -1,5 +1,7 @@
-import time
+import torch
+from torch.distributions import normal
 
+import time
 
 #####################
 # several candidate loss functions
@@ -7,24 +9,39 @@ import time
 
 def l2_loss(network, batch): 
     
-    images = batch['image']
-    fluxes = batch['flux'].squeeze()
+    x = batch['image']
+    y = batch['flux'].squeeze()
         
-    mean, _ = network(images)
+    est, sd = network(x)
+    
+    loss = (y - est)**2
             
-    return (fluxes - mean)**2
+    return loss, y, est, sd
 
+
+def l2_loss_logspace(network, batch): 
+    
+    x = batch['image']
+    y = torch.log(batch['flux'].squeeze())
+    
+    est, sd = network(x)
+    
+    loss = (y - est)**2
+    
+    return loss, y, est, sd
 
 def klpq(network, batch): 
     
-    images = batch['image']
-    fluxes = batch['flux'].squeeze()
+    x = batch['image']
+    y = batch['flux'].squeeze()
         
-    mean, sd = network(images)
+    est, sd = network(x)
         
-    norm = normal.Normal(loc = mean, scale = sd)
+    norm = normal.Normal(loc = est, scale = sd)
     
-    return - norm.log_prob(fluxes)
+    loss = - norm.log_prob(y)
+    
+    return loss, y, est, sd
 
 #####################
 # wrapper to train the network
@@ -41,7 +58,7 @@ def train_network(network, loss_fun, dataset, optimizer, n_epochs):
 
             optimizer.zero_grad()
 
-            loss = loss_fun(network, batch).mean()
+            loss = loss_fun(network, batch)[0].mean()
             loss.backward()
 
             optimizer.step()
