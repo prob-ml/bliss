@@ -21,7 +21,9 @@ def l2_loss(network, batch):
 
 def l2_loss_logspace(network, batch): 
     
-    x = batch['image']
+    images = batch['image'] 
+    
+    x = torch.log(images - images.min() + 1.0)
     y = torch.log(batch['flux'].squeeze())
     
     est, sd = network(x)
@@ -42,6 +44,7 @@ def klpq(network, batch):
     loss = - norm.log_prob(y)
     
     return loss, y, est, sd
+
 
 #####################
 # wrapper to train the network
