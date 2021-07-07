@@ -3,6 +3,8 @@ from torch.distributions import normal
 
 import time
 
+from which_device import device
+
 #####################
 # several candidate loss functions
 #####################
@@ -42,6 +44,43 @@ def klpq(network, batch):
     norm = normal.Normal(loc = est, scale = sd)
     
     loss = - norm.log_prob(y)
+    
+    return loss, y, est, sd
+
+def klqp(network, batch, psf, background): 
+    
+    x = batch['image']
+    y = batch['flux'].squeeze()
+    
+    batchsize = x.shape[0]
+    
+    assert psf.shape[0] == x.shape[2]
+    assert psf.shape[1] == x.shape[3]
+    slen = psf.shape[0]
+    
+    # get estimate
+    est, sd = network(x)
+    
+    # sample from variational distribution
+    z = torch.randn(est.shape, device = device)
+    sample = est + z * sd
+
+    # reconstruct image 
+    recon = psf.unsqueeze(0) * sample.view(batchsize, 1, 1) + background
+    
+    # add in the one band
+    recon = recon.view(batchsize, 1, slen, slen)
+    
+    # log likelihood
+    scale = torch.sqrt(recon.clamp(min = 1.))
+    norm = normal.Normal(loc = recon, scale = scale)
+    loglik = norm.log_prob(x).view(batchsize, -1).sum(1)
+    
+    # entropy
+    entropy = torch.log(sd)
+    
+    # negative elbo
+    loss = - (loglik + entropy)
     
     return loss, y, est, sd
 

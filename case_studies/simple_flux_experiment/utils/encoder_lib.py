@@ -31,10 +31,10 @@ class MLPEncoder(nn.Module):
         h = self.fc2(h)
         
         mean = h[:, 0]
-        sd_scale = torch.sigmoid(h[:, 1])
+        sd = self.softplus(h[:, 1]) + 1e-6
         
-        # clip the sd at the mean
-        sd = mean * sd_scale
+        # sd_scale = torch.sigmoid(h[:, 1])
+        # sd = mean * sd_scale
     
         return mean, sd
 
