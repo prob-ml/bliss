@@ -97,6 +97,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
+        # FIXME it's available through self.hparams["optimizer_params"]
         self.optimizer_params = optimizer_params
 
     def forward(self, image, background):
@@ -139,14 +140,15 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         loss = self.get_loss(images, recon_mean)
 
         # metrics
+        # FIXME: change to val/loss so it's automatically grouped in tensorboard
         self.log("val_loss", loss)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("val_max_residual", residuals.abs().max())
         return {"images": images, "recon_mean": recon_mean}
 
     def validation_epoch_end(self, outputs):
-        images = outputs[0]["images"][:10]
-        recon_mean = outputs[0]["recon_mean"][:10]
+        images = torch.cat([x["images"] for x in outputs])
+        recon_mean = torch.cat([x["recon_mean"] for x in outputs])
         fig = self.plot_reconstruction(images, recon_mean)
         if self.logger:
             self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
@@ -157,6 +159,13 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         num_examples = 10
         num_cols = 3
         residuals = (images - recon_mean) / torch.sqrt(images)
+        large_residuals_idx = residuals.mean(dim=(1, 2, 3)).argsort(descending=True)[:num_examples]
+        images = images[large_residuals_idx]
+        recon_mean = recon_mean[large_residuals_idx]
+        residuals = residuals[large_residuals_idx]
+
+        residual_vmax = torch.ceil(residuals.max().cpu()).numpy()
+        residual_vmin = torch.floor(residuals.min().cpu()).numpy()
         plt.ioff()
 
         fig = plt.figure(figsize=(10, 25))
@@ -165,17 +174,22 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
             plt.subplot(num_examples, num_cols, num_cols * i + 1)
             plt.title("images")
-            plt.imshow(images[i, 0].data.cpu().numpy())
+            plt.imshow(images[i, 0].data.cpu().numpy(), interpolation=None)
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 2)
             plt.title("recon_mean")
-            plt.imshow(recon_mean[i, 0].data.cpu().numpy())
+            plt.imshow(recon_mean[i, 0].data.cpu().numpy(), interpolation=None)
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 3)
             plt.title("residuals")
-            plt.imshow(residuals[i, 0].data.cpu().numpy())
+            plt.imshow(
+                residuals[i, 0].data.cpu().numpy(),
+                interpolation=None,
+                vmin=residual_vmin,
+                vmax=residual_vmax,
+            )
             plt.colorbar()
 
         plt.tight_layout()
