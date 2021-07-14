@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 from torch import nn
 
@@ -30,6 +32,7 @@ class MLPEncoder(nn.Module):
     def __init__(self, 
                  ptile_slen = 52, 
                  tile_slen = 4,
+                 flux_tile_slen = 10, 
                  n_bands = 1,
                  max_sources = 1,
                  latent_dim = 64):
@@ -40,12 +43,15 @@ class MLPEncoder(nn.Module):
         self.ptile_slen = ptile_slen
         self.tile_slen = tile_slen
         self.n_bands = n_bands
-        self.n_pixels = self.ptile_slen ** 2 * self.n_bands
         
         self.max_sources = max_sources
         
         # output dimension 
         outdim = 2 * self.max_sources * self.n_bands
+        
+        # the size of the ptiles passed to this encoder
+        self.flux_tile_slen = flux_tile_slen
+        self.n_pixels = self.flux_tile_slen ** 2 * self.n_bands
         
         # the network
         self.fc1 = nn.Linear(self.n_pixels, latent_dim)
@@ -59,17 +65,16 @@ class MLPEncoder(nn.Module):
         batch_size = images.shape[0]
         
         # tile the image
-        image_ptiles = get_images_in_tiles(images, 
-                                           tile_slen = self.tile_slen, 
-                                           ptile_slen = self.ptile_slen)
+        image_ptiles = self._get_ptiles_from_images(images)
         
         # pass through nn
-        mean, sd = self.forward_ptiles(image_ptiles)
+        mean, sd = self._forward_ptiles(image_ptiles)
         
         # sample 
         z = torch.randn(mean.shape, device = device)
         samples = mean + z * sd
         
+        # save everything in a dictionary
         out_dict = dict(mean = mean, 
                         sd = sd, 
                         samples = samples)
@@ -83,15 +88,15 @@ class MLPEncoder(nn.Module):
                                            self.max_sources, 
                                            self.n_bands)
         
-        return out_dict
+        return out_dict 
+        
     
-    
-    def forward_ptiles(self, image_ptiles):
+    def _forward_ptiles(self, image_ptiles):
         
         n = image_ptiles.shape[0]
-        
+                
         # pass through neural network
-        h = image_ptiles.view(n, self.n_pixels)
+        h = image_ptiles.reshape(n, self.n_pixels)
         h = self.fc1(h)
         h = self.relu(h)
         h = self.fc2(h)
@@ -107,4 +112,20 @@ class MLPEncoder(nn.Module):
         # sd = mean * sd_scale
     
         return mean, sd
+    
+    def _trim_ptiles(self, image_ptiles): 
+        
+        diff = self.ptile_slen - self.flux_tile_slen
+        
+        indx0 = int(np.floor(diff / 2))
+        indx1 = indx0 + self.flux_tile_slen
+        
+        return image_ptiles[:, :, indx0:indx1, indx0:indx1]
 
+    
+    def _get_ptiles_from_images(self, images): 
+        image_ptiles = get_images_in_tiles(images, 
+                                           tile_slen = self.tile_slen, 
+                                           ptile_slen = self.ptile_slen)
+        
+        return self._trim_ptiles(image_ptiles)
