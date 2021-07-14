@@ -154,7 +154,15 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
 
     def plot_reconstruction(self, images, recon_mean):
-        # only plot i band if available, otherwise the highest band given.
+
+        # 1. only plot i band if available, otherwise the highest band given.
+        # 2. plot the `num_examples` of images with the largest average residual
+        #    across all batches in the last epoch
+        # 3. residual color range (`vmin`, `vmax`) are fixed as across all samples
+        #    (same across all rows in the subplot grid)
+        # 4. image and recon_mean are fixed in each sample
+        #    (same across each row in the subplot grid)
+
         assert images.size(0) >= 10
         num_examples = 10
         num_cols = 3
@@ -171,15 +179,19 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         fig = plt.figure(figsize=(10, 25))
 
         for i in range(num_examples):
+            image = images[i, 0].data.cpu()
+            recon = recon_mean[i, 0].data.cpu()
+            vmax = torch.ceil(torch.max(image.max(), recon.min()))
+            vmin = torch.floor(torch.min(image.min(), recon.min()))
 
             plt.subplot(num_examples, num_cols, num_cols * i + 1)
             plt.title("images")
-            plt.imshow(images[i, 0].data.cpu().numpy(), interpolation=None)
+            plt.imshow(image.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 2)
             plt.title("recon_mean")
-            plt.imshow(recon_mean[i, 0].data.cpu().numpy(), interpolation=None)
+            plt.imshow(recon.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 3)
