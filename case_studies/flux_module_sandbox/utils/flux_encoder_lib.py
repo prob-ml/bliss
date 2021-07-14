@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from which_device import device
 
-def get_images_in_tiles(images, tile_slen, ptile_slen):
+def _get_images_in_tiles(images, tile_slen, ptile_slen):
     
     # this tiling code adapted from the ImageEncoder method 
     # of the same name. Make this its own function then?
@@ -26,13 +26,24 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     
     return tiles
 
+def _trim_images(images, trim_slen): 
+    
+    slen = images.shape[-1]
+    
+    diff = slen - trim_slen
+        
+    indx0 = int(np.floor(diff / 2))
+    indx1 = indx0 + trim_slen
+        
+    return images[:, :, indx0:indx1, indx0:indx1]
 
+    
 
 class MLPEncoder(nn.Module):
     def __init__(self, 
                  ptile_slen = 52, 
                  tile_slen = 4,
-                 flux_tile_slen = 10, 
+                 flux_tile_slen = 20, 
                  n_bands = 1,
                  max_sources = 1,
                  latent_dim = 64):
@@ -55,9 +66,10 @@ class MLPEncoder(nn.Module):
         
         # the network
         self.fc1 = nn.Linear(self.n_pixels, latent_dim)
-        self.relu = torch.nn.ReLU()
-        self.fc2 = nn.Linear(latent_dim, outdim)
+        self.fc2 = nn.Linear(latent_dim, latent_dim)
+        self.fc3 = nn.Linear(latent_dim, outdim)
         
+        self.relu = torch.nn.ReLU()
         self.softplus = torch.nn.Softplus()
         
     def forward(self, images): 
@@ -96,10 +108,15 @@ class MLPEncoder(nn.Module):
         n = image_ptiles.shape[0]
                 
         # pass through neural network
-        h = image_ptiles.reshape(n, self.n_pixels)
+        h = image_ptiles.flatten(1, -1)
+        
         h = self.fc1(h)
         h = self.relu(h)
+        
         h = self.fc2(h)
+        h = self.relu(h)
+        
+        h = self.fc3(h)
         
         
         indx0 = self.max_sources * self.n_bands
@@ -115,17 +132,12 @@ class MLPEncoder(nn.Module):
     
     def _trim_ptiles(self, image_ptiles): 
         
-        diff = self.ptile_slen - self.flux_tile_slen
-        
-        indx0 = int(np.floor(diff / 2))
-        indx1 = indx0 + self.flux_tile_slen
-        
-        return image_ptiles[:, :, indx0:indx1, indx0:indx1]
+        return _trim_images(image_ptiles, self.flux_tile_slen)
 
     
     def _get_ptiles_from_images(self, images): 
-        image_ptiles = get_images_in_tiles(images, 
-                                           tile_slen = self.tile_slen, 
-                                           ptile_slen = self.ptile_slen)
+        image_ptiles = _get_images_in_tiles(images, 
+                                            tile_slen = self.tile_slen, 
+                                            ptile_slen = self.ptile_slen)
         
         return self._trim_ptiles(image_ptiles)
