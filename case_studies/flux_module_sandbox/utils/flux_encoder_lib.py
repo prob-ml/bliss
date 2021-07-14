@@ -62,16 +62,23 @@ class MLPEncoder(nn.Module):
         
         # the size of the ptiles passed to this encoder
         self.flux_tile_slen = flux_tile_slen
-        self.n_pixels = self.flux_tile_slen ** 2 * self.n_bands
         
         # the network
-        self.fc1 = nn.Linear(self.n_pixels, latent_dim)
+        self.conv1 = nn.Conv2d(self.n_bands, 6, 3)
+        self.conv2 = nn.Conv2d(6, 16, 3)
+        
+        # compute output dimension 
+        x = torch.randn((1, 
+                         self.n_bands,
+                         self.flux_tile_slen,
+                         self.flux_tile_slen))
+        
+        out_dim = self._conv_layers(x).shape[-1]
+        
+        self.fc1 = nn.Linear(out_dim, latent_dim)
         self.fc2 = nn.Linear(latent_dim, latent_dim)
         self.fc3 = nn.Linear(latent_dim, outdim)
-        
-        self.relu = torch.nn.ReLU()
-        self.softplus = torch.nn.Softplus()
-        
+                
     def forward(self, images): 
         
         batch_size = images.shape[0]
@@ -101,29 +108,31 @@ class MLPEncoder(nn.Module):
                                            self.n_bands)
         
         return out_dict 
+    
+    def _conv_layers(self, image_ptiles): 
+        # pass through conv layers
+        h = F.relu(self.conv1(image_ptiles))
+        h = F.relu(self.conv2(h))
         
+        return h.flatten(1, -1)
+
     
     def _forward_ptiles(self, image_ptiles):
         
-        n = image_ptiles.shape[0]
-                
-        # pass through neural network
-        h = image_ptiles.flatten(1, -1)
+        # pass through conv layers 
+        h = self._conv_layers(image_ptiles)
         
-        h = self.fc1(h)
-        h = self.relu(h)
-        
-        h = self.fc2(h)
-        h = self.relu(h)
-        
-        h = self.fc3(h)
+        # pass through fully connected       
+        h = F.relu(self.fc1(h))       
+        h = F.relu(self.fc2(h))        
+        h = F.relu(self.fc3(h))
         
         
         indx0 = self.max_sources * self.n_bands
         indx1 = 2 * indx0
         
         mean = h[:, 0:indx0]
-        sd = self.softplus(h[:, indx0:indx1]) + 1e-6
+        sd = F.softplus(h[:, indx0:indx1]) + 1e-6
         
         # sd_scale = torch.sigmoid(h[:, 1])
         # sd = mean * sd_scale
