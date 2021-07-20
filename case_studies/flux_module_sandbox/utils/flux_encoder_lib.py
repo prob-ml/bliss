@@ -10,7 +10,7 @@ from which_device import device
 
 def _get_images_in_tiles(images, tile_slen, ptile_slen):
     
-    # this tiling code adapted from the ImageEncoder method 
+    # TODO: this tiling code adapted from the ImageEncoder method 
     # of the same name. Make this its own function then?
     
     # images should be batchsize x n_bands x slen x slen
@@ -66,6 +66,7 @@ class MLPEncoder(nn.Module):
         # the network
         self.conv1 = nn.Conv2d(self.n_bands, 6, 3)
         self.conv2 = nn.Conv2d(6, 16, 3)
+        self.conv3 = nn.Conv2d(16, 16, 3)
         
         # compute output dimension 
         x = torch.randn((1, 
@@ -77,7 +78,10 @@ class MLPEncoder(nn.Module):
         
         self.fc1 = nn.Linear(out_dim, latent_dim)
         self.fc2 = nn.Linear(latent_dim, latent_dim)
-        self.fc3 = nn.Linear(latent_dim, outdim)
+        self.fc3 = nn.Linear(latent_dim, latent_dim)
+        self.fc4 = nn.Linear(latent_dim, outdim)
+        
+        self.normal = torch.distributions.Normal(0, 1)
                 
     def forward(self, images): 
         
@@ -90,7 +94,7 @@ class MLPEncoder(nn.Module):
         mean, sd = self._forward_ptiles(image_ptiles)
         
         # sample 
-        z = torch.randn(mean.shape, device = device)
+        z = self.normal.sample(mean.shape)
         samples = mean + z * sd
         
         # save everything in a dictionary
@@ -113,6 +117,7 @@ class MLPEncoder(nn.Module):
         # pass through conv layers
         h = F.relu(self.conv1(image_ptiles))
         h = F.relu(self.conv2(h))
+        h = F.relu(self.conv3(h))
         
         return h.flatten(1, -1)
 
@@ -126,6 +131,7 @@ class MLPEncoder(nn.Module):
         h = F.relu(self.fc1(h))       
         h = F.relu(self.fc2(h))        
         h = F.relu(self.fc3(h))
+        h = F.relu(self.fc4(h))
         
         
         indx0 = self.max_sources * self.n_bands
