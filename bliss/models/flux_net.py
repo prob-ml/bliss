@@ -32,7 +32,7 @@ def _trim_images(images, trim_slen):
 class FluxEncoder(nn.Module):
     def __init__(self, ptile_slen=52, tile_slen=4, flux_tile_slen=20, n_bands=1, max_sources=1):
 
-        super(FluxEncoder, self).__init__()
+        super().__init__()
 
         # image / model parameters
         self.ptile_slen = ptile_slen
@@ -86,7 +86,7 @@ class FluxEncoder(nn.Module):
         # reshape
         n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
 
-        for k in out_dict.keys():
+        for k in out_dict:
             out_dict[k] = out_dict[k].view(
                 batch_size, n_tiles_per_image, self.max_sources, self.n_bands
             )
@@ -208,7 +208,7 @@ class FluxEstimator(pl.LightningModule):
         out = self.enc(batch["images"])
 
         # get loss
-        kl, recon = self.kl_qp_flux_loss(batch, out["samples"], out["sd"])
+        kl = self.kl_qp_flux_loss(batch, out["samples"], out["sd"])[0]
 
         return kl.mean()
 
