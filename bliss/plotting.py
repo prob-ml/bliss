@@ -44,7 +44,7 @@ def plot_image_locs(
         _plot_locs(ax, slen, border_padding, true_locs, color=colors[0], marker=markers[0], s=s)
 
     if est_locs is not None:
-        s2 = 2 * s if markers[1] == "x" else s
+        s2 = 2.0 * s if markers[1] == "+" else s
         _plot_locs(
             ax,
             slen,
@@ -57,13 +57,7 @@ def plot_image_locs(
         )
 
 
-def plot_image(
-    fig,
-    ax,
-    image,
-    vmin=None,
-    vmax=None,
-):
+def plot_image(fig, ax, image, vmin=None, vmax=None):
 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
