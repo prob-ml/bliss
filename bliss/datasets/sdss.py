@@ -312,13 +312,12 @@ class SloanDigitalSkySurvey(Dataset):
             if verbose:
                 print("loading sdss image from", frame_path)
             frame = fits.open(frame_path)
-
-            calibration = frame[1].data
+            calibration = frame[1].data  # pylint: disable=maybe-no-member
             nelec_per_nmgy = gain[b] / calibration
 
-            (sky_small,) = frame[2].data["ALLSKY"]
-            (sky_x,) = frame[2].data["XINTERP"]
-            (sky_y,) = frame[2].data["YINTERP"]
+            (sky_small,) = frame[2].data["ALLSKY"]  # pylint: disable=maybe-no-member
+            (sky_x,) = frame[2].data["XINTERP"]  # pylint: disable=maybe-no-member
+            (sky_y,) = frame[2].data["YINTERP"]  # pylint: disable=maybe-no-member
 
             small_rows = np.mgrid[0 : sky_small.shape[0]]
             small_cols = np.mgrid[0 : sky_small.shape[1]]
@@ -332,7 +331,7 @@ class SloanDigitalSkySurvey(Dataset):
             large_sky = sky_interp(large_points)
             large_sky_nelec = large_sky * gain[b]
 
-            pixels_ss_nmgy = frame[0].data
+            pixels_ss_nmgy = frame[0].data  # pylint: disable=maybe-no-member
             pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
             pixels_nelec = pixels_ss_nelec + large_sky_nelec
 

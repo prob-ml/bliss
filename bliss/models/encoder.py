@@ -2,7 +2,7 @@ import numpy as np
 from einops import rearrange, repeat
 
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 from torch.distributions import categorical
 
@@ -254,9 +254,7 @@ class ImageEncoder(nn.Module):
         self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
 
         # Number of variational parameters used to characterize each source in an image.
-        self.n_params_per_source = sum(
-            self.variational_params[k]["dim"] for k in self.variational_params
-        )
+        self.n_params_per_source = sum(param["dim"] for _, param in self.variational_params.items())
 
         # There are self.max_detections * (self.max_detections + 1) total possible detections.
         # For each param, for each possible number of detection d, there are d ways of assignment.
@@ -350,8 +348,8 @@ class ImageEncoder(nn.Module):
 
         # initialize matrices containing the indices for each variational param.
         indx_mats = {}
-        for k in self.variational_params:
-            param_dim = self.variational_params[k]["dim"]
+        for k, param in self.variational_params.items():
+            param_dim = param["dim"]
             shape = (self.max_detections + 1, param_dim * self.max_detections)
             indx_mat = torch.full(
                 shape,
@@ -364,8 +362,8 @@ class ImageEncoder(nn.Module):
         # for a given n_detection.
         curr_indx = 0
         for n_detections in range(1, self.max_detections + 1):
-            for k in self.variational_params:
-                param_dim = self.variational_params[k]["dim"]
+            for k, param in self.variational_params.items():
+                param_dim = param["dim"]
                 new_indx = (param_dim * n_detections) + curr_indx
                 indx_mats[k][n_detections, 0 : (param_dim * n_detections)] = torch.arange(
                     curr_indx, new_indx
@@ -429,10 +427,10 @@ class ImageEncoder(nn.Module):
         assert len(n_sources.shape) == 2
 
         est_params = {}
-        for k in self.variational_params:
+        for k, param in self.variational_params.items():
             indx_mat = getattr(self, k + "_indx")
-            param_dim = self.variational_params[k]["dim"]
-            transform = self.variational_params[k]["transform"]
+            param_dim = param["dim"]
+            transform = param["transform"]
             _param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
             param = transform(_param)
             est_params[k] = param

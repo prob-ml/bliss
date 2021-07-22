@@ -1,10 +1,10 @@
 from itertools import product
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
-import numpy as np
 from torch.distributions import Bernoulli
 from torch.distributions.relaxed_bernoulli import LogitRelaxedBernoulli
+import numpy as np
 
 from bliss.utils import MLP, ConcatLayer
 
