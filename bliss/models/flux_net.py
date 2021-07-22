@@ -4,7 +4,6 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from einops import rearrange, repeat
 import torch.nn.functional as F
 from torch.distributions import normal
 
@@ -59,7 +58,7 @@ class FluxEncoder(nn.Module):
         self.conv3 = nn.Conv2d(16, 16, 3)
 
         # compute output dimension
-        conv_out_dim = (self.flux_tile_slen - 6)**2 * 16
+        conv_out_dim = (self.flux_tile_slen - 6) ** 2 * 16
 
         latent_dim = 64
         self.fc1 = nn.Linear(conv_out_dim, latent_dim)
@@ -126,9 +125,7 @@ class FluxEncoder(nn.Module):
         return _trim_images(image_ptiles, self.flux_tile_slen)
 
     def _get_ptiles_from_images(self, images):
-        image_ptiles = tile_images(
-            images, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen
-        )
+        image_ptiles = tile_images(images, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen)
 
         return self._trim_ptiles(image_ptiles)
 

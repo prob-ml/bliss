@@ -16,17 +16,18 @@ def get_mgrid(slen):
     # parameterizes the edges: (0, 0) is center of edge pixel
     return mgrid.float() * (slen - 1) / slen
 
-def tile_images(images, ptile_slen, tile_slen): 
+
+def tile_images(images, ptile_slen, tile_slen):
     """
     Divide a batch of full images into padded tiles similar to nn.conv2d
     with a sliding window=self.ptile_slen and stride=self.tile_slen
     """
-    
+
     # images should be batchsize x n_bands x slen x slen
     assert len(images.shape) == 4
 
     n_bands = images.shape[1]
-    
+
     window = ptile_slen
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
@@ -320,7 +321,7 @@ class ImageEncoder(nn.Module):
         Divide a batch of full images into padded tiles similar to nn.conv2d
         with a sliding window=self.ptile_slen and stride=self.tile_slen
         """
-        
+
         return tile_images(images, self.ptile_slen, self.tile_slen)
 
     def center_ptiles(self, image_ptiles, tile_locs):
