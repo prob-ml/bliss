@@ -27,15 +27,16 @@ jedi = "0.17.2"
 jupyter = "^1.0.0"
 jupyter_contrib_nbextensions = "^0.5.1"
 nbstripout = "^0.3.9"
+plotly = "^4.14.3"
 pre-commit = "^2.9.2"
 pylint = "^2.6.0"
 pytest = "^6.1.2"
 pytest-cov = "^2.10"
 ray = {extras = ["tune", "default"], version = "^1.0.1"}
 rope = "^0.18.0"
+scikit-learn = "^0.24.2"
 speclite = "^0.13"
 tox = "^3.20.1"
-plotly = "^4.14.3"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
