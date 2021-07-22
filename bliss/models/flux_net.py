@@ -10,27 +10,8 @@ from torch.distributions import normal
 
 
 from bliss.models import decoder
-from bliss.models.encoder import get_star_bool
+from bliss.models.encoder import get_star_bool, tile_images
 from bliss.optimizer import get_optimizer
-
-
-def _get_images_in_tiles(images, tile_slen, ptile_slen):
-
-    # TODO: this tiling code adapted from the ImageEncoder method
-    # of the same name. Make this its own function then?
-
-    # images should be batchsize x n_bands x slen x slen
-    assert len(images.shape) == 4
-
-    n_bands = images.shape[1]
-
-    window = ptile_slen
-    tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
-
-    # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
-
-    return tiles
 
 
 def _trim_images(images, trim_slen):
@@ -78,12 +59,10 @@ class FluxEncoder(nn.Module):
         self.conv3 = nn.Conv2d(16, 16, 3)
 
         # compute output dimension
-        x = torch.randn((1, self.n_bands, self.flux_tile_slen, self.flux_tile_slen))
-
-        out_dim = self._conv_layers(x).shape[-1]
+        conv_out_dim = (self.flux_tile_slen - 6)**2 * 16
 
         latent_dim = 64
-        self.fc1 = nn.Linear(out_dim, latent_dim)
+        self.fc1 = nn.Linear(conv_out_dim, latent_dim)
         self.fc2 = nn.Linear(latent_dim, latent_dim)
         self.fc3 = nn.Linear(latent_dim, latent_dim)
         self.fc4 = nn.Linear(latent_dim, outdim)
@@ -147,7 +126,7 @@ class FluxEncoder(nn.Module):
         return _trim_images(image_ptiles, self.flux_tile_slen)
 
     def _get_ptiles_from_images(self, images):
-        image_ptiles = _get_images_in_tiles(
+        image_ptiles = tile_images(
             images, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen
         )
 
