@@ -20,7 +20,7 @@ def get_mgrid(slen):
 def tile_images(images, ptile_slen, tile_slen):
     """
     Divide a batch of full images into padded tiles similar to nn.conv2d
-    with a sliding window=self.ptile_slen and stride=self.tile_slen
+    with a sliding window=ptile_slen and stride=tile_slen
     """
 
     # images should be batchsize x n_bands x slen x slen
