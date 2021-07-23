@@ -147,6 +147,8 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         theta = self._uniform(0, 2 * np.pi)
         g1 = l * np.cos(theta)
         g2 = l * np.sin(theta)
+
+        # pylint: disable=no-value-for-parameter
         galaxy = galsim.Gaussian(half_light_radius=hlr).shear(g1=g1, g2=g2).withFlux(flux)
         gal_conv = galsim.Convolution(galaxy, self.psf)
         image = gal_conv.drawImage(

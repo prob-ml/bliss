@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from astropy.io import fits
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 from torch.distributions import Poisson
 import pytorch_lightning as pl
@@ -668,16 +668,15 @@ class StarTileDecoder(nn.Module):
 
     @staticmethod
     def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
-        psfield = fits.open(psf_fit_file, ignore_missing_end=True)
+        data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
         psf_params = torch.zeros(len(bands), 6)
         for i, band in enumerate(bands):
-            sigma1 = psfield[6].data["psf_sigma1"][0][band] ** 2
-            sigma2 = psfield[6].data["psf_sigma2"][0][band] ** 2
-            sigmap = psfield[6].data["psf_sigmap"][0][band] ** 2
-
-            beta = psfield[6].data["psf_beta"][0][band]
-            b = psfield[6].data["psf_b"][0][band]
-            p0 = psfield[6].data["psf_p0"][0][band]
+            sigma1 = data["psf_sigma1"][0][band] ** 2
+            sigma2 = data["psf_sigma2"][0][band] ** 2
+            sigmap = data["psf_sigmap"][0][band] ** 2
+            beta = data["psf_beta"][0][band]
+            b = data["psf_b"][0][band]
+            p0 = data["psf_p0"][0][band]
 
             psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
 
