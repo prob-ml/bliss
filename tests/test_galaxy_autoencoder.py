@@ -43,4 +43,4 @@ def test_galaxy_autoencoder_bulge_disk(galaxy_ae_setup, devices):
     if not devices.use_cuda:
         return
 
-    assert results["max_residual"] < 20
+    assert results["max_residual"] < 25
