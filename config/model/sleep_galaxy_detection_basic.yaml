@@ -30,3 +30,4 @@ kwargs:
     ptile_slen: 12
     max_detections: ${model.kwargs.decoder_kwargs.max_sources}
   use_galaxy_encoder: False
+  annotate_probs: False

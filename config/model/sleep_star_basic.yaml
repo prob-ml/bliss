@@ -28,3 +28,4 @@ kwargs:
     dropout: 0.013123
     hidden: 185
   use_galaxy_encoder: False
+  annotate_probs: False
