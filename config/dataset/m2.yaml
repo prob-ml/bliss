@@ -3,4 +3,4 @@ kwargs:
   decoder_kwargs: ${model.kwargs.decoder_kwargs}
   n_batches: 10
   batch_size: 20
-  generate_device: ${gpus}
+  generate_device: "cuda:0"
