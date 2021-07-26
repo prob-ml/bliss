@@ -22,7 +22,7 @@ def _trim_images(images, trim_slen):
     diff = slen - trim_slen
     assert diff >= 0
 
-    indx0 = int(np.floor(diff / 2))
+    indx0 = diff // 2
     indx1 = indx0 + trim_slen
 
     return images[:, :, indx0:indx1, indx0:indx1]
