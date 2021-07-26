@@ -14,22 +14,24 @@ from bliss.optimizer import get_optimizer
 
 
 def _trim_images(images, trim_slen):
-
     # crops an image so only the central `trim_slen x trim_slen` pixels remain.
-
     slen = images.shape[-1]
-
     diff = slen - trim_slen
     assert diff >= 0
-
+    
     indx0 = diff // 2
     indx1 = indx0 + trim_slen
-
     return images[:, :, indx0:indx1, indx0:indx1]
 
 
-class FluxEncoder(nn.Module):
-    def __init__(self, ptile_slen=52, tile_slen=4, flux_tile_slen=20, n_bands=1, max_sources=1):
+class FluxEncoderNet(nn.Module):
+    def __init__(self, 
+                 ptile_slen=52, 
+                 tile_slen=4, 
+                 flux_tile_slen=20, 
+                 n_bands=1, 
+                 max_sources=1, 
+                 latent_dim=64):
 
         super().__init__()
 
@@ -52,19 +54,31 @@ class FluxEncoder(nn.Module):
         self.flux_tile_slen = flux_tile_slen
 
         # the network
-        self.conv1 = nn.Conv2d(self.n_bands, 6, 3)
-        self.conv2 = nn.Conv2d(6, 16, 3)
-        self.conv3 = nn.Conv2d(16, 16, 3)
+        
+        # convolutional layers 
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(self.n_bands, 6, 3),
+            nn.ReLU(),
+            nn.Conv2d(6, 16, 3),
+            nn.ReLU(),
+            nn.Conv2d(16, 16, 3),
+            nn.ReLU(),
+            nn.Flatten(1)
+        )
 
         # compute output dimension
         conv_out_dim = (self.flux_tile_slen - 6) ** 2 * 16
-
-        latent_dim = 64
-        self.fc1 = nn.Linear(conv_out_dim, latent_dim)
-        self.fc2 = nn.Linear(latent_dim, latent_dim)
-        self.fc3 = nn.Linear(latent_dim, latent_dim)
-        self.fc4 = nn.Linear(latent_dim, outdim)
-
+        
+        self.fc_layers = nn.Sequential(
+            nn.Linear(conv_out_dim, latent_dim), 
+            nn.ReLU(),
+            nn.Linear(latent_dim, latent_dim), 
+            nn.ReLU(),
+            nn.Linear(latent_dim, latent_dim), 
+            nn.ReLU(),
+            nn.Linear(latent_dim, outdim)
+        )
+        
     def forward(self, images):
 
         batch_size = images.shape[0]
@@ -92,25 +106,14 @@ class FluxEncoder(nn.Module):
 
         return out_dict
 
-    def _conv_layers(self, image_ptiles):
-        # pass through conv layers
-        h = F.relu(self.conv1(image_ptiles))
-        h = F.relu(self.conv2(h))
-        h = F.relu(self.conv3(h))
-
-        return h.flatten(1, -1)
-
     def _forward_ptiles(self, image_ptiles):
 
         # pass through conv layers
-        h = self._conv_layers(image_ptiles)
-
+        h = self.conv_layers(image_ptiles)
+        
         # pass through fully connected
-        h = F.relu(self.fc1(h))
-        h = F.relu(self.fc2(h))
-        h = F.relu(self.fc3(h))
-        h = F.relu(self.fc4(h))
-
+        h = self.fc_layers(h)
+        
         indx0 = self.n_bands
         indx1 = 2 * indx0
 
@@ -154,7 +157,7 @@ class FluxEstimator(pl.LightningModule):
         tile_slen = self.image_decoder.tile_slen
         max_sources = self.image_decoder.max_sources
 
-        self.enc = FluxEncoder(
+        self.enc = FluxEncoderNet(
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             flux_tile_slen=flux_tile_slen,
