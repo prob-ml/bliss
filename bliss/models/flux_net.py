@@ -15,8 +15,7 @@ from bliss.optimizer import get_optimizer
 
 def _trim_images(images, trim_slen):
 
-    # crops an image to be the center
-    # trim_slen x trim_slen pixels
+    # crops an image so only the central `trim_slen x trim_slen` pixels remain.
 
     slen = images.shape[-1]
 
