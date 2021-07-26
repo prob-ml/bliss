@@ -206,7 +206,7 @@ class FluxEstimator(pl.LightningModule):
         out = self.enc(batch["images"])
 
         # get loss
-        kl = self.kl_qp_flux_loss(batch, out["samples"], out["sd"])[0]
+        kl, _ = self.kl_qp_flux_loss(batch, out["samples"], out["sd"])
 
         return kl.mean()
 
