@@ -120,7 +120,6 @@ class FluxEncoder(nn.Module):
         return mean, sd
 
     def _trim_ptiles(self, image_ptiles):
-
         return _trim_images(image_ptiles, self.flux_tile_slen)
 
     def _get_ptiles_from_images(self, images):
