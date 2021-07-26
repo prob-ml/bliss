@@ -48,7 +48,7 @@ class FluxEncoder(nn.Module):
         # output dimension
         outdim = 2 * self.n_bands
 
-        # the size of the ptiles passed to this encoder
+        # padded tiles are trimmed to this size for the flux encoder
         self.flux_tile_slen = flux_tile_slen
 
         # the network
