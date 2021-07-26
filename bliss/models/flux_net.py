@@ -124,7 +124,6 @@ class FluxEncoder(nn.Module):
 
     def _get_ptiles_from_images(self, images):
         image_ptiles = tile_images(images, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen)
-
         return self._trim_ptiles(image_ptiles)
 
 
