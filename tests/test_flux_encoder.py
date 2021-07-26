@@ -1,26 +1,21 @@
 import torch
 import pytorch_lightning as pl
 
-from hydra import initialize, compose
-
 from bliss.models import flux_net
 from bliss.datasets import simulated
 
 
 class TestFluxEncoder:
-    def test_flux_encoder(self, devices):
+    def test_flux_encoder(self, devices, get_config):
 
         device = devices.device
 
         # get parameters
-        overrides = {"model": "sleep_sdss_measure_simple", "dataset": "default"}
-        overrides = [f"{key}={value}" for key, value in overrides.items()]
-        with initialize(config_path="./../config"):
-            cfg = compose("config", overrides=overrides)
-
-        # set device
-        cfg.dataset.kwargs.update({"generate_device": str(device) if devices.use_cuda else "cpu"})
-        cfg.dataset.kwargs.update({"generate_device": str(device) if devices.use_cuda else "cpu"})
+        overrides = {
+            "model": "sleep_sdss_measure_simple",
+            "dataset": "default" if devices.use_cuda else "cpu",
+        }
+        cfg = get_config(overrides, devices)
 
         if not devices.use_cuda:
             cfg.training.update({"n_epochs": 3})

@@ -15,15 +15,14 @@ from bliss.optimizer import get_optimizer
 
 def _trim_images(images, trim_slen):
 
-    # crops an image to be the center
-    # trim_slen x trim_slen pixels
+    # crops an image so only the central `trim_slen x trim_slen` pixels remain.
 
     slen = images.shape[-1]
 
     diff = slen - trim_slen
     assert diff >= 0
 
-    indx0 = int(np.floor(diff / 2))
+    indx0 = diff // 2
     indx1 = indx0 + trim_slen
 
     return images[:, :, indx0:indx1, indx0:indx1]
@@ -49,7 +48,7 @@ class FluxEncoder(nn.Module):
         # output dimension
         outdim = 2 * self.n_bands
 
-        # the size of the ptiles passed to this encoder
+        # padded tiles are trimmed to this size for the flux encoder
         self.flux_tile_slen = flux_tile_slen
 
         # the network
@@ -121,12 +120,10 @@ class FluxEncoder(nn.Module):
         return mean, sd
 
     def _trim_ptiles(self, image_ptiles):
-
         return _trim_images(image_ptiles, self.flux_tile_slen)
 
     def _get_ptiles_from_images(self, images):
         image_ptiles = tile_images(images, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen)
-
         return self._trim_ptiles(image_ptiles)
 
 
@@ -208,7 +205,7 @@ class FluxEstimator(pl.LightningModule):
         out = self.enc(batch["images"])
 
         # get loss
-        kl = self.kl_qp_flux_loss(batch, out["samples"], out["sd"])[0]
+        kl, _ = self.kl_qp_flux_loss(batch, out["samples"], out["sd"])
 
         return kl.mean()
 
