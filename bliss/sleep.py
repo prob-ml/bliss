@@ -323,8 +323,6 @@ class SleepPhase(pl.LightningModule):
         self.log("val/star_fluxes_mae", metrics["star_fluxes_mae"])
         self.log("val/avg_tpr", metrics["avg_tpr"])
         self.log("val/avg_ppv", metrics["avg_ppv"])
-        self.log("val/image_fluxes_mae", metrics["image_fluxes_mae"])
-        self.log("val/norm_pp_mae", metrics["norm_pp_mae"])
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -339,9 +337,6 @@ class SleepPhase(pl.LightningModule):
         self.log("star_fluxes_mae", metrics["star_fluxes_mae"])
         self.log("avg_tpr", metrics["avg_tpr"])
         self.log("avg_ppv", metrics["avg_ppv"])
-        self.log("galaxy_params_mae", metrics["galaxy_params_mae"])
-        self.log("image_fluxes_mae", metrics["image_fluxes_mae"])
-        self.log("norm_pp_mae", metrics["norm_pp_mae"])
 
         return batch
 
@@ -386,7 +381,9 @@ class SleepPhase(pl.LightningModule):
         # add some images to tensorboard for validating location/counts.
         # 'batch' is a batch from simulated dataset (all params are tiled)
         n_samples = 10
-        assert n_samples <= len(batch["n_sources"])
+
+        if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
+            return
 
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
