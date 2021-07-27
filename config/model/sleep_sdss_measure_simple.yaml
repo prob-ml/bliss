@@ -38,10 +38,4 @@ kwargs:
     spatial_dropout: 0.0
     dropout: 0.0
     hidden: 128
-  galaxy_encoder_kwargs:
-    latent_dim: ${model.galaxy.latent_dim}
-    slen: 44
-    n_bands: 1
-    hidden: 256
-  use_galaxy_encoder: True
   annotate_probs: True

@@ -5,7 +5,7 @@ image:
   background:
     - 865.0
 galaxy:
-  slen: 44
+  slen: 53
   latent_dim: 8
 kwargs:
   decoder_kwargs:
@@ -29,10 +29,5 @@ kwargs:
     tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
     ptile_slen: 52
     max_detections: ${model.kwargs.decoder_kwargs.max_sources}
-  galaxy_encoder_kwargs:
-    latent_dim: ${model.galaxy.latent_dim}
-    slen: 44
-    n_bands: 1
-    hidden: 256
   use_galaxy_encoder: True
   annotate_probs: False
