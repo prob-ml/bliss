@@ -7,14 +7,19 @@ import torch.nn.functional as F
 from torch.distributions import categorical
 
 
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    # mgrid is between -1 and 1
-    # then scale slightly because of the way f.grid_sample
-    # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float() * (slen - 1) / slen
+def get_images_in_tiles(images, tile_slen, ptile_slen):
+    """
+    Divide a batch of full images into padded tiles similar to nn.conv2d
+    with a sliding window=ptile_slen and stride=tile_slen
+    """
+    # images should be batchsize x n_bands x slen x slen
+    assert len(images.shape) == 4
+    n_bands = images.shape[1]
+    window = ptile_slen
+    tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
+    # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
+    tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
+    return tiles
 
 
 def tile_images(images, ptile_slen, tile_slen):
@@ -308,54 +313,15 @@ class ImageEncoder(nn.Module):
         )
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
-        # grid for center cropped tiles
-        self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
-
         # misc
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def get_images_in_tiles(self, images):
+    def _get_images_in_tiles(self, images):
         """
         Divide a batch of full images into padded tiles similar to nn.conv2d
         with a sliding window=self.ptile_slen and stride=self.tile_slen
         """
-
-        return tile_images(images, self.ptile_slen, self.tile_slen)
-
-    def center_ptiles(self, image_ptiles, tile_locs):
-        # assume there is at most one source per tile
-        # return a centered version of sources in tiles using their true locations in tiles.
-        # also we crop them to avoid sharp borders with no bacgkround/noise.
-
-        # round up necessary variables and paramters
-        assert len(image_ptiles.shape) == 4
-        assert len(tile_locs.shape) == 3
-        assert tile_locs.shape[1] == 1
-        assert image_ptiles.shape[-1] == self.ptile_slen
-        n_ptiles = image_ptiles.shape[0]
-        crop_slen = self.tile_slen
-        ptile_slen = self.ptile_slen
-        assert tile_locs.shape[0] == n_ptiles
-
-        # get new locs to do the shift
-        ptile_locs = tile_locs * self.tile_slen + self.border_padding
-        ptile_locs /= ptile_slen
-        locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
-        locs0 /= ptile_slen - 1
-        locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
-        locs = 2 * locs0 - ptile_locs
-
-        # center tiles on the corresponding source given by locs.
-        locs = (locs - 0.5) * 2
-        locs = locs.index_select(2, self.swap)  # trps (x,y) coords
-        grid_loc = self.cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
-        shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
-
-        # now that everything is center we can crop easily
-        cropped_tiles = shifted_tiles[
-            :, :, crop_slen : ptile_slen - crop_slen, crop_slen : ptile_slen - crop_slen
-        ]
-        return cropped_tiles
+        return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, these are cached since
@@ -502,7 +468,7 @@ class ImageEncoder(nn.Module):
     def sample_encoder(self, images, n_samples):
         assert len(images.shape) == 4
         assert images.shape[0] == 1, "Only works for 1 image"
-        image_ptiles = self.get_images_in_tiles(images)
+        image_ptiles = self._get_images_in_tiles(images)
         h = self.get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
@@ -597,7 +563,7 @@ class ImageEncoder(nn.Module):
 
         # extract image_ptiles
         batch_size = images.shape[0]
-        image_ptiles = self.get_images_in_tiles(images)
+        image_ptiles = self._get_images_in_tiles(images)
         n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
 
         # MAP (for n_sources) prediction on var params on each tile
