@@ -27,13 +27,6 @@ from bliss.metrics import eval_error_on_batch
 plt.switch_backend("Agg")
 
 
-def sort_locs(locs):
-    # sort according to x location
-    assert len(locs.shape) == 2
-    indx_sort = locs[:, 0].sort()[1]
-    return locs[indx_sort, :], indx_sort
-
-
 def _get_log_probs_all_perms(
     locs_log_probs_all,
     star_params_log_probs_all,
