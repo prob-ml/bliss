@@ -87,7 +87,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert self.optimizer_params is not None, "Need to specify `optimizer_params`."
         name = self.optimizer_params["name"]
         kwargs = self.optimizer_params["kwargs"]
-        return get_optimizer(name, self.parameters(), kwargs)
+        return get_optimizer(name, self.enc.parameters(), kwargs)
 
     def forward(self, image_ptiles, tile_locs):
         n_ptiles = image_ptiles.shape[0]
