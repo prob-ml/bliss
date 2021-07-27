@@ -316,7 +316,7 @@ class ImageEncoder(nn.Module):
         # misc
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def _get_images_in_tiles(self, images):
+    def get_images_in_tiles(self, images):
         """
         Divide a batch of full images into padded tiles similar to nn.conv2d
         with a sliding window=self.ptile_slen and stride=self.tile_slen
@@ -468,7 +468,7 @@ class ImageEncoder(nn.Module):
     def sample_encoder(self, images, n_samples):
         assert len(images.shape) == 4
         assert images.shape[0] == 1, "Only works for 1 image"
-        image_ptiles = self._get_images_in_tiles(images)
+        image_ptiles = self.get_images_in_tiles(images)
         h = self.get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
@@ -563,7 +563,7 @@ class ImageEncoder(nn.Module):
 
         # extract image_ptiles
         batch_size = images.shape[0]
-        image_ptiles = self._get_images_in_tiles(images)
+        image_ptiles = self.get_images_in_tiles(images)
         n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
 
         # MAP (for n_sources) prediction on var params on each tile
