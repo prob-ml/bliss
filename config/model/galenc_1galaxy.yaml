@@ -1,4 +1,4 @@
-name: SleepPhase
+name: GalaxyEncoder
 image:
   slen: 4
   n_bands: 1
@@ -8,6 +8,7 @@ galaxy:
   slen: 53
   latent_dim: 8
 kwargs:
+  hidden: 256
   decoder_kwargs:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
@@ -24,10 +25,3 @@ kwargs:
     latents_file: ${paths.data}/latents_simulated_gaussian_galaxies.pt
     psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
     background_values: ${model.image.background}
-  encoder_kwargs:
-    n_bands: ${model.image.n_bands}
-    tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
-    ptile_slen: 52
-    max_detections: ${model.kwargs.decoder_kwargs.max_sources}
-  use_galaxy_encoder: True
-  annotate_probs: False
