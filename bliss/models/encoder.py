@@ -57,17 +57,10 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
 
     # dictionary of tile_params is consistent and no extraneous keys.
     required = {"n_sources", "locs"}
-    optional = {
-        "galaxy_bool",
-        "galaxy_params",
-        "fluxes",
-        "log_fluxes",
-        "prob_galaxy",
-        "prob_n_sources",
-    }
+    optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes", "prob_galaxy"}
     assert required.issubset(tile_params.keys())
     for param_name in tile_params:
-        assert param_name in required or param_name in optional
+        assert param_name in required or param_name in optional or param_name == "prob_n_sources"
 
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
@@ -77,6 +70,10 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
+
+    # otherwise prob_n_sources makes no sense globally
+    if max_detections == 1:
+        optional.add("prob_n_sources")
 
     # calculate tile_slen
     tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
@@ -122,7 +119,7 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
             param = torch.gather(
                 param, 1, repeat(_indx_sort, "b n -> b n r", r=tile_param.shape[-1])
             )
-            param = param[:, 0:max_sources, ...]
+            param = param[:, 0:max_sources]
             params[param_name] = param
     return params
 
@@ -323,7 +320,7 @@ class ImageEncoder(nn.Module):
         assert tile_locs.shape[1] == 1
         assert image_ptiles.shape[-1] == self.ptile_slen
         n_ptiles = image_ptiles.shape[0]
-        crop_slen = 2 * self.tile_slen
+        crop_slen = self.tile_slen
         ptile_slen = self.ptile_slen
         assert tile_locs.shape[0] == n_ptiles
 
@@ -572,7 +569,7 @@ class ImageEncoder(nn.Module):
             for key, value in tile_estimate.items()
         }
         tile_estimate["prob_n_sources"] = torch.exp(pred["n_source_log_probs"]).reshape(
-            batch_size, n_tiles_per_image, self.max_detections + 1, -1
+            batch_size, n_tiles_per_image, 1, self.max_detections + 1
         )
         tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
         return tile_estimate

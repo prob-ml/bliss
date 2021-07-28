@@ -172,11 +172,11 @@ class SleepPhase(pl.LightningModule):
         if self.use_galaxy_encoder:
             assert galaxy_encoder_kwargs is not None, "Galaxy Encoder kwargs not provided."
             # NOTE: We crop and center each padded tile before passing it on to the galaxy_encoder
-            #       assume that crop_slen = 2*tile_slen (on each side)
+            #       assume that crop_slen = tile_slen (on each side)
             # TODO: for now only, 1 galaxy per tile is supported. Even though multiple stars per
             #       tile should work but there is no easy way to enforce this.
             self.galaxy_encoder = galaxy_net.CenteredGalaxyEncoder(**galaxy_encoder_kwargs)
-            self.cropped_slen = self.image_encoder.ptile_slen - 4 * self.image_encoder.tile_slen
+            self.cropped_slen = self.image_encoder.ptile_slen - 2 * self.image_encoder.tile_slen
             assert self.cropped_slen >= 20, "Cropped slen not reasonable"
             assert self.galaxy_encoder.slen == self.cropped_slen
             assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params

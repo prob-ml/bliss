@@ -20,7 +20,7 @@ kwargs:
     mean_sources: 0.03
     min_sources: 0
     f_min: 1e3
-    f_max: 1e5
+    f_max: 1e6
     alpha: 0.5
     gal_slen: ${model.galaxy.slen}
     autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt
@@ -40,7 +40,7 @@ kwargs:
     hidden: 128
   galaxy_encoder_kwargs:
     latent_dim: ${model.galaxy.latent_dim}
-    slen: 36
+    slen: 44
     n_bands: 1
     hidden: 256
   use_galaxy_encoder: True
