@@ -8,7 +8,7 @@ from torch.distributions import Normal
 
 from bliss import plotting
 from bliss.optimizer import get_optimizer
-from bliss.models.encoder import get_images_in_tiles, get_full_params
+from bliss.models.encoder import get_images_in_tiles
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import CenteredGalaxyEncoder
 
@@ -33,6 +33,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.ptile_slen = self.image_decoder.ptile_slen
         self.latent_dim = self.image_decoder.n_galaxy_params
         self.n_bands = self.image_decoder.n_bands
+        self.border_padding = self.image_decoder.border_padding
 
         # will be trained.
         self.max_sources = 1  # by construction.
@@ -43,6 +44,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
+        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
         # consistency
         assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
@@ -89,7 +91,9 @@ class GalaxyEncoder(pl.LightningModule):
         kwargs = self.optimizer_params["kwargs"]
         return get_optimizer(name, self.enc.parameters(), kwargs)
 
-    def forward(self, image_ptiles, tile_locs):
+    def forward(self, images, tile_locs):
+        batch_size = images.shape[0]
+        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
         n_ptiles = image_ptiles.shape[0]
 
         # in each padded tile we need to center the corresponding galaxy
@@ -106,14 +110,12 @@ class GalaxyEncoder(pl.LightningModule):
         z = self.enc(centered_ptiles)
         assert z.shape[0] == n_ptiles
 
-        return z
+        galaxy_params = z.view(batch_size, -1, 1, self.latent_dim)
+        return galaxy_params
 
     def get_loss(self, batch):
         images = batch["images"]
-        batch_size = images.shape[0]
-        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        galaxy_params = self(image_ptiles, batch["locs"])  # use true locations.
-        galaxy_params = galaxy_params.view(batch_size, -1, 1, self.latent_dim)
+        tile_galaxy_params = self(images, batch["locs"])
 
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
@@ -121,7 +123,7 @@ class GalaxyEncoder(pl.LightningModule):
             batch["n_sources"],
             batch["locs"],
             batch["galaxy_bool"],
-            galaxy_params,
+            tile_galaxy_params,
             batch["fluxes"],
             add_noise=False,
         )
@@ -154,18 +156,13 @@ class GalaxyEncoder(pl.LightningModule):
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
         images = batch["images"]
-        _slen = int(batch["slen"].unique().item())
-        _true_params = {k: v for k, v in batch.items() if k not in exclude}
+        tile_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # obtain map estimates
-        tile_galaxy_params = self(batch)
+        tile_galaxy_params = self(images, batch["locs"])
         tile_est = {
-            k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in _true_params.items()
+            k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
         }
-        estimate = get_full_params(tile_est, _slen)
-        assert len(estimate["locs"].shape) == 3
-        assert estimate["locs"].shape[1] == estimate["n_sources"].max().int().item()
-
         # draw all reconstruction images.
         recon_images, _ = self.image_decoder.render_images(
             tile_est["n_sources"],
