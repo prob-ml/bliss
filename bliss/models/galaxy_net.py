@@ -156,21 +156,27 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def plot_reconstruction(self, images, recon_mean):
 
         # 1. only plot i band if available, otherwise the highest band given.
-        # 2. plot the `num_examples` of images with the largest average residual
+        # 2. plot `num_examples//2` images with the largest average residual
+        #    and `num_examples//2` images with the smallest average residual
         #    across all batches in the last epoch
-        # 3. residual color range (`vmin`, `vmax`) are fixed as across all samples
+        # 3. residual color range (`vmin`, `vmax`) are fixed across all samples
         #    (same across all rows in the subplot grid)
-        # 4. image and recon_mean are fixed in each sample
-        #    (same across each row in the subplot grid)
+        # 4. image and recon_mean color range are fixed for their particular sample
+        #    (same within each row in the subplot grid)
 
         assert images.size(0) >= 10
         num_examples = 10
         num_cols = 3
+
         residuals = (images - recon_mean) / torch.sqrt(images)
-        large_residuals_idx = residuals.mean(dim=(1, 2, 3)).argsort(descending=True)[:num_examples]
-        images = images[large_residuals_idx]
-        recon_mean = recon_mean[large_residuals_idx]
-        residuals = residuals[large_residuals_idx]
+        residuals_idx = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)
+        large_residuals_idx = residuals_idx[: num_examples // 2]
+        small_residuals_idx = residuals_idx[-num_examples // 2 :]
+        plot_idx = torch.cat((large_residuals_idx, small_residuals_idx))
+
+        images = images[plot_idx]
+        recon_mean = recon_mean[plot_idx]
+        residuals = residuals[plot_idx]
 
         residual_vmax = torch.ceil(residuals.max().cpu()).numpy()
         residual_vmin = torch.floor(residuals.min().cpu()).numpy()
@@ -181,8 +187,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         for i in range(num_examples):
             image = images[i, 0].data.cpu()
             recon = recon_mean[i, 0].data.cpu()
-            vmax = torch.ceil(torch.max(image.max(), recon.min()))
-            vmin = torch.floor(torch.min(image.min(), recon.min()))
+
+            vmax = torch.ceil(torch.max(image.max(), recon.max())).cpu().numpy()
+            vmin = torch.floor(torch.min(image.min(), recon.min())).cpu().numpy()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 1)
             plt.title("images")
@@ -195,9 +202,13 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 3)
-            plt.title("residuals")
+            res = residuals[i, 0].data.cpu().numpy()
+            if i < num_examples // 2:
+                plt.title(f"residuals (worst), avg abs residual: {abs(res).mean():.4f}")
+            else:
+                plt.title(f"residuals (best), avg abs residual: {abs(res).mean():.4f}")
             plt.imshow(
-                residuals[i, 0].data.cpu().numpy(),
+                res,
                 interpolation=None,
                 vmin=residual_vmin,
                 vmax=residual_vmax,
