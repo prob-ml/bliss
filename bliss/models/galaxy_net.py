@@ -124,7 +124,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)
         loss = self.get_loss(images, recon_mean)
-        self.log("train_loss", loss)
+        self.log("train/loss", loss)
         return loss
 
     # ---------------
@@ -137,10 +137,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         loss = self.get_loss(images, recon_mean)
 
         # metrics
-        # FIXME: change to val/loss so it's automatically grouped in tensorboard
-        self.log("val_loss", loss)
+        self.log("val/loss", loss)
         residuals = (images - recon_mean) / torch.sqrt(images)
-        self.log("val_max_residual", residuals.abs().max())
+        self.log("val/max_residual", residuals.abs().max())
         return {"images": images, "recon_mean": recon_mean}
 
     def validation_epoch_end(self, outputs):

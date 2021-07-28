@@ -393,11 +393,11 @@ class SleepPhase(pl.LightningModule):
 
         if optimizer_idx == 0:  # image_encoder
             loss = self.get_detection_loss(batch)[0]
-            self.log("train_detection_loss", loss)
+            self.log("train/detection_loss", loss)
 
         if optimizer_idx == 1:  # galaxy_encoder
             loss = self.get_galaxy_loss(batch)
-            self.log("train_galaxy_loss", loss)
+            self.log("train/galaxy_loss", loss)
 
         return loss
 
@@ -410,27 +410,27 @@ class SleepPhase(pl.LightningModule):
             galaxy_bool_loss,
         ) = self.get_detection_loss(batch)
 
-        self.log("val_loss", detection_loss)
-        self.log("val_counter_loss", counter_loss.mean())
-        self.log("val_locs_loss", locs_loss.mean())
-        self.log("val_gal_bool_loss", galaxy_bool_loss.mean())
-        self.log("val_star_params_loss", star_params_loss.mean())
+        self.log("val/loss", detection_loss)
+        self.log("val/counter_loss", counter_loss.mean())
+        self.log("val/locs_loss", locs_loss.mean())
+        self.log("val/gal_bool_loss", galaxy_bool_loss.mean())
+        self.log("val/star_params_loss", star_params_loss.mean())
 
         if self.use_galaxy_encoder:
             galaxy_loss = self.get_galaxy_loss(batch)
-            self.log("val_galaxy_loss", galaxy_loss)
+            self.log("val/galaxy_loss", galaxy_loss)
 
         # calculate metrics for this batch
         metrics = self.get_metrics(batch)
-        self.log("val_acc_counts", metrics["counts_acc"])
-        self.log("val_gal_counts", metrics["galaxy_counts_acc"])
-        self.log("val_locs_mae", metrics["locs_mae"])
-        self.log("val_star_fluxes_mae", metrics["star_fluxes_mae"])
-        self.log("val_avg_tpr", metrics["avg_tpr"])
-        self.log("val_avg_ppv", metrics["avg_ppv"])
-        self.log("val_galaxy_params_mae", metrics["galaxy_params_mae"])
-        self.log("val_image_fluxes_mae", metrics["image_fluxes_mae"])
-        self.log("val_norm_pp_mae", metrics["norm_pp_mae"])
+        self.log("val/acc_counts", metrics["counts_acc"])
+        self.log("val/gal_counts", metrics["galaxy_counts_acc"])
+        self.log("val/locs_mae", metrics["locs_mae"])
+        self.log("val/star_fluxes_mae", metrics["star_fluxes_mae"])
+        self.log("val/avg_tpr", metrics["avg_tpr"])
+        self.log("val/avg_ppv", metrics["avg_ppv"])
+        self.log("val/galaxy_params_mae", metrics["galaxy_params_mae"])
+        self.log("val/image_fluxes_mae", metrics["image_fluxes_mae"])
+        self.log("val/norm_pp_mae", metrics["norm_pp_mae"])
         return batch
 
     def validation_epoch_end(self, outputs):

@@ -204,7 +204,7 @@ class OneDimFNP(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         loss = self.training_step(batch, batch_idx)
-        self.log("val_loss", loss)
+        self.log("val/loss", loss)
         self.valid_losses.append(loss.item())
         return loss
 

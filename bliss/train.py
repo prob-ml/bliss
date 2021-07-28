@@ -79,7 +79,7 @@ def setup_callbacks(cfg, paths, logger):
             filename="{epoch}",
             save_top_k=1,
             verbose=True,
-            monitor="val_loss",
+            monitor="val/loss",
             mode="min",
         )
         callbacks.append(checkpoint_callback)
