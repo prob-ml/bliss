@@ -30,10 +30,10 @@ def pytest_collection_modifyitems(config, items):
 
 def get_cfg(overrides, devices):
     assert "model" in overrides
-    overrides = [f"{key}={value}" for key, value in overrides.items()]
+    overrides.update({"gpus": devices.gpus})
+    overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
-        cfg.training.trainer.update({"gpus": devices.gpus})
     return cfg
 
 
@@ -138,3 +138,8 @@ def sleep_setup(devices):
 @pytest.fixture(scope="session")
 def galaxy_ae_setup(devices):
     return GalaxyAESetup(devices)
+
+
+@pytest.fixture(scope="session")
+def get_config():
+    return get_cfg

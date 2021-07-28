@@ -35,3 +35,4 @@ kwargs:
     n_bands: 1
     hidden: 256
   use_galaxy_encoder: True
+  annotate_probs: False

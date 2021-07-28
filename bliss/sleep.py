@@ -149,10 +149,11 @@ class SleepPhase(pl.LightningModule):
 
     def __init__(
         self,
-        encoder_kwargs,
-        decoder_kwargs,
+        encoder_kwargs: dict,
+        decoder_kwargs: dict,
         galaxy_encoder_kwargs: dict = None,
-        use_galaxy_encoder=False,
+        use_galaxy_encoder: bool = False,
+        annotate_probs: bool = False,
         optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         super().__init__()
@@ -182,6 +183,9 @@ class SleepPhase(pl.LightningModule):
             assert self.galaxy_encoder.latent_dim == self.image_decoder.n_galaxy_params
             assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
             assert self.image_encoder.max_detections == 1
+
+        # plotting
+        self.annotate_probs = annotate_probs
 
     def forward_galaxy(self, image_ptiles, tile_locs):
         n_ptiles = image_ptiles.shape[0]
@@ -522,7 +526,7 @@ class SleepPhase(pl.LightningModule):
         n_samples = min(10, len(batch["n_sources"]))
         assert n_samples > 1
 
-        # extract non-params entries for get full params to works.
+        # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
@@ -536,32 +540,51 @@ class SleepPhase(pl.LightningModule):
         assert len(estimate["locs"].shape) == 3
         assert estimate["locs"].shape[1] == estimate["n_sources"].max().int().item()
 
+        # draw all reconstruction images.
+        recon_images, _ = self.image_decoder.render_images(
+            tile_estimate["n_sources"],
+            tile_estimate["locs"],
+            tile_estimate["galaxy_bool"],
+            tile_estimate["galaxy_params"],
+            tile_estimate["fluxes"],
+            add_noise=False,
+        )
+        residuals = (images - recon_images) / torch.sqrt(recon_images)
+
+        # draw worst `n_samples` examples as measured by avg. reconstruction error.
+        worst_indices = residuals.mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
+
+        # use same vmin, vmax throughout for residuals
+        res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).numpy()
+        res_vmin = torch.floor(residuals[worst_indices].min().cpu()).numpy()
+
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
 
-        for i in range(n_samples):
+        for i, idx in enumerate(worst_indices):
+
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
 
-            image = images[None, i]
-            assert len(image.shape) == 4
+            image = images[idx, 0].cpu().numpy()
+            recon = recon_images[idx, 0].cpu().numpy()
+            res = residuals[idx, 0].cpu().numpy()
+
+            # vmin, vmax should be shared between reconstruction and true images.
+            vmax = np.ceil(max(image.max(), recon.max()))
+            vmin = np.floor(min(image.min(), recon.min()))
 
             # true parameters on full image.
-            true_n_sources = true_params["n_sources"][None, i]
-            true_locs = true_params["locs"][None, i]
-            true_galaxy_bool = true_params["galaxy_bool"][None, i]
+            true_n_sources = true_params["n_sources"][None, idx]
+            true_locs = true_params["locs"][None, idx]
+            true_galaxy_bool = true_params["galaxy_bool"][None, idx]
 
             # convert tile estimates to full parameterization for plotting
-            n_sources = estimate["n_sources"][None, i]
-            locs = estimate["locs"][None, i]
-            galaxy_bool = estimate["galaxy_bool"][None, i]
-            prob_galaxy = estimate["prob_galaxy"][None, i]
-
-            # plot true image + number of sources first.
-            image = image[0, 0].cpu().numpy()  # only first band will be plotted.
-            plotting.plot_image(fig, true_ax, image)
-            true_ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
+            n_sources = estimate["n_sources"][None, idx]
+            locs = estimate["locs"][None, idx]
+            galaxy_bool = estimate["galaxy_bool"][None, idx]
+            prob_galaxy = estimate["prob_galaxy"][None, idx]
 
             # round up true and estimated parameters.
             true_star_bool = get_star_bool(true_n_sources, true_galaxy_bool)
@@ -579,53 +602,45 @@ class SleepPhase(pl.LightningModule):
             star_locs = star_locs.cpu().numpy()[0]
             prob_galaxy = prob_galaxy.cpu().numpy()[0].reshape(-1)
 
-            # draw reconstruction image.
-            recon_image, _ = self.image_decoder.render_images(
-                tile_estimate["n_sources"][None, i],
-                tile_estimate["locs"][None, i],
-                tile_estimate["galaxy_bool"][None, i],
-                tile_estimate["galaxy_params"][None, i],
-                tile_estimate["fluxes"][None, i],
-                add_noise=False,
-            )
-
-            recon_image = recon_image[0, 0].cpu().numpy()
-            res_image = (image - recon_image) / np.sqrt(image)
+            # x-axis comparing true objects and estimated objects.
+            true_ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
 
             # plot these images too.
-            plotting.plot_image(fig, recon_ax, recon_image)
-            plotting.plot_image(fig, res_ax, res_image)
+            plotting.plot_image(fig, true_ax, image, vmin=vmin, vmax=vmax)
+            plotting.plot_image(fig, recon_ax, recon, vmin=vmin, vmax=vmax)
+            plotting.plot_image(fig, res_ax, res, vmin=res_vmin, vmax=res_vmax)
 
-            # plot and add locations. assume
+            # galaxies first
             plotting.plot_image_locs(
                 true_ax,
                 slen,
                 border_padding,
                 true_locs=true_galaxy_locs,
                 est_locs=galaxy_locs,
-                prob_galaxy=prob_galaxy,
+                prob_galaxy=prob_galaxy if self.annotate_probs else None,
                 markers=("x", "+"),
                 colors=("r", "b"),
             )
 
+            # then stars
             plotting.plot_image_locs(
                 true_ax,
                 slen,
                 border_padding,
                 true_locs=true_star_locs,
                 est_locs=star_locs,
-                prob_galaxy=prob_galaxy,
+                prob_galaxy=prob_galaxy if self.annotate_probs else None,
                 markers=("x", "+"),
                 colors=("orange", "deepskyblue"),
             )
 
-        plt.subplots_adjust(hspace=0.2, wspace=0.4)
+        fig.tight_layout()
         if self.logger:
             if kind == "validation":
-                title = f"Val Images {self.current_epoch}"
+                title = f"(Worst) Val Images {self.current_epoch}"
                 self.logger.experiment.add_figure(title, fig)
             elif kind == "testing":
-                self.logger.experiment.add_figure("Test Images", fig)
+                self.logger.experiment.add_figure("(Worst) Test Images", fig)
             else:
                 raise NotImplementedError()
         plt.close(fig)
