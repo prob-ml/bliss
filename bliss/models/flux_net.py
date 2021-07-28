@@ -1,5 +1,3 @@
-import numpy as np
-
 import pytorch_lightning as pl
 import torch
 from torch import nn
@@ -18,20 +16,16 @@ def _trim_images(images, trim_slen):
     slen = images.shape[-1]
     diff = slen - trim_slen
     assert diff >= 0
-    
+
     indx0 = diff // 2
     indx1 = indx0 + trim_slen
     return images[:, :, indx0:indx1, indx0:indx1]
 
 
 class FluxEncoderNet(nn.Module):
-    def __init__(self, 
-                 ptile_slen=52, 
-                 tile_slen=4, 
-                 flux_tile_slen=20, 
-                 n_bands=1, 
-                 max_sources=1, 
-                 latent_dim=64):
+    def __init__(
+        self, ptile_slen=52, tile_slen=4, flux_tile_slen=20, n_bands=1, max_sources=1, latent_dim=64
+    ):
 
         super().__init__()
 
@@ -54,8 +48,8 @@ class FluxEncoderNet(nn.Module):
         self.flux_tile_slen = flux_tile_slen
 
         # the network
-        
-        # convolutional layers 
+
+        # convolutional layers
         self.conv_layers = nn.Sequential(
             nn.Conv2d(self.n_bands, 6, 3),
             nn.ReLU(),
@@ -63,22 +57,22 @@ class FluxEncoderNet(nn.Module):
             nn.ReLU(),
             nn.Conv2d(16, 16, 3),
             nn.ReLU(),
-            nn.Flatten(1)
+            nn.Flatten(1),
         )
 
         # compute output dimension
         conv_out_dim = (self.flux_tile_slen - 6) ** 2 * 16
-        
+
         self.fc_layers = nn.Sequential(
-            nn.Linear(conv_out_dim, latent_dim), 
+            nn.Linear(conv_out_dim, latent_dim),
             nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim), 
+            nn.Linear(latent_dim, latent_dim),
             nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim), 
+            nn.Linear(latent_dim, latent_dim),
             nn.ReLU(),
-            nn.Linear(latent_dim, outdim)
+            nn.Linear(latent_dim, outdim),
         )
-        
+
     def forward(self, images):
 
         batch_size = images.shape[0]
@@ -110,10 +104,10 @@ class FluxEncoderNet(nn.Module):
 
         # pass through conv layers
         h = self.conv_layers(image_ptiles)
-        
+
         # pass through fully connected
         h = self.fc_layers(h)
-        
+
         indx0 = self.n_bands
         indx1 = 2 * indx0
 
