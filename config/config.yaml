@@ -6,7 +6,7 @@ defaults:
   - testing: default
   - generate: default
   - optional tuning: ${model}
-  - predict: sdss_basic
+  - predict: sdss
 
 mode: train
 
