@@ -82,7 +82,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim=8,
         hidden=256,
         n_bands=1,
-        optimizer_params: dict = None,
+        optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -96,9 +96,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
-
-        # FIXME it's available through self.hparams["optimizer_params"]
-        self.optimizer_params = optimizer_params
 
     def forward(self, image, background):
         z = self.enc.forward(image - background)
@@ -114,9 +111,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        assert self.optimizer_params is not None, "Need to specify `optimizer_params`."
-        name = self.optimizer_params["name"]
-        kwargs = self.optimizer_params["kwargs"]
+        assert self.hparams["optimizer_params"] is not None, "Need to specify `optimizer_params`."
+        name = self.hparams["optimizer_params"]["name"]
+        kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.parameters(), kwargs)
 
     # ---------------
