@@ -141,7 +141,6 @@ class GalaxyEncoder(pl.LightningModule):
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         loss = self.get_loss(batch)
         self.log("val/loss", loss)
-        self.make_plots(batch)
         return batch
 
     def validation_epoch_end(self, outputs):
