@@ -468,7 +468,7 @@ class SleepPhase(pl.LightningModule):
         fig.tight_layout()
         if self.logger:
             if kind == "validation":
-                title = f"(Worst) Val Images {self.current_epoch}"
+                title = f"Val Images {self.current_epoch}"
                 self.logger.experiment.add_figure(title, fig)
             elif kind == "testing":
                 self.logger.experiment.add_figure("(Worst) Test Images", fig)
