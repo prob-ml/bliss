@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 
 from bliss.optimizer import get_optimizer
+from bliss.utils import make_grid
 
 plt.switch_backend("Agg")
 
@@ -143,11 +144,38 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return {"images": images, "recon_mean": recon_mean}
 
     def validation_epoch_end(self, outputs):
-        images = torch.cat([x["images"] for x in outputs])
-        recon_mean = torch.cat([x["recon_mean"] for x in outputs])
-        fig = self.plot_reconstruction(images, recon_mean)
         if self.logger:
-            self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
+            images = torch.cat([x["images"] for x in outputs])
+            recon_mean = torch.cat([x["recon_mean"] for x in outputs])
+
+            reconstructions = self.plot_reconstruction(images, recon_mean)
+            grid_example = self.plot_grid_examples(images, recon_mean)
+
+            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/images", reconstructions)
+            self.logger.experiment.add_figure(
+                f"Epoch:{self.current_epoch}/grid_examples", grid_example
+            )
+
+    def plot_grid_examples(self, images, recon_mean):
+        # 1.  plot a grid of all input images and recon_mean
+        # 2.  only plot the highest band
+
+        nrow = 16
+        image_grid = make_grid(images, nrow=nrow)[0]
+        recon_grid = make_grid(recon_mean, nrow=nrow)[0]
+        h, w = image_grid.size()
+        base_size = 8
+        fig = plt.figure(figsize=(2 * base_size, int(h / w * base_size)))
+        for i, grid in enumerate([image_grid, recon_grid]):
+            plt.subplot(1, 2, i + 1)
+            plt.imshow(grid.cpu().numpy(), interpolation=None)
+            if i == 0:
+                plt.title("images")
+            else:
+                plt.title("recon_mean")
+            plt.xticks([])
+            plt.yticks([])
+        return fig
 
     def plot_reconstruction(self, images, recon_mean):
 

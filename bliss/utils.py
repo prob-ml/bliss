@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -108,3 +109,73 @@ class NormalEncoder(nn.Module):
             logscale_z = torch.log(self.minscale + (1 - self.minscale) * F.softplus(logscale_z))
         pz = Normal(mean_z, logscale_z.exp())
         return pz
+
+
+# adapt from torchvision.utils.make_grid
+@torch.no_grad()
+def make_grid(
+    tensor,
+    nrow: int = 8,
+    padding: int = 2,
+    scale_each: bool = False,
+    pad_value: int = 0,
+) -> torch.Tensor:
+    """
+    Make a grid of images.
+
+    Args:
+        tensor (Tensor or list): 4D mini-batch Tensor of shape (B x C x H x W)
+            or a list of images all of the same size.
+        nrow (int, optional): Number of images displayed in each row of the grid.
+            The final grid size is ``(B / nrow, nrow)``. Default: ``8``.
+        padding (int, optional): amount of padding. Default: ``2``.
+        scale_each (bool, optional): If ``True``, scale each image in the batch of
+            images separately rather than the (min, max) over all images. Default: ``False``.
+        pad_value (float, optional): Value for the padded pixels. Default: ``0``.
+
+    Returns:
+        grid (Tensor): the tensor containing grid of images.
+    """
+
+    if tensor.dim() == 2:  # single image H x W
+        tensor = tensor.unsqueeze(0)
+    if tensor.dim() == 3:  # single image
+        tensor = tensor.unsqueeze(0)
+
+        def norm_ip(img, low, high):
+            img.clamp_(min=low, max=high)
+            img.sub_(low).div_(max(high - low, 1e-5))
+
+        def norm_range(t):
+            norm_ip(t, float(t.min()), float(t.max()))
+
+        if scale_each is True:
+            for t in tensor:  # loop over mini-batch dimension
+                norm_range(t)
+        else:
+            norm_range(tensor)
+
+    if tensor.size(0) == 1:
+        return tensor.squeeze(0)
+
+    # make the mini-batch of images into a grid
+    nmaps = tensor.size(0)
+    xmaps = min(nrow, nmaps)
+    ymaps = int(math.ceil(float(nmaps) / xmaps))
+    height, width = int(tensor.size(2) + padding), int(tensor.size(3) + padding)
+    num_channels = tensor.size(1)
+    grid = tensor.new_full(
+        (num_channels, height * ymaps + padding, width * xmaps + padding), pad_value
+    )
+    k = 0
+    for y in range(ymaps):
+        for x in range(xmaps):
+            if k >= nmaps:
+                break
+            # Tensor.copy_() is a valid method but seems to be missing from the stubs
+            # https://pytorch.org/docs/stable/tensors.html#torch.Tensor.copy_
+            grid.narrow(1, y * height + padding, height - padding).narrow(
+                2, x * width + padding, width - padding
+            ).copy_(tensor[k])
+            k = k + 1
+    return grid
