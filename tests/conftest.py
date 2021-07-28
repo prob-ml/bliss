@@ -138,3 +138,8 @@ def sleep_setup(devices):
 @pytest.fixture(scope="session")
 def galaxy_ae_setup(devices):
     return GalaxyAESetup(devices)
+
+
+@pytest.fixture(scope="session")
+def get_config():
+    return get_cfg
