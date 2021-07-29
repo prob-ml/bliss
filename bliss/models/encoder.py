@@ -319,7 +319,7 @@ class ImageEncoder(nn.Module):
     def get_images_in_tiles(self, images):
         """
         Divide a batch of full images into padded tiles similar to nn.conv2d
-        with a sliding window=self.ptile_slen and stride=self.tile_slen
+        with a sliding stride=self.tile_slen and window=self.ptile_slen
         """
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
