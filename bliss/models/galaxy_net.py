@@ -161,18 +161,23 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         # 2.  only plot the highest band
 
         nrow = 16
+        residuals = (images - recon_mean) / torch.sqrt(images)
+
         image_grid = make_grid(images, nrow=nrow)[0]
         recon_grid = make_grid(recon_mean, nrow=nrow)[0]
+        residual_grid = make_grid(residuals, nrow=nrow)[0]
         h, w = image_grid.size()
         base_size = 8
-        fig = plt.figure(figsize=(2 * base_size, int(h / w * base_size)))
-        for i, grid in enumerate([image_grid, recon_grid]):
-            plt.subplot(1, 2, i + 1)
+        fig = plt.figure(figsize=(3 * base_size, int(h / w * base_size)))
+        for i, grid in enumerate([image_grid, recon_grid, residual_grid]):
+            plt.subplot(1, 3, i + 1)
             plt.imshow(grid.cpu().numpy(), interpolation=None)
             if i == 0:
                 plt.title("images")
-            else:
+            elif i == 1:
                 plt.title("recon_mean")
+            else:
+                plt.title("residuals")
             plt.xticks([])
             plt.yticks([])
         return fig
