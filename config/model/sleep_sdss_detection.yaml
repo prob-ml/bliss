@@ -3,7 +3,7 @@ image:
   slen: 40
   n_bands: 1
   background:
-    - 633.0
+    - 865.0
 galaxy:
   slen: 53
   latent_dim: 8
@@ -12,22 +12,30 @@ kwargs:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
     tile_slen: 4
-    ptile_slen: 36
-    border_padding: 4
-    prob_galaxy: 1.0
+    ptile_slen: 52
+    border_padding: 24
+    prob_galaxy: 0.7
     n_galaxy_params: ${model.galaxy.latent_dim}
     max_sources: 1
-    mean_sources: 0.015
+    mean_sources: 0.03
     min_sources: 0
+    f_min: 1e3
+    f_max: 1e6
+    alpha: 0.5
     gal_slen: ${model.galaxy.slen}
     autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt
     latents_file: ${paths.data}/latents_simulated_sdss_galaxies.pt
-    psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
+    psf_params_file: ${paths.root}/data/psField-000094-1-0012.fits
     background_values: ${model.image.background}
+    sdss_bands:
+      - 2
   encoder_kwargs:
     n_bands: ${model.image.n_bands}
     tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
-    ptile_slen: 12
+    ptile_slen: 52
     max_detections: ${model.kwargs.decoder_kwargs.max_sources}
-  use_galaxy_encoder: False
-  annotate_probs: False
+    channel: 8
+    spatial_dropout: 0.0
+    dropout: 0.0
+    hidden: 128
+  annotate_probs: True

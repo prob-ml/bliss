@@ -29,7 +29,6 @@ def pytest_collection_modifyitems(config, items):
 
 
 def get_cfg(overrides, devices):
-    assert "model" in overrides
     overrides.update({"gpus": devices.gpus})
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path="../config"):

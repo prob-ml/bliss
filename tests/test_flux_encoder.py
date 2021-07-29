@@ -12,7 +12,7 @@ class TestFluxEncoder:
 
         # get parameters
         overrides = {
-            "model": "sleep_sdss_measure_simple",
+            "model": "sleep_sdss_detection",
             "dataset": "default" if devices.use_cuda else "cpu",
         }
         cfg = get_config(overrides, devices)

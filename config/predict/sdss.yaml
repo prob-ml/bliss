@@ -1,10 +1,10 @@
 # image and sdss parameters
 sdss_kwargs:
   sdss_dir: ${paths.data}/sdss
-  run: 3900
-  camcol: 6
+  run: 94
+  camcol: 1
   fields:
-    - 269
+    - 12
   stampsize: 5
   overwrite_fits_cache: False
   overwrite_cache: False
@@ -13,9 +13,10 @@ bands:
   - 2
 
 # i/o parameters
-checkpoint: ${paths.root}/models/sleep_sdss_measure.ckpt
+sleep_checkpoint: ${paths.root}/models/sleep_sdss.ckpt
+galaxy_checkpoint: ${paths.root}/models/galaxy_encoder_sdss.ckpt
 device: "cuda:0"
-output_file: "${paths.data}/var_params.pt"
+output_file: null
 
 # coverage for tests
 testing: False

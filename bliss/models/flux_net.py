@@ -7,7 +7,7 @@ from torch.distributions import normal
 
 
 from bliss.models import decoder
-from bliss.models.encoder import get_star_bool, tile_images
+from bliss.models.encoder import get_star_bool, get_images_in_tiles
 from bliss.optimizer import get_optimizer
 
 
@@ -120,7 +120,7 @@ class FluxEncoderNet(nn.Module):
         return _trim_images(image_ptiles, self.flux_tile_slen)
 
     def _get_ptiles_from_images(self, images):
-        image_ptiles = tile_images(images, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen)
+        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
         return self._trim_ptiles(image_ptiles)
 
 

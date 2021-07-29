@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from bliss import sleep
 from bliss.datasets import simulated, galsim_galaxies
-from bliss.models import galaxy_net
+from bliss.models import galaxy_net, galaxy_encoder
 
 # available datasets and models.
 _datasets = [
@@ -22,7 +22,7 @@ _datasets = [
 ]
 datasets = {cls.__name__: cls for cls in _datasets}
 
-_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxyAE]
+_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxyAE, galaxy_encoder.GalaxyEncoder]
 models = {cls.__name__: cls for cls in _models}
 
 
@@ -64,7 +64,9 @@ def setup_profiler(cfg, paths):
 def setup_logger(cfg, paths):
     logger = False
     if cfg.training.trainer.logger:
-        logger = TensorBoardLogger(save_dir=paths["output"], name="lightning_logs")
+        logger = TensorBoardLogger(
+            save_dir=paths["output"], name="lightning_logs", default_hp_metric=False
+        )
     return logger
 
 
@@ -79,7 +81,7 @@ def setup_callbacks(cfg, paths, logger):
             filename="{epoch}",
             save_top_k=1,
             verbose=True,
-            monitor="val_loss",
+            monitor="val/loss",
             mode="min",
         )
         callbacks.append(checkpoint_callback)
