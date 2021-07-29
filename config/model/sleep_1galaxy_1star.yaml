@@ -33,5 +33,4 @@ kwargs:
     spatial_dropout: 0.11399
     dropout: 0.013123
     hidden: 185
-  use_galaxy_encoder: False
   annotate_probs: True

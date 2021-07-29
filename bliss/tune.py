@@ -45,11 +45,11 @@ def sleep_trainable(search_space, cfg: DictConfig):
         callbacks=[
             TuneReportCallback(
                 {
-                    "loss": "val_loss",
-                    "star_count_acc": "val_acc_counts",
-                    "galaxy_counts_acc": "val_gal_counts",
-                    "locs_mae": "val_locs_mae",
-                    "fluxes_mae": "val_star_fluxes_mae",
+                    "loss": "val/loss",
+                    "star_count_acc": "val/acc_counts",
+                    "galaxy_counts_acc": "val/gal_counts",
+                    "locs_mae": "val/locs_mae",
+                    "fluxes_mae": "val/star_fluxes_mae",
                 },
                 on="validation_end",
             )

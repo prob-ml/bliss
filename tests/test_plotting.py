@@ -4,5 +4,6 @@ def test_plotting(sleep_setup):
         "model": "sleep_star_basic",
         "dataset": "test_plotting",
         "training": "test_plotting",
+        "model.kwargs.annotate_probs": True,
     }
     sleep_setup.get_trained_sleep(overrides)

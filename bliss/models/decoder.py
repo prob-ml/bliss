@@ -10,8 +10,18 @@ from torch.distributions import Poisson
 import pytorch_lightning as pl
 from einops import rearrange, reduce
 
-from .encoder import get_is_on_from_n_sources, get_mgrid
-from . import galaxy_net
+from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.models import galaxy_net
+
+
+def get_mgrid(slen):
+    offset = (slen - 1) / 2
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    # mgrid is between -1 and 1
+    # then scale slightly because of the way f.grid_sample
+    # parameterizes the edges: (0, 0) is center of edge pixel
+    return mgrid.float() * (slen - 1) / slen
 
 
 class ImageDecoder(pl.LightningModule):

@@ -1,4 +1,4 @@
-name: SleepPhase
+name: GalaxyEncoder
 image:
   slen: 40
   n_bands: 1
@@ -8,6 +8,7 @@ galaxy:
   slen: 53
   latent_dim: 8
 kwargs:
+  hidden: 256
   decoder_kwargs:
     n_bands: ${model.image.n_bands}
     slen: ${model.image.slen}
@@ -29,19 +30,3 @@ kwargs:
     background_values: ${model.image.background}
     sdss_bands:
       - 2
-  encoder_kwargs:
-    n_bands: ${model.image.n_bands}
-    tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
-    ptile_slen: 52
-    max_detections: ${model.kwargs.decoder_kwargs.max_sources}
-    channel: 8
-    spatial_dropout: 0.0
-    dropout: 0.0
-    hidden: 128
-  galaxy_encoder_kwargs:
-    latent_dim: ${model.galaxy.latent_dim}
-    slen: 44
-    n_bands: 1
-    hidden: 256
-  use_galaxy_encoder: True
-  annotate_probs: True

@@ -5,7 +5,7 @@ class TestBasicGalaxyTiles:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
         overrides = {
-            "model": "sleep_galaxy_detection_basic",
+            "model": "sleep_galaxy_basic",
             "dataset": "default" if devices.use_cuda else "cpu",
             "training": "unittest" if devices.use_cuda else "cpu",
             "training.n_epochs": 201 if devices.use_cuda else 1,
