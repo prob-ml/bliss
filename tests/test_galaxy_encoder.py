@@ -11,6 +11,8 @@ class TestBasicGalaxyMeasure:
             "model": "galenc_sdss",
             "dataset": "default" if devices.use_cuda else "cpu",
             "training": "cpu",
+            "training.trainer.check_val_every_n_epoch": 1,
+            "training.n_epochs": 3,  # plotting coverage.
             "dataset.kwargs.batch_size": 10,
         }
         return overrides
