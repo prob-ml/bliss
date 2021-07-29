@@ -17,13 +17,16 @@ def prediction(image, image_encoder, galaxy_encoder):
     assert image.shape[1] == image_encoder.n_bands == galaxy_encoder.n_bands
     image_encoder.eval()
     galaxy_encoder.eval()
-    assert image_encoder.border_padding == galaxy_encoder.image_decoder.border_padding
-    assert image_encoder.tile_slen == galaxy_encoder.image_decoder.tile_slen
+    assert image_encoder.border_padding == galaxy_encoder.border_padding
+    assert image_encoder.tile_slen == galaxy_encoder.tile_slen
     assert image_encoder.max_detections == galaxy_encoder.image_decoder.max_sources == 1
     h, w = image.shape[-2], image.shape[-1]
     bp = image_encoder.border_padding
 
+    # get padded tiles.
     ptiles = image_encoder.get_images_in_tiles(image)
+
+    # get MAP estimates
     tile_n_sources = image_encoder.tile_map_n_sources(ptiles)
     tile_map = image_encoder.tile_map_estimate(image)
 
