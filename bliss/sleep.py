@@ -179,7 +179,7 @@ class SleepPhase(pl.LightningModule):
         tile_est["galaxy_params"] = tile_est["galaxy_params"].contiguous()
         return tile_est
 
-    def get_detection_loss(self, batch):
+    def get_loss(self, batch):
         """
 
         loc_mean shape = (n_ptiles x max_detections x 2)
@@ -296,7 +296,7 @@ class SleepPhase(pl.LightningModule):
         return opt
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
-        loss = self.get_detection_loss(batch)[0]
+        loss = self.get_loss(batch)[0]
         self.log("train/loss", loss)
         return loss
 
@@ -307,7 +307,7 @@ class SleepPhase(pl.LightningModule):
             locs_loss,
             star_params_loss,
             galaxy_bool_loss,
-        ) = self.get_detection_loss(batch)
+        ) = self.get_loss(batch)
 
         self.log("val/loss", detection_loss)
         self.log("val/counter_loss", counter_loss.mean())
