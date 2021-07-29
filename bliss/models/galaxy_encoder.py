@@ -24,20 +24,23 @@ class GalaxyEncoder(pl.LightningModule):
         self.save_hyperparameters()
         self.optimizer_params = optimizer_params
 
+        self.max_sources = 1  # by construction.
+
         # to produce images to train on.
         self.image_decoder = ImageDecoder(**decoder_kwargs)
         self.image_decoder.requires_grad_(False)
 
         # extract useful info from image_decoder
-        self.tile_slen = self.image_decoder.tile_slen
-        self.ptile_slen = self.image_decoder.ptile_slen
         self.latent_dim = self.image_decoder.n_galaxy_params
         self.n_bands = self.image_decoder.n_bands
+
+        # put image dimensions together
+        self.tile_slen = self.image_decoder.tile_slen
         self.border_padding = self.image_decoder.border_padding
+        self.ptile_slen = self.tile_slen + 2 * self.border_padding
+        self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        self.max_sources = 1  # by construction.
-        self.slen = self.ptile_slen - 2 * self.tile_slen  # will crop 2 * tile_slen
         self.enc = CenteredGalaxyEncoder(
             slen=self.slen, latent_dim=self.latent_dim, n_bands=self.n_bands, hidden=hidden
         )
@@ -48,7 +51,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # consistency
         assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
-        assert self.slen >= 20, "Cropped slen not reasonable"
+        assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
 
     def center_ptiles(self, image_ptiles, tile_locs):
         # assume there is at most one source per tile
@@ -61,7 +64,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert tile_locs.shape[1] == 1
         assert image_ptiles.shape[-1] == self.ptile_slen
         n_ptiles = image_ptiles.shape[0]
-        crop_slen = self.tile_slen
+        tile_slen = self.tile_slen
         ptile_slen = self.ptile_slen
         assert tile_locs.shape[0] == n_ptiles
 
@@ -81,7 +84,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # now that everything is center we can crop easily
         cropped_tiles = shifted_tiles[
-            :, :, crop_slen : ptile_slen - crop_slen, crop_slen : ptile_slen - crop_slen
+            :, :, tile_slen : ptile_slen - tile_slen, tile_slen : ptile_slen - tile_slen
         ]
         return cropped_tiles
 
@@ -91,31 +94,35 @@ class GalaxyEncoder(pl.LightningModule):
         kwargs = self.optimizer_params["kwargs"]
         return get_optimizer(name, self.enc.parameters(), kwargs)
 
-    def forward(self, images, tile_locs):
+    def forward_image(self, images, tile_locs):
         batch_size = images.shape[0]
-        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        galaxy_params = self(ptiles, tile_locs)
+        return galaxy_params.view(batch_size, -1, 1, self.latent_dim)
+
+    def forward(self, image_ptiles, tile_locs):
+        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         n_ptiles = image_ptiles.shape[0]
 
         # in each padded tile we need to center the corresponding galaxy
         _tile_locs = tile_locs.reshape(n_ptiles, self.max_sources, 2)
         centered_ptiles = self.center_ptiles(image_ptiles, _tile_locs)
-        assert centered_ptiles.shape[-1] == self.slen
+        assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # remove background before encoding
         ptile_background = self.image_decoder.get_background(self.slen)
         centered_ptiles -= ptile_background.unsqueeze(0)
 
         # TODO: Should we zero out tiles without galaxies during training?
-        # we can assume there is one galaxy per_tile and encode each tile independently.
+
+        # We can assume there is one galaxy per_tile and encode each tile independently.
         z = self.enc(centered_ptiles)
         assert z.shape[0] == n_ptiles
-
-        galaxy_params = z.view(batch_size, -1, 1, self.latent_dim)
-        return galaxy_params
+        return z
 
     def get_loss(self, batch):
         images = batch["images"]
-        tile_galaxy_params = self(images, batch["locs"])
+        tile_galaxy_params = self.forward_image(images, batch["locs"])
 
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
@@ -158,7 +165,7 @@ class GalaxyEncoder(pl.LightningModule):
         tile_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # obtain map estimates
-        tile_galaxy_params = self(images, batch["locs"])
+        tile_galaxy_params = self.forward_image(images, batch["locs"])
         tile_est = {
             k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
         }
