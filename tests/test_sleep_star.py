@@ -14,12 +14,12 @@ class TestSleepStarOneTile:
         return overrides
 
     @pytest.fixture(scope="class")
-    def trained_sleep(self, overrides, sleep_setup):
-        return sleep_setup.get_trained_sleep(overrides)
+    def trained_sleep(self, overrides, model_setup):
+        return model_setup.get_trained_model(overrides)
 
-    def test_simulated(self, overrides, trained_sleep, sleep_setup, devices):
+    def test_simulated(self, overrides, trained_sleep, model_setup, devices):
         overrides.update({"testing": "default"})
-        results = sleep_setup.test_sleep(overrides, trained_sleep)
+        results = model_setup.test_model(overrides, trained_sleep)
         assert {"acc_counts", "locs_mae", "star_fluxes_mae"}.issubset(results.keys())
 
         # only expect tests to pass if gpu
@@ -43,12 +43,12 @@ class TestSleepStarTiles:
         return overrides
 
     @pytest.fixture(scope="class")
-    def trained_sleep(self, overrides, sleep_setup):
-        return sleep_setup.get_trained_sleep(overrides)
+    def trained_sleep(self, overrides, model_setup):
+        return model_setup.get_trained_model(overrides)
 
-    def test_simulated(self, overrides, trained_sleep, sleep_setup, devices):
+    def test_simulated(self, overrides, trained_sleep, model_setup, devices):
         overrides.update({"testing": "default"})
-        results = sleep_setup.test_sleep(overrides, trained_sleep)
+        results = model_setup.test_model(overrides, trained_sleep)
         assert {"acc_counts", "locs_mae", "star_fluxes_mae"}.issubset(results.keys())
 
         # only expect tests to pass if gpu
@@ -59,10 +59,10 @@ class TestSleepStarTiles:
         assert results["locs_mae"] < 0.5
         assert results["star_fluxes_mae"] < 0.5
 
-    def test_saved(self, overrides, trained_sleep, sleep_setup, devices, paths):
+    def test_saved(self, overrides, trained_sleep, model_setup, devices, paths):
         test_file = Path(paths["data"]).joinpath("star_test1.pt").as_posix()
         overrides.update({"testing.file": test_file})
-        results = sleep_setup.test_sleep(overrides, trained_sleep)
+        results = model_setup.test_model(overrides, trained_sleep)
 
         # only expect tests to pass if gpu
         if not devices.use_cuda:
