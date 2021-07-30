@@ -18,11 +18,10 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         hidden: int = 256,
         decoder_kwargs: dict = None,
-        optimizer_params: dict = None,
+        optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.optimizer_params = optimizer_params
 
         self.max_sources = 1  # by construction.
 
@@ -89,9 +88,9 @@ class GalaxyEncoder(pl.LightningModule):
         return cropped_tiles
 
     def configure_optimizers(self):
-        assert self.optimizer_params is not None, "Need to specify `optimizer_params`."
-        name = self.optimizer_params["name"]
-        kwargs = self.optimizer_params["kwargs"]
+        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
+        name = self.hparams["optimizer_params"]["name"]
+        kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.enc.parameters(), kwargs)
 
     def forward_image(self, images, tile_locs):

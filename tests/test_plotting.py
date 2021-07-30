@@ -1,4 +1,4 @@
-def test_plotting(sleep_setup):
+def test_plotting(model_setup):
     # just to test `make_validation_plots` works.
     overrides = {
         "model": "sleep_star_basic",
@@ -6,4 +6,4 @@ def test_plotting(sleep_setup):
         "training": "test_plotting",
         "model.kwargs.annotate_probs": True,
     }
-    sleep_setup.get_trained_sleep(overrides)
+    model_setup.get_trained_model(overrides)

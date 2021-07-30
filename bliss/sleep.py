@@ -144,7 +144,7 @@ class SleepPhase(pl.LightningModule):
         encoder_kwargs: dict,
         decoder_kwargs: dict,
         annotate_probs: bool = False,
-        optimizer_params: dict = None,
+        optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -152,7 +152,6 @@ class SleepPhase(pl.LightningModule):
         self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
         self.image_decoder = decoder.ImageDecoder(**decoder_kwargs)
         self.image_decoder.requires_grad_(False)
-        self.optimizer_params = optimizer_params
 
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
@@ -289,11 +288,10 @@ class SleepPhase(pl.LightningModule):
         )
 
     def configure_optimizers(self):
-        assert self.optimizer_params is not None, "Need to specify `optimizer_params`."
-        name = self.optimizer_params["name"]
-        kwargs = self.optimizer_params["kwargs"]
-        opt = get_optimizer(name, self.image_encoder.parameters(), kwargs)
-        return opt
+        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
+        name = self.hparams["optimizer_params"]["name"]
+        kwargs = self.hparams["optimizer_params"]["kwargs"]
+        return get_optimizer(name, self.image_encoder.parameters(), kwargs)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
         loss = self.get_loss(batch)[0]
