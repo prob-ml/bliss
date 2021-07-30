@@ -21,8 +21,8 @@ class TestWake:
         return overrides
 
     @pytest.fixture(scope="class")
-    def trained_sleep(self, overrides, sleep_setup):
-        return sleep_setup.get_trained_sleep(overrides)
+    def trained_sleep(self, overrides, model_setup):
+        return model_setup.get_trained_model(overrides)
 
     def test_simulated(self, trained_sleep, devices):
 
