@@ -138,6 +138,7 @@ class FluxEstimator(pl.LightningModule):
     ):
 
         super().__init__()
+        self.save_hyperparameters()
 
         # the image decoder: we need this to
         # compute the kl-q-p loss
