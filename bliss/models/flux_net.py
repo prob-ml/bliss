@@ -134,7 +134,7 @@ class FluxEstimator(pl.LightningModule):
         self,
         decoder_kwargs,
         flux_tile_slen=20,
-        optimizer_params: dict = None,
+        optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
 
         super().__init__()
@@ -158,8 +158,6 @@ class FluxEstimator(pl.LightningModule):
             n_bands=n_bands,
             max_sources=max_sources,
         )
-
-        self.optimizer_params = optimizer_params
 
     def forward(self, images):
         # input images is the full scene.
@@ -211,10 +209,10 @@ class FluxEstimator(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
-        assert self.optimizer_params is not None, "Need to specify `optimizer_params`."
-        name = self.optimizer_params["name"]
-        kwargs = self.optimizer_params["kwargs"]
-        return get_optimizer(name, self.parameters(), kwargs)
+        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
+        name = self.hparams["optimizer_params"]["name"]
+        kwargs = self.hparams["optimizer_params"]["kwargs"]
+        return get_optimizer(name, self.enc.parameters(), kwargs)
 
     # ---------------
     # Training
