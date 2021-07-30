@@ -13,12 +13,12 @@ class TestBasicGalaxyTiles:
         return overrides
 
     @pytest.fixture(scope="class")
-    def trained_sleep(self, overrides, sleep_setup):
-        return sleep_setup.get_trained_sleep(overrides)
+    def trained_sleep(self, overrides, model_setup):
+        return model_setup.get_trained_model(overrides)
 
-    def test_simulated(self, overrides, trained_sleep, sleep_setup, devices):
+    def test_simulated(self, overrides, trained_sleep, model_setup, devices):
         overrides.update({"testing": "default"})
-        results = sleep_setup.test_sleep(overrides, trained_sleep)
+        results = model_setup.test_model(overrides, trained_sleep)
         assert {"acc_gal_counts", "locs_mae"}.issubset(results.keys())
 
         # only check testing results if GPU available

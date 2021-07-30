@@ -8,7 +8,7 @@ from bliss import metrics as metrics_lib
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(sleep_setup, devices):
+def trained_star_encoder_m2(model_setup, devices):
     overrides = {
         "model": "m2",
         "dataset": "m2" if devices.use_cuda else "cpu",
@@ -18,7 +18,7 @@ def trained_star_encoder_m2(sleep_setup, devices):
         "optimizer": "m2",
     }
 
-    sleep_net = sleep_setup.get_trained_sleep(overrides)
+    sleep_net = model_setup.get_trained_model(overrides)
     return sleep_net.image_encoder.to(devices.device)
 
 
