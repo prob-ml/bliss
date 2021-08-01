@@ -109,12 +109,12 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     max_detections = true_params.size(1)
 
     # view to evaluate all combinations of log_prob.
-    _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
-    _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
-    _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+    true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+    param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+    param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
 
-    _sd = (_param_logvar.exp() + 1e-5).sqrt()
-    param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
+    sd = (param_logvar.exp() + 1e-5).sqrt()
+    param_log_probs_all = Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
     return param_log_probs_all
 
 
@@ -387,8 +387,8 @@ class SleepPhase(pl.LightningModule):
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
         border_padding = int((images.shape[-1] - slen) / 2)
-        _true_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(_true_params, slen)
+        true_params_dict = {k: v for k, v in batch.items() if k not in exclude}
+        true_params = get_full_params(true_params_dict, slen)
 
         # obtain map estimates
         tile_estimate = self.tile_map_estimate(batch)

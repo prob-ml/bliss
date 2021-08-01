@@ -531,14 +531,14 @@ class Tiler(nn.Module):
         locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
-        _grid = rearrange(
+        local_grid = rearrange(
             self.cached_grid, "s1 s2 xy -> 1 s1 s2 xy", s1=self.ptile_slen, s2=self.ptile_slen, xy=2
         )
 
         locs_swapped = locs.index_select(1, self.swap)
         locs_swapped = rearrange(locs_swapped, "np xy -> np 1 1 xy")
 
-        grid_loc = _grid - locs_swapped
+        grid_loc = local_grid - locs_swapped
         source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
         return source_rendered
 
@@ -575,15 +575,15 @@ class Tiler(nn.Module):
         """Pad the source with zeros so that it is size ptile_slen,"""
         assert len(source.shape) == 3
 
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
         assert len(source.shape) == 3
 
         source_slen = source.shape[2]
 
-        assert source_slen <= _slen, "Should be using trim source."
+        assert source_slen <= slen, "Should be using trim source."
 
-        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=source.device)
-        offset = int((_slen - source_slen) / 2)
+        source_expanded = torch.zeros(source.shape[0], slen, slen, device=source.device)
+        offset = int((slen - source_slen) / 2)
 
         source_expanded[
             :, offset : (offset + source_slen), offset : (offset + source_slen)
@@ -597,14 +597,14 @@ class Tiler(nn.Module):
 
         # if self.ptile_slen is even, we still make source dimension odd.
         # otherwise, the source won't have a peak in the center pixel.
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        local_slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
         source_slen = source.shape[2]
         source_center = (source_slen - 1) / 2
 
-        assert source_slen >= _slen
+        assert source_slen >= local_slen
 
-        r = np.floor(_slen / 2)
+        r = np.floor(local_slen / 2)
         l_indx = int(source_center - r)
         u_indx = int(source_center + r + 1)
 
@@ -692,9 +692,9 @@ class StarTileDecoder(nn.Module):
     def _get_psf(self):
         psf_list = []
         for i in range(self.n_bands):
-            _psf = self._get_psf_single_band(self.params[i])
-            _psf *= self.normalization_constant[i]
-            psf_list.append(_psf.unsqueeze(0))
+            band_psf = self._get_psf_single_band(self.params[i])
+            band_psf *= self.normalization_constant[i]
+            psf_list.append(band_psf.unsqueeze(0))
         psf = torch.cat(psf_list)
 
         assert (psf > 0).all()
@@ -708,15 +708,15 @@ class StarTileDecoder(nn.Module):
         return (term1 + term2 + term3) / (1 + b + p0)
 
     def _get_psf_single_band(self, psf_params):
-        _psf_params = torch.exp(psf_params)
+        psf_params = torch.exp(psf_params)
         return self._psf_fun(
             self.cached_radii_grid,
-            _psf_params[0],
-            _psf_params[1],
-            _psf_params[2],
-            _psf_params[3],
-            _psf_params[4],
-            _psf_params[5],
+            psf_params[0],
+            psf_params[1],
+            psf_params[2],
+            psf_params[3],
+            psf_params[4],
+            psf_params[5],
         )
 
     def _adjust_psf(self):

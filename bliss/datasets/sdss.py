@@ -181,21 +181,21 @@ class SloanDigitalSkySurvey(Dataset):
         fieldgains = self.pf_fits["GAIN"]
 
         # get desired field
-        for i, _field in enumerate(fieldnums):
+        for i, field in enumerate(fieldnums):
             gain = fieldgains[i]
-            if (not fields) or _field in fields:
+            if (not fields) or field in fields:
                 # load the catalog distributed with SDSS
-                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
-                po_cache = "photoObj-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, _field)
-                po_path = camcol_path.joinpath(str(_field), po_file)
-                po_cache_path = camcol_path.joinpath(str(_field), po_cache)
+                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, field)
+                po_cache = "photoObj-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, field)
+                po_path = camcol_path.joinpath(str(field), po_file)
+                po_cache_path = camcol_path.joinpath(str(field), po_cache)
                 if (not po_cache_path.exists()) or (overwrite_fits_cache):
                     try:
                         po_fits = fits.getdata(po_path)
                     except IndexError as e:
                         print(
                             "INFO: IndexError while accessing field: {}. "
-                            "This field will not be included.\n".format(_field)
+                            "This field will not be included.\n".format(field)
                         )
                         print(e)
                         po_fits = None
@@ -205,29 +205,29 @@ class SloanDigitalSkySurvey(Dataset):
                     if po_fits is None:
                         print(
                             "INFO: cached data for field {} is None. "
-                            "This field will not be included".format(_field)
+                            "This field will not be included".format(field)
                         )
 
                 # Load the PSF produced by SDSS
-                psf_file = "psField-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
-                psf_cache = "psField-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, _field)
+                psf_file = "psField-{:06d}-{:d}-{:04d}.fits".format(run, camcol, field)
+                psf_cache = "psField-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, field)
 
-                psf_path = camcol_path.joinpath(str(_field), psf_file)
-                psf_cache_path = camcol_path.joinpath(str(_field), psf_cache)
+                psf_path = camcol_path.joinpath(str(field), psf_file)
+                psf_cache_path = camcol_path.joinpath(str(field), psf_cache)
 
                 try:
                     psf = SdssPSF(psf_path.as_posix(), bands)
                 except IndexError as e:
                     print(
                         "INFO: IndexError while accessing PSF for field: {}. "
-                        "This field will not be included.".format(_field),
+                        "This field will not be included.".format(field),
                     )
                     print(e)
                     psf = None
 
                 pickle.dump(psf, psf_cache_path.open("wb+"))
                 if po_fits is not None:
-                    self.rcfgcs.append((run, camcol, _field, gain, po_fits, psf))
+                    self.rcfgcs.append((run, camcol, field, gain, po_fits, psf))
         self.items = [None] * len(self.rcfgcs)
         self.cache_paths = [None] * len(self.rcfgcs)
 
