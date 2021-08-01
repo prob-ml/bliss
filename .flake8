@@ -1,0 +1,67 @@
+[flake8]
+exclude = .git
+max-line-length = 100
+inline-quotes = double
+ignore =
+    # documentation not yet needed
+    D100,D101,D102,D103,D104,D105,D106,D107,
+
+    # high Jones complexity isn't always so bad
+    WPS221,
+
+    # removing all magic numbers seems like overkill
+    WPS432,
+
+    # assertions are useful for development code
+    S101,
+
+    # requiring trailing commas seems too picky
+    C812,
+
+    # nested imports can be fine
+    WPS433,
+
+    # number of local variables is already checked by pylint
+    WPS210,
+
+    # a redundant subscript can be more readible that defining a temp value
+    WPS349,
+
+    # not sure what is wrong with comparing an array to a float
+    WPS459,
+
+    # only makes sense once we're using proper docstrings
+    D205, D400, DAR201, DAR101,
+
+    # useless else has its moments
+    WPS503,
+
+    # no need to explicitly inherit from object
+    WPS306,
+
+    # for list comprehensions one-character variable names are useful
+    WPS111,
+
+    # some of these bad variable names are set by other packages
+    WPS110,
+
+    # too many extra lines
+    WPS414,
+
+    # seems to work fine
+    WPS465,
+
+    # already enforced by pylint
+    WPS211,
+
+    # not too many assert statements
+    WPS218,
+
+    # reusing string constants is less verbose that defining a variable
+    WPS226,
+
+    # positional arguments to formatting strings are redundant
+    P101,
+
+    # I am not worried about security issues associate with pickle
+    S301, S403,
