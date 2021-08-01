@@ -81,10 +81,9 @@ class GalaxyEncoder(pl.LightningModule):
         shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
 
         # now that everything is center we can crop easily
-        cropped_tiles = shifted_tiles[
+        return shifted_tiles[
             :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
         ]
-        return cropped_tiles
 
     def configure_optimizers(self):
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
@@ -134,9 +133,7 @@ class GalaxyEncoder(pl.LightningModule):
         )
 
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
-        recon_losses = recon_losses.sum()
-
-        return recon_losses
+        return recon_losses.sum()
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         loss = self.get_loss(batch)

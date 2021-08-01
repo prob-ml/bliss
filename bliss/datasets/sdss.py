@@ -108,8 +108,7 @@ class SdssPSF:
     def read_psf(self, band):
         psfield = fits.open(self.psf_fit_file)
         hdu = psfield[band + 1]
-        psf = hdu.data
-        return psf
+        return hdu.data
 
     def psf_at_points(self, idx, x, y):
         psf = self[idx]

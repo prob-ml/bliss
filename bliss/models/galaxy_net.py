@@ -65,8 +65,7 @@ class CenteredGalaxyDecoder(nn.Module):
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
         assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
-        recon_mean = F.relu(z)
-        return recon_mean
+        return F.relu(z)
 
 
 class OneCenteredGalaxyAE(pl.LightningModule):
@@ -99,8 +98,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def forward(self, image, background):
         z = self.enc.forward(image - background)
         recon_mean = self.dec.forward(z)
-        recon_mean = recon_mean + background
-        return recon_mean
+        return recon_mean + background
 
     def get_loss(self, image, recon_mean):
         return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()

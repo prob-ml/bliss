@@ -222,8 +222,7 @@ class ImageDecoder(pl.LightningModule):
 
         # long() here is necessary because used for indexing and one_hot encoding.
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
-        n_sources = rearrange(n_sources.long(), "b n 1 -> b n")
-        return n_sources
+        return rearrange(n_sources.long(), "b n 1 -> b n")
 
     def _sample_locs(self, is_on_array, batch_size):
         # output dimension is batch_size x n_tiles_per_image x max_sources x 2
@@ -326,9 +325,7 @@ class ImageDecoder(pl.LightningModule):
         log_fluxes = torch.where(
             fluxes > 0, fluxes, torch.ones_like(fluxes)
         )  # prevent log(0) errors.
-        log_fluxes = torch.log(log_fluxes)
-
-        return log_fluxes
+        return torch.log(log_fluxes)
 
     @staticmethod
     def _apply_noise(images_mean):
@@ -539,8 +536,7 @@ class Tiler(nn.Module):
         locs_swapped = rearrange(locs_swapped, "np xy -> np 1 1 xy")
 
         grid_loc = local_grid - locs_swapped
-        source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
-        return source_rendered
+        return F.grid_sample(source, grid_loc, align_corners=True)
 
     def render_tile(self, locs, sources):
         """

@@ -86,8 +86,7 @@ class ConcatLayer(nn.Module):
                         raise ValueError(
                             "The sizes in ConcatLayer need to be either the same or 1."
                         )
-        X = torch.cat(args, -1)
-        return X
+        return torch.cat(args, -1)
 
 
 # *************************
@@ -106,5 +105,4 @@ class NormalEncoder(nn.Module):
     def forward(self, mean_z, logscale_z):
         if self.minscale is not None:
             logscale_z = torch.log(self.minscale + (1 - self.minscale) * F.softplus(logscale_z))
-        pz = Normal(mean_z, logscale_z.exp())
-        return pz
+        return Normal(mean_z, logscale_z.exp())

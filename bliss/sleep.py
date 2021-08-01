@@ -114,8 +114,7 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
 
     sd = (param_logvar.exp() + 1e-5).sqrt()
-    param_log_probs_all = Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
-    return param_log_probs_all
+    return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
 
 
 class SleepPhase(pl.LightningModule):

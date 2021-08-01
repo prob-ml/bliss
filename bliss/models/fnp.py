@@ -130,8 +130,7 @@ class FNP(nn.Module):
         py = self.label_vdecoder(z, u.unsqueeze(0))
         log_py = py.log_prob(y_all).sum() / XM.size(0)
         assert not torch.isnan(log_py)
-        obj = log_pqz + log_py
-        return obj
+        return log_pqz + log_py
 
     def calc_log_pqz(self, pz, qz, z):
         # pylint: disable=attribute-defined-outside-init
@@ -226,9 +225,7 @@ class DepGraph(nn.Module):
         unsorted_G[idx_utr[0], idx_utr[1]] = G.squeeze()
         # unsort the dag to conform to the data order
         original_idx = torch.sort(sort_idx)[1]
-        unsorted_G = unsorted_G[original_idx, :][:, original_idx]
-
-        return unsorted_G
+        return unsorted_G[original_idx, :][:, original_idx]
 
     def sample_A(self, uM, uR):
         indices = []
@@ -252,8 +249,7 @@ class DepGraph(nn.Module):
     def g(self, z1, z2):
         sq_norm2 = (z2 - z1).pow(2)
         a = -0.5 * sq_norm2.sum(1, keepdim=True) / self.g_logscale.exp()
-        b = self.logitexp(a).view(z1.size(0), 1)
-        return b
+        return self.logitexp(a).view(z1.size(0), 1)
 
     @staticmethod
     def logitexp(logp):
@@ -268,8 +264,7 @@ class DepGraph(nn.Module):
         # scalar ordering function
         if z.size(1) == 1:
             return z
-        log_cdf = torch.sum(torch.log(0.5 + 0.5 * torch.erf(z / np.sqrt(2))), dim=1, keepdim=True)
-        return log_cdf
+        return torch.sum(torch.log(0.5 + 0.5 * torch.erf(z / np.sqrt(2))), dim=1, keepdim=True)
 
 
 class RepEncoder(nn.Module):
@@ -299,8 +294,7 @@ class RepEncoder(nn.Module):
                 input_list[i] = x.unsqueeze(1)
             input_list.append(u_diff.unsqueeze(0))
 
-        rep_R = self.f(self.cat(*input_list))
-        return rep_R
+        return self.f(self.cat(*input_list))
 
 
 # **************************
@@ -323,8 +317,7 @@ class AveragePooler(nn.Module):
 
     def forward(self, rep_R, GA):
         W = self.norm_graph(GA)
-        pz_all = torch.matmul(W, rep_R)
-        return pz_all
+        return torch.matmul(W, rep_R)
 
 
 class SetPooler(nn.Module):

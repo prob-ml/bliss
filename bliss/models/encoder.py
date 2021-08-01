@@ -17,8 +17,7 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     window = ptile_slen
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
-    return tiles
+    return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
 
 
 def tile_images(images, ptile_slen, tile_slen):
@@ -35,8 +34,7 @@ def tile_images(images, ptile_slen, tile_slen):
     window = ptile_slen
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
-    return tiles
+    return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -64,8 +62,7 @@ def get_star_bool(n_sources, galaxy_bool):
     assert n_sources.le(max_sources).all()
     is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
     is_on_array = is_on_array.view(*galaxy_bool.shape)
-    star_bool = (1 - galaxy_bool) * is_on_array
-    return star_bool
+    return (1 - galaxy_bool) * is_on_array
 
 
 def get_full_params(tile_params: dict, slen: int, wlen: int = None):
@@ -150,8 +147,7 @@ def _argfront(is_on_array, dim):
     # return indices that sort pushing all zeroes of tensor to the back.
     # dim is dimension along which do the ordering.
     assert len(is_on_array.shape) == 2
-    indx_sort = (is_on_array != 0).long().argsort(dim=dim, descending=True)
-    return indx_sort
+    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
 
 
 def _sample_class_weights(class_weights, n_samples=1):
@@ -202,8 +198,7 @@ class ConvBlock(nn.Module):
             identity = self.sc_bn(self.sc_conv(identity))
 
         out = x + identity
-        out = F.relu(out)
-        return out
+        return F.relu(out)
 
 
 class EncoderCNN(nn.Module):
@@ -212,8 +207,7 @@ class EncoderCNN(nn.Module):
         self.layer = self._make_layer(n_bands, channel, dropout)
 
     def forward(self, x):
-        x = self.layer(x)
-        return x
+        return self.layer(x)
 
     def _make_layer(self, n_bands, channel, dropout):
         layers = [
@@ -374,7 +368,7 @@ class ImageEncoder(nn.Module):
         var_param = torch.gather(h, 1, indices)
 
         # np: n_ptiles, ns: n_samples
-        var_param = rearrange(
+        return rearrange(
             var_param,
             "np (ns d pd) -> ns np d pd",
             np=n_ptiles,
@@ -382,7 +376,6 @@ class ImageEncoder(nn.Module):
             d=self.max_detections,
             pd=param_dim,
         )
-        return var_param
 
     def get_var_params_all(self, image_ptiles):
         # get h matrix.
@@ -458,8 +451,7 @@ class ImageEncoder(nn.Module):
         assert image_ptiles.shape[0] == tile_n_sources.shape[0]
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections).unsqueeze(0)
         var_params = self.forward_sampled(image_ptiles, tile_n_sources)
-        var_params = {key: value.squeeze(0) for key, value in var_params.items()}
-        return var_params
+        return {key: value.squeeze(0) for key, value in var_params.items()}
 
     def sample_encoder(self, images, n_samples):
         assert len(images.shape) == 4
@@ -552,8 +544,7 @@ class ImageEncoder(nn.Module):
     def tile_map_n_sources(self, image_ptiles):
         h = self.get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-        return tile_n_sources
+        return torch.argmax(log_probs_n_sources_per_tile, dim=1)
 
     def tile_map_estimate(self, images):
 
@@ -585,8 +576,7 @@ class ImageEncoder(nn.Module):
 
         # obtained estimates per tile, then on full image.
         tile_estimate = self.tile_map_estimate(images)
-        estimate = get_full_params(tile_estimate, slen, wlen)
-        return estimate
+        return get_full_params(tile_estimate, slen, wlen)
 
     @property
     def variational_params(self):
