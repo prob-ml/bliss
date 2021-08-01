@@ -52,7 +52,7 @@ class ImageDecoder(pl.LightningModule):
         sdss_bands=(2,),
     ):
         super().__init__()
-        ## Set class attributes
+        # Set class attributes
         self.n_bands = n_bands
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
@@ -89,7 +89,7 @@ class ImageDecoder(pl.LightningModule):
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
 
-        ## Border Padding
+        # Border Padding
         # Images are first rendered on *padded* tiles (aka ptiles).
         # The padded tile consists of the tile and neighboring tiles
         # The width of the padding is given by ptile_slen.
@@ -106,19 +106,19 @@ class ImageDecoder(pl.LightningModule):
         assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
         self.border_padding = int(border_padding)
 
-        ## Background
+        # Background
         assert len(background_values) == n_bands
         self.background_values = background_values
 
-        ## Submodule for managing tiles (no learned parameters)
+        # Submodule for managing tiles (no learned parameters)
         self.tiler = Tiler(tile_slen, ptile_slen)
 
-        ## Submodule for rendering stars on a tile
+        # Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
             self.tiler, self.n_bands, self.psf_params_file, self.psf_slen, self.sdss_bands
         )
 
-        ## Submodule for rendering galaxies on a tile
+        # Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
             assert self.autoencoder_ckpt is not None and self.latents_file is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(

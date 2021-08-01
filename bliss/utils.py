@@ -62,15 +62,15 @@ class ConcatLayer(nn.Module):
         self.input_idxs = input_idxs
 
     def forward(self, *args):
-        ## Filter only to arguments we want to concatenate
+        # Filter only to arguments we want to concatenate
         if self.input_idxs is not None:
             args = [args[i] for i in self.input_idxs]
         else:
             args = list(args)
 
-        ## Get the maximum size of each tensor dimension
-        ## and repeat any tensors which have a 1 in
-        ## a dimension
+        # Get the maximum size of each tensor dimension
+        # and repeat any tensors which have a 1 in
+        # a dimension
         sizes = []
         for d, _ in enumerate(args[0].size()):
             sizes.append(max([arg.size(d) for arg in args]))

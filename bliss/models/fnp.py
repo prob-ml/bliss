@@ -51,7 +51,7 @@ class FNP(nn.Module):
         fb_z=0.0,
     ):
         super().__init__()
-        ## Learned Submodules
+        # Learned Submodules
         self.cov_vencoder = cov_vencoder
         self.dep_graph = dep_graph
         self.trans_cond_y = trans_cond_y
@@ -60,7 +60,7 @@ class FNP(nn.Module):
         self.prop_vencoder = prop_vencoder
         self.label_vdecoder = label_vdecoder
 
-        ## Initialize free-bits regularization
+        # Initialize free-bits regularization
         self.fb_z = fb_z
         self.register_buffer("lambda_z", torch.tensor(1e-8))
 
@@ -73,18 +73,18 @@ class FNP(nn.Module):
         n_ref = XR.size(0)
         X_all = torch.cat([XR, XM], dim=0)
 
-        ## Sample covariate representation U
+        # Sample covariate representation U
         pu = self.cov_vencoder(X_all)
         u = pu.rsample()
         uR = u[:n_ref]
         uM = u[n_ref:]
         assert torch.isnan(u).sum() == 0
 
-        ## Sample the dependency matrices
-        ## If we are training ("infer"), the entire dependency
-        ## graph (A and G) is generated.
-        ## If we are predicting ("predict"), only the dependent
-        ## graph (A) is used.
+        # Sample the dependency matrices
+        # If we are training ("infer"), the entire dependency
+        # graph (A and G) is generated.
+        # If we are predicting ("predict"), only the dependent
+        # graph (A) is used.
         if A_in is None:
             A = self.dep_graph.sample_A(uM, uR)
         else:
@@ -97,35 +97,35 @@ class FNP(nn.Module):
         GA = torch.cat([G, A], 0)
         assert torch.isnan(GA).sum() == 0
 
-        ## From the dependency graph GA and the encoded
-        ## representative set, we calculate the distribution
-        ## of the latent representations Z
+        # From the dependency graph GA and the encoded
+        # representative set, we calculate the distribution
+        # of the latent representations Z
         yR_encoded = self.trans_cond_y(yR)
         rep_R = self.rep_encoder(u, uR, XR, yR_encoded)
         pz = self.pooler(rep_R, GA)
         return u, pz
 
     def log_prob(self, XR, yR, XM, yM, G_in=None, A_in=None):
-        ## Get the distribution of the latent representations Z
-        ## and the encoding U of the covariates
+        # Get the distribution of the latent representations Z
+        # and the encoding U of the covariates
         u, pz = self.encode(XR, yR, XM, G_in, A_in)
 
         X_all = torch.cat([XR, XM], dim=0)
 
-        ## Sample Z from the proposal distribution (which
-        ## is allowed to look at the labels of all points)
+        # Sample Z from the proposal distribution (which
+        # is allowed to look at the labels of all points)
         y_all = torch.cat([yR, yM], dim=1)
         y_all_encoded = self.trans_cond_y(y_all)
         qz = self.prop_vencoder(X_all.unsqueeze(0), y_all_encoded)
         z = qz.rsample()
 
-        ## Calculate the difference between the "prior" pz and the
-        ## variational distribution qz with an optional "free-bits" strategy.
-        ## This free-bits strategy is a lower bound that solves the problem
-        ## of posterior collapse.
+        # Calculate the difference between the "prior" pz and the
+        # variational distribution qz with an optional "free-bits" strategy.
+        # This free-bits strategy is a lower bound that solves the problem
+        # of posterior collapse.
         log_pqz = self.calc_log_pqz(pz, qz, z)
 
-        ## Calculate the conditional likelihood of the labels y conditional on Z
+        # Calculate the conditional likelihood of the labels y conditional on Z
         py = self.label_vdecoder(z, u.unsqueeze(0))
         log_py = py.log_prob(y_all).sum() / XM.size(0)
         assert not torch.isnan(log_py)
@@ -176,9 +176,9 @@ class FNP(nn.Module):
         return y_pred
 
 
-## ***********************
-## FNP-specific submodules
-## ***********************
+# ***********************
+# FNP-specific submodules
+# ***********************
 class DepGraph(nn.Module):
     """
     A dependency-graph module for use within FNP.
@@ -193,11 +193,11 @@ class DepGraph(nn.Module):
 
     def __init__(self, dim_u, temperature=0.3):
         super().__init__()
-        ## Dimension of the encoded-input space
+        # Dimension of the encoded-input space
         self.dim_u = dim_u
-        ## Temperature for LogitRelaxedBernoulli when training
+        # Temperature for LogitRelaxedBernoulli when training
         self.temperature = temperature
-        ## Learned parameter for self.g, the pairwise distance function
+        # Learned parameter for self.g, the pairwise distance function
         self.g_logscale = nn.Parameter(torch.tensor(np.log(self.dim_u) * 0.5))
 
     def sample_G(self, uR):
@@ -290,8 +290,8 @@ class RepEncoder(nn.Module):
         if self.use_x:
             input_list.append(XR.unsqueeze(0))
 
-        ## If we look at differences in U values, we need to increase the dimension
-        ## (each representative member looks different to each dependent member)
+        # If we look at differences in U values, we need to increase the dimension
+        # (each representative member looks different to each dependent member)
         if self.use_u_diff:
             u_diff = u.unsqueeze(1) - uR.unsqueeze(0)
             for i, x in enumerate(input_list):
