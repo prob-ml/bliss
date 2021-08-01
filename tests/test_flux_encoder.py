@@ -1,8 +1,8 @@
-import torch
 import pytorch_lightning as pl
+import torch
 
-from bliss.models import flux_net
 from bliss.datasets import simulated
+from bliss.models import flux_net
 
 
 class TestFluxEncoder:

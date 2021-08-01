@@ -1,12 +1,12 @@
 """File to produce BLISS estimates on survey images. Currently only SDSS is supported."""
 import torch
-from omegaconf import DictConfig
 from einops import rearrange
+from omegaconf import DictConfig
 
 from bliss.datasets import sdss
-from bliss.sleep import SleepPhase
-from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.encoder import get_full_params
+from bliss.models.galaxy_encoder import GalaxyEncoder
+from bliss.sleep import SleepPhase
 
 
 def prediction(image, image_encoder, galaxy_encoder):

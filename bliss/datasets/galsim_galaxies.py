@@ -1,12 +1,12 @@
 from collections import namedtuple
-from speclite.filters import load_filter, ab_reference_flux
-import numpy as np
-import galsim
-import torch
 
 import astropy.units as u
-from torch.utils.data import Dataset, DataLoader
+import galsim
+import numpy as np
 import pytorch_lightning as pl
+import torch
+from speclite.filters import ab_reference_flux, load_filter
+from torch.utils.data import DataLoader, Dataset
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 

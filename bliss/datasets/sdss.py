@@ -1,16 +1,16 @@
 import pathlib
 import pickle
 import warnings
-from math import floor, ceil
+from math import ceil, floor
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+from astropy.io import fits
+from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
 from torch.utils.data import Dataset
-from astropy.io import fits
-from astropy.wcs import WCS, FITSFixedWarning
 
 
 class StarStamper:

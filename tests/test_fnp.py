@@ -1,19 +1,11 @@
 import numpy as np
-from pytorch_lightning import LightningModule, Trainer
-
 import torch
-from torch.utils.data.dataloader import DataLoader
+from pytorch_lightning import LightningModule, Trainer
 from torch.optim import Adam
+from torch.utils.data.dataloader import DataLoader
 
-from bliss.models.fnp import (
-    DepGraph,
-    FNP,
-    AveragePooler,
-    SetPooler,
-    RepEncoder,
-)
-
-from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEncoder
+from bliss.models.fnp import FNP, AveragePooler, DepGraph, RepEncoder, SetPooler
+from bliss.utils import MLP, ConcatLayer, NormalEncoder, SequentialVarg, SplitLayer
 
 
 class TestFNP:

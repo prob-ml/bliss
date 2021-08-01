@@ -1,8 +1,8 @@
+import pytorch_lightning as pl
 import torch
 from torch import optim
-from torch.utils.data import DataLoader
 from torch.distributions.normal import Normal
-import pytorch_lightning as pl
+from torch.utils.data import DataLoader
 
 
 class WakeNet(pl.LightningModule):

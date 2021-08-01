@@ -1,10 +1,10 @@
 from copy import deepcopy
 
 import pytest
+import pytorch_lightning as pl
 import torch
 from torch import nn
 from torch.distributions.normal import Normal
-import pytorch_lightning as pl
 
 from bliss import wake
 

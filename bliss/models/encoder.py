@@ -1,9 +1,8 @@
 import numpy as np
-from einops import rearrange, repeat
-
 import torch
-from torch import nn
 import torch.nn.functional as F
+from einops import rearrange, repeat
+from torch import nn
 from torch.distributions import categorical
 
 

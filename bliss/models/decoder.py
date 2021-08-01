@@ -2,16 +2,16 @@ import warnings
 from pathlib import Path
 
 import numpy as np
-from astropy.io import fits
-import torch
-from torch import nn
-import torch.nn.functional as F
-from torch.distributions import Poisson
 import pytorch_lightning as pl
+import torch
+import torch.nn.functional as F
+from astropy.io import fits
 from einops import rearrange, reduce
+from torch import nn
+from torch.distributions import Poisson
 
-from bliss.models.encoder import get_is_on_from_n_sources
 from bliss.models import galaxy_net
+from bliss.models.encoder import get_is_on_from_n_sources
 
 
 def get_mgrid(slen):

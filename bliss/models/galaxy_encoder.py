@@ -1,16 +1,15 @@
-import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 import numpy as np
-
+import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from torch.distributions import Normal
 
 from bliss import plotting
-from bliss.optimizer import get_optimizer
-from bliss.models.encoder import get_images_in_tiles
 from bliss.models.decoder import ImageDecoder, get_mgrid
+from bliss.models.encoder import get_images_in_tiles
 from bliss.models.galaxy_net import CenteredGalaxyEncoder
+from bliss.optimizer import get_optimizer
 
 
 class GalaxyEncoder(pl.LightningModule):

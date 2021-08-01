@@ -1,7 +1,8 @@
 import pytest
 import pytorch_lightning as pl
-from bliss.models.galaxy_encoder import GalaxyEncoder
+
 from bliss.datasets.simulated import SimulatedDataset
+from bliss.models.galaxy_encoder import GalaxyEncoder
 
 
 class TestBasicGalaxyMeasure:

@@ -1,9 +1,8 @@
-import pytorch_lightning as pl
 import matplotlib.pyplot as plt
-
+import pytorch_lightning as pl
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 from torch.distributions import Normal
 
 from bliss.optimizer import get_optimizer

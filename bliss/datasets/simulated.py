@@ -1,7 +1,9 @@
 import warnings
+
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import IterableDataset, Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset, IterableDataset
+
 from bliss.models.decoder import ImageDecoder
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset

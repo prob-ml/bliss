@@ -1,13 +1,11 @@
 import pytorch_lightning as pl
 import torch
-from torch import nn
-
 import torch.nn.functional as F
+from torch import nn
 from torch.distributions import normal
 
-
 from bliss.models import decoder
-from bliss.models.encoder import get_star_bool, get_images_in_tiles
+from bliss.models.encoder import get_images_in_tiles, get_star_bool
 from bliss.optimizer import get_optimizer
 
 

@@ -11,17 +11,16 @@ from itertools import permutations
 
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
-
 import torch
-from torch.nn import CrossEntropyLoss
-from torch.distributions import Normal
 from einops import rearrange
+from torch.distributions import Normal
+from torch.nn import CrossEntropyLoss
 
 from bliss import plotting
-from bliss.optimizer import get_optimizer
-from bliss.models import encoder, decoder
-from bliss.models.encoder import get_star_bool, get_full_params
 from bliss.metrics import eval_error_on_batch
+from bliss.models import decoder, encoder
+from bliss.models.encoder import get_full_params, get_star_bool
+from bliss.optimizer import get_optimizer
 
 plt.switch_backend("Agg")
 
