@@ -246,10 +246,7 @@ class SleepPhase(pl.LightningModule):
         counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
 
         # the following two functions computes the log-probability of parameters when
-        # each estimated source i is matched with true source j for
-        # i, j in {1, ..., max_detections}
-        # *_log_probs_all have shape n_ptiles x max_detections x max_detections
-
+        # each estimated source i is matched with true source j.
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16

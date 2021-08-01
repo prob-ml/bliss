@@ -367,7 +367,6 @@ class ImageDecoder(pl.LightningModule):
         is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
         is_on_array = rearrange(is_on_array, "bt s -> bt s 1")
         star_bool = (1 - galaxy_bool) * is_on_array
-        # _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
         assert star_bool.shape == (n_ptiles, max_sources, 1)
 
         # final shapes of images.
