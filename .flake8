@@ -67,4 +67,7 @@ ignore =
     S301, S403,
 
     # black disagrees, actually inserting space before some colons
-    E203
+    E203,
+
+    # f-strings are OK, though perhaps using .format is better
+    WPS305,
