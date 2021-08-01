@@ -71,7 +71,7 @@ class OneDimDataset:
         y = np.concatenate(ys, axis=1).transpose()
         # Generate holdouts
         ys = []
-        for i in range(10):
+        for _ in range(10):
             Xi = X + np.random.normal()
             eps_i = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
             yi = self.f(Xi, eps_i)

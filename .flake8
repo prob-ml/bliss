@@ -71,3 +71,9 @@ ignore =
 
     # f-strings are OK, though perhaps using .format is better
     WPS305,
+
+    # some of these "overused" expressions are quite short
+    WPS204,
+
+    # these distinction btw public and private class attrs isn't that meaningful here
+    WPS230,
