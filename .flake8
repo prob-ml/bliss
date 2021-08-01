@@ -65,3 +65,6 @@ ignore =
 
     # I am not worried about security issues associate with pickle
     S301, S403,
+
+    # black disagrees, actually inserting space before some colons
+    E203
