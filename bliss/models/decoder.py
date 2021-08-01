@@ -491,9 +491,7 @@ class ImageDecoder(pl.LightningModule):
 
 
 class Tiler(nn.Module):
-    """
-    This class creates an image tile from multiple sources.
-    """
+    """This class creates an image tile from multiple sources."""
 
     def __init__(self, tile_slen, ptile_slen):
         super().__init__()
@@ -768,10 +766,12 @@ class GalaxyTileDecoder(nn.Module):
         single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bool)
 
         ptile = self.tiler.render_tile(
-            locs, single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1)
+            locs,
+            single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
         )
         var_ptile = self.tiler.render_tile(
-            locs, single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1)
+            locs,
+            single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
         )
 
         return ptile, var_ptile

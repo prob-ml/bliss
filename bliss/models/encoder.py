@@ -46,7 +46,10 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert torch.all(n_sources.le(max_sources))
 
     is_on_array = torch.zeros(
-        *n_sources.shape, max_sources, device=n_sources.device, dtype=torch.float
+        *n_sources.shape,
+        max_sources,
+        device=n_sources.device,
+        dtype=torch.float,
     )
 
     for i in range(max_sources):
@@ -278,7 +281,7 @@ class ImageEncoder(nn.Module):
         self.dim_out_all = int(
             0.5 * self.max_detections * (self.max_detections + 1) * self.n_params_per_source
             + 1
-            + self.max_detections
+            + self.max_detections,
         )
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
         self.enc_final = nn.Sequential(
@@ -418,7 +421,7 @@ class ImageEncoder(nn.Module):
         """
         Obtain log probability of number of n_sources.
 
-        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
         probability of having 0,1,2 stars.
         """
         free_probs = h[:, self.prob_n_source_indx]

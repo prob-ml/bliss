@@ -5,7 +5,7 @@ import torch
 from torch.distributions import Normal
 
 from bliss.models.encoder import get_is_on_from_n_sources
-from bliss.sleep import _get_min_perm_loss, _get_params_logprob_all_combs
+from bliss.sleep import get_min_perm_loss, get_params_logprob_all_combs
 
 
 class TestStarEncoderObjective:
@@ -26,7 +26,7 @@ class TestStarEncoderObjective:
         param_logvar = torch.randn(n_ptiles, max_detections, n_source_params, device=device)
 
         # get all losses
-        param_log_probs_all = _get_params_logprob_all_combs(true_params, param_mean, param_logvar)
+        param_log_probs_all = get_params_logprob_all_combs(true_params, param_mean, param_logvar)
 
         # just for my sanity
         assert list(param_log_probs_all.shape) == [
@@ -55,7 +55,8 @@ class TestStarEncoderObjective:
     # pylint: disable=too-many-statements
     def test_get_min_perm_loss(self, devices):
         """
-        Same as previous function but checks that we can get the permutation with the minimum loss.
+        Same as previous function but checks that we can get the permutation
+        with the minimum loss.
         """
 
         device = devices.device
@@ -100,14 +101,14 @@ class TestStarEncoderObjective:
         prob_galaxy = torch.rand(n_ptiles, max_detections, device=device)
 
         # get loss for locations
-        locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
+        locs_log_probs_all = get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
 
         # get loss for fluxes
-        star_params_log_probs_all = _get_params_logprob_all_combs(
+        star_params_log_probs_all = get_params_logprob_all_combs(
             true_log_fluxes, log_flux_mean, log_flux_logvar
         )
 
-        (locs_loss, star_params_loss, galaxy_bool_loss,) = _get_min_perm_loss(
+        (locs_loss, star_params_loss, galaxy_bool_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
             prob_galaxy,

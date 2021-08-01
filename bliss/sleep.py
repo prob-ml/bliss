@@ -71,7 +71,7 @@ def _get_log_probs_all_perms(
     )
 
 
-def _get_min_perm_loss(
+def get_min_perm_loss(
     locs_log_probs_all,
     star_params_log_probs_all,
     prob_galaxy,
@@ -101,7 +101,7 @@ def _get_min_perm_loss(
     return locs_loss, star_params_loss, galaxy_bool_loss
 
 
-def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     # return shape (n_ptiles x max_detections x max_detections)
     assert true_params.shape == param_mean.shape == param_logvar.shape
 
@@ -250,15 +250,15 @@ class SleepPhase(pl.LightningModule):
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
-        locs_log_probs_all = _get_params_logprob_all_combs(true_tile_locs, loc_mean, loc_logvar)
-        star_params_log_probs_all = _get_params_logprob_all_combs(
+        locs_log_probs_all = get_params_logprob_all_combs(true_tile_locs, loc_mean, loc_logvar)
+        star_params_log_probs_all = get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
         prob_galaxy = rearrange(pred["prob_galaxy"], "bn s 1 -> bn s")
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
-        (locs_loss, star_params_loss, galaxy_bool_loss,) = _get_min_perm_loss(
+        (locs_loss, star_params_loss, galaxy_bool_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
             prob_galaxy,

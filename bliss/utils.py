@@ -5,9 +5,7 @@ from torch.nn import functional as F
 
 
 class MLP(nn.Sequential):
-    """
-    A Multi-layer perceptron of dense layers with non-linear activation layers
-    """
+    """A Multi-layer perceptron of dense layers with non-linear activation layers"""
 
     def __init__(self, in_features, hs, out_features, act=nn.ReLU, final=None):
         self.in_features = in_features
@@ -38,9 +36,7 @@ class SequentialVarg(nn.Sequential):
 
 
 class SplitLayer(nn.Module):
-    """
-    This layer splits the input according to the arguments to torch.split
-    """
+    """This layer splits the input according to the arguments to torch.split"""
 
     def __init__(self, split_size_or_sections, dim):
         super().__init__()

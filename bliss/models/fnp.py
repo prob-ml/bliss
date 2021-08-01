@@ -134,9 +134,7 @@ class FNP(nn.Module):
 
     def calc_log_pqz(self, pz, qz, z):
         # pylint: disable=attribute-defined-outside-init
-        """
-        Calculates the log difference between pz and qz (with an optional free bits strategy)
-        """
+        """Calculates the log difference between pz and qz (with an optional free bits strategy)"""
         pqz_all = pz.log_prob(z) - qz.log_prob(z)
         assert torch.isnan(pqz_all).sum() == 0
         if self.fb_z > 0:
@@ -301,9 +299,7 @@ class RepEncoder(nn.Module):
 # Representation Poolers
 # **************************
 class AveragePooler(nn.Module):
-    """
-    Pools together representations by taking a sum.
-    """
+    """Pools representations by taking a sum."""
 
     def __init__(
         self,
@@ -322,7 +318,7 @@ class AveragePooler(nn.Module):
 
 class SetPooler(nn.Module):
     """
-    Pools together representations using a set transformer architecture.
+    Pools representations using a set transformer architecture.
     See https://arxiv.org/abs/1810.00825.
     """
 

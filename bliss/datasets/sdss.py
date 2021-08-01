@@ -155,7 +155,7 @@ class SloanDigitalSkySurvey(Dataset):
         run=3900,
         camcol=6,
         fields=(269,),
-        bands=range(5),
+        bands=(0, 1, 2, 3, 4),
         stampsize=5,
         overwrite_fits_cache=False,
         overwrite_cache=False,
@@ -320,9 +320,8 @@ class SloanDigitalSkySurvey(Dataset):
 
             small_rows = np.mgrid[0 : sky_small.shape[0]]
             small_cols = np.mgrid[0 : sky_small.shape[1]]
-            sky_interp = RegularGridInterpolator(
-                (small_rows, small_cols), sky_small, method="nearest"
-            )
+            small_rcs = (small_rows, small_cols)
+            sky_interp = RegularGridInterpolator(small_rcs, sky_small, method="nearest")
 
             sky_y = sky_y.clip(0, sky_small.shape[0] - 1)
             sky_x = sky_x.clip(0, sky_small.shape[1] - 1)

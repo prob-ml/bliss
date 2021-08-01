@@ -77,3 +77,15 @@ ignore =
 
     # these distinction btw public and private class attrs isn't that meaningful here
     WPS230,
+
+    # false positive; this cannot be done with "yield from"
+    WPS526,
+
+    # not helpful
+    WPS201,
+
+    # not that complex really
+    WPS237,
+
+    # unfortunately pytorch convention is to import "functional" as F
+    N812,
