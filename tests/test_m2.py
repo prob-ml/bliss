@@ -1,8 +1,8 @@
 import os
 
-import torch
-import pytest
 import numpy as np
+import pytest
+import torch
 
 from bliss import metrics as metrics_lib
 

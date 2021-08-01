@@ -1,6 +1,6 @@
 import torch
+from einops import rearrange, reduce
 from scipy import optimize as sp_optim
-from einops import reduce, rearrange
 
 
 def inner_join_locs(locs1, locs2):

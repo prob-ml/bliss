@@ -1,11 +1,11 @@
 import pytest
-import torch
 import pytorch_lightning as pl
-from hydra import initialize, compose
+import torch
+from hydra import compose, initialize
 
 from bliss import sleep
-from bliss.datasets import simulated, galsim_galaxies
-from bliss.models import galaxy_net, galaxy_encoder, flux_net
+from bliss.datasets import galsim_galaxies, simulated
+from bliss.models import flux_net, galaxy_encoder, galaxy_net
 
 
 # command line arguments for tests

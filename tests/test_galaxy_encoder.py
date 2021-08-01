@@ -1,13 +1,14 @@
 import pytest
 import pytorch_lightning as pl
-from bliss.models.galaxy_encoder import GalaxyEncoder
+
 from bliss.datasets.simulated import SimulatedDataset
+from bliss.models.galaxy_encoder import GalaxyEncoder
 
 
 class TestBasicGalaxyMeasure:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        overrides = {
+        return {
             "model": "galenc_sdss",
             "dataset": "default" if devices.use_cuda else "cpu",
             "training": "cpu",
@@ -15,7 +16,6 @@ class TestBasicGalaxyMeasure:
             "training.n_epochs": 3,  # plotting coverage.
             "dataset.kwargs.batch_size": 10,
         }
-        return overrides
 
     def test_simulated(self, devices, overrides, get_config):
         cfg = get_config(overrides, devices)

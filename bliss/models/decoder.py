@@ -2,16 +2,16 @@ import warnings
 from pathlib import Path
 
 import numpy as np
-from astropy.io import fits
-import torch
-from torch import nn
-import torch.nn.functional as F
-from torch.distributions import Poisson
 import pytorch_lightning as pl
+import torch
+from astropy.io import fits
 from einops import rearrange, reduce
+from torch import nn
+from torch.distributions import Poisson
+from torch.nn import functional as F
 
-from bliss.models.encoder import get_is_on_from_n_sources
 from bliss.models import galaxy_net
+from bliss.models.encoder import get_is_on_from_n_sources
 
 
 def get_mgrid(slen):
@@ -52,7 +52,7 @@ class ImageDecoder(pl.LightningModule):
         sdss_bands=(2,),
     ):
         super().__init__()
-        ## Set class attributes
+        # Set class attributes
         self.n_bands = n_bands
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
@@ -89,7 +89,7 @@ class ImageDecoder(pl.LightningModule):
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
 
-        ## Border Padding
+        # Border Padding
         # Images are first rendered on *padded* tiles (aka ptiles).
         # The padded tile consists of the tile and neighboring tiles
         # The width of the padding is given by ptile_slen.
@@ -106,19 +106,19 @@ class ImageDecoder(pl.LightningModule):
         assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
         self.border_padding = int(border_padding)
 
-        ## Background
+        # Background
         assert len(background_values) == n_bands
         self.background_values = background_values
 
-        ## Submodule for managing tiles (no learned parameters)
+        # Submodule for managing tiles (no learned parameters)
         self.tiler = Tiler(tile_slen, ptile_slen)
 
-        ## Submodule for rendering stars on a tile
+        # Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
             self.tiler, self.n_bands, self.psf_params_file, self.psf_slen, self.sdss_bands
         )
 
-        ## Submodule for rendering galaxies on a tile
+        # Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
             assert self.autoencoder_ckpt is not None and self.latents_file is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
@@ -222,8 +222,7 @@ class ImageDecoder(pl.LightningModule):
 
         # long() here is necessary because used for indexing and one_hot encoding.
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
-        n_sources = rearrange(n_sources.long(), "b n 1 -> b n")
-        return n_sources
+        return rearrange(n_sources.long(), "b n 1 -> b n")
 
     def _sample_locs(self, is_on_array, batch_size):
         # output dimension is batch_size x n_tiles_per_image x max_sources x 2
@@ -293,8 +292,8 @@ class ImageDecoder(pl.LightningModule):
                 self.n_bands - 1,
             )
             colors = torch.randn(*shape, device=base_fluxes.device)
-            _fluxes = 10 ** (colors / 2.5) * base_fluxes
-            fluxes = torch.cat((base_fluxes, _fluxes), dim=3)
+            fluxes = 10 ** (colors / 2.5) * base_fluxes
+            fluxes = torch.cat((base_fluxes, fluxes), dim=3)
             fluxes *= star_bool.float()
         else:
             fluxes = base_fluxes * star_bool.float()
@@ -326,9 +325,7 @@ class ImageDecoder(pl.LightningModule):
         log_fluxes = torch.where(
             fluxes > 0, fluxes, torch.ones_like(fluxes)
         )  # prevent log(0) errors.
-        log_fluxes = torch.log(log_fluxes)
-
-        return log_fluxes
+        return torch.log(log_fluxes)
 
     @staticmethod
     def _apply_noise(images_mean):
@@ -338,8 +335,8 @@ class ImageDecoder(pl.LightningModule):
             warnings.warn("image mean less than 0")
             images_mean = images_mean.clamp(min=1.0)
 
-        _images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
-        images = _images + images_mean
+        images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
+        images += images_mean
 
         return images
 
@@ -361,17 +358,16 @@ class ImageDecoder(pl.LightningModule):
         n_ptiles = batch_size * n_tiles_per_image
 
         # view parameters being explicit about shapes
-        _n_sources = rearrange(n_sources, "b t -> (b t)")
-        _locs = rearrange(locs, "b t s xy -> (b t) s xy", xy=2)
-        _galaxy_bool = rearrange(galaxy_bool, "b t s 1 -> (b t) s 1")
-        _fluxes = rearrange(fluxes, "b t s band -> (b t) s band")
+        n_sources = rearrange(n_sources, "b t -> (b t)")
+        locs = rearrange(locs, "b t s xy -> (b t) s xy", xy=2)
+        galaxy_bool = rearrange(galaxy_bool, "b t s 1 -> (b t) s 1")
+        fluxes = rearrange(fluxes, "b t s band -> (b t) s band")
 
         # draw stars and galaxies
-        _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)
-        _is_on_array = rearrange(_is_on_array, "bt s -> bt s 1")
-        _star_bool = (1 - _galaxy_bool) * _is_on_array
-        # _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
-        assert _star_bool.shape == (n_ptiles, max_sources, 1)
+        is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
+        is_on_array = rearrange(is_on_array, "bt s -> bt s 1")
+        star_bool = (1 - galaxy_bool) * is_on_array
+        assert star_bool.shape == (n_ptiles, max_sources, 1)
 
         # final shapes of images.
         img_shape = (
@@ -383,11 +379,11 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # draw stars and galaxies
-        stars = self.star_tile_decoder(_locs, _fluxes, _star_bool)
+        stars = self.star_tile_decoder(locs, fluxes, star_bool)
         galaxies = torch.zeros(img_shape, device=locs.device)
         var_images = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_tile_decoder is not None:
-            galaxies, var_images = self.galaxy_tile_decoder(_locs, galaxy_params, _galaxy_bool)
+            galaxies, var_images = self.galaxy_tile_decoder(locs, galaxy_params, galaxy_bool)
 
         images = galaxies.view(img_shape) + stars.view(img_shape)
         var_images = var_images.view(img_shape)
@@ -484,12 +480,9 @@ class ImageDecoder(pl.LightningModule):
                 )
 
                 # get canvas
-                canvas[
-                    :,
-                    :,
-                    (i * tile_slen) : (i * tile_slen + canvas_len),
-                    (j * tile_slen) : (j * tile_slen + canvas_len),
-                ] += image_tile_cols
+                a1, a2 = i * tile_slen, j * tile_slen
+                b1, b2 = a1 + canvas_len, a2 + canvas_len
+                canvas[:, :, a1:b1, a2:b2] += image_tile_cols
 
         # trim to original image size
         x0 = n_tiles_of_padding * tile_slen - border_padding
@@ -498,9 +491,7 @@ class ImageDecoder(pl.LightningModule):
 
 
 class Tiler(nn.Module):
-    """
-    This class creates an image tile from multiple sources.
-    """
+    """This class creates an image tile from multiple sources."""
 
     def __init__(self, tile_slen, ptile_slen):
         super().__init__()
@@ -534,16 +525,15 @@ class Tiler(nn.Module):
         locs = locs * (self.tile_slen / self.ptile_slen) + (padding / self.ptile_slen)
         # scale locs so they take values between -1 and 1 for grid sample
         locs = (locs - 0.5) * 2
-        _grid = rearrange(
+        local_grid = rearrange(
             self.cached_grid, "s1 s2 xy -> 1 s1 s2 xy", s1=self.ptile_slen, s2=self.ptile_slen, xy=2
         )
 
         locs_swapped = locs.index_select(1, self.swap)
         locs_swapped = rearrange(locs_swapped, "np xy -> np 1 1 xy")
 
-        grid_loc = _grid - locs_swapped
-        source_rendered = F.grid_sample(source, grid_loc, align_corners=True)
-        return source_rendered
+        grid_loc = local_grid - locs_swapped
+        return F.grid_sample(source, grid_loc, align_corners=True)
 
     def render_tile(self, locs, sources):
         """
@@ -578,15 +568,15 @@ class Tiler(nn.Module):
         """Pad the source with zeros so that it is size ptile_slen,"""
         assert len(source.shape) == 3
 
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
         assert len(source.shape) == 3
 
         source_slen = source.shape[2]
 
-        assert source_slen <= _slen, "Should be using trim source."
+        assert source_slen <= slen, "Should be using trim source."
 
-        source_expanded = torch.zeros(source.shape[0], _slen, _slen, device=source.device)
-        offset = int((_slen - source_slen) / 2)
+        source_expanded = torch.zeros(source.shape[0], slen, slen, device=source.device)
+        offset = int((slen - source_slen) / 2)
 
         source_expanded[
             :, offset : (offset + source_slen), offset : (offset + source_slen)
@@ -600,14 +590,14 @@ class Tiler(nn.Module):
 
         # if self.ptile_slen is even, we still make source dimension odd.
         # otherwise, the source won't have a peak in the center pixel.
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        local_slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
         source_slen = source.shape[2]
         source_center = (source_slen - 1) / 2
 
-        assert source_slen >= _slen
+        assert source_slen >= local_slen
 
-        r = np.floor(_slen / 2)
+        r = np.floor(local_slen / 2)
         l_indx = int(source_center - r)
         u_indx = int(source_center + r + 1)
 
@@ -695,9 +685,9 @@ class StarTileDecoder(nn.Module):
     def _get_psf(self):
         psf_list = []
         for i in range(self.n_bands):
-            _psf = self._get_psf_single_band(self.params[i])
-            _psf *= self.normalization_constant[i]
-            psf_list.append(_psf.unsqueeze(0))
+            band_psf = self._get_psf_single_band(self.params[i])
+            band_psf *= self.normalization_constant[i]
+            psf_list.append(band_psf.unsqueeze(0))
         psf = torch.cat(psf_list)
 
         assert (psf > 0).all()
@@ -711,15 +701,15 @@ class StarTileDecoder(nn.Module):
         return (term1 + term2 + term3) / (1 + b + p0)
 
     def _get_psf_single_band(self, psf_params):
-        _psf_params = torch.exp(psf_params)
+        psf_params = torch.exp(psf_params)
         return self._psf_fun(
             self.cached_radii_grid,
-            _psf_params[0],
-            _psf_params[1],
-            _psf_params[2],
-            _psf_params[3],
-            _psf_params[4],
-            _psf_params[5],
+            psf_params[0],
+            psf_params[1],
+            psf_params[2],
+            psf_params[3],
+            psf_params[4],
+            psf_params[5],
         )
 
     def _adjust_psf(self):
@@ -776,10 +766,12 @@ class GalaxyTileDecoder(nn.Module):
         single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bool)
 
         ptile = self.tiler.render_tile(
-            locs, single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1)
+            locs,
+            single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
         )
         var_ptile = self.tiler.render_tile(
-            locs, single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1)
+            locs,
+            single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
         )
 
         return ptile, var_ptile
@@ -791,9 +783,9 @@ class GalaxyTileDecoder(nn.Module):
         b = galaxy_bool.flatten()
 
         # allocate memory
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        gal = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device)
-        var = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device)
+        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        gal = torch.zeros(z.shape[0], self.n_bands, slen, slen, device=galaxy_params.device)
+        var = torch.zeros(z.shape[0], self.n_bands, slen, slen, device=galaxy_params.device)
 
         # forward only galaxies that are on!
         # no background

@@ -9,19 +9,18 @@ model.
 import math
 from itertools import permutations
 
-import matplotlib.pyplot as plt
 import pytorch_lightning as pl
-
 import torch
-from torch.nn import CrossEntropyLoss
-from torch.distributions import Normal
 from einops import rearrange
+from matplotlib import pyplot as plt
+from torch.distributions import Normal
+from torch.nn import CrossEntropyLoss
 
 from bliss import plotting
-from bliss.optimizer import get_optimizer
-from bliss.models import encoder, decoder
-from bliss.models.encoder import get_star_bool, get_full_params
 from bliss.metrics import eval_error_on_batch
+from bliss.models import decoder, encoder
+from bliss.models.encoder import get_full_params, get_star_bool
+from bliss.optimizer import get_optimizer
 
 plt.switch_backend("Agg")
 
@@ -60,9 +59,9 @@ def _get_log_probs_all_perms(
             * (1 - true_galaxy_bool)
         ).sum(1)
 
-        _prob_galaxy = prob_galaxy[:, perm]
-        galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
-        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - _prob_galaxy)
+        prob_galaxy_i = prob_galaxy[:, perm]
+        galaxy_bool_loss = true_galaxy_bool * torch.log(prob_galaxy_i)
+        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - prob_galaxy_i)
         galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
 
     return (
@@ -72,7 +71,7 @@ def _get_log_probs_all_perms(
     )
 
 
-def _get_min_perm_loss(
+def get_min_perm_loss(
     locs_log_probs_all,
     star_params_log_probs_all,
     prob_galaxy,
@@ -96,13 +95,13 @@ def _get_min_perm_loss(
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
 
     # get the star & galaxy losses according to the found permutation
-    _indx = indx.unsqueeze(1)
-    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, _indx).squeeze()
-    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, _indx).squeeze()
+    indx = indx.unsqueeze(1)
+    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, indx).squeeze()
+    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, indx).squeeze()
     return locs_loss, star_params_loss, galaxy_bool_loss
 
 
-def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     # return shape (n_ptiles x max_detections x max_detections)
     assert true_params.shape == param_mean.shape == param_logvar.shape
 
@@ -110,13 +109,12 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     max_detections = true_params.size(1)
 
     # view to evaluate all combinations of log_prob.
-    _true_params = true_params.view(n_ptiles, 1, max_detections, -1)
-    _param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
-    _param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+    true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+    param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+    param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
 
-    _sd = (_param_logvar.exp() + 1e-5).sqrt()
-    param_log_probs_all = Normal(_param_mean, _sd).log_prob(_true_params).sum(dim=3)
-    return param_log_probs_all
+    sd = (param_logvar.exp() + 1e-5).sqrt()
+    return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
 
 
 class SleepPhase(pl.LightningModule):
@@ -248,22 +246,19 @@ class SleepPhase(pl.LightningModule):
         counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
 
         # the following two functions computes the log-probability of parameters when
-        # each estimated source i is matched with true source j for
-        # i, j in {1, ..., max_detections}
-        # *_log_probs_all have shape n_ptiles x max_detections x max_detections
-
+        # each estimated source i is matched with true source j.
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
-        locs_log_probs_all = _get_params_logprob_all_combs(true_tile_locs, loc_mean, loc_logvar)
-        star_params_log_probs_all = _get_params_logprob_all_combs(
+        locs_log_probs_all = get_params_logprob_all_combs(true_tile_locs, loc_mean, loc_logvar)
+        star_params_log_probs_all = get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
         prob_galaxy = rearrange(pred["prob_galaxy"], "bn s 1 -> bn s")
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
-        (locs_loss, star_params_loss, galaxy_bool_loss,) = _get_min_perm_loss(
+        (locs_loss, star_params_loss, galaxy_bool_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
             prob_galaxy,
@@ -388,8 +383,8 @@ class SleepPhase(pl.LightningModule):
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
         border_padding = int((images.shape[-1] - slen) / 2)
-        _true_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(_true_params, slen)
+        true_params_dict = {k: v for k, v in batch.items() if k not in exclude}
+        true_params = get_full_params(true_params_dict, slen)
 
         # obtain map estimates
         tile_estimate = self.tile_map_estimate(batch)

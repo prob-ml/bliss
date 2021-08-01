@@ -1,5 +1,5 @@
 import torch
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 
 from bliss.models.encoder import get_is_on_from_n_sources
 

@@ -1,10 +1,10 @@
 from copy import deepcopy
 
 import pytest
+import pytorch_lightning as pl
 import torch
 from torch import nn
 from torch.distributions.normal import Normal
-import pytorch_lightning as pl
 
 from bliss import wake
 
@@ -12,13 +12,12 @@ from bliss import wake
 class TestWake:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        overrides = dict(
+        return dict(
             model="sleep_star_basic",
             dataset="default" if devices.use_cuda else "cpu",
             training="unittest" if devices.use_cuda else "cpu",
             optimizer="m2",
         )
-        return overrides
 
     @pytest.fixture(scope="class")
     def trained_sleep(self, overrides, model_setup):
@@ -68,8 +67,7 @@ class TestWake:
                 true_params["fluxes"],
                 add_noise=False,
             )
-            loss = -Normal(recon, recon.sqrt()).log_prob(obs_image).mean()
-            return loss
+            return -Normal(recon, recon.sqrt()).log_prob(obs_image).mean()
 
         # loss of true decoder
         target_loss = eval_decoder_loss(image_decoder)

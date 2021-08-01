@@ -1,17 +1,16 @@
-from pathlib import Path
-import shutil
-
 import os
-from omegaconf import DictConfig, OmegaConf
+import shutil
+from pathlib import Path
 
 import pytorch_lightning as pl
-from pytorch_lightning.profiler import AdvancedProfiler
-from pytorch_lightning.loggers import TensorBoardLogger
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.profiler import AdvancedProfiler
 
 from bliss import sleep
-from bliss.datasets import simulated, galsim_galaxies
-from bliss.models import galaxy_net, galaxy_encoder
+from bliss.datasets import galsim_galaxies, simulated
+from bliss.models import galaxy_encoder, galaxy_net
 
 # available datasets and models.
 _datasets = [
