@@ -485,7 +485,7 @@ class ImageDecoder(pl.LightningModule):
 
                 # get canvas
                 a1, a2 = i * tile_slen, j * tile_slen
-                b1, b2 = a1 + canvas_len, b2 + canvas_len
+                b1, b2 = a1 + canvas_len, a2 + canvas_len
                 canvas[:, :, a1:b1, a2:b2] += image_tile_cols
 
         # trim to original image size
@@ -788,9 +788,9 @@ class GalaxyTileDecoder(nn.Module):
         b = galaxy_bool.flatten()
 
         # allocate memory
-        _slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        gal = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device)
-        var = torch.zeros(z.shape[0], self.n_bands, _slen, _slen, device=galaxy_params.device)
+        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+        gal = torch.zeros(z.shape[0], self.n_bands, slen, slen, device=galaxy_params.device)
+        var = torch.zeros(z.shape[0], self.n_bands, slen, slen, device=galaxy_params.device)
 
         # forward only galaxies that are on!
         # no background
