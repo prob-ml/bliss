@@ -1,4 +1,5 @@
-from hydra import initialize, compose
+from hydra import compose, initialize
+
 from bliss import generate
 
 

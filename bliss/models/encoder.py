@@ -1,10 +1,9 @@
 import numpy as np
-from einops import rearrange, repeat
-
 import torch
+from einops import rearrange, repeat
 from torch import nn
-import torch.nn.functional as F
 from torch.distributions import categorical
+from torch.nn import functional as F
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
@@ -18,8 +17,7 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     window = ptile_slen
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
-    return tiles
+    return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
 
 
 def tile_images(images, ptile_slen, tile_slen):
@@ -36,8 +34,7 @@ def tile_images(images, ptile_slen, tile_slen):
     window = ptile_slen
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    tiles = rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
-    return tiles
+    return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -49,7 +46,10 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     assert torch.all(n_sources.le(max_sources))
 
     is_on_array = torch.zeros(
-        *n_sources.shape, max_sources, device=n_sources.device, dtype=torch.float
+        *n_sources.shape,
+        max_sources,
+        device=n_sources.device,
+        dtype=torch.float,
     )
 
     for i in range(max_sources):
@@ -65,8 +65,7 @@ def get_star_bool(n_sources, galaxy_bool):
     assert n_sources.le(max_sources).all()
     is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
     is_on_array = is_on_array.view(*galaxy_bool.shape)
-    star_bool = (1 - galaxy_bool) * is_on_array
-    return star_bool
+    return (1 - galaxy_bool) * is_on_array
 
 
 def get_full_params(tile_params: dict, slen: int, wlen: int = None):
@@ -117,18 +116,18 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
 
     # recenter and renormalize locations.
     tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
-    _tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
+    tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
     bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
 
-    _locs = _tile_locs * tile_slen + bias
-    _locs[..., 0] /= slen
-    _locs[..., 1] /= wlen
-    _locs *= tile_is_on_array.unsqueeze(2)
+    locs = tile_locs * tile_slen + bias
+    locs[..., 0] /= slen
+    locs[..., 1] /= wlen
+    locs *= tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip
-    locs = _locs.view(n_samples, -1, 2)
-    _indx_sort = _argfront(locs[..., 0], dim=1)
-    locs = torch.gather(locs, 1, repeat(_indx_sort, "b n -> b n r", r=2))
+    locs = locs.view(n_samples, -1, 2)
+    indx_sort = _argfront(locs[..., 0], dim=1)
+    locs = torch.gather(locs, 1, repeat(indx_sort, "b n -> b n r", r=2))
     locs = locs[:, 0:max_sources]
     params = {"n_sources": n_sources, "locs": locs}
 
@@ -140,7 +139,7 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
             assert len(tile_param.shape) == 4
             param = rearrange(tile_param, "b t d k -> b (t d) k")
             param = torch.gather(
-                param, 1, repeat(_indx_sort, "b n -> b n r", r=tile_param.shape[-1])
+                param, 1, repeat(indx_sort, "b n -> b n r", r=tile_param.shape[-1])
             )
             param = param[:, 0:max_sources]
             params[param_name] = param
@@ -151,8 +150,7 @@ def _argfront(is_on_array, dim):
     # return indices that sort pushing all zeroes of tensor to the back.
     # dim is dimension along which do the ordering.
     assert len(is_on_array.shape) == 2
-    indx_sort = (is_on_array != 0).long().argsort(dim=dim, descending=True)
-    return indx_sort
+    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
 
 
 def _sample_class_weights(class_weights, n_samples=1):
@@ -203,8 +201,7 @@ class ConvBlock(nn.Module):
             identity = self.sc_bn(self.sc_conv(identity))
 
         out = x + identity
-        out = F.relu(out)
-        return out
+        return F.relu(out)
 
 
 class EncoderCNN(nn.Module):
@@ -213,8 +210,7 @@ class EncoderCNN(nn.Module):
         self.layer = self._make_layer(n_bands, channel, dropout)
 
     def forward(self, x):
-        x = self.layer(x)
-        return x
+        return self.layer(x)
 
     def _make_layer(self, n_bands, channel, dropout):
         layers = [
@@ -285,7 +281,7 @@ class ImageEncoder(nn.Module):
         self.dim_out_all = int(
             0.5 * self.max_detections * (self.max_detections + 1) * self.n_params_per_source
             + 1
-            + self.max_detections
+            + self.max_detections,
         )
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
         self.enc_final = nn.Sequential(
@@ -324,8 +320,10 @@ class ImageEncoder(nn.Module):
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
     def _get_hidden_indices(self):
-        """Setup the indices corresponding to entries in h, these are cached since
-        same for all h."""
+        """
+        Setup the indices corresponding to entries in h, these are cached since
+        same for all h.
+        """
 
         # initialize matrices containing the indices for each variational param.
         indx_mats = {}
@@ -368,17 +366,14 @@ class ImageEncoder(nn.Module):
         assert h.size(0) == n_sources.size(1)
         assert h.size(1) == self.dim_out_all
         n_ptiles = h.size(0)
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
+        h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
-        var_param = torch.gather(
-            _h,
-            1,
-            indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
-        )
+        indices = indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1)
+        var_param = torch.gather(h, 1, indices)
 
         # np: n_ptiles, ns: n_samples
-        var_param = rearrange(
+        return rearrange(
             var_param,
             "np (ns d pd) -> ns np d pd",
             np=n_ptiles,
@@ -386,7 +381,6 @@ class ImageEncoder(nn.Module):
             d=self.max_detections,
             pd=param_dim,
         )
-        return var_param
 
     def get_var_params_all(self, image_ptiles):
         # get h matrix.
@@ -412,8 +406,8 @@ class ImageEncoder(nn.Module):
             indx_mat = getattr(self, k + "_indx")
             param_dim = param["dim"]
             transform = param["transform"]
-            _param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
-            param = transform(_param)
+            param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
+            param = transform(param)
             est_params[k] = param
 
         return est_params
@@ -429,7 +423,7 @@ class ImageEncoder(nn.Module):
         """
         Obtain log probability of number of n_sources.
 
-        * Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
         probability of having 0,1,2 stars.
         """
         free_probs = h[:, self.prob_n_source_indx]
@@ -462,8 +456,7 @@ class ImageEncoder(nn.Module):
         assert image_ptiles.shape[0] == tile_n_sources.shape[0]
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections).unsqueeze(0)
         var_params = self.forward_sampled(image_ptiles, tile_n_sources)
-        var_params = {key: value.squeeze(0) for key, value in var_params.items()}
-        return var_params
+        return {key: value.squeeze(0) for key, value in var_params.items()}
 
     def sample_encoder(self, images, n_samples):
         assert len(images.shape) == 4
@@ -556,8 +549,7 @@ class ImageEncoder(nn.Module):
     def tile_map_n_sources(self, image_ptiles):
         h = self.get_var_params_all(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        tile_n_sources = torch.argmax(log_probs_n_sources_per_tile, dim=1)
-        return tile_n_sources
+        return torch.argmax(log_probs_n_sources_per_tile, dim=1)
 
     def tile_map_estimate(self, images):
 
@@ -589,8 +581,7 @@ class ImageEncoder(nn.Module):
 
         # obtained estimates per tile, then on full image.
         tile_estimate = self.tile_map_estimate(images)
-        estimate = get_full_params(tile_estimate, slen, wlen)
-        return estimate
+        return get_full_params(tile_estimate, slen, wlen)
 
     @property
     def variational_params(self):

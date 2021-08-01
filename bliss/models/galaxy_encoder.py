@@ -1,16 +1,15 @@
-import pytorch_lightning as pl
-import matplotlib.pyplot as plt
 import numpy as np
-
+import pytorch_lightning as pl
 import torch
-import torch.nn.functional as F
+from matplotlib import pyplot as plt
 from torch.distributions import Normal
+from torch.nn import functional as F
 
 from bliss import plotting
-from bliss.optimizer import get_optimizer
-from bliss.models.encoder import get_images_in_tiles
 from bliss.models.decoder import ImageDecoder, get_mgrid
+from bliss.models.encoder import get_images_in_tiles
 from bliss.models.galaxy_net import CenteredGalaxyEncoder
+from bliss.optimizer import get_optimizer
 
 
 class GalaxyEncoder(pl.LightningModule):
@@ -82,10 +81,9 @@ class GalaxyEncoder(pl.LightningModule):
         shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
 
         # now that everything is center we can crop easily
-        cropped_tiles = shifted_tiles[
-            :, :, tile_slen : ptile_slen - tile_slen, tile_slen : ptile_slen - tile_slen
+        return shifted_tiles[
+            :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
         ]
-        return cropped_tiles
 
     def configure_optimizers(self):
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
@@ -104,8 +102,8 @@ class GalaxyEncoder(pl.LightningModule):
         n_ptiles = image_ptiles.shape[0]
 
         # in each padded tile we need to center the corresponding galaxy
-        _tile_locs = tile_locs.reshape(n_ptiles, self.max_sources, 2)
-        centered_ptiles = self.center_ptiles(image_ptiles, _tile_locs)
+        tile_locs = tile_locs.reshape(n_ptiles, self.max_sources, 2)
+        centered_ptiles = self.center_ptiles(image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # remove background before encoding
@@ -135,9 +133,7 @@ class GalaxyEncoder(pl.LightningModule):
         )
 
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
-        recon_losses = recon_losses.sum()
-
-        return recon_losses
+        return recon_losses.sum()
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         loss = self.get_loss(batch)

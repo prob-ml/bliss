@@ -1,8 +1,8 @@
+import pytorch_lightning as pl
 import torch
 from torch import optim
-from torch.utils.data import DataLoader
 from torch.distributions.normal import Normal
-import pytorch_lightning as pl
+from torch.utils.data import DataLoader
 
 
 class WakeNet(pl.LightningModule):
@@ -90,12 +90,8 @@ class WakeNet(pl.LightningModule):
 
         image_indx_start = self.border_padding
         image_indx_end = self.border_padding + self.slen
-        loss = (
-            error[:, :, image_indx_start:image_indx_end, image_indx_start:image_indx_end]
-            .sum((1, 2, 3))
-            .mean()
-        )
-        return loss
+        err = error[:, :, image_indx_start:image_indx_end, image_indx_start:image_indx_end]
+        return err.sum((1, 2, 3)).mean()
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         loss = self.get_loss(batch)

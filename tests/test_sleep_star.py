@@ -1,17 +1,17 @@
 from pathlib import Path
+
 import pytest
 
 
 class TestSleepStarOneTile:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        overrides = dict(
+        return dict(
             model="sleep_star_one_tile",
             dataset="single_tile" if devices.use_cuda else "cpu",
             training="unittest" if devices.use_cuda else "cpu",
             optimizer="m2",
         )
-        return overrides
 
     @pytest.fixture(scope="class")
     def trained_sleep(self, overrides, model_setup):
@@ -34,13 +34,12 @@ class TestSleepStarOneTile:
 class TestSleepStarTiles:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        overrides = {
+        return {
             "model": "sleep_star_basic",
             "dataset": "default" if devices.use_cuda else "cpu",
             "training": "unittest" if devices.use_cuda else "cpu",
             "optimizer": "m2",
         }
-        return overrides
 
     @pytest.fixture(scope="class")
     def trained_sleep(self, overrides, model_setup):

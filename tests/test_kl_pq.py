@@ -4,8 +4,8 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 
-from bliss.sleep import _get_params_logprob_all_combs, _get_min_perm_loss
 from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.sleep import get_min_perm_loss, get_params_logprob_all_combs
 
 
 class TestStarEncoderObjective:
@@ -26,7 +26,7 @@ class TestStarEncoderObjective:
         param_logvar = torch.randn(n_ptiles, max_detections, n_source_params, device=device)
 
         # get all losses
-        param_log_probs_all = _get_params_logprob_all_combs(true_params, param_mean, param_logvar)
+        param_log_probs_all = get_params_logprob_all_combs(true_params, param_mean, param_logvar)
 
         # just for my sanity
         assert list(param_log_probs_all.shape) == [
@@ -55,7 +55,8 @@ class TestStarEncoderObjective:
     # pylint: disable=too-many-statements
     def test_get_min_perm_loss(self, devices):
         """
-        Same as previous function but checks that we can get the permutation with the minimum loss.
+        Same as previous function but checks that we can get the permutation
+        with the minimum loss.
         """
 
         device = devices.device
@@ -100,14 +101,14 @@ class TestStarEncoderObjective:
         prob_galaxy = torch.rand(n_ptiles, max_detections, device=device)
 
         # get loss for locations
-        locs_log_probs_all = _get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
+        locs_log_probs_all = get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
 
         # get loss for fluxes
-        star_params_log_probs_all = _get_params_logprob_all_combs(
+        star_params_log_probs_all = get_params_logprob_all_combs(
             true_log_fluxes, log_flux_mean, log_flux_logvar
         )
 
-        (locs_loss, star_params_loss, galaxy_bool_loss,) = _get_min_perm_loss(
+        (locs_loss, star_params_loss, galaxy_bool_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
             prob_galaxy,
@@ -135,8 +136,8 @@ class TestStarEncoderObjective:
 
         # a more thorough check for all possible true_n_sources
         for i in range(n_ptiles):
-            _true_n_sources = int(true_n_sources[i])
-            _true_galaxy_bool = true_galaxy_bool[i, 0:_true_n_sources]
+            local_true_n_sources = int(true_n_sources[i])
+            local_true_galaxy_bool = true_galaxy_bool[i, 0:local_true_n_sources]
 
             if true_n_sources[i] == 0:
                 assert locs_loss[i] == 0
@@ -145,40 +146,42 @@ class TestStarEncoderObjective:
                 continue
 
             # get parameters for ith observation
-            _true_locs = true_locs[i, 0:_true_n_sources, :]
-            _loc_mean = loc_mean[i, 0:_true_n_sources, :]
-            _loc_logvar = loc_logvar[i, 0:_true_n_sources, :]
+            local_true_locs = true_locs[i, 0:local_true_n_sources, :]
+            local_loc_mean = loc_mean[i, 0:local_true_n_sources, :]
+            local_loc_logvar = loc_logvar[i, 0:local_true_n_sources, :]
 
-            _true_log_fluxes = true_log_fluxes[i, 0:_true_n_sources, :]
-            _log_flux_mean = log_flux_mean[i, 0:_true_n_sources, :]
-            _log_flux_logvar = log_flux_logvar[i, 0:_true_n_sources, :]
+            local_true_log_fluxes = true_log_fluxes[i, 0:local_true_n_sources, :]
+            local_log_flux_mean = log_flux_mean[i, 0:local_true_n_sources, :]
+            local_log_flux_logvar = log_flux_logvar[i, 0:local_true_n_sources, :]
 
-            _prob_galaxy = prob_galaxy[i, 0:_true_n_sources]
+            prob_galaxy_i = prob_galaxy[i, 0:local_true_n_sources]
 
             min_locs_loss = 1e16
             min_star_params_loss = 1e16
             min_galaxy_bool_loss = 1e16
-            for perm in permutations(range(_true_n_sources)):
+            for perm in permutations(range(local_true_n_sources)):
                 locs_loss_perm = -Normal(
-                    _loc_mean[perm, :], (torch.exp(_loc_logvar[perm, :]) + 1e-5).sqrt()
-                ).log_prob(_true_locs)
+                    local_loc_mean[perm, :], (torch.exp(local_loc_logvar[perm, :]) + 1e-5).sqrt()
+                ).log_prob(local_true_locs)
 
                 star_params_loss_perm = (
                     -Normal(
-                        _log_flux_mean[perm, :],
-                        (torch.exp(_log_flux_logvar[perm, :]) + 1e-5).sqrt(),
+                        local_log_flux_mean[perm, :],
+                        (torch.exp(local_log_flux_logvar[perm, :]) + 1e-5).sqrt(),
                     )
-                    .log_prob(_true_log_fluxes)
+                    .log_prob(local_true_log_fluxes)
                     .sum(-1)
                 )
 
-                p = _prob_galaxy.unsqueeze(0)[:, perm].squeeze()
-                galaxy_bool_loss_perm = -_true_galaxy_bool * torch.log(p)
-                galaxy_bool_loss_perm -= (1 - _true_galaxy_bool) * torch.log(1 - p)
+                p = prob_galaxy_i.unsqueeze(0)[:, perm].squeeze()
+                galaxy_bool_loss_perm = -local_true_galaxy_bool * torch.log(p)
+                galaxy_bool_loss_perm -= (1 - local_true_galaxy_bool) * torch.log(1 - p)
 
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_locs_loss = locs_loss_perm.sum()
-                    min_star_params_loss = (star_params_loss_perm * (1 - _true_galaxy_bool)).sum()
+                    min_star_params_loss = (
+                        star_params_loss_perm * (1 - local_true_galaxy_bool)
+                    ).sum()
                     min_galaxy_bool_loss = galaxy_bool_loss_perm.sum()
 
             assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5

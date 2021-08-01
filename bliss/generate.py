@@ -1,13 +1,13 @@
-import os
 import math
+import os
 from pathlib import Path
 
 import torch
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 
-from bliss.datasets import simulated, galsim_galaxies
 from bliss import plotting
+from bliss.datasets import galsim_galaxies, simulated
 
 datasets = {
     "SimulatedDataset": simulated.SimulatedDataset,

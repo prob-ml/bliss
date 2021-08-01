@@ -1,12 +1,12 @@
 from collections import namedtuple
-from speclite.filters import load_filter, ab_reference_flux
-import numpy as np
-import galsim
-import torch
 
-import astropy.units as u
-from torch.utils.data import Dataset, DataLoader
+import galsim
+import numpy as np
 import pytorch_lightning as pl
+import torch
+from astropy import units as u
+from speclite.filters import ab_reference_flux, load_filter
+from torch.utils.data import DataLoader, Dataset
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 
@@ -41,8 +41,8 @@ def calculate_zero_point(band_name="sdss2010-r", B0=24):
 Survey = namedtuple(
     "Survey",
     [
-        "effective_area",  #  [m^2]
-        "pixel_scale",  #  [arcsec/pixel]
+        "effective_area",  # [m^2]
+        "pixel_scale",  # [arcsec/pixel]
         "airmass",
         "zeropoint_airmass",  # airmass at which zeropoint is calculated
         "filters",  # list of filters.
@@ -53,9 +53,9 @@ Filter = namedtuple(
     "Filter",
     [
         "band",
-        "exp_time",  #  [s]
+        "exp_time",  # [s]
         "extinction",
-        "median_psf_fwhm",  #  [arcsec]
+        "median_psf_fwhm",  # [arcsec]
         "effective_wavelength",  # [Angstroms]
         "limit_mag",
         "zeropoint",  # [s^-1 * m^-2]
@@ -229,9 +229,9 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         assert sdss_kwargs["bands"][0] == 2
         assert len(list(psf_points)) == 2
         sdss_data = SloanDigitalSkySurvey(**sdss_kwargs)
-        _psf = sdss_data.rcfgcs[0][-1]
+        local_psf = sdss_data.rcfgcs[0][-1]
         x, y = psf_points
-        psf = _psf.psf_at_points(0, x, y)
+        psf = local_psf.psf_at_points(0, x, y)
         psf_image = galsim.Image(psf, scale=self.pixel_scale)
         self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
@@ -259,7 +259,8 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
             b_d = a_d * disk_q
             disk_hlr_arcsecs = np.sqrt(a_d * b_d)
             disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
-                q=disk_q, beta=beta_radians * galsim.radians
+                q=disk_q,
+                beta=beta_radians * galsim.radians,
             )
             components.append(disk)
 

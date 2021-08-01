@@ -4,13 +4,12 @@ import pytest
 class TestBasicGalaxyTiles:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        overrides = {
+        return {
             "model": "sleep_galaxy_basic",
             "dataset": "default" if devices.use_cuda else "cpu",
             "training": "unittest" if devices.use_cuda else "cpu",
             "training.n_epochs": 201 if devices.use_cuda else 1,
         }
-        return overrides
 
     @pytest.fixture(scope="class")
     def trained_sleep(self, overrides, model_setup):

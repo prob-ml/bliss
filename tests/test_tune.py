@@ -1,6 +1,7 @@
 import pytest
 import torch
-from hydra import initialize, compose
+from hydra import compose, initialize
+
 from bliss import tune
 
 
@@ -30,8 +31,7 @@ class TestTune:
             "tuning.save": False,
             "tuning.n_samples": 2 if devices.use_cuda else 1,
         }
-        overrides = [f"{k}={v}" for k, v in overrides.items()]
-        return overrides
+        return [f"{k}={v}" for k, v in overrides.items()]
 
     @pytest.mark.filterwarnings("ignore:.*Relying on `self.log.*:DeprecationWarning")
     def test_tune_run(self, overrides):

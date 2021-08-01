@@ -1,16 +1,16 @@
 import pathlib
 import pickle
 import warnings
-from math import floor, ceil
+from math import ceil, floor
 
 import numpy as np
 import torch
-import torch.nn.functional as F
-from einops import rearrange
-from scipy.interpolate import RegularGridInterpolator
-from torch.utils.data import Dataset
 from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
+from einops import rearrange
+from scipy.interpolate import RegularGridInterpolator
+from torch.nn import functional as F
+from torch.utils.data import Dataset
 
 
 class StarStamper:
@@ -108,8 +108,7 @@ class SdssPSF:
     def read_psf(self, band):
         psfield = fits.open(self.psf_fit_file)
         hdu = psfield[band + 1]
-        psf = hdu.data
-        return psf
+        return hdu.data
 
     def psf_at_points(self, idx, x, y):
         psf = self[idx]
@@ -156,7 +155,7 @@ class SloanDigitalSkySurvey(Dataset):
         run=3900,
         camcol=6,
         fields=(269,),
-        bands=range(5),
+        bands=(0, 1, 2, 3, 4),
         stampsize=5,
         overwrite_fits_cache=False,
         overwrite_cache=False,
@@ -181,21 +180,21 @@ class SloanDigitalSkySurvey(Dataset):
         fieldgains = self.pf_fits["GAIN"]
 
         # get desired field
-        for i, _field in enumerate(fieldnums):
+        for i, field in enumerate(fieldnums):
             gain = fieldgains[i]
-            if (not fields) or _field in fields:
+            if (not fields) or field in fields:
                 # load the catalog distributed with SDSS
-                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
-                po_cache = "photoObj-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, _field)
-                po_path = camcol_path.joinpath(str(_field), po_file)
-                po_cache_path = camcol_path.joinpath(str(_field), po_cache)
+                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, field)
+                po_cache = "photoObj-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, field)
+                po_path = camcol_path.joinpath(str(field), po_file)
+                po_cache_path = camcol_path.joinpath(str(field), po_cache)
                 if (not po_cache_path.exists()) or (overwrite_fits_cache):
                     try:
                         po_fits = fits.getdata(po_path)
                     except IndexError as e:
                         print(
                             "INFO: IndexError while accessing field: {}. "
-                            "This field will not be included.\n".format(_field)
+                            "This field will not be included.\n".format(field)
                         )
                         print(e)
                         po_fits = None
@@ -205,29 +204,29 @@ class SloanDigitalSkySurvey(Dataset):
                     if po_fits is None:
                         print(
                             "INFO: cached data for field {} is None. "
-                            "This field will not be included".format(_field)
+                            "This field will not be included".format(field)
                         )
 
                 # Load the PSF produced by SDSS
-                psf_file = "psField-{:06d}-{:d}-{:04d}.fits".format(run, camcol, _field)
-                psf_cache = "psField-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, _field)
+                psf_file = "psField-{:06d}-{:d}-{:04d}.fits".format(run, camcol, field)
+                psf_cache = "psField-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, field)
 
-                psf_path = camcol_path.joinpath(str(_field), psf_file)
-                psf_cache_path = camcol_path.joinpath(str(_field), psf_cache)
+                psf_path = camcol_path.joinpath(str(field), psf_file)
+                psf_cache_path = camcol_path.joinpath(str(field), psf_cache)
 
                 try:
                     psf = SdssPSF(psf_path.as_posix(), bands)
                 except IndexError as e:
                     print(
                         "INFO: IndexError while accessing PSF for field: {}. "
-                        "This field will not be included.".format(_field),
+                        "This field will not be included.".format(field),
                     )
                     print(e)
                     psf = None
 
                 pickle.dump(psf, psf_cache_path.open("wb+"))
                 if po_fits is not None:
-                    self.rcfgcs.append((run, camcol, _field, gain, po_fits, psf))
+                    self.rcfgcs.append((run, camcol, field, gain, po_fits, psf))
         self.items = [None] * len(self.rcfgcs)
         self.cache_paths = [None] * len(self.rcfgcs)
 
@@ -321,9 +320,8 @@ class SloanDigitalSkySurvey(Dataset):
 
             small_rows = np.mgrid[0 : sky_small.shape[0]]
             small_cols = np.mgrid[0 : sky_small.shape[1]]
-            sky_interp = RegularGridInterpolator(
-                (small_rows, small_cols), sky_small, method="nearest"
-            )
+            small_rcs = (small_rows, small_cols)
+            sky_interp = RegularGridInterpolator(small_rcs, sky_small, method="nearest")
 
             sky_y = sky_y.clip(0, sky_small.shape[0] - 1)
             sky_x = sky_x.clip(0, sky_small.shape[1] - 1)

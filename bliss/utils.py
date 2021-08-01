@@ -1,13 +1,11 @@
 import torch
 from torch import nn
-import torch.nn.functional as F
 from torch.distributions import Normal
+from torch.nn import functional as F
 
 
 class MLP(nn.Sequential):
-    """
-    A Multi-layer perceptron of dense layers with non-linear activation layers
-    """
+    """A Multi-layer perceptron of dense layers with non-linear activation layers"""
 
     def __init__(self, in_features, hs, out_features, act=nn.ReLU, final=None):
         self.in_features = in_features
@@ -38,9 +36,7 @@ class SequentialVarg(nn.Sequential):
 
 
 class SplitLayer(nn.Module):
-    """
-    This layer splits the input according to the arguments to torch.split
-    """
+    """This layer splits the input according to the arguments to torch.split"""
 
     def __init__(self, split_size_or_sections, dim):
         super().__init__()
@@ -62,15 +58,15 @@ class ConcatLayer(nn.Module):
         self.input_idxs = input_idxs
 
     def forward(self, *args):
-        ## Filter only to arguments we want to concatenate
+        # Filter only to arguments we want to concatenate
         if self.input_idxs is not None:
             args = [args[i] for i in self.input_idxs]
         else:
             args = list(args)
 
-        ## Get the maximum size of each tensor dimension
-        ## and repeat any tensors which have a 1 in
-        ## a dimension
+        # Get the maximum size of each tensor dimension
+        # and repeat any tensors which have a 1 in
+        # a dimension
         sizes = []
         for d, _ in enumerate(args[0].size()):
             sizes.append(max([arg.size(d) for arg in args]))
@@ -86,8 +82,7 @@ class ConcatLayer(nn.Module):
                         raise ValueError(
                             "The sizes in ConcatLayer need to be either the same or 1."
                         )
-        X = torch.cat(args, -1)
-        return X
+        return torch.cat(args, -1)
 
 
 # *************************
@@ -106,5 +101,4 @@ class NormalEncoder(nn.Module):
     def forward(self, mean_z, logscale_z):
         if self.minscale is not None:
             logscale_z = torch.log(self.minscale + (1 - self.minscale) * F.softplus(logscale_z))
-        pz = Normal(mean_z, logscale_z.exp())
-        return pz
+        return Normal(mean_z, logscale_z.exp())
