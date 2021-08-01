@@ -1,8 +1,6 @@
+import fitsio
 import numpy as np
 import torch
-
-import fitsio
-
 from astropy.io import fits
 from astropy.wcs import WCS
 

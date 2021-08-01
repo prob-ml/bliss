@@ -75,8 +75,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
 
 class BlissDataset(Dataset):
+    """A dataset created from simulated batches saved as a single dict by bin/generate.py"""
+
     def __init__(self, pt_file="example.pt"):
-        """A dataset created from simulated batches saved as a single dict by bin/generate.py"""
         super().__init__()
 
         data = torch.load(pt_file)
@@ -88,7 +89,7 @@ class BlissDataset(Dataset):
         self.slen = self.data.pop("slen")
 
     def __len__(self):
-        """Number of batches saved in the file."""
+        """Get the number of batches saved in the file."""
         return self.size
 
     def __getitem__(self, idx):

@@ -320,8 +320,10 @@ class ImageEncoder(nn.Module):
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
     def _get_hidden_indices(self):
-        """Setup the indices corresponding to entries in h, these are cached since
-        same for all h."""
+        """
+        Setup the indices corresponding to entries in h, these are cached since
+        same for all h.
+        """
 
         # initialize matrices containing the indices for each variational param.
         indx_mats = {}
