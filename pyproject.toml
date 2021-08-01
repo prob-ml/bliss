@@ -37,6 +37,7 @@ rope = "^0.18.0"
 scikit-learn = "^0.24.2"
 speclite = "^0.13"
 tox = "^3.20.1"
+wemake-python-styleguide = "^0.15.3"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
