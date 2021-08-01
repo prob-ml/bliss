@@ -83,7 +83,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # now that everything is center we can crop easily
         cropped_tiles = shifted_tiles[
-            :, :, tile_slen : ptile_slen - tile_slen, tile_slen : ptile_slen - tile_slen
+            :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
         ]
         return cropped_tiles
 

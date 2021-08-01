@@ -484,12 +484,9 @@ class ImageDecoder(pl.LightningModule):
                 )
 
                 # get canvas
-                canvas[
-                    :,
-                    :,
-                    (i * tile_slen) : (i * tile_slen + canvas_len),
-                    (j * tile_slen) : (j * tile_slen + canvas_len),
-                ] += image_tile_cols
+                a1, a2 = i * tile_slen, j * tile_slen
+                b1, b2 = a1 + canvas_len, b2 + canvas_len
+                canvas[:, :, a1:b1, a2:b2] += image_tile_cols
 
         # trim to original image size
         x0 = n_tiles_of_padding * tile_slen - border_padding
