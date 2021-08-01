@@ -103,8 +103,8 @@ class GalaxyEncoder(pl.LightningModule):
         n_ptiles = image_ptiles.shape[0]
 
         # in each padded tile we need to center the corresponding galaxy
-        _tile_locs = tile_locs.reshape(n_ptiles, self.max_sources, 2)
-        centered_ptiles = self.center_ptiles(image_ptiles, _tile_locs)
+        tile_locs = tile_locs.reshape(n_ptiles, self.max_sources, 2)
+        centered_ptiles = self.center_ptiles(image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # remove background before encoding

@@ -293,8 +293,8 @@ class ImageDecoder(pl.LightningModule):
                 self.n_bands - 1,
             )
             colors = torch.randn(*shape, device=base_fluxes.device)
-            _fluxes = 10 ** (colors / 2.5) * base_fluxes
-            fluxes = torch.cat((base_fluxes, _fluxes), dim=3)
+            fluxes = 10 ** (colors / 2.5) * base_fluxes
+            fluxes = torch.cat((base_fluxes, fluxes), dim=3)
             fluxes *= star_bool.float()
         else:
             fluxes = base_fluxes * star_bool.float()
@@ -338,8 +338,8 @@ class ImageDecoder(pl.LightningModule):
             warnings.warn("image mean less than 0")
             images_mean = images_mean.clamp(min=1.0)
 
-        _images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
-        images = _images + images_mean
+        images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
+        images += images_mean
 
         return images
 
@@ -361,17 +361,17 @@ class ImageDecoder(pl.LightningModule):
         n_ptiles = batch_size * n_tiles_per_image
 
         # view parameters being explicit about shapes
-        _n_sources = rearrange(n_sources, "b t -> (b t)")
-        _locs = rearrange(locs, "b t s xy -> (b t) s xy", xy=2)
-        _galaxy_bool = rearrange(galaxy_bool, "b t s 1 -> (b t) s 1")
-        _fluxes = rearrange(fluxes, "b t s band -> (b t) s band")
+        n_sources = rearrange(n_sources, "b t -> (b t)")
+        locs = rearrange(locs, "b t s xy -> (b t) s xy", xy=2)
+        galaxy_bool = rearrange(galaxy_bool, "b t s 1 -> (b t) s 1")
+        fluxes = rearrange(fluxes, "b t s band -> (b t) s band")
 
         # draw stars and galaxies
-        _is_on_array = get_is_on_from_n_sources(_n_sources, max_sources)
-        _is_on_array = rearrange(_is_on_array, "bt s -> bt s 1")
-        _star_bool = (1 - _galaxy_bool) * _is_on_array
+        is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
+        is_on_array = rearrange(is_on_array, "bt s -> bt s 1")
+        star_bool = (1 - galaxy_bool) * is_on_array
         # _star_bool = _star_bool.view(n_ptiles, max_sources, 1)
-        assert _star_bool.shape == (n_ptiles, max_sources, 1)
+        assert star_bool.shape == (n_ptiles, max_sources, 1)
 
         # final shapes of images.
         img_shape = (
@@ -383,11 +383,11 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # draw stars and galaxies
-        stars = self.star_tile_decoder(_locs, _fluxes, _star_bool)
+        stars = self.star_tile_decoder(locs, fluxes, star_bool)
         galaxies = torch.zeros(img_shape, device=locs.device)
         var_images = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_tile_decoder is not None:
-            galaxies, var_images = self.galaxy_tile_decoder(_locs, galaxy_params, _galaxy_bool)
+            galaxies, var_images = self.galaxy_tile_decoder(locs, galaxy_params, galaxy_bool)
 
         images = galaxies.view(img_shape) + stars.view(img_shape)
         var_images = var_images.view(img_shape)

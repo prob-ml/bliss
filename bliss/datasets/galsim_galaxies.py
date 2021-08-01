@@ -229,9 +229,9 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         assert sdss_kwargs["bands"][0] == 2
         assert len(list(psf_points)) == 2
         sdss_data = SloanDigitalSkySurvey(**sdss_kwargs)
-        _psf = sdss_data.rcfgcs[0][-1]
+        local_psf = sdss_data.rcfgcs[0][-1]
         x, y = psf_points
-        psf = _psf.psf_at_points(0, x, y)
+        psf = local_psf.psf_at_points(0, x, y)
         psf_image = galsim.Image(psf, scale=self.pixel_scale)
         self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 

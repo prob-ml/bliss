@@ -116,18 +116,18 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
 
     # recenter and renormalize locations.
     tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
-    _tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
+    tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
     bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
 
-    _locs = _tile_locs * tile_slen + bias
-    _locs[..., 0] /= slen
-    _locs[..., 1] /= wlen
-    _locs *= tile_is_on_array.unsqueeze(2)
+    locs = tile_locs * tile_slen + bias
+    locs[..., 0] /= slen
+    locs[..., 1] /= wlen
+    locs *= tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip
-    locs = _locs.view(n_samples, -1, 2)
-    _indx_sort = _argfront(locs[..., 0], dim=1)
-    locs = torch.gather(locs, 1, repeat(_indx_sort, "b n -> b n r", r=2))
+    locs = locs.view(n_samples, -1, 2)
+    indx_sort = _argfront(locs[..., 0], dim=1)
+    locs = torch.gather(locs, 1, repeat(indx_sort, "b n -> b n r", r=2))
     locs = locs[:, 0:max_sources]
     params = {"n_sources": n_sources, "locs": locs}
 
@@ -139,7 +139,7 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
             assert len(tile_param.shape) == 4
             param = rearrange(tile_param, "b t d k -> b (t d) k")
             param = torch.gather(
-                param, 1, repeat(_indx_sort, "b n -> b n r", r=tile_param.shape[-1])
+                param, 1, repeat(indx_sort, "b n -> b n r", r=tile_param.shape[-1])
             )
             param = param[:, 0:max_sources]
             params[param_name] = param
@@ -367,14 +367,11 @@ class ImageEncoder(nn.Module):
         assert h.size(0) == n_sources.size(1)
         assert h.size(1) == self.dim_out_all
         n_ptiles = h.size(0)
-        _h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
+        h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
 
         # select the indices from _h indicated by indx_mat.
-        var_param = torch.gather(
-            _h,
-            1,
-            indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1),
-        )
+        indices = indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1)
+        var_param = torch.gather(h, 1, indices)
 
         # np: n_ptiles, ns: n_samples
         var_param = rearrange(
@@ -411,8 +408,8 @@ class ImageEncoder(nn.Module):
             indx_mat = getattr(self, k + "_indx")
             param_dim = param["dim"]
             transform = param["transform"]
-            _param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
-            param = transform(_param)
+            param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
+            param = transform(param)
             est_params[k] = param
 
         return est_params

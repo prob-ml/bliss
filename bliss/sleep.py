@@ -59,9 +59,9 @@ def _get_log_probs_all_perms(
             * (1 - true_galaxy_bool)
         ).sum(1)
 
-        _prob_galaxy = prob_galaxy[:, perm]
-        galaxy_bool_loss = true_galaxy_bool * torch.log(_prob_galaxy)
-        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - _prob_galaxy)
+        prob_galaxy_i = prob_galaxy[:, perm]
+        galaxy_bool_loss = true_galaxy_bool * torch.log(prob_galaxy_i)
+        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - prob_galaxy_i)
         galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
 
     return (
@@ -95,9 +95,9 @@ def _get_min_perm_loss(
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
 
     # get the star & galaxy losses according to the found permutation
-    _indx = indx.unsqueeze(1)
-    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, _indx).squeeze()
-    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, _indx).squeeze()
+    indx = indx.unsqueeze(1)
+    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, indx).squeeze()
+    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, indx).squeeze()
     return locs_loss, star_params_loss, galaxy_bool_loss
 
 
