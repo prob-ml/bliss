@@ -9,10 +9,10 @@ model.
 import math
 from itertools import permutations
 
-import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
+from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 

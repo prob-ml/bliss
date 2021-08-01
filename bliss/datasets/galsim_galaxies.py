@@ -1,10 +1,10 @@
 from collections import namedtuple
 
-import astropy.units as u
 import galsim
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from astropy import units as u
 from speclite.filters import ab_reference_flux, load_filter
 from torch.utils.data import DataLoader, Dataset
 

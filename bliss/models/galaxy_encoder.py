@@ -1,9 +1,9 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 import torch
-import torch.nn.functional as F
+from matplotlib import pyplot as plt
 from torch.distributions import Normal
+from torch.nn import functional as F
 
 from bliss import plotting
 from bliss.models.decoder import ImageDecoder, get_mgrid

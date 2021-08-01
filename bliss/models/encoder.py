@@ -1,9 +1,9 @@
 import numpy as np
 import torch
-import torch.nn.functional as F
 from einops import rearrange, repeat
 from torch import nn
 from torch.distributions import categorical
+from torch.nn import functional as F
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):

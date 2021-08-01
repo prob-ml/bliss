@@ -2,8 +2,8 @@ import math
 import os
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import torch
+from matplotlib import pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 
 from bliss import plotting

@@ -1,8 +1,8 @@
 import pytorch_lightning as pl
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.distributions import normal
+from torch.nn import functional as F
 
 from bliss.models import decoder
 from bliss.models.encoder import get_images_in_tiles, get_star_bool

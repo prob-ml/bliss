@@ -4,11 +4,11 @@ from pathlib import Path
 import numpy as np
 import pytorch_lightning as pl
 import torch
-import torch.nn.functional as F
 from astropy.io import fits
 from einops import rearrange, reduce
 from torch import nn
 from torch.distributions import Poisson
+from torch.nn import functional as F
 
 from bliss.models import galaxy_net
 from bliss.models.encoder import get_is_on_from_n_sources
