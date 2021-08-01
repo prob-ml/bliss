@@ -23,10 +23,10 @@ repos:
         exclude: ^.*fits
       - id: isort
         name: isort
-        entry: isort
+        entry: isort --line-length 100
         language: system
         types: [python]
-        args: [--profile black]
+        args: [--profile black, --line-length 100]
       - id: pylint
         name: pylint
         entry: pylint

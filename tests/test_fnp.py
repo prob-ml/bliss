@@ -191,8 +191,7 @@ class OneDimFNP(LightningModule):
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         XR, yR, XM, yM = batch
-        loss = self.fnp(XR, yR, XM, yM)
-        return loss
+        return self.fnp(XR, yR, XM, yM)
 
     def validation_step(self, batch, batch_idx):
         loss = self.training_step(batch, batch_idx)
@@ -201,5 +200,4 @@ class OneDimFNP(LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=self.lr)
-        return optimizer
+        return Adam(self.parameters(), lr=self.lr)
