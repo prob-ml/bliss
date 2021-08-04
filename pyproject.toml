@@ -17,7 +17,6 @@ python = "^3.8"
 pytorch-lightning = "^1.0.8"
 scipy = "^1.4.1"
 torch = "1.7.1"
-sphinx-rtd-theme = "^0.5.2"
 
 [tool.poetry.dev-dependencies]
 Cython = "^0.29.21"
@@ -41,6 +40,7 @@ tox = "^3.20.1"
 wemake-python-styleguide = "^0.15.3"
 isort = "^5.9.3"
 pre-commit-hooks = "^4.0.1"
+sphinx-rtd-theme = "^0.5.2"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
