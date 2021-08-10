@@ -218,6 +218,5 @@ class GalaxyEncoder(pl.LightningModule):
 
         fig.tight_layout()
         if self.logger:
-            title = f"(Worst) Val Images {self.current_epoch}"
-            self.logger.experiment.add_figure(title, fig)
+            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/worst images", fig)
         plt.close(fig)
