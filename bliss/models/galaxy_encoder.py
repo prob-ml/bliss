@@ -146,11 +146,16 @@ class GalaxyEncoder(pl.LightningModule):
         return batch
 
     def validation_epoch_end(self, outputs):
-        if self.current_epoch > 1:
-            self.make_plots(outputs[-1])  # last batch in epoch
+        # put all outputs together into a single batch
+        batch = {}
+        for b in outputs:
+            for k, v in b.items():
+                curr_val = batch.get(k, torch.tensor([]))
+                batch[k] = torch.cat([curr_val, v])
+        self.make_plots(batch)
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, n_samples=10):
+    def make_plots(self, batch, n_samples=25):
         # validate worst reconstruction images.
         assert n_samples <= len(batch["n_sources"])
 
@@ -164,6 +169,7 @@ class GalaxyEncoder(pl.LightningModule):
         tile_est = {
             k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
         }
+
         # draw all reconstruction images.
         recon_images, _ = self.image_decoder.render_images(
             tile_est["n_sources"],
@@ -175,8 +181,8 @@ class GalaxyEncoder(pl.LightningModule):
         )
         residuals = (images - recon_images) / torch.sqrt(recon_images)
 
-        # draw worst `n_samples` examples as measured by avg. reconstruction error.
-        worst_indices = residuals.mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
+        # draw worst `n_samples` examples as measured by absolute avg. residual error.
+        worst_indices = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
 
         # use same vmin, vmax throughout for residuals
         res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).numpy()
@@ -190,6 +196,12 @@ class GalaxyEncoder(pl.LightningModule):
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
+
+            # add titles to axes
+            if i == 0:
+                true_ax.set_title("Truth", size=18)
+                recon_ax.set_title("Reconstruction", size=18)
+                res_ax.set_title("Residual", size=18)
 
             image = images[idx, 0].cpu().numpy()
             recon = recon_images[idx, 0].cpu().numpy()
