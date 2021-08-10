@@ -20,6 +20,6 @@ trials_result/
 .env
 jupyter/
 output/
-outputs/
+hydra_temp/
 bin/
 .pytest_cache/
