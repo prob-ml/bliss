@@ -443,7 +443,7 @@ class SleepPhase(pl.LightningModule):
                 prob_galaxy=prob_galaxy if self.annotate_probs else None,
                 markers=("x", "+"),
                 colors=("r", "b"),
-                labels=("true galaxy", "pred. galaxy") if i == 0 else None,
+                labels=("true galaxy", "pred. galaxy") if i == 0 else (None, None),
             )
 
             # then stars
@@ -456,7 +456,7 @@ class SleepPhase(pl.LightningModule):
                 prob_galaxy=prob_galaxy if self.annotate_probs else None,
                 markers=("x", "+"),
                 colors=("orange", "deepskyblue"),
-                labels=("true star", "pred. star") if i == 0 else None,
+                labels=("true star", "pred. star") if i == 0 else (None, None),
             )
 
             if i == 0:

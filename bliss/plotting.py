@@ -31,7 +31,7 @@ def plot_image_locs(
     s=20,
     markers=("x", "+"),
     borders=True,
-    labels=None,
+    labels=(None, None),
 ):
     # prob_galaxy is used to indicate confidence on prediction via marker size.
 
