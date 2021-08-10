@@ -50,6 +50,7 @@ def setup_callbacks(cfg):
             verbose=True,
             monitor="val/loss",
             mode="min",
+            save_on_train_epoch_end=False,
         )
         callbacks.append(checkpoint_callback)
 
