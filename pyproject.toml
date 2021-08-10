@@ -40,6 +40,7 @@ tox = "^3.20.1"
 wemake-python-styleguide = "^0.15.3"
 isort = "^5.9.3"
 pre-commit-hooks = "^4.0.1"
+flake8 = "^3.9.2"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
