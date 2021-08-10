@@ -8,10 +8,9 @@ defaults:
   - optional tuning: ${model}
   - predict: sdss
 
-mode: train
+hydra.output_subdir: null
 
-general:
-  overwrite: False
+mode: train
 
 gpus: 1 # use a single gpu by default.
 
@@ -19,5 +18,5 @@ paths:
   root: ${oc.env:BLISS_HOME}
   data: ${paths.root}/data
   models: ${paths.root}/models
-  output: ${paths.root}/temp/default
+  output: ${paths.root}/output
   sdss: ${paths.root}/data/sdss

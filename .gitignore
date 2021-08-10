@@ -19,6 +19,6 @@ trials_result/
 .vscode/
 .env
 jupyter/
-outputs/
+output/
 bin/
 .pytest_cache/
