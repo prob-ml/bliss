@@ -20,5 +20,6 @@ trials_result/
 .env
 jupyter/
 output/
+outputs/
 bin/
 .pytest_cache/
