@@ -370,10 +370,9 @@ class SleepPhase(pl.LightningModule):
         }
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, kind="validation"):
+    def make_plots(self, batch, kind="validation", n_samples=10):
         # add some images to tensorboard for validating location/counts.
         # 'batch' is a batch from simulated dataset (all params are tiled)
-        n_samples = 10
 
         if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
             return
@@ -444,6 +443,7 @@ class SleepPhase(pl.LightningModule):
                 prob_galaxy=prob_galaxy if self.annotate_probs else None,
                 markers=("x", "+"),
                 colors=("r", "b"),
+                labels=("true galaxy", "pred. galaxy") if i == 0 else None,
             )
 
             # then stars
@@ -456,7 +456,11 @@ class SleepPhase(pl.LightningModule):
                 prob_galaxy=prob_galaxy if self.annotate_probs else None,
                 markers=("x", "+"),
                 colors=("orange", "deepskyblue"),
+                labels=("true star", "pred. star") if i == 0 else None,
             )
+
+            if i == 0:
+                ax.legend(loc="best", prop={"size": 12})
 
         fig.tight_layout()
         if self.logger:
