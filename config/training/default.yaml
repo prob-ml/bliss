@@ -1,6 +1,9 @@
 deterministic: False
 plotting: True
 n_epochs: 121
+experiment: default
+version: null
+save_top_k: 1
 trainer:
   profiler: null
   logger: True

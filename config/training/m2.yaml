@@ -2,6 +2,9 @@ deterministic: False
 seed: 42
 plotting: False
 n_epochs: 400
+experiment: default
+version: null
+save_top_k: 1
 trainer:
   profiler: null
   logger: False
