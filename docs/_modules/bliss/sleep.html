@@ -312,7 +312,7 @@
         <span class="c1"># plotting</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">annotate_probs</span> <span class="o">=</span> <span class="n">annotate_probs</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">):</span><span class="c1"># pylint: disable=empty-docstring</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
         <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">)</span>
 
@@ -436,14 +436,16 @@
             <span class="n">galaxy_bool_loss</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="c1"># pylint: disable=empty-docstring</span>
+    <span class="k">def</span> <span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
         <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;optimizer_params&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Need to specify &#39;optimizer_params&#39;.&quot;</span>
         <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;optimizer_params&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;optimizer_params&quot;</span><span class="p">][</span><span class="s2">&quot;kwargs&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">get_optimizer</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">optimizer_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
+    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">optimizer_idx</span><span class="o">=</span><span class="mi">0</span>
+    <span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
         <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
         <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;train/loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span>
@@ -475,7 +477,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;val/avg_ppv&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;avg_ppv&quot;</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">batch</span>
 
-    <span class="k">def</span> <span class="nf">validation_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span> <span class="c1">#pylint: disable=empty-docstring</span>
+    <span class="k">def</span> <span class="nf">validation_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
         <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_epoch</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_make_plots</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;validation&quot;</span><span class="p">)</span>
@@ -492,7 +494,7 @@
 
         <span class="k">return</span> <span class="n">batch</span>
 
-    <span class="k">def</span> <span class="nf">test_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span> <span class="c1">#disable=empty-docstring</span>
+    <span class="k">def</span> <span class="nf">test_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
         <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_make_plots</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;testing&quot;</span><span class="p">)</span>
 

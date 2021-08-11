@@ -43,8 +43,8 @@ class WakeNet(pl.LightningModule):
         # get n_bands
         self.n_bands = self.image_decoder.n_bands
 
-    def forward(self, obs_img):
-
+    def forward(self, obs_img):  # pylint: disable=empty-docstring
+        """"""
         with torch.no_grad():
             self.star_encoder.eval()
             sample = self.star_encoder.sample_encoder(obs_img, self.n_samples)
@@ -66,20 +66,20 @@ class WakeNet(pl.LightningModule):
     # Data
     # ----------------
 
-    def train_dataloader(self):
-        """ Pytorch Lightning method """
+    def train_dataloader(self):  # pylint: disable=empty-docstring
+        """"""
         return DataLoader(self.observed_img, batch_size=None)
 
-    def val_dataloader(self):
-        """ Pytorch Lightning method """
+    def val_dataloader(self):  # pylint: disable=empty-docstring
+        """"""
         return DataLoader(self.observed_img, batch_size=None)
 
     # ---------------
     # Optimizer
     # ----------------
 
-    def configure_optimizers(self):
-        """ Pytorch Lightning method """
+    def configure_optimizers(self):  # pylint: disable=empty-docstring
+        """"""
         return optim.Adam([{"params": self.image_decoder.parameters(), "lr": self.lr}])
 
     # ---------------
@@ -96,13 +96,13 @@ class WakeNet(pl.LightningModule):
         err = error[:, :, image_indx_start:image_indx_end, image_indx_start:image_indx_end]
         return err.sum((1, 2, 3)).mean()
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
-        """ Pytorch Lightning method """
+    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+        """"""
         loss = self._get_loss(batch)
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
-        """ Pytorch Lightning method """
+    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+        """"""
         loss = self._get_loss(batch)
         self.log("validation_loss", loss)
