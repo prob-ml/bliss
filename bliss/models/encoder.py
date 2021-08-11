@@ -73,23 +73,16 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # NOTE: assume that each param in each tile is already pushed to the front.
 
     # check slen, wlen
-    if wlen is None:
-        wlen = slen
+    wlen = slen if wlen is None else wlen
     assert isinstance(slen, int) and isinstance(wlen, int)
 
     # check dictionary of tile_params is consistent and has no extraneous keys.
     required = {"n_sources", "locs"}
-    optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes", "prob_galaxy"}
-
+    optional = {"galaxy_bool", "star_bool", "galaxy_params", "fluxes", "log_fluxes", "prob_galaxy"}
     assert required.issubset(tile_params.keys())
-    max_detections = tile_params["tile_locs"].shape[2]
 
-    # otherwise prob_n_sources makes no sense globally
-    if max_detections == 1:
-        optional.add("prob_n_sources")
-
-    for param_name in tile_params:
-        assert param_name in required or param_name in optional
+    for pname in tile_params:
+        assert pname in required or pname in optional or pname == "prob_n_sources"
 
     # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
     tile_n_sources = tile_params["n_sources"]
@@ -98,6 +91,10 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
     max_detections = tile_locs.shape[2]
+
+    # otherwise prob_n_sources makes no sense globally
+    if max_detections == 1:
+        optional.add("prob_n_sources")
 
     # calculate tile_slen
     tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
@@ -533,6 +530,7 @@ class ImageEncoder(nn.Module):
         tile_estimate = {
             "locs": tile_locs,
             "galaxy_bool": tile_galaxy_bool,
+            "star_bool": tile_star_bool,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
             "prob_galaxy": pred["prob_galaxy"],
