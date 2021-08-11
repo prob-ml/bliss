@@ -175,11 +175,25 @@ def _identity_func(x):
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, dropout, downsample=False):
+    """A Convolution Layer
+
+    This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
+    in the middle, and an option to downsample with a stride of 2.
+    """
+
+    def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
+        """
+
+        Args:
+            in_channel: Number of input channels
+            out_channel: Number of output channels
+            dropout: Dropbout proportion in [0, 1]
+            downsample (optional): Whether to downsample with stride of 2. Defaults to False.
+        """
         super().__init__()
         self.downsample = downsample
         stride = 1
-        if downsample:
+        if self.downsample:
             stride = 2
             self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
             self.sc_bn = nn.BatchNorm2d(out_channel)
@@ -189,7 +203,8 @@ class ConvBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channel)
 
-    def forward(self, x):
+    def forward(self, x):  # pylint: disable=empty-docstring
+        """"""
         identity = x
 
         x = self.conv1(x)
@@ -212,7 +227,8 @@ class EncoderCNN(nn.Module):
         super().__init__()
         self.layer = self._make_layer(n_bands, channel, dropout)
 
-    def forward(self, x):
+    def forward(self, x):  # pylint: disable=empty-docstring
+        """"""
         return self.layer(x)
 
     def _make_layer(self, n_bands, channel, dropout):
@@ -451,7 +467,8 @@ class ImageEncoder(nn.Module):
 
         return var_params
 
-    def forward(self, image_ptiles, tile_n_sources):
+    def forward(self, image_ptiles, tile_n_sources):  # pylint: disable=empty-docstring
+        """"""
         # images shape = (n_ptiles x n_bands x pslen x pslen)
         # tile_n_sources shape = (n_ptiles)
         assert len(tile_n_sources.shape) == 1

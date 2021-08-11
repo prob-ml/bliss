@@ -328,11 +328,24 @@
 
 
 <div class="viewcode-block" id="ConvBlock"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ConvBlock">[docs]</a><span class="k">class</span> <span class="nc">ConvBlock</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">in_channel</span><span class="p">,</span> <span class="n">out_channel</span><span class="p">,</span> <span class="n">dropout</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A Convolution Layer</span>
+
+<span class="sd">    This module is two stacks of Conv2D -&gt; ReLU -&gt; BatchNorm, with dropout</span>
+<span class="sd">    in the middle, and an option to downsample with a stride of 2.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">in_channel</span> <span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">out_channel</span> <span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">dropout</span> <span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">downsample</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            in_channel: Number of input channels</span>
+<span class="sd">            out_channel: Number of output channels</span>
+<span class="sd">            dropout: Dropbout proportion in [0, 1]</span>
+<span class="sd">            downsample (optional): Whether to downsample with stride of 2. Defaults to False.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">downsample</span> <span class="o">=</span> <span class="n">downsample</span>
         <span class="n">stride</span> <span class="o">=</span> <span class="mi">1</span>
-        <span class="k">if</span> <span class="n">downsample</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">downsample</span><span class="p">:</span>
             <span class="n">stride</span> <span class="o">=</span> <span class="mi">2</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">sc_conv</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">in_channel</span><span class="p">,</span> <span class="n">out_channel</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">sc_bn</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm2d</span><span class="p">(</span><span class="n">out_channel</span><span class="p">)</span>
