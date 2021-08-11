@@ -77,25 +77,27 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
         wlen = slen
     assert isinstance(slen, int) and isinstance(wlen, int)
 
-    # dictionary of tile_params is consistent and no extraneous keys.
+    # check dictionary of tile_params is consistent and has no extraneous keys.
     required = {"n_sources", "locs"}
     optional = {"galaxy_bool", "galaxy_params", "fluxes", "log_fluxes", "prob_galaxy"}
+
     assert required.issubset(tile_params.keys())
-    for param_name in tile_params:
-        assert param_name in required or param_name in optional or param_name == "prob_n_sources"
-
-    tile_n_sources = tile_params["n_sources"]
-    tile_locs = tile_params["locs"]
-
-    # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
-    assert len(tile_locs.shape) == 4
-    n_samples = tile_locs.shape[0]
-    n_tiles_per_image = tile_locs.shape[1]
-    max_detections = tile_locs.shape[2]
+    max_detections = tile_params["tile_locs"].shape[2]
 
     # otherwise prob_n_sources makes no sense globally
     if max_detections == 1:
         optional.add("prob_n_sources")
+
+    for param_name in tile_params:
+        assert param_name in required or param_name in optional
+
+    # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
+    tile_n_sources = tile_params["n_sources"]
+    tile_locs = tile_params["locs"]
+    assert len(tile_locs.shape) == 4
+    n_samples = tile_locs.shape[0]
+    n_tiles_per_image = tile_locs.shape[1]
+    max_detections = tile_locs.shape[2]
 
     # calculate tile_slen
     tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
@@ -143,6 +145,7 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
             )
             param = param[:, 0:max_sources]
             params[param_name] = param
+
     return params
 
 
