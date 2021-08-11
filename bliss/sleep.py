@@ -159,7 +159,7 @@ class SleepPhase(pl.LightningModule):
         # plotting
         self.annotate_probs = annotate_probs
 
-    def forward(self, image_ptiles, tile_n_sources):
+    def forward(self, image_ptiles, tile_n_sources):# pylint: disable=empty-docstring
         """"""
         return self.image_encoder(image_ptiles, tile_n_sources)
 
@@ -341,7 +341,6 @@ class SleepPhase(pl.LightningModule):
 
     def test_epoch_end(self, outputs):
         """ Pytorch Lightning method """
-        batch = outputs[-1]
         self._make_plots(outputs[-1], kind="testing")
 
     def _get_metrics(self, batch):
