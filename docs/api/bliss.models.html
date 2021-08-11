@@ -291,59 +291,27 @@ Or multiple galaxies in the case of galaxies.</p></li>
 <dd><p>A Convolution Layer</p>
 <p>This module is two stacks of Conv2D -&gt; ReLU -&gt; BatchNorm, with dropout
 in the middle, and an option to downsample with a stride of 2.</p>
-<dl class="py method">
-<dt id="bliss.models.encoder.ConvBlock.forward">
-<code class="sig-name descname"><span class="pre">forward</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#ConvBlock.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.encoder.ConvBlock.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div>
-</dd></dl>
-
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>in_channel</strong> – Number of input channels</p></li>
+<li><p><strong>out_channel</strong> – Number of output channels</p></li>
+<li><p><strong>dropout</strong> – Dropout proportion between [0, 1]</p></li>
+<li><p><strong>downsample</strong> (<em>optional</em>) – Whether to downsample with stride of 2.</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py class">
 <dt id="bliss.models.encoder.EncoderCNN">
 <em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">bliss.models.encoder.</span></code><code class="sig-name descname"><span class="pre">EncoderCNN</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_bands</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#EncoderCNN"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.encoder.EncoderCNN" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="py method">
-<dt id="bliss.models.encoder.EncoderCNN.forward">
-<code class="sig-name descname"><span class="pre">forward</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#EncoderCNN.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.encoder.EncoderCNN.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div>
-</dd></dl>
-
-</dd></dl>
+<dd></dd></dl>
 
 <dl class="py class">
 <dt id="bliss.models.encoder.ImageEncoder">
 <em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">bliss.models.encoder.</span></code><code class="sig-name descname"><span class="pre">ImageEncoder</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_detections</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_bands</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_slen</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ptile_slen</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_dropout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dropout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#ImageEncoder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.encoder.ImageEncoder" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="py method">
-<dt id="bliss.models.encoder.ImageEncoder.forward">
-<code class="sig-name descname"><span class="pre">forward</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_ptiles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_n_sources</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#ImageEncoder.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.encoder.ImageEncoder.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div>
-</dd></dl>
-
-<dl class="py method">
 <dt id="bliss.models.encoder.ImageEncoder.get_images_in_tiles">
 <code class="sig-name descname"><span class="pre">get_images_in_tiles</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">images</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#ImageEncoder.get_images_in_tiles"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.encoder.ImageEncoder.get_images_in_tiles" title="Permalink to this definition">¶</a></dt>
 <dd><p>Divide a batch of full images into padded tiles similar to nn.conv2d

@@ -179,17 +179,16 @@ class ConvBlock(nn.Module):
 
     This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
     in the middle, and an option to downsample with a stride of 2.
+
+    Parameters:
+        in_channel: Number of input channels
+        out_channel: Number of output channels
+        dropout: Dropout proportion between [0, 1]
+        downsample (optional): Whether to downsample with stride of 2.
     """
 
     def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
-        """
-
-        Args:
-            in_channel: Number of input channels
-            out_channel: Number of output channels
-            dropout: Dropbout proportion in [0, 1]
-            downsample (optional): Whether to downsample with stride of 2. Defaults to False.
-        """
+        """Initializes the module layers"""
         super().__init__()
         self.downsample = downsample
         stride = 1
