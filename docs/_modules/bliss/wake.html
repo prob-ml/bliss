@@ -220,9 +220,11 @@
     <span class="c1"># ----------------</span>
 
 <div class="viewcode-block" id="WakeNet.train_dataloader"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.train_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">train_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Pytorch Lightning method &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observed_img</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="WakeNet.val_dataloader"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.val_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">val_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Pytorch Lightning method &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observed_img</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></div>
 
     <span class="c1"># ---------------</span>
@@ -230,13 +232,14 @@
     <span class="c1"># ----------------</span>
 
 <div class="viewcode-block" id="WakeNet.configure_optimizers"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.configure_optimizers">[docs]</a>    <span class="k">def</span> <span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Pytorch Lightning method &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">([{</span><span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">lr</span><span class="p">}])</span></div>
 
     <span class="c1"># ---------------</span>
     <span class="c1"># Training</span>
     <span class="c1"># ----------------</span>
 
-    <span class="k">def</span> <span class="nf">get_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_get_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
         <span class="n">img</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="n">recon_mean</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
         <span class="n">error</span> <span class="o">=</span> <span class="o">-</span><span class="n">Normal</span><span class="p">(</span><span class="n">recon_mean</span><span class="p">,</span> <span class="n">recon_mean</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
@@ -247,12 +250,14 @@
         <span class="k">return</span> <span class="n">err</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
 
 <div class="viewcode-block" id="WakeNet.training_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.training_step">[docs]</a>    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument</span>
-        <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="sd">&quot;&quot;&quot; Pytorch Lightning method &quot;&quot;&quot;</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;train_loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">loss</span></div>
 
 <div class="viewcode-block" id="WakeNet.validation_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.validation_step">[docs]</a>    <span class="k">def</span> <span class="nf">validation_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument</span>
-        <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="sd">&quot;&quot;&quot; Pytorch Lightning method &quot;&quot;&quot;</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;validation_loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span></div></div>
 </pre></div>
 

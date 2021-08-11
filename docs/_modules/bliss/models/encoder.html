@@ -226,21 +226,20 @@
     <span class="c1"># NOTE: assume that each param in each tile is already pushed to the front.</span>
 
     <span class="c1"># check slen, wlen</span>
-    <span class="k">if</span> <span class="n">wlen</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">wlen</span> <span class="o">=</span> <span class="n">slen</span>
+    <span class="n">wlen</span> <span class="o">=</span> <span class="n">slen</span> <span class="k">if</span> <span class="n">wlen</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">wlen</span>
     <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">slen</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wlen</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
 
-    <span class="c1"># dictionary of tile_params is consistent and no extraneous keys.</span>
+    <span class="c1"># check dictionary of tile_params is consistent and has no extraneous keys.</span>
     <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;n_sources&quot;</span><span class="p">,</span> <span class="s2">&quot;locs&quot;</span><span class="p">}</span>
-    <span class="n">optional</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;galaxy_bool&quot;</span><span class="p">,</span> <span class="s2">&quot;galaxy_params&quot;</span><span class="p">,</span> <span class="s2">&quot;fluxes&quot;</span><span class="p">,</span> <span class="s2">&quot;log_fluxes&quot;</span><span class="p">,</span> <span class="s2">&quot;prob_galaxy&quot;</span><span class="p">}</span>
+    <span class="n">optional</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;galaxy_bool&quot;</span><span class="p">,</span> <span class="s2">&quot;star_bool&quot;</span><span class="p">,</span> <span class="s2">&quot;galaxy_params&quot;</span><span class="p">,</span> <span class="s2">&quot;fluxes&quot;</span><span class="p">,</span> <span class="s2">&quot;log_fluxes&quot;</span><span class="p">,</span> <span class="s2">&quot;prob_galaxy&quot;</span><span class="p">}</span>
     <span class="k">assert</span> <span class="n">required</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="n">tile_params</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-    <span class="k">for</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">tile_params</span><span class="p">:</span>
-        <span class="k">assert</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">required</span> <span class="ow">or</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">optional</span> <span class="ow">or</span> <span class="n">param_name</span> <span class="o">==</span> <span class="s2">&quot;prob_n_sources&quot;</span>
 
-    <span class="n">tile_n_sources</span> <span class="o">=</span> <span class="n">tile_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span>
-    <span class="n">tile_locs</span> <span class="o">=</span> <span class="n">tile_params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">pname</span> <span class="ow">in</span> <span class="n">tile_params</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">pname</span> <span class="ow">in</span> <span class="n">required</span> <span class="ow">or</span> <span class="n">pname</span> <span class="ow">in</span> <span class="n">optional</span> <span class="ow">or</span> <span class="n">pname</span> <span class="o">==</span> <span class="s2">&quot;prob_n_sources&quot;</span>
 
     <span class="c1"># tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)</span>
+    <span class="n">tile_n_sources</span> <span class="o">=</span> <span class="n">tile_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span>
+    <span class="n">tile_locs</span> <span class="o">=</span> <span class="n">tile_params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tile_locs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
     <span class="n">n_samples</span> <span class="o">=</span> <span class="n">tile_locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="n">tile_locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
@@ -296,6 +295,10 @@
             <span class="p">)</span>
             <span class="n">param</span> <span class="o">=</span> <span class="n">param</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="n">max_sources</span><span class="p">]</span>
             <span class="n">params</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">param</span>
+
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+    <span class="k">assert</span> <span class="n">params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
     <span class="k">return</span> <span class="n">params</span>
 
 
@@ -683,6 +686,7 @@
         <span class="n">tile_estimate</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;locs&quot;</span><span class="p">:</span> <span class="n">tile_locs</span><span class="p">,</span>
             <span class="s2">&quot;galaxy_bool&quot;</span><span class="p">:</span> <span class="n">tile_galaxy_bool</span><span class="p">,</span>
+            <span class="s2">&quot;star_bool&quot;</span><span class="p">:</span> <span class="n">tile_star_bool</span><span class="p">,</span>
             <span class="s2">&quot;log_fluxes&quot;</span><span class="p">:</span> <span class="n">tile_log_fluxes</span><span class="p">,</span>
             <span class="s2">&quot;fluxes&quot;</span><span class="p">:</span> <span class="n">tile_fluxes</span><span class="p">,</span>
             <span class="s2">&quot;prob_galaxy&quot;</span><span class="p">:</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;prob_galaxy&quot;</span><span class="p">],</span>
