@@ -334,8 +334,7 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def test_epoch_end(self, outputs):
-        batch = outputs[-1]
-        self.make_plots(batch, kind="testing")
+        self.make_plots(outputs[-1], kind="testing")
 
     def get_metrics(self, batch):
         # get images and properties
@@ -443,7 +442,6 @@ class SleepPhase(pl.LightningModule):
                 prob_galaxy=prob_galaxy if self.annotate_probs else None,
                 markers=("x", "+"),
                 colors=("r", "b"),
-                labels=("true galaxy", "pred. galaxy") if i == 0 else (None, None),
             )
 
             # then stars
@@ -456,11 +454,21 @@ class SleepPhase(pl.LightningModule):
                 prob_galaxy=prob_galaxy if self.annotate_probs else None,
                 markers=("x", "+"),
                 colors=("orange", "deepskyblue"),
-                labels=("true star", "pred. star") if i == 0 else (None, None),
             )
 
+            # add legend to the first axis.
             if i == 0:
-                ax.legend(loc="best", prop={"size": 12})
+                ax.scatter(0, 0, color="r", s=25, marker="x", label="true galaxy")
+                ax.scatter(0, 0, color="b", s=35, marker="+", label="pred. galaxy")
+                ax.scatter(0, 0, color="orange", s=25, marker="x", label="true star")
+                ax.scatter(0, 0, color="deepskyblue", s=35, marker="+", label="pred. star")
+                ax.legend(
+                    bbox_to_anchor=(0.0, 1.1, 1.0, 0.102),
+                    loc="lower left",
+                    ncol=2,
+                    mode="expand",
+                    borderaxespad=0.0,
+                )
 
         fig.tight_layout()
         if self.logger:
