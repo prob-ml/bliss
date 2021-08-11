@@ -5,11 +5,11 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 
-from bliss import plotting
 from bliss.models.decoder import ImageDecoder, get_mgrid
-from bliss.models.encoder import get_images_in_tiles
+from bliss.models.encoder import get_full_params, get_images_in_tiles
 from bliss.models.galaxy_net import CenteredGalaxyEncoder
 from bliss.optimizer import get_optimizer
+from bliss.plotting import plot_image, plot_image_and_locs
 
 
 class GalaxyEncoder(pl.LightningModule):
@@ -160,6 +160,7 @@ class GalaxyEncoder(pl.LightningModule):
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
         images = batch["images"]
+        slen = int(batch["slen"].unique().item())
         tile_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # obtain map estimates
@@ -167,8 +168,10 @@ class GalaxyEncoder(pl.LightningModule):
         tile_est = {
             k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
         }
+        est = get_full_params(tile_est, slen)
 
         # draw all reconstruction images.
+        # render_images automatically accounts for tiles with no galaxies.
         recon_images, _ = self.image_decoder.render_images(
             tile_est["n_sources"],
             tile_est["locs"],
@@ -195,45 +198,24 @@ class GalaxyEncoder(pl.LightningModule):
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
 
-            # add titles to axes
+            # add titles to axes in the first row
             if i == 0:
                 true_ax.set_title("Truth", size=18)
                 recon_ax.set_title("Reconstruction", size=18)
                 res_ax.set_title("Residual", size=18)
 
-            image = images[idx, 0].cpu().numpy()
-            recon = recon_images[idx, 0].cpu().numpy()
-            res = residuals[idx, 0].cpu().numpy()
-
             # vmin, vmax should be shared between reconstruction and true images.
-            vmax = np.ceil(max(image.max(), recon.max()))
-            vmin = np.floor(min(image.min(), recon.min()))
+            vmax = np.ceil(max(images[idx].max(), recon_images[idx].max()))
+            vmin = np.floor(min(images[idx].min(), recon_images[idx].min()))
+            vrange = (vmin, vmax)
 
-            # plot these images too.
-            plotting.plot_image(fig, true_ax, image, vmin=vmin, vmax=vmax)
-            plotting.plot_image(fig, recon_ax, recon, vmin=vmin, vmax=vmax)
-            plotting.plot_image(fig, res_ax, res, vmin=res_vmin, vmax=res_vmax)
-
-            # add legend to the first axis.
-            if i == 0:
-                true_ax.scatter(0, 0, color="r", s=25, marker="x", label="true galaxy")
-                true_ax.scatter(0, 0, color="orange", s=25, marker="x", label="true star")
-                recon_ax.scatter(0, 0, color="b", s=25, marker="x", label="pred. galaxy")
-                recon_ax.scatter(0, 0, color="orange", s=25, marker="x", label="true star")
-                true_ax.legend(
-                    bbox_to_anchor=(0.0, 1.1, 1.0, 0.102),
-                    loc="lower left",
-                    ncol=2,
-                    mode="expand",
-                    borderaxespad=0.0,
-                )
-                recon_ax.legend(
-                    bbox_to_anchor=(0.0, 1.1, 1.0, 0.102),
-                    loc="lower left",
-                    ncol=2,
-                    mode="expand",
-                    borderaxespad=0.0,
-                )
+            # plot!
+            labels = None if i > 0 else ("true galaxy", None, "true star", None)
+            plot_image_and_locs(idx, fig, true_ax, images, slen, est, labels=labels, vrange=vrange)
+            plot_image_and_locs(
+                idx, fig, recon_ax, recon_images, slen, est, labels=labels, vrange=vrange
+            )
+            plot_image(fig, res_ax, residuals[idx, 0].cpu().numpy(), vrange=(res_vmin, res_vmax))
 
         fig.tight_layout()
         if self.logger:
