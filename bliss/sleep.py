@@ -16,11 +16,11 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 
-from bliss import plotting
 from bliss.metrics import eval_error_on_batch
 from bliss.models import decoder, encoder
-from bliss.models.encoder import get_full_params, get_star_bool
+from bliss.models.encoder import get_full_params
 from bliss.optimizer import get_optimizer
+from bliss.plotting import plot_image_and_locs
 
 plt.switch_backend("Agg")
 
@@ -168,7 +168,7 @@ class SleepPhase(pl.LightningModule):
         tile_est = self.image_encoder.tile_map_estimate(images)
         tile_est["galaxy_params"] = batch["galaxy_params"]
 
-        # FIXME: True galaxy params are not necessarily consistent with MAP estimates
+        # FIXME: True galaxy params are not necessarily consistent with other MAP estimates
         # need to do some matching to ensure correctness of residual images?
         # maybe doesn't matter because only care about detection if not estimating
         # galaxy_parameters.
@@ -324,7 +324,7 @@ class SleepPhase(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         """ Pytorch Lightning method """
-        if self.current_epoch > 1:
+        if self.current_epoch > 0:
             self._make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
@@ -342,7 +342,7 @@ class SleepPhase(pl.LightningModule):
     def test_epoch_end(self, outputs):
         """ Pytorch Lightning method """
         batch = outputs[-1]
-        self._make_plots(batch, kind="testing")
+        self._make_plots(outputs[-1], kind="testing")
 
     def _get_metrics(self, batch):
         # get images and properties
@@ -377,101 +377,53 @@ class SleepPhase(pl.LightningModule):
         }
 
     # pylint: disable=too-many-statements
-    def _make_plots(self, batch, kind="validation"):
+    def _make_plots(self, batch, kind="validation", n_samples=16):
         # add some images to tensorboard for validating location/counts.
         # 'batch' is a batch from simulated dataset (all params are tiled)
-        n_samples = 10
 
+        assert n_samples ** (0.5) % 1 == 0
         if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
             return
 
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
-        images = batch["images"]
         slen = int(batch["slen"].unique().item())
-        border_padding = int((images.shape[-1] - slen) / 2)
         true_params_dict = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params(true_params_dict, slen)
 
         # obtain map estimates
         tile_estimate = self.tile_map_estimate(batch)
         estimate = get_full_params(tile_estimate, slen)
-        assert len(estimate["locs"].shape) == 3
-        assert estimate["locs"].shape[1] == estimate["n_sources"].max().int().item()
-        figsize = (20, 8)
-        fig, axes = plt.subplots(nrows=2, ncols=5, figsize=figsize)
+
+        # setup figure and axes.
+        figsize = (12, 12)
+        nrows = int(n_samples ** 0.5)
+        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
         axes = axes.flatten()
+        labels = ("t. gal", "p. gal", "t. star", "p. star")
 
         for i in range(n_samples):
-
-            ax = axes[i]
-
-            image = images[i, 0].cpu().numpy()
-
-            # true parameters on full image.
-            true_n_sources = true_params["n_sources"][None, i]
-            true_locs = true_params["locs"][None, i]
-            true_galaxy_bool = true_params["galaxy_bool"][None, i]
-
-            # convert tile estimates to full parameterization for plotting
-            n_sources = estimate["n_sources"][None, i]
-            locs = estimate["locs"][None, i]
-            galaxy_bool = estimate["galaxy_bool"][None, i]
-            prob_galaxy = estimate["prob_galaxy"][None, i]
-
-            # round up true and estimated parameters.
-            true_star_bool = get_star_bool(true_n_sources, true_galaxy_bool)
-            true_galaxy_locs = true_locs * true_galaxy_bool
-            true_star_locs = true_locs * true_star_bool
-
-            star_bool = get_star_bool(n_sources, galaxy_bool)
-            galaxy_locs = locs * galaxy_bool
-            star_locs = locs * star_bool
-
-            # convert everything to numpy + cpu so matplotlib can use it.
-            true_galaxy_locs = true_galaxy_locs.cpu().numpy()[0]
-            true_star_locs = true_star_locs.cpu().numpy()[0]
-            galaxy_locs = galaxy_locs.cpu().numpy()[0]
-            star_locs = star_locs.cpu().numpy()[0]
-            prob_galaxy = prob_galaxy.cpu().numpy()[0].reshape(-1)
-
-            # x-axis comparing true objects and estimated objects.
-            ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
-
-            # plot these images too.
-            plotting.plot_image(fig, ax, image, vmin=image.min().item(), vmax=image.max().item())
-
-            # galaxies first
-            plotting.plot_image_locs(
-                ax,
+            plot_image_and_locs(
+                i,
+                fig,
+                axes[i],
+                batch["images"],
                 slen,
-                border_padding,
-                true_locs=true_galaxy_locs,
-                est_locs=galaxy_locs,
-                prob_galaxy=prob_galaxy if self.annotate_probs else None,
-                markers=("x", "+"),
-                colors=("r", "b"),
-            )
-
-            # then stars
-            plotting.plot_image_locs(
-                ax,
-                slen,
-                border_padding,
-                true_locs=true_star_locs,
-                est_locs=star_locs,
-                prob_galaxy=prob_galaxy if self.annotate_probs else None,
-                markers=("x", "+"),
-                colors=("orange", "deepskyblue"),
+                true_params,
+                estimate=estimate,
+                labels=None if i > 0 else labels,
+                annotate_axis=True,
+                annotate_probs=self.annotate_probs,
+                add_borders=True,
             )
 
         fig.tight_layout()
         if self.logger:
             if kind == "validation":
-                title = f"Val Images {self.current_epoch}"
+                title = f"Epoch:{self.current_epoch}/Validation Images"
                 self.logger.experiment.add_figure(title, fig)
             elif kind == "testing":
-                self.logger.experiment.add_figure("(Worst) Test Images", fig)
+                self.logger.experiment.add_figure("Test Images", fig)
             else:
                 raise NotImplementedError()
         plt.close(fig)
