@@ -157,6 +157,7 @@ class ImageDecoder(pl.LightningModule):
             "n_sources": n_sources,
             "locs": locs,
             "galaxy_bool": galaxy_bool,
+            "star_bool": star_bool,
             "galaxy_params": galaxy_params,
             "fluxes": fluxes,
             "log_fluxes": log_fluxes,

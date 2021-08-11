@@ -2,10 +2,13 @@ deterministic: True
 seed: 42
 plotting: False
 n_epochs: 100
+experiment: default
+version: null
+save_top_k: 1
 trainer:
-  profiler: null
   logger: False
   checkpoint_callback: False
+  profiler: null
   reload_dataloaders_every_epoch: False
   max_epochs: ${training.n_epochs}
   min_epochs: ${training.n_epochs}
