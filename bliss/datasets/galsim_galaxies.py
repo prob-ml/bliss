@@ -196,6 +196,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         min_a_b=0.8,
         max_a_b=3.6,
         psf_points=(450, 550),  # points in the SDSS frame.
+        flux_sample="uniform",
     ):
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
@@ -219,6 +220,8 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
         self.min_flux = min_flux
         self.max_flux = max_flux
+        self.alpha = 0.5
+
         self.min_a_d = min_a_d
         self.max_a_d = max_a_d
         self.min_a_b = min_a_b
@@ -235,15 +238,30 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         psf_image = galsim.Image(psf, scale=self.pixel_scale)
         self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
-    def _uniform(self, a, b):
+        self.flux_sample = flux_sample
+
+    @staticmethod
+    def _uniform(a, b):
         # uses pytorch to return a single float ~ U(a, b)
         u = (a - b) * torch.rand(1) + b
         return u.item()
 
+    def _draw_pareto_flux(self):
+        # draw pareto conditioned on being less than f_max
+        u_max = 1 - (self.min_flux / self.max_flux) ** self.alpha
+        uniform_samples = torch.rand(1) * u_max
+        return self.min_flux / (1.0 - uniform_samples) ** (1 / self.alpha)
+
     def __getitem__(self, idx):
 
         # create galaxy as mixture of Exponential + DeVacauleurs
-        total_flux = self._uniform(self.min_flux, self.max_flux)
+        if self.flux_sample == "uniform":
+            total_flux = self._uniform(self.min_flux, self.max_flux)
+        if self.flux_sample == "pareto":
+            total_flux = self._draw_pareto_flux()
+        else:
+            raise NotImplementedError()
+
         disk_frac = self._uniform(0, 1)
         bulge_frac = 1 - disk_frac
 
