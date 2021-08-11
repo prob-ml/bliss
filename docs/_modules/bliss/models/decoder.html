@@ -661,8 +661,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;cached_grid&quot;</span><span class="p">,</span> <span class="n">get_mgrid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span><span class="p">),</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;swap&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Tiler.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.Tiler.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_one_source</span><span class="p">(</span><span class="n">locs</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span></div>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>  <span class="c1">#pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_one_source</span><span class="p">(</span><span class="n">locs</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Tiler.render_one_source"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.Tiler.render_one_source">[docs]</a>    <span class="k">def</span> <span class="nf">render_one_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -790,7 +791,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">normalization_constant</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">psf_i</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">normalization_constant</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalization_constant</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
 
-<div class="viewcode-block" id="StarTileDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.StarTileDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">star_bool</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">star_bool</span><span class="p">):</span>  <span class="c1">#pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
         <span class="c1"># locs: is (n_ptiles x max_num_stars x 2)</span>
         <span class="c1"># fluxes: Is (n_ptiles x max_stars x n_bands)</span>
         <span class="c1"># star_bool: Is (n_ptiles x max_stars x 1)</span>
@@ -812,7 +814,7 @@
         <span class="n">sources</span> <span class="o">=</span> <span class="n">expanded_psf</span> <span class="o">*</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">fluxes</span><span class="p">,</span> <span class="s2">&quot;np ms nb -&gt; np ms nb 1 1&quot;</span><span class="p">)</span>
         <span class="n">sources</span> <span class="o">*=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">star_bool</span><span class="p">,</span> <span class="s2">&quot;np ms 1 -&gt; np ms 1 1 1&quot;</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="o">.</span><span class="n">render_tile</span><span class="p">(</span><span class="n">locs</span><span class="p">,</span> <span class="n">sources</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="o">.</span><span class="n">render_tile</span><span class="p">(</span><span class="n">locs</span><span class="p">,</span> <span class="n">sources</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">psf_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">psf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_psf</span><span class="p">()</span>
@@ -907,7 +909,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">n_galaxy_params</span>
 
-<div class="viewcode-block" id="GalaxyTileDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.GalaxyTileDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>  <span class="c1">#pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
         <span class="c1"># max_sources obtained from locs, allows for more flexibility when rendering.</span>
         <span class="n">n_ptiles</span> <span class="o">=</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">max_sources</span> <span class="o">=</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
@@ -929,7 +932,7 @@
             <span class="n">single_vars</span> <span class="o">*</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
         <span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">ptile</span><span class="p">,</span> <span class="n">var_ptile</span></div>
+        <span class="k">return</span> <span class="n">ptile</span><span class="p">,</span> <span class="n">var_ptile</span>
 
     <span class="k">def</span> <span class="nf">_render_single_galaxies</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>
 
