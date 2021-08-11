@@ -67,9 +67,11 @@ class WakeNet(pl.LightningModule):
     # ----------------
 
     def train_dataloader(self):
+        """ Pytorch Lightning method """
         return DataLoader(self.observed_img, batch_size=None)
 
     def val_dataloader(self):
+        """ Pytorch Lightning method """
         return DataLoader(self.observed_img, batch_size=None)
 
     # ---------------
@@ -77,13 +79,14 @@ class WakeNet(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
+        """ Pytorch Lightning method """
         return optim.Adam([{"params": self.image_decoder.parameters(), "lr": self.lr}])
 
     # ---------------
     # Training
     # ----------------
 
-    def get_loss(self, batch):
+    def _get_loss(self, batch):
         img = batch.unsqueeze(0)
         recon_mean = self(img)
         error = -Normal(recon_mean, recon_mean.sqrt()).log_prob(img)
@@ -94,10 +97,12 @@ class WakeNet(pl.LightningModule):
         return err.sum((1, 2, 3)).mean()
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
-        loss = self.get_loss(batch)
+        """ Pytorch Lightning method """
+        loss = self._get_loss(batch)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
-        loss = self.get_loss(batch)
+        """ Pytorch Lightning method """
+        loss = self._get_loss(batch)
         self.log("validation_loss", loss)
