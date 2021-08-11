@@ -155,7 +155,7 @@ class GalaxyEncoder(pl.LightningModule):
     # pylint: disable=too-many-statements
     def make_plots(self, batch, n_samples=25):
         # validate worst reconstruction images.
-        assert n_samples <= len(batch["n_sources"])
+        n_samples = min(len(batch["n_sources"]), n_samples)
 
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
