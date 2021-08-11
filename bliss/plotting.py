@@ -40,7 +40,6 @@ def plot_image_and_locs(
     vrange=None,
 ):
     # collect all necessary parameters to plot
-    assert "star_bool" in true_params and "star_bool" in estimate
     assert images.shape[1] == 1, "Only 1 band supported."
     bpad = int((images.shape[-1] - slen) / 2)
 
@@ -87,12 +86,12 @@ def plot_image_and_locs(
     # then locations for galaxies first
     prob_galaxy = prob_galaxy if annotate_probs else None
     plot_locs(ax, slen, bpad, true_galaxy_locs, "r", "x", s=20, prob_galaxy=None)
-    if galaxy_locs:
-        plot_locs(ax, slen, bpad, true_galaxy_locs, "b", "+", s=30, prob_galaxy=prob_galaxy)
+    if galaxy_locs is not None:
+        plot_locs(ax, slen, bpad, galaxy_locs, "b", "+", s=30, prob_galaxy=prob_galaxy)
 
     # then stars
     plot_locs(ax, slen, bpad, true_star_locs, "c", "x", s=20)
-    if star_locs:
+    if star_locs is not None:
         plot_locs(ax, slen, bpad, star_locs, "m", "+", s=30, prob_galaxy=prob_galaxy)
 
     if labels is not None:
@@ -104,7 +103,7 @@ def plot_image_and_locs(
             if l is not None:
                 ax.scatter(0, 0, color=c, s=s, marker=m, label=l)
         ax.legend(
-            bbox_to_anchor=(0.0, 1.1, 1.0, 0.102),
+            bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
             loc="lower left",
             ncol=2,
             mode="expand",

@@ -319,7 +319,7 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def validation_epoch_end(self, outputs):
-        if self.current_epoch > 1:
+        if self.current_epoch > 0:
             self.make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
@@ -369,10 +369,11 @@ class SleepPhase(pl.LightningModule):
         }
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, kind="validation", n_samples=15):
+    def make_plots(self, batch, kind="validation", n_samples=16):
         # add some images to tensorboard for validating location/counts.
         # 'batch' is a batch from simulated dataset (all params are tiled)
 
+        assert n_samples ** (0.5) % 1 == 0
         if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
             return
 
@@ -387,10 +388,11 @@ class SleepPhase(pl.LightningModule):
         estimate = get_full_params(tile_estimate, slen)
 
         # setup figure and axes.
-        figsize = (21, 7)
-        fig, axes = plt.subplots(nrows=n_samples // 5, ncols=n_samples // 3, figsize=figsize)
+        figsize = (12, 12)
+        nrows = int(n_samples ** 0.5)
+        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
         axes = axes.flatten()
-        labels = ("true galaxy", "pred. galaxy", "true star", "pred. star")
+        labels = ("t. gal", "p. gal", "t. star", "p. star")
 
         for i in range(n_samples):
             plot_image_and_locs(

@@ -148,7 +148,7 @@ class GalaxyEncoder(pl.LightningModule):
         batch = {}
         for b in outputs:
             for k, v in b.items():
-                curr_val = batch.get(k, torch.tensor([]))
+                curr_val = batch.get(k, torch.tensor([], device=v.device))
                 batch[k] = torch.cat([curr_val, v])
         self.make_plots(batch)
 
@@ -186,8 +186,8 @@ class GalaxyEncoder(pl.LightningModule):
         worst_indices = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
 
         # use same vmin, vmax throughout for residuals
-        res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).numpy()
-        res_vmin = torch.floor(residuals[worst_indices].min().cpu()).numpy()
+        res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).item()
+        res_vmin = torch.floor(residuals[worst_indices].min().cpu()).item()
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
@@ -205,12 +205,12 @@ class GalaxyEncoder(pl.LightningModule):
                 res_ax.set_title("Residual", size=18)
 
             # vmin, vmax should be shared between reconstruction and true images.
-            vmax = np.ceil(max(images[idx].max(), recon_images[idx].max()))
-            vmin = np.floor(min(images[idx].min(), recon_images[idx].min()))
+            vmax = np.ceil(max(images[idx].max().item(), recon_images[idx].max().item()))
+            vmin = np.floor(min(images[idx].min().item(), recon_images[idx].min().item()))
             vrange = (vmin, vmax)
 
             # plot!
-            labels = None if i > 0 else ("true galaxy", None, "true star", None)
+            labels = None if i > 0 else ("t. gal", None, "t. star", None)
             plot_image_and_locs(idx, fig, true_ax, images, slen, est, labels=labels, vrange=vrange)
             plot_image_and_locs(
                 idx, fig, recon_ax, recon_images, slen, est, labels=labels, vrange=vrange
