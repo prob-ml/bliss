@@ -292,8 +292,9 @@
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">background_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_bands</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">background_values</span> <span class="o">=</span> <span class="n">background_values</span>
 
-<div class="viewcode-block" id="ImageDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span><span class="o">.</span><span class="n">psf_forward</span><span class="p">()</span></div>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span><span class="o">.</span><span class="n">psf_forward</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">sample_prior</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="n">n_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_n_sources</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>

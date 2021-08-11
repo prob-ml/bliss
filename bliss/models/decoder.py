@@ -139,7 +139,8 @@ class ImageDecoder(pl.LightningModule):
         assert len(background_values) == n_bands
         self.background_values = background_values
 
-    def forward(self):
+    def forward(self):  # pylint: disable=empty-docstring
+        """"""
         return self.star_tile_decoder.psf_forward()
 
     def sample_prior(self, batch_size=1):
