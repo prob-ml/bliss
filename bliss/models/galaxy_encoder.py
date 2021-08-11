@@ -5,11 +5,11 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 
-from bliss import plotting
 from bliss.models.decoder import ImageDecoder, get_mgrid
-from bliss.models.encoder import get_images_in_tiles
+from bliss.models.encoder import get_full_params, get_images_in_tiles
 from bliss.models.galaxy_net import CenteredGalaxyEncoder
 from bliss.optimizer import get_optimizer
+from bliss.plotting import plot_image, plot_image_and_locs
 
 
 class GalaxyEncoder(pl.LightningModule):
@@ -110,8 +110,6 @@ class GalaxyEncoder(pl.LightningModule):
         ptile_background = self.image_decoder.get_background(self.slen)
         centered_ptiles -= ptile_background.unsqueeze(0)
 
-        # TODO: Should we zero out tiles without galaxies during training?
-
         # We can assume there is one galaxy per_tile and encode each tile independently.
         z = self.enc(centered_ptiles)
         assert z.shape[0] == n_ptiles
@@ -146,17 +144,23 @@ class GalaxyEncoder(pl.LightningModule):
         return batch
 
     def validation_epoch_end(self, outputs):
-        if self.current_epoch > 1:
-            self.make_plots(outputs[-1])  # last batch in epoch
+        # put all outputs together into a single batch
+        batch = {}
+        for b in outputs:
+            for k, v in b.items():
+                curr_val = batch.get(k, torch.tensor([], device=v.device))
+                batch[k] = torch.cat([curr_val, v])
+        self.make_plots(batch)
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, n_samples=10):
+    def make_plots(self, batch, n_samples=25):
         # validate worst reconstruction images.
-        assert n_samples <= len(batch["n_sources"])
+        n_samples = min(len(batch["n_sources"]), n_samples)
 
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
         images = batch["images"]
+        slen = int(batch["slen"].unique().item())
         tile_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # obtain map estimates
@@ -164,7 +168,10 @@ class GalaxyEncoder(pl.LightningModule):
         tile_est = {
             k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
         }
+        est = get_full_params(tile_est, slen)
+
         # draw all reconstruction images.
+        # render_images automatically accounts for tiles with no galaxies.
         recon_images, _ = self.image_decoder.render_images(
             tile_est["n_sources"],
             tile_est["locs"],
@@ -175,12 +182,12 @@ class GalaxyEncoder(pl.LightningModule):
         )
         residuals = (images - recon_images) / torch.sqrt(recon_images)
 
-        # draw worst `n_samples` examples as measured by avg. reconstruction error.
-        worst_indices = residuals.mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
+        # draw worst `n_samples` examples as measured by absolute avg. residual error.
+        worst_indices = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
 
         # use same vmin, vmax throughout for residuals
-        res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).numpy()
-        res_vmin = torch.floor(residuals[worst_indices].min().cpu()).numpy()
+        res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).item()
+        res_vmin = torch.floor(residuals[worst_indices].min().cpu()).item()
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
@@ -191,21 +198,26 @@ class GalaxyEncoder(pl.LightningModule):
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
 
-            image = images[idx, 0].cpu().numpy()
-            recon = recon_images[idx, 0].cpu().numpy()
-            res = residuals[idx, 0].cpu().numpy()
+            # add titles to axes in the first row
+            if i == 0:
+                true_ax.set_title("Truth", size=18)
+                recon_ax.set_title("Reconstruction", size=18)
+                res_ax.set_title("Residual", size=18)
 
             # vmin, vmax should be shared between reconstruction and true images.
-            vmax = np.ceil(max(image.max(), recon.max()))
-            vmin = np.floor(min(image.min(), recon.min()))
+            vmax = np.ceil(max(images[idx].max().item(), recon_images[idx].max().item()))
+            vmin = np.floor(min(images[idx].min().item(), recon_images[idx].min().item()))
+            vrange = (vmin, vmax)
 
-            # plot these images too.
-            plotting.plot_image(fig, true_ax, image, vmin=vmin, vmax=vmax)
-            plotting.plot_image(fig, recon_ax, recon, vmin=vmin, vmax=vmax)
-            plotting.plot_image(fig, res_ax, res, vmin=res_vmin, vmax=res_vmax)
+            # plot!
+            labels = None if i > 0 else ("t. gal", None, "t. star", None)
+            plot_image_and_locs(idx, fig, true_ax, images, slen, est, labels=labels, vrange=vrange)
+            plot_image_and_locs(
+                idx, fig, recon_ax, recon_images, slen, est, labels=labels, vrange=vrange
+            )
+            plot_image(fig, res_ax, residuals[idx, 0].cpu().numpy(), vrange=(res_vmin, res_vmax))
 
         fig.tight_layout()
         if self.logger:
-            title = f"(Worst) Val Images {self.current_epoch}"
-            self.logger.experiment.add_figure(title, fig)
+            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Validation Images", fig)
         plt.close(fig)

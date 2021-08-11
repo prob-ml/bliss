@@ -14,7 +14,7 @@ class TestBasicGalaxyMeasure:
             "training": "cpu",
             "training.trainer.check_val_every_n_epoch": 1,
             "training.n_epochs": 3,  # plotting coverage.
-            "dataset.kwargs.batch_size": 10,
+            "dataset.kwargs.batch_size": 3,
         }
 
     def test_simulated(self, devices, overrides, get_config):

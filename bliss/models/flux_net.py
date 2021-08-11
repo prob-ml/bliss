@@ -5,7 +5,7 @@ from torch.distributions import normal
 from torch.nn import functional as F
 
 from bliss.models import decoder
-from bliss.models.encoder import get_images_in_tiles, get_star_bool
+from bliss.models.encoder import get_images_in_tiles
 from bliss.optimizer import get_optimizer
 
 
@@ -186,8 +186,7 @@ class FluxEstimator(pl.LightningModule):
         loglik = norm.log_prob(batch["images"]).view(batchsize, -1).sum(1)
 
         # entropy
-        star_bool = get_star_bool(batch["n_sources"], batch["galaxy_bool"])
-        entropy = torch.log(est_flux_sd) * star_bool
+        entropy = torch.log(est_flux_sd) * batch["star_bool"]
         entropy = entropy.view(batchsize, -1).sum(1)
 
         # negative elbo
