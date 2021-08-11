@@ -45,12 +45,13 @@ def setup_callbacks(cfg):
     callbacks = []
     if cfg.training.trainer.checkpoint_callback:
         checkpoint_callback = ModelCheckpoint(
-            filename="{epoch}-{val/loss:.2f}",
+            filename="epoch={epoch}-val_loss={val/loss:.3f}",
             save_top_k=cfg.training.save_top_k,
             verbose=True,
             monitor="val/loss",
             mode="min",
             save_on_train_epoch_end=False,
+            auto_insert_metric_name=False,
         )
         callbacks.append(checkpoint_callback)
 
