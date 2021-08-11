@@ -2,9 +2,12 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def plot_image(fig, ax, image, vrange=None):
+    vmin = image.min().item() if vrange is None else vrange[0]
+    vmax = image.max().item() if vrange is None else vrange[1]
+
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(image, vmin=vrange[0], vmax=vrange[1])
+    im = ax.matshow(image, vmin=vmin, vmax=vmax)
     fig.colorbar(im, cax=cax, orientation="vertical")
 
 
