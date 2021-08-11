@@ -160,6 +160,7 @@ class SleepPhase(pl.LightningModule):
         self.annotate_probs = annotate_probs
 
     def forward(self, image_ptiles, tile_n_sources):
+        """"""
         return self.image_encoder(image_ptiles, tile_n_sources)
 
     def tile_map_estimate(self, batch):
@@ -283,17 +284,20 @@ class SleepPhase(pl.LightningModule):
         )
 
     def configure_optimizers(self):
+        """ Pytorch Lightning method """
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.image_encoder.parameters(), kwargs)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
+        """ Pytorch Lightning method """
         loss = self.get_loss(batch)[0]
         self.log("train/loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+        """ Pytorch Lightning method """
         (
             detection_loss,
             counter_loss,
@@ -309,7 +313,7 @@ class SleepPhase(pl.LightningModule):
         self.log("val/star_params_loss", star_params_loss.mean())
 
         # calculate metrics for this batch
-        metrics = self.get_metrics(batch)
+        metrics = self._get_metrics(batch)
         self.log("val/acc_counts", metrics["counts_acc"])
         self.log("val/gal_counts", metrics["galaxy_counts_acc"])
         self.log("val/locs_mae", metrics["locs_mae"])
@@ -319,11 +323,13 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def validation_epoch_end(self, outputs):
+        """ Pytorch Lightning method """
         if self.current_epoch > 1:
-            self.make_plots(outputs[-1], kind="validation")
+            self._make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
-        metrics = self.get_metrics(batch)
+        """ Pytorch Lightning method """
+        metrics = self._get_metrics(batch)
         self.log("acc_counts", metrics["counts_acc"])
         self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
         self.log("locs_mae", metrics["locs_mae"])
@@ -334,10 +340,11 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def test_epoch_end(self, outputs):
+        """ Pytorch Lightning method """
         batch = outputs[-1]
-        self.make_plots(batch, kind="testing")
+        self._make_plots(batch, kind="testing")
 
-    def get_metrics(self, batch):
+    def _get_metrics(self, batch):
         # get images and properties
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
@@ -370,7 +377,7 @@ class SleepPhase(pl.LightningModule):
         }
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, kind="validation"):
+    def _make_plots(self, batch, kind="validation"):
         # add some images to tensorboard for validating location/counts.
         # 'batch' is a batch from simulated dataset (all params are tiled)
         n_samples = 10
