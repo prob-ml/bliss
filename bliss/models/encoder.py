@@ -143,6 +143,9 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
             param = param[:, 0:max_sources]
             params[param_name] = param
 
+    assert len(params["locs"].shape) == 3
+    assert params["locs"].shape[1] == params["n_sources"].max().int().item()
+
     return params
 
 
