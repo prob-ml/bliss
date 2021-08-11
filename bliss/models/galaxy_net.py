@@ -195,9 +195,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         assert images.size(0) >= 10
         num_examples = 10
-        num_cols = 3
+        num_cols = 4
 
         residuals = (images - recon_mean) / torch.sqrt(images)
+        losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
+
         residuals_idx = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)
         large_residuals_idx = residuals_idx[: num_examples // 2]
         small_residuals_idx = residuals_idx[-num_examples // 2 :]
@@ -206,9 +208,13 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         images = images[plot_idx]
         recon_mean = recon_mean[plot_idx]
         residuals = residuals[plot_idx]
+        losses = losses[plot_idx]
 
         residual_vmax = torch.ceil(residuals.max().cpu()).numpy()
         residual_vmin = torch.floor(residuals.min().cpu()).numpy()
+
+        losses_vmax = torch.ceil(losses.max().cpu()).numpy()
+        losses_vmin = torch.floor(losses.min().cpu()).numpy()
         plt.ioff()
 
         fig = plt.figure(figsize=(10, 25))
@@ -216,6 +222,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         for i in range(num_examples):
             image = images[i, 0].data.cpu()
             recon = recon_mean[i, 0].data.cpu()
+            loss = losses[i, 0].data.cpu()
 
             vmax = torch.ceil(torch.max(image.max(), recon.max())).cpu().numpy()
             vmin = torch.floor(torch.min(image.min(), recon.min())).cpu().numpy()
@@ -233,15 +240,20 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plt.subplot(num_examples, num_cols, num_cols * i + 3)
             res = residuals[i, 0].data.cpu().numpy()
             if i < num_examples // 2:
-                plt.title(f"residuals (worst), avg abs residual: {abs(res).mean():.4f}")
+                plt.title(f"worst residuals, avg abs residual: {abs(res).mean():.3f}")
             else:
-                plt.title(f"residuals (best), avg abs residual: {abs(res).mean():.4f}")
+                plt.title(f"best residuals, avg abs residual: {abs(res).mean():.3f}")
             plt.imshow(
                 res,
                 interpolation=None,
                 vmin=residual_vmin,
                 vmax=residual_vmax,
             )
+            plt.colorbar()
+
+            plt.subplot(num_examples, num_cols, num_cols * i + 4)
+            plt.title("loss")
+            plt.imshow(loss.numpy(), interpolation=None, vmin=losses_vmin, vmax=losses_vmax)
             plt.colorbar()
 
         plt.tight_layout()
