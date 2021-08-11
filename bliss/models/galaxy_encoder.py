@@ -110,8 +110,6 @@ class GalaxyEncoder(pl.LightningModule):
         ptile_background = self.image_decoder.get_background(self.slen)
         centered_ptiles -= ptile_background.unsqueeze(0)
 
-        # TODO: Should we zero out tiles without galaxies during training?
-
         # We can assume there is one galaxy per_tile and encode each tile independently.
         z = self.enc(centered_ptiles)
         assert z.shape[0] == n_ptiles
@@ -216,7 +214,28 @@ class GalaxyEncoder(pl.LightningModule):
             plotting.plot_image(fig, recon_ax, recon, vmin=vmin, vmax=vmax)
             plotting.plot_image(fig, res_ax, res, vmin=res_vmin, vmax=res_vmax)
 
+            # add legend to the first axis.
+            if i == 0:
+                true_ax.scatter(0, 0, color="r", s=25, marker="x", label="true galaxy")
+                true_ax.scatter(0, 0, color="orange", s=25, marker="x", label="true star")
+                recon_ax.scatter(0, 0, color="b", s=25, marker="x", label="pred. galaxy")
+                recon_ax.scatter(0, 0, color="orange", s=25, marker="x", label="true star")
+                true_ax.legend(
+                    bbox_to_anchor=(0.0, 1.1, 1.0, 0.102),
+                    loc="lower left",
+                    ncol=2,
+                    mode="expand",
+                    borderaxespad=0.0,
+                )
+                recon_ax.legend(
+                    bbox_to_anchor=(0.0, 1.1, 1.0, 0.102),
+                    loc="lower left",
+                    ncol=2,
+                    mode="expand",
+                    borderaxespad=0.0,
+                )
+
         fig.tight_layout()
         if self.logger:
-            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/worst images", fig)
+            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Validation Images", fig)
         plt.close(fig)
