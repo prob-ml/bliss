@@ -341,7 +341,7 @@ class SleepPhase(pl.LightningModule):
 
         return batch
 
-    def test_epoch_end(self, outputs):  # disable=empty-docstring
+    def test_epoch_end(self, outputs):  # pylint: disable=empty-docstring
         """"""
         self._make_plots(outputs[-1], kind="testing")
 
