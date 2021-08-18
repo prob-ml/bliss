@@ -401,7 +401,7 @@ class SDSSCatalogGalaxies(pl.LightningDataModule, Dataset):
         noise = image.sqrt() * torch.randn(*image.shape) * self.noise_factor
         image += noise
 
-        return {"images": image, "background": self.background, "entry": entry}
+        return {"images": image, "background": self.background}
 
     def __len__(self):
         return len(self.catalog)
