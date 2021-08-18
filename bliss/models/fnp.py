@@ -11,7 +11,8 @@ from bliss.utils import MLP, ConcatLayer
 
 
 class FNP(nn.Module):
-    """
+    """Functional Neural Process
+
     This is an implementation of the Functional Neural Process (FNP)
     from http://arxiv.org/abs/1906.08324.
 
@@ -22,22 +23,25 @@ class FNP(nn.Module):
     The FNP is made up of a few different modules. These are all
     application-specific, so they are passed as arguments to the
     class constructor
-    * cov_vencoder This is a module which takes input tensor X
+
+    Attributes:
+    cov_vencoder: This is a module which takes input tensor X
     and outputs a probability distribution from which U is sampled.
-    * dep_graph: An object of type DepGraph which samples graphs G and A.
+    dep_graph: An object of type DepGraph which samples graphs G and A.
     Requires methods .sample_G(uR) and .sample_A(uM, uR)
-    * trans_cond_y: A module which takes labels Y and returns a flattened
+    trans_cond_y: A module which takes labels Y and returns a flattened
     representation Y_encoded
-    * rep_encoder: This is a module which takes (u, uR, XR, yR_encoded) as input
+    rep_encoder: This is a module which takes (u, uR, XR, yR_encoded) as input
     and outputs a flattened representation. (see RepEncoder)
-    * pooler: This is a module which takes the output of rep_encoder and the dependency matrix
+    pooler: This is a module which takes the output of rep_encoder and the dependency matrix
     and returns a sampler for the latent variables Z. (see AveragePooler, SetPooler)
-    * prop_vencoder: This is a module which samples a representation
+    prop_vencoder: This is a module which samples a representation
     for an object given X and yR_encoded (only used in training, not prediction)
-    * label_vdecoder: This is a module which probabilistically
+    label_vdecoder: This is a module which probabilistically
     decodes the pooled representation into the output
-    * fb_z: If non-zero, the amount of "free-bits" regularization to apply while training. This
-    encourages learning a better representation and can avoid a local minimum in the prior.
+    fb_z (optional): If non-zero, the amount of "free-bits" regularization to apply
+        while training. This encourages learning a better representation and can avoid a
+        local minimum in the prior.
     """
 
     def __init__(
@@ -153,6 +157,7 @@ class FNP(nn.Module):
         return log_pqz
 
     def forward(self, XR, yR, XM, yM, G_in=None, A_in=None):
+        """Calculates negative log probability of inputs and outputs"""
         return -self.log_prob(XR, yR, XM, yM, G_in, A_in)
 
     def predict(self, x_new, XR, yR, sample=True, A_in=None, sample_Z=True):
@@ -280,6 +285,7 @@ class RepEncoder(nn.Module):
         self.use_x = use_x
 
     def forward(self, u, uR, XR, yR_encoded):
+        """Encodes representation based on input from references points"""
         input_list = [yR_encoded]
         if self.use_x:
             input_list.append(XR.unsqueeze(0))
@@ -312,6 +318,7 @@ class AveragePooler(nn.Module):
         self.norm_graph = lambda x: x / (torch.sum(x, 1, keepdim=True) + 1e-8)
 
     def forward(self, rep_R, GA):
+        """Averages the reference points based on the dependency graph GA"""
         W = self.norm_graph(GA)
         return torch.matmul(W, rep_R)
 
@@ -353,7 +360,8 @@ class SetPooler(nn.Module):
                 MLP(dim_in, self.pooling_layers, 2 * self.dim_z),
             )
 
-    def forward(self, rep_R, GA):
+    def forward(self, rep_R, GA):  # pylint: disable=empty-docstring
+        """"""
         if not self.set_transformer:
             rep_pooled = GA.unsqueeze(0).unsqueeze(-1).mul(rep_R).sum(2)
             pz_all = self.pool_net(rep_pooled)
@@ -391,6 +399,7 @@ class MAB(nn.Module):
         self.fc_o = nn.Linear(dim_V, dim_V)
 
     def forward(self, Q, K):
+        """Generates outout from query Q and key/value K"""
         # We assume that Q and K are ...x N x D, where
         # ... are 0 or more preceding dimensions.
         Q = self.fc_q(Q).unsqueeze(-3)
@@ -423,6 +432,7 @@ class SAB(nn.Module):
         self.mab = MAB(dim_in, dim_in, dim_out, num_heads, ln=ln)
 
     def forward(self, X):
+        """Applies MAB to X as key, query, and value."""
         return self.mab(X, X)
 
 
@@ -443,6 +453,7 @@ class PMA(nn.Module):
         self.squeeze_out = squeeze_out
 
     def forward(self, X):
+        """PMA on X (set-valued transformation which is permutation invariant)"""
         diff_dim = len(X.size()) - 2
         S = self.S[(None,) * diff_dim].expand(*X.shape[:-2], *self.S.shape)
         out = self.mab(S, X)
