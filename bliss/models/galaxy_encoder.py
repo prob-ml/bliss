@@ -85,7 +85,8 @@ class GalaxyEncoder(pl.LightningModule):
             :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
         ]
 
-    def configure_optimizers(self):
+    def configure_optimizers(self):  # pylint: disable=empty-docstring
+        """"""
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
@@ -97,7 +98,8 @@ class GalaxyEncoder(pl.LightningModule):
         galaxy_params = self(ptiles, tile_locs)
         return galaxy_params.view(batch_size, -1, 1, self.latent_dim)
 
-    def forward(self, image_ptiles, tile_locs):
+    def forward(self, image_ptiles, tile_locs):  # pylint: disable=empty-docstring
+        """"""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         n_ptiles = image_ptiles.shape[0]
 
@@ -133,17 +135,20 @@ class GalaxyEncoder(pl.LightningModule):
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
         return recon_losses.sum()
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+        """"""
         loss = self.get_loss(batch)
         self.log("train/loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+        """"""
         loss = self.get_loss(batch)
         self.log("val/loss", loss)
         return batch
 
-    def validation_epoch_end(self, outputs):
+    def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
+        """"""
         # put all outputs together into a single batch
         batch = {}
         for b in outputs:

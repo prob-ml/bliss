@@ -508,7 +508,7 @@ class Tiler(nn.Module):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def forward(self, locs, source):  #pylint: disable=empty-docstring
+    def forward(self, locs, source):  # pylint: disable=empty-docstring
         """"""
         return self.render_one_source(locs, source)
 
@@ -638,7 +638,7 @@ class StarTileDecoder(nn.Module):
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
-    def forward(self, locs, fluxes, star_bool):  #pylint: disable=empty-docstring
+    def forward(self, locs, fluxes, star_bool):  # pylint: disable=empty-docstring
         """"""
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
@@ -756,7 +756,7 @@ class GalaxyTileDecoder(nn.Module):
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params
 
-    def forward(self, locs, galaxy_params, galaxy_bool):  #pylint: disable=empty-docstring
+    def forward(self, locs, galaxy_params, galaxy_bool):  # pylint: disable=empty-docstring
         """"""
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
