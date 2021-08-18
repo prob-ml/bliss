@@ -159,7 +159,8 @@ class SleepPhase(pl.LightningModule):
         # plotting
         self.annotate_probs = annotate_probs
 
-    def forward(self, image_ptiles, tile_n_sources):
+    def forward(self, image_ptiles, tile_n_sources):  # pylint: disable=empty-docstring
+        """"""
         return self.image_encoder(image_ptiles, tile_n_sources)
 
     def tile_map_estimate(self, batch):
@@ -176,7 +177,7 @@ class SleepPhase(pl.LightningModule):
         tile_est["galaxy_params"] = tile_est["galaxy_params"].contiguous()
         return tile_est
 
-    def get_loss(self, batch):
+    def _get_loss(self, batch):
         """
 
         loc_mean shape = (n_ptiles x max_detections x 2)
@@ -282,25 +283,30 @@ class SleepPhase(pl.LightningModule):
             galaxy_bool_loss,
         )
 
-    def configure_optimizers(self):
+    def configure_optimizers(self):  # pylint: disable=empty-docstring
+        """"""
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.image_encoder.parameters(), kwargs)
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
-        loss = self.get_loss(batch)[0]
+    def training_step(
+        self, batch, batch_idx, optimizer_idx=0
+    ):  # pylint: disable=unused-argument,empty-docstring
+        """"""
+        loss = self._get_loss(batch)[0]
         self.log("train/loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+        """"""
         (
             detection_loss,
             counter_loss,
             locs_loss,
             star_params_loss,
             galaxy_bool_loss,
-        ) = self.get_loss(batch)
+        ) = self._get_loss(batch)
 
         self.log("val/loss", detection_loss)
         self.log("val/counter_loss", counter_loss.mean())
@@ -309,7 +315,7 @@ class SleepPhase(pl.LightningModule):
         self.log("val/star_params_loss", star_params_loss.mean())
 
         # calculate metrics for this batch
-        metrics = self.get_metrics(batch)
+        metrics = self._get_metrics(batch)
         self.log("val/acc_counts", metrics["counts_acc"])
         self.log("val/gal_counts", metrics["galaxy_counts_acc"])
         self.log("val/locs_mae", metrics["locs_mae"])
@@ -318,12 +324,14 @@ class SleepPhase(pl.LightningModule):
         self.log("val/avg_ppv", metrics["avg_ppv"])
         return batch
 
-    def validation_epoch_end(self, outputs):
+    def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
+        """"""
         if self.current_epoch > 0:
-            self.make_plots(outputs[-1], kind="validation")
+            self._make_plots(outputs[-1], kind="validation")
 
-    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
-        metrics = self.get_metrics(batch)
+    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+        """"""
+        metrics = self._get_metrics(batch)
         self.log("acc_counts", metrics["counts_acc"])
         self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
         self.log("locs_mae", metrics["locs_mae"])
@@ -333,10 +341,11 @@ class SleepPhase(pl.LightningModule):
 
         return batch
 
-    def test_epoch_end(self, outputs):
-        self.make_plots(outputs[-1], kind="testing")
+    def test_epoch_end(self, outputs):  # pylint: disable=empty-docstring
+        """"""
+        self._make_plots(outputs[-1], kind="testing")
 
-    def get_metrics(self, batch):
+    def _get_metrics(self, batch):
         # get images and properties
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
@@ -369,7 +378,7 @@ class SleepPhase(pl.LightningModule):
         }
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, kind="validation", n_samples=16):
+    def _make_plots(self, batch, kind="validation", n_samples=16):
         # add some images to tensorboard for validating location/counts.
         # 'batch' is a batch from simulated dataset (all params are tiled)
 
