@@ -13,6 +13,7 @@ datasets = {
     "SimulatedDataset": simulated.SimulatedDataset,
     "SDSSGalaxies": galsim_galaxies.SDSSGalaxies,
     "ToyGaussian": galsim_galaxies.ToyGaussian,
+    "SDSSCatalogGalaxies": galsim_galaxies.SDSSCatalogGalaxies,
 }
 
 
