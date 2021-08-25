@@ -263,7 +263,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         # create galaxy as mixture of Exponential + DeVacauleurs
         if self.flux_sample == "uniform":
             total_flux = self._uniform(self.min_flux, self.max_flux)
-        if self.flux_sample == "pareto":
+        elif self.flux_sample == "pareto":
             total_flux = self._draw_pareto_flux()
         else:
             raise NotImplementedError()
