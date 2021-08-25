@@ -292,10 +292,6 @@ class ImageEncoder(nn.Module):
         assert border_padding % 1 == 0, "amount of border padding should be an integer"
         self.border_padding = int(border_padding)
 
-        # cache the weights used for the tiling convolution
-
-        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
-
         # Number of variational parameters used to characterize each source in an image.
         self.n_params_per_source = sum(param["dim"] for _, param in self.variational_params.items())
 
@@ -308,6 +304,9 @@ class ImageEncoder(nn.Module):
             + self.max_detections,
         )
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
+
+        # networks to be trained
+        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
@@ -322,10 +321,12 @@ class ImageEncoder(nn.Module):
         )
         self.log_softmax = nn.LogSoftmax(dim=1)
 
-        # get index for prob_n_sources, assigned indices that were not used.
+        # get indices into the triangular array of returned parameters
         indx_mats, last_indx = self._get_hidden_indices()
         for k, v in indx_mats.items():
             self.register_buffer(k + "_indx", v, persistent=False)
+
+        # assigned indices that were not used to `prob_n_source`
         self.register_buffer(
             "prob_n_source_indx",
             torch.arange(last_indx, self.dim_out_all),
