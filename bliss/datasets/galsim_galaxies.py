@@ -352,8 +352,8 @@ class SDSSCatalogGalaxies(pl.LightningDataModule, Dataset):
         self.noise_factor = noise_factor
 
         # directly from survey + filter.
-        assert len(sdss_survey.filters) == 1 == len(bands)
-        assert sdss_survey.filters[0].band == "r" == bands[0]
+        assert self.n_bands == 1
+        assert bands[0] == 1
         self.pixel_scale, self.psf = _setup_sdss_params(sdss_kwargs, psf_points)
 
         # read sdss-formatted catalog table of entries.
