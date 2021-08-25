@@ -1,0 +1,25 @@
+name: "SDSSCatalogGalaxies"
+kwargs:
+  num_workers: 0
+  batch_size: 64
+  background: 865
+  noise_factor: 0.05
+  slen: 53
+  bands:
+    - r
+  psf_points:
+    - 450
+    - 550
+  sdss_catalog: "${paths.data}/coadd_galaxy_catalog.dat"
+  sdss_kwargs:
+    bands:
+      - 2
+    camcol: 1
+    center_subpixel: true
+    fields:
+      - 12
+    overwrite_cache: false
+    overwrite_fits_cache: false
+    run: 94
+    sdss_dir: "${paths.data}/sdss"
+    stampsize: 5

@@ -158,7 +158,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         assert images.size(0) >= 10
         num_examples = 10
         num_cols = 3
-        residuals = (images - recon_mean) / torch.sqrt(images)
+        residuals = (images - recon_mean) / torch.sqrt(recon_mean)
         plt.ioff()
 
         fig = plt.figure(figsize=(10, 25))
