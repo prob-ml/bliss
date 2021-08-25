@@ -51,7 +51,7 @@ def generate(cfg: DictConfig):
     global_params = set(cfg.generate.common)
 
     # get batches and combine them
-    fbatch = dict()
+    fbatch = {}
     for batch in dataset.train_dataloader():
         if not bool(fbatch):  # dict is empty
             fbatch = batch
