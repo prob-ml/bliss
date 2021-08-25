@@ -353,7 +353,7 @@ class SDSSCatalogGalaxies(pl.LightningDataModule, Dataset):
 
         # directly from survey + filter.
         assert self.n_bands == 1
-        assert bands[0] == 1
+        assert bands[0] == "r"
         self.pixel_scale, self.psf = _setup_sdss_params(sdss_kwargs, psf_points)
 
         # read sdss-formatted catalog table of entries.
