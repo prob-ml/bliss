@@ -36,7 +36,7 @@ class TestWake:
         # this will be the ground truth catalog.
         # we will use this to construct an image
         which_batch = batch["n_sources"].sum(1).argmax()
-        true_params = dict()
+        true_params = {}
         for key in batch.keys():
             if key != "slen":
                 true_params[key] = batch[key][which_batch : (which_batch + 1)]
