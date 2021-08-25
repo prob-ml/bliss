@@ -161,7 +161,7 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
         # add noise and background.
         image += self.background
-        noise = np.sqrt(image) * torch.randn(*image.shape) * self.noise_factor
+        noise = torch.sqrt(image) * torch.randn(*image.shape) * self.noise_factor
         image += noise
 
         return {"images": image, "background": self.background}
