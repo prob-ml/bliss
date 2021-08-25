@@ -1,12 +1,13 @@
 import pytorch_lightning as pl
 import torch
 from matplotlib import pyplot as plt
-from plotting import plot_image_and_locs
 from torch import nn
 
-from bliss.models.decoder import ImageDecoder, get_mgrid
+from bliss.models.decoder import get_mgrid
 from bliss.models.encoder import EncoderCNN, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.galaxy_encoder import center_ptiles, get_full_params
+from bliss.optimizer import get_optimizer
+from bliss.plotting import plot_image_and_locs
 
 
 class BinaryEncoder(pl.LightningModule):
@@ -16,7 +17,10 @@ class BinaryEncoder(pl.LightningModule):
         spatial_dropout=0,
         dropout=0,
         hidden=128,
-        decoder_kwargs: dict = None,
+        n_bands=1,
+        tile_slen=4,
+        ptile_slen=52,
+        decoder_kwargs: dict = None,  # pylint: disable=unused-argument
         optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         """
@@ -38,18 +42,16 @@ class BinaryEncoder(pl.LightningModule):
 
         self.max_sources = 1  # by construction.
 
-        # to produce images to train on.
-        self.image_decoder = ImageDecoder(**decoder_kwargs)
-        self.image_decoder.requires_grad_(False)
-
         # extract useful info from image_decoder
-        self.latent_dim = self.image_decoder.n_galaxy_params
-        self.n_bands = self.image_decoder.n_bands
+        self.n_bands = n_bands
 
         # put image dimensions together
-        self.tile_slen = self.image_decoder.tile_slen
-        self.border_padding = self.image_decoder.border_padding
-        self.ptile_slen = self.tile_slen + 2 * self.border_padding
+        self.tile_slen = tile_slen
+        self.ptile_slen = ptile_slen
+        border_padding = (ptile_slen - tile_slen) / 2
+        assert tile_slen <= ptile_slen
+        assert border_padding % 1 == 0, "amount of border padding should be an integer"
+        self.border_padding = int(border_padding)
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
@@ -135,6 +137,13 @@ class BinaryEncoder(pl.LightningModule):
             "galaxy_bool": pred_galaxy_bool,
             "prob_galaxy": prob_galaxy,
         }
+
+    def configure_optimizers(self):  # pylint: disable=empty-docstring
+        """"""
+        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
+        name = self.hparams["optimizer_params"]["name"]
+        kwargs = self.hparams["optimizer_params"]["kwargs"]
+        return get_optimizer(name, self.parameters(), kwargs)
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
         """"""
