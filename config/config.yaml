@@ -11,7 +11,7 @@ defaults:
 hydra:
   output_subdir: null
   run:
-    dir: ./hydra_temp/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: ./output/hydra_temp/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
 mode: train
 
