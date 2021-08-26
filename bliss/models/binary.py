@@ -2,6 +2,7 @@ import pytorch_lightning as pl
 import torch
 from matplotlib import pyplot as plt
 from torch import nn
+from torch.nn import BCELoss
 
 from bliss.models.decoder import get_mgrid
 from bliss.models.encoder import EncoderCNN, get_images_in_tiles, get_is_on_from_n_sources
@@ -116,15 +117,14 @@ class BinaryEncoder(pl.LightningModule):
     def get_prediction(self, batch):
 
         images = batch["images"]
-        galaxy_bool = batch["galaxy_bool"]
-        prob_galaxy = self.forward_image(images, batch["locs"])
+        galaxy_bool = batch["galaxy_bool"].reshape(-1)
+        prob_galaxy = self.forward_image(images, batch["locs"]).reshape(-1)
+        tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
+        tile_is_on_array = tile_is_on_array.reshape(-1)
 
         # we need to calculate cross entropy loss, only for "on" sources
-        tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1)
-        loss = galaxy_bool * torch.log(prob_galaxy)
-        loss += (1 - galaxy_bool) * torch.log(1 - prob_galaxy)
-        loss *= tile_is_on_array
+        loss = BCELoss(reduction="none")(prob_galaxy, galaxy_bool) * tile_is_on_array
+        loss = loss.sum()
 
         # get predictions for calculating metrics
         pred_galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
@@ -132,7 +132,7 @@ class BinaryEncoder(pl.LightningModule):
         total_n_sources = batch["n_sources"].sum()
         acc = correct / total_n_sources
         return {
-            "loss": -loss.sum(),
+            "loss": loss,
             "acc": acc,
             "galaxy_bool": pred_galaxy_bool,
             "prob_galaxy": prob_galaxy,
