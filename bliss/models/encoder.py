@@ -30,8 +30,8 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
 def get_is_on_from_n_sources(n_sources, max_sources):
     """Provides tensor which indicates how many sources are present for each batch.
 
-    Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
-    whether there are more than l sources on the kth batch.
+    Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry
+    indicates whether there are more than l sources on the `*th` index.
 
     Arguments:
         n_sources: Tensor with number of sources per tile.
