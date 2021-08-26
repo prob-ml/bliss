@@ -68,7 +68,6 @@ class BinaryEncoder(pl.LightningModule):
             nn.Dropout(dropout),
             nn.Linear(hidden, 1),
         )
-        self.log_softmax = nn.LogSoftmax(dim=1)
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
@@ -122,17 +121,18 @@ class BinaryEncoder(pl.LightningModule):
 
         # we need to calculate cross entropy loss, only for "on" sources
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
-        loss = (
-            galaxy_bool * torch.log(prob_galaxy) + (1 - galaxy_bool) * torch.log(1 - prob_galaxy)
-        ) * tile_is_on_array
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1)
+        loss = galaxy_bool * torch.log(prob_galaxy)
+        loss += (1 - galaxy_bool) * torch.log(1 - prob_galaxy)
+        loss *= tile_is_on_array
 
         # get predictions for calculating metrics
-        pred_galaxy_bool = (prob_galaxy > 0.5).astype(torch.float) * tile_is_on_array
+        pred_galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
         correct = ((pred_galaxy_bool.eq(galaxy_bool)) * tile_is_on_array).sum()
         total_n_sources = batch["n_sources"].sum()
         acc = correct / total_n_sources
         return {
-            "loss": loss.sum(),
+            "loss": -loss.sum(),
             "acc": acc,
             "galaxy_bool": pred_galaxy_bool,
             "prob_galaxy": prob_galaxy,
@@ -147,14 +147,14 @@ class BinaryEncoder(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
         """"""
-        pred = self.get_loss(batch)
+        pred = self.get_prediction(batch)
         self.log("train/loss", pred["loss"])
-        self.log("val/acc", pred["acc"])
+        self.log("train/acc", pred["acc"])
         return pred["loss"]
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
         """"""
-        pred = self.get_loss(batch)
+        pred = self.get_prediction(batch)
         self.log("val/loss", pred["loss"])
         self.log("val/acc", pred["acc"])
         return batch
@@ -207,8 +207,11 @@ class BinaryEncoder(pl.LightningModule):
                 estimate=est,
                 labels=None if i > 0 else labels,
                 annotate_axis=False,
-                annotate_probs=self.annotate_probs,
+                annotate_probs=True,
                 add_borders=True,
             )
 
         fig.tight_layout()
+
+        title = f"Epoch:{self.current_epoch}/Validation Images"
+        self.logger.experiment.add_figure(title, fig)
