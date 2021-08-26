@@ -38,9 +38,9 @@ def plot_image_and_locs(
     estimate: dict = None,
     labels=None,
     annotate_axis=False,
-    annotate_probs=False,
     add_borders=False,
     vrange=None,
+    prob_galaxy=None,
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
@@ -62,13 +62,11 @@ def plot_image_and_locs(
         locs = estimate["locs"][idx].cpu().numpy()
         galaxy_bool = estimate["galaxy_bool"][idx].cpu().numpy()
         star_bool = estimate["star_bool"][idx].cpu().numpy()
-        prob_galaxy = estimate["prob_galaxy"][idx].cpu().numpy().reshape(-1)
         galaxy_locs = locs * galaxy_bool
         star_locs = locs * star_bool
-    else:
-        galaxy_locs = None
-        star_locs = None
-        prob_galaxy = None
+
+    if prob_galaxy is not None:
+        prob_galaxy = prob_galaxy[idx].cpu().numpy().reshape(-1)
 
     # annotate useful information around the axis
     if annotate_axis and estimate is not None:
@@ -86,15 +84,12 @@ def plot_image_and_locs(
     vmax = image.max().item() if vrange is None else vrange[1]
     plot_image(fig, ax, image, vrange=(vmin, vmax))
 
-    # then locations for galaxies first
-    prob_galaxy = prob_galaxy if annotate_probs else None
+    # plot locations
     plot_locs(ax, slen, bpad, true_galaxy_locs, "r", "x", s=20, prob_galaxy=None)
-    if galaxy_locs is not None:
-        plot_locs(ax, slen, bpad, galaxy_locs, "b", "+", s=30, prob_galaxy=prob_galaxy)
+    plot_locs(ax, slen, bpad, true_star_locs, "c", "x", s=20, prob_galaxy=None)
 
-    # then stars
-    plot_locs(ax, slen, bpad, true_star_locs, "c", "x", s=20)
-    if star_locs is not None:
+    if estimate is not None:
+        plot_locs(ax, slen, bpad, galaxy_locs, "b", "+", s=30, prob_galaxy=prob_galaxy)
         plot_locs(ax, slen, bpad, star_locs, "m", "+", s=30, prob_galaxy=prob_galaxy)
 
     if labels is not None:
