@@ -124,7 +124,7 @@ class BinaryEncoder(pl.LightningModule):
 
         # we need to calculate cross entropy loss, only for "on" sources
         loss = BCELoss(reduction="none")(prob_galaxy, galaxy_bool) * tile_is_on_array
-        loss = loss.sum()
+        loss = loss.mean()
 
         # get predictions for calculating metrics
         pred_galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
@@ -134,8 +134,8 @@ class BinaryEncoder(pl.LightningModule):
         return {
             "loss": loss,
             "acc": acc,
-            "galaxy_bool": pred_galaxy_bool,
-            "prob_galaxy": prob_galaxy,
+            "galaxy_bool": pred_galaxy_bool.reshape(images.shape[0], -1, 1, 1),
+            "prob_galaxy": prob_galaxy.reshape(images.shape[0], -1, 1, 1),
         }
 
     def configure_optimizers(self):  # pylint: disable=empty-docstring
@@ -207,8 +207,8 @@ class BinaryEncoder(pl.LightningModule):
                 estimate=est,
                 labels=None if i > 0 else labels,
                 annotate_axis=False,
-                annotate_probs=True,
-                add_borders=True,
+                add_borders=False,
+                prob_galaxy=est["prob_galaxy"],
             )
 
         fig.tight_layout()
