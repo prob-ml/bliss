@@ -4,19 +4,21 @@ from einops import rearrange
 from omegaconf import DictConfig
 
 from bliss.datasets import sdss
-from bliss.models.encoder import get_full_params
+from bliss.models.binary import BinaryEncoder
+from bliss.models.encoder import get_full_params, get_star_bool
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.sleep import SleepPhase
 
 
-def prediction(image, image_encoder, galaxy_encoder):
+def prediction(image, image_encoder, galaxy_encoder, binary_encoder):
 
     # prepare and check consistency
+    assert (
+        not image_encoder.training and not galaxy_encoder.training and not binary_encoder.training
+    )
     assert len(image.shape) == 4
     assert image.shape[0] == 1
     assert image.shape[1] == image_encoder.n_bands == galaxy_encoder.n_bands
-    image_encoder.eval()
-    galaxy_encoder.eval()
     assert image_encoder.border_padding == galaxy_encoder.border_padding
     assert image_encoder.tile_slen == galaxy_encoder.tile_slen
     assert image_encoder.max_detections == galaxy_encoder.image_decoder.max_sources == 1
@@ -35,13 +37,23 @@ def prediction(image, image_encoder, galaxy_encoder):
 
     # get galaxy params per tile
     galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
+    var_params["galaxy_param_mean"] = galaxy_param_mean
+    tile_map["galaxy_params"] = galaxy_param_mean
+
+    # get classification params per tile
+    prob_galaxy = binary_encoder(ptiles, tile_map["locs"])
+    galaxy_bool = (prob_galaxy > 0.5).float()
+    star_bool = get_star_bool(tile_map["n_sources"], tile_map["galaxy_bool"])
+    var_params["galaxy_bool"] = galaxy_bool
+    tile_map["galaxy_bool"] = galaxy_bool
+    var_params["star_bool"] = star_bool
+    tile_map["star_bool"] = star_bool
 
     # full parameters on chunk
     full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
 
     # collect all parameters into dictionaries
-    var_params["galaxy_param_mean"] = galaxy_param_mean
-    tile_map["galaxy_params"] = galaxy_param_mean
+
     return var_params, tile_map, full_map
 
 
@@ -52,6 +64,7 @@ def predict(cfg: DictConfig):
     sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss_kwargs)
     sleep_net = SleepPhase.load_from_checkpoint(cfg.predict.sleep_checkpoint)
     galaxy_encoder = GalaxyEncoder.load_from_checkpoint(cfg.predict.galaxy_checkpoint)
+    binary_encoder = BinaryEncoder.load_from_checkpoint(cfg.predict.binary_checkpoint)
 
     # load images from SDSS for prediction.
     image = sdss_obj[0]["image"][0]
@@ -60,9 +73,9 @@ def predict(cfg: DictConfig):
 
     # move everything to specified GPU
     sleep_net.to(cfg.predict.device)
-    sleep_net.eval()
     image_encoder = sleep_net.image_encoder.eval()
     galaxy_encoder = galaxy_encoder.to(cfg.predict.device).eval()
+    binary_encoder = binary_encoder.to(cfg.predict.device).eval()
 
     list_var_params = []
     clen = 300  # sdss image is too big so we need to chunk it.
@@ -78,7 +91,7 @@ def predict(cfg: DictConfig):
                 chunk = chunk.to(cfg.predict.device)
 
                 # predict!
-                var_params, _, _ = prediction(chunk, image_encoder, galaxy_encoder)
+                var_params, _, _ = prediction(chunk, image_encoder, galaxy_encoder, binary_encoder)
 
                 # put everything in the cpu before saving
                 var_params = {key: value.cpu() for key, value in var_params.items()}
