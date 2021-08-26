@@ -131,10 +131,15 @@ class BinaryEncoder(pl.LightningModule):
         correct = ((pred_galaxy_bool.eq(galaxy_bool)) * tile_is_on_array).sum()
         total_n_sources = batch["n_sources"].sum()
         acc = correct / total_n_sources
+
+        # finally organize quantities and return as a dictionary
+        pred_star_bool = (1 - pred_galaxy_bool) * tile_is_on_array
+
         return {
             "loss": loss,
             "acc": acc,
             "galaxy_bool": pred_galaxy_bool.reshape(images.shape[0], -1, 1, 1),
+            "star_bool": pred_star_bool.reshape(images.shape[0], -1, 1, 1),
             "prob_galaxy": prob_galaxy.reshape(images.shape[0], -1, 1, 1),
         }
 
@@ -183,9 +188,9 @@ class BinaryEncoder(pl.LightningModule):
 
         # prediction
         pred = self.get_prediction(batch)
-        tile_est = {
-            k: (v if k != "galaxy_bool" else pred["galaxy_bool"]) for k, v in tile_params.items()
-        }
+        tile_est = dict(tile_params.items())
+        tile_est["galaxy_bool"] = pred["galaxy_bool"]
+        tile_est["star_bool"] = pred["star_bool"]
         tile_est["prob_galaxy"] = pred["prob_galaxy"]
         est = get_full_params(tile_est, slen)
 
