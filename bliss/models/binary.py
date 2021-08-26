@@ -124,7 +124,7 @@ class BinaryEncoder(pl.LightningModule):
 
         # we need to calculate cross entropy loss, only for "on" sources
         loss = BCELoss(reduction="none")(prob_galaxy, galaxy_bool) * tile_is_on_array
-        loss = loss.mean()
+        loss = loss.sum()
 
         # get predictions for calculating metrics
         pred_galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
@@ -207,7 +207,7 @@ class BinaryEncoder(pl.LightningModule):
                 estimate=est,
                 labels=None if i > 0 else labels,
                 annotate_axis=False,
-                add_borders=False,
+                add_borders=True,
                 prob_galaxy=est["prob_galaxy"],
             )
 
