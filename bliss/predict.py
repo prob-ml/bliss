@@ -10,18 +10,15 @@ from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.sleep import SleepPhase
 
 
-def prediction(image, image_encoder, galaxy_encoder, binary_encoder):
-
+def prediction(image, image_encoder, galaxy_encoder=None, binary_encoder=None):
     # prepare and check consistency
-    assert (
-        not image_encoder.training and not galaxy_encoder.training and not binary_encoder.training
-    )
+    assert not image_encoder.training
     assert len(image.shape) == 4
     assert image.shape[0] == 1
-    assert image.shape[1] == image_encoder.n_bands == galaxy_encoder.n_bands
-    assert image_encoder.border_padding == galaxy_encoder.border_padding
-    assert image_encoder.tile_slen == galaxy_encoder.tile_slen
-    assert image_encoder.max_detections == galaxy_encoder.image_decoder.max_sources == 1
+    assert image.shape[1] == image_encoder.n_bands
+    assert image_encoder.max_detections == 1
+
+    # prepare dimensions
     h, w = image.shape[-2], image.shape[-1]
     bp = image_encoder.border_padding
 
@@ -35,24 +32,33 @@ def prediction(image, image_encoder, galaxy_encoder, binary_encoder):
     # get var_params in tiles (excluding galaxy params)
     var_params = image_encoder(ptiles, tile_n_sources)
 
-    # get galaxy params per tile
-    galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
-    var_params["galaxy_param_mean"] = galaxy_param_mean
-    tile_map["galaxy_params"] = galaxy_param_mean
+    if galaxy_encoder is not None:
+        # get galaxy params per tile
+        assert not galaxy_encoder.training
+        assert image.shape[1] == galaxy_encoder.n_bands
+        assert image_encoder.border_padding == galaxy_encoder.border_padding
+        assert galaxy_encoder.image_decoder.max_sources == 1
+        assert image_encoder.tile_slen == galaxy_encoder.tile_slen
 
-    # get classification params per tile
-    prob_galaxy = binary_encoder(ptiles, tile_map["locs"])
-    galaxy_bool = (prob_galaxy > 0.5).float()
-    star_bool = get_star_bool(tile_map["n_sources"], tile_map["galaxy_bool"])
-    var_params["galaxy_bool"] = galaxy_bool
-    tile_map["galaxy_bool"] = galaxy_bool
-    var_params["star_bool"] = star_bool
-    tile_map["star_bool"] = star_bool
+        galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
+        latent_dim = galaxy_param_mean.shape[-1]
+        var_params["galaxy_param_mean"] = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
+        tile_map["galaxy_params"] = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
+
+    if binary_encoder is not None:
+        # get classification params per tile
+        assert not binary_encoder.training
+        assert image.shape[1] == binary_encoder.n_bands
+        prob_galaxy = binary_encoder(ptiles, tile_map["locs"])
+        galaxy_bool = (prob_galaxy > 0.5).float().reshape(1, -1, 1, 1)
+        star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool).reshape(1, -1, 1, 1)
+        var_params["galaxy_bool"] = galaxy_bool
+        tile_map["galaxy_bool"] = galaxy_bool
+        var_params["star_bool"] = star_bool
+        tile_map["star_bool"] = star_bool
 
     # full parameters on chunk
     full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
-
-    # collect all parameters into dictionaries
 
     return var_params, tile_map, full_map
 
