@@ -514,17 +514,21 @@ class Tiler(nn.Module):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def forward(self, locs, source):  # pylint: disable=empty-docstring
-        """Renders sources from locations and sources."""
+    def forward(self, locs, source):
+        """See render_one_source."""
         return self.render_one_source(locs, source)
 
     def render_one_source(self, locs, source):
-        """
-        :param locs: is n_ptiles x len((x,y))
-        :param source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
+        """Renders one source at a location from shape.
+
+        Arguments:
+            locs: is n_ptiles x len((x,y))
+            source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
                         `expanded_psf` (psf repeated multiple times) for the case of of stars.
                         Or multiple galaxies in the case of galaxies.
-        :return: shape = (n_ptiles x n_bands x slen x slen)
+
+        Returns:
+            Tensor with shape = (n_ptiles x n_bands x slen x slen)
         """
         assert source.shape[2] == source.shape[3]
         assert locs.shape[1] == 2
@@ -545,11 +549,14 @@ class Tiler(nn.Module):
         return F.grid_sample(source, grid_loc, align_corners=True)
 
     def render_tile(self, locs, sources):
-        """
-        :param locs: is (n_ptiles x max_num_stars x 2)
-        :param sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
+        """Renders tile from locations and sources.
 
-        :return: ptile = (n_ptiles x n_bands x slen x slen)
+        Arguments:
+            locs: is (n_ptiles x max_num_stars x 2)
+            sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
+
+        Returns:
+            ptile = (n_ptiles x n_bands x slen x slen)
         """
         max_sources = locs.shape[1]
         ptile_shape = (
@@ -574,7 +581,7 @@ class Tiler(nn.Module):
         return fitted_source
 
     def _expand_source(self, source):
-        """Pad the source with zeros so that it is size ptile_slen,"""
+        """Pad the source with zeros so that it is size ptile_slen."""
         assert len(source.shape) == 3
 
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
