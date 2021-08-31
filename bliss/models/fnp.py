@@ -75,6 +75,17 @@ class FNP(nn.Module):
         This method runs the FNP up to the point the distributions for the latent
         variables are calculated. This is the shared procedure for both model inference
         and prediction.
+
+        Arguments:
+            XR: Tensor of reference point features.
+            yR: Tensor of reference point labels.
+            XM: Tensor of dependent point features.
+            G_in: Tensor of graphical dependencies between reference points
+            A_in: Tensor of graphical dependencies from dependent to reference points.
+
+        Returns:
+            u: Sampled embeddings for both reference and dependent points
+            pz: Distribution of latent representation.
         """
         n_ref = XR.size(0)
         X_all = torch.cat([XR, XM], dim=0)

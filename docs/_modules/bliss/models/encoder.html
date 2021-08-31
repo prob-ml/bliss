@@ -160,11 +160,18 @@
 
 
 <div class="viewcode-block" id="get_images_in_tiles"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.get_images_in_tiles">[docs]</a><span class="k">def</span> <span class="nf">get_images_in_tiles</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Divide a batch of full images into padded tiles similar to nn.conv2d</span>
-<span class="sd">    with a sliding window=ptile_slen and stride=tile_slen</span>
+    <span class="sd">&quot;&quot;&quot;Divides a batch of full images into padded tiles.</span>
+
+<span class="sd">    This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        images: Tensor of images with size (batchsize x n_bands x slen x slen)</span>
+<span class="sd">        tile_slen: Side length of tile</span>
+<span class="sd">        ptile_slen: Side length of padded tile</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># images should be batchsize x n_bands x slen x slen</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
     <span class="n">n_bands</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
     <span class="n">window</span> <span class="o">=</span> <span class="n">ptile_slen</span>
@@ -174,12 +181,19 @@
 
 
 <div class="viewcode-block" id="tile_images"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.tile_images">[docs]</a><span class="k">def</span> <span class="nf">tile_images</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Divide a batch of full images into padded tiles similar to nn.conv2d</span>
-<span class="sd">    with a sliding window=ptile_slen and stride=tile_slen</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;Divides a batch of full images into padded tiles.</span>
 
-    <span class="c1"># images should be batchsize x n_bands x slen x slen</span>
+<span class="sd">    This is similar to nn.conv2d with a sliding window=ptile_slen and stride=tile_slen</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        images: Tensor of images with size (batchsize x n_bands x slen x slen)</span>
+<span class="sd">        tile_slen: Side length of tile</span>
+<span class="sd">        ptile_slen: Side length of padded tile</span>
+
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
 
     <span class="n">n_bands</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
@@ -191,8 +205,17 @@
 
 
 <div class="viewcode-block" id="get_is_on_from_n_sources"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.get_is_on_from_n_sources">[docs]</a><span class="k">def</span> <span class="nf">get_is_on_from_n_sources</span><span class="p">(</span><span class="n">n_sources</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates</span>
+    <span class="sd">&quot;&quot;&quot;Provides tensor which indicates how many sources are present for each batch.</span>
+
+<span class="sd">    Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates</span>
 <span class="sd">    whether there are more than l sources on the kth batch.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        n_sources: Tensor with number of sources per tile.</span>
+<span class="sd">        max_sources: Maximum number of sources allowed per tile.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Tensor indicating how many sources are present for each batch.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">assert</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">n_sources</span><span class="p">))</span>
     <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">n_sources</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>
@@ -328,7 +351,7 @@
 
 
 <div class="viewcode-block" id="ConvBlock"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ConvBlock">[docs]</a><span class="k">class</span> <span class="nc">ConvBlock</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;A Convolution Layer</span>
+    <span class="sd">&quot;&quot;&quot;A Convolution Layer.</span>
 
 <span class="sd">    This module is two stacks of Conv2D -&gt; ReLU -&gt; BatchNorm, with dropout</span>
 <span class="sd">    in the middle, and an option to downsample with a stride of 2.</span>
@@ -341,7 +364,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">in_channel</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">out_channel</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">dropout</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">downsample</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Initializes the module layers&quot;&quot;&quot;</span>
+        <span class="sd">&quot;&quot;&quot;Initializes the module layers.&quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">downsample</span> <span class="o">=</span> <span class="n">downsample</span>
         <span class="n">stride</span> <span class="o">=</span> <span class="mi">1</span>
@@ -355,8 +378,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">conv2</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">out_channel</span><span class="p">,</span> <span class="n">out_channel</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bn2</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm2d</span><span class="p">(</span><span class="n">out_channel</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="ConvBlock.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ConvBlock.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;Runs convolutional block on inputs.&quot;&quot;&quot;</span>
         <span class="n">identity</span> <span class="o">=</span> <span class="n">x</span>
 
         <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv1</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
@@ -371,7 +394,7 @@
             <span class="n">identity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sc_bn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sc_conv</span><span class="p">(</span><span class="n">identity</span><span class="p">))</span>
 
         <span class="n">out</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">identity</span>
-        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">out</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">out</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="EncoderCNN"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.EncoderCNN">[docs]</a><span class="k">class</span> <span class="nc">EncoderCNN</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
@@ -379,9 +402,9 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">layer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_layer</span><span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">dropout</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">layer</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="EncoderCNN.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.EncoderCNN.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;Runs encoder CNN on inputs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">layer</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_make_layer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">dropout</span><span class="p">):</span>
         <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span>
@@ -405,30 +428,35 @@
 
 
 <div class="viewcode-block" id="ImageEncoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ImageEncoder">[docs]</a><span class="k">class</span> <span class="nc">ImageEncoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Encodes the distribution of a latent variable representing an astronomical image.</span>
+
+<span class="sd">    This class implements the source encoder, which is supposed to take in</span>
+<span class="sd">    an astronomical image of size slen * slen and returns a NN latent variable</span>
+<span class="sd">    representation of this image.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        max_detections: Number of maximum detections in a single tile.</span>
+<span class="sd">        n_bands: number of bands</span>
+<span class="sd">        tile_slen: dimension of full image, we assume its square for now</span>
+<span class="sd">        ptile_slen: dimension (in pixels) of the individual</span>
+<span class="sd">                        image padded tiles (usually 8 for stars, and _ for galaxies).</span>
+<span class="sd">        channel: TODO (document this)</span>
+<span class="sd">        spatial_dropout: TODO (document this)</span>
+<span class="sd">        dropout: TODO (document this)</span>
+<span class="sd">        hidden: TODO (document this)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">max_detections</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">tile_slen</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="n">ptile_slen</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
-        <span class="n">channel</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+        <span class="n">max_detections</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">n_bands</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">ptile_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
+        <span class="n">channel</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span>
         <span class="n">spatial_dropout</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">dropout</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-        <span class="n">hidden</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+        <span class="n">hidden</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">128</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        This class implements the source encoder, which is supposed to take in a synthetic image of</span>
-<span class="sd">        size slen * slen and returns a NN latent variable representation of this image.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">        slen (int): dimension of full image, we assume its square for now</span>
-<span class="sd">        ptile_slen (int): dimension (in pixels) of the individual</span>
-<span class="sd">                           image padded tiles (usually 8 for stars, and _ for galaxies).</span>
-<span class="sd">        n_bands (int): number of bands</span>
-<span class="sd">        max_detections (int): Number of maximum detections in a single tile.</span>
-<span class="sd">        n_galaxy_params (int): Number of latent dimensions in the galaxy AE network.</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_detections</span> <span class="o">=</span> <span class="n">max_detections</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="n">n_bands</span>
@@ -484,17 +512,21 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;swap&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
 <div class="viewcode-block" id="ImageEncoder.get_images_in_tiles"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ImageEncoder.get_images_in_tiles">[docs]</a>    <span class="k">def</span> <span class="nf">get_images_in_tiles</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">images</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Divide a batch of full images into padded tiles similar to nn.conv2d</span>
-<span class="sd">        with a sliding stride=self.tile_slen and window=self.ptile_slen</span>
+        <span class="sd">&quot;&quot;&quot;Divides a batch of full images into padded tiles.</span>
+
+<span class="sd">        This is similar to nn.conv2d with a sliding stride=self.tile_slen</span>
+<span class="sd">        and window=self.ptile_slen.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            images: Tensor of size (batchsize x n_bands x slen x slen)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">get_images_in_tiles</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_get_hidden_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Setup the indices corresponding to entries in h, these are cached since</span>
-<span class="sd">        same for all h.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="sd">&quot;&quot;&quot;Setup the indices corresponding to entries in h, cached since same for all h.&quot;&quot;&quot;</span>
 
         <span class="c1"># initialize matrices containing the indices for each variational param.</span>
         <span class="n">indx_mats</span> <span class="o">=</span> <span class="p">{}</span>
@@ -523,13 +555,17 @@
         <span class="k">return</span> <span class="n">indx_mats</span><span class="p">,</span> <span class="n">curr_indx</span>
 
     <span class="k">def</span> <span class="nf">_indx_h_for_n_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">n_sources</span><span class="p">,</span> <span class="n">indx_mat</span><span class="p">,</span> <span class="n">param_dim</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Index into all possible combinations of variational parameters (h) to obtain actually</span>
+        <span class="sd">&quot;&quot;&quot;Obtains variational parameters for n_sources.</span>
+
+<span class="sd">        Indexes into all possible combinations of variational parameters (h) to obtain actually</span>
 <span class="sd">        variational parameters for n_sources.</span>
-<span class="sd">        Args:</span>
+
+<span class="sd">        Arguments:</span>
 <span class="sd">            h: shape = (n_ptiles x dim_out_all)</span>
 <span class="sd">            n_sources: (n_samples x n_tiles)</span>
+<span class="sd">            indx_mat: TODO (to be documented)</span>
 <span class="sd">            param_dim: the dimension of the parameter you are indexing h.</span>
+
 <span class="sd">        Returns:</span>
 <span class="sd">            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -563,9 +599,11 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">enc_final</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_get_var_params_for_n_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">n_sources</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Args:</span>
-<span class="sd">            n_sources.shape = (n_samples x n_ptiles)</span>
+        <span class="sd">&quot;&quot;&quot;Gets variational parameters for n_sources.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            h: shape = (n_ptiles x dim_out_all)</span>
+<span class="sd">            n_sources: Tensor with shape (n_samples x n_ptiles)</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            loc_mean.shape = (n_sample x n_ptiles x max_detections x len(x,y))</span>
@@ -591,11 +629,16 @@
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">sd</span><span class="p">)</span> <span class="o">*</span> <span class="n">tile_is_on_array</span>
 
     <span class="k">def</span> <span class="nf">_get_logprob_n_from_var_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Obtain log probability of number of n_sources.</span>
+        <span class="sd">&quot;&quot;&quot;Obtains log probability of number of n_sources.</span>
 
-<span class="sd">        Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return</span>
+<span class="sd">        For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return</span>
 <span class="sd">        probability of having 0,1,2 stars.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            h: Variational parameters</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Log-probability of number of sources.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">free_probs</span> <span class="o">=</span> <span class="n">h</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">prob_n_source_indx</span><span class="p">]</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="n">free_probs</span><span class="p">)</span>
@@ -619,8 +662,8 @@
 
         <span class="k">return</span> <span class="n">var_params</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="ImageEncoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ImageEncoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;Runs encoder on image ptiles.&quot;&quot;&quot;</span>
         <span class="c1"># images shape = (n_ptiles x n_bands x pslen x pslen)</span>
         <span class="c1"># tile_n_sources shape = (n_ptiles)</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tile_n_sources</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
@@ -628,7 +671,7 @@
         <span class="k">assert</span> <span class="n">image_ptiles</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">tile_n_sources</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">tile_n_sources</span> <span class="o">=</span> <span class="n">tile_n_sources</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_detections</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="n">var_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward_sampled</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">var_params</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">var_params</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span></div>
 
     <span class="k">def</span> <span class="nf">sample_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">images</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">):</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>

@@ -151,9 +151,9 @@
            <div itemprop="articleBody">
             
   <h1>Source code for bliss.sleep</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;Summary for sleep.py</span>
+<span></span><span class="sd">&quot;&quot;&quot;Implements sleep-phase training of BLISS models.</span>
 
-<span class="sd">This module contains SleepPhase class, which implements the sleep-phase traning using</span>
+<span class="sd">This module contains the SleepPhase class, which implements the sleep-phase training using</span>
 <span class="sd">pytorch-lightning framework. Users should use this class to construct the sleep-phase</span>
 <span class="sd">model.</span>
 
@@ -312,9 +312,9 @@
         <span class="c1"># plotting</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">annotate_probs</span> <span class="o">=</span> <span class="n">annotate_probs</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">)</span>
+<div class="viewcode-block" id="SleepPhase.forward"><a class="viewcode-back" href="../../api/bliss.html#bliss.sleep.SleepPhase.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Encodes parameters from image tiles.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">tile_map_estimate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
         <span class="n">images</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">]</span>
@@ -331,30 +331,41 @@
         <span class="k">return</span> <span class="n">tile_est</span>
 
     <span class="k">def</span> <span class="nf">_get_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+        <span class="sd">&quot;&quot;&quot;Private method to evaluate loss on the input minibatch.</span>
 
-<span class="sd">        loc_mean shape = (n_ptiles x max_detections x 2)</span>
-<span class="sd">        log_flux_mean shape = (n_ptiles x max_detections x n_bands)</span>
+<span class="sd">        Arguments:</span>
+<span class="sd">            batch: Batch of training data (described below).</span>
 
-<span class="sd">        the *_logvar inputs should the same shape as their respective means</span>
-<span class="sd">        the true_tile_* inputs, except for true_tile_is_on_array,</span>
-<span class="sd">        should have same shape as their respective means, e.g.</span>
-<span class="sd">        true_locs should have the same shape as loc_mean</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            A tuple with the following components:</span>
+<span class="sd">                loss:</span>
+<span class="sd">                counter_loss:</span>
+<span class="sd">                locs_loss:</span>
+<span class="sd">                star_params_loss:</span>
+<span class="sd">                galaxy_bool_loss:</span>
 
-<span class="sd">        In true_locs, the off sources must have parameter value = 0</span>
+<span class="sd">        Notes:</span>
+<span class="sd">            loc_mean shape = (n_ptiles x max_detections x 2)</span>
+<span class="sd">            log_flux_mean shape = (n_ptiles x max_detections x n_bands)</span>
 
-<span class="sd">        true_is_on_array shape = (n_ptiles x max_detections)</span>
-<span class="sd">            Indicates if sources is on (1) or off (0)</span>
+<span class="sd">            the *_logvar inputs should the same shape as their respective means</span>
+<span class="sd">            the true_tile_* inputs, except for true_tile_is_on_array,</span>
+<span class="sd">            should have same shape as their respective means, e.g.</span>
+<span class="sd">            true_locs should have the same shape as loc_mean</span>
 
-<span class="sd">        true_galaxy_bool shape = (n_ptiles x max_detections x 1)</span>
-<span class="sd">            indicating whether each source is a galaxy (1) or star (0)</span>
+<span class="sd">            In true_locs, the off sources must have parameter value = 0</span>
 
-<span class="sd">        prob_galaxy shape = (n_ptiles x max_detections)</span>
-<span class="sd">            are probabilities for each source to be a galaxy</span>
+<span class="sd">            true_is_on_array shape = (n_ptiles x max_detections)</span>
+<span class="sd">                Indicates if sources is on (1) or off (0)</span>
 
-<span class="sd">        n_source_log_probs shape = (n_ptiles x (max_detections + 1))</span>
-<span class="sd">            are log-probabilities for the number of sources (0, 1, ..., max_detections)</span>
+<span class="sd">            true_galaxy_bool shape = (n_ptiles x max_detections x 1)</span>
+<span class="sd">                indicating whether each source is a galaxy (1) or star (0)</span>
 
+<span class="sd">            prob_galaxy shape = (n_ptiles x max_detections)</span>
+<span class="sd">                are probabilities for each source to be a galaxy</span>
+
+<span class="sd">            n_source_log_probs shape = (n_ptiles x (max_detections + 1))</span>
+<span class="sd">                are log-probabilities for the number of sources (0, 1, ..., max_detections)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="p">(</span>
             <span class="n">images</span><span class="p">,</span>
@@ -436,23 +447,21 @@
             <span class="n">galaxy_bool_loss</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="SleepPhase.configure_optimizers"><a class="viewcode-back" href="../../api/bliss.html#bliss.sleep.SleepPhase.configure_optimizers">[docs]</a>    <span class="k">def</span> <span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Configure optimizers for training (pytorch lightning).&quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;optimizer_params&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Need to specify &#39;optimizer_params&#39;.&quot;</span>
         <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;optimizer_params&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;optimizer_params&quot;</span><span class="p">][</span><span class="s2">&quot;kwargs&quot;</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">get_optimizer</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">get_optimizer</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">kwargs</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">optimizer_idx</span><span class="o">=</span><span class="mi">0</span>
-    <span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="SleepPhase.training_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.sleep.SleepPhase.training_step">[docs]</a>    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">optimizer_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument</span>
+        <span class="sd">&quot;&quot;&quot;Training step (pytorch lightning).&quot;&quot;&quot;</span>
         <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;train/loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">loss</span>
+        <span class="k">return</span> <span class="n">loss</span></div>
 
-    <span class="k">def</span> <span class="nf">validation_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="SleepPhase.validation_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.sleep.SleepPhase.validation_step">[docs]</a>    <span class="k">def</span> <span class="nf">validation_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;Pytorch lightning method.&quot;&quot;&quot;</span>
         <span class="p">(</span>
             <span class="n">detection_loss</span><span class="p">,</span>
             <span class="n">counter_loss</span><span class="p">,</span>
@@ -475,15 +484,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;val/star_fluxes_mae&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;star_fluxes_mae&quot;</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;val/avg_tpr&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;avg_tpr&quot;</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;val/avg_ppv&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;avg_ppv&quot;</span><span class="p">])</span>
-        <span class="k">return</span> <span class="n">batch</span>
+        <span class="k">return</span> <span class="n">batch</span></div>
 
-    <span class="k">def</span> <span class="nf">validation_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="SleepPhase.validation_epoch_end"><a class="viewcode-back" href="../../api/bliss.html#bliss.sleep.SleepPhase.validation_epoch_end">[docs]</a>    <span class="k">def</span> <span class="nf">validation_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;Pytorch lightning method.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_epoch</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_make_plots</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;validation&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_make_plots</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;validation&quot;</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="nf">test_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="SleepPhase.test_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.sleep.SleepPhase.test_step">[docs]</a>    <span class="k">def</span> <span class="nf">test_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;Pytorch lightning method.&quot;&quot;&quot;</span>
         <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_metrics</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;acc_counts&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;counts_acc&quot;</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;acc_gal_counts&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;galaxy_counts_acc&quot;</span><span class="p">])</span>
@@ -492,11 +501,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;avg_tpr&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;avg_tpr&quot;</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;avg_ppv&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;avg_ppv&quot;</span><span class="p">])</span>
 
-        <span class="k">return</span> <span class="n">batch</span>
+        <span class="k">return</span> <span class="n">batch</span></div>
 
-    <span class="k">def</span> <span class="nf">test_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
-        <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_make_plots</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;testing&quot;</span><span class="p">)</span>
+<div class="viewcode-block" id="SleepPhase.test_epoch_end"><a class="viewcode-back" href="../../api/bliss.html#bliss.sleep.SleepPhase.test_epoch_end">[docs]</a>    <span class="k">def</span> <span class="nf">test_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;Pytorch lightning method.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_make_plots</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;testing&quot;</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_get_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
         <span class="c1"># get images and properties</span>

@@ -10,8 +10,15 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     """Divides a batch of full images into padded tiles.
 
     This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.
+
+    Arguments:
+        images: Tensor of images with size (batchsize x n_bands x slen x slen)
+        tile_slen: Side length of tile
+        ptile_slen: Side length of padded tile
+
+    Returns:
+        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
     """
-    # images should be batchsize x n_bands x slen x slen
     assert len(images.shape) == 4
     n_bands = images.shape[1]
     window = ptile_slen
@@ -24,9 +31,16 @@ def tile_images(images, ptile_slen, tile_slen):
     """Divides a batch of full images into padded tiles.
 
     This is similar to nn.conv2d with a sliding window=ptile_slen and stride=tile_slen
-    """
 
-    # images should be batchsize x n_bands x slen x slen
+    Arguments:
+        images: Tensor of images with size (batchsize x n_bands x slen x slen)
+        tile_slen: Side length of tile
+        ptile_slen: Side length of padded tile
+
+
+    Returns:
+        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
+    """
     assert len(images.shape) == 4
 
     n_bands = images.shape[1]
@@ -42,6 +56,13 @@ def get_is_on_from_n_sources(n_sources, max_sources):
 
     Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
     whether there are more than l sources on the kth batch.
+
+    Arguments:
+        n_sources: Tensor with number of sources per tile.
+        max_sources: Maximum number of sources allowed per tile.
+
+    Returns:
+        Tensor indicating how many sources are present for each batch.
     """
     assert not torch.any(torch.isnan(n_sources))
     assert torch.all(n_sources >= 0)
@@ -340,15 +361,19 @@ class ImageEncoder(nn.Module):
     def get_images_in_tiles(self, images):
         """Divides a batch of full images into padded tiles.
 
-        This is similar to nn.conv2d with a sliding stride=self.tile_slen and window=self.ptile_slen
+        This is similar to nn.conv2d with a sliding stride=self.tile_slen
+        and window=self.ptile_slen.
+
+        Arguments:
+            images: Tensor of size (batchsize x n_bands x slen x slen)
+
+        Returns:
+            A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
         """
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
     def _get_hidden_indices(self):
-        """Setup the indices corresponding to entries in h.
-
-        These are cached sincesame for all h.
-        """
+        """Setup the indices corresponding to entries in h, cached since same for all h."""
 
         # initialize matrices containing the indices for each variational param.
         indx_mats = {}
@@ -455,6 +480,12 @@ class ImageEncoder(nn.Module):
 
         For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
         probability of having 0,1,2 stars.
+
+        Arguments:
+            h: Variational parameters
+
+        Returns:
+            Log-probability of number of sources.
         """
         free_probs = h[:, self.prob_n_source_indx]
         return self.log_softmax(free_probs)
