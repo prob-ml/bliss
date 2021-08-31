@@ -283,23 +283,21 @@ class SleepPhase(pl.LightningModule):
             galaxy_bool_loss,
         )
 
-    def configure_optimizers(self):  # pylint: disable=empty-docstring
-        """"""
+    def configure_optimizers(self):
+        """Configure optimizers for training (pytorch lightning)."""
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.image_encoder.parameters(), kwargs)
 
-    def training_step(
-        self, batch, batch_idx, optimizer_idx=0
-    ):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+    def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
+        """Training step (pytorch lightning)."""
         loss = self._get_loss(batch)[0]
         self.log("train/loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Pytorch lightning method."""
         (
             detection_loss,
             counter_loss,
@@ -325,12 +323,12 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
-        """"""
+        """Pytorch lightning method."""
         if self.current_epoch > 0:
             self._make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Pytorch lightning method."""
         metrics = self._get_metrics(batch)
         self.log("acc_counts", metrics["counts_acc"])
         self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
@@ -342,7 +340,7 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def test_epoch_end(self, outputs):  # pylint: disable=empty-docstring
-        """"""
+        """Pytorch lightning method."""
         self._make_plots(outputs[-1], kind="testing")
 
     def _get_metrics(self, batch):

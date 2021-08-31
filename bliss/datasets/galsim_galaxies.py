@@ -23,6 +23,9 @@ def get_flux(ab_mag: float, filt, survey, B0=24) -> float:
 
     Args:
         ab_mag: AB magnitude of source.
+        filt: TODO (to be documented)
+        survey: TODO (to be documented)
+        B0: TODO (to be documented); defaults to 24.
 
     Returns:
         Flux in detected electrons.

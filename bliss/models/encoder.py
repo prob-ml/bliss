@@ -205,7 +205,7 @@ class ConvBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channel)
 
     def forward(self, x):  # pylint: disable=empty-docstring
-        """"""
+        """Runs convolutional block on inputs."""
         identity = x
 
         x = self.conv1(x)
@@ -229,7 +229,7 @@ class EncoderCNN(nn.Module):
         self.layer = self._make_layer(n_bands, channel, dropout)
 
     def forward(self, x):  # pylint: disable=empty-docstring
-        """"""
+        """Runs encoder CNN on inputs."""
         return self.layer(x)
 
     def _make_layer(self, n_bands, channel, dropout):
@@ -385,6 +385,7 @@ class ImageEncoder(nn.Module):
         Arguments:
             h: shape = (n_ptiles x dim_out_all)
             n_sources: (n_samples x n_tiles)
+            indx_mat: TODO (to be documented)
             param_dim: the dimension of the parameter you are indexing h.
 
         Returns:
@@ -421,8 +422,10 @@ class ImageEncoder(nn.Module):
 
     def _get_var_params_for_n_sources(self, h, n_sources):
         """Gets variational parameters for n_sources.
-        Args:
-            n_sources.shape = (n_samples x n_ptiles)
+
+        Arguments:
+            h: shape = (n_ptiles x dim_out_all)
+            n_sources: Tensor with shape (n_samples x n_ptiles)
 
         Returns:
             loc_mean.shape = (n_sample x n_ptiles x max_detections x len(x,y))
@@ -476,7 +479,7 @@ class ImageEncoder(nn.Module):
         return var_params
 
     def forward(self, image_ptiles, tile_n_sources):  # pylint: disable=empty-docstring
-        """"""
+        """Runs encoder on image ptiles."""
         # images shape = (n_ptiles x n_bands x pslen x pslen)
         # tile_n_sources shape = (n_ptiles)
         assert len(tile_n_sources.shape) == 1

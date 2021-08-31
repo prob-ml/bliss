@@ -1,2 +1,3 @@
 [darglint]
 strictness=long
+docstring_style=google
