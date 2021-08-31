@@ -16,13 +16,19 @@ def get_background(sky_brightness, filt, survey, B0=24):
     return get_flux(sky_brightness, filt, survey, B0=B0) * survey.pixel_scale ** 2
 
 
-def get_flux(ab_mag, filt, survey, B0=24):
-    """Convert source magnitude to flux.
+def get_flux(ab_mag: float, filt, survey, B0=24) -> float:
+    """Converts source magnitude to flux.
+
     The calculation includes the effects of atmospheric extinction.
+
     Args:
-        ab_magnitude(float): AB magnitude of source.
+        ab_mag: AB magnitude of source.
+        filt: TODO (to be documented)
+        survey: TODO (to be documented)
+        B0: TODO (to be documented); defaults to 24.
+
     Returns:
-        float: Flux in detected electrons.
+        Flux in detected electrons.
     """
     zeropoint = filt.zeropoint * survey.effective_area  # [s^-1]
     ab_mag += filt.extinction * (survey.airmass - survey.zeropoint_airmass)

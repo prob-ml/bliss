@@ -7,11 +7,18 @@ from torch.nn import functional as F
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
+    """Divides a batch of full images into padded tiles.
+
+    This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.
+
+    Arguments:
+        images: Tensor of images with size (batchsize x n_bands x slen x slen)
+        tile_slen: Side length of tile
+        ptile_slen: Side length of padded tile
+
+    Returns:
+        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
     """
-    Divide a batch of full images into padded tiles similar to nn.conv2d
-    with a sliding window=ptile_slen and stride=tile_slen
-    """
-    # images should be batchsize x n_bands x slen x slen
     assert len(images.shape) == 4
     n_bands = images.shape[1]
     window = ptile_slen
@@ -21,12 +28,19 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
 
 
 def tile_images(images, ptile_slen, tile_slen):
-    """
-    Divide a batch of full images into padded tiles similar to nn.conv2d
-    with a sliding window=ptile_slen and stride=tile_slen
-    """
+    """Divides a batch of full images into padded tiles.
 
-    # images should be batchsize x n_bands x slen x slen
+    This is similar to nn.conv2d with a sliding window=ptile_slen and stride=tile_slen
+
+    Arguments:
+        images: Tensor of images with size (batchsize x n_bands x slen x slen)
+        tile_slen: Side length of tile
+        ptile_slen: Side length of padded tile
+
+
+    Returns:
+        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
+    """
     assert len(images.shape) == 4
 
     n_bands = images.shape[1]
@@ -38,8 +52,17 @@ def tile_images(images, ptile_slen, tile_slen):
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
-    """Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
+    """Provides tensor which indicates how many sources are present for each batch.
+
+    Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
     whether there are more than l sources on the kth batch.
+
+    Arguments:
+        n_sources: Tensor with number of sources per tile.
+        max_sources: Maximum number of sources allowed per tile.
+
+    Returns:
+        Tensor indicating how many sources are present for each batch.
     """
     assert not torch.any(torch.isnan(n_sources))
     assert torch.all(n_sources >= 0)
@@ -175,7 +198,7 @@ def _identity_func(x):
 
 
 class ConvBlock(nn.Module):
-    """A Convolution Layer
+    """A Convolution Layer.
 
     This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
     in the middle, and an option to downsample with a stride of 2.
@@ -188,7 +211,7 @@ class ConvBlock(nn.Module):
     """
 
     def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
-        """Initializes the module layers"""
+        """Initializes the module layers."""
         super().__init__()
         self.downsample = downsample
         stride = 1
@@ -203,7 +226,7 @@ class ConvBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channel)
 
     def forward(self, x):  # pylint: disable=empty-docstring
-        """"""
+        """Runs convolutional block on inputs."""
         identity = x
 
         x = self.conv1(x)
@@ -227,7 +250,7 @@ class EncoderCNN(nn.Module):
         self.layer = self._make_layer(n_bands, channel, dropout)
 
     def forward(self, x):  # pylint: disable=empty-docstring
-        """"""
+        """Runs encoder CNN on inputs."""
         return self.layer(x)
 
     def _make_layer(self, n_bands, channel, dropout):
@@ -252,30 +275,35 @@ class EncoderCNN(nn.Module):
 
 
 class ImageEncoder(nn.Module):
+    """Encodes the distribution of a latent variable representing an astronomical image.
+
+    This class implements the source encoder, which is supposed to take in
+    an astronomical image of size slen * slen and returns a NN latent variable
+    representation of this image.
+
+    Parameters:
+        max_detections: Number of maximum detections in a single tile.
+        n_bands: number of bands
+        tile_slen: dimension of full image, we assume its square for now
+        ptile_slen: dimension (in pixels) of the individual
+                        image padded tiles (usually 8 for stars, and _ for galaxies).
+        channel: TODO (document this)
+        spatial_dropout: TODO (document this)
+        dropout: TODO (document this)
+        hidden: TODO (document this)
+    """
+
     def __init__(
         self,
-        max_detections=1,
-        n_bands=1,
-        tile_slen=2,
-        ptile_slen=6,
-        channel=8,
+        max_detections: int = 1,
+        n_bands: int = 1,
+        tile_slen: int = 2,
+        ptile_slen: int = 6,
+        channel: int = 8,
         spatial_dropout=0,
         dropout=0,
-        hidden=128,
+        hidden: int = 128,
     ):
-        """
-        This class implements the source encoder, which is supposed to take in a synthetic image of
-        size slen * slen and returns a NN latent variable representation of this image.
-
-        Args:
-        slen (int): dimension of full image, we assume its square for now
-        ptile_slen (int): dimension (in pixels) of the individual
-                           image padded tiles (usually 8 for stars, and _ for galaxies).
-        n_bands (int): number of bands
-        max_detections (int): Number of maximum detections in a single tile.
-        n_galaxy_params (int): Number of latent dimensions in the galaxy AE network.
-
-        """
         super().__init__()
         self.max_detections = max_detections
         self.n_bands = n_bands
@@ -331,17 +359,21 @@ class ImageEncoder(nn.Module):
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
     def get_images_in_tiles(self, images):
-        """
-        Divide a batch of full images into padded tiles similar to nn.conv2d
-        with a sliding stride=self.tile_slen and window=self.ptile_slen
+        """Divides a batch of full images into padded tiles.
+
+        This is similar to nn.conv2d with a sliding stride=self.tile_slen
+        and window=self.ptile_slen.
+
+        Arguments:
+            images: Tensor of size (batchsize x n_bands x slen x slen)
+
+        Returns:
+            A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
         """
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
     def _get_hidden_indices(self):
-        """
-        Setup the indices corresponding to entries in h, these are cached since
-        same for all h.
-        """
+        """Setup the indices corresponding to entries in h, cached since same for all h."""
 
         # initialize matrices containing the indices for each variational param.
         indx_mats = {}
@@ -370,13 +402,17 @@ class ImageEncoder(nn.Module):
         return indx_mats, curr_indx
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
-        """
-        Index into all possible combinations of variational parameters (h) to obtain actually
+        """Obtains variational parameters for n_sources.
+
+        Indexes into all possible combinations of variational parameters (h) to obtain actually
         variational parameters for n_sources.
-        Args:
+
+        Arguments:
             h: shape = (n_ptiles x dim_out_all)
             n_sources: (n_samples x n_tiles)
+            indx_mat: TODO (to be documented)
             param_dim: the dimension of the parameter you are indexing h.
+
         Returns:
             var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
         """
@@ -410,9 +446,11 @@ class ImageEncoder(nn.Module):
         return self.enc_final(h)
 
     def _get_var_params_for_n_sources(self, h, n_sources):
-        """
-        Args:
-            n_sources.shape = (n_samples x n_ptiles)
+        """Gets variational parameters for n_sources.
+
+        Arguments:
+            h: shape = (n_ptiles x dim_out_all)
+            n_sources: Tensor with shape (n_samples x n_ptiles)
 
         Returns:
             loc_mean.shape = (n_sample x n_ptiles x max_detections x len(x,y))
@@ -438,11 +476,16 @@ class ImageEncoder(nn.Module):
         return torch.normal(mean, sd) * tile_is_on_array
 
     def _get_logprob_n_from_var_params(self, h):
-        """
-        Obtain log probability of number of n_sources.
+        """Obtains log probability of number of n_sources.
 
-        Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
         probability of having 0,1,2 stars.
+
+        Arguments:
+            h: Variational parameters
+
+        Returns:
+            Log-probability of number of sources.
         """
         free_probs = h[:, self.prob_n_source_indx]
         return self.log_softmax(free_probs)
@@ -467,7 +510,7 @@ class ImageEncoder(nn.Module):
         return var_params
 
     def forward(self, image_ptiles, tile_n_sources):  # pylint: disable=empty-docstring
-        """"""
+        """Runs encoder on image ptiles."""
         # images shape = (n_ptiles x n_bands x pslen x pslen)
         # tile_n_sources shape = (n_ptiles)
         assert len(tile_n_sources.shape) == 1
