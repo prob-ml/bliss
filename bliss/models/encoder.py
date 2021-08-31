@@ -271,6 +271,7 @@ class ImageEncoder(nn.Module):
         dropout: TODO (document this)
         hidden: TODO (document this)
     """
+
     def __init__(
         self,
         max_detections: int = 1,
@@ -337,16 +338,16 @@ class ImageEncoder(nn.Module):
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
     def get_images_in_tiles(self, images):
-        """
-        Divide a batch of full images into padded tiles similar to nn.conv2d
-        with a sliding stride=self.tile_slen and window=self.ptile_slen
+        """Divides a batch of full images into padded tiles.
+
+        This is similar to nn.conv2d with a sliding stride=self.tile_slen and window=self.ptile_slen
         """
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
     def _get_hidden_indices(self):
-        """
-        Setup the indices corresponding to entries in h, these are cached since
-        same for all h.
+        """Setup the indices corresponding to entries in h.
+
+        These are cached sincesame for all h.
         """
 
         # initialize matrices containing the indices for each variational param.
@@ -376,13 +377,16 @@ class ImageEncoder(nn.Module):
         return indx_mats, curr_indx
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
-        """
-        Index into all possible combinations of variational parameters (h) to obtain actually
+        """Obtains variational parameters for n_sources.
+
+        Indexes into all possible combinations of variational parameters (h) to obtain actually
         variational parameters for n_sources.
-        Args:
+
+        Arguments:
             h: shape = (n_ptiles x dim_out_all)
             n_sources: (n_samples x n_tiles)
             param_dim: the dimension of the parameter you are indexing h.
+
         Returns:
             var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
         """
@@ -416,7 +420,7 @@ class ImageEncoder(nn.Module):
         return self.enc_final(h)
 
     def _get_var_params_for_n_sources(self, h, n_sources):
-        """
+        """Gets variational parameters for n_sources.
         Args:
             n_sources.shape = (n_samples x n_ptiles)
 
@@ -444,10 +448,9 @@ class ImageEncoder(nn.Module):
         return torch.normal(mean, sd) * tile_is_on_array
 
     def _get_logprob_n_from_var_params(self, h):
-        """
-        Obtain log probability of number of n_sources.
+        """Obtains log probability of number of n_sources.
 
-        Example: If max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
         probability of having 0,1,2 stars.
         """
         free_probs = h[:, self.prob_n_source_indx]
