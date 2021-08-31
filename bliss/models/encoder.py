@@ -7,9 +7,9 @@ from torch.nn import functional as F
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
-    """
-    Divide a batch of full images into padded tiles similar to nn.conv2d
-    with a sliding window=ptile_slen and stride=tile_slen
+    """Divides a batch of full images into padded tiles.
+
+    This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.
     """
     # images should be batchsize x n_bands x slen x slen
     assert len(images.shape) == 4
@@ -21,9 +21,9 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
 
 
 def tile_images(images, ptile_slen, tile_slen):
-    """
-    Divide a batch of full images into padded tiles similar to nn.conv2d
-    with a sliding window=ptile_slen and stride=tile_slen
+    """Divides a batch of full images into padded tiles.
+
+    This is similar to nn.conv2d with a sliding window=ptile_slen and stride=tile_slen
     """
 
     # images should be batchsize x n_bands x slen x slen
@@ -38,7 +38,9 @@ def tile_images(images, ptile_slen, tile_slen):
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
-    """Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
+    """Provides tensor which indicates how many sources are present for each batch.
+
+    Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates
     whether there are more than l sources on the kth batch.
     """
     assert not torch.any(torch.isnan(n_sources))
@@ -175,7 +177,7 @@ def _identity_func(x):
 
 
 class ConvBlock(nn.Module):
-    """A Convolution Layer
+    """A Convolution Layer.
 
     This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
     in the middle, and an option to downsample with a stride of 2.
@@ -188,7 +190,7 @@ class ConvBlock(nn.Module):
     """
 
     def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
-        """Initializes the module layers"""
+        """Initializes the module layers."""
         super().__init__()
         self.downsample = downsample
         stride = 1
@@ -252,30 +254,34 @@ class EncoderCNN(nn.Module):
 
 
 class ImageEncoder(nn.Module):
+    """Encodes the distribution of a latent variable representing an astronomical image.
+
+    This class implements the source encoder, which is supposed to take in
+    an astronomical image of size slen * slen and returns a NN latent variable
+    representation of this image.
+
+    Parameters:
+        max_detections: Number of maximum detections in a single tile.
+        n_bands: number of bands
+        tile_slen: dimension of full image, we assume its square for now
+        ptile_slen: dimension (in pixels) of the individual
+                        image padded tiles (usually 8 for stars, and _ for galaxies).
+        channel: TODO (document this)
+        spatial_dropout: TODO (document this)
+        dropout: TODO (document this)
+        hidden: TODO (document this)
+    """
     def __init__(
         self,
-        max_detections=1,
-        n_bands=1,
-        tile_slen=2,
-        ptile_slen=6,
-        channel=8,
+        max_detections: int = 1,
+        n_bands: int = 1,
+        tile_slen: int = 2,
+        ptile_slen: int = 6,
+        channel: int = 8,
         spatial_dropout=0,
         dropout=0,
-        hidden=128,
+        hidden: int = 128,
     ):
-        """
-        This class implements the source encoder, which is supposed to take in a synthetic image of
-        size slen * slen and returns a NN latent variable representation of this image.
-
-        Args:
-        slen (int): dimension of full image, we assume its square for now
-        ptile_slen (int): dimension (in pixels) of the individual
-                           image padded tiles (usually 8 for stars, and _ for galaxies).
-        n_bands (int): number of bands
-        max_detections (int): Number of maximum detections in a single tile.
-        n_galaxy_params (int): Number of latent dimensions in the galaxy AE network.
-
-        """
         super().__init__()
         self.max_detections = max_detections
         self.n_bands = n_bands
