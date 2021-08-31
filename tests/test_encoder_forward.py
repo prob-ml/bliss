@@ -6,7 +6,8 @@ from bliss.models import encoder
 
 class TestSourceEncoder:
     def test_forward(self, devices):
-        """
+        """Tests forward function of source encoder.
+
         * Test that forward returns the correct pattern of zeros.
         * Test that variational parameters inside h agree with those returned from forward.
         """
@@ -128,7 +129,7 @@ class TestSourceEncoder:
                     )
 
     def test_forward_to_hidden2d(self, devices):
-        """Consistency check of using forward vs get_var_params"""
+        """Consistency check of using forward vs get_var_params."""
         device = devices.device
 
         n_image_tiles = 30
