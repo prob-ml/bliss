@@ -1,6 +1,6 @@
-"""Summary for sleep.py
+"""Implements sleep-phase training of BLISS models.
 
-This module contains SleepPhase class, which implements the sleep-phase traning using
+This module contains the SleepPhase class, which implements the sleep-phase training using
 pytorch-lightning framework. Users should use this class to construct the sleep-phase
 model.
 
@@ -178,7 +178,7 @@ class SleepPhase(pl.LightningModule):
         return tile_est
 
     def _get_loss(self, batch):
-        """
+        """Private method to evaluate loss on the input minibatch.
 
         loc_mean shape = (n_ptiles x max_detections x 2)
         log_flux_mean shape = (n_ptiles x max_detections x n_bands)
