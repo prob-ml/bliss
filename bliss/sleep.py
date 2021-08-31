@@ -159,8 +159,8 @@ class SleepPhase(pl.LightningModule):
         # plotting
         self.annotate_probs = annotate_probs
 
-    def forward(self, image_ptiles, tile_n_sources):  # pylint: disable=empty-docstring
-        """"""
+    def forward(self, image_ptiles, tile_n_sources):
+        """Encodes parameters from image tiles."""
         return self.image_encoder(image_ptiles, tile_n_sources)
 
     def tile_map_estimate(self, batch):

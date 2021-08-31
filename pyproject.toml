@@ -42,7 +42,7 @@ speclite = "^0.13"
 tox = "^3.20.1"
 wemake-python-styleguide = "^0.15.3"
 sphinx-rtd-theme = "^0.5.2"
-flake8-docstrings = "^1.6.0"
+darglint = "^1.8.0"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
