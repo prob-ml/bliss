@@ -5,7 +5,7 @@ from torch.nn import functional as F
 
 
 class MLP(nn.Sequential):
-    """A Multi-layer perceptron of dense layers with non-linear activation layers"""
+    """A Multi-layer perceptron of dense layers with non-linear activation layers."""
 
     def __init__(self, in_features, hs, out_features, act=nn.ReLU, final=None):
         self.in_features = in_features
@@ -21,10 +21,7 @@ class MLP(nn.Sequential):
 
 
 class SequentialVarg(nn.Sequential):
-    """
-    This subclass of torch.nn.Sequential allows for stacking modules which take
-    and/or return multiple arguments.
-    """
+    """Stacks modules which take and/or return multiple arguments."""
 
     def forward(self, *X):
         for module in self:
@@ -36,7 +33,7 @@ class SequentialVarg(nn.Sequential):
 
 
 class SplitLayer(nn.Module):
-    """This layer splits the input according to the arguments to torch.split"""
+    """Splits the input according to the arguments to torch.split."""
 
     def __init__(self, split_size_or_sections, dim):
         super().__init__()
@@ -48,10 +45,7 @@ class SplitLayer(nn.Module):
 
 
 class ConcatLayer(nn.Module):
-    """
-    Concatenates input tensors of the same size along the last dimension.
-    Optionally filters out arguments based on position.
-    """
+    """Concatenates input tensors of the same size along the last dimension."""
 
     def __init__(self, input_idxs=None):
         super().__init__()
@@ -89,10 +83,7 @@ class ConcatLayer(nn.Module):
 # Probabilistic Encoders
 # ************************
 class NormalEncoder(nn.Module):
-    """
-    This module takes two tensors of equal shape, mean and logscale, which parameterize
-    a Normal distribution
-    """
+    """Encodes a Normal distribution with mean and logscale."""
 
     def __init__(self, minscale=None):
         super().__init__()

@@ -63,6 +63,10 @@ jobs:
         run: |
           poetry run flake8 bliss/ tests/
 
+      - name: Run darglint
+        run: |
+          poetry run darglint bliss/ tests/
+
       - name: Run black
         run: |
           poetry run black --check .

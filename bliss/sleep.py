@@ -1,6 +1,6 @@
-"""Summary for sleep.py
+"""Implements sleep-phase training of BLISS models.
 
-This module contains SleepPhase class, which implements the sleep-phase traning using
+This module contains the SleepPhase class, which implements the sleep-phase training using
 pytorch-lightning framework. Users should use this class to construct the sleep-phase
 model.
 
@@ -159,8 +159,8 @@ class SleepPhase(pl.LightningModule):
         # plotting
         self.annotate_probs = annotate_probs
 
-    def forward(self, image_ptiles, tile_n_sources):  # pylint: disable=empty-docstring
-        """"""
+    def forward(self, image_ptiles, tile_n_sources):
+        """Encodes parameters from image tiles."""
         return self.image_encoder(image_ptiles, tile_n_sources)
 
     def tile_map_estimate(self, batch):
@@ -178,30 +178,41 @@ class SleepPhase(pl.LightningModule):
         return tile_est
 
     def _get_loss(self, batch):
-        """
+        """Private method to evaluate loss on the input minibatch.
 
-        loc_mean shape = (n_ptiles x max_detections x 2)
-        log_flux_mean shape = (n_ptiles x max_detections x n_bands)
+        Arguments:
+            batch: Batch of training data (described below).
 
-        the *_logvar inputs should the same shape as their respective means
-        the true_tile_* inputs, except for true_tile_is_on_array,
-        should have same shape as their respective means, e.g.
-        true_locs should have the same shape as loc_mean
+        Returns:
+            A tuple with the following components:
+                loss:
+                counter_loss:
+                locs_loss:
+                star_params_loss:
+                galaxy_bool_loss:
 
-        In true_locs, the off sources must have parameter value = 0
+        Notes:
+            loc_mean shape = (n_ptiles x max_detections x 2)
+            log_flux_mean shape = (n_ptiles x max_detections x n_bands)
 
-        true_is_on_array shape = (n_ptiles x max_detections)
-            Indicates if sources is on (1) or off (0)
+            the *_logvar inputs should the same shape as their respective means
+            the true_tile_* inputs, except for true_tile_is_on_array,
+            should have same shape as their respective means, e.g.
+            true_locs should have the same shape as loc_mean
 
-        true_galaxy_bool shape = (n_ptiles x max_detections x 1)
-            indicating whether each source is a galaxy (1) or star (0)
+            In true_locs, the off sources must have parameter value = 0
 
-        prob_galaxy shape = (n_ptiles x max_detections)
-            are probabilities for each source to be a galaxy
+            true_is_on_array shape = (n_ptiles x max_detections)
+                Indicates if sources is on (1) or off (0)
 
-        n_source_log_probs shape = (n_ptiles x (max_detections + 1))
-            are log-probabilities for the number of sources (0, 1, ..., max_detections)
+            true_galaxy_bool shape = (n_ptiles x max_detections x 1)
+                indicating whether each source is a galaxy (1) or star (0)
 
+            prob_galaxy shape = (n_ptiles x max_detections)
+                are probabilities for each source to be a galaxy
+
+            n_source_log_probs shape = (n_ptiles x (max_detections + 1))
+                are log-probabilities for the number of sources (0, 1, ..., max_detections)
         """
         (
             images,
@@ -283,23 +294,21 @@ class SleepPhase(pl.LightningModule):
             galaxy_bool_loss,
         )
 
-    def configure_optimizers(self):  # pylint: disable=empty-docstring
-        """"""
+    def configure_optimizers(self):
+        """Configure optimizers for training (pytorch lightning)."""
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.image_encoder.parameters(), kwargs)
 
-    def training_step(
-        self, batch, batch_idx, optimizer_idx=0
-    ):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+    def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
+        """Training step (pytorch lightning)."""
         loss = self._get_loss(batch)[0]
         self.log("train/loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Pytorch lightning method."""
         (
             detection_loss,
             counter_loss,
@@ -325,12 +334,12 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
-        """"""
+        """Pytorch lightning method."""
         if self.current_epoch > 0:
             self._make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Pytorch lightning method."""
         metrics = self._get_metrics(batch)
         self.log("acc_counts", metrics["counts_acc"])
         self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
@@ -342,7 +351,7 @@ class SleepPhase(pl.LightningModule):
         return batch
 
     def test_epoch_end(self, outputs):  # pylint: disable=empty-docstring
-        """"""
+        """Pytorch lightning method."""
         self._make_plots(outputs[-1], kind="testing")
 
     def _get_metrics(self, batch):

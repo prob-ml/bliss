@@ -140,7 +140,7 @@ class ImageDecoder(pl.LightningModule):
         self.background_values = background_values
 
     def forward(self):  # pylint: disable=empty-docstring
-        """"""
+        """Decodes latent representation into an image."""
         return self.star_tile_decoder.psf_forward()
 
     def sample_prior(self, batch_size=1):
@@ -277,7 +277,13 @@ class ImageDecoder(pl.LightningModule):
         return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     def _sample_fluxes(self, n_stars, star_bool, batch_size):
-        """
+        """Samples fluxes.
+
+        Arguments:
+            n_stars: Tensor indicating number of stars per tile
+            star_bool: Tensor indicating whether each object is a star or not
+            batch_size: Size of the batches
+
         Returns:
             fluxes, tensor shape (batch_size x self.n_tiles_per_image x self.max_sources x n_bands)
         """
@@ -508,17 +514,21 @@ class Tiler(nn.Module):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def forward(self, locs, source):  # pylint: disable=empty-docstring
-        """"""
+    def forward(self, locs, source):
+        """See render_one_source."""
         return self.render_one_source(locs, source)
 
     def render_one_source(self, locs, source):
-        """
-        :param locs: is n_ptiles x len((x,y))
-        :param source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
+        """Renders one source at a location from shape.
+
+        Arguments:
+            locs: is n_ptiles x len((x,y))
+            source: is a (n_ptiles, n_bands, slen, slen) tensor, which could either be a
                         `expanded_psf` (psf repeated multiple times) for the case of of stars.
                         Or multiple galaxies in the case of galaxies.
-        :return: shape = (n_ptiles x n_bands x slen x slen)
+
+        Returns:
+            Tensor with shape = (n_ptiles x n_bands x slen x slen)
         """
         assert source.shape[2] == source.shape[3]
         assert locs.shape[1] == 2
@@ -539,11 +549,14 @@ class Tiler(nn.Module):
         return F.grid_sample(source, grid_loc, align_corners=True)
 
     def render_tile(self, locs, sources):
-        """
-        :param locs: is (n_ptiles x max_num_stars x 2)
-        :param sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
+        """Renders tile from locations and sources.
 
-        :return: ptile = (n_ptiles x n_bands x slen x slen)
+        Arguments:
+            locs: is (n_ptiles x max_num_stars x 2)
+            sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
+
+        Returns:
+            ptile = (n_ptiles x n_bands x slen x slen)
         """
         max_sources = locs.shape[1]
         ptile_shape = (
@@ -568,7 +581,7 @@ class Tiler(nn.Module):
         return fitted_source
 
     def _expand_source(self, source):
-        """Pad the source with zeros so that it is size ptile_slen,"""
+        """Pad the source with zeros so that it is size ptile_slen."""
         assert len(source.shape) == 3
 
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
@@ -639,7 +652,7 @@ class StarTileDecoder(nn.Module):
         self.normalization_constant = self.normalization_constant.detach()
 
     def forward(self, locs, fluxes, star_bool):  # pylint: disable=empty-docstring
-        """"""
+        """Renders star tile from locations and fluxes."""
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
         # star_bool: Is (n_ptiles x max_stars x 1)
@@ -757,7 +770,7 @@ class GalaxyTileDecoder(nn.Module):
         self.n_galaxy_params = n_galaxy_params
 
     def forward(self, locs, galaxy_params, galaxy_bool):  # pylint: disable=empty-docstring
-        """"""
+        """Renders galaxy tile from locations and galaxy parameters."""
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]

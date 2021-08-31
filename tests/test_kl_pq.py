@@ -54,10 +54,7 @@ class TestStarEncoderObjective:
 
     # pylint: disable=too-many-statements
     def test_get_min_perm_loss(self, devices):
-        """
-        Same as previous function but checks that we can get the permutation
-        with the minimum loss.
-        """
+        """Same as previous, but checks that we get the permutation with the minimum loss."""
 
         device = devices.device
 

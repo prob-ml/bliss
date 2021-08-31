@@ -31,8 +31,8 @@ class CenteredGalaxyEncoder(nn.Module):
             nn.Linear(hidden, latent_dim),
         )
 
-    def forward(self, image):  # pylint: disable=empty-docstring
-        """"""
+    def forward(self, image):
+        """Encodes galaxy from image."""
         return self.features(image)
 
 
@@ -60,8 +60,8 @@ class CenteredGalaxyDecoder(nn.Module):
             nn.ConvTranspose2d(4, n_bands, 5, stride=3),
         )
 
-    def forward(self, z):  # pylint: disable=empty-docstring
-        """"""
+    def forward(self, z):
+        """Decodes image from latent representation."""
         z = self.fc(z)
         z = z.view(-1, 8, self.min_slen, self.min_slen)
         z = self.deconv(z)
@@ -97,8 +97,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
-    def forward(self, image, background):  # pylint: disable=empty-docstring
-        """"""
+    def forward(self, image, background):
+        """Gets reconstructed image from running through encoder and decoder."""
         z = self.enc.forward(image - background)
         recon_mean = self.dec.forward(z)
         return recon_mean + background
@@ -110,8 +110,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # Optimizer
     # ----------------
 
-    def configure_optimizers(self):  # pylint: disable=empty-docstring
-        """"""
+    def configure_optimizers(self):
+        """Configures optimizers for training (pytorch lightning)."""
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
@@ -122,7 +122,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # ----------------
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)
         loss = self.get_loss(images, recon_mean)
@@ -134,7 +134,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # ----------------
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)
         loss = self.get_loss(images, recon_mean)
@@ -146,7 +146,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return {"images": images, "recon_mean": recon_mean}
 
     def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
-        """"""
+        """Validation epoch end (pytorch lightning)."""
         images = outputs[0]["images"][:10]
         recon_mean = outputs[0]["recon_mean"][:10]
         fig = self.plot_reconstruction(images, recon_mean)
@@ -185,7 +185,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return fig
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Testing step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)
         residuals = (images - recon_mean) / torch.sqrt(images)
