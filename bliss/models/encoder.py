@@ -27,30 +27,6 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
 
 
-def tile_images(images, ptile_slen, tile_slen):
-    """Divides a batch of full images into padded tiles.
-
-    This is similar to nn.conv2d with a sliding window=ptile_slen and stride=tile_slen
-
-    Arguments:
-        images: Tensor of images with size (batchsize x n_bands x slen x slen)
-        tile_slen: Side length of tile
-        ptile_slen: Side length of padded tile
-
-
-    Returns:
-        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
-    """
-    assert len(images.shape) == 4
-
-    n_bands = images.shape[1]
-
-    window = ptile_slen
-    tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
-    # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
-
-
 def get_is_on_from_n_sources(n_sources, max_sources):
     """Provides tensor which indicates how many sources are present for each batch.
 
