@@ -5,7 +5,7 @@ from omegaconf import DictConfig
 
 from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
-from bliss.models.encoder import get_full_params, get_star_bool
+from bliss.models.encoder import get_full_params, get_is_on_from_n_sources, get_star_bool
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.sleep import SleepPhase
 
@@ -27,6 +27,7 @@ def prediction(image, image_encoder, galaxy_encoder=None, binary_encoder=None):
 
     # get MAP estimates
     tile_n_sources = image_encoder.tile_map_n_sources(ptiles)
+    tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
     tile_map = image_encoder.tile_map_estimate(image)
 
     # get var_params in tiles (excluding galaxy params)
@@ -42,20 +43,26 @@ def prediction(image, image_encoder, galaxy_encoder=None, binary_encoder=None):
 
         galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
         latent_dim = galaxy_param_mean.shape[-1]
-        var_params["galaxy_param_mean"] = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-        tile_map["galaxy_params"] = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
+        galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
+        galaxy_param_mean *= tile_is_on_array
+        var_params["galaxy_param_mean"] = galaxy_param_mean
+        tile_map["galaxy_params"] = galaxy_param_mean
 
     if binary_encoder is not None:
         # get classification params per tile
         assert not binary_encoder.training
         assert image.shape[1] == binary_encoder.n_bands
-        prob_galaxy = binary_encoder(ptiles, tile_map["locs"])
-        galaxy_bool = (prob_galaxy > 0.5).float().reshape(1, -1, 1, 1)
+        prob_galaxy = (
+            binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
+        )
+        galaxy_bool = (prob_galaxy > 0.5).float().reshape(1, -1, 1, 1) * tile_is_on_array
         star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool).reshape(1, -1, 1, 1)
         var_params["galaxy_bool"] = galaxy_bool
         tile_map["galaxy_bool"] = galaxy_bool
         var_params["star_bool"] = star_bool
         tile_map["star_bool"] = star_bool
+        tile_map["prob_galaxy"] = prob_galaxy
+        var_params["prob_galaxy"] = prob_galaxy
 
     # full parameters on chunk
     full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
