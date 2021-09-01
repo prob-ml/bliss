@@ -371,25 +371,6 @@ whether there are more than l sources on the kth batch.</p>
 </dl>
 </dd></dl>
 
-<dl class="py function">
-<dt id="bliss.models.encoder.tile_images">
-<code class="sig-prename descclassname"><span class="pre">bliss.models.encoder.</span></code><code class="sig-name descname"><span class="pre">tile_images</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">images</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ptile_slen</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_slen</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#tile_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.encoder.tile_images" title="Permalink to this definition">¶</a></dt>
-<dd><p>Divides a batch of full images into padded tiles.</p>
-<p>This is similar to nn.conv2d with a sliding window=ptile_slen and stride=tile_slen</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>images</strong> – Tensor of images with size (batchsize x n_bands x slen x slen)</p></li>
-<li><p><strong>tile_slen</strong> – Side length of tile</p></li>
-<li><p><strong>ptile_slen</strong> – Side length of padded tile</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image</p>
-</dd>
-</dl>
-</dd></dl>
-
 </div>
 <div class="section" id="module-bliss.models.fnp">
 <span id="bliss-models-fnp-module"></span><h2>bliss.models.fnp module<a class="headerlink" href="#module-bliss.models.fnp" title="Permalink to this headline">¶</a></h2>

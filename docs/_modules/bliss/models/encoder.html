@@ -180,30 +180,6 @@
     <span class="k">return</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">tiles</span><span class="p">,</span> <span class="s2">&quot;b (c h w) n -&gt; (b n) c h w&quot;</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">n_bands</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="n">window</span><span class="p">,</span> <span class="n">w</span><span class="o">=</span><span class="n">window</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="tile_images"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.tile_images">[docs]</a><span class="k">def</span> <span class="nf">tile_images</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Divides a batch of full images into padded tiles.</span>
-
-<span class="sd">    This is similar to nn.conv2d with a sliding window=ptile_slen and stride=tile_slen</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        images: Tensor of images with size (batchsize x n_bands x slen x slen)</span>
-<span class="sd">        tile_slen: Side length of tile</span>
-<span class="sd">        ptile_slen: Side length of padded tile</span>
-
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
-
-    <span class="n">n_bands</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-
-    <span class="n">window</span> <span class="o">=</span> <span class="n">ptile_slen</span>
-    <span class="n">tiles</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">unfold</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="n">window</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="n">tile_slen</span><span class="p">)</span>
-    <span class="c1"># b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch</span>
-    <span class="k">return</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">tiles</span><span class="p">,</span> <span class="s2">&quot;b (c h w) n -&gt; (b n) c h w&quot;</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">n_bands</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="n">window</span><span class="p">,</span> <span class="n">w</span><span class="o">=</span><span class="n">window</span><span class="p">)</span></div>
-
-
 <div class="viewcode-block" id="get_is_on_from_n_sources"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.get_is_on_from_n_sources">[docs]</a><span class="k">def</span> <span class="nf">get_is_on_from_n_sources</span><span class="p">(</span><span class="n">n_sources</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Provides tensor which indicates how many sources are present for each batch.</span>
 
