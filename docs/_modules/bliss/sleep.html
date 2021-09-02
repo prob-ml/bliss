@@ -275,9 +275,6 @@
 
 <span class="sd">    Implementation of sleep-phase training using pytorch-lightning framework.</span>
 
-<span class="sd">    Args:</span>
-<span class="sd">        cfg (DictConfig): OmegaConf configuration from YAML files</span>
-
 <span class="sd">    Example:</span>
 <span class="sd">        In python script, set up the sleep-phase model and pytorch-lightning trainer::</span>
 
@@ -285,7 +282,7 @@
 <span class="sd">            from bliss.sleep import SleepPhase</span>
 
 
-<span class="sd">            model = SleepPhase(cfg)</span>
+<span class="sd">            model = SleepPhase(**cfg.model.kwargs, optimizer_params=cfg.optimizer)</span>
 <span class="sd">            trainer = pl.Trainer()</span>
 <span class="sd">            trainer.fit(model, data=dataset)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -297,6 +294,14 @@
         <span class="n">annotate_probs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">optimizer_params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># pylint: disable=unused-argument</span>
     <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initializes SleepPhase class.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            encoder_kwargs: Keyword args passed to ImageEncoder</span>
+<span class="sd">            decoder_kwargs: Keyword args passed to ImageDecoder</span>
+<span class="sd">            annotate_probs: Should probabilities be annotated on plot? Defaults to False.</span>
+<span class="sd">            optimizer_params: Parameters passed to optimizer. Defaults to None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>
 

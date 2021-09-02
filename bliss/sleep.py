@@ -122,9 +122,6 @@ class SleepPhase(pl.LightningModule):
 
     Implementation of sleep-phase training using pytorch-lightning framework.
 
-    Args:
-        cfg (DictConfig): OmegaConf configuration from YAML files
-
     Example:
         In python script, set up the sleep-phase model and pytorch-lightning trainer::
 
@@ -132,7 +129,7 @@ class SleepPhase(pl.LightningModule):
             from bliss.sleep import SleepPhase
 
 
-            model = SleepPhase(cfg)
+            model = SleepPhase(**cfg.model.kwargs, optimizer_params=cfg.optimizer)
             trainer = pl.Trainer()
             trainer.fit(model, data=dataset)
     """
@@ -144,6 +141,14 @@ class SleepPhase(pl.LightningModule):
         annotate_probs: bool = False,
         optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
+        """Initializes SleepPhase class.
+
+        Args:
+            encoder_kwargs: Keyword args passed to ImageEncoder
+            decoder_kwargs: Keyword args passed to ImageDecoder
+            annotate_probs: Should probabilities be annotated on plot? Defaults to False.
+            optimizer_params: Parameters passed to optimizer. Defaults to None.
+        """
         super().__init__()
         self.save_hyperparameters()
 
