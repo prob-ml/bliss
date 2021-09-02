@@ -294,21 +294,6 @@ in the middle, and an option to downsample with a stride of 2.</p>
 <p>This class implements the source encoder, which is supposed to take in
 an astronomical image of size slen * slen and returns a NN latent variable
 representation of this image.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>max_detections</strong> – Number of maximum detections in a single tile.</p></li>
-<li><p><strong>n_bands</strong> – number of bands</p></li>
-<li><p><strong>tile_slen</strong> – dimension of full image, we assume its square for now</p></li>
-<li><p><strong>ptile_slen</strong> – dimension (in pixels) of the individual
-image padded tiles (usually 8 for stars, and _ for galaxies).</p></li>
-<li><p><strong>channel</strong> – TODO (document this)</p></li>
-<li><p><strong>spatial_dropout</strong> – TODO (document this)</p></li>
-<li><p><strong>dropout</strong> – TODO (document this)</p></li>
-<li><p><strong>hidden</strong> – TODO (document this)</p></li>
-</ul>
-</dd>
-</dl>
 <dl class="py method">
 <dt id="bliss.models.encoder.ImageEncoder.forward">
 <code class="sig-name descname"><span class="pre">forward</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_ptiles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_n_sources</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/encoder.html#ImageEncoder.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.encoder.ImageEncoder.forward" title="Permalink to this definition">¶</a></dt>
