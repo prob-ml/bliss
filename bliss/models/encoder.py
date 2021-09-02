@@ -256,17 +256,6 @@ class ImageEncoder(nn.Module):
     This class implements the source encoder, which is supposed to take in
     an astronomical image of size slen * slen and returns a NN latent variable
     representation of this image.
-
-    Parameters:
-        max_detections: Number of maximum detections in a single tile.
-        n_bands: number of bands
-        tile_slen: dimension of full image, we assume its square for now
-        ptile_slen: dimension (in pixels) of the individual
-                        image padded tiles (usually 8 for stars, and _ for galaxies).
-        channel: TODO (document this)
-        spatial_dropout: TODO (document this)
-        dropout: TODO (document this)
-        hidden: TODO (document this)
     """
 
     def __init__(
@@ -280,6 +269,19 @@ class ImageEncoder(nn.Module):
         dropout=0,
         hidden: int = 128,
     ):
+        """Initializes ImageEncoder.
+
+        Args:
+            max_detections: Number of maximum detections in a single tile.
+            n_bands: number of bands
+            tile_slen: dimension of full image, we assume its square for now
+            ptile_slen: dimension (in pixels) of the individual
+                            image padded tiles (usually 8 for stars, and _ for galaxies).
+            channel: TODO (document this)
+            spatial_dropout: TODO (document this)
+            dropout: TODO (document this)
+            hidden: TODO (document this)
+        """
         super().__init__()
         self.max_detections = max_detections
         self.n_bands = n_bands
