@@ -428,8 +428,8 @@ class SleepPhase(pl.LightningModule):
                 estimate=estimate,
                 labels=None if i > 0 else labels,
                 annotate_axis=True,
-                annotate_probs=self.annotate_probs,
                 add_borders=True,
+                prob_galaxy=estimate["prob_galaxy"],
             )
 
         fig.tight_layout()
