@@ -226,4 +226,5 @@ class BinaryEncoder(pl.LightningModule):
         fig.tight_layout()
 
         title = f"Epoch:{self.current_epoch}/Validation Images"
-        self.logger.experiment.add_figure(title, fig)
+        if self.logger is not None:
+            self.logger.experiment.add_figure(title, fig)
