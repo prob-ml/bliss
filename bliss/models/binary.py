@@ -14,29 +14,32 @@ from bliss.plotting import plot_image_and_locs
 class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
-        channel=8,
-        spatial_dropout=0,
-        dropout=0,
-        hidden=128,
-        n_bands=1,
-        tile_slen=4,
-        ptile_slen=52,
+        n_bands: int = 1,
+        tile_slen: int = 4,
+        ptile_slen: int = 52,
+        channel: int = 8,
+        hidden: int = 128,
+        spatial_dropout: float = 0,
+        dropout: float = 0,
         decoder_kwargs: dict = None,  # pylint: disable=unused-argument
         optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
-        """
+        """Encoder which conditioned on other source params returns probability of galaxy vs. star.
+
         This class implements the binary encoder, which is supposed to take in a synthetic image
         along with true locations and source parameters and return whether each source in that
         image is a star or a galaxy.
 
-        Args:
-        slen (int): dimension of full image, we assume its square for now
-        ptile_slen (int): dimension (in pixels) of the individual
-                           image padded tiles (usually 8 for stars, and _ for galaxies).
-        n_bands (int): number of bands
-        max_detections (int): Number of maximum detections in a single tile.
-        n_galaxy_params (int): Number of latent dimensions in the galaxy AE network.
-
+        Arguments:
+            n_bands: number of bands
+            tile_slen: dimension (in pixels) of each tile.
+            ptile_slen: dimension (in pixels) of the individual image padded tiles.
+            channel: TODO (document this)
+            hidden: TODO (document this)
+            spatial_dropout: TODO (document this)
+            dropout: TODO (document this)
+            decoder_kwargs: TODO (document this)
+            optimizer_params: TODO (document this)
         """
         super().__init__()
         self.save_hyperparameters()
@@ -75,13 +78,11 @@ class BinaryEncoder(pl.LightningModule):
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
     def get_images_in_tiles(self, images):
-        """
-        Divide a batch of full images into padded tiles similar to nn.conv2d
-        with a sliding stride=self.tile_slen and window=self.ptile_slen
-        """
+        """Divide a batch of full images into padded tiles similar to nn.conv2d."""
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
     def center_ptiles(self, image_ptiles, tile_locs):
+        """Return padded tiles centered on each corresponding source."""
         return center_ptiles(
             image_ptiles,
             tile_locs,
@@ -115,6 +116,7 @@ class BinaryEncoder(pl.LightningModule):
         return torch.sigmoid(z).clamp(1e-4, 1 - 1e-4)
 
     def get_prediction(self, batch):
+        """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
 
         images = batch["images"]
         galaxy_bool = batch["galaxy_bool"].reshape(-1)
@@ -166,13 +168,18 @@ class BinaryEncoder(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
         """"""
-        # put all outputs together into a single batch
+        # Put all outputs together into a single batch
         batch = {}
         for b in outputs:
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
                 batch[k] = torch.cat([curr_val, v])
         self.make_plots(batch)
+
+    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+        """"""
+        pred = self.get_prediction(batch)
+        self.log("acc", pred["acc"])
 
     def make_plots(self, batch, n_samples=16):
 
