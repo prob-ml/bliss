@@ -1,6 +1,6 @@
 deterministic: False
 plotting: True
-n_epochs: 5
+n_epochs: 2
 experiment: default
 version: null
 save_top_k: 1
