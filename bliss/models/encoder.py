@@ -488,7 +488,7 @@ class ImageEncoder(nn.Module):
 
         return var_params
 
-    def forward(self, image_ptiles, tile_n_sources):  # pylint: disable=empty-docstring
+    def forward(self, image_ptiles, tile_n_sources):
         """Runs encoder on image ptiles."""
         # images shape = (n_ptiles x n_bands x pslen x pslen)
         # tile_n_sources shape = (n_ptiles)

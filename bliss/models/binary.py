@@ -94,13 +94,14 @@ class BinaryEncoder(pl.LightningModule):
         )
 
     def forward_image(self, images, tile_locs):
+        """Splits `images` into padded tiles and runs `self.forward()` on them."""
         batch_size = images.shape[0]
         ptiles = self.get_images_in_tiles(images)
         prob_galaxy = self(ptiles, tile_locs)
         return prob_galaxy.view(batch_size, -1, 1, 1)
 
-    def forward(self, image_ptiles, tile_locs):  # pylint: disable=empty-docstring
-        """"""
+    def forward(self, image_ptiles, tile_locs):
+        """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         n_ptiles = image_ptiles.shape[0]
 
@@ -146,28 +147,28 @@ class BinaryEncoder(pl.LightningModule):
         }
 
     def configure_optimizers(self):  # pylint: disable=empty-docstring
-        """"""
+        """Pytorch lightning method."""
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.parameters(), kwargs)
 
     def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Pytorch lightning method."""
         pred = self.get_prediction(batch)
         self.log("train/loss", pred["loss"])
         self.log("train/acc", pred["acc"])
         return pred["loss"]
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Pytorch lightning method."""
         pred = self.get_prediction(batch)
         self.log("val/loss", pred["loss"])
         self.log("val/acc", pred["acc"])
         return batch
 
     def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
-        """"""
+        """Pytorch lightning method."""
         # Put all outputs together into a single batch
         batch = {}
         for b in outputs:
@@ -177,11 +178,12 @@ class BinaryEncoder(pl.LightningModule):
         self.make_plots(batch)
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
-        """"""
+        """Pytorch lightning method."""
         pred = self.get_prediction(batch)
         self.log("acc", pred["acc"])
 
     def make_plots(self, batch, n_samples=16):
+        """Produced informative plots demonstrating encoder performance."""
 
         assert n_samples ** (0.5) % 1 == 0
         if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
