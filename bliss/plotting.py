@@ -1,4 +1,7 @@
+from matplotlib.figure import Figure
+from matplotlib.pyplot import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from torch import Tensor
 
 
 def plot_image(fig, ax, image, vrange=None):
@@ -30,17 +33,17 @@ def plot_locs(ax, slen, bpad, locs, color="r", marker="x", s=20, prob_galaxy=Non
 
 def plot_image_and_locs(
     idx: int,
-    fig,
-    ax,
+    fig: Figure,
+    ax: Axes,
     images,
     slen: int,
     true_params: dict,
     estimate: dict = None,
-    labels=None,
-    annotate_axis=False,
-    add_borders=False,
-    vrange=None,
-    prob_galaxy=None,
+    labels: list = None,
+    annotate_axis: bool = False,
+    add_borders: bool = False,
+    vrange: tuple = None,
+    prob_galaxy: Tensor = None,
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
