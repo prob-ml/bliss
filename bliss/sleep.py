@@ -340,7 +340,7 @@ class SleepPhase(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
         """Pytorch lightning method."""
-        if self.current_epoch > 0:
+        if self.current_epoch > 0 and self.image_decoder.n_bands == 1:
             self._make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
@@ -357,7 +357,8 @@ class SleepPhase(pl.LightningModule):
 
     def test_epoch_end(self, outputs):  # pylint: disable=empty-docstring
         """Pytorch lightning method."""
-        self._make_plots(outputs[-1], kind="testing")
+        if self.image_decoder.n_bands == 1:
+            self._make_plots(outputs[-1], kind="testing")
 
     def _get_metrics(self, batch):
         # get images and properties

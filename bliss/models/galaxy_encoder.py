@@ -167,7 +167,8 @@ class GalaxyEncoder(pl.LightningModule):
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
                 batch[k] = torch.cat([curr_val, v])
-        self.make_plots(batch)
+        if self.n_bands == 1:
+            self.make_plots(batch)
 
     # pylint: disable=too-many-statements
     def make_plots(self, batch, n_samples=25):
