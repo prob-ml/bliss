@@ -1,0 +1,38 @@
+name: BinaryEncoder
+image:
+  slen: 40
+  n_bands: 1
+  background:
+    - 865.0
+galaxy:
+  slen: 53
+  latent_dim: 8
+kwargs:
+  channel: 8
+  spatial_dropout: 0.0
+  dropout: 0.0
+  hidden: 128
+  n_bands: 1
+  tile_slen: 4
+  ptile_slen: 52
+  decoder_kwargs:
+    n_bands: ${model.image.n_bands}
+    slen: ${model.image.slen}
+    tile_slen: 4
+    ptile_slen: 52
+    border_padding: 24
+    prob_galaxy: 0.7
+    n_galaxy_params: ${model.galaxy.latent_dim}
+    max_sources: 1
+    mean_sources: 0.03
+    min_sources: 0
+    f_min: 1e3
+    f_max: 1e6
+    alpha: 0.5
+    gal_slen: ${model.galaxy.slen}
+    autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt
+    latents_file: ${paths.data}/latents_simulated_sdss_galaxies.pt
+    psf_params_file: ${paths.root}/data/psField-000094-1-0012.fits
+    background_values: ${model.image.background}
+    sdss_bands:
+      - 2

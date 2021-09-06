@@ -13,8 +13,9 @@ bands:
   - 2
 
 # i/o parameters
-sleep_checkpoint: ${paths.root}/models/sleep_sdss.ckpt
+sleep_checkpoint: ${paths.root}/models/sdss_sleep.ckpt
 galaxy_checkpoint: ${paths.root}/models/galaxy_encoder_sdss.ckpt
+binary_checkpoint: ${paths.root}/models/sdss_binary.ckpt
 device: "cuda:0"
 output_file: null
 

@@ -12,6 +12,41 @@ from bliss.optimizer import get_optimizer
 from bliss.plotting import plot_image, plot_image_and_locs
 
 
+def center_ptiles(
+    image_ptiles, tile_locs, tile_slen, ptile_slen, border_padding, swap, cached_grid
+):
+    # assume there is at most one source per tile
+    # return a centered version of sources in tiles using their true locations in tiles.
+    # also we crop them to avoid sharp borders with no bacgkround/noise.
+
+    # round up necessary variables and paramters
+    assert len(image_ptiles.shape) == 4
+    assert len(tile_locs.shape) == 3
+    assert tile_locs.shape[1] == 1
+    assert image_ptiles.shape[-1] == ptile_slen
+    n_ptiles = image_ptiles.shape[0]
+    assert tile_locs.shape[0] == n_ptiles
+
+    # get new locs to do the shift
+    ptile_locs = tile_locs * tile_slen + border_padding
+    ptile_locs /= ptile_slen
+    locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
+    locs0 /= ptile_slen - 1
+    locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
+    locs = 2 * locs0 - ptile_locs
+
+    # center tiles on the corresponding source given by locs.
+    locs = (locs - 0.5) * 2
+    locs = locs.index_select(2, swap)  # transpose (x,y) coords
+    grid_loc = cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
+    shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
+
+    # now that everything is center we can crop easily
+    return shifted_tiles[
+        :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
+    ]
+
+
 class GalaxyEncoder(pl.LightningModule):
     def __init__(
         self,
@@ -52,38 +87,15 @@ class GalaxyEncoder(pl.LightningModule):
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
 
     def center_ptiles(self, image_ptiles, tile_locs):
-        # assume there is at most one source per tile
-        # return a centered version of sources in tiles using their true locations in tiles.
-        # also we crop them to avoid sharp borders with no bacgkround/noise.
-
-        # round up necessary variables and paramters
-        assert len(image_ptiles.shape) == 4
-        assert len(tile_locs.shape) == 3
-        assert tile_locs.shape[1] == 1
-        assert image_ptiles.shape[-1] == self.ptile_slen
-        n_ptiles = image_ptiles.shape[0]
-        tile_slen = self.tile_slen
-        ptile_slen = self.ptile_slen
-        assert tile_locs.shape[0] == n_ptiles
-
-        # get new locs to do the shift
-        ptile_locs = tile_locs * self.tile_slen + self.border_padding
-        ptile_locs /= ptile_slen
-        locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
-        locs0 /= ptile_slen - 1
-        locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
-        locs = 2 * locs0 - ptile_locs
-
-        # center tiles on the corresponding source given by locs.
-        locs = (locs - 0.5) * 2
-        locs = locs.index_select(2, self.swap)  # trps (x,y) coords
-        grid_loc = self.cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
-        shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
-
-        # now that everything is center we can crop easily
-        return shifted_tiles[
-            :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
-        ]
+        return center_ptiles(
+            image_ptiles,
+            tile_locs,
+            self.tile_slen,
+            self.ptile_slen,
+            self.border_padding,
+            self.swap,
+            self.cached_grid,
+        )
 
     def configure_optimizers(self):
         """Set up optimizers (pytorch-lightning method)."""

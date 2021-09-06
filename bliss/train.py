@@ -8,7 +8,7 @@ from pytorch_lightning.profiler import AdvancedProfiler
 
 from bliss import sleep
 from bliss.datasets import galsim_galaxies, simulated
-from bliss.models import galaxy_encoder, galaxy_net
+from bliss.models import binary, galaxy_encoder, galaxy_net
 
 # available datasets and models.
 _datasets = [
@@ -19,7 +19,12 @@ _datasets = [
 ]
 datasets = {cls.__name__: cls for cls in _datasets}
 
-_models = [sleep.SleepPhase, galaxy_net.OneCenteredGalaxyAE, galaxy_encoder.GalaxyEncoder]
+_models = [
+    sleep.SleepPhase,
+    galaxy_net.OneCenteredGalaxyAE,
+    galaxy_encoder.GalaxyEncoder,
+    binary.BinaryEncoder,
+]
 models = {cls.__name__: cls for cls in _models}
 
 
