@@ -6,7 +6,7 @@ def test_binary(model_setup, devices):
         "optimizer": "adam",
         "optimizer.kwargs.lr": 1e-4,
         "model.kwargs.decoder_kwargs.mean_sources": 0.03,
-        "training.n_epochs": 300 if devices.use_cuda else 2,
+        "training.n_epochs": 50 if devices.use_cuda else 2,
     }
 
     trained_binary = model_setup.get_trained_model(overrides)
