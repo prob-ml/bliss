@@ -175,7 +175,9 @@ class BinaryEncoder(pl.LightningModule):
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
                 batch[k] = torch.cat([curr_val, v])
-        self.make_plots(batch)
+
+        if self.n_bands == 1:
+            self.make_plots(batch)
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
         """Pytorch lightning method."""
