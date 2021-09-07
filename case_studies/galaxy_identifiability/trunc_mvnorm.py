@@ -5,6 +5,15 @@ import rpy2.robjects as robjects
 numpy2ri.activate()
 
 class TruncMVNorm:
+    """ Class for calculated truncated multivariate normal
+    
+
+    Example:
+        >>> means = torch.tensor([[-1, 1], [0,0], [1, 1]]).float()
+        >>> tm = trunc_mvnorm.TruncMVNorm()
+        >>> tm.mtmvnorm(means[0].numpy(), None, np.array([[0.,0.], [-1., -1.]]), np.array([[1.,1.], [0., 0.]]))
+        >>> tm.pmvnorm(means[0].numpy(), None, np.array([[0.,0.], [-1., -1.]]), np.array([[1.,1.], [0., 0.]]))
+    """
     def __init__(self) -> None:
         self._r_mtmvnorm = robjects.r("""
             function(m, l, u) {
