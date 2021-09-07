@@ -340,7 +340,7 @@ class SleepPhase(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
         """Pytorch lightning method."""
-        if self.current_epoch > 0:
+        if self.current_epoch > 0 and self.image_decoder.n_bands == 1:
             self._make_plots(outputs[-1], kind="validation")
 
     def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
@@ -357,7 +357,8 @@ class SleepPhase(pl.LightningModule):
 
     def test_epoch_end(self, outputs):  # pylint: disable=empty-docstring
         """Pytorch lightning method."""
-        self._make_plots(outputs[-1], kind="testing")
+        if self.image_decoder.n_bands == 1:
+            self._make_plots(outputs[-1], kind="testing")
 
     def _get_metrics(self, batch):
         # get images and properties
@@ -399,6 +400,7 @@ class SleepPhase(pl.LightningModule):
         assert n_samples ** (0.5) % 1 == 0
         if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
             return
+        nrows = int(n_samples ** 0.5)  # for figure
 
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
@@ -411,11 +413,8 @@ class SleepPhase(pl.LightningModule):
         estimate = get_full_params(tile_estimate, slen)
 
         # setup figure and axes.
-        figsize = (12, 12)
-        nrows = int(n_samples ** 0.5)
-        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
+        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
-        labels = ("t. gal", "p. gal", "t. star", "p. star")
 
         for i in range(n_samples):
             plot_image_and_locs(
@@ -426,10 +425,10 @@ class SleepPhase(pl.LightningModule):
                 slen,
                 true_params,
                 estimate=estimate,
-                labels=None if i > 0 else labels,
+                labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),
                 annotate_axis=True,
-                annotate_probs=self.annotate_probs,
                 add_borders=True,
+                prob_galaxy=estimate["prob_galaxy"],
             )
 
         fig.tight_layout()
