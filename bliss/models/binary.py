@@ -21,8 +21,8 @@ class BinaryEncoder(pl.LightningModule):
         hidden: int = 128,
         spatial_dropout: float = 0,
         dropout: float = 0,
-        decoder_kwargs: dict = None,  # pylint: disable=unused-argument
-        optimizer_params: dict = None,  # pylint: disable=unused-argument
+        decoder_kwargs: dict = None,
+        optimizer_params: dict = None,
     ):
         """Encoder which conditioned on other source params returns probability of galaxy vs. star.
 
@@ -146,28 +146,28 @@ class BinaryEncoder(pl.LightningModule):
             "prob_galaxy": prob_galaxy.reshape(images.shape[0], -1, 1, 1),
         }
 
-    def configure_optimizers(self):  # pylint: disable=empty-docstring
+    def configure_optimizers(self):
         """Pytorch lightning method."""
         assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.parameters(), kwargs)
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def training_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         pred = self.get_prediction(batch)
         self.log("train/loss", pred["loss"])
         self.log("train/acc", pred["acc"])
         return pred["loss"]
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         pred = self.get_prediction(batch)
         self.log("val/loss", pred["loss"])
         self.log("val/acc", pred["acc"])
         return batch
 
-    def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
+    def validation_epoch_end(self, outputs):
         """Pytorch lightning method."""
         # Put all outputs together into a single batch
         batch = {}
@@ -179,7 +179,7 @@ class BinaryEncoder(pl.LightningModule):
         if self.n_bands == 1:
             self.make_plots(batch)
 
-    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         pred = self.get_prediction(batch)
         self.log("acc", pred["acc"])

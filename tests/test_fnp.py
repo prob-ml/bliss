@@ -187,7 +187,7 @@ class OneDimFNP(LightningModule):
         self.lr = lr
         self.valid_losses = []
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx):
         XR, yR, XM, yM = batch
         return self.fnp(XR, yR, XM, yM)
 

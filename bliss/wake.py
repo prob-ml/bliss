@@ -96,13 +96,13 @@ class WakeNet(pl.LightningModule):
         err = error[:, :, image_indx_start:image_indx_end, image_indx_start:image_indx_end]
         return err.sum((1, 2, 3)).mean()
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         loss = self._get_loss(batch)
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         loss = self._get_loss(batch)
         self.log("validation_loss", loss)

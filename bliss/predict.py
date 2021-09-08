@@ -117,9 +117,8 @@ def predict(cfg: DictConfig):
 
     all_var_params = {}
     for var_params in list_var_params:
-        for key in var_params:
+        for key, t2 in var_params.items():
             t1 = all_var_params.get(key, torch.tensor([]))
-            t2 = var_params[key]
             all_var_params[key] = torch.cat((t1, t2))
 
     if cfg.predict.output_file is not None:
