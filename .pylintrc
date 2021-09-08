@@ -27,8 +27,8 @@ disable=too-many-ancestors,
 	# seem urgent
 	invalid-name,
 
-        # doesn't seem helpful
-        too-few-public-methods,
+	# doesn't seem helpful
+	too-few-public-methods,
 
 	# we don't have comprehensive documentation yet, let's suppress
 	# these warnings until that's something we're focused on
@@ -51,6 +51,9 @@ disable=too-many-ancestors,
 	# problems in the tests directory
 	no-self-use,
 	redefined-outer-name,
+
+	# when overriding methods you don't get to pick your arguments
+	unused-argument,
 
 
 [SIMILARITIES]

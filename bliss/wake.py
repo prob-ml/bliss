@@ -43,7 +43,7 @@ class WakeNet(pl.LightningModule):
         # get n_bands
         self.n_bands = self.image_decoder.n_bands
 
-    def forward(self, obs_img):  # pylint: disable=empty-docstring
+    def forward(self, obs_img):
         """Get reconstructed mean from running encoder and then decoder."""
         with torch.no_grad():
             self.star_encoder.eval()
@@ -66,11 +66,11 @@ class WakeNet(pl.LightningModule):
     # Data
     # ----------------
 
-    def train_dataloader(self):  # pylint: disable=empty-docstring
+    def train_dataloader(self):
         """Returns training dataloader (pytorch lightning)."""
         return DataLoader(self.observed_img, batch_size=None)
 
-    def val_dataloader(self):  # pylint: disable=empty-docstring
+    def val_dataloader(self):
         """Returns validation dataloader (pytorch lightning)."""
         return DataLoader(self.observed_img, batch_size=None)
 
@@ -96,13 +96,13 @@ class WakeNet(pl.LightningModule):
         err = error[:, :, image_indx_start:image_indx_end, image_indx_start:image_indx_end]
         return err.sum((1, 2, 3)).mean()
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         loss = self._get_loss(batch)
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         loss = self._get_loss(batch)
         self.log("validation_loss", loss)

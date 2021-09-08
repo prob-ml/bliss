@@ -82,7 +82,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim=8,
         hidden=256,
         n_bands=1,
-        optimizer_params: dict = None,  # pylint: disable=unused-argument
+        optimizer_params: dict = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -121,7 +121,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # Training
     # ----------------
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)
@@ -133,7 +133,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # Validation
     # ----------------
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)
@@ -145,7 +145,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.log("val_max_residual", residuals.abs().max())
         return {"images": images, "recon_mean": recon_mean}
 
-    def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
+    def validation_epoch_end(self, outputs):
         """Validation epoch end (pytorch lightning)."""
         images = outputs[0]["images"][:10]
         recon_mean = outputs[0]["recon_mean"][:10]
@@ -184,7 +184,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         return fig
 
-    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def test_step(self, batch, batch_idx):
         """Testing step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)

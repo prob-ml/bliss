@@ -55,13 +55,13 @@ def generate(cfg: DictConfig):
     for batch in dataset.train_dataloader():
         if not bool(fbatch):  # dict is empty
             fbatch = batch
-            for key in fbatch:
+            for key, val in fbatch.items():
                 if key in global_params:
-                    fbatch[key] = fbatch[key][0]
+                    fbatch[key] = val[0]
         else:
-            for key in fbatch:
+            for key, val in fbatch.items():
                 if key not in global_params:
-                    fbatch[key] = torch.vstack((fbatch[key], batch[key]))
+                    fbatch[key] = torch.vstack((val, batch[key]))
 
     # make sure in CPU by default.
     # assumes all data are tensors (including metadata).
