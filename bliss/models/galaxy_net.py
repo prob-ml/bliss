@@ -125,7 +125,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def forward_model_1(self, residual):
         z = self.enc_1.forward(residual)
-        recon_mean = F.relu(self.dec_1.forward(z)) + 0.5
+        recon_mean = (
+            F.relu(self.dec_1.forward(z)) + 0.5
+        )  # add 0.5 to force positive output should change to init strategy later on
         return recon_mean
 
     def forward(self, image, background):
@@ -167,11 +169,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         if optimizer_idx == 1:
             with torch.no_grad():
                 recon_mean_0 = self.forward_model_0(images, background)
-            recon_mean_1 = self.forward_model_1(images - recon_mean_0)
-            loss_1 = self.get_loss(images - recon_mean_0, recon_mean_1)
+            recon_mean_1 = self.forward_model_1(images - recon_mean_0 + background)
+            loss_1 = self.get_loss(images - recon_mean_0 + background, recon_mean_1)
             self.log("train/loss_1", loss_1, prog_bar=True)
 
-            recon_mean = recon_mean_0 + recon_mean_1
+            recon_mean = recon_mean_0 + recon_mean_1 - background
             loss = self.get_loss(images, recon_mean)
             self.log("train/loss", loss, prog_bar=True)
             return loss_1
@@ -186,11 +188,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         loss_0 = self.get_loss(images, recon_mean_0)
         self.log("val/loss_0", loss_0)
 
-        recon_mean_1 = self.forward_model_1(images - recon_mean_0)
-        loss_1 = self.get_loss(images - recon_mean_0, recon_mean_1)
+        recon_mean_1 = self.forward_model_1(images - recon_mean_0 + background)
+        loss_1 = self.get_loss(images - recon_mean_0 + background, recon_mean_1)
         self.log("val/loss_1", loss_1)
 
-        recon_mean = recon_mean_0 + recon_mean_1
+        recon_mean = recon_mean_0 + recon_mean_1 - background
         loss = self.get_loss(images, recon_mean)
         self.log("val/loss", loss)
 
