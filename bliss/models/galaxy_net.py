@@ -12,50 +12,6 @@ from bliss.utils import make_grid
 plt.switch_backend("Agg")
 
 
-class ConvBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel, act=nn.LeakyReLU):
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.Conv2d(in_channel, out_channel, kernel_size=kernel, padding=(kernel - 1) // 2),
-            nn.BatchNorm2d(out_channel),
-            act(inplace=True),
-        )
-
-    def forward(self, x):
-        return self.layers(x)
-
-
-class InceptionBlock(nn.Module):
-    def __init__(self, in_channel, hidden_channel, out_channel):
-        super().__init__()
-        self.conv1 = ConvBlock(in_channel, out_channel, 1)
-        self.conv3 = nn.Sequential(
-            ConvBlock(in_channel, hidden_channel, 1), ConvBlock(hidden_channel, out_channel, 3)
-        )
-        self.conv5 = nn.Sequential(
-            ConvBlock(in_channel, hidden_channel, 1), ConvBlock(hidden_channel, out_channel, 5)
-        )
-        self.conv7 = nn.Sequential(
-            ConvBlock(in_channel, hidden_channel, 1), ConvBlock(hidden_channel, out_channel, 7)
-        )
-        self.maxpool3 = nn.Sequential(
-            nn.MaxPool2d(kernel_size=3, stride=1, padding=1), ConvBlock(in_channel, out_channel, 1)
-        )
-        self.maxpool5 = nn.Sequential(
-            nn.MaxPool2d(kernel_size=5, stride=1, padding=2), ConvBlock(in_channel, out_channel, 1)
-        )
-
-    def forward(self, x):
-        x1 = self.conv1(x)
-        x3 = self.conv3(x)
-        x5 = self.conv5(x)
-        x7 = self.conv7(x)
-        xm3 = self.maxpool3(x)
-        xm5 = self.maxpool5(x)
-        out = x1 + x3 + x5 + x7 + xm3 + xm5
-        return out
-
-
 class CenteredGalaxyEncoder(nn.Module):
     def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256):
         super().__init__()
@@ -64,34 +20,27 @@ class CenteredGalaxyEncoder(nn.Module):
         self.latent_dim = latent_dim
 
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
-        min_slen = f(f(slen))  # pylint: disable=unused-variable
-        base_dim = 2
+        min_slen = f(f(slen))
 
-        self.feature = nn.Sequential(
-            InceptionBlock(n_bands, 2 * base_dim, 4 * base_dim),
-            nn.Conv2d(4 * base_dim, 4 * base_dim, kernel_size=2, stride=2),
-            InceptionBlock(4 * base_dim, 2 * base_dim, 8 * base_dim),
-            nn.Conv2d(8 * base_dim, 8 * base_dim, kernel_size=2, stride=2),
-            InceptionBlock(8 * base_dim, 4 * base_dim, 16 * base_dim),
-            nn.Conv2d(16 * base_dim, 16 * base_dim, kernel_size=2, stride=2),
-            InceptionBlock(16 * base_dim, 8 * base_dim, 32 * base_dim),
-            nn.Conv2d(32 * base_dim, 32 * base_dim, kernel_size=2, stride=2),
-        )
-        self.fc = nn.Sequential(
-            nn.Flatten(1, -1),
-            nn.Linear(32 * base_dim * 3 ** 2, 512),
-            nn.BatchNorm1d(512),
+        self.features = nn.Sequential(
+            nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
             nn.LeakyReLU(),
-            nn.Linear(512, hidden),
-            nn.BatchNorm1d(hidden),
+            nn.Conv2d(4, 8, 5, stride=3, padding=0),
+            nn.LeakyReLU(),
+            nn.Flatten(1, -1),
+            nn.Linear(8 * min_slen ** 2, hidden),
             nn.LeakyReLU(),
             nn.Linear(hidden, latent_dim),
         )
+        # self.init_weight()
 
-    def forward(self, x):
-        x = self.feature(x)
-        x = self.fc(x)
-        return x
+    def init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="leaky_relu")
+
+    def forward(self, image):
+        return self.features(image)
 
 
 class CenteredGalaxyDecoder(nn.Module):
@@ -105,38 +54,33 @@ class CenteredGalaxyDecoder(nn.Module):
         self.min_slen = f(f(slen))
         assert g(g(self.min_slen)) == slen
 
-        base_dim = 2
-        self.base_dim = base_dim
-
-        self.feature = nn.Sequential(
-            nn.ConvTranspose2d(32 * base_dim, 16 * base_dim, kernel_size=2, stride=2),
-            nn.LeakyReLU(inplace=True),
-            nn.ConvTranspose2d(
-                16 * base_dim, 8 * base_dim, kernel_size=2, stride=2, output_padding=1
-            ),
-            nn.LeakyReLU(inplace=True),
-            nn.ConvTranspose2d(8 * base_dim, 4 * base_dim, kernel_size=2, stride=2),
-            nn.LeakyReLU(inplace=True),
-            nn.ConvTranspose2d(4 * base_dim, n_bands, kernel_size=2, stride=2, output_padding=1),
-            nn.LeakyReLU(inplace=True),
-        )
-
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, hidden),
-            nn.BatchNorm1d(hidden),
             nn.LeakyReLU(),
-            nn.Linear(hidden, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(hidden, 8 * self.min_slen ** 2),
             nn.LeakyReLU(),
-            nn.Linear(512, 32 * base_dim * 3 ** 2),
         )
+
+        self.deconv = nn.Sequential(
+            nn.ConvTranspose2d(8, 4, 5, stride=3),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(4, n_bands, 5, stride=3),
+        )
+        # self.init_weight()
+
+    def init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.ConvTranspose2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="leaky_relu")
 
     def forward(self, z):
         z = self.fc(z)
-        z = z.view(-1, 32 * self.base_dim, 3, 3)
-        z = self.feature(z)
+        z = z.view(-1, 8, self.min_slen, self.min_slen)
+        z = self.deconv(z)
+        z = z[:, :, : self.slen, : self.slen]
         assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
-        return z
+        recon_mean = z
+        return recon_mean
 
 
 class OneCenteredGalaxyAE(pl.LightningModule):
@@ -224,9 +168,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             with torch.no_grad():
                 recon_mean_0 = self.forward_model_0(images, background)
             recon_mean_1 = self.forward_model_1(images - recon_mean_0)
-
             loss_1 = F.mse_loss(images - recon_mean_0, recon_mean_1)
-            # loss_1 = self.get_loss(images - recon_mean_0, recon_mean_1)
             self.log("train/loss_1", loss_1, prog_bar=True)
 
             recon_mean = recon_mean_0 + recon_mean_1
@@ -246,7 +188,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         recon_mean_1 = self.forward_model_1(images - recon_mean_0)
         loss_1 = F.mse_loss(images - recon_mean_0, recon_mean_1)
-        # loss_1 = self.get_loss(images - recon_mean_0, recon_mean_1)
         self.log("val/loss_1", loss_1)
 
         recon_mean = recon_mean_0 + recon_mean_1
