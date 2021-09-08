@@ -12,86 +12,11 @@ from bliss.utils import make_grid
 plt.switch_backend("Agg")
 
 
-def to_polar(x, y):
-    d = (x ** 2 + y ** 2).sqrt()
-    r = torch.torch.atan(y / x)
-    r[torch.isnan(r)] = 1.5708
-
-    return d, r
-
-
-def get_polar_param_init(slen, latent_dim, distance_only=False):
-    col = torch.cat(
-        [
-            torch.arange(slen // 2, 0, -1),
-            torch.arange(0, slen // 2 + 1),
-        ]
-    )
-    col = col / (slen // 2)
-    x = col.repeat([slen, 1])
-    y = col.reshape(-1, 1).repeat([1, slen])
-    d, r = to_polar(x, y)
-    if distance_only:
-        d = d.repeat([latent_dim, 1, 1])
-        return d
-    d = d.repeat([latent_dim // 2, 1, 1])
-    r = r.repeat([latent_dim // 2, 1, 1])
-    return torch.cat([d, r], dim=0)
-
-
-def get_pos_param(slen, latent_dim):
-    param = get_polar_param_init(slen, latent_dim)
-    noise = torch.empty_like(param)
-    nn.init.xavier_normal_(noise, gain=nn.init.calculate_gain("leaky_relu"))
-    return param + noise
-
-
-class ConvBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel, act=nn.LeakyReLU):
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.Conv2d(in_channel, out_channel, kernel_size=kernel, padding=(kernel - 1) // 2),
-            nn.BatchNorm2d(out_channel),
-            act(inplace=True),
-        )
-
-    def forward(self, x):
-        return self.layers(x)
-
-
-class InceptionBlock(nn.Module):
-    def __init__(self, in_channel, hidden_channel, out_channel):
-        super().__init__()
-        self.conv1 = ConvBlock(in_channel, out_channel, 1)
-        self.conv3 = nn.Sequential(
-            ConvBlock(in_channel, hidden_channel, 1), ConvBlock(hidden_channel, out_channel, 3)
-        )
-        self.conv5 = nn.Sequential(
-            ConvBlock(in_channel, hidden_channel, 1), ConvBlock(hidden_channel, out_channel, 5)
-        )
-        self.conv7 = nn.Sequential(
-            ConvBlock(in_channel, hidden_channel, 1), ConvBlock(hidden_channel, out_channel, 7)
-        )
-        self.maxpool3 = nn.Sequential(
-            nn.MaxPool2d(kernel_size=3, stride=1, padding=1), ConvBlock(in_channel, out_channel, 1)
-        )
-        self.maxpool5 = nn.Sequential(
-            nn.MaxPool2d(kernel_size=5, stride=1, padding=2), ConvBlock(in_channel, out_channel, 1)
-        )
-
-    def forward(self, x):
-        x1 = self.conv1(x)
-        x3 = self.conv3(x)
-        x5 = self.conv5(x)
-        x7 = self.conv7(x)
-        xm3 = self.maxpool3(x)
-        xm5 = self.maxpool5(x)
-        out = x1 + x3 + x5 + x7 + xm3 + xm5
-        return out
-
-
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(
+        self, slen=53, latent_dim=8, n_bands=1, hidden=256  # pylint: disable=unused-argument
+    ):
+
         super().__init__()
 
         self.slen = slen
@@ -99,40 +24,28 @@ class CenteredGalaxyEncoder(nn.Module):
 
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
         min_slen = f(f(slen))  # pylint: disable=unused-variable
-        base_dim = 2
-        self.pos_param = nn.Parameter(get_pos_param(slen, latent_dim))
 
-        self.feature = nn.Sequential(
-            InceptionBlock(n_bands + latent_dim, 2 * base_dim, 4 * base_dim),
-            nn.Conv2d(4 * base_dim, 4 * base_dim, kernel_size=2, stride=2),
-            InceptionBlock(4 * base_dim, 2 * base_dim, 8 * base_dim),
-            nn.Conv2d(8 * base_dim, 8 * base_dim, kernel_size=2, stride=2),
-            InceptionBlock(8 * base_dim, 4 * base_dim, 16 * base_dim),
-            nn.Conv2d(16 * base_dim, 16 * base_dim, kernel_size=2, stride=2),
-            InceptionBlock(16 * base_dim, 8 * base_dim, 32 * base_dim),
-            nn.Conv2d(32 * base_dim, 32 * base_dim, kernel_size=2, stride=2),
-        )
-        self.fc = nn.Sequential(
-            nn.Flatten(1, -1),
-            nn.Linear(32 * base_dim * 3 ** 2, 512),
-            nn.BatchNorm1d(512),
+        self.features = nn.Sequential(
+            nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
             nn.LeakyReLU(),
-            nn.Linear(512, hidden),
-            nn.BatchNorm1d(hidden),
+            nn.Flatten(),
+            nn.Linear(17 * 17 * 4, 512),
             nn.LeakyReLU(),
-            nn.Linear(hidden, latent_dim),
+            nn.Linear(512, 128),
+            nn.LeakyReLU(),
+            nn.Linear(128, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, 8),
         )
 
-    def forward(self, x):
-        batch = x.size(0)
-        x = torch.cat([x, self.pos_param.repeat([batch, 1, 1, 1])], dim=1)
-        x = self.feature(x)
-        x = self.fc(x)
-        return x
+    def forward(self, image):
+        return self.features(image)
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(
+        self, slen=53, latent_dim=8, n_bands=1, hidden=256
+    ):  # pylint: disable=unused-argument
         super().__init__()
 
         self.slen = slen
@@ -142,38 +55,23 @@ class CenteredGalaxyDecoder(nn.Module):
         self.min_slen = f(f(slen))
         assert g(g(self.min_slen)) == slen
 
-        base_dim = 2
-        self.base_dim = base_dim
-
-        self.feature = nn.Sequential(
-            nn.ConvTranspose2d(32 * base_dim, 16 * base_dim, kernel_size=2, stride=2),
-            nn.LeakyReLU(inplace=True),
-            nn.ConvTranspose2d(
-                16 * base_dim, 8 * base_dim, kernel_size=2, stride=2, output_padding=1
-            ),
-            nn.LeakyReLU(inplace=True),
-            nn.ConvTranspose2d(8 * base_dim, 4 * base_dim, kernel_size=2, stride=2),
-            nn.LeakyReLU(inplace=True),
-            nn.ConvTranspose2d(4 * base_dim, n_bands, kernel_size=2, stride=2, output_padding=1),
-            nn.LeakyReLU(inplace=True),
-        )
-
         self.fc = nn.Sequential(
-            nn.Linear(latent_dim, hidden),
-            nn.BatchNorm1d(hidden),
+            nn.Linear(8, 32),
             nn.LeakyReLU(),
-            nn.Linear(hidden, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(32, 128),
             nn.LeakyReLU(),
-            nn.Linear(512, 32 * base_dim * 3 ** 2),
+            nn.Linear(128, 512),
+            nn.LeakyReLU(),
+            nn.Linear(512, 17 * 17 * 4),
         )
+
+        self.features = nn.Sequential(nn.ConvTranspose2d(4, n_bands, 5, stride=3), nn.ReLU())
 
     def forward(self, z):
         z = self.fc(z)
-        z = z.view(-1, 32 * self.base_dim, 3, 3)
-        z = self.feature(z)
-        assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
-        return z
+        z = z.view(-1, 4, 17, 17)
+        recon_mean = self.features(z)
+        return recon_mean
 
 
 class OneCenteredGalaxyAE(pl.LightningModule):
@@ -218,7 +116,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def forward_model_1(self, residual):
         z = self.enc_1.forward(residual)
-        recon_mean = F.leaky_relu(self.dec_1.forward(z))
+        recon_mean = self.dec_1.forward(z)
         return recon_mean
 
     def forward(self, image, background):
