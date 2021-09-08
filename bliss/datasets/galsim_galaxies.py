@@ -141,8 +141,8 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
     def _uniform(self, a, b):
         # uses pytorch to return a single float ~ U(a, b)
-        u = (a - b) * torch.rand(1) + b
-        return u.item()
+        unif = (a - b) * torch.rand(1) + b
+        return unif.item()
 
     def __getitem__(self, idx):
         flux_avg = self._uniform(self.min_flux, self.max_flux)
@@ -255,8 +255,8 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
     @staticmethod
     def _uniform(a, b):
         # uses pytorch to return a single float ~ U(a, b)
-        u = (a - b) * torch.rand(1) + b
-        return u.item()
+        unif = (a - b) * torch.rand(1) + b
+        return unif.item()
 
     def _draw_pareto_flux(self):
         # draw pareto conditioned on being less than f_max

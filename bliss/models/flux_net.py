@@ -86,15 +86,13 @@ class FluxEncoderNet(nn.Module):
         samples = mean + z * sd
 
         # save everything in a dictionary
-        out_dict = dict(mean=mean, sd=sd, samples=samples)
+        out_dict = {"mean": mean, "sd": sd, "samples": samples}
 
         # reshape
         n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
 
-        for k in out_dict:
-            out_dict[k] = out_dict[k].view(
-                batch_size, n_tiles_per_image, self.max_sources, self.n_bands
-            )
+        for k, v in out_dict.items():
+            out_dict[k] = v.view(batch_size, n_tiles_per_image, self.max_sources, self.n_bands)
 
         return out_dict
 
@@ -132,7 +130,7 @@ class FluxEstimator(pl.LightningModule):
         self,
         decoder_kwargs,
         flux_tile_slen=20,
-        optimizer_params: dict = None,  # pylint: disable=unused-argument
+        optimizer_params: dict = None,
     ):
 
         super().__init__()
@@ -216,7 +214,7 @@ class FluxEstimator(pl.LightningModule):
     # Training
     # ----------------
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx):
         loss = self.get_loss(batch)
         self.log("train_loss", loss)
         return loss
@@ -225,7 +223,7 @@ class FluxEstimator(pl.LightningModule):
     # Validation
     # ----------------
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def validation_step(self, batch, batch_idx):
         out = self.enc(batch["images"])
 
         # get loss

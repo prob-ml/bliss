@@ -52,7 +52,7 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         hidden: int = 256,
         decoder_kwargs: dict = None,
-        optimizer_params: dict = None,  # pylint: disable=unused-argument
+        optimizer_params: dict = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -147,19 +147,19 @@ class GalaxyEncoder(pl.LightningModule):
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
         return recon_losses.sum()
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
         loss = self.get_loss(batch)
         self.log("train/loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def validation_step(self, batch, batch_idx):
         """Pytorch lightning validation step."""
         loss = self.get_loss(batch)
         self.log("val/loss", loss)
         return batch
 
-    def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
+    def validation_epoch_end(self, outputs):
         """Pytorch lightning method run at end of validation epoch."""
         # put all outputs together into a single batch
         batch = {}

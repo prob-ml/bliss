@@ -6,12 +6,12 @@ import pytest
 class TestSleepStarOneTile:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        return dict(
-            model="sleep_star_one_tile",
-            dataset="single_tile" if devices.use_cuda else "cpu",
-            training="unittest" if devices.use_cuda else "cpu",
-            optimizer="m2",
-        )
+        return {
+            "model": "sleep_star_one_tile",
+            "dataset": ("single_tile" if devices.use_cuda else "cpu"),
+            "training": ("unittest" if devices.use_cuda else "cpu"),
+            "optimizer": "m2",
+        }
 
     @pytest.fixture(scope="class")
     def trained_sleep(self, overrides, model_setup):

@@ -89,7 +89,7 @@ def train(cfg: DictConfig):
     callbacks = setup_callbacks(cfg)
     profiler = setup_profiler(cfg)
     trainer_dict = OmegaConf.to_container(cfg.training.trainer, resolve=True)
-    trainer_dict.update(dict(logger=logger, profiler=profiler, callbacks=callbacks))
+    trainer_dict.update({"logger": logger, "profiler": profiler, "callbacks": callbacks})
     trainer = pl.Trainer(**trainer_dict)
 
     # train!

@@ -139,7 +139,7 @@ class ImageDecoder(pl.LightningModule):
         assert len(background_values) == n_bands
         self.background_values = background_values
 
-    def forward(self):  # pylint: disable=empty-docstring
+    def forward(self):
         """Decodes latent representation into an image."""
         return self.star_tile_decoder.psf_forward()
 
@@ -651,7 +651,7 @@ class StarTileDecoder(nn.Module):
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
-    def forward(self, locs, fluxes, star_bool):  # pylint: disable=empty-docstring
+    def forward(self, locs, fluxes, star_bool):
         """Renders star tile from locations and fluxes."""
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
@@ -769,7 +769,7 @@ class GalaxyTileDecoder(nn.Module):
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params
 
-    def forward(self, locs, galaxy_params, galaxy_bool):  # pylint: disable=empty-docstring
+    def forward(self, locs, galaxy_params, galaxy_bool):
         """Renders galaxy tile from locations and galaxy parameters."""
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]

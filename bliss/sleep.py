@@ -139,7 +139,7 @@ class SleepPhase(pl.LightningModule):
         encoder_kwargs: dict,
         decoder_kwargs: dict,
         annotate_probs: bool = False,
-        optimizer_params: dict = None,  # pylint: disable=unused-argument
+        optimizer_params: dict = None,
     ):
         """Initializes SleepPhase class.
 
@@ -306,13 +306,13 @@ class SleepPhase(pl.LightningModule):
         kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.image_encoder.parameters(), kwargs)
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
         loss = self._get_loss(batch)[0]
         self.log("train/loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         (
             detection_loss,
@@ -338,12 +338,12 @@ class SleepPhase(pl.LightningModule):
         self.log("val/avg_ppv", metrics["avg_ppv"])
         return batch
 
-    def validation_epoch_end(self, outputs):  # pylint: disable=empty-docstring
+    def validation_epoch_end(self, outputs):
         """Pytorch lightning method."""
         if self.current_epoch > 0 and self.image_decoder.n_bands == 1:
             self._make_plots(outputs[-1], kind="validation")
 
-    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument,empty-docstring
+    def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         metrics = self._get_metrics(batch)
         self.log("acc_counts", metrics["counts_acc"])
@@ -355,7 +355,7 @@ class SleepPhase(pl.LightningModule):
 
         return batch
 
-    def test_epoch_end(self, outputs):  # pylint: disable=empty-docstring
+    def test_epoch_end(self, outputs):
         """Pytorch lightning method."""
         if self.image_decoder.n_bands == 1:
             self._make_plots(outputs[-1], kind="testing")

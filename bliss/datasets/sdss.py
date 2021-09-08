@@ -314,9 +314,9 @@ class SloanDigitalSkySurvey(Dataset):
             calibration = frame[1].data  # pylint: disable=maybe-no-member
             nelec_per_nmgy = gain[b] / calibration
 
-            (sky_small,) = frame[2].data["ALLSKY"]  # pylint: disable=maybe-no-member
-            (sky_x,) = frame[2].data["XINTERP"]  # pylint: disable=maybe-no-member
-            (sky_y,) = frame[2].data["YINTERP"]  # pylint: disable=maybe-no-member
+            sky_small = frame[2].data["ALLSKY"][0]  # pylint: disable=maybe-no-member
+            sky_x = frame[2].data["XINTERP"][0]  # pylint: disable=maybe-no-member
+            sky_y = frame[2].data["YINTERP"][0]  # pylint: disable=maybe-no-member
 
             small_rows = np.mgrid[0 : sky_small.shape[0]]
             small_cols = np.mgrid[0 : sky_small.shape[1]]
@@ -357,7 +357,7 @@ class SloanDigitalSkySurvey(Dataset):
             po_fits, image_list[band_idx], wcs_list[band_idx], background_list[band_idx]
         )
         stamp_psfs = np.asarray(psf.psf_at_points(band_idx, pts, prs))
-        if len(stamp_bgs) > 0:
+        if stamp_bgs.size > 0:
             psf_center = stamp_psfs.shape[-1] // 2
             psf_lower = psf_center - floor(self.stampsize / 2)
             psf_upper = psf_center + ceil(self.stampsize / 2)

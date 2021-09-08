@@ -131,9 +131,9 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
 
     # now do the same for the rest of the parameters (without scaling or biasing)
     # for same reason no need to multiply times is_on_array
-    for param_name in tile_params:
+    for param_name, val in tile_params.items():
         if param_name in optional:
-            tile_param = tile_params[param_name]
+            tile_param = val
             assert len(tile_param.shape) == 4
             param = rearrange(tile_param, "b t d k -> b (t d) k")
             param = torch.gather(
@@ -201,7 +201,7 @@ class ConvBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channel)
 
-    def forward(self, x):  # pylint: disable=empty-docstring
+    def forward(self, x):
         """Runs convolutional block on inputs."""
         identity = x
 
@@ -225,7 +225,7 @@ class EncoderCNN(nn.Module):
         super().__init__()
         self.layer = self._make_layer(n_bands, channel, dropout)
 
-    def forward(self, x):  # pylint: disable=empty-docstring
+    def forward(self, x):
         """Runs encoder CNN on inputs."""
         return self.layer(x)
 

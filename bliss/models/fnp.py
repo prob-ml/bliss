@@ -373,7 +373,7 @@ class SetPooler(nn.Module):
                 MLP(dim_in, self.pooling_layers, 2 * self.dim_z),
             )
 
-    def forward(self, rep_R, GA):  # pylint: disable=empty-docstring
+    def forward(self, rep_R, GA):
         """Runs set pooler on encoded representations and graph."""
         if not self.set_transformer:
             rep_pooled = GA.unsqueeze(0).unsqueeze(-1).mul(rep_R).sum(2)
