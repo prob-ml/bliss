@@ -32,6 +32,12 @@ class CenteredGalaxyEncoder(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(hidden, latent_dim),
         )
+        # self.init_weight()
+
+    def init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="leaky_relu")
 
     def forward(self, image):
         return self.features(image)
@@ -60,6 +66,12 @@ class CenteredGalaxyDecoder(nn.Module):
             nn.LeakyReLU(),
             nn.ConvTranspose2d(4, n_bands, 5, stride=3),
         )
+        # self.init_weight()
+
+    def init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.ConvTranspose2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="leaky_relu")
 
     def forward(self, z):
         z = self.fc(z)
@@ -67,7 +79,7 @@ class CenteredGalaxyDecoder(nn.Module):
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
         assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
-        recon_mean = F.relu(z)
+        recon_mean = z
         return recon_mean
 
 
@@ -88,23 +100,43 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.enc = CenteredGalaxyEncoder(
+        self.enc_0 = CenteredGalaxyEncoder(
             slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
         )
-        self.dec = CenteredGalaxyDecoder(
+        self.dec_0 = CenteredGalaxyDecoder(
+            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+        )
+
+        self.enc_1 = CenteredGalaxyEncoder(
+            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+        )
+        self.dec_1 = CenteredGalaxyDecoder(
             slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
         )
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
-    def forward(self, image, background):
-        z = self.enc.forward(image - background)
-        recon_mean = self.dec.forward(z)
+    def forward_model_0(self, image, background):
+        z = self.enc_0.forward(image - background)
+        recon_mean = F.relu(self.dec_0.forward(z))
         recon_mean = recon_mean + background
         return recon_mean
 
+    def forward_model_1(self, residual):
+        z = self.enc_1.forward(residual)
+        recon_mean = F.relu(self.dec_1.forward(z)) + 0.5
+        return recon_mean
+
+    def forward(self, image, background):
+        recon_mean_0 = self.forward_model_0(image, background)
+        recon_mean_1 = self.forward_model_1(image - recon_mean_0)
+        recon_mean = recon_mean_0 + recon_mean_1
+
+        return recon_mean
+
     def get_loss(self, image, recon_mean):
+        # this is nan whenever recon_mean is not strictly positive
         return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
 
     # ---------------
@@ -115,18 +147,34 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         assert self.hparams["optimizer_params"] is not None, "Need to specify `optimizer_params`."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
-        return get_optimizer(name, self.parameters(), kwargs)
+        opt_0_params = list(self.enc_0.parameters()) + list(self.dec_0.parameters())
+        opt_1_params = list(self.enc_1.parameters()) + list(self.dec_1.parameters())
+        opt_0 = get_optimizer(name, opt_0_params, kwargs)
+        opt_1 = get_optimizer(name, opt_1_params, kwargs)
+        return opt_0, opt_1
 
     # ---------------
     # Training
     # ----------------
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx, optimizer_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
-        recon_mean = self(images, background)
-        loss = self.get_loss(images, recon_mean)
-        self.log("train/loss", loss)
-        return loss
+        if optimizer_idx == 0:
+            recon_mean_0 = self.forward_model_0(images, background)
+            loss_0 = self.get_loss(images, recon_mean_0)
+            self.log("train/loss_0", loss_0, prog_bar=True)
+            return loss_0
+        if optimizer_idx == 1:
+            with torch.no_grad():
+                recon_mean_0 = self.forward_model_0(images, background)
+            recon_mean_1 = self.forward_model_1(images - recon_mean_0)
+            loss_1 = self.get_loss(images - recon_mean_0, recon_mean_1)
+            self.log("train/loss_1", loss_1, prog_bar=True)
+
+            recon_mean = recon_mean_0 + recon_mean_1
+            loss = self.get_loss(images, recon_mean)
+            self.log("train/loss", loss, prog_bar=True)
+            return loss_1
 
     # ---------------
     # Validation
@@ -134,21 +182,38 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
         images, background = batch["images"], batch["background"]
-        recon_mean = self(images, background)
+        recon_mean_0 = self.forward_model_0(images, background)
+        loss_0 = self.get_loss(images, recon_mean_0)
+        self.log("val/loss_0", loss_0)
+
+        recon_mean_1 = self.forward_model_1(images - recon_mean_0)
+        loss_1 = self.get_loss(images - recon_mean_0, recon_mean_1)
+        self.log("val/loss_1", loss_1)
+
+        recon_mean = recon_mean_0 + recon_mean_1
         loss = self.get_loss(images, recon_mean)
+        self.log("val/loss", loss)
 
         # metrics
-        self.log("val/loss", loss)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("val/max_residual", residuals.abs().max())
-        return {"images": images, "recon_mean": recon_mean}
+        return {
+            "images": images,
+            "recon_mean_0": recon_mean_0,
+            "recon_mean_1": recon_mean_1,
+            "recon_mean": recon_mean,
+        }
 
     def validation_epoch_end(self, outputs):
         if self.logger:
             images = torch.cat([x["images"] for x in outputs])
             recon_mean = torch.cat([x["recon_mean"] for x in outputs])
+            recon_mean_0 = torch.cat([x["recon_mean_0"] for x in outputs])
+            recon_mean_1 = torch.cat([x["recon_mean_1"] for x in outputs])
 
-            reconstructions = self.plot_reconstruction(images, recon_mean)
+            reconstructions = self.plot_reconstruction(
+                images, recon_mean_0, recon_mean_1, recon_mean
+            )
             grid_example = self.plot_grid_examples(images, recon_mean)
 
             self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/images", reconstructions)
@@ -182,7 +247,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plt.yticks([])
         return fig
 
-    def plot_reconstruction(self, images, recon_mean):
+    def plot_reconstruction(self, images, recon_mean_0, recon_mean_1, recon_mean):
 
         # 1. only plot i band if available, otherwise the highest band given.
         # 2. plot `num_examples//2` images with the largest average residual
@@ -195,10 +260,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         assert images.size(0) >= 10
         num_examples = 10
-        num_cols = 4
+        num_cols = 6
 
+        residuals_0 = (images - recon_mean_0) / torch.sqrt(images)
         residuals = (images - recon_mean) / torch.sqrt(images)
-        losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
 
         residuals_idx = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)
         large_residuals_idx = residuals_idx[: num_examples // 2]
@@ -206,23 +271,24 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         plot_idx = torch.cat((large_residuals_idx, small_residuals_idx))
 
         images = images[plot_idx]
+        recon_mean_0 = recon_mean_0[plot_idx]
+        recon_mean_1 = recon_mean_1[plot_idx]
         recon_mean = recon_mean[plot_idx]
         residuals = residuals[plot_idx]
-        losses = losses[plot_idx]
+        residuals_0 = residuals_0[plot_idx]
 
         residual_vmax = torch.ceil(residuals.max().cpu()).numpy()
         residual_vmin = torch.floor(residuals.min().cpu()).numpy()
 
-        losses_vmax = torch.ceil(losses.max().cpu()).numpy()
-        losses_vmin = torch.floor(losses.min().cpu()).numpy()
         plt.ioff()
 
-        fig = plt.figure(figsize=(10, 25))
+        fig = plt.figure(figsize=(15, 25))
 
         for i in range(num_examples):
             image = images[i, 0].data.cpu()
             recon = recon_mean[i, 0].data.cpu()
-            loss = losses[i, 0].data.cpu()
+            recon_0 = recon_mean_0[i, 0].data.cpu()
+            recon_1 = recon_mean_1[i, 0].data.cpu()
 
             vmax = torch.ceil(torch.max(image.max(), recon.max())).cpu().numpy()
             vmin = torch.floor(torch.min(image.min(), recon.min())).cpu().numpy()
@@ -233,11 +299,35 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plt.colorbar()
 
             plt.subplot(num_examples, num_cols, num_cols * i + 2)
+            plt.title("recon_mean_0")
+            plt.imshow(recon_0.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
+            plt.colorbar()
+
+            plt.subplot(num_examples, num_cols, num_cols * i + 3)
+            res_0 = residuals_0[i, 0].data.cpu().numpy()
+            if i < num_examples // 2:
+                plt.title(f"worst residuals_0, avg abs residual: {abs(res_0).mean():.3f}")
+            else:
+                plt.title(f"best residuals_0, avg abs residual: {abs(res_0).mean():.3f}")
+            plt.imshow(
+                res_0,
+                interpolation=None,
+                vmin=residual_vmin,
+                vmax=residual_vmax,
+            )
+
+            plt.colorbar()
+            plt.subplot(num_examples, num_cols, num_cols * i + 4)
+            plt.title("recon_mean_1")
+            plt.imshow(recon_1.numpy(), interpolation=None)
+            plt.colorbar()
+
+            plt.subplot(num_examples, num_cols, num_cols * i + 5)
             plt.title("recon_mean")
             plt.imshow(recon.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
             plt.colorbar()
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 3)
+            plt.subplot(num_examples, num_cols, num_cols * i + 6)
             res = residuals[i, 0].data.cpu().numpy()
             if i < num_examples // 2:
                 plt.title(f"worst residuals, avg abs residual: {abs(res).mean():.3f}")
@@ -249,11 +339,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
                 vmin=residual_vmin,
                 vmax=residual_vmax,
             )
-            plt.colorbar()
-
-            plt.subplot(num_examples, num_cols, num_cols * i + 4)
-            plt.title("loss")
-            plt.imshow(loss.numpy(), interpolation=None, vmin=losses_vmin, vmax=losses_vmax)
             plt.colorbar()
 
         plt.tight_layout()
