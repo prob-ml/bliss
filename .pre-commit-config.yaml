@@ -46,6 +46,6 @@ repos:
         args:
           - "--line-length=100"
   - repo: https://github.com/terrencepreilly/darglint
-    rev: master
+    rev: v1.8.0
     hooks:
       - id: darglint
