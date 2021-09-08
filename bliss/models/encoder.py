@@ -201,7 +201,7 @@ class ConvBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channel)
 
-    def forward(self, x):  # pylint: disable=empty-docstring
+    def forward(self, x):
         """Runs convolutional block on inputs."""
         identity = x
 
@@ -225,7 +225,7 @@ class EncoderCNN(nn.Module):
         super().__init__()
         self.layer = self._make_layer(n_bands, channel, dropout)
 
-    def forward(self, x):  # pylint: disable=empty-docstring
+    def forward(self, x):
         """Runs encoder CNN on inputs."""
         return self.layer(x)
 

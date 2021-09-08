@@ -43,7 +43,7 @@ class WakeNet(pl.LightningModule):
         # get n_bands
         self.n_bands = self.image_decoder.n_bands
 
-    def forward(self, obs_img):  # pylint: disable=empty-docstring
+    def forward(self, obs_img):
         """Get reconstructed mean from running encoder and then decoder."""
         with torch.no_grad():
             self.star_encoder.eval()
@@ -66,11 +66,11 @@ class WakeNet(pl.LightningModule):
     # Data
     # ----------------
 
-    def train_dataloader(self):  # pylint: disable=empty-docstring
+    def train_dataloader(self):
         """Returns training dataloader (pytorch lightning)."""
         return DataLoader(self.observed_img, batch_size=None)
 
-    def val_dataloader(self):  # pylint: disable=empty-docstring
+    def val_dataloader(self):
         """Returns validation dataloader (pytorch lightning)."""
         return DataLoader(self.observed_img, batch_size=None)
 
