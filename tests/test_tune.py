@@ -20,7 +20,7 @@ class TestTune:
                 allocated_gpus = 1
 
         overrides = {
-            "model": "m2",
+            "model": "sleep_m2",
             "dataset": "m2" if devices.use_cuda else "cpu",
             "dataset.kwargs.n_batches": 10 if devices.use_cuda else 2,
             "training": "m2" if devices.use_cuda else "cpu",

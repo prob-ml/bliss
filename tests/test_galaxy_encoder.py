@@ -9,7 +9,7 @@ class TestBasicGalaxyMeasure:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
         return {
-            "model": "galenc_sdss",
+            "model": "galaxy-encoder_sdss",
             "dataset": "default" if devices.use_cuda else "cpu",
             "training": "cpu",
             "training.trainer.check_val_every_n_epoch": 1,
