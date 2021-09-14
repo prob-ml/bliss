@@ -26,7 +26,7 @@ def sleep_trainable(search_space, cfg: DictConfig):
     cfg.optimizer.kwargs.weight_decay = search_space["weight_decay"]
 
     # model
-    model = sleep.SleepPhase(**cfg.model.kwargs, optimizer_params=cfg.optimizer)
+    model = sleep.SleepPhase(**cfg.model.kwargs)
 
     # data module
     dataset = SimulatedDataset(**cfg.dataset.kwargs)

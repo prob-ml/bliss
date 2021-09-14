@@ -80,8 +80,7 @@ class ModelSetup:
 
     def get_model(self, overrides):
         cfg = self.get_cfg(overrides)
-        opt = cfg.optimizer
-        model = models[cfg.model.name](**cfg.model.kwargs, optimizer_params=opt)
+        model = models[cfg.model.name](**cfg.model.kwargs)
         return model.to(self.devices.device)
 
     def get_trained_model(self, overrides):

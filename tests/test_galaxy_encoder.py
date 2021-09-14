@@ -19,7 +19,7 @@ class TestBasicGalaxyMeasure:
 
     def test_simulated(self, devices, overrides, get_config):
         cfg = get_config(overrides, devices)
-        galaxy_encoder = GalaxyEncoder(**cfg.model.kwargs, optimizer_params=cfg.optimizer)
+        galaxy_encoder = GalaxyEncoder(**cfg.model.kwargs)
         dataset = SimulatedDataset(**cfg.dataset.kwargs)
         trainer = pl.Trainer(**cfg.training.trainer)
         trainer.fit(galaxy_encoder, datamodule=dataset)
