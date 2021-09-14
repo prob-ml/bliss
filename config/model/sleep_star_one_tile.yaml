@@ -22,8 +22,7 @@ decoder:
     f_max: 1e6
     psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
     background_values:
-      background:
-        - 633.0
+      - 633.0
     loc_min: 0.
     loc_max: 1.0
 
