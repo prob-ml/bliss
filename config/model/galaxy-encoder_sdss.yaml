@@ -1,12 +1,7 @@
-name: BinaryEncoder
+name: GalaxyEncoder
 kwargs:
-  n_bands: 1
-  tile_slen: 4
-  ptile_slen: 52
-  channel: 8
-  hidden: 128
-  spatial_dropout: 0.0
-  dropout: 0.0
+  hidden: 256
+  decoder_kwargs: ${model.decoder.kwargs}
   optimizer_params: ${optimizer}
 decoder: # SDSS standard decoder.
   kwargs:

@@ -4,3 +4,4 @@ kwargs:
   latent_dim: 8
   n_bands: 1
   hidden: 256
+  optimizer_params: ${optimizer}

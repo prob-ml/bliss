@@ -21,7 +21,6 @@ class BinaryEncoder(pl.LightningModule):
         hidden: int = 128,
         spatial_dropout: float = 0,
         dropout: float = 0,
-        decoder_kwargs: dict = None,
         optimizer_params: dict = None,
     ):
         """Encoder which conditioned on other source params returns probability of galaxy vs. star.
@@ -38,7 +37,6 @@ class BinaryEncoder(pl.LightningModule):
             hidden: TODO (document this)
             spatial_dropout: TODO (document this)
             dropout: TODO (document this)
-            decoder_kwargs: TODO (document this)
             optimizer_params: TODO (document this)
         """
         super().__init__()
