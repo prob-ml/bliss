@@ -5,13 +5,12 @@ from hydra import compose, initialize
 
 from bliss import sleep
 from bliss.datasets import galsim_galaxies, simulated
-from bliss.models import binary, flux_net, galaxy_encoder, galaxy_net
+from bliss.models import binary, galaxy_encoder, galaxy_net
 
 models = {
     "SleepPhase": sleep.SleepPhase,
     "GalaxyEncoder": galaxy_encoder.GalaxyEncoder,
     "OneCenteredGalaxyAE": galaxy_net.OneCenteredGalaxyAE,
-    "FluxEncoder": flux_net.FluxEstimator,
     "BinaryEncoder": binary.BinaryEncoder,
 }
 
