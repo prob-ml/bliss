@@ -1,7 +1,10 @@
 name: GalaxyEncoder
 kwargs:
   hidden: 256
-  decoder_kwargs:
+  decoder_kwargs: ${model.decoder.kwargs}
+  optimizer_params: ${optimizer}
+decoder:
+  kwargs:
     n_bands: 1
     slen: 4
     tile_slen: 4

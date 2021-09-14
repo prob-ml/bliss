@@ -3,6 +3,7 @@ kwargs:
   decoder_kwargs: ${model.decoder.kwargs}
   encoder_kwargs: ${model.encoder.kwargs}
   annotate_probs: False
+  optimizer_params: ${optimizer}
 decoder:
   kwargs:
     n_bands: 1

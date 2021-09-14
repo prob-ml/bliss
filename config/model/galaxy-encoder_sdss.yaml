@@ -1,15 +1,8 @@
 name: GalaxyEncoder
-image:
-  slen: 40
-  n_bands: 1
-  background:
-    - 865.0
-galaxy:
-  slen: 53
-  latent_dim: 8
 kwargs:
   hidden: 256
   decoder_kwargs: ${model.decoder.kwargs}
+  optimizer_params: ${optimizer}
 decoder: # SDSS standard decoder.
   kwargs:
     n_bands: 1

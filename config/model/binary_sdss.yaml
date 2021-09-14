@@ -7,6 +7,7 @@ kwargs:
   hidden: 128
   spatial_dropout: 0.0
   dropout: 0.0
+  optimizer_params: ${optimizer}
 decoder: # SDSS standard decoder.
   kwargs:
     n_bands: 1
