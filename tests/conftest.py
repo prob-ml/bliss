@@ -5,13 +5,12 @@ from hydra import compose, initialize
 
 from bliss import sleep
 from bliss.datasets import galsim_galaxies, simulated
-from bliss.models import binary, flux_net, galaxy_encoder, galaxy_net
+from bliss.models import binary, galaxy_encoder, galaxy_net
 
 models = {
     "SleepPhase": sleep.SleepPhase,
     "GalaxyEncoder": galaxy_encoder.GalaxyEncoder,
     "OneCenteredGalaxyAE": galaxy_net.OneCenteredGalaxyAE,
-    "FluxEncoder": flux_net.FluxEstimator,
     "BinaryEncoder": binary.BinaryEncoder,
 }
 
@@ -80,8 +79,7 @@ class ModelSetup:
 
     def get_model(self, overrides):
         cfg = self.get_cfg(overrides)
-        opt = cfg.optimizer
-        model = models[cfg.model.name](**cfg.model.kwargs, optimizer_params=opt)
+        model = models[cfg.model.name](**cfg.model.kwargs)
         return model.to(self.devices.device)
 
     def get_trained_model(self, overrides):

@@ -82,7 +82,7 @@ def train(cfg: DictConfig):
     dataset = datasets[cfg.dataset.name](**cfg.dataset.kwargs)
 
     # setup model
-    model = models[cfg.model.name](**cfg.model.kwargs, optimizer_params=cfg.optimizer)
+    model = models[cfg.model.name](**cfg.model.kwargs)
 
     # setup trainer
     logger = setup_logger(cfg, paths)

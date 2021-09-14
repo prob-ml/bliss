@@ -128,8 +128,7 @@ class SleepPhase(pl.LightningModule):
             import pytorch_lightning as pl
             from bliss.sleep import SleepPhase
 
-
-            model = SleepPhase(**cfg.model.kwargs, optimizer_params=cfg.optimizer)
+            model = SleepPhase(**cfg.model.kwargs)
             trainer = pl.Trainer()
             trainer.fit(model, data=dataset)
     """

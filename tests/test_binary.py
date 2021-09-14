@@ -5,7 +5,7 @@ def test_binary(model_setup, devices):
         "training": "unittest" if devices.use_cuda else "cpu",
         "optimizer": "adam",
         "optimizer.kwargs.lr": 1e-4,
-        "model.kwargs.decoder_kwargs.mean_sources": 0.03,
+        "model.decoder.kwargs.mean_sources": 0.03,
         "training.n_epochs": 50 if devices.use_cuda else 2,
     }
 

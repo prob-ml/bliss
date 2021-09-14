@@ -10,7 +10,7 @@ from bliss import metrics as metrics_lib
 @pytest.fixture(scope="module")
 def trained_star_encoder_m2(model_setup, devices):
     overrides = {
-        "model": "m2",
+        "model": "sleep_m2",
         "dataset": "m2" if devices.use_cuda else "cpu",
         "training": "m2" if devices.use_cuda else "cpu",
         "training.trainer.check_val_every_n_epoch": 9999,
