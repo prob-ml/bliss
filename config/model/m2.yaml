@@ -1,18 +1,15 @@
 name: SleepPhase
-image:
-  slen: 100
-  n_bands: 2
-  background:
-    - 686.0
-    - 1123.0
+
 kwargs:
-  decoder_kwargs:
-    n_bands: ${model.image.n_bands}
-    slen: ${model.image.slen}
+  decoder_kwargs: ${model.decoder.kwargs}
+  encoder_kwargs: ${model.encoder.kwargs}
+decoder:
+  kwargs:
+    n_bands: 2
+    slen: 100
     tile_slen: 2
     ptile_slen: 26
     border_padding: 3
-    prob_galaxy: 0.0
     max_sources: 5
     mean_sources: 0.48
     min_sources: 0
@@ -20,13 +17,17 @@ kwargs:
     f_max: 1e6
     alpha: 0.5
     psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
-    background_values: ${model.image.background}
+    prob_galaxy: 0.0
+    background_values:
+      - 686.0
+      - 1123.0
     sdss_bands:
       - 2
       - 3
-  encoder_kwargs:
-    n_bands: ${model.image.n_bands}
-    tile_slen: ${model.kwargs.decoder_kwargs.tile_slen}
+encoder:
+  kwargs:
+    n_bands: ${model.decoder.kwargs.n_bands}
+    tile_slen: ${model.decoder.kwargs.tile_slen}
     ptile_slen: 8
     max_detections: 2
     channel: 17
