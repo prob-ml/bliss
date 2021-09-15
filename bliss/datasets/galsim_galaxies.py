@@ -223,7 +223,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         max_a_d=6.5,
         min_a_b=0.8,
         max_a_b=3.6,
-        psf_points=(450, 550),  # points in the SDSS frame.
+        psf_points=(1024, 745),  # points in the SDSS frame.
         flux_sample="uniform",
     ):
         super().__init__()
@@ -344,7 +344,7 @@ class SDSSCatalogGalaxies(pl.LightningDataModule, Dataset):
         slen=53,
         background=865.0,
         noise_factor=0.05,
-        psf_points=(450, 550),  # points in the SDSS frame
+        psf_points=(1024, 745),  # points in the SDSS frame
     ):
         super().__init__()
 

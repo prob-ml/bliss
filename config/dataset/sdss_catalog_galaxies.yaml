@@ -8,8 +8,8 @@ kwargs:
   bands:
     - r
   psf_points:
-    - 450
-    - 550
+    - 1024
+    - 745
   sdss_catalog: "${paths.data}/coadd_galaxy_catalog.dat"
   sdss_kwargs:
     bands:

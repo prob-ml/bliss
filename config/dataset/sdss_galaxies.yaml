@@ -14,8 +14,8 @@ kwargs:
   max_a_b: 3.6 # from catalog with mag < 22.2 cut.
   flux_sample: "uniform"
   psf_points:
-    - 450
-    - 550
+    - 1024
+    - 745
   sdss_kwargs:
     bands:
       - 2
