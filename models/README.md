@@ -1,7 +1,7 @@
 # Models
 
-This README should be regularly updated to containt the commands used to produce each of the models
-containd in this directory.
+This README should be regularly updated to contain the commands used to produce each of the models
+in this directory.
 
 * ``sdss_autoencoder.ckpt``
 
