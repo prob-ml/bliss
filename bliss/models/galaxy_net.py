@@ -6,6 +6,7 @@ from torch.distributions import Normal
 from torch.nn import functional as F
 
 from bliss.optimizer import get_optimizer
+from bliss.plotting import plot_image
 
 plt.switch_backend("Agg")
 plt.ioff()
@@ -164,8 +165,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         # only plot i band if available, otherwise the highest band given.
         assert images.size(0) >= n_examples
         assert images.shape[1] == recon_mean.shape[1] == residuals.shape[1] == 1, "1 band only."
-        n_cols = 3
-        fig = plt.figure(figsize=(10, n_examples * 2.5))
+        fig, axes = plt.subplots(n_rows=n_examples, n_cols=3, figsize=(10, n_examples * 2.5))
 
         if mode == "random":
             indices = torch.randint(0, len(images), size=(n_examples,))
@@ -176,23 +176,34 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         else:
             raise NotImplementedError(f"Specified mode '{mode}' has not been implemented.")
 
+        # pick standard ranges for residuals
+        vmin_res = residuals[indices].min().item()
+        vmax_res = residuals[indices].max().item()
+
         for i in range(n_examples):
             idx = indices[i]
 
-            plt.subplot(n_examples, n_cols, n_cols * i + 1)
-            plt.title("images")
-            plt.imshow(images[idx, 0].data.cpu().numpy())
-            plt.colorbar()
+            ax_true = axes[i, 0]
+            ax_recon = axes[i, 1]
+            ax_res = axes[i, 2]
 
-            plt.subplot(n_examples, n_cols, n_cols * i + 2)
-            plt.title("recon_mean")
-            plt.imshow(recon_mean[idx, 0].data.cpu().numpy())
-            plt.colorbar()
+            # only add titles to the first axes.
+            if i == 0:
+                ax_true.set_title(r"\rm Images $x$")
+                ax_recon.set_title(r"\rm Reconstruction $\tilde{x}$")
+                ax_res.set_title(r"\rm Residual $\frac{x - \tilde{x}}{\sqrt{\tilde{x}}$")
 
-            plt.subplot(n_examples, n_cols, n_cols * i + 3)
-            plt.title("residuals")
-            plt.imshow(residuals[idx, 0].data.cpu().numpy())
-            plt.colorbar()
+            # standarize ranges of true and reconstruction
+            image = images[idx, 0].cpu().numpy()
+            recon = recon_mean[idx, 0].cpu().numpy()
+            residual = residuals[idx, 0].cpu().numpy()
+            vmin = min(image.min().item(), recon.min().item())
+            vmax = max(image.max().item(), recon.max().item())
+
+            # plot images
+            plot_image(fig, ax_true, image, vrange=(vmin, vmax))
+            plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
+            plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
 
         plt.tight_layout()
 
