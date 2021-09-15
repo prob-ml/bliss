@@ -3,17 +3,11 @@ import os
 from pathlib import Path
 
 import torch
+from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 
 from bliss import plotting
-from bliss.datasets import galsim_galaxies, simulated
-
-datasets = {
-    "SimulatedDataset": simulated.SimulatedDataset,
-    "SDSSGalaxies": galsim_galaxies.SDSSGalaxies,
-    "ToyGaussian": galsim_galaxies.ToyGaussian,
-}
 
 
 def visualize(batch, path, n_samples, figsize=(12, 12)):
@@ -44,7 +38,7 @@ def generate(cfg: DictConfig):
 
     filepath = Path(cfg.generate.file)
     imagepath = Path(filepath.parent).joinpath(filepath.stem + "_images.pdf")
-    dataset = datasets[cfg.dataset.name](**cfg.dataset.kwargs)
+    dataset = instantiate(cfg.dataset)
 
     # params common to all batches (do not stack).
     global_params = set(cfg.generate.common)

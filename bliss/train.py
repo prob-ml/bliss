@@ -1,22 +1,16 @@
 from pathlib import Path
 
 import pytorch_lightning as pl
+from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.profiler import AdvancedProfiler
 
 from bliss import sleep
-from bliss.datasets import galsim_galaxies, simulated
 from bliss.models import binary, galaxy_encoder, galaxy_net
 
 # available datasets and models.
-_datasets = [
-    simulated.SimulatedDataset,
-    galsim_galaxies.ToyGaussian,
-    galsim_galaxies.SDSSGalaxies,
-]
-datasets = {cls.__name__: cls for cls in _datasets}
 
 _models = [
     sleep.SleepPhase,
@@ -78,7 +72,7 @@ def train(cfg: DictConfig):
     setup_seed(cfg)
 
     # setup dataset.
-    dataset = datasets[cfg.dataset.name](**cfg.dataset.kwargs)
+    dataset = instantiate(cfg.dataset)
 
     # setup model
     model = models[cfg.model.name](**cfg.model.kwargs)

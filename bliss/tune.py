@@ -5,6 +5,7 @@ import hydra
 import numpy as np
 import pytorch_lightning as pl
 import ray
+from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from ray.tune import CLIReporter
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
@@ -13,7 +14,6 @@ from ray.tune.suggest import ConcurrencyLimiter
 from ray.tune.suggest.hyperopt import HyperOptSearch
 
 from bliss import sleep
-from bliss.datasets.simulated import SimulatedDataset
 
 
 def sleep_trainable(search_space, cfg: DictConfig):
@@ -29,7 +29,7 @@ def sleep_trainable(search_space, cfg: DictConfig):
     model = sleep.SleepPhase(**cfg.model.kwargs)
 
     # data module
-    dataset = SimulatedDataset(**cfg.dataset.kwargs)
+    dataset = instantiate(cfg.dataset)
 
     # set up trainer
     logging.getLogger("lightning").setLevel(0)

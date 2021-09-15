@@ -1,7 +1,6 @@
-name: SimulatedDataset
-kwargs:
-  decoder_kwargs: ${model.decoder.kwargs}
-  n_batches: 10
-  batch_size: 32
-  generate_device: "cuda:0"
-  testing_file: null
+_target_: bliss.datasets.simulated.SimulatedDataset
+decoder_kwargs: ${model.decoder.kwargs}
+n_batches: 10
+batch_size: 32
+generate_device: "cuda:0"
+testing_file: null
