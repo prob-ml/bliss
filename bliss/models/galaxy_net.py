@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch
+from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.distributions import Normal
@@ -66,7 +67,7 @@ class CenteredGalaxyDecoder(nn.Module):
     def forward(self, z):
         """Decodes image from latent representation."""
         z = self.fc(z)
-        z = z.view(-1, 4, self.min_slen, self.min_slen)
+        z = rearrange(z, "b (c h w) -> b c h w", h=self.min_slen, w=self.min_slen)
         return self.features(z)
 
 
