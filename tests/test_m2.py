@@ -1,16 +1,16 @@
 import os
 
-import torch
-import pytest
 import numpy as np
+import pytest
+import torch
 
 from bliss import metrics as metrics_lib
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(sleep_setup, devices):
+def trained_star_encoder_m2(model_setup, devices):
     overrides = {
-        "model": "m2",
+        "model": "sleep_m2",
         "dataset": "m2" if devices.use_cuda else "cpu",
         "training": "m2" if devices.use_cuda else "cpu",
         "training.trainer.check_val_every_n_epoch": 9999,
@@ -18,7 +18,7 @@ def trained_star_encoder_m2(sleep_setup, devices):
         "optimizer": "m2",
     }
 
-    sleep_net = sleep_setup.get_trained_sleep(overrides)
+    sleep_net = model_setup.get_trained_model(overrides)
     return sleep_net.image_encoder.to(devices.device)
 
 

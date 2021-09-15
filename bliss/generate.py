@@ -1,18 +1,19 @@
-import os
 import math
+import os
 from pathlib import Path
 
 import torch
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 
-from bliss.datasets import simulated, galsim_galaxies
 from bliss import plotting
+from bliss.datasets import galsim_galaxies, simulated
 
 datasets = {
     "SimulatedDataset": simulated.SimulatedDataset,
     "SDSSGalaxies": galsim_galaxies.SDSSGalaxies,
     "ToyGaussian": galsim_galaxies.ToyGaussian,
+    "SDSSCatalogGalaxies": galsim_galaxies.SDSSCatalogGalaxies,
 }
 
 
@@ -43,24 +44,24 @@ def generate(cfg: DictConfig):
         os.makedirs(output.as_posix())
 
     filepath = Path(cfg.generate.file)
-    imagepath = Path(cfg.paths.root).joinpath("temp", filepath.stem + "_images.pdf")
+    imagepath = Path(filepath.parent).joinpath(filepath.stem + "_images.pdf")
     dataset = datasets[cfg.dataset.name](**cfg.dataset.kwargs)
 
     # params common to all batches (do not stack).
     global_params = set(cfg.generate.common)
 
     # get batches and combine them
-    fbatch = dict()
+    fbatch = {}
     for batch in dataset.train_dataloader():
         if not bool(fbatch):  # dict is empty
             fbatch = batch
-            for key in fbatch:
+            for key, val in fbatch.items():
                 if key in global_params:
-                    fbatch[key] = fbatch[key][0]
+                    fbatch[key] = val[0]
         else:
-            for key in fbatch:
+            for key, val in fbatch.items():
                 if key not in global_params:
-                    fbatch[key] = torch.vstack((fbatch[key], batch[key]))
+                    fbatch[key] = torch.vstack((val, batch[key]))
 
     # make sure in CPU by default.
     # assumes all data are tensors (including metadata).

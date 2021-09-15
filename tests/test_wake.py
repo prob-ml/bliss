@@ -1,10 +1,10 @@
 from copy import deepcopy
 
 import pytest
+import pytorch_lightning as pl
 import torch
 from torch import nn
 from torch.distributions.normal import Normal
-import pytorch_lightning as pl
 
 from bliss import wake
 
@@ -12,17 +12,16 @@ from bliss import wake
 class TestWake:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
-        overrides = dict(
-            model="sleep_star_basic",
-            dataset="default" if devices.use_cuda else "cpu",
-            training="unittest" if devices.use_cuda else "cpu",
-            optimizer="m2",
-        )
-        return overrides
+        return {
+            "model": "sleep_star_basic",
+            "dataset": "default" if devices.use_cuda else "cpu",
+            "training": "unittest" if devices.use_cuda else "cpu",
+            "optimizer": "m2",
+        }
 
     @pytest.fixture(scope="class")
-    def trained_sleep(self, overrides, sleep_setup):
-        return sleep_setup.get_trained_sleep(overrides)
+    def trained_sleep(self, overrides, model_setup):
+        return model_setup.get_trained_model(overrides)
 
     def test_simulated(self, trained_sleep, devices):
 
@@ -37,7 +36,7 @@ class TestWake:
         # this will be the ground truth catalog.
         # we will use this to construct an image
         which_batch = batch["n_sources"].sum(1).argmax()
-        true_params = dict()
+        true_params = {}
         for key in batch.keys():
             if key != "slen":
                 true_params[key] = batch[key][which_batch : (which_batch + 1)]
@@ -68,8 +67,7 @@ class TestWake:
                 true_params["fluxes"],
                 add_noise=False,
             )
-            loss = -Normal(recon, recon.sqrt()).log_prob(obs_image).mean()
-            return loss
+            return -Normal(recon, recon.sqrt()).log_prob(obs_image).mean()
 
         # loss of true decoder
         target_loss = eval_decoder_loss(image_decoder)

@@ -1,6 +1,6 @@
 name: SimulatedDataset
 kwargs:
-  decoder_kwargs: ${model.kwargs.decoder_kwargs}
+  decoder_kwargs: ${model.decoder.kwargs}
   n_batches: 10
   batch_size: 6400
   generate_device: "cuda:0"

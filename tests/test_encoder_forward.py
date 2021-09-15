@@ -1,14 +1,19 @@
-import torch
 import numpy as np
+import torch
 
 from bliss.models import encoder
 
 
 class TestSourceEncoder:
     def test_forward(self, devices):
-        """
-        * Test that forward returns the correct pattern of zeros.
-        * Test that variational parameters inside h agree with those returned from forward.
+        """Tests forward function of source encoder.
+
+        Arguments:
+            devices: GPU device information.
+
+        Notes:
+            * Test that forward returns the correct pattern of zeros.
+            * Test that variational parameters inside h agree with those returned from forward.
         """
         device = devices.device
 
@@ -65,10 +70,10 @@ class TestSourceEncoder:
             is_on_array = encoder.get_is_on_from_n_sources(
                 n_star_per_tile, star_encoder.max_detections
             )
-            _loc_mean = pred["loc_mean"] * is_on_array.unsqueeze(2).float()
-            _log_flux_mean = pred["log_flux_mean"] * is_on_array.unsqueeze(2).float()
-            assert torch.all(_loc_mean == pred["loc_mean"])
-            assert torch.all(_log_flux_mean == pred["log_flux_mean"])
+            loc_mean = pred["loc_mean"] * is_on_array.unsqueeze(2).float()
+            log_flux_mean = pred["log_flux_mean"] * is_on_array.unsqueeze(2).float()
+            assert torch.all(loc_mean == pred["loc_mean"])
+            assert torch.all(log_flux_mean == pred["log_flux_mean"])
 
             # we check the variational parameters against the hidden parameters
             # one by one
@@ -128,7 +133,7 @@ class TestSourceEncoder:
                     )
 
     def test_forward_to_hidden2d(self, devices):
-        """Consistency check of using forward vs get_var_params"""
+        """Consistency check of using forward vs get_var_params."""
         device = devices.device
 
         n_image_tiles = 30

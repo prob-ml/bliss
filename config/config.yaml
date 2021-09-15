@@ -1,4 +1,5 @@
 defaults:
+  - _self_
   - optimizer: adam
   - model: sleep_star_basic
   - training: default
@@ -6,12 +7,14 @@ defaults:
   - testing: default
   - generate: default
   - optional tuning: ${model}
-  - predict: sdss_basic
+  - predict: sdss
+
+hydra:
+  output_subdir: null
+  run:
+    dir: ./output/hydra_temp/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
 mode: train
-
-general:
-  overwrite: False
 
 gpus: 1 # use a single gpu by default.
 
@@ -19,5 +22,5 @@ paths:
   root: ${oc.env:BLISS_HOME}
   data: ${paths.root}/data
   models: ${paths.root}/models
-  output: ${paths.root}/temp/default
+  output: ${paths.root}/output
   sdss: ${paths.root}/data/sdss

@@ -1,8 +1,6 @@
+import fitsio
 import numpy as np
 import torch
-
-import fitsio
-
 from astropy.io import fits
 from astropy.wcs import WCS
 
@@ -53,7 +51,7 @@ def load_data(
         hdulist = fits.open(
             sdss_dir + str(run) + "/" + str(camcol) + "/" + str(field) + "/" + frame_names[i]
         )
-        wcs_list.append(WCS(hdulist["primary"].header))
+        wcs_list.append(WCS(hdulist["primary"].header))  # pylint: disable=E1101
 
     min_coords = wcs_list[0].wcs_pix2world(np.array([[0, 0]]), 0)
     max_coords = wcs_list[0].wcs_pix2world(np.array([[slen1, slen0]]), 0)

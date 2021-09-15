@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 
 
 def plot_residuals(image, recon_mean, resid_fun=lambda x, y: x - y):

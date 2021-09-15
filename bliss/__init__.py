@@ -1,4 +1,4 @@
-from os import getenv, environ
+from os import environ, getenv
 from pathlib import Path
 
 if getenv("BLISS_HOME") is None:

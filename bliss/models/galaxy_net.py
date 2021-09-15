@@ -1,10 +1,9 @@
 import pytorch_lightning as pl
-import matplotlib.pyplot as plt
-
 import torch
+from matplotlib import pyplot as plt
 from torch import nn
-import torch.nn.functional as F
 from torch.distributions import Normal
+from torch.nn import functional as F
 
 from bliss.optimizer import get_optimizer
 from bliss.utils import make_grid
@@ -23,13 +22,13 @@ class CenteredGalaxyEncoder(nn.Module):
         self.latent_dim = latent_dim
 
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
-        min_slen = f(f(slen))  # pylint: disable=unused-variable
+        min_slen = f(slen)  # pylint: disable=unused-variable
 
         self.features = nn.Sequential(
             nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
             nn.LeakyReLU(),
             nn.Flatten(),
-            nn.Linear(17 * 17 * 4, 512),
+            nn.Linear(min_slen * min_slen * 4, 512),
             nn.LeakyReLU(),
             nn.Linear(512, 128),
             nn.LeakyReLU(),
@@ -39,6 +38,7 @@ class CenteredGalaxyEncoder(nn.Module):
         )
 
     def forward(self, image):
+        """Encodes galaxy from image."""
         return self.features(image)
 
 
@@ -52,8 +52,8 @@ class CenteredGalaxyDecoder(nn.Module):
 
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
         g = lambda x: (x - 1) * 3 + 5
-        self.min_slen = f(f(slen))
-        assert g(g(self.min_slen)) == slen
+        self.min_slen = f(slen)
+        assert g(self.min_slen) == slen
 
         self.fc = nn.Sequential(
             nn.Linear(8, 32),
@@ -62,16 +62,16 @@ class CenteredGalaxyDecoder(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(128, 512),
             nn.LeakyReLU(),
-            nn.Linear(512, 17 * 17 * 4),
+            nn.Linear(512, self.min_slen * self.min_slen * 4),
         )
 
         self.features = nn.Sequential(nn.ConvTranspose2d(4, n_bands, 5, stride=3))
 
     def forward(self, z):
+        """Decodes image from latent representation."""
         z = self.fc(z)
-        z = z.view(-1, 4, 17, 17)
-        recon_mean = self.features(z)
-        return recon_mean
+        z = z.view(-1, 4, self.min_slen, self.min_slen)
+        return self.features(z)
 
 
 class OneCenteredGalaxyAE(pl.LightningModule):
@@ -111,20 +111,17 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def forward_model_0(self, image, background):
         z = self.enc_0.forward(image - background)
         recon_mean = F.relu(self.dec_0.forward(z))
-        recon_mean = recon_mean + background
-        return recon_mean
+        return recon_mean + background
 
     def forward_model_1(self, residual):
         z = self.enc_1.forward(residual)
-        recon_mean = self.dec_1.forward(z)
-        return recon_mean
+        return self.dec_1.forward(z)
 
     def forward(self, image, background):
+        """Gets reconstructed image from running through encoder and decoder."""
         recon_mean_0 = self.forward_model_0(image, background)
         recon_mean_1 = self.forward_model_1(image - recon_mean_0)
-        recon_mean = recon_mean_0 + recon_mean_1
-
-        return recon_mean
+        return recon_mean_0 + recon_mean_1
 
     def get_loss(self, image, recon_mean):
         # this is nan whenever recon_mean is not strictly positive
@@ -135,6 +132,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # ----------------
 
     def configure_optimizers(self):
+        """Configures optimizers for training (pytorch lightning)."""
         assert self.hparams["optimizer_params"] is not None, "Need to specify `optimizer_params`."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
@@ -149,29 +147,30 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # ----------------
 
     def training_step(self, batch, batch_idx, optimizer_idx):  # pylint: disable=unused-argument
+        """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         if optimizer_idx == 0:
             recon_mean_0 = self.forward_model_0(images, background)
-            loss_0 = self.get_loss(images, recon_mean_0)
-            self.log("train/loss_0", loss_0, prog_bar=True)
-            return loss_0
+            loss = self.get_loss(images, recon_mean_0)
+            self.log("train/loss_0", loss, prog_bar=True)
         if optimizer_idx == 1:
             with torch.no_grad():
                 recon_mean_0 = self.forward_model_0(images, background)
             recon_mean_1 = self.forward_model_1(images - recon_mean_0)
-            loss_1 = F.mse_loss(images - recon_mean_0, recon_mean_1)
-            self.log("train/loss_1", loss_1, prog_bar=True)
+            loss = F.mse_loss(images - recon_mean_0, recon_mean_1)
+            self.log("train/loss_1", loss, prog_bar=True)
 
             recon_mean = recon_mean_0 + recon_mean_1
-            loss = self.get_loss(images, recon_mean)
-            self.log("train/loss", loss, prog_bar=True)
-            return loss_1
+            final_loss = self.get_loss(images, recon_mean)
+            self.log("train/loss", final_loss, prog_bar=True)
+        return loss
 
     # ---------------
     # Validation
     # ----------------
 
-    def validation_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def validation_step(self, batch, batch_idx):
+        """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean_0 = self.forward_model_0(images, background)
         loss_0 = self.get_loss(images, recon_mean_0)
@@ -196,6 +195,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         }
 
     def validation_epoch_end(self, outputs):
+        """Validation epoch end (pytorch lightning)."""
         if self.logger:
             images = torch.cat([x["images"] for x in outputs])
             recon_mean = torch.cat([x["recon_mean"] for x in outputs])
@@ -274,69 +274,42 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         plt.ioff()
 
         fig = plt.figure(figsize=(15, 25))
-
         for i in range(num_examples):
             image = images[i, 0].data.cpu()
             recon = recon_mean[i, 0].data.cpu()
             recon_0 = recon_mean_0[i, 0].data.cpu()
             recon_1 = recon_mean_1[i, 0].data.cpu()
+            res_0 = residuals_0[i, 0].data.cpu()
+            res = residuals[i, 0].data.cpu()
 
-            vmax = torch.ceil(torch.max(image.max(), recon.max())).cpu().numpy()
-            vmin = torch.floor(torch.min(image.min(), recon.min())).cpu().numpy()
+            image_vmax = torch.ceil(torch.max(image.max(), recon.max())).cpu().numpy()
+            image_vmin = torch.floor(torch.min(image.min(), recon.min())).cpu().numpy()
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 1)
-            plt.title("images")
-            plt.imshow(image.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
-            plt.colorbar()
+            plots = {
+                "images": image,
+                "recon_mean_0": recon_0,
+                "residuals_0": res_0,
+                "recon_mean_1": recon_1,
+                "recon_mean": recon,
+                "residuals": res,
+            }
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 2)
-            plt.title("recon_mean_0")
-            plt.imshow(recon_0.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
-            plt.colorbar()
+            for j, (title, plot) in enumerate(plots.items()):
+                plt.subplot(num_examples, num_cols, num_cols * i + j + 1)
+                plt.title(title)
+                if title.startswith("residuals"):
+                    vmin, vmax = residual_vmin, residual_vmax
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 3)
-            res_0 = residuals_0[i, 0].data.cpu().numpy()
-            if i < num_examples // 2:
-                plt.title(f"worst residuals_0, avg abs residual: {abs(res_0).mean():.3f}")
-            else:
-                plt.title(f"best residuals_0, avg abs residual: {abs(res_0).mean():.3f}")
-            plt.imshow(
-                res_0,
-                interpolation=None,
-                vmin=residual_vmin,
-                vmax=residual_vmax,
-            )
-
-            plt.colorbar()
-            plt.subplot(num_examples, num_cols, num_cols * i + 4)
-            plt.title("recon_mean_1")
-            plt.imshow(recon_1.numpy(), interpolation=None)
-            plt.colorbar()
-
-            plt.subplot(num_examples, num_cols, num_cols * i + 5)
-            plt.title("recon_mean")
-            plt.imshow(recon.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
-            plt.colorbar()
-
-            plt.subplot(num_examples, num_cols, num_cols * i + 6)
-            res = residuals[i, 0].data.cpu().numpy()
-            if i < num_examples // 2:
-                plt.title(f"worst residuals, avg abs residual: {abs(res).mean():.3f}")
-            else:
-                plt.title(f"best residuals, avg abs residual: {abs(res).mean():.3f}")
-            plt.imshow(
-                res,
-                interpolation=None,
-                vmin=residual_vmin,
-                vmax=residual_vmax,
-            )
-            plt.colorbar()
-
+                else:
+                    vmin, vmax = image_vmin, image_vmax
+                plt.imshow(plot.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
+                plt.colorbar()
         plt.tight_layout()
 
         return fig
 
-    def test_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def test_step(self, batch, batch_idx):
+        """Testing step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)
         residuals = (images - recon_mean) / torch.sqrt(images)

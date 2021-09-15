@@ -1,23 +1,51 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.4.0
+  - repo: local
     hooks:
       - id: trailing-whitespace
-        exclude: ^.*fits
+        name: trailing-whitespace
+        entry: trailing-whitespace-fixer
+        language: python
+        exclude: ^(.*fits|.*pt|.*npz|.*ckpt|.*png|.*inv|.*npy)
       - id: check-added-large-files
+        name: check-added-large-files
+        entry: check-added-large-files
+        language: python
         args:
           - "--maxkb=15000"
       - id: check-merge-conflict
+        name: check-merge-conflict
+        entry: check-merge-conflict
+        language: python
       - id: end-of-file-fixer
-        exclude: ^.*fits
-  - repo: https://github.com/psf/black
-    rev: 20.8b1
-    hooks:
+        name: end-of-file-fixer
+        entry: end-of-file-fixer
+        language: python
+        exclude: ^(.*fits|.*pt|.*npz|.*ckpt|.*png|.*inv|.*npy)
+      - id: isort
+        name: isort
+        entry: isort --line-length 100
+        language: system
+        types: [python]
+        args: [--profile black, --line-length 100]
+      - id: pylint
+        name: pylint
+        entry: pylint
+        language: system
+        types: [python]
+      - id: flake8
+        name: flake8
+        entry: flake8
+        language: system
+        types: [python]
       - id: black
+        name: black
+        entry: black
+        language: python
         language_version: python3.8
+        types: [python]
         args:
           - "--line-length=100"
-  - repo: https://github.com/pycqa/pylint
-    rev: pylint-2.6.0
+  - repo: https://github.com/terrencepreilly/darglint
+    rev: v1.8.0
     hooks:
-      - id: pylint
+      - id: darglint

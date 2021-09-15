@@ -1,49 +1,171 @@
 
+
 <!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>bliss.models.fnp &mdash; bliss  documentation</title>
+  
 
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>bliss.models.fnp &#8212; bliss  documentation</title>
-    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
-    <link rel="stylesheet" href="../../../_static/alabaster.css" type="text/css" />
-    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
-    <script src="../../../_static/jquery.js"></script>
-    <script src="../../../_static/underscore.js"></script>
-    <script src="../../../_static/doctools.js"></script>
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
     <link rel="index" title="Index" href="../../../genindex.html" />
-    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
 
-  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> bliss
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">bliss</a>
+        
+      </nav>
 
 
-  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
-
-  </head><body>
-
-
-    <div class="document">
-      <div class="documentwrapper">
-        <div class="bodywrapper">
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
 
 
-          <div class="body" role="main">
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>bliss.models.fnp</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
   <h1>Source code for bliss.models.fnp</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">product</span>
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
-<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Bernoulli</span>
 <span class="kn">from</span> <span class="nn">torch.distributions.relaxed_bernoulli</span> <span class="kn">import</span> <span class="n">LogitRelaxedBernoulli</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
 
 <span class="kn">from</span> <span class="nn">bliss.utils</span> <span class="kn">import</span> <span class="n">MLP</span><span class="p">,</span> <span class="n">ConcatLayer</span>
 
 
 <div class="viewcode-block" id="FNP"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.FNP">[docs]</a><span class="k">class</span> <span class="nc">FNP</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;Functional Neural Process.</span>
+
 <span class="sd">    This is an implementation of the Functional Neural Process (FNP)</span>
 <span class="sd">    from http://arxiv.org/abs/1906.08324.</span>
 
@@ -54,22 +176,25 @@
 <span class="sd">    The FNP is made up of a few different modules. These are all</span>
 <span class="sd">    application-specific, so they are passed as arguments to the</span>
 <span class="sd">    class constructor</span>
-<span class="sd">    * cov_vencoder This is a module which takes input tensor X</span>
-<span class="sd">    and outputs a probability distribution from which U is sampled.</span>
-<span class="sd">    * dep_graph: An object of type DepGraph which samples graphs G and A.</span>
-<span class="sd">    Requires methods .sample_G(uR) and .sample_A(uM, uR)</span>
-<span class="sd">    * trans_cond_y: A module which takes labels Y and returns a flattened</span>
-<span class="sd">    representation Y_encoded</span>
-<span class="sd">    * rep_encoder: This is a module which takes (u, uR, XR, yR_encoded) as input</span>
-<span class="sd">    and outputs a flattened representation. (see RepEncoder)</span>
-<span class="sd">    * pooler: This is a module which takes the output of rep_encoder and the dependency matrix</span>
-<span class="sd">    and returns a sampler for the latent variables Z. (see AveragePooler, SetPooler)</span>
-<span class="sd">    * prop_vencoder: This is a module which samples a representation</span>
-<span class="sd">    for an object given X and yR_encoded (only used in training, not prediction)</span>
-<span class="sd">    * label_vdecoder: This is a module which probabilistically</span>
-<span class="sd">    decodes the pooled representation into the output</span>
-<span class="sd">    * fb_z: If non-zero, the amount of &quot;free-bits&quot; regularization to apply while training. This</span>
-<span class="sd">    encourages learning a better representation and can avoid a local minimum in the prior.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        cov_vencoder: This is a module which takes input tensor X</span>
+<span class="sd">            and outputs a probability distribution from which U is sampled.</span>
+<span class="sd">        dep_graph: An object of type DepGraph which samples graphs G and A.</span>
+<span class="sd">            Requires methods .sample_G(uR) and .sample_A(uM, uR)</span>
+<span class="sd">        trans_cond_y: A module which takes labels Y and returns a flattened</span>
+<span class="sd">            representation Y_encoded</span>
+<span class="sd">        rep_encoder: This is a module which takes (u, uR, XR, yR_encoded) as input</span>
+<span class="sd">            and outputs a flattened representation. (see RepEncoder)</span>
+<span class="sd">        pooler: This is a module which takes the output of rep_encoder and the dependency matrix</span>
+<span class="sd">            and returns a sampler for the latent variables Z. (see AveragePooler, SetPooler)</span>
+<span class="sd">        prop_vencoder: This is a module which samples a representation</span>
+<span class="sd">            for an object given X and yR_encoded (only used in training, not prediction)</span>
+<span class="sd">        label_vdecoder: This is a module which probabilistically</span>
+<span class="sd">            decodes the pooled representation into the output</span>
+<span class="sd">        fb_z (optional): If non-zero, the amount of &quot;free-bits&quot; regularization to apply</span>
+<span class="sd">            while training. This encourages learning a better representation and can avoid a</span>
+<span class="sd">            local minimum in the prior.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -84,7 +209,7 @@
         <span class="n">fb_z</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="c1">## Learned Submodules</span>
+        <span class="c1"># Learned Submodules</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cov_vencoder</span> <span class="o">=</span> <span class="n">cov_vencoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dep_graph</span> <span class="o">=</span> <span class="n">dep_graph</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trans_cond_y</span> <span class="o">=</span> <span class="n">trans_cond_y</span>
@@ -93,31 +218,43 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">prop_vencoder</span> <span class="o">=</span> <span class="n">prop_vencoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">label_vdecoder</span> <span class="o">=</span> <span class="n">label_vdecoder</span>
 
-        <span class="c1">## Initialize free-bits regularization</span>
+        <span class="c1"># Initialize free-bits regularization</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fb_z</span> <span class="o">=</span> <span class="n">fb_z</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;lambda_z&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1e-8</span><span class="p">))</span>
 
 <div class="viewcode-block" id="FNP.encode"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.FNP.encode">[docs]</a>    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">XR</span><span class="p">,</span> <span class="n">yR</span><span class="p">,</span> <span class="n">XM</span><span class="p">,</span> <span class="n">G_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">A_in</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+        <span class="sd">&quot;&quot;&quot;Encodes latent representations.</span>
+
 <span class="sd">        This method runs the FNP up to the point the distributions for the latent</span>
 <span class="sd">        variables are calculated. This is the shared procedure for both model inference</span>
 <span class="sd">        and prediction.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            XR: Tensor of reference point features.</span>
+<span class="sd">            yR: Tensor of reference point labels.</span>
+<span class="sd">            XM: Tensor of dependent point features.</span>
+<span class="sd">            G_in: Tensor of graphical dependencies between reference points</span>
+<span class="sd">            A_in: Tensor of graphical dependencies from dependent to reference points.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            u: Sampled embeddings for both reference and dependent points</span>
+<span class="sd">            pz: Distribution of latent representation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">n_ref</span> <span class="o">=</span> <span class="n">XR</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="n">X_all</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">XR</span><span class="p">,</span> <span class="n">XM</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
-        <span class="c1">## Sample covariate representation U</span>
+        <span class="c1"># Sample covariate representation U</span>
         <span class="n">pu</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_vencoder</span><span class="p">(</span><span class="n">X_all</span><span class="p">)</span>
         <span class="n">u</span> <span class="o">=</span> <span class="n">pu</span><span class="o">.</span><span class="n">rsample</span><span class="p">()</span>
         <span class="n">uR</span> <span class="o">=</span> <span class="n">u</span><span class="p">[:</span><span class="n">n_ref</span><span class="p">]</span>
         <span class="n">uM</span> <span class="o">=</span> <span class="n">u</span><span class="p">[</span><span class="n">n_ref</span><span class="p">:]</span>
         <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">u</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span>
 
-        <span class="c1">## Sample the dependency matrices</span>
-        <span class="c1">## If we are training (&quot;infer&quot;), the entire dependency</span>
-        <span class="c1">## graph (A and G) is generated.</span>
-        <span class="c1">## If we are predicting (&quot;predict&quot;), only the dependent</span>
-        <span class="c1">## graph (A) is used.</span>
+        <span class="c1"># Sample the dependency matrices</span>
+        <span class="c1"># If we are training (&quot;infer&quot;), the entire dependency</span>
+        <span class="c1"># graph (A and G) is generated.</span>
+        <span class="c1"># If we are predicting (&quot;predict&quot;), only the dependent</span>
+        <span class="c1"># graph (A) is used.</span>
         <span class="k">if</span> <span class="n">A_in</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_graph</span><span class="o">.</span><span class="n">sample_A</span><span class="p">(</span><span class="n">uM</span><span class="p">,</span> <span class="n">uR</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -130,46 +267,43 @@
         <span class="n">GA</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">G</span><span class="p">,</span> <span class="n">A</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">GA</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span>
 
-        <span class="c1">## From the dependency graph GA and the encoded</span>
-        <span class="c1">## representative set, we calculate the distribution</span>
-        <span class="c1">## of the latent representations Z</span>
+        <span class="c1"># From the dependency graph GA and the encoded</span>
+        <span class="c1"># representative set, we calculate the distribution</span>
+        <span class="c1"># of the latent representations Z</span>
         <span class="n">yR_encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trans_cond_y</span><span class="p">(</span><span class="n">yR</span><span class="p">)</span>
         <span class="n">rep_R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rep_encoder</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">uR</span><span class="p">,</span> <span class="n">XR</span><span class="p">,</span> <span class="n">yR_encoded</span><span class="p">)</span>
         <span class="n">pz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pooler</span><span class="p">(</span><span class="n">rep_R</span><span class="p">,</span> <span class="n">GA</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">u</span><span class="p">,</span> <span class="n">pz</span></div>
 
     <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">XR</span><span class="p">,</span> <span class="n">yR</span><span class="p">,</span> <span class="n">XM</span><span class="p">,</span> <span class="n">yM</span><span class="p">,</span> <span class="n">G_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">A_in</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="c1">## Get the distribution of the latent representations Z</span>
-        <span class="c1">## and the encoding U of the covariates</span>
+        <span class="c1"># Get the distribution of the latent representations Z</span>
+        <span class="c1"># and the encoding U of the covariates</span>
         <span class="n">u</span><span class="p">,</span> <span class="n">pz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">XR</span><span class="p">,</span> <span class="n">yR</span><span class="p">,</span> <span class="n">XM</span><span class="p">,</span> <span class="n">G_in</span><span class="p">,</span> <span class="n">A_in</span><span class="p">)</span>
 
         <span class="n">X_all</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">XR</span><span class="p">,</span> <span class="n">XM</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
-        <span class="c1">## Sample Z from the proposal distribution (which</span>
-        <span class="c1">## is allowed to look at the labels of all points)</span>
+        <span class="c1"># Sample Z from the proposal distribution (which</span>
+        <span class="c1"># is allowed to look at the labels of all points)</span>
         <span class="n">y_all</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">yR</span><span class="p">,</span> <span class="n">yM</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">y_all_encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trans_cond_y</span><span class="p">(</span><span class="n">y_all</span><span class="p">)</span>
         <span class="n">qz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prop_vencoder</span><span class="p">(</span><span class="n">X_all</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">y_all_encoded</span><span class="p">)</span>
         <span class="n">z</span> <span class="o">=</span> <span class="n">qz</span><span class="o">.</span><span class="n">rsample</span><span class="p">()</span>
 
-        <span class="c1">## Calculate the difference between the &quot;prior&quot; pz and the</span>
-        <span class="c1">## variational distribution qz with an optional &quot;free-bits&quot; strategy.</span>
-        <span class="c1">## This free-bits strategy is a lower bound that solves the problem</span>
-        <span class="c1">## of posterior collapse.</span>
+        <span class="c1"># Calculate the difference between the &quot;prior&quot; pz and the</span>
+        <span class="c1"># variational distribution qz with an optional &quot;free-bits&quot; strategy.</span>
+        <span class="c1"># This free-bits strategy is a lower bound that solves the problem</span>
+        <span class="c1"># of posterior collapse.</span>
         <span class="n">log_pqz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc_log_pqz</span><span class="p">(</span><span class="n">pz</span><span class="p">,</span> <span class="n">qz</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span>
 
-        <span class="c1">## Calculate the conditional likelihood of the labels y conditional on Z</span>
+        <span class="c1"># Calculate the conditional likelihood of the labels y conditional on Z</span>
         <span class="n">py</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_vdecoder</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">u</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
         <span class="n">log_py</span> <span class="o">=</span> <span class="n">py</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">y_all</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">XM</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">assert</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">log_py</span><span class="p">)</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">log_pqz</span> <span class="o">+</span> <span class="n">log_py</span>
-        <span class="k">return</span> <span class="n">obj</span>
+        <span class="k">return</span> <span class="n">log_pqz</span> <span class="o">+</span> <span class="n">log_py</span>
 
 <div class="viewcode-block" id="FNP.calc_log_pqz"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.FNP.calc_log_pqz">[docs]</a>    <span class="k">def</span> <span class="nf">calc_log_pqz</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pz</span><span class="p">,</span> <span class="n">qz</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
         <span class="c1"># pylint: disable=attribute-defined-outside-init</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Calculates the log difference between pz and qz (with an optional free bits strategy)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="sd">&quot;&quot;&quot;Calculates the log difference between pz and qz (with an optional free bits strategy).&quot;&quot;&quot;</span>
         <span class="n">pqz_all</span> <span class="o">=</span> <span class="n">pz</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">-</span> <span class="n">qz</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">z</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">pqz_all</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fb_z</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -177,13 +311,9 @@
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">log_qpz</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">fb_z</span> <span class="o">*</span> <span class="n">z</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="n">z</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="mf">0.05</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">1.0</span>
-                    <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
                 <span class="k">elif</span> <span class="n">log_qpz</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">fb_z</span> <span class="o">*</span> <span class="n">z</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="n">z</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="mf">0.1</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">1.0</span>
-                    <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="mf">0.1</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
 
             <span class="n">log_pqz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lambda_z</span> <span class="o">*</span> <span class="n">pqz_all</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
 
@@ -192,6 +322,7 @@
         <span class="k">return</span> <span class="n">log_pqz</span></div>
 
 <div class="viewcode-block" id="FNP.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.FNP.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">XR</span><span class="p">,</span> <span class="n">yR</span><span class="p">,</span> <span class="n">XM</span><span class="p">,</span> <span class="n">yM</span><span class="p">,</span> <span class="n">G_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">A_in</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Calculates negative log probability of inputs and outputs.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">XR</span><span class="p">,</span> <span class="n">yR</span><span class="p">,</span> <span class="n">XM</span><span class="p">,</span> <span class="n">yM</span><span class="p">,</span> <span class="n">G_in</span><span class="p">,</span> <span class="n">A_in</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x_new</span><span class="p">,</span> <span class="n">XR</span><span class="p">,</span> <span class="n">yR</span><span class="p">,</span> <span class="n">sample</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">A_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sample_Z</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
@@ -213,12 +344,12 @@
         <span class="k">return</span> <span class="n">y_pred</span></div>
 
 
-<span class="c1">## ***********************</span>
-<span class="c1">## FNP-specific submodules</span>
-<span class="c1">## ***********************</span>
+<span class="c1"># ***********************</span>
+<span class="c1"># FNP-specific submodules</span>
+<span class="c1"># ***********************</span>
 <div class="viewcode-block" id="DepGraph"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.DepGraph">[docs]</a><span class="k">class</span> <span class="nc">DepGraph</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A dependency-graph module for use within FNP.</span>
+    <span class="sd">&quot;&quot;&quot;Dependency Graph module for use within FNP.</span>
+
 <span class="sd">    For tensors of input encodings from the reference points (uR)</span>
 <span class="sd">    and dependent points (uM), this module returns matrices</span>
 <span class="sd">    that represent the dependency structure.</span>
@@ -230,11 +361,11 @@
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim_u</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mf">0.3</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="c1">## Dimension of the encoded-input space</span>
+        <span class="c1"># Dimension of the encoded-input space</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dim_u</span> <span class="o">=</span> <span class="n">dim_u</span>
-        <span class="c1">## Temperature for LogitRelaxedBernoulli when training</span>
+        <span class="c1"># Temperature for LogitRelaxedBernoulli when training</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="n">temperature</span>
-        <span class="c1">## Learned parameter for self.g, the pairwise distance function</span>
+        <span class="c1"># Learned parameter for self.g, the pairwise distance function</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">g_logscale</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim_u</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">))</span>
 
     <span class="k">def</span> <span class="nf">sample_G</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uR</span><span class="p">):</span>
@@ -262,9 +393,7 @@
         <span class="n">unsorted_G</span><span class="p">[</span><span class="n">idx_utr</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">idx_utr</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
         <span class="c1"># unsort the dag to conform to the data order</span>
         <span class="n">original_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">sort_idx</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
-        <span class="n">unsorted_G</span> <span class="o">=</span> <span class="n">unsorted_G</span><span class="p">[</span><span class="n">original_idx</span><span class="p">,</span> <span class="p">:][:,</span> <span class="n">original_idx</span><span class="p">]</span>
-
-        <span class="k">return</span> <span class="n">unsorted_G</span>
+        <span class="k">return</span> <span class="n">unsorted_G</span><span class="p">[</span><span class="n">original_idx</span><span class="p">,</span> <span class="p">:][:,</span> <span class="n">original_idx</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">sample_A</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uM</span><span class="p">,</span> <span class="n">uR</span><span class="p">):</span>
         <span class="n">indices</span> <span class="o">=</span> <span class="p">[]</span>
@@ -288,8 +417,7 @@
     <span class="k">def</span> <span class="nf">g</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z1</span><span class="p">,</span> <span class="n">z2</span><span class="p">):</span>
         <span class="n">sq_norm2</span> <span class="o">=</span> <span class="p">(</span><span class="n">z2</span> <span class="o">-</span> <span class="n">z1</span><span class="p">)</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
         <span class="n">a</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">sq_norm2</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">g_logscale</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
-        <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logitexp</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">z1</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">b</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">logitexp</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">z1</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">logitexp</span><span class="p">(</span><span class="n">logp</span><span class="p">):</span>
@@ -304,14 +432,12 @@
         <span class="c1"># scalar ordering function</span>
         <span class="k">if</span> <span class="n">z</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">z</span>
-        <span class="n">log_cdf</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">erf</span><span class="p">(</span><span class="n">z</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">log_cdf</span></div>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">erf</span><span class="p">(</span><span class="n">z</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="RepEncoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.RepEncoder">[docs]</a><span class="k">class</span> <span class="nc">RepEncoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;Representation encoder for use within FNP.</span>
+
 <span class="sd">    Module which forms an encoded representation based on</span>
 <span class="sd">    the encoded input (U), the reference input (xR),</span>
 <span class="sd">    and the encoded reference labels (yR).</span>
@@ -325,29 +451,27 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">use_x</span> <span class="o">=</span> <span class="n">use_x</span>
 
 <div class="viewcode-block" id="RepEncoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.RepEncoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">u</span><span class="p">,</span> <span class="n">uR</span><span class="p">,</span> <span class="n">XR</span><span class="p">,</span> <span class="n">yR_encoded</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Encodes representation based on input from references points.&quot;&quot;&quot;</span>
         <span class="n">input_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">yR_encoded</span><span class="p">]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_x</span><span class="p">:</span>
             <span class="n">input_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">XR</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
 
-        <span class="c1">## If we look at differences in U values, we need to increase the dimension</span>
-        <span class="c1">## (each representative member looks different to each dependent member)</span>
+        <span class="c1"># If we look at differences in U values, we need to increase the dimension</span>
+        <span class="c1"># (each representative member looks different to each dependent member)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_u_diff</span><span class="p">:</span>
             <span class="n">u_diff</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">uR</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">input_list</span><span class="p">):</span>
                 <span class="n">input_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">input_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">u_diff</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
 
-        <span class="n">rep_R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">f</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="o">*</span><span class="n">input_list</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">rep_R</span></div></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="o">*</span><span class="n">input_list</span><span class="p">))</span></div></div>
 
 
 <span class="c1"># **************************</span>
 <span class="c1"># Representation Poolers</span>
 <span class="c1"># **************************</span>
 <div class="viewcode-block" id="AveragePooler"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.AveragePooler">[docs]</a><span class="k">class</span> <span class="nc">AveragePooler</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Pools together representations by taking a sum.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;Pools representations by taking a sum.&quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -360,14 +484,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">norm_graph</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">/</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
 
 <div class="viewcode-block" id="AveragePooler.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.AveragePooler.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rep_R</span><span class="p">,</span> <span class="n">GA</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Averages the reference points based on the dependency graph GA.&quot;&quot;&quot;</span>
         <span class="n">W</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm_graph</span><span class="p">(</span><span class="n">GA</span><span class="p">)</span>
-        <span class="n">pz_all</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">W</span><span class="p">,</span> <span class="n">rep_R</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">pz_all</span></div></div>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">W</span><span class="p">,</span> <span class="n">rep_R</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="SetPooler"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.SetPooler">[docs]</a><span class="k">class</span> <span class="nc">SetPooler</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Pools together representations using a set transformer architecture.</span>
+    <span class="sd">&quot;&quot;&quot;Pools representations using a set transformer architecture.</span>
+
 <span class="sd">    See https://arxiv.org/abs/1810.00825.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -402,7 +526,8 @@
                 <span class="n">MLP</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pooling_layers</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_z</span><span class="p">),</span>
             <span class="p">)</span>
 
-<div class="viewcode-block" id="SetPooler.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.SetPooler.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rep_R</span><span class="p">,</span> <span class="n">GA</span><span class="p">):</span>
+<div class="viewcode-block" id="SetPooler.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.SetPooler.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rep_R</span><span class="p">,</span> <span class="n">GA</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+        <span class="sd">&quot;&quot;&quot;Runs set pooler on encoded representations and graph.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_transformer</span><span class="p">:</span>
             <span class="n">rep_pooled</span> <span class="o">=</span> <span class="n">GA</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">rep_R</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
             <span class="n">pz_all</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pool_net</span><span class="p">(</span><span class="n">rep_pooled</span><span class="p">)</span>
@@ -419,12 +544,10 @@
 
 
 <div class="viewcode-block" id="MAB"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.MAB">[docs]</a><span class="k">class</span> <span class="nc">MAB</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A Multihead Attention Block for use in a set transformer.</span>
-<span class="sd">    See https://arxiv.org/abs/1810.00825.</span>
+    <span class="sd">&quot;&quot;&quot;A Multihead Attention Block for use in a set transformer.</span>
 
-<span class="sd">    This implementation is from https://github.com/juho-lee/set_transformer/,</span>
-<span class="sd">    which comes with the MIT license.</span>
+<span class="sd">    See https://arxiv.org/abs/1810.00825. This implementation is from</span>
+<span class="sd">    https://github.com/juho-lee/set_transformer/, which comes with the MIT license.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim_Q</span><span class="p">,</span> <span class="n">dim_K</span><span class="p">,</span> <span class="n">dim_V</span><span class="p">,</span> <span class="n">num_heads</span><span class="p">,</span> <span class="n">ln</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
@@ -440,6 +563,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">fc_o</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">dim_V</span><span class="p">,</span> <span class="n">dim_V</span><span class="p">)</span>
 
 <div class="viewcode-block" id="MAB.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.MAB.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Q</span><span class="p">,</span> <span class="n">K</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Generates outout from query Q and key/value K.&quot;&quot;&quot;</span>
         <span class="c1"># We assume that Q and K are ...x N x D, where</span>
         <span class="c1"># ... are 0 or more preceding dimensions.</span>
         <span class="n">Q</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_q</span><span class="p">(</span><span class="n">Q</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">)</span>
@@ -459,12 +583,10 @@
 
 
 <div class="viewcode-block" id="SAB"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.SAB">[docs]</a><span class="k">class</span> <span class="nc">SAB</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A Self-Attention Block for use in a set transformer.</span>
-<span class="sd">    See https://arxiv.org/abs/1810.00825.</span>
+    <span class="sd">&quot;&quot;&quot;A Self-Attention Block for use in a set transformer.</span>
 
-<span class="sd">    This implementation is from https://github.com/juho-lee/set_transformer/,</span>
-<span class="sd">    which comes with the MIT license.</span>
+<span class="sd">    See https://arxiv.org/abs/1810.00825. This implementation is from</span>
+<span class="sd">    https://github.com/juho-lee/set_transformer/, which comes with the MIT license.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="p">,</span> <span class="n">num_heads</span><span class="p">,</span> <span class="n">ln</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
@@ -472,16 +594,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">mab</span> <span class="o">=</span> <span class="n">MAB</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="p">,</span> <span class="n">num_heads</span><span class="p">,</span> <span class="n">ln</span><span class="o">=</span><span class="n">ln</span><span class="p">)</span>
 
 <div class="viewcode-block" id="SAB.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.SAB.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Applies MAB to X as key, query, and value.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mab</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">X</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="PMA"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.PMA">[docs]</a><span class="k">class</span> <span class="nc">PMA</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A Pooling by Multihead Attention block for use in a set transformer.</span>
-<span class="sd">    See https://arxiv.org/abs/1810.00825.</span>
+    <span class="sd">&quot;&quot;&quot;A Pooling by Multihead Attention block for use in a set transformer.</span>
 
-<span class="sd">    This implementation is from https://github.com/juho-lee/set_transformer/,</span>
-<span class="sd">    which comes with the MIT license.</span>
+<span class="sd">    See https://arxiv.org/abs/1810.00825. This implementation is from</span>
+<span class="sd">    https://github.com/juho-lee/set_transformer/, which comes with the MIT license.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">num_heads</span><span class="p">,</span> <span class="n">num_seeds</span><span class="p">,</span> <span class="n">ln</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">squeeze_out</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
@@ -492,6 +613,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">squeeze_out</span> <span class="o">=</span> <span class="n">squeeze_out</span>
 
 <div class="viewcode-block" id="PMA.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.fnp.PMA.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;PMA on X (set-valued transformation which is permutation invariant).&quot;&quot;&quot;</span>
         <span class="n">diff_dim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">size</span><span class="p">())</span> <span class="o">-</span> <span class="mi">2</span>
         <span class="n">S</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">S</span><span class="p">[(</span><span class="kc">None</span><span class="p">,)</span> <span class="o">*</span> <span class="n">diff_dim</span><span class="p">]</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">*</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">2</span><span class="p">],</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">S</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
         <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mab</span><span class="p">(</span><span class="n">S</span><span class="p">,</span> <span class="n">X</span><span class="p">)</span>
@@ -500,69 +622,47 @@
         <span class="k">return</span> <span class="n">out</span></div></div>
 </pre></div>
 
+           </div>
+           
           </div>
+          <footer>
 
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Probabilistic Machine Learning Research Group.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
         </div>
       </div>
-      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
-        <div class="sphinxsidebarwrapper">
-<h1 class="logo"><a href="../../../index.html">bliss</a></h1>
 
+    </section>
 
+  </div>
+  
 
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
 
+  
+  
+    
+   
 
-
-
-
-<h3>Navigation</h3>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../../../Installation.html">Installation Guide</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">Bliss API</a></li>
-</ul>
-
-<div class="relations">
-<h3>Related Topics</h3>
-<ul>
-  <li><a href="../../../index.html">Documentation overview</a><ul>
-  <li><a href="../../index.html">Module code</a><ul>
-  </ul></li>
-  </ul></li>
-</ul>
-</div>
-<div id="searchbox" style="display: none" role="search">
-  <h3 id="searchlabel">Quick search</h3>
-    <div class="searchformwrapper">
-    <form class="search" action="../../../search.html" method="get">
-      <input type="text" name="q" aria-labelledby="searchlabel" />
-      <input type="submit" value="Go" />
-    </form>
-    </div>
-</div>
-<script>$('#searchbox').show(0);</script>
-
-
-
-
-
-
-
-
-        </div>
-      </div>
-      <div class="clearer"></div>
-    </div>
-    <div class="footer">
-      &copy;2021, Probabilistic Machine Learning Research Group.
-
-      |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
-      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-
-    </div>
-
-
-
-
-  </body>
+</body>
 </html>

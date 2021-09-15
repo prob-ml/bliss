@@ -19,6 +19,7 @@ trials_result/
 .vscode/
 .env
 jupyter/
-outputs/
+output/
+hydra_temp/
 bin/
 .pytest_cache/

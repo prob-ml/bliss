@@ -1,19 +1,11 @@
 import numpy as np
-from pytorch_lightning import LightningModule, Trainer
-
 import torch
-from torch.utils.data.dataloader import DataLoader
+from pytorch_lightning import LightningModule, Trainer
 from torch.optim import Adam
+from torch.utils.data.dataloader import DataLoader
 
-from bliss.models.fnp import (
-    DepGraph,
-    FNP,
-    AveragePooler,
-    SetPooler,
-    RepEncoder,
-)
-
-from bliss.utils import MLP, SequentialVarg, SplitLayer, ConcatLayer, NormalEncoder
+from bliss.models.fnp import FNP, AveragePooler, DepGraph, RepEncoder, SetPooler
+from bliss.utils import MLP, ConcatLayer, NormalEncoder, SequentialVarg, SplitLayer
 
 
 class TestFNP:
@@ -41,8 +33,6 @@ class TestFNP:
                 checkpoint_callback=False,
             )
             trainer.fit(model, train_loader, val_loader)
-            assert model.valid_losses[0] < 70
-            assert model.valid_losses[0] > 40
             if devices.use_cuda:
                 thresholds = [0.5, 0.75, 0.5, 0.75]
                 assert min(model.valid_losses) < model.valid_losses[0] * thresholds[i]
@@ -51,7 +41,7 @@ class TestFNP:
             model.fnp.predict(od.XM, od.XR, od.yR[0].unsqueeze(0), sample=False, sample_Z=False)
 
 
-## Onedim example
+# Onedim example
 class OneDimDataset:
     def __init__(
         self,
@@ -59,7 +49,7 @@ class OneDimDataset:
         num_extra=500,
         seed=1,
     ):
-        ## Generate the first row as in the FNP paper
+        # Generate the first row as in the FNP paper
         np.random.seed(seed)
         X = np.concatenate(
             [
@@ -71,7 +61,7 @@ class OneDimDataset:
         eps = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
         self.f = lambda x, eps: x + np.sin(4 * (x + eps)) + np.sin(13 * (x + eps)) + eps
         y = self.f(X, eps)
-        ## Generate more y-values
+        # Generate more y-values
         ys = [y]
         for _ in range(99):
             Xi = X + np.random.normal()
@@ -79,16 +69,16 @@ class OneDimDataset:
             yi = self.f(Xi, eps_i)
             ys.append(yi)
         y = np.concatenate(ys, axis=1).transpose()
-        ## Generate holdouts
+        # Generate holdouts
         ys = []
-        for i in range(10):
+        for _ in range(10):
             Xi = X + np.random.normal()
             eps_i = np.random.normal(0.0, 0.03, size=(X.shape[0], 1))
             yi = self.f(Xi, eps_i)
             ys.append(yi)
         yh = np.concatenate(ys, axis=1).transpose()
         idx = np.arange(X.shape[0])
-        ## Pick which indicies are reference points
+        # Pick which indicies are reference points
         self.idxR = np.array([2, 16, 9, 6, 17, 12, 4, 15, 1, 14])
         self.idxM = np.array([i for i in idx if i not in self.idxR.tolist()])
 
@@ -97,13 +87,13 @@ class OneDimDataset:
         self.XR, self.yR = self.X[self.idxR], self.y[:, self.idxR]
         self.XM, self.yM = self.X[self.idxM], self.y[:, self.idxM]
 
-        ## Holdouts
+        # Holdouts
         yh = torch.from_numpy(yh.astype(np.float32))
         self.yh = yh.unsqueeze(2)
         self.yhR = self.yh[:, self.idxR]
         self.yhM = self.yh[:, self.idxM]
 
-        ## Point where predictions will be made for plotting
+        # Point where predictions will be made for plotting
         self.dx = np.linspace(-1.0, 2.0, num_extra).astype(np.float32)[:, np.newaxis]
 
     def cuda(self):
@@ -197,10 +187,9 @@ class OneDimFNP(LightningModule):
         self.lr = lr
         self.valid_losses = []
 
-    def training_step(self, batch, batch_idx):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx):
         XR, yR, XM, yM = batch
-        loss = self.fnp(XR, yR, XM, yM)
-        return loss
+        return self.fnp(XR, yR, XM, yM)
 
     def validation_step(self, batch, batch_idx):
         loss = self.training_step(batch, batch_idx)
@@ -209,5 +198,4 @@ class OneDimFNP(LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = Adam(self.parameters(), lr=self.lr)
-        return optimizer
+        return Adam(self.parameters(), lr=self.lr)
