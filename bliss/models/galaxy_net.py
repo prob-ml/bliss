@@ -12,9 +12,7 @@ plt.switch_backend("Agg")
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(
-        self, slen=53, latent_dim=8, n_bands=1, hidden=256  # pylint: disable=unused-argument
-    ):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=32):
 
         super().__init__()
 
@@ -22,19 +20,19 @@ class CenteredGalaxyEncoder(nn.Module):
         self.latent_dim = latent_dim
 
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
-        min_slen = f(slen)  # pylint: disable=unused-variable
+        min_slen = f(slen)
 
         self.features = nn.Sequential(
             nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
             nn.LeakyReLU(),
             nn.Flatten(),
-            nn.Linear(min_slen * min_slen * 4, 512),
+            nn.Linear(min_slen * min_slen * 4, hidden * 16),
             nn.LeakyReLU(),
-            nn.Linear(512, 128),
+            nn.Linear(hidden * 16, hidden * 4),
             nn.LeakyReLU(),
-            nn.Linear(128, 32),
+            nn.Linear(hidden * 4, hidden),
             nn.LeakyReLU(),
-            nn.Linear(32, 8),
+            nn.Linear(hidden, latent_dim),
         )
 
     def forward(self, image):
@@ -43,9 +41,7 @@ class CenteredGalaxyEncoder(nn.Module):
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(
-        self, slen=53, latent_dim=8, n_bands=1, hidden=256
-    ):  # pylint: disable=unused-argument
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=32):
         super().__init__()
 
         self.slen = slen
@@ -56,13 +52,13 @@ class CenteredGalaxyDecoder(nn.Module):
         assert g(self.min_slen) == slen
 
         self.fc = nn.Sequential(
-            nn.Linear(8, 32),
+            nn.Linear(latent_dim, hidden),
             nn.LeakyReLU(),
-            nn.Linear(32, 128),
+            nn.Linear(hidden, hidden * 4),
             nn.LeakyReLU(),
-            nn.Linear(128, 512),
+            nn.Linear(hidden * 4, hidden * 16),
             nn.LeakyReLU(),
-            nn.Linear(512, self.min_slen * self.min_slen * 4),
+            nn.Linear(hidden * 16, self.min_slen * self.min_slen * 4),
         )
 
         self.features = nn.Sequential(nn.ConvTranspose2d(4, n_bands, 5, stride=3))
@@ -84,10 +80,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self,
         slen=53,
         latent_dim=8,
-        hidden=256,
+        hidden=32,
         n_bands=1,
         mse_residual_model_loss: bool = True,
-        optimizer_params: dict = None,  # pylint: disable=unused-argument
+        optimizer_params: dict = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -145,7 +141,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     # Training
     # ----------------
 
-    def training_step(self, batch, batch_idx, optimizer_idx):  # pylint: disable=unused-argument
+    def training_step(self, batch, batch_idx, optimizer_idx):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         if optimizer_idx == 0:
