@@ -165,7 +165,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         # only plot i band if available, otherwise the highest band given.
         assert images.size(0) >= n_examples
         assert images.shape[1] == recon_mean.shape[1] == residuals.shape[1] == 1, "1 band only."
-        fig, axes = plt.subplots(n_rows=n_examples, n_cols=3, figsize=(10, n_examples * 2.5))
+        fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=(10, n_examples * 2.5))
 
         if mode == "random":
             indices = torch.randint(0, len(images), size=(n_examples,))
@@ -191,12 +191,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             if i == 0:
                 ax_true.set_title(r"\rm Images $x$")
                 ax_recon.set_title(r"\rm Reconstruction $\tilde{x}$")
-                ax_res.set_title(r"\rm Residual $\frac{x - \tilde{x}}{\sqrt{\tilde{x}}$")
+                ax_res.set_title(r"\rm Residual $\frac{x - \tilde{x}}{\sqrt{\tilde{x}}}$")
 
             # standarize ranges of true and reconstruction
-            image = images[idx, 0].cpu().numpy()
-            recon = recon_mean[idx, 0].cpu().numpy()
-            residual = residuals[idx, 0].cpu().numpy()
+            image = images[idx, 0].detach().cpu().numpy()
+            recon = recon_mean[idx, 0].detach().cpu().numpy()
+            residual = residuals[idx, 0].detach().cpu().numpy()
             vmin = min(image.min().item(), recon.min().item())
             vmax = max(image.max().item(), recon.max().item())
 
