@@ -86,46 +86,47 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim=8,
         hidden=256,
         n_bands=1,
+        mse_residual_model_loss: bool = True,
         optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         super().__init__()
         self.save_hyperparameters()
 
-        self.enc_0 = CenteredGalaxyEncoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+        self.main_autoencoder = nn.Sequential(
+            CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands),
+            CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands),
         )
-        self.dec_0 = CenteredGalaxyDecoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+        self.residual_autoencoder = nn.Sequential(
+            CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands),
+            CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands),
         )
-
-        self.enc_1 = CenteredGalaxyEncoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
-        self.dec_1 = CenteredGalaxyDecoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
+        self.mse_residual_model_loss = mse_residual_model_loss
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
-    def forward_model_0(self, image, background):
-        z = self.enc_0.forward(image - background)
-        recon_mean = F.relu(self.dec_0.forward(z))
-        return recon_mean + background
+    def _main_forward(self, image, background):
+        return F.relu(self.main_autoencoder(image - background)) + background
 
-    def forward_model_1(self, residual):
-        z = self.enc_1.forward(residual)
-        return self.dec_1.forward(z)
+    def _residual_forward(self, residual):
+        return self.residual_autoencoder(residual)
 
     def forward(self, image, background):
         """Gets reconstructed image from running through encoder and decoder."""
-        recon_mean_0 = self.forward_model_0(image, background)
-        recon_mean_1 = self.forward_model_1(image - recon_mean_0)
-        return recon_mean_0 + recon_mean_1
+        recon_mean_main = self._main_forward(image, background)
+        recon_mean_residual = self._residual_forward(image - recon_mean_main)
+        return recon_mean_main + recon_mean_residual
 
-    def get_loss(self, image, recon_mean):
+    def get_likelihood_loss(self, image, recon_mean):
         # this is nan whenever recon_mean is not strictly positive
         return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
+
+    def get_residual_model_loss(self, image, recon_mean):
+        if self.mse_residual_model_loss:
+            loss = F.mse_loss(image, recon_mean)
+        else:
+            loss = self.get_likelihood_loss(image, recon_mean)
+        return loss
 
     # ---------------
     # Optimizer
@@ -136,11 +137,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         assert self.hparams["optimizer_params"] is not None, "Need to specify `optimizer_params`."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
-        opt_0_params = list(self.enc_0.parameters()) + list(self.dec_0.parameters())
-        opt_1_params = list(self.enc_1.parameters()) + list(self.dec_1.parameters())
-        opt_0 = get_optimizer(name, opt_0_params, kwargs)
-        opt_1 = get_optimizer(name, opt_1_params, kwargs)
-        return opt_0, opt_1
+        opt_main = get_optimizer(name, self.main_autoencoder.parameters(), kwargs)
+        opt_residual = get_optimizer(name, self.residual_autoencoder.parameters(), kwargs)
+        return opt_main, opt_residual
 
     # ---------------
     # Training
@@ -150,19 +149,19 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         if optimizer_idx == 0:
-            recon_mean_0 = self.forward_model_0(images, background)
-            loss = self.get_loss(images, recon_mean_0)
-            self.log("train/loss_0", loss, prog_bar=True)
+            recon_mean_main = self._main_forward(images, background)
+            loss = self.get_likelihood_loss(images, recon_mean_main)
+            self.log("train/loss_main", loss, prog_bar=True)
         if optimizer_idx == 1:
             with torch.no_grad():
-                recon_mean_0 = self.forward_model_0(images, background)
-            recon_mean_1 = self.forward_model_1(images - recon_mean_0)
-            loss = F.mse_loss(images - recon_mean_0, recon_mean_1)
-            self.log("train/loss_1", loss, prog_bar=True)
+                recon_mean_main = self._main_forward(images, background)
+            recon_mean_residual = self._residual_forward(images - recon_mean_main)
+            loss = self.get_residual_model_loss(images - recon_mean_main, recon_mean_residual)
+            self.log("train/loss_residual", loss, prog_bar=True)
 
-            recon_mean = recon_mean_0 + recon_mean_1
-            final_loss = self.get_loss(images, recon_mean)
-            self.log("train/loss", final_loss, prog_bar=True)
+            recon_mean_final = recon_mean_main + recon_mean_residual
+            loss_final = self.get_likelihood_loss(images, recon_mean_final)
+            self.log("train/loss", loss_final, prog_bar=True)
         return loss
 
     # ---------------
@@ -172,40 +171,40 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        recon_mean_0 = self.forward_model_0(images, background)
-        loss_0 = self.get_loss(images, recon_mean_0)
-        self.log("val/loss_0", loss_0)
+        recon_mean_main = self._main_forward(images, background)
+        loss_main = self.get_likelihood_loss(images, recon_mean_main)
+        self.log("val/loss_main", loss_main)
 
-        recon_mean_1 = self.forward_model_1(images - recon_mean_0)
-        loss_1 = F.mse_loss(images - recon_mean_0, recon_mean_1)
-        self.log("val/loss_1", loss_1)
+        recon_mean_residual = self._residual_forward(images - recon_mean_main)
+        loss_residual = self.get_residual_model_loss(images - recon_mean_main, recon_mean_residual)
+        self.log("val/loss_residual", loss_residual)
 
-        recon_mean = recon_mean_0 + recon_mean_1
-        loss = self.get_loss(images, recon_mean)
+        recon_mean_final = recon_mean_main + recon_mean_residual
+        loss = self.get_likelihood_loss(images, recon_mean_final)
         self.log("val/loss", loss)
 
         # metrics
-        residuals = (images - recon_mean) / torch.sqrt(images)
+        residuals = (images - recon_mean_final) / torch.sqrt(images)
         self.log("val/max_residual", residuals.abs().max())
         return {
             "images": images,
-            "recon_mean_0": recon_mean_0,
-            "recon_mean_1": recon_mean_1,
-            "recon_mean": recon_mean,
+            "recon_mean_main": recon_mean_main,
+            "recon_mean_residual": recon_mean_residual,
+            "recon_mean_final": recon_mean_final,
         }
 
     def validation_epoch_end(self, outputs):
         """Validation epoch end (pytorch lightning)."""
         if self.logger:
             images = torch.cat([x["images"] for x in outputs])
-            recon_mean = torch.cat([x["recon_mean"] for x in outputs])
-            recon_mean_0 = torch.cat([x["recon_mean_0"] for x in outputs])
-            recon_mean_1 = torch.cat([x["recon_mean_1"] for x in outputs])
+            recon_mean_final = torch.cat([x["recon_mean_final"] for x in outputs])
+            recon_mean_main = torch.cat([x["recon_mean_main"] for x in outputs])
+            recon_mean_residual = torch.cat([x["recon_mean_residual"] for x in outputs])
 
             reconstructions = self.plot_reconstruction(
-                images, recon_mean_0, recon_mean_1, recon_mean
+                images, recon_mean_main, recon_mean_residual, recon_mean_final
             )
-            grid_example = self.plot_grid_examples(images, recon_mean)
+            grid_example = self.plot_grid_examples(images, recon_mean_final)
 
             self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/images", reconstructions)
             self.logger.experiment.add_figure(
@@ -238,7 +237,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plt.yticks([])
         return fig
 
-    def plot_reconstruction(self, images, recon_mean_0, recon_mean_1, recon_mean):
+    def plot_reconstruction(self, images, recon_mean_main, recon_mean_residual, recon_mean_final):
 
         # 1. only plot i band if available, otherwise the highest band given.
         # 2. plot `num_examples//2` images with the largest average residual
@@ -253,53 +252,53 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         num_examples = 10
         num_cols = 6
 
-        residuals_0 = (images - recon_mean_0) / torch.sqrt(images)
-        residuals = (images - recon_mean) / torch.sqrt(images)
+        residuals_main = (images - recon_mean_main) / torch.sqrt(images)
+        residuals_final = (images - recon_mean_final) / torch.sqrt(images)
+        recon_mean_residual = recon_mean_residual / torch.sqrt(images)
 
-        residuals_idx = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)
+        residuals_idx = residuals_final.abs().mean(dim=(1, 2, 3)).argsort(descending=True)
         large_residuals_idx = residuals_idx[: num_examples // 2]
         small_residuals_idx = residuals_idx[-num_examples // 2 :]
         plot_idx = torch.cat((large_residuals_idx, small_residuals_idx))
 
         images = images[plot_idx]
-        recon_mean_0 = recon_mean_0[plot_idx]
-        recon_mean_1 = recon_mean_1[plot_idx]
-        recon_mean = recon_mean[plot_idx]
-        residuals = residuals[plot_idx]
-        residuals_0 = residuals_0[plot_idx]
+        recon_mean_main = recon_mean_main[plot_idx]
+        recon_mean_residual = recon_mean_residual[plot_idx]
+        recon_mean_final = recon_mean_final[plot_idx]
+        residuals_main = residuals_main[plot_idx]
+        residuals_final = residuals_final[plot_idx]
 
-        residual_vmax = torch.ceil(residuals.max().cpu()).numpy()
-        residual_vmin = torch.floor(residuals.min().cpu()).numpy()
+        residual_vmax = torch.ceil(residuals_final.max().cpu()).numpy()
+        residual_vmin = torch.floor(residuals_final.min().cpu()).numpy()
 
         plt.ioff()
 
         fig = plt.figure(figsize=(15, 25))
         for i in range(num_examples):
             image = images[i, 0].data.cpu()
-            recon = recon_mean[i, 0].data.cpu()
-            recon_0 = recon_mean_0[i, 0].data.cpu()
-            recon_1 = recon_mean_1[i, 0].data.cpu()
-            res_0 = residuals_0[i, 0].data.cpu()
-            res = residuals[i, 0].data.cpu()
+            recon_final = recon_mean_final[i, 0].data.cpu()
+            recon_main = recon_mean_main[i, 0].data.cpu()
+            recon_residual = recon_mean_residual[i, 0].data.cpu()
+            res_main = residuals_main[i, 0].data.cpu()
+            res_final = residuals_final[i, 0].data.cpu()
 
-            image_vmax = torch.ceil(torch.max(image.max(), recon.max())).cpu().numpy()
-            image_vmin = torch.floor(torch.min(image.min(), recon.min())).cpu().numpy()
+            image_vmax = torch.ceil(torch.max(image.max(), recon_final.max())).cpu().numpy()
+            image_vmin = torch.floor(torch.min(image.min(), recon_final.min())).cpu().numpy()
 
             plots = {
                 "images": image,
-                "recon_mean_0": recon_0,
-                "residuals_0": res_0,
-                "recon_mean_1": recon_1,
-                "recon_mean": recon,
-                "residuals": res,
+                "recon_mean_main": recon_main,
+                "residuals_main": res_main,
+                "recon_mean_residual": recon_residual,
+                "recon_mean_final": recon_final,
+                "residuals_final": res_final,
             }
 
             for j, (title, plot) in enumerate(plots.items()):
                 plt.subplot(num_examples, num_cols, num_cols * i + j + 1)
                 plt.title(title)
-                if title.startswith("residuals"):
+                if "residual" in title:
                     vmin, vmax = residual_vmin, residual_vmax
-
                 else:
                     vmin, vmax = image_vmin, image_vmax
                 plt.imshow(plot.numpy(), interpolation=None, vmin=vmin, vmax=vmax)

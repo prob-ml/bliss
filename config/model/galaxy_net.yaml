@@ -5,3 +5,4 @@ kwargs:
   n_bands: 1
   hidden: 256
   optimizer_params: ${optimizer}
+  mse_residual_model_loss: true
