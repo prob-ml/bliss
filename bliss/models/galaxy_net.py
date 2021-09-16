@@ -161,11 +161,14 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             self.logger.experiment.add_figure(f"Random Images {self.current_epoch}", fig_random)
             self.logger.experiment.add_figure(f"Worst Images {self.current_epoch}", fig_worst)
 
-    def plot_reconstruction(self, images, recon_mean, residuals, n_examples=10, mode="random"):
+    def plot_reconstruction(
+        self, images, recon_mean, residuals, n_examples=10, mode="random", width=10, pad=6.0
+    ):
         # only plot i band if available, otherwise the highest band given.
         assert images.size(0) >= n_examples
         assert images.shape[1] == recon_mean.shape[1] == residuals.shape[1] == 1, "1 band only."
-        fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=(10, n_examples * 2.5))
+        figsize = (width, width * n_examples / 3)
+        fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=figsize)
 
         if mode == "random":
             indices = torch.randint(0, len(images), size=(n_examples,))
@@ -189,9 +192,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
             # only add titles to the first axes.
             if i == 0:
-                ax_true.set_title(r"\rm Images $x$")
-                ax_recon.set_title(r"\rm Reconstruction $\tilde{x}$")
-                ax_res.set_title(r"\rm Residual $\frac{x - \tilde{x}}{\sqrt{\tilde{x}}}$")
+                ax_true.set_title("Images $x$", pad=pad)
+                ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
+                ax_res.set_title(
+                    r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad
+                )
 
             # standarize ranges of true and reconstruction
             image = images[idx, 0].detach().cpu().numpy()
