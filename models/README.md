@@ -1,12 +1,14 @@
 # Models
 
 This README should be regularly updated to contain the commands used to produce each of the models
-in this directory. Please also specify most recent **validation loss** as a reference.
+in this directory. Please also specify most recent **validation loss** and number of
+**epochs** as a reference.
 
 * ``sdss_autoencoder.ckpt``
 
 ```bash
 # Validation Loss = 781819.375
+# Epochs = 969
 poetry run bliss mode="train" model="galaxy_net" dataset="sdss_galaxies" optimizer="adam" \
 training.n_epochs=251 training.trainer.check_val_every_n_epoch=10 dataset.kwargs.noise_factor=0.01 \
 dataset.kwargs.num_workers=5 training.trainer.checkpoint_callback=True
