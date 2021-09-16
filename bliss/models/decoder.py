@@ -658,12 +658,13 @@ class StarTileDecoder(nn.Module):
         elif psf_file is not None:
             ext = Path(psf_file).suffix
             if ext == ".npy":
-                self.psf_image = torch.from_numpy(np.load(psf_file))
+                psf_image = torch.from_numpy(np.load(psf_file))
             else:
                 raise NotImplementedError("Only .npy format are supported for PSF files.")
+            self.register_buffer("psf_image", psf_image)
             self.params = None
             assert self.psf_image.shape[0] == self.n_bands
-            assert self.sf_image.shape[-1] == self.psf_image.shape[-2] == self.psf_slen
+            assert self.psf_image.shape[-1] == self.psf_image.shape[-2] == self.psf_slen
 
         else:
             raise ValueError("Either psf_params_file is not None or psf_file is not None")
@@ -744,8 +745,7 @@ class StarTileDecoder(nn.Module):
     def _get_psf_single_band(self, band_idx):
         if self.params is not None:
             psf_params = torch.exp(self.params[band_idx])
-
-            return self._psf_fun(
+            psf = self._psf_fun(
                 self.cached_radii_grid,
                 psf_params[0],
                 psf_params[1],
@@ -755,7 +755,10 @@ class StarTileDecoder(nn.Module):
                 psf_params[5],
             )
 
-        return self.psf_image[band_idx].abs()  # prevent negative numbers.
+        elif self.psf_image is not None:
+            psf = self.psf_image[band_idx]  # pylint: disable=unsubscriptable-object
+
+        return psf
 
     def _adjust_psf(self):
         # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
