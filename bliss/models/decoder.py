@@ -671,7 +671,7 @@ class StarTileDecoder(nn.Module):
         # get psf normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = self._get_psf_single_band(psf_params[i])
+            psf_i = self._get_psf_single_band(i)
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
@@ -726,7 +726,7 @@ class StarTileDecoder(nn.Module):
     def _get_psf(self):
         psf_list = []
         for i in range(self.n_bands):
-            band_psf = self._get_psf_single_band(self.params[i])
+            band_psf = self._get_psf_single_band(i)
             band_psf *= self.normalization_constant[i]
             psf_list.append(band_psf.unsqueeze(0))
         psf = torch.cat(psf_list)
@@ -755,7 +755,7 @@ class StarTileDecoder(nn.Module):
                 psf_params[5],
             )
 
-        return self.psf_image[band_idx]
+        return self.psf_image[band_idx].abs()  # prevent negative numbers.
 
     def _adjust_psf(self):
         # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
