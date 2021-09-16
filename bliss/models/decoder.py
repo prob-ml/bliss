@@ -44,7 +44,8 @@ class ImageDecoder(pl.LightningModule):
         gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
-        psf_params_file="psf_params.npy",
+        psf_params_file=None,
+        psf_file=None,
         psf_slen=25,
         background_values=(686.0,),
         loc_min=0.0,
@@ -83,7 +84,6 @@ class ImageDecoder(pl.LightningModule):
         self.latents_file = latents_file
         # Star Decoder
         self.psf_slen = psf_slen
-        self.psf_params_file = psf_params_file
         self.sdss_bands = tuple(sdss_bands)
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
@@ -115,7 +115,12 @@ class ImageDecoder(pl.LightningModule):
 
         # Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
-            self.tiler, self.n_bands, self.psf_params_file, self.psf_slen, self.sdss_bands
+            self.tiler,
+            self.n_bands,
+            self.psf_slen,
+            self.sdss_bands,
+            psf_params_file=psf_params_file,
+            psf_file=psf_file,
         )
 
         # Submodule for rendering galaxies on a tile
@@ -621,28 +626,47 @@ class Tiler(nn.Module):
 
 
 class StarTileDecoder(nn.Module):
-    def __init__(self, tiler, n_bands, psf_params_file, psf_slen, sdss_bands=(2,)):
+    def __init__(
+        self, tiler, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None, psf_file=None
+    ):
         super().__init__()
         self.tiler = tiler
         self.n_bands = n_bands
-        ext = Path(psf_params_file).suffix
-        if ext == ".npy":
-            psf_params = torch.from_numpy(np.load(psf_params_file))
-            psf_params = psf_params[list(range(n_bands))]
-        elif ext == ".fits":
-            assert len(sdss_bands) == n_bands
-            psf_params = self.get_fit_file_psf_params(psf_params_file, sdss_bands)
-        else:
-            raise NotImplementedError(
-                "Only .npy and .fits extensions are supported for PSF params files."
-            )
-        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
         self.psf_slen = psf_slen
-        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        # extra factor to be consistent with old repo
-        # but probably doesn't matter ...
-        grid *= self.psf_slen / (self.psf_slen - 1)
-        self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
+
+        if psf_params_file is not None:
+            assert psf_file is None, "Only 1 at a time works."
+            ext = Path(psf_params_file).suffix
+            if ext == ".npy":
+                psf_params = torch.from_numpy(np.load(psf_params_file))
+                psf_params = psf_params[list(range(n_bands))]
+            elif ext == ".fits":
+                assert len(sdss_bands) == n_bands
+                psf_params = self.get_fit_file_psf_params(psf_params_file, sdss_bands)
+            else:
+                raise NotImplementedError(
+                    "Only .npy and .fits extensions are supported for PSF params files."
+                )
+            self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
+            self.psf_image = None
+            grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+            # extra factor to be consistent with old repo
+            # but probably doesn't matter ...
+            grid *= self.psf_slen / (self.psf_slen - 1)
+            self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
+
+        elif psf_file is not None:
+            ext = Path(psf_file).suffix
+            if ext == ".npy":
+                self.psf_image = torch.from_numpy(np.load(psf_file))
+            else:
+                raise NotImplementedError("Only .npy format are supported for PSF files.")
+            self.params = None
+            assert self.psf_image.shape[0] == self.n_bands
+            assert self.sf_image.shape[-1] == self.psf_image.shape[-2] == self.psf_slen
+
+        else:
+            raise ValueError("Either psf_params_file is not None or psf_file is not None")
 
         # get psf normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
@@ -717,17 +741,21 @@ class StarTileDecoder(nn.Module):
         term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def _get_psf_single_band(self, psf_params):
-        psf_params = torch.exp(psf_params)
-        return self._psf_fun(
-            self.cached_radii_grid,
-            psf_params[0],
-            psf_params[1],
-            psf_params[2],
-            psf_params[3],
-            psf_params[4],
-            psf_params[5],
-        )
+    def _get_psf_single_band(self, band_idx):
+        if self.params is not None:
+            psf_params = torch.exp(self.params[band_idx])
+
+            return self._psf_fun(
+                self.cached_radii_grid,
+                psf_params[0],
+                psf_params[1],
+                psf_params[2],
+                psf_params[3],
+                psf_params[4],
+                psf_params[5],
+            )
+
+        return self.psf_image[band_idx]
 
     def _adjust_psf(self):
         # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
