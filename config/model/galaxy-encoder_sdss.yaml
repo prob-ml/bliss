@@ -16,8 +16,8 @@ decoder: # SDSS standard decoder.
     f_min: 1e3
     f_max: 1e6
     alpha: 0.5
-    psf_params_file: ${paths.root}/data/psField-000094-1-0012.fits
-    psf_file: Null
+    psf_file: ${paths.data}/stripe82_centered_psf.npy
+    psf_params_file: Null
     prob_galaxy: 0.7
     n_galaxy_params: 8
     gal_slen: 53
