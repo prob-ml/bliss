@@ -23,6 +23,7 @@ decoder:
     autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt
     latents_file: ${paths.data}/latents_simulated_sdss_galaxies.pt
     psf_params_file: ${paths.root}/data/psField-000094-1-0012.fits
+    psf_file: Null
     background_values:
       - 865.0
     sdss_bands:
