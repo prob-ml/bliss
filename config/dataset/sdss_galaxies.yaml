@@ -13,18 +13,4 @@ kwargs:
   min_a_b: 0.8
   max_a_b: 3.6 # from catalog with mag < 22.2 cut.
   flux_sample: "uniform"
-  psf_points:
-    - 1024
-    - 745
-  sdss_kwargs:
-    bands:
-      - 2
-    camcol: 1
-    center_subpixel: true
-    fields:
-      - 12
-    overwrite_cache: false
-    overwrite_fits_cache: false
-    run: 94
-    sdss_dir: "${paths.data}/sdss"
-    stampsize: 5
+  psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
