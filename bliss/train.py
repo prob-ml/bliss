@@ -15,7 +15,6 @@ _datasets = [
     simulated.SimulatedDataset,
     galsim_galaxies.ToyGaussian,
     galsim_galaxies.SDSSGalaxies,
-    galsim_galaxies.SavedGalaxies,
 ]
 datasets = {cls.__name__: cls for cls in _datasets}
 
