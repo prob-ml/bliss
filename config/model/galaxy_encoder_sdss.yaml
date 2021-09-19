@@ -11,7 +11,7 @@ decoder: # SDSS standard decoder.
     ptile_slen: 52
     border_padding: 24
     max_sources: 1
-    mean_sources: 0.03
+    mean_sources: 0.04
     min_sources: 0
     f_min: 1e3
     f_max: 1e6
