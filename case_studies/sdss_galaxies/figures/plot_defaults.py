@@ -31,4 +31,4 @@ mpl.rcParams.update(
 # font = {"family": "sans-serif", "sans-serif": ["Helvetica"]}
 # plt.rc("font", **font)
 
-plt.rc("text", usetex=False)
+plt.rc("text", usetex=True)
