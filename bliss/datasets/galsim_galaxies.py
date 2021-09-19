@@ -1,101 +1,10 @@
-from collections import namedtuple
+from pathlib import Path
 
 import galsim
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from astropy import units as u
-from astropy.table import Table
-from speclite.filters import ab_reference_flux, load_filter
 from torch.utils.data import DataLoader, Dataset
-
-from bliss.datasets.sdss import SloanDigitalSkySurvey
-
-
-def get_background(sky_brightness, filt, survey, B0=24):
-    return get_flux(sky_brightness, filt, survey, B0=B0) * survey.pixel_scale ** 2
-
-
-def get_flux(ab_mag: float, filt, survey, B0=24) -> float:
-    """Converts source magnitude to flux.
-
-    The calculation includes the effects of atmospheric extinction.
-
-    Args:
-        ab_mag: AB magnitude of source.
-        filt: TODO (to be documented)
-        survey: TODO (to be documented)
-        B0: TODO (to be documented); defaults to 24.
-
-    Returns:
-        Flux in detected electrons.
-    """
-    zeropoint = filt.zeropoint * survey.effective_area  # [s^-1]
-    ab_mag += filt.extinction * (survey.airmass - survey.zeropoint_airmass)
-    return filt.exp_time * zeropoint * 10 ** (-0.4 * (ab_mag - B0))
-
-
-def calculate_zero_point(band_name="sdss2010-r", B0=24):
-    # Credit: https://github.com/LSSTDESC/WeakLensingDeblending/issues/19
-    filt = load_filter(band_name)
-    return (
-        (filt.convolve_with_function(ab_reference_flux) * 10 ** (-0.4 * B0))
-        .to(1 / (u.s * u.m ** 2))  # pylint: disable=no-member
-        .value
-    )
-
-
-Survey = namedtuple(
-    "Survey",
-    [
-        "effective_area",  # [m^2]
-        "pixel_scale",  # [arcsec/pixel]
-        "airmass",
-        "zeropoint_airmass",  # airmass at which zeropoint is calculated
-        "filters",  # list of filters.
-    ],
-)
-
-Filter = namedtuple(
-    "Filter",
-    [
-        "band",
-        "exp_time",  # [s]
-        "extinction",
-        "median_psf_fwhm",  # [arcsec]
-        "effective_wavelength",  # [Angstroms]
-        "limit_mag",
-        "zeropoint",  # [s^-1 * m^-2]
-        "sky_brightness",  # [mag]
-    ],
-)
-
-# exp_time, pixel_scale, psf_fwhm, effective_wavelength, limit_mag from:
-# https://www.sdss.org/dr12/scope/
-# effective area from Gunn et al 2006 (https://arxiv.org/pdf/astro-ph/0602326.pdf, pg. 8)
-# airmass from https://arxiv.org/pdf/1105.2320.pdf (table 1)
-# extinction coefficent from https://iopscience.iop.org/article/10.1086/324741/pdf (table 24)
-# zeropoint_airmass from https://speclite.readthedocs.io/en/latest/filters.html
-# sky brighntess from: https://www.sdss.org/dr12/imaging/other_info/
-# corresponds to a single exposure/filter.
-sdss_survey = Survey(
-    effective_area=3.58,
-    pixel_scale=0.396,
-    airmass=1.16,
-    zeropoint_airmass=1.3,
-    filters=[
-        Filter(
-            band="r",
-            exp_time=53.9,
-            extinction=0.1,
-            median_psf_fwhm=1.3,
-            effective_wavelength=6165,
-            limit_mag=22.2,
-            zeropoint=calculate_zero_point("sdss2010-r"),
-            sky_brightness=21.06,  # stripe-82 specific, low surface brightness.
-        )
-    ],
-)
 
 
 class ToyGaussian(pl.LightningDataModule, Dataset):
@@ -185,37 +94,14 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
-def _setup_sdss_params(sdss_kwargs, psf_points):
-
-    # directly from survey + filter.
-    assert len(sdss_survey.filters) == 1
-    assert sdss_survey.filters[0].band == "r"
-    pixel_scale = sdss_survey.pixel_scale
-
-    # setup sdss object and psf at a given point.
-    assert len(list(sdss_kwargs["bands"])) == 1
-    assert sdss_kwargs["bands"][0] == 2
-    assert len(list(psf_points)) == 2
-    sdss_data = SloanDigitalSkySurvey(**sdss_kwargs)
-    local_psf = sdss_data.rcfgcs[0][-1]
-    x, y = psf_points
-    psf = local_psf.psf_at_points(0, x, y)
-    psf_image = galsim.Image(psf, scale=pixel_scale)
-    psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
-
-    return pixel_scale, psf
-
-
 class SDSSGalaxies(pl.LightningDataModule, Dataset):
     def __init__(
         self,
-        sdss_kwargs: dict,  # for obtaining PSF at points.
         num_workers=0,
         batch_size=64,
         n_batches=10,
         n_bands=1,
         slen=53,
-        background=865.0,
         noise_factor=0.05,
         min_flux=1e3,
         max_flux=3.5e5,
@@ -223,7 +109,9 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         max_a_d=6.5,
         min_a_b=0.8,
         max_a_b=3.6,
-        psf_points=(1024, 745),  # points in the SDSS frame.
+        background=865.0,
+        pixel_scale=0.396,  # SDSS
+        psf_image_file: str = None,
         flux_sample="uniform",
     ):
         super().__init__()
@@ -238,6 +126,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
         self.background[...] = background
         self.noise_factor = noise_factor
+        self.pixel_scale = pixel_scale
 
         self.min_flux = min_flux
         self.max_flux = max_flux
@@ -250,7 +139,10 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
         self.flux_sample = flux_sample
 
-        self.pixel_scale, self.psf = _setup_sdss_params(sdss_kwargs, psf_points)
+        # load psf from file
+        assert Path(psf_image_file).suffix == ".npy"
+        psf_image = galsim.Image(np.load(psf_image_file), scale=self.pixel_scale)
+        self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
     @staticmethod
     def _uniform(a, b):
@@ -331,123 +223,3 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-
-class SDSSCatalogGalaxies(pl.LightningDataModule, Dataset):
-    def __init__(
-        self,
-        sdss_catalog: str,  # filepath
-        sdss_kwargs: dict,
-        num_workers=0,
-        batch_size=32,
-        bands=("r",),
-        slen=53,
-        background=865.0,
-        noise_factor=0.05,
-        psf_points=(1024, 745),  # points in the SDSS frame
-    ):
-        super().__init__()
-
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-
-        self.n_bands = len(bands)
-        self.slen = slen
-        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
-        self.background[...] = background
-        self.noise_factor = noise_factor
-
-        # directly from survey + filter.
-        assert self.n_bands == 1
-        assert bands[0] == "r"
-        self.pixel_scale, self.psf = _setup_sdss_params(sdss_kwargs, psf_points)
-
-        # read sdss-formatted catalog table of entries.
-        self.catalog = Table.read(sdss_catalog, format="ascii")
-
-    @staticmethod
-    def _get_sdss_galaxy(entry):
-        components = []
-        disk_flux = entry["expflux_r"]
-        bulge_flux = entry["devflux_r"]
-
-        if disk_flux > 0:
-            disk_beta = np.radians(entry["expphi_r"])  # radians
-            disk_hlr = entry["exprad_r"]  # arcsecs
-            disk_q = entry["expab_r"]
-            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr).shear(
-                q=disk_q,
-                beta=disk_beta * galsim.radians,
-            )
-            components.append(disk)
-
-        if bulge_flux > 0:
-            bulge_beta = np.radians(entry["devphi_r"])
-            bulge_hlr = entry["devrad_r"]
-            bulge_q = entry["devab_r"]
-            bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr).shear(
-                q=bulge_q,
-                beta=bulge_beta * galsim.radians,
-            )
-            components.append(bulge)
-
-        return galsim.Add(components)
-
-    def __getitem__(self, idx):
-        entry = self.catalog[idx]
-        galaxy = self._get_sdss_galaxy(entry)
-        gal_conv = galsim.Convolution(galaxy, self.psf)
-        image = gal_conv.drawImage(
-            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
-        )
-        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
-
-        # add noise and background.
-        image += self.background.mean()
-        noise = image.sqrt() * torch.randn(*image.shape) * self.noise_factor
-        image += noise
-
-        return {"images": image, "background": self.background}
-
-    def __len__(self):
-        return len(self.catalog)
-
-    def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-    def val_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-    def test_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-
-class SavedGalaxies(pl.LightningDataModule, Dataset):
-    def __init__(self, data_file, batch_size=128):
-        super().__init__()
-
-        self.batch_size = batch_size
-
-        self.data = torch.load(data_file)
-
-        # Source Equation (4) in: https://arxiv.org/abs/2005.12039
-        assert self.data["images"].shape[1] == 1, "Only 1 band supported"
-        self.n_images = len(self.data["images"])
-
-    def __len__(self):
-        return len(self.data["images"])
-
-    def __getitem__(self, idx):
-        image = self.data["images"][idx]
-        background = self.data["background"]
-
-        return {"images": image, "background": background}
-
-    def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
-
-    def val_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
-
-    def test_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=0)
