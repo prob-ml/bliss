@@ -141,7 +141,9 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
         # load psf from file
         assert Path(psf_image_file).suffix == ".npy"
-        psf_image = galsim.Image(np.load(psf_image_file), scale=self.pixel_scale)
+        psf_image = np.load(psf_image_file)
+        assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
+        psf_image = galsim.Image(psf_image[0], scale=self.pixel_scale)
         self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
     @staticmethod
