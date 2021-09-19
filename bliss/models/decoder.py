@@ -707,8 +707,7 @@ class StarTileDecoder(nn.Module):
     def _get_psf(self):
         psf_list = []
         for i in range(self.n_bands):
-            params = torch.exp(self.params[i])
-            band_psf = self._get_psf_single_band(params)
+            band_psf = self._get_psf_single_band(i)
             band_psf *= self.normalization_constant[i]
             psf_list.append(band_psf.unsqueeze(0))
         psf = torch.cat(psf_list)
@@ -723,7 +722,8 @@ class StarTileDecoder(nn.Module):
         term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def _get_psf_single_band(self, psf_params):
+    def _get_psf_single_band(self, band_idx):
+        psf_params = torch.exp(self.params[band_idx])
         return self._psf_fun(
             self.cached_radii_grid,
             psf_params[0],
