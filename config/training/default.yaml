@@ -15,3 +15,4 @@ trainer:
   limit_train_batches: 1.0
   limit_val_batches: 1.0
   check_val_every_n_epoch: 10
+  log_every_n_steps: 10 # correspond to n_batches

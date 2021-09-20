@@ -1,4 +1,0 @@
-name: "SavedGalaxies"
-kwargs:
-  batch_size: 64
-  data_file: "${paths.data}/small_sample_simulated_sdss_galaxies.pt"
