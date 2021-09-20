@@ -22,7 +22,7 @@ dataset.kwargs.num_workers=5 training.trainer.checkpoint_callback=True
 # Notes:
 # - 20/09/21: Slight increase since galaxy PSF exactly equals decoder PSF
 poetry run bliss mode="train" model="binary_sdss" dataset="default" \
-optimizer.kwargs.lr=1e-4 training.n_epochs=1001 training.trainer.checkpoint_callback=True \
+optimizer.kwargs.lr=1e-4 training.n_epochs=501 training.trainer.checkpoint_callback=True \
 model.decoder.kwargs.mean_sources=0.03 training.save_top_k=5
 ```
 
@@ -42,11 +42,12 @@ model.kwargs.decoder_kwargs.mean_sources=0.04 training.trainer.check_val_every_n
 
 ```bash
 # Validation Loss = -0.094
-# Epochs = 899
+# Epochs = 1501
 # Notes:
 # - Optimization can be a bit unstable and not always reach < -0.09 level (which seems to be significant cutoff)
 # - Results on SDSS Stripe 82 frame vary +- 10% depending on optimization (at least current metrics), might become
-# clear if differences are signifcant once we make metrics as a function of magnitude.
+# clear if differences are significant once we make metrics as a function of magnitude. Another possibility
+# is that the sleep phase data model misspecification?
 poetry run bliss mode="train" model="sleep_sdss_detection" dataset="default" \
 optimizer.kwargs.lr=1e-4 training.n_epochs=1001 training.trainer.checkpoint_callback=True \
 model.decoder.kwargs.mean_sources=0.03 training.save_top_k=5
