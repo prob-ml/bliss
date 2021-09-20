@@ -29,20 +29,24 @@ model.decoder.kwargs.mean_sources=0.03 training.save_top_k=5
 * ``sdss_galaxy_encoder.ckpt``
 
 ```bash
-# Validation Loss = 1302662.375
-# Epochs = 949
+# Validation Loss = 1295313.875
+# Epochs = 1174
 # Notes:
 # - 20/09/21: Training for even longer might be possible.
 poetry run bliss mode="train" model="galenc_sdss" dataset="default" \
-optimizer.kwargs.lr=1e-4 training.n_epochs=1001 training.trainer.checkpoint_callback=True \
+optimizer.kwargs.lr=1e-4 training.n_epochs=1501 training.trainer.checkpoint_callback=True \
 model.kwargs.decoder_kwargs.mean_sources=0.04 training.trainer.check_val_every_n_epoch=25
 ```
 
 * ``sdss_sleep.ckpt``
 
 ```bash
-# Validation Loss = -0.089
-# Epochs = 969
+# Validation Loss = -0.094
+# Epochs = 899
+# Notes:
+# - Optimization can be a bit unstable and not always reach < -0.09 level (which seems to be significant cutoff)
+# - Results on SDSS Stripe 82 frame vary +- 10% depending on optimization (at least current metrics), might become
+# clear if differences are signifcant once we make metrics as a function of magnitude.
 poetry run bliss mode="train" model="sleep_sdss_detection" dataset="default" \
 optimizer.kwargs.lr=1e-4 training.n_epochs=1001 training.trainer.checkpoint_callback=True \
 model.decoder.kwargs.mean_sources=0.03 training.save_top_k=5
