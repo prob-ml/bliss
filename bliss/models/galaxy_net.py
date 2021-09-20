@@ -6,8 +6,10 @@ from torch.distributions import Normal
 from torch.nn import functional as F
 
 from bliss.optimizer import get_optimizer
+from bliss.plotting import plot_image
 
 plt.switch_backend("Agg")
+plt.ioff()
 
 
 class CenteredGalaxyEncoder(nn.Module):
@@ -129,7 +131,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.log("train/loss", loss)
         return loss
 
-    # ---------------
+    # ----------------
     # Validation
     # ----------------
 
@@ -137,48 +139,76 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean = self(images, background)
+        residuals = (images - recon_mean) / torch.sqrt(recon_mean)
         loss = self.get_loss(images, recon_mean)
 
         # metrics
         self.log("val/loss", loss)
-        residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("val/max_residual", residuals.abs().max())
-        return {"images": images, "recon_mean": recon_mean}
+        return {"images": images, "recon_mean": recon_mean, "residuals": residuals}
 
     def validation_epoch_end(self, outputs):
         """Validation epoch end (pytorch lightning)."""
-        images = outputs[0]["images"][:10]
-        recon_mean = outputs[0]["recon_mean"][:10]
-        fig = self.plot_reconstruction(images, recon_mean)
+
+        # combine all images and recon_mean's into a single tensor
+        images = torch.cat([output["images"] for output in outputs])
+        recon_mean = torch.cat([output["recon_mean"] for output in outputs])
+        residuals = torch.cat([output["residuals"] for output in outputs])
+
+        fig_random = self.plot_reconstruction(images, recon_mean, residuals, mode="random")
+        fig_worst = self.plot_reconstruction(images, recon_mean, residuals, mode="worst")
         if self.logger:
-            self.logger.experiment.add_figure(f"Images {self.current_epoch}", fig)
+            self.logger.experiment.add_figure(f"Random Images {self.current_epoch}", fig_random)
+            self.logger.experiment.add_figure(f"Worst Images {self.current_epoch}", fig_worst)
 
-    def plot_reconstruction(self, images, recon_mean):
+    def plot_reconstruction(
+        self, images, recon_mean, residuals, n_examples=10, mode="random", width=10, pad=6.0
+    ):
         # only plot i band if available, otherwise the highest band given.
-        assert images.size(0) >= 10
-        num_examples = 10
-        num_cols = 3
-        residuals = (images - recon_mean) / torch.sqrt(recon_mean)
-        plt.ioff()
+        assert images.size(0) >= n_examples
+        assert images.shape[1] == recon_mean.shape[1] == residuals.shape[1] == 1, "1 band only."
+        figsize = (width, width * n_examples / 3)
+        fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=figsize)
 
-        fig = plt.figure(figsize=(10, 25))
+        if mode == "random":
+            indices = torch.randint(0, len(images), size=(n_examples,))
+        elif mode == "worst":
+            # get indices where absolute residual is the largest.
+            absolute_residual = residuals.abs().sum(axis=(1, 2, 3))
+            indices = absolute_residual.argsort()[-n_examples:]
+        else:
+            raise NotImplementedError(f"Specified mode '{mode}' has not been implemented.")
 
-        for i in range(num_examples):
+        # pick standard ranges for residuals
+        vmin_res = residuals[indices].min().item()
+        vmax_res = residuals[indices].max().item()
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 1)
-            plt.title("images")
-            plt.imshow(images[i, 0].data.cpu().numpy())
-            plt.colorbar()
+        for i in range(n_examples):
+            idx = indices[i]
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 2)
-            plt.title("recon_mean")
-            plt.imshow(recon_mean[i, 0].data.cpu().numpy())
-            plt.colorbar()
+            ax_true = axes[i, 0]
+            ax_recon = axes[i, 1]
+            ax_res = axes[i, 2]
 
-            plt.subplot(num_examples, num_cols, num_cols * i + 3)
-            plt.title("residuals")
-            plt.imshow(residuals[i, 0].data.cpu().numpy())
-            plt.colorbar()
+            # only add titles to the first axes.
+            if i == 0:
+                ax_true.set_title("Images $x$", pad=pad)
+                ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
+                ax_res.set_title(
+                    r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad
+                )
+
+            # standarize ranges of true and reconstruction
+            image = images[idx, 0].detach().cpu().numpy()
+            recon = recon_mean[idx, 0].detach().cpu().numpy()
+            residual = residuals[idx, 0].detach().cpu().numpy()
+            vmin = min(image.min().item(), recon.min().item())
+            vmax = max(image.max().item(), recon.max().item())
+
+            # plot images
+            plot_image(fig, ax_true, image, vrange=(vmin, vmax))
+            plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
+            plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
 
         plt.tight_layout()
 
