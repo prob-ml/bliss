@@ -13,3 +13,4 @@ trainer:
   max_epochs: ${training.n_epochs}
   min_epochs: ${training.n_epochs}
   gpus: ${gpus}
+  log_every_n_steps: 1
