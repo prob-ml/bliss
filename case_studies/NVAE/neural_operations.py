@@ -8,15 +8,25 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules.batchnorm import BatchNorm2d
 
 from thirdparty.swish import Swish as SwishFN
-from thirdparty.inplaced_sync_batchnorm import SyncBatchNormSwish
+# from thirdparty.inplaced_sync_batchnorm import SyncBatchNormSwish
 
 from utils import average_tensor
 from collections import OrderedDict
 
+class BatchNormSwish(BatchNorm2d):
+    def forward(self, input):
+        # Apply batchnorm
+        x = super().forward(input)
+        # Apply switsh
+        x = SwishFN.apply(x)
+        return x
+
 BN_EPS = 1e-5
-SYNC_BN = True
+# SYNC_BN = True
+SYNC_BN = False
 
 OPS = OrderedDict([
     ('res_elu', lambda Cin, Cout, stride: ELUConv(Cin, Cout, 3, stride, 1)),
@@ -195,7 +205,7 @@ class BNSwishConv(nn.Module):
         super(BNSwishConv, self).__init__()
         self.upsample = stride == -1
         stride = abs(stride)
-        self.bn_act = SyncBatchNormSwish(C_in, eps=BN_EPS, momentum=0.05)
+        self.bn_act = BatchNormSwish(C_in, eps=BN_EPS, momentum=0.05)
         self.conv_0 = Conv2D(C_in, C_out, kernel_size, stride=stride, padding=padding, bias=True, dilation=dilation)
 
     def forward(self, x):
@@ -272,7 +282,7 @@ class ConvBNSwish(nn.Module):
 
         self.conv = nn.Sequential(
             Conv2D(Cin, Cout, k, stride, padding, groups=groups, bias=False, dilation=dilation, weight_norm=False),
-            SyncBatchNormSwish(Cout, eps=BN_EPS, momentum=0.05)  # drop in replacement for BN + Swish
+            BatchNormSwish(Cout, eps=BN_EPS, momentum=0.05)  # drop in replacement for BN + Swish
         )
 
     def forward(self, x):

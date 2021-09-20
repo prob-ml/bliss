@@ -197,7 +197,8 @@
         <span class="n">gal_slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span>
         <span class="n">autoencoder_ckpt</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">latents_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">psf_params_file</span><span class="o">=</span><span class="s2">&quot;psf_params.npy&quot;</span><span class="p">,</span>
+        <span class="n">psf_params_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">psf_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">psf_slen</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
         <span class="n">background_values</span><span class="o">=</span><span class="p">(</span><span class="mf">686.0</span><span class="p">,),</span>
         <span class="n">loc_min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
@@ -236,7 +237,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span> <span class="o">=</span> <span class="n">latents_file</span>
         <span class="c1"># Star Decoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">=</span> <span class="n">psf_slen</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">psf_params_file</span> <span class="o">=</span> <span class="n">psf_params_file</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sdss_bands</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">sdss_bands</span><span class="p">)</span>
         <span class="c1"># number of tiles per image</span>
         <span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
@@ -268,7 +268,12 @@
 
         <span class="c1"># Submodule for rendering stars on a tile</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span> <span class="o">=</span> <span class="n">StarTileDecoder</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_params_file</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sdss_bands</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sdss_bands</span><span class="p">,</span>
+            <span class="n">psf_params_file</span><span class="o">=</span><span class="n">psf_params_file</span><span class="p">,</span>
+            <span class="n">psf_file</span><span class="o">=</span><span class="n">psf_file</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="c1"># Submodule for rendering galaxies on a tile</span>
@@ -292,7 +297,7 @@
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">background_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_bands</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">background_values</span> <span class="o">=</span> <span class="n">background_values</span>
 
-<div class="viewcode-block" id="ImageDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="ImageDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Decodes latent representation into an image.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span><span class="o">.</span><span class="n">psf_forward</span><span class="p">()</span></div>
 
@@ -774,37 +779,57 @@
 
 
 <div class="viewcode-block" id="StarTileDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.StarTileDecoder">[docs]</a><span class="k">class</span> <span class="nc">StarTileDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiler</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">,</span> <span class="n">psf_params_file</span><span class="p">,</span> <span class="n">psf_slen</span><span class="p">,</span> <span class="n">sdss_bands</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,)):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tiler</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">,</span> <span class="n">psf_slen</span><span class="p">,</span> <span class="n">sdss_bands</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,),</span> <span class="n">psf_params_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">psf_file</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span> <span class="o">=</span> <span class="n">tiler</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="n">n_bands</span>
-        <span class="n">ext</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">psf_params_file</span><span class="p">)</span><span class="o">.</span><span class="n">suffix</span>
-        <span class="k">if</span> <span class="n">ext</span> <span class="o">==</span> <span class="s2">&quot;.npy&quot;</span><span class="p">:</span>
-            <span class="n">psf_params</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">psf_params_file</span><span class="p">))</span>
-            <span class="n">psf_params</span> <span class="o">=</span> <span class="n">psf_params</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_bands</span><span class="p">))]</span>
-        <span class="k">elif</span> <span class="n">ext</span> <span class="o">==</span> <span class="s2">&quot;.fits&quot;</span><span class="p">:</span>
-            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">sdss_bands</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_bands</span>
-            <span class="n">psf_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_fit_file_psf_params</span><span class="p">(</span><span class="n">psf_params_file</span><span class="p">,</span> <span class="n">sdss_bands</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;Only .npy and .fits extensions are supported for PSF params files.&quot;</span>
-            <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">psf_params</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">=</span> <span class="n">psf_slen</span>
-        <span class="n">grid</span> <span class="o">=</span> <span class="n">get_mgrid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
-        <span class="c1"># extra factor to be consistent with old repo</span>
-        <span class="c1"># but probably doesn&#39;t matter ...</span>
-        <span class="n">grid</span> <span class="o">*=</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;cached_radii_grid&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">grid</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span>
+
+        <span class="k">if</span> <span class="n">psf_params_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">psf_file</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Only 1 at a time works.&quot;</span>
+            <span class="n">ext</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">psf_params_file</span><span class="p">)</span><span class="o">.</span><span class="n">suffix</span>
+            <span class="k">if</span> <span class="n">ext</span> <span class="o">==</span> <span class="s2">&quot;.npy&quot;</span><span class="p">:</span>
+                <span class="n">psf_params</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">psf_params_file</span><span class="p">))</span>
+                <span class="n">psf_params</span> <span class="o">=</span> <span class="n">psf_params</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_bands</span><span class="p">))]</span>
+            <span class="k">elif</span> <span class="n">ext</span> <span class="o">==</span> <span class="s2">&quot;.fits&quot;</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">sdss_bands</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_bands</span>
+                <span class="n">psf_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_fit_file_psf_params</span><span class="p">(</span><span class="n">psf_params_file</span><span class="p">,</span> <span class="n">sdss_bands</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="s2">&quot;Only .npy and .fits extensions are supported for PSF params files.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">psf_params</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">psf_image</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">grid</span> <span class="o">=</span> <span class="n">get_mgrid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+            <span class="c1"># extra factor to be consistent with old repo</span>
+            <span class="c1"># but probably doesn&#39;t matter ...</span>
+            <span class="n">grid</span> <span class="o">*=</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;cached_radii_grid&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">grid</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span>
+
+        <span class="k">elif</span> <span class="n">psf_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ext</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">psf_file</span><span class="p">)</span><span class="o">.</span><span class="n">suffix</span>
+            <span class="k">if</span> <span class="n">ext</span> <span class="o">==</span> <span class="s2">&quot;.npy&quot;</span><span class="p">:</span>
+                <span class="n">psf_image</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">psf_file</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Only .npy format are supported for PSF files.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;psf_image&quot;</span><span class="p">,</span> <span class="n">psf_image</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either psf_params_file is not None or psf_file is not None&quot;</span><span class="p">)</span>
 
         <span class="c1"># get psf normalization_constant</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">normalization_constant</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">):</span>
-            <span class="n">psf_i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_psf_single_band</span><span class="p">(</span><span class="n">psf_params</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">psf_i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_psf_single_band</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">normalization_constant</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">psf_i</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">normalization_constant</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalization_constant</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
 
-<div class="viewcode-block" id="StarTileDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.StarTileDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">star_bool</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="StarTileDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.StarTileDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">star_bool</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Renders star tile from locations and fluxes.&quot;&quot;&quot;</span>
         <span class="c1"># locs: is (n_ptiles x max_num_stars x 2)</span>
         <span class="c1"># fluxes: Is (n_ptiles x max_stars x n_bands)</span>
@@ -855,7 +880,7 @@
     <span class="k">def</span> <span class="nf">_get_psf</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">psf_list</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">):</span>
-            <span class="n">band_psf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_psf_single_band</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">band_psf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_psf_single_band</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
             <span class="n">band_psf</span> <span class="o">*=</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalization_constant</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">psf_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">band_psf</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
         <span class="n">psf</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">psf_list</span><span class="p">)</span>
@@ -870,17 +895,23 @@
         <span class="n">term3</span> <span class="o">=</span> <span class="n">p0</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">r</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="n">beta</span> <span class="o">*</span> <span class="n">sigmap</span><span class="p">))</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="n">beta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">term1</span> <span class="o">+</span> <span class="n">term2</span> <span class="o">+</span> <span class="n">term3</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">b</span> <span class="o">+</span> <span class="n">p0</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_get_psf_single_band</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">psf_params</span><span class="p">):</span>
-        <span class="n">psf_params</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">psf_params</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_psf_fun</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">cached_radii_grid</span><span class="p">,</span>
-            <span class="n">psf_params</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="n">psf_params</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
-            <span class="n">psf_params</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
-            <span class="n">psf_params</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
-            <span class="n">psf_params</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
-            <span class="n">psf_params</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
-        <span class="p">)</span>
+    <span class="k">def</span> <span class="nf">_get_psf_single_band</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">band_idx</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">psf_params</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">band_idx</span><span class="p">])</span>
+            <span class="n">psf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_psf_fun</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cached_radii_grid</span><span class="p">,</span>
+                <span class="n">psf_params</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">psf_params</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">psf_params</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+                <span class="n">psf_params</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+                <span class="n">psf_params</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+                <span class="n">psf_params</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_image</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">psf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_image</span><span class="p">[</span><span class="n">band_idx</span><span class="p">]</span>  <span class="c1"># pylint: disable=unsubscriptable-object</span>
+
+        <span class="k">return</span> <span class="n">psf</span>
 
     <span class="k">def</span> <span class="nf">_adjust_psf</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># use power_law_psf and current psf parameters to forward and obtain fresh psf model.</span>
@@ -922,7 +953,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">n_galaxy_params</span>
 
-<div class="viewcode-block" id="GalaxyTileDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.GalaxyTileDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="GalaxyTileDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.GalaxyTileDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Renders galaxy tile from locations and galaxy parameters.&quot;&quot;&quot;</span>
         <span class="c1"># max_sources obtained from locs, allows for more flexibility when rendering.</span>
         <span class="n">n_ptiles</span> <span class="o">=</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>

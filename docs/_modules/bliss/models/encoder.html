@@ -183,8 +183,8 @@
 <div class="viewcode-block" id="get_is_on_from_n_sources"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.get_is_on_from_n_sources">[docs]</a><span class="k">def</span> <span class="nf">get_is_on_from_n_sources</span><span class="p">(</span><span class="n">n_sources</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Provides tensor which indicates how many sources are present for each batch.</span>
 
-<span class="sd">    Return a boolean array of shape=(batch_size, max_sources) whose (k,l)th entry indicates</span>
-<span class="sd">    whether there are more than l sources on the kth batch.</span>
+<span class="sd">    Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry</span>
+<span class="sd">    indicates whether there are more than l sources on the `*th` index.</span>
 
 <span class="sd">    Arguments:</span>
 <span class="sd">        n_sources: Tensor with number of sources per tile.</span>
@@ -284,9 +284,9 @@
 
     <span class="c1"># now do the same for the rest of the parameters (without scaling or biasing)</span>
     <span class="c1"># for same reason no need to multiply times is_on_array</span>
-    <span class="k">for</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">tile_params</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">tile_params</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="k">if</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">optional</span><span class="p">:</span>
-            <span class="n">tile_param</span> <span class="o">=</span> <span class="n">tile_params</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span>
+            <span class="n">tile_param</span> <span class="o">=</span> <span class="n">val</span>
             <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tile_param</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
             <span class="n">param</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">tile_param</span><span class="p">,</span> <span class="s2">&quot;b t d k -&gt; b (t d) k&quot;</span><span class="p">)</span>
             <span class="n">param</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
@@ -354,7 +354,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">conv2</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">out_channel</span><span class="p">,</span> <span class="n">out_channel</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bn2</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm2d</span><span class="p">(</span><span class="n">out_channel</span><span class="p">)</span>
 
-<div class="viewcode-block" id="ConvBlock.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ConvBlock.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="ConvBlock.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ConvBlock.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Runs convolutional block on inputs.&quot;&quot;&quot;</span>
         <span class="n">identity</span> <span class="o">=</span> <span class="n">x</span>
 
@@ -378,7 +378,7 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">layer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_layer</span><span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">dropout</span><span class="p">)</span>
 
-<div class="viewcode-block" id="EncoderCNN.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.EncoderCNN.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="EncoderCNN.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.EncoderCNN.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Runs encoder CNN on inputs.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">layer</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div>
 
@@ -445,10 +445,6 @@
         <span class="k">assert</span> <span class="n">border_padding</span> <span class="o">%</span> <span class="mi">1</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;amount of border padding should be an integer&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">border_padding</span><span class="p">)</span>
 
-        <span class="c1"># cache the weights used for the tiling convolution</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">enc_conv</span> <span class="o">=</span> <span class="n">EncoderCNN</span><span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">spatial_dropout</span><span class="p">)</span>
-
         <span class="c1"># Number of variational parameters used to characterize each source in an image.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_params_per_source</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">param</span><span class="p">[</span><span class="s2">&quot;dim&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variational_params</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
 
@@ -461,6 +457,9 @@
             <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_detections</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">dim_enc_conv_out</span> <span class="o">=</span> <span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+
+        <span class="c1"># networks to be trained</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enc_conv</span> <span class="o">=</span> <span class="n">EncoderCNN</span><span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">spatial_dropout</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">enc_final</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">channel</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">dim_enc_conv_out</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">hidden</span><span class="p">),</span>
@@ -475,10 +474,12 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log_softmax</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LogSoftmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
-        <span class="c1"># get index for prob_n_sources, assigned indices that were not used.</span>
+        <span class="c1"># get indices into the triangular array of returned parameters</span>
         <span class="n">indx_mats</span><span class="p">,</span> <span class="n">last_indx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_hidden_indices</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">indx_mats</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="s2">&quot;_indx&quot;</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="c1"># assigned indices that were not used to `prob_n_source`</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
             <span class="s2">&quot;prob_n_source_indx&quot;</span><span class="p">,</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">last_indx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_out_all</span><span class="p">),</span>
@@ -640,7 +641,7 @@
 
         <span class="k">return</span> <span class="n">var_params</span>
 
-<div class="viewcode-block" id="ImageEncoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ImageEncoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="ImageEncoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.encoder.ImageEncoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Runs encoder on image ptiles.&quot;&quot;&quot;</span>
         <span class="c1"># images shape = (n_ptiles x n_bands x pslen x pslen)</span>
         <span class="c1"># tile_n_sources shape = (n_ptiles)</span>
