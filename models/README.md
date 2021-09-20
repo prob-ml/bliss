@@ -17,6 +17,10 @@ dataset.kwargs.num_workers=5 training.trainer.checkpoint_callback=True
 * ``sdss_binary.ckpt``
 
 ```bash
+# Validation Loss = 6.571
+# Epochs = 359
+# Notes:
+# - 20/09/21: Slight increase since galaxy PSF exactly equals decoder PSF
 poetry run bliss mode="train" model="binary_sdss" dataset="default" \
 optimizer.kwargs.lr=1e-4 training.n_epochs=1001 training.trainer.checkpoint_callback=True \
 model.decoder.kwargs.mean_sources=0.03 training.save_top_k=5
@@ -25,6 +29,10 @@ model.decoder.kwargs.mean_sources=0.03 training.save_top_k=5
 * ``sdss_galaxy_encoder.ckpt``
 
 ```bash
+# Validation Loss = 1302662.375
+# Epochs = 949
+# Notes:
+# - 20/09/21: Training for even longer might be possible.
 poetry run bliss mode="train" model="galenc_sdss" dataset="default" \
 optimizer.kwargs.lr=1e-4 training.n_epochs=1001 training.trainer.checkpoint_callback=True \
 model.kwargs.decoder_kwargs.mean_sources=0.04 training.trainer.check_val_every_n_epoch=25
@@ -33,6 +41,8 @@ model.kwargs.decoder_kwargs.mean_sources=0.04 training.trainer.check_val_every_n
 * ``sdss_sleep.ckpt``
 
 ```bash
+# Validation Loss = -0.089
+# Epochs = 969
 poetry run bliss mode="train" model="sleep_sdss_detection" dataset="default" \
 optimizer.kwargs.lr=1e-4 training.n_epochs=1001 training.trainer.checkpoint_callback=True \
 model.decoder.kwargs.mean_sources=0.03 training.save_top_k=5
