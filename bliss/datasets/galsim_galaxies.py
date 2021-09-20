@@ -206,13 +206,14 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
         image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
+        noiseless = image.clone()
 
         # add noise and background.
         image += self.background.mean()
         noise = image.sqrt() * torch.randn(*image.shape) * self.noise_factor
         image += noise
 
-        return {"images": image, "background": self.background}
+        return {"images": image, "background": self.background, "noiseless": noiseless}
 
     def __len__(self):
         return self.batch_size * self.n_batches
