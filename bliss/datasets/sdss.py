@@ -13,6 +13,16 @@ from torch.nn import functional as F
 from torch.utils.data import Dataset
 
 
+def convert_mag_to_flux(mag, nelec_per_nmgy=987.31):
+    # default corresponds to average value of columns for run 94, camcol 1, field 12
+    return 10 ** ((22.5 - mag) / 2.5) * nelec_per_nmgy
+
+
+def convert_flux_to_mag(flux, nelec_per_nmgy=987.31):
+    # default corresponds to average value of columns for run 94, camcol 1, field 12
+    return 22.5 - 2.5 * np.log10(flux / nelec_per_nmgy)
+
+
 class StarStamper:
     def __init__(self, stampsize, center_subpixel=True, grid_dtype=torch.float):
         self.stampsize = stampsize
