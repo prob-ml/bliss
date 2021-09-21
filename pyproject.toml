@@ -46,6 +46,7 @@ sphinx-rtd-theme = "^0.5.2"
 darglint = "^1.8.0"
 flake8-docstrings = "^1.6.0"
 tqdm = "^4.62.3"
+statsmodels = "^0.12.2"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
