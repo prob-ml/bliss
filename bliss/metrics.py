@@ -1,6 +1,7 @@
 import galsim
 import numpy as np
 import torch
+import tqdm
 from einops import rearrange, reduce
 from scipy import optimize as sp_optim
 
@@ -17,10 +18,10 @@ def get_single_galaxy_measurements(
     Args:
         slen: Side-length of square input images.
         pixel_scale: Conversion from arcseconds to pixel.
-        true_images: Array of shape (samples, n_bands, slen, slen) containing noiseless
-            images of single-centered galaxies.
-        recon_images: Array of shape (samples, n_bands, slen, slen) containing noiseless
-            reconstructions of `true_images` based on their possibly noisy version.Í
+        true_images: Array of shape (samples, n_bands, slen, slen) containing images of
+            single-centered galaxies without noise or background.
+        recon_images: Array of shape (samples, n_bands, slen, slen) containing
+            reconstructions of `true_images` without noise or background.
         psf_image: Array of shape (n_bands, slen, slen) containing PSF image used for
             convolving the galaxies in `true_images`.
 
@@ -48,7 +49,7 @@ def get_single_galaxy_measurements(
     galsim_psf_image = galsim.Image(psf_image, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
-    for i in range(n_samples):
+    for i in tqdm.tqdm(range(n_samples)):
         true_image = true_images[i]
         recon_image = recon_images[i]
 
