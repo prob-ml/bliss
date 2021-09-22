@@ -83,7 +83,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim=8,
         hidden=32,
         n_bands=1,
-        mse_residual_model_loss: bool = True,
+        mse_residual_model_loss: bool = False,
         optimizer_params: dict = None,
     ):
         super().__init__()
@@ -118,11 +118,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         # this is nan whenever recon_mean is not strictly positive
         return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
 
-    def get_residual_model_loss(self, image, recon_mean):
+    def get_residual_model_loss(self, image, recon_mean_main, recon_mean_residual):
         if self.mse_residual_model_loss:
-            loss = F.mse_loss(image, recon_mean)
+            loss = F.mse_loss(image - recon_mean_main, recon_mean_residual)
         else:
-            loss = self.get_likelihood_loss(image, recon_mean)
+            loss = self.get_likelihood_loss(image, recon_mean_main + recon_mean_residual)
         return loss
 
     # ---------------
@@ -174,7 +174,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             with torch.no_grad():
                 recon_mean_main = self._main_forward(images, background)
             recon_mean_residual = self._residual_forward(images - recon_mean_main)
-            loss = self.get_residual_model_loss(images - recon_mean_main, recon_mean_residual)
+            loss = self.get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
             self.log("train/loss_residual", loss, prog_bar=True)
 
             recon_mean_final = recon_mean_main + recon_mean_residual
@@ -194,7 +194,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.log("val/loss_main", loss_main)
 
         recon_mean_residual = self._residual_forward(images - recon_mean_main)
-        loss_residual = self.get_residual_model_loss(images - recon_mean_main, recon_mean_residual)
+        loss_residual = self.get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
         self.log("val/loss_residual", loss_residual)
 
         recon_mean_final = recon_mean_main + recon_mean_residual

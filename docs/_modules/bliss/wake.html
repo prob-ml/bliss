@@ -196,7 +196,7 @@
         <span class="c1"># get n_bands</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">n_bands</span>
 
-<div class="viewcode-block" id="WakeNet.forward"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs_img</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="WakeNet.forward"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs_img</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get reconstructed mean from running encoder and then decoder.&quot;&quot;&quot;</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">star_encoder</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
@@ -219,11 +219,11 @@
     <span class="c1"># Data</span>
     <span class="c1"># ----------------</span>
 
-<div class="viewcode-block" id="WakeNet.train_dataloader"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.train_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">train_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="WakeNet.train_dataloader"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.train_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">train_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Returns training dataloader (pytorch lightning).&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observed_img</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="WakeNet.val_dataloader"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.val_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">val_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># pylint: disable=empty-docstring</span>
+<div class="viewcode-block" id="WakeNet.val_dataloader"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.val_dataloader">[docs]</a>    <span class="k">def</span> <span class="nf">val_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Returns validation dataloader (pytorch lightning).&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observed_img</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></div>
 
@@ -249,16 +249,16 @@
         <span class="n">err</span> <span class="o">=</span> <span class="n">error</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">image_indx_start</span><span class="p">:</span><span class="n">image_indx_end</span><span class="p">,</span> <span class="n">image_indx_start</span><span class="p">:</span><span class="n">image_indx_end</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">err</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
 
-<div class="viewcode-block" id="WakeNet.training_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.training_step">[docs]</a>    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
+<div class="viewcode-block" id="WakeNet.training_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.training_step">[docs]</a>    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Training step (pytorch lightning).&quot;&quot;&quot;</span>
         <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;train_loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;train/loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">loss</span></div>
 
-<div class="viewcode-block" id="WakeNet.validation_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.validation_step">[docs]</a>    <span class="k">def</span> <span class="nf">validation_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,empty-docstring</span>
+<div class="viewcode-block" id="WakeNet.validation_step"><a class="viewcode-back" href="../../api/bliss.html#bliss.wake.WakeNet.validation_step">[docs]</a>    <span class="k">def</span> <span class="nf">validation_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Validation step (pytorch lightning).&quot;&quot;&quot;</span>
         <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_loss</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;validation_loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span></div></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;validation/loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span></div></div>
 </pre></div>
 
            </div>
