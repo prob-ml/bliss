@@ -138,6 +138,27 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         opt_residual = get_optimizer(name, self.residual_autoencoder.parameters(), kwargs)
         return opt_main, opt_residual
 
+    def optimizer_step(
+        self,
+        epoch,
+        batch_idx,
+        optimizer,
+        optimizer_idx,
+        optimizer_closure,
+        on_tpu=False,
+        using_native_amp=False,
+        using_lbfgs=False,
+    ):
+        # update generator every step
+        if optimizer_idx == 0:
+            optimizer.step(closure=optimizer_closure)
+
+        if optimizer_idx == 1:
+            if self.trainer.global_step > 500:
+                optimizer.step(closure=optimizer_closure)
+                # # the closure (which includes the `training_step`) will be executed by `optimizer.step`
+                # optimizer.step(closure=optimizer_closure)
+
     # ---------------
     # Training
     # ----------------
