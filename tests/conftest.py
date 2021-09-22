@@ -4,16 +4,6 @@ import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 
-from bliss import sleep
-from bliss.models import binary, galaxy_encoder, galaxy_net
-
-models = {
-    "SleepPhase": sleep.SleepPhase,
-    "GalaxyEncoder": galaxy_encoder.GalaxyEncoder,
-    "OneCenteredGalaxyAE": galaxy_net.OneCenteredGalaxyAE,
-    "BinaryEncoder": binary.BinaryEncoder,
-}
-
 
 # command line arguments for tests
 def pytest_addoption(parser):
@@ -73,7 +63,7 @@ class ModelSetup:
 
     def get_model(self, overrides):
         cfg = self.get_cfg(overrides)
-        model = models[cfg.model.name](**cfg.model.kwargs)
+        model = instantiate(cfg.model)
         return model.to(self.devices.device)
 
     def get_trained_model(self, overrides):

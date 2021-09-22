@@ -4,8 +4,6 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
-from bliss.models.decoder import ImageDecoder
-
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
     "ignore", ".*does not have many workers which may be a bottleneck.*", UserWarning
@@ -14,13 +12,13 @@ warnings.filterwarnings(
 
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
-        self, decoder_kwargs, n_batches=10, batch_size=32, generate_device="cpu", testing_file=None
+        self, decoder, n_batches=10, batch_size=32, generate_device="cpu", testing_file=None
     ):
         super().__init__()
 
         self.n_batches = n_batches
         self.batch_size = batch_size
-        self.image_decoder = ImageDecoder(**decoder_kwargs).to(generate_device)
+        self.image_decoder = decoder.to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
 

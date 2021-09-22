@@ -1,5 +1,5 @@
 _target_: bliss.datasets.simulated.SimulatedDataset
-decoder_kwargs: ${model.decoder.kwargs}
+decoder: ${model.decoder}
 n_batches: 10
 batch_size: 32
 generate_device: "cuda:0"

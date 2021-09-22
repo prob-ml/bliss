@@ -2,8 +2,6 @@ import pytest
 import pytorch_lightning as pl
 from hydra.utils import instantiate
 
-from bliss.models.galaxy_encoder import GalaxyEncoder
-
 
 class TestBasicGalaxyMeasure:
     @pytest.fixture(scope="class")
@@ -19,7 +17,7 @@ class TestBasicGalaxyMeasure:
 
     def test_simulated(self, devices, overrides, get_config):
         cfg = get_config(overrides, devices)
-        galaxy_encoder = GalaxyEncoder(**cfg.model.kwargs)
+        galaxy_encoder = instantiate(cfg.model)
         dataset = instantiate(cfg.dataset)
         trainer = pl.Trainer(**cfg.training.trainer)
         trainer.fit(galaxy_encoder, datamodule=dataset)

@@ -7,19 +7,6 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.profiler import AdvancedProfiler
 
-from bliss import sleep
-from bliss.models import binary, galaxy_encoder, galaxy_net
-
-# available datasets and models.
-
-_models = [
-    sleep.SleepPhase,
-    galaxy_net.OneCenteredGalaxyAE,
-    galaxy_encoder.GalaxyEncoder,
-    binary.BinaryEncoder,
-]
-models = {cls.__name__: cls for cls in _models}
-
 
 def setup_seed(cfg):
     if cfg.training.deterministic:
@@ -75,7 +62,7 @@ def train(cfg: DictConfig):
     dataset = instantiate(cfg.dataset)
 
     # setup model
-    model = models[cfg.model.name](**cfg.model.kwargs)
+    model = instantiate(cfg.model)
 
     # setup trainer
     logger = setup_logger(cfg, paths)

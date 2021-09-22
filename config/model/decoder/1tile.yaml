@@ -1,0 +1,16 @@
+_target_: bliss.models.decoder.ImageDecoder
+n_bands: 1
+slen: 10
+tile_slen: 10
+ptile_slen: 10
+prob_galaxy: 0.0
+max_sources: 2
+mean_sources: 1.2
+min_sources: 0
+f_min: 1e5
+f_max: 1e6
+psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
+background_values:
+  - 633.0
+loc_min: 0.
+loc_max: 1.0

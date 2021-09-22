@@ -1,0 +1,20 @@
+_target_: bliss.models.decoder.ImageDecoder
+n_bands: 2
+slen: 100
+tile_slen: 2
+ptile_slen: 26
+border_padding: 3
+max_sources: 5
+mean_sources: 0.48
+min_sources: 0
+f_min: 1e3
+f_max: 1e6
+alpha: 0.5
+psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
+prob_galaxy: 0.0
+background_values:
+  - 686.0
+  - 1123.0
+sdss_bands:
+  - 2
+  - 3
