@@ -52,10 +52,9 @@ class ModelSetup:
 
     def get_trainer(self, overrides):
         cfg = self.get_cfg(overrides)
-        if cfg.training.deterministic:
+        if cfg.training.trainer.deterministic:
             pl.seed_everything(cfg.training.seed)
-            return pl.Trainer(**cfg.training.trainer, deterministic=True)
-        return pl.Trainer(**cfg.training.trainer)
+        return instantiate(cfg.training.trainer)
 
     def get_dataset(self, overrides):
         cfg = self.get_cfg(overrides)

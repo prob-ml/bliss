@@ -1,5 +1,4 @@
 import pytest
-import pytorch_lightning as pl
 from hydra.utils import instantiate
 
 
@@ -19,5 +18,5 @@ class TestBasicGalaxyMeasure:
         cfg = get_config(overrides, devices)
         galaxy_encoder = instantiate(cfg.model)
         dataset = instantiate(cfg.dataset)
-        trainer = pl.Trainer(**cfg.training.trainer)
+        trainer = instantiate(cfg.training.trainer)
         trainer.fit(galaxy_encoder, datamodule=dataset)

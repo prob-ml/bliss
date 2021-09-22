@@ -9,7 +9,7 @@ from pytorch_lightning.profiler import AdvancedProfiler
 
 
 def setup_seed(cfg):
-    if cfg.training.deterministic:
+    if cfg.training.trainer.deterministic:
         assert cfg.training.seed is not None
         pl.seed_everything(cfg.training.seed)
 
@@ -68,9 +68,10 @@ def train(cfg: DictConfig):
     logger = setup_logger(cfg, paths)
     callbacks = setup_callbacks(cfg)
     profiler = setup_profiler(cfg)
-    trainer_dict = OmegaConf.to_container(cfg.training.trainer, resolve=True)
-    trainer_dict.update({"logger": logger, "profiler": profiler, "callbacks": callbacks})
-    trainer = pl.Trainer(**trainer_dict)
+
+    trainer = instantiate(
+        cfg.training.trainer, logger=logger, profiler=profiler, callbacks=callbacks
+    )
 
     # train!
     trainer.fit(model, datamodule=dataset)
