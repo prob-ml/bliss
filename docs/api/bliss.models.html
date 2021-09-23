@@ -632,7 +632,7 @@ to <code class="docutils literal notranslate"><span class="pre">optimizer.step()
 <li><p><strong>optimizer_closure</strong> – Closure for all optimizers</p></li>
 <li><p><strong>on_tpu</strong> – <code class="docutils literal notranslate"><span class="pre">True</span></code> if TPU backward is required</p></li>
 <li><p><strong>using_native_amp</strong> – <code class="docutils literal notranslate"><span class="pre">True</span></code> if using native amp</p></li>
-<li><p><strong>using_lbfgs</strong> – True if the matching optimizer is <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.optim.LBFGS.html#torch.optim.LBFGS" title="(in PyTorch vmaster (1.10.0a0+git701771a ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.optim.LBFGS</span></code></a></p></li>
+<li><p><strong>using_lbfgs</strong> – True if the matching optimizer is <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.optim.LBFGS.html#torch.optim.LBFGS" title="(in PyTorch vmaster (1.11.0a0+git42cf661 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.optim.LBFGS</span></code></a></p></li>
 </ul>
 </dd>
 </dl>
@@ -706,6 +706,44 @@ learning rate warm-up:</p>
 <dt id="bliss.models.galaxy_net.OneCenteredGalaxyAE.validation_step">
 <code class="sig-name descname"><span class="pre">validation_step</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#OneCenteredGalaxyAE.validation_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxyAE.validation_step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Validation step (pytorch lightning).</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.galaxy_net.ResidualConvDownsampleBlock">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">bliss.models.galaxy_net.</span></code><code class="sig-name descname"><span class="pre">ResidualConvDownsampleBlock</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kernel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_layers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#ResidualConvDownsampleBlock"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.galaxy_net.ResidualConvDownsampleBlock" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt id="bliss.models.galaxy_net.ResidualConvDownsampleBlock.forward">
+<code class="sig-name descname"><span class="pre">forward</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#ResidualConvDownsampleBlock.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.galaxy_net.ResidualConvDownsampleBlock.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="bliss.models.galaxy_net.ResidualConvUpsampleBlock">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">bliss.models.galaxy_net.</span></code><code class="sig-name descname"><span class="pre">ResidualConvUpsampleBlock</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kernel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_layers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_padding</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#ResidualConvUpsampleBlock"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.galaxy_net.ResidualConvUpsampleBlock" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt id="bliss.models.galaxy_net.ResidualConvUpsampleBlock.forward">
+<code class="sig-name descname"><span class="pre">forward</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#ResidualConvUpsampleBlock.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.galaxy_net.ResidualConvUpsampleBlock.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
 </dd></dl>
 
 </dd></dl>

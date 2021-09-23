@@ -158,6 +158,8 @@
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Normal</span>
 <span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
+<span class="kn">from</span> <span class="nn">torch.nn.modules.conv</span> <span class="kn">import</span> <span class="n">Conv2d</span><span class="p">,</span> <span class="n">ConvTranspose2d</span>
+<span class="kn">from</span> <span class="nn">torch.nn.modules.module</span> <span class="kn">import</span> <span class="n">Module</span>
 
 <span class="kn">from</span> <span class="nn">bliss.optimizer</span> <span class="kn">import</span> <span class="n">get_optimizer</span>
 <span class="kn">from</span> <span class="nn">bliss.utils</span> <span class="kn">import</span> <span class="n">make_grid</span>
@@ -176,21 +178,29 @@
         <span class="n">f</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="mi">5</span><span class="p">)</span> <span class="o">//</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># function to figure out dimension of conv2d output.</span>
         <span class="n">min_slen</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">slen</span><span class="p">)</span>
 
+        <span class="c1"># self.features = nn.Sequential(</span>
+        <span class="c1">#     nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),</span>
+        <span class="c1">#     nn.LeakyReLU(),</span>
+        <span class="c1">#     nn.Flatten(),</span>
+        <span class="c1">#     nn.Linear(min_slen * min_slen * 4, hidden * 16),</span>
+        <span class="c1">#     nn.LeakyReLU(),</span>
+        <span class="c1">#     nn.Linear(hidden * 16, hidden * 4),</span>
+        <span class="c1">#     nn.LeakyReLU(),</span>
+        <span class="c1">#     nn.Linear(hidden * 4, hidden),</span>
+        <span class="c1">#     nn.LeakyReLU(),</span>
+        <span class="c1">#     nn.Linear(hidden, latent_dim),</span>
+        <span class="c1"># )</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">min_slen</span> <span class="o">*</span> <span class="n">min_slen</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">*</span> <span class="mi">16</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden</span> <span class="o">*</span> <span class="mi">16</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">*</span> <span class="mi">4</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span> <span class="n">hidden</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden</span><span class="p">,</span> <span class="n">latent_dim</span><span class="p">),</span>
+            <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="o">*</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+            <span class="c1"># nn.LeakyReLU(),</span>
+            <span class="c1"># ResidualConvDownsampleBlock(n_bands*4, 3, 2),</span>
         <span class="p">)</span>
 
 <div class="viewcode-block" id="CenteredGalaxyEncoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyEncoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Encodes galaxy from image.&quot;&quot;&quot;</span>
+        <span class="c1"># print(image.shape)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">(</span><span class="n">image</span><span class="p">)</span></div></div>
 
 
@@ -205,22 +215,30 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">min_slen</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">slen</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">g</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">min_slen</span><span class="p">)</span> <span class="o">==</span> <span class="n">slen</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">fc</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">hidden</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">*</span> <span class="mi">4</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">*</span> <span class="mi">16</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden</span> <span class="o">*</span> <span class="mi">16</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_slen</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_slen</span> <span class="o">*</span> <span class="mi">4</span><span class="p">),</span>
-        <span class="p">)</span>
+        <span class="c1"># self.fc = nn.Sequential(</span>
+        <span class="c1">#     nn.Linear(latent_dim, hidden),</span>
+        <span class="c1">#     nn.LeakyReLU(),</span>
+        <span class="c1">#     nn.Linear(hidden, hidden * 4),</span>
+        <span class="c1">#     nn.LeakyReLU(),</span>
+        <span class="c1">#     nn.Linear(hidden * 4, hidden * 16),</span>
+        <span class="c1">#     nn.LeakyReLU(),</span>
+        <span class="c1">#     nn.Linear(hidden * 16, self.min_slen * self.min_slen * 4),</span>
+        <span class="c1"># )</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">ConvTranspose2d</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">3</span><span class="p">))</span>
+        <span class="c1"># self.features = nn.Sequential(nn.ConvTranspose2d(4, n_bands, 5, stride=3))</span>
+        <span class="n">output_padding</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="c1"># ResidualConvUpsampleBlock(n_bands*8, 3, 2, output_padding[0]),</span>
+            <span class="c1"># nn.LeakyReLU(),</span>
+            <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="o">*</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
+            <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="o">*</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="CenteredGalaxyDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Decodes image from latent representation.&quot;&quot;&quot;</span>
-        <span class="n">z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc</span><span class="p">(</span><span class="n">z</span><span class="p">)</span>
-        <span class="n">z</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="s2">&quot;b (c h w) -&gt; b c h w&quot;</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_slen</span><span class="p">,</span> <span class="n">w</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_slen</span><span class="p">)</span>
+        <span class="c1"># z = self.fc(z)</span>
+        <span class="c1"># z = rearrange(z, &quot;b (c h w) -&gt; b c h w&quot;, h=self.min_slen, w=self.min_slen)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">(</span><span class="n">z</span><span class="p">)</span></div></div>
 
 
@@ -321,7 +339,9 @@
         <span class="n">images</span><span class="p">,</span> <span class="n">background</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">],</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;background&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">optimizer_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">recon_mean_main</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_main_forward</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">background</span><span class="p">)</span>
-            <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_likelihood_loss</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">recon_mean_main</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                <span class="n">recon_mean_residual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residual_forward</span><span class="p">(</span><span class="n">images</span> <span class="o">-</span> <span class="n">recon_mean_main</span><span class="p">)</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_likelihood_loss</span><span class="p">(</span><span class="n">images</span> <span class="o">-</span> <span class="n">recon_mean_residual</span><span class="p">,</span> <span class="n">recon_mean_main</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;train/loss_main&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">prog_bar</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">optimizer_idx</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
@@ -484,6 +504,91 @@
         <span class="n">recon_mean</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">background</span><span class="p">)</span>
         <span class="n">residuals</span> <span class="o">=</span> <span class="p">(</span><span class="n">images</span> <span class="o">-</span> <span class="n">recon_mean</span><span class="p">)</span> <span class="o">/</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">images</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;max_residual&quot;</span><span class="p">,</span> <span class="n">residuals</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">max</span><span class="p">())</span></div></div>
+
+
+<div class="viewcode-block" id="ResidualConvDownsampleBlock"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResidualConvDownsampleBlock">[docs]</a><span class="k">class</span> <span class="nc">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">in_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">n_layers</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="n">out_channels</span> <span class="o">=</span> <span class="n">in_channels</span><span class="o">*</span><span class="mi">2</span>
+        <span class="n">conv</span> <span class="o">=</span> <span class="n">Conv2d</span><span class="p">(</span><span class="n">in_channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span><span class="n">conv</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="c1"># layers.append(nn.BatchNorm2d(out_channels))</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">())</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">out_channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="o">*</span><span class="n">layers</span><span class="p">)</span>
+        <span class="c1"># self.downsample = nn.Pool2d(kernel_size, stride=2)</span>
+<div class="viewcode-block" id="ResidualConvDownsampleBlock.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResidualConvDownsampleBlock.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">x_downsampled</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">interpolate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:],</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;bilinear&quot;</span><span class="p">,</span> <span class="n">align_corners</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># x_downsampled = self.downsample(x)</span>
+        <span class="c1"># x_downsampled = x_downsampled * (x.max() / x_downsampled.max())</span>
+        <span class="c1"># print(x.shape)</span>
+        <span class="c1"># print(x.mean())</span>
+        <span class="c1"># print(x_downsampled.mean())</span>
+        <span class="n">x_downsampled</span> <span class="o">=</span> <span class="n">x_downsampled</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># print(y.shape)</span>
+        <span class="k">return</span> <span class="n">y</span> <span class="o">+</span> <span class="n">x_downsampled</span></div></div>
+        <span class="c1"># return x_downsampled</span>
+
+
+<div class="viewcode-block" id="ResidualConvUpsampleBlock"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResidualConvUpsampleBlock">[docs]</a><span class="k">class</span> <span class="nc">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">in_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">n_layers</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="n">out_channels</span> <span class="o">=</span> <span class="n">in_channels</span><span class="o">//</span><span class="mi">2</span>
+        <span class="n">conv</span> <span class="o">=</span> <span class="n">ConvTranspose2d</span><span class="p">(</span><span class="n">in_channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">output_padding</span><span class="o">=</span><span class="n">output_padding</span><span class="p">)</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span><span class="n">conv</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="c1"># layers.append(nn.BatchNorm2d(out_channels))</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">())</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">out_channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="o">*</span><span class="n">layers</span><span class="p">)</span>
+<div class="viewcode-block" id="ResidualConvUpsampleBlock.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResidualConvUpsampleBlock.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">x_upsampled</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">interpolate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:],</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;nearest&quot;</span><span class="p">)</span>
+        <span class="n">x_upsampled</span> <span class="o">=</span> <span class="n">x_upsampled</span><span class="p">[:,</span> <span class="p">:</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="c1"># print(y.shape)</span>
+        <span class="k">return</span> <span class="n">y</span> <span class="o">+</span> <span class="n">x_upsampled</span></div></div>
+        <span class="c1"># return x_upsampled</span>
+
+
+<span class="c1"># class ResidualConvCell(nn.Module):</span>
+<span class="c1">#     def __init__(self, in_channels, mode, n_layers=2):</span>
+<span class="c1">#         super().__init__()</span>
+<span class="c1">#         ## First layer is either a downsample or upsample</span>
+<span class="c1">#         if mode == &#39;down&#39;:</span>
+<span class="c1">#             out_channels = in_channels*2</span>
+<span class="c1">#             conv1 = Conv2d(in_channels, out_channels, kernel_size=(3,3), stride=2)</span>
+<span class="c1">#         elif mode == &#39;up&#39;:</span>
+<span class="c1">#             out_channels = in_channels//2</span>
+<span class="c1">#             conv1 = ConvTranspose2d(in_channels, out_channels, kernel_size=(3,3), stride=2)</span>
+<span class="c1">#         elif mode == &#39;same&#39;:</span>
+<span class="c1">#             conv1 = Conv2d(in_channels, in_channels, kernel_size=(3,3), stride=1)</span>
+<span class="c1">#         else:</span>
+<span class="c1">#             raise ValueError(&quot;mode needs to be one of `down`, `up`, or `same`.&quot;)</span>
+        
+<span class="c1">#         layers = [conv1]</span>
+<span class="c1">#         # layers.append(nn.BatchNorm2d())</span>
+<span class="c1">#         # layers.append(nn.ReLU())</span>
+
+<span class="c1">#         for n in range(n_layers - 1):</span>
+<span class="c1">#             layers.append(nn.BatchNorm2d(out_channels))</span>
+<span class="c1">#             layers.append(nn.ReLU())</span>
+<span class="c1">#             layers.append(Conv2d(in_channels, out_channels))</span>
+
+
+
+<span class="c1"># class ResidualConvBlock(nn.Module):</span>
+<span class="c1">#     def __init__(self, *args, **kwargs):</span>
+<span class="c1">#         super().__init__()</span>
+<span class="c1">#         conv = Conv2d(*args, **kwargs)</span>
+<span class="c1">#         layers = [conv]</span>
+<span class="c1">#         layers.append(nn.BatchNorm2d())</span>
+<span class="c1">#         layers.append(nn.ReLU())</span>
+<span class="c1">#         self.f = nn.Sequential(*layers)</span>
+<span class="c1">#     def forward(self, x):</span>
+<span class="c1">#         y = self.f(x) + x</span>
+<span class="c1">#         return y</span>
 </pre></div>
 
            </div>

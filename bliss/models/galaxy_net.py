@@ -5,6 +5,8 @@ from matplotlib import pyplot as plt
 from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
+from torch.nn.modules.conv import Conv2d, ConvTranspose2d
+from torch.nn.modules.module import Module
 
 from bliss.optimizer import get_optimizer
 from bliss.utils import make_grid
@@ -23,21 +25,29 @@ class CenteredGalaxyEncoder(nn.Module):
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
         min_slen = f(slen)
 
+        # self.features = nn.Sequential(
+        #     nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
+        #     nn.LeakyReLU(),
+        #     nn.Flatten(),
+        #     nn.Linear(min_slen * min_slen * 4, hidden * 16),
+        #     nn.LeakyReLU(),
+        #     nn.Linear(hidden * 16, hidden * 4),
+        #     nn.LeakyReLU(),
+        #     nn.Linear(hidden * 4, hidden),
+        #     nn.LeakyReLU(),
+        #     nn.Linear(hidden, latent_dim),
+        # )
         self.features = nn.Sequential(
-            nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
+            ResidualConvDownsampleBlock(n_bands, 3, 4),
             nn.LeakyReLU(),
-            nn.Flatten(),
-            nn.Linear(min_slen * min_slen * 4, hidden * 16),
-            nn.LeakyReLU(),
-            nn.Linear(hidden * 16, hidden * 4),
-            nn.LeakyReLU(),
-            nn.Linear(hidden * 4, hidden),
-            nn.LeakyReLU(),
-            nn.Linear(hidden, latent_dim),
+            ResidualConvDownsampleBlock(n_bands*2, 3, 4),
+            # nn.LeakyReLU(),
+            # ResidualConvDownsampleBlock(n_bands*4, 3, 2),
         )
 
     def forward(self, image):
         """Encodes galaxy from image."""
+        # print(image.shape)
         return self.features(image)
 
 
@@ -52,22 +62,30 @@ class CenteredGalaxyDecoder(nn.Module):
         self.min_slen = f(slen)
         assert g(self.min_slen) == slen
 
-        self.fc = nn.Sequential(
-            nn.Linear(latent_dim, hidden),
-            nn.LeakyReLU(),
-            nn.Linear(hidden, hidden * 4),
-            nn.LeakyReLU(),
-            nn.Linear(hidden * 4, hidden * 16),
-            nn.LeakyReLU(),
-            nn.Linear(hidden * 16, self.min_slen * self.min_slen * 4),
-        )
+        # self.fc = nn.Sequential(
+        #     nn.Linear(latent_dim, hidden),
+        #     nn.LeakyReLU(),
+        #     nn.Linear(hidden, hidden * 4),
+        #     nn.LeakyReLU(),
+        #     nn.Linear(hidden * 4, hidden * 16),
+        #     nn.LeakyReLU(),
+        #     nn.Linear(hidden * 16, self.min_slen * self.min_slen * 4),
+        # )
 
-        self.features = nn.Sequential(nn.ConvTranspose2d(4, n_bands, 5, stride=3))
+        # self.features = nn.Sequential(nn.ConvTranspose2d(4, n_bands, 5, stride=3))
+        output_padding = [1, 1, 0]
+        self.features = nn.Sequential(
+            # ResidualConvUpsampleBlock(n_bands*8, 3, 2, output_padding[0]),
+            # nn.LeakyReLU(),
+            ResidualConvUpsampleBlock(n_bands*4, 3, 4, output_padding[1]),
+            nn.LeakyReLU(),
+            ResidualConvUpsampleBlock(n_bands*2, 3, 4, output_padding[2]),
+        )
 
     def forward(self, z):
         """Decodes image from latent representation."""
-        z = self.fc(z)
-        z = rearrange(z, "b (c h w) -> b c h w", h=self.min_slen, w=self.min_slen)
+        # z = self.fc(z)
+        # z = rearrange(z, "b (c h w) -> b c h w", h=self.min_slen, w=self.min_slen)
         return self.features(z)
 
 
@@ -168,7 +186,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         images, background = batch["images"], batch["background"]
         if optimizer_idx == 0:
             recon_mean_main = self._main_forward(images, background)
-            loss = self.get_likelihood_loss(images, recon_mean_main)
+            with torch.no_grad():
+                recon_mean_residual = self._residual_forward(images - recon_mean_main)
+            loss = self.get_likelihood_loss(images - recon_mean_residual, recon_mean_main)
             self.log("train/loss_main", loss, prog_bar=True)
         if optimizer_idx == 1:
             with torch.no_grad():
@@ -331,3 +351,88 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean = self(images, background)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("max_residual", residuals.abs().max())
+
+
+class ResidualConvDownsampleBlock(nn.Module):
+    def __init__(self, in_channels, kernel_size, n_layers):
+        super().__init__()
+        out_channels = in_channels*2
+        conv = Conv2d(in_channels, out_channels, kernel_size, stride=2)
+        layers = [conv]
+        for _ in range(n_layers - 1):
+            # layers.append(nn.BatchNorm2d(out_channels))
+            layers.append(nn.ReLU())
+            layers.append(Conv2d(out_channels, out_channels, kernel_size, stride=1, padding=1))
+        self.f = nn.Sequential(*layers)
+        # self.downsample = nn.Pool2d(kernel_size, stride=2)
+    def forward(self, x):
+        y = self.f(x)
+        x_downsampled = F.interpolate(x, size=y.shape[-2:], mode="bilinear", align_corners=True)
+        # x_downsampled = self.downsample(x)
+        # x_downsampled = x_downsampled * (x.max() / x_downsampled.max())
+        # print(x.shape)
+        # print(x.mean())
+        # print(x_downsampled.mean())
+        x_downsampled = x_downsampled.repeat(1, 2, 1, 1)
+        # print(y.shape)
+        return y + x_downsampled
+        # return x_downsampled
+
+
+class ResidualConvUpsampleBlock(nn.Module):
+    def __init__(self, in_channels, kernel_size, n_layers, output_padding):
+        super().__init__()
+        out_channels = in_channels//2
+        conv = ConvTranspose2d(in_channels, out_channels, kernel_size, stride=2, output_padding=output_padding)
+        layers = [conv]
+        for _ in range(n_layers - 1):
+            # layers.append(nn.BatchNorm2d(out_channels))
+            layers.append(nn.ReLU())
+            layers.append(Conv2d(out_channels, out_channels, kernel_size, stride=1, padding=1))
+        self.f = nn.Sequential(*layers)
+    def forward(self, x):
+        y = self.f(x)
+        x_upsampled = F.interpolate(x, size=y.shape[-2:], mode="nearest")
+        x_upsampled = x_upsampled[:, :y.shape[1], :, :]
+        # print(y.shape)
+        return y + x_upsampled
+        # return x_upsampled
+
+
+# class ResidualConvCell(nn.Module):
+#     def __init__(self, in_channels, mode, n_layers=2):
+#         super().__init__()
+#         ## First layer is either a downsample or upsample
+#         if mode == 'down':
+#             out_channels = in_channels*2
+#             conv1 = Conv2d(in_channels, out_channels, kernel_size=(3,3), stride=2)
+#         elif mode == 'up':
+#             out_channels = in_channels//2
+#             conv1 = ConvTranspose2d(in_channels, out_channels, kernel_size=(3,3), stride=2)
+#         elif mode == 'same':
+#             conv1 = Conv2d(in_channels, in_channels, kernel_size=(3,3), stride=1)
+#         else:
+#             raise ValueError("mode needs to be one of `down`, `up`, or `same`.")
+        
+#         layers = [conv1]
+#         # layers.append(nn.BatchNorm2d())
+#         # layers.append(nn.ReLU())
+
+#         for n in range(n_layers - 1):
+#             layers.append(nn.BatchNorm2d(out_channels))
+#             layers.append(nn.ReLU())
+#             layers.append(Conv2d(in_channels, out_channels))
+
+
+
+# class ResidualConvBlock(nn.Module):
+#     def __init__(self, *args, **kwargs):
+#         super().__init__()
+#         conv = Conv2d(*args, **kwargs)
+#         layers = [conv]
+#         layers.append(nn.BatchNorm2d())
+#         layers.append(nn.ReLU())
+#         self.f = nn.Sequential(*layers)
+#     def forward(self, x):
+#         y = self.f(x) + x
+#         return y
