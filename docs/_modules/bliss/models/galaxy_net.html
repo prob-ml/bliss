@@ -194,8 +194,8 @@
             <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
             <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="o">*</span><span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-            <span class="c1"># nn.LeakyReLU(),</span>
-            <span class="c1"># ResidualConvDownsampleBlock(n_bands*4, 3, 2),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
+            <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="o">*</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
         <span class="p">)</span>
 
 <div class="viewcode-block" id="CenteredGalaxyEncoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyEncoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">):</span>
@@ -228,8 +228,8 @@
         <span class="c1"># self.features = nn.Sequential(nn.ConvTranspose2d(4, n_bands, 5, stride=3))</span>
         <span class="n">output_padding</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
-            <span class="c1"># ResidualConvUpsampleBlock(n_bands*8, 3, 2, output_padding[0]),</span>
-            <span class="c1"># nn.LeakyReLU(),</span>
+            <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="o">*</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
             <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="o">*</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
             <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
             <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="o">*</span><span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
