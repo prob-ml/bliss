@@ -38,9 +38,9 @@ class CenteredGalaxyEncoder(nn.Module):
         #     nn.Linear(hidden, latent_dim),
         # )
         self.features = nn.Sequential(
-            ResidualConvDownsampleBlock(n_bands, 3, 4),
+            ResidualConvDownsampleBlock(n_bands, 8, 3, 4),
             nn.LeakyReLU(),
-            ResidualConvDownsampleBlock(n_bands*2, 3, 4),
+            ResidualConvDownsampleBlock(n_bands*2, 8, 3, 4),
             # nn.LeakyReLU(),
             # ResidualConvDownsampleBlock(n_bands*4, 3, 2),
         )
@@ -77,9 +77,9 @@ class CenteredGalaxyDecoder(nn.Module):
         self.features = nn.Sequential(
             # ResidualConvUpsampleBlock(n_bands*8, 3, 2, output_padding[0]),
             # nn.LeakyReLU(),
-            ResidualConvUpsampleBlock(n_bands*4, 3, 4, output_padding[1]),
+            ResidualConvUpsampleBlock(n_bands*4, 8, 3, 4, output_padding[1]),
             nn.LeakyReLU(),
-            ResidualConvUpsampleBlock(n_bands*2, 3, 4, output_padding[2]),
+            ResidualConvUpsampleBlock(n_bands*2, 8, 3, 4, output_padding[2]),
         )
 
     def forward(self, z):
@@ -354,15 +354,19 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
 
 class ResidualConvDownsampleBlock(nn.Module):
-    def __init__(self, in_channels, kernel_size, n_layers):
+    def __init__(self, in_channels, expand_factor, kernel_size, n_layers):
         super().__init__()
+        expand_channels = in_channels*expand_factor
         out_channels = in_channels*2
-        conv = Conv2d(in_channels, out_channels, kernel_size, stride=2)
-        layers = [conv]
+        conv_initial = Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=1)
+        conv = Conv2d(expand_channels, expand_channels, kernel_size, stride=2)
+        layers = [conv_initial, conv]
         for _ in range(n_layers - 1):
             # layers.append(nn.BatchNorm2d(out_channels))
             layers.append(nn.ReLU())
-            layers.append(Conv2d(out_channels, out_channels, kernel_size, stride=1, padding=1))
+            layers.append(Conv2d(expand_channels, expand_channels, kernel_size, stride=1, padding=1))
+        layers.append(nn.ReLU())
+        layers.append(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=1))
         self.f = nn.Sequential(*layers)
         # self.downsample = nn.Pool2d(kernel_size, stride=2)
     def forward(self, x):
@@ -380,15 +384,19 @@ class ResidualConvDownsampleBlock(nn.Module):
 
 
 class ResidualConvUpsampleBlock(nn.Module):
-    def __init__(self, in_channels, kernel_size, n_layers, output_padding):
+    def __init__(self, in_channels, expand_factor, kernel_size, n_layers, output_padding):
         super().__init__()
+        expand_channels = in_channels*expand_factor
         out_channels = in_channels//2
-        conv = ConvTranspose2d(in_channels, out_channels, kernel_size, stride=2, output_padding=output_padding)
-        layers = [conv]
+        conv_initial = Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=1)
+        conv = ConvTranspose2d(expand_channels, expand_channels, kernel_size, stride=2, output_padding=output_padding)
+        layers = [conv_initial, conv]
         for _ in range(n_layers - 1):
             # layers.append(nn.BatchNorm2d(out_channels))
             layers.append(nn.ReLU())
-            layers.append(Conv2d(out_channels, out_channels, kernel_size, stride=1, padding=1))
+            layers.append(Conv2d(expand_channels, expand_channels, kernel_size, stride=1, padding=1))
+        layers.append(nn.ReLU())
+        layers.append(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=1))
         self.f = nn.Sequential(*layers)
     def forward(self, x):
         y = self.f(x)
