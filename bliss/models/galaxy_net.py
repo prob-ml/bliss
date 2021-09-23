@@ -186,9 +186,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         images, background = batch["images"], batch["background"]
         if optimizer_idx == 0:
             recon_mean_main = self._main_forward(images, background)
-            with torch.no_grad():
-                recon_mean_residual = self._residual_forward(images - recon_mean_main)
-            loss = self.get_likelihood_loss(images - recon_mean_residual, recon_mean_main)
+            # with torch.no_grad():
+            #     recon_mean_residual = self._residual_forward(images - recon_mean_main)
+            # loss = self.get_likelihood_loss(images - recon_mean_residual, recon_mean_main)
+            loss = self.get_likelihood_loss(images, recon_mean_main)
             self.log("train/loss_main", loss, prog_bar=True)
         if optimizer_idx == 1:
             with torch.no_grad():
