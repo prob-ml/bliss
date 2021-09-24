@@ -43,6 +43,8 @@ class CenteredGalaxyEncoder(nn.Module):
             ResidualConvDownsampleBlock(n_bands*2, 8, 3, 4),
             nn.LeakyReLU(),
             ResidualConvDownsampleBlock(n_bands*4, 8, 3, 4),
+            nn.LeakyReLU(),
+            ResidualConvDownsampleBlock(n_bands*8, 8, 3, 4),
         )
 
     def forward(self, image):
@@ -73,13 +75,15 @@ class CenteredGalaxyDecoder(nn.Module):
         # )
 
         # self.features = nn.Sequential(nn.ConvTranspose2d(4, n_bands, 5, stride=3))
-        output_padding = [1, 1, 0]
+        output_padding = [0, 1, 1, 0]
         self.features = nn.Sequential(
-            ResidualConvUpsampleBlock(n_bands*8, 8, 3, 4, output_padding[0]),
+            ResidualConvUpsampleBlock(n_bands*16, 8, 3, 4, output_padding[0]),
             nn.LeakyReLU(),
-            ResidualConvUpsampleBlock(n_bands*4, 8, 3, 4, output_padding[1]),
+            ResidualConvUpsampleBlock(n_bands*8, 8, 3, 4, output_padding[1]),
             nn.LeakyReLU(),
-            ResidualConvUpsampleBlock(n_bands*2, 8, 3, 4, output_padding[2]),
+            ResidualConvUpsampleBlock(n_bands*4, 8, 3, 4, output_padding[2]),
+            nn.LeakyReLU(),
+            ResidualConvUpsampleBlock(n_bands*2, 8, 3, 4, output_padding[3]),
         )
 
     def forward(self, z):
