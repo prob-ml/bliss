@@ -357,6 +357,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("max_residual", residuals.abs().max())
 
+class ResConv2dBlock(Conv2d):
+    def forward(self, input):
+        y = super().forward(input)
+        y = F.relu(y)
+        return input + y
 
 class ResidualConvDownsampleBlock(nn.Module):
     def __init__(self, in_channels, expand_factor, kernel_size, n_layers):
@@ -365,12 +370,9 @@ class ResidualConvDownsampleBlock(nn.Module):
         out_channels = in_channels*2
         conv_initial = Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=1)
         conv = Conv2d(expand_channels, expand_channels, kernel_size, stride=2)
-        layers = [conv_initial, conv]
+        layers = [conv_initial, nn.ReLU(), conv, nn.ReLU()]
         for _ in range(n_layers - 1):
-            # layers.append(nn.BatchNorm2d(out_channels))
-            layers.append(nn.ReLU())
-            layers.append(Conv2d(expand_channels, expand_channels, kernel_size, stride=1, padding=1))
-        layers.append(nn.ReLU())
+            layers.append(ResConv2dBlock(expand_channels, expand_channels, kernel_size, stride=1, padding=1))
         layers.append(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=1))
         self.f = nn.Sequential(*layers)
         # self.downsample = nn.Pool2d(kernel_size, stride=2)
@@ -399,7 +401,7 @@ class ResidualConvUpsampleBlock(nn.Module):
         for _ in range(n_layers - 1):
             # layers.append(nn.BatchNorm2d(out_channels))
             layers.append(nn.ReLU())
-            layers.append(Conv2d(expand_channels, expand_channels, kernel_size, stride=1, padding=1))
+            layers.append(ResConv2dBlock(expand_channels, expand_channels, kernel_size, stride=1, padding=1))
         layers.append(nn.ReLU())
         layers.append(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=1))
         self.f = nn.Sequential(*layers)
