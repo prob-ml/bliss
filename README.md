@@ -9,12 +9,12 @@ Bayesian Light Source Separator (BLISS)
 
 # Introduction
 
-BLISS is a Bayesian method for deblending and cataloging light sources. BLISS provides:
+BLISS is a Bayesian method for deblending and cataloging light sources. BLISS provides
   - __Accurate estimation__ of parameters in blended field.
   - __Calibrated uncertainties__ through fitting an approximate Bayesian posterior.
   - __Scalability__ of Bayesian inference to entire astronomical surveys.
 
-BLISS uses state-of-the-art methods in variational inference including:
+BLISS uses state-of-the-art variational inference techniques including
   - __Amortized inference__, in which a neural network maps telescope images to an approximate Bayesian posterior on parameters of interest.
   - __Variational auto-encoders__ (VAEs) to fit a flexible model for galaxy morphology and deblend galaxies.
   - __Wake-sleep algorithm__ to jointly fit the approximate posterior and model parameters such as the PSF and the galaxy VAE.
