@@ -25,6 +25,7 @@ def set_rc_params(
     minor_tick_size=4,
     major_tick_width=0.8,
     minor_tick_width=0.6,
+    lines_marker_size=8,
 ):
     # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
     mpl.rcParams.update(
@@ -51,6 +52,8 @@ def set_rc_params(
             "xtick.minor.size": minor_tick_size,
             "xtick.minor.width": minor_tick_width,
             "ytick.minor.width": minor_tick_width,
+            # markers
+            "lines.markersize": lines_marker_size,
             # legend
             "legend.fontsize": legend_fontsize,
         }
