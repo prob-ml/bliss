@@ -9,7 +9,7 @@ Bayesian Light Source Separator (BLISS)
 
 # Introduction
 
-BLISS is a Bayesian procedure for deblending light sources. BLISS provides:
+BLISS is a Bayesian method for deblending and cataloging light sources. BLISS provides:
   - __Accurate estimation__ of parameters in blended field.
   - __Calibrated uncertainties__ through fitting an approximate Bayesian posterior.
   - __Scalability__ of Bayesian inference to entire astronomical surveys.
