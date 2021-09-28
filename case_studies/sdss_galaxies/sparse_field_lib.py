@@ -1,3 +1,4 @@
+# pylint: skip-file
 import fitsio
 import numpy as np
 import torch
@@ -8,7 +9,7 @@ from bliss.datasets import sdss
 
 
 def load_data(
-    catalog_file="coadd_field_catalog_runjing_liu.fit",
+    catalog_file="../../data/coadd_catalog_94_1_12.fits",
     sdss_dir="../../data/sdss/",
     run=94,
     camcol=1,
