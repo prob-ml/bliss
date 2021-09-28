@@ -13,6 +13,16 @@ from torch.nn import functional as F
 from torch.utils.data import Dataset
 
 
+def convert_mag_to_flux(mag, nelec_per_nmgy=987.31):
+    # default corresponds to average value of columns for run 94, camcol 1, field 12
+    return 10 ** ((22.5 - mag) / 2.5) * nelec_per_nmgy
+
+
+def convert_flux_to_mag(flux, nelec_per_nmgy=987.31):
+    # default corresponds to average value of columns for run 94, camcol 1, field 12
+    return 22.5 - 2.5 * np.log10(flux / nelec_per_nmgy)
+
+
 class StarStamper:
     def __init__(self, stampsize, center_subpixel=True, grid_dtype=torch.float):
         self.stampsize = stampsize
@@ -171,7 +181,7 @@ class SloanDigitalSkySurvey(Dataset):
         self.center_subpixel = center_subpixel
         self.stamper = StarStamper(stampsize, center_subpixel=center_subpixel)
         # meta data for the run + camcol
-        pf_file = "photoField-{:06d}-{:d}.fits".format(run, camcol)
+        pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
         camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
         pf_path = camcol_path.joinpath(pf_file)
         self.pf_fits = fits.getdata(pf_path)
@@ -184,8 +194,8 @@ class SloanDigitalSkySurvey(Dataset):
             gain = fieldgains[i]
             if (not fields) or field in fields:
                 # load the catalog distributed with SDSS
-                po_file = "photoObj-{:06d}-{:d}-{:04d}.fits".format(run, camcol, field)
-                po_cache = "photoObj-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, field)
+                po_file = f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+                po_cache = f"photoObj-{run:06d}-{camcol:d}-{field:04d}.pkl"
                 po_path = camcol_path.joinpath(str(field), po_file)
                 po_cache_path = camcol_path.joinpath(str(field), po_cache)
                 if (not po_cache_path.exists()) or (overwrite_fits_cache):
@@ -193,8 +203,8 @@ class SloanDigitalSkySurvey(Dataset):
                         po_fits = fits.getdata(po_path)
                     except IndexError as e:
                         print(
-                            "INFO: IndexError while accessing field: {}. "
-                            "This field will not be included.\n".format(field)
+                            f"INFO: IndexError while accessing field: {field}. "
+                            "This field will not be included.\n"
                         )
                         print(e)
                         po_fits = None
@@ -203,13 +213,13 @@ class SloanDigitalSkySurvey(Dataset):
                     po_fits = pickle.load(po_cache_path.open("rb+"))
                     if po_fits is None:
                         print(
-                            "INFO: cached data for field {} is None. "
-                            "This field will not be included".format(field)
+                            f"INFO: cached data for field {field} is None. "
+                            "This field will not be included"
                         )
 
                 # Load the PSF produced by SDSS
-                psf_file = "psField-{:06d}-{:d}-{:04d}.fits".format(run, camcol, field)
-                psf_cache = "psField-{:06d}-{:d}-{:04d}.pkl".format(run, camcol, field)
+                psf_file = f"psField-{run:06d}-{camcol:d}-{field:04d}.fits"
+                psf_cache = f"psField-{run:06d}-{camcol:d}-{field:04d}.pkl"
 
                 psf_path = camcol_path.joinpath(str(field), psf_file)
                 psf_cache_path = camcol_path.joinpath(str(field), psf_cache)
@@ -218,8 +228,8 @@ class SloanDigitalSkySurvey(Dataset):
                     psf = SdssPSF(psf_path.as_posix(), bands)
                 except IndexError as e:
                     print(
-                        "INFO: IndexError while accessing PSF for field: {}. "
-                        "This field will not be included.".format(field),
+                        f"INFO: IndexError while accessing PSF for field: {field}. "
+                        "This field will not be included."
                     )
                     print(e)
                     psf = None
@@ -306,7 +316,7 @@ class SloanDigitalSkySurvey(Dataset):
             if b not in self.bands:
                 continue
 
-            frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format(bl, run, camcol, field)
+            frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
             frame_path = str(field_dir.joinpath(frame_name))
             if verbose:
                 print("loading sdss image from", frame_path)

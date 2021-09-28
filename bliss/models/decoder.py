@@ -44,7 +44,7 @@ class ImageDecoder(pl.LightningModule):
         gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
-        psf_params_file="psf_params.npy",
+        psf_params_file=None,
         psf_slen=25,
         background_values=(686.0,),
         loc_min=0.0,
@@ -83,7 +83,6 @@ class ImageDecoder(pl.LightningModule):
         self.latents_file = latents_file
         # Star Decoder
         self.psf_slen = psf_slen
-        self.psf_params_file = psf_params_file
         self.sdss_bands = tuple(sdss_bands)
         # number of tiles per image
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
@@ -115,7 +114,11 @@ class ImageDecoder(pl.LightningModule):
 
         # Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
-            self.tiler, self.n_bands, self.psf_params_file, self.psf_slen, self.sdss_bands
+            self.tiler,
+            self.n_bands,
+            self.psf_slen,
+            self.sdss_bands,
+            psf_params_file=psf_params_file,
         )
 
         # Submodule for rendering galaxies on a tile
@@ -621,10 +624,12 @@ class Tiler(nn.Module):
 
 
 class StarTileDecoder(nn.Module):
-    def __init__(self, tiler, n_bands, psf_params_file, psf_slen, sdss_bands=(2,)):
+    def __init__(self, tiler, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None):
         super().__init__()
         self.tiler = tiler
         self.n_bands = n_bands
+        self.psf_slen = psf_slen
+
         ext = Path(psf_params_file).suffix
         if ext == ".npy":
             psf_params = torch.from_numpy(np.load(psf_params_file))
@@ -637,7 +642,7 @@ class StarTileDecoder(nn.Module):
                 "Only .npy and .fits extensions are supported for PSF params files."
             )
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
-        self.psf_slen = psf_slen
+        self.psf_image = None
         grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
         # extra factor to be consistent with old repo
         # but probably doesn't matter ...
@@ -647,7 +652,7 @@ class StarTileDecoder(nn.Module):
         # get psf normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
         for i in range(self.n_bands):
-            psf_i = self._get_psf_single_band(psf_params[i])
+            psf_i = self._get_psf_single_band(i)
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
@@ -702,7 +707,7 @@ class StarTileDecoder(nn.Module):
     def _get_psf(self):
         psf_list = []
         for i in range(self.n_bands):
-            band_psf = self._get_psf_single_band(self.params[i])
+            band_psf = self._get_psf_single_band(i)
             band_psf *= self.normalization_constant[i]
             psf_list.append(band_psf.unsqueeze(0))
         psf = torch.cat(psf_list)
@@ -717,8 +722,8 @@ class StarTileDecoder(nn.Module):
         term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def _get_psf_single_band(self, psf_params):
-        psf_params = torch.exp(psf_params)
+    def _get_psf_single_band(self, band_idx):
+        psf_params = torch.exp(self.params[band_idx])
         return self._psf_fun(
             self.cached_radii_grid,
             psf_params[0],

@@ -10,8 +10,10 @@ from torch.nn.modules.module import Module
 
 from bliss.optimizer import get_optimizer
 from bliss.utils import make_grid
+from bliss.plotting import plot_image
 
 plt.switch_backend("Agg")
+plt.ioff()
 
 
 class CenteredGalaxyEncoder(nn.Module):
@@ -213,7 +215,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             self.log("train/loss", loss_final, prog_bar=True)
         return loss
 
-    # ---------------
+    # ----------------
     # Validation
     # ----------------
 
@@ -239,122 +241,189 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             "images": images,
             "recon_mean_main": recon_mean_main,
             "recon_mean_residual": recon_mean_residual,
-            "recon_mean_final": recon_mean_final,
+            # "recon_mean_final": recon_mean_final,
+            "recon_mean": recon_mean_final,
+            "residuals": residuals,
         }
+        # return {"images": images, "recon_mean": recon_mean, "residuals": residuals}
+
+    # def plot_grid_examples(self, images, recon_mean):
+    #     # 1.  plot a grid of all input images and recon_mean
+    #     # 2.  only plot the highest band
+
+    #     nrow = 16
+    #     residuals = (images - recon_mean) / torch.sqrt(images)
+
+    #     image_grid = make_grid(images, nrow=nrow)[0]
+    #     recon_grid = make_grid(recon_mean, nrow=nrow)[0]
+    #     residual_grid = make_grid(residuals, nrow=nrow)[0]
+    #     h, w = image_grid.size()
+    #     base_size = 8
+    #     fig = plt.figure(figsize=(3 * base_size, int(h / w * base_size)))
+    #     for i, grid in enumerate([image_grid, recon_grid, residual_grid]):
+    #         plt.subplot(1, 3, i + 1)
+    #         plt.imshow(grid.cpu().numpy(), interpolation=None)
+    #         if i == 0:
+    #             plt.title("images")
+    #         elif i == 1:
+    #             plt.title("recon_mean")
+    #         else:
+    #             plt.title("residuals")
+    #         plt.xticks([])
+    #         plt.yticks([])
+    #     return fig
 
     def validation_epoch_end(self, outputs):
         """Validation epoch end (pytorch lightning)."""
+
+        # combine all images and recon_mean's into a single tensor
+        images = torch.cat([output["images"] for output in outputs])
+        recon_mean = torch.cat([output["recon_mean"] for output in outputs])
+        residuals = torch.cat([output["residuals"] for output in outputs])
+
+        fig_random = self.plot_reconstruction(images, recon_mean, residuals, mode="random")
+        fig_worst = self.plot_reconstruction(images, recon_mean, residuals, mode="worst")
         if self.logger:
-            images = torch.cat([x["images"] for x in outputs])
-            recon_mean_final = torch.cat([x["recon_mean_final"] for x in outputs])
-            recon_mean_main = torch.cat([x["recon_mean_main"] for x in outputs])
-            recon_mean_residual = torch.cat([x["recon_mean_residual"] for x in outputs])
+            self.logger.experiment.add_figure(f"Random Images {self.current_epoch}", fig_random)
+            self.logger.experiment.add_figure(f"Worst Images {self.current_epoch}", fig_worst)
 
-            reconstructions = self.plot_reconstruction(
-                images, recon_mean_main, recon_mean_residual, recon_mean_final
-            )
-            grid_example = self.plot_grid_examples(images, recon_mean_final)
+    # def validation_epoch_end(self, outputs):
+    #     """Validation epoch end (pytorch lightning)."""
+    #     if self.logger:
+    #         images = torch.cat([x["images"] for x in outputs])
+    #         recon_mean_final = torch.cat([x["recon_mean_final"] for x in outputs])
+    #         recon_mean_main = torch.cat([x["recon_mean_main"] for x in outputs])
+    #         recon_mean_residual = torch.cat([x["recon_mean_residual"] for x in outputs])
 
-            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/images", reconstructions)
-            self.logger.experiment.add_figure(
-                f"Epoch:{self.current_epoch}/grid_examples", grid_example
-            )
+    #         reconstructions = self.plot_reconstruction(
+    #             images, recon_mean_main, recon_mean_residual, recon_mean_final
+    #         )
+    #         grid_example = self.plot_grid_examples(images, recon_mean_final)
 
-    def plot_grid_examples(self, images, recon_mean):
-        # 1.  plot a grid of all input images and recon_mean
-        # 2.  only plot the highest band
+    #         self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/images", reconstructions)
+    #         self.logger.experiment.add_figure(
+    #             f"Epoch:{self.current_epoch}/grid_examples", grid_example
+    #         )
 
-        nrow = 16
-        residuals = (images - recon_mean) / torch.sqrt(images)
+    def plot_reconstruction(
+        self, images, recon_mean, residuals, n_examples=10, mode="random", width=10, pad=6.0
+    ):
+        # only plot i band if available, otherwise the highest band given.
+        assert images.size(0) >= n_examples
+        assert images.shape[1] == recon_mean.shape[1] == residuals.shape[1] == 1, "1 band only."
+        figsize = (width, width * n_examples / 3)
+        fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=figsize)
 
-        image_grid = make_grid(images, nrow=nrow)[0]
-        recon_grid = make_grid(recon_mean, nrow=nrow)[0]
-        residual_grid = make_grid(residuals, nrow=nrow)[0]
-        h, w = image_grid.size()
-        base_size = 8
-        fig = plt.figure(figsize=(3 * base_size, int(h / w * base_size)))
-        for i, grid in enumerate([image_grid, recon_grid, residual_grid]):
-            plt.subplot(1, 3, i + 1)
-            plt.imshow(grid.cpu().numpy(), interpolation=None)
+        if mode == "random":
+            indices = torch.randint(0, len(images), size=(n_examples,))
+        elif mode == "worst":
+            # get indices where absolute residual is the largest.
+            absolute_residual = residuals.abs().sum(axis=(1, 2, 3))
+            indices = absolute_residual.argsort()[-n_examples:]
+        else:
+            raise NotImplementedError(f"Specified mode '{mode}' has not been implemented.")
+
+        # pick standard ranges for residuals
+        vmin_res = residuals[indices].min().item()
+        vmax_res = residuals[indices].max().item()
+
+        for i in range(n_examples):
+            idx = indices[i]
+
+            ax_true = axes[i, 0]
+            ax_recon = axes[i, 1]
+            ax_res = axes[i, 2]
+
+            # only add titles to the first axes.
             if i == 0:
-                plt.title("images")
-            elif i == 1:
-                plt.title("recon_mean")
-            else:
-                plt.title("residuals")
-            plt.xticks([])
-            plt.yticks([])
+                ax_true.set_title("Images $x$", pad=pad)
+                ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
+                ax_res.set_title(
+                    r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad
+                )
+
+            # standarize ranges of true and reconstruction
+            image = images[idx, 0].detach().cpu().numpy()
+            recon = recon_mean[idx, 0].detach().cpu().numpy()
+            residual = residuals[idx, 0].detach().cpu().numpy()
+            vmin = min(image.min().item(), recon.min().item())
+            vmax = max(image.max().item(), recon.max().item())
+
+            # plot images
+            plot_image(fig, ax_true, image, vrange=(vmin, vmax))
+            plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
+            plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
+        
         return fig
+    # def plot_reconstruction(self, images, recon_mean_main, recon_mean_residual, recon_mean_final):
 
-    def plot_reconstruction(self, images, recon_mean_main, recon_mean_residual, recon_mean_final):
+    #     # 1. only plot i band if available, otherwise the highest band given.
+    #     # 2. plot `num_examples//2` images with the largest average residual
+    #     #    and `num_examples//2` images with the smallest average residual
+    #     #    across all batches in the last epoch
+    #     # 3. residual color range (`vmin`, `vmax`) are fixed across all samples
+    #     #    (same across all rows in the subplot grid)
+    #     # 4. image and recon_mean color range are fixed for their particular sample
+    #     #    (same within each row in the subplot grid)
 
-        # 1. only plot i band if available, otherwise the highest band given.
-        # 2. plot `num_examples//2` images with the largest average residual
-        #    and `num_examples//2` images with the smallest average residual
-        #    across all batches in the last epoch
-        # 3. residual color range (`vmin`, `vmax`) are fixed across all samples
-        #    (same across all rows in the subplot grid)
-        # 4. image and recon_mean color range are fixed for their particular sample
-        #    (same within each row in the subplot grid)
+    #     assert images.size(0) >= 10
+    #     num_examples = 10
+    #     num_cols = 6
 
-        assert images.size(0) >= 10
-        num_examples = 10
-        num_cols = 6
+    #     residuals_main = (images - recon_mean_main) / torch.sqrt(images)
+    #     residuals_final = (images - recon_mean_final) / torch.sqrt(images)
+    #     recon_mean_residual = recon_mean_residual / torch.sqrt(images)
 
-        residuals_main = (images - recon_mean_main) / torch.sqrt(images)
-        residuals_final = (images - recon_mean_final) / torch.sqrt(images)
-        recon_mean_residual = recon_mean_residual / torch.sqrt(images)
+    #     residuals_idx = residuals_final.abs().mean(dim=(1, 2, 3)).argsort(descending=True)
+    #     large_residuals_idx = residuals_idx[: num_examples // 2]
+    #     small_residuals_idx = residuals_idx[-num_examples // 2 :]
+    #     plot_idx = torch.cat((large_residuals_idx, small_residuals_idx))
 
-        residuals_idx = residuals_final.abs().mean(dim=(1, 2, 3)).argsort(descending=True)
-        large_residuals_idx = residuals_idx[: num_examples // 2]
-        small_residuals_idx = residuals_idx[-num_examples // 2 :]
-        plot_idx = torch.cat((large_residuals_idx, small_residuals_idx))
+    #     images = images[plot_idx]
+    #     recon_mean_main = recon_mean_main[plot_idx]
+    #     recon_mean_residual = recon_mean_residual[plot_idx]
+    #     recon_mean_final = recon_mean_final[plot_idx]
+    #     residuals_main = residuals_main[plot_idx]
+    #     residuals_final = residuals_final[plot_idx]
 
-        images = images[plot_idx]
-        recon_mean_main = recon_mean_main[plot_idx]
-        recon_mean_residual = recon_mean_residual[plot_idx]
-        recon_mean_final = recon_mean_final[plot_idx]
-        residuals_main = residuals_main[plot_idx]
-        residuals_final = residuals_final[plot_idx]
+    #     residual_vmax = torch.ceil(residuals_final.max().cpu()).numpy()
+    #     residual_vmin = torch.floor(residuals_final.min().cpu()).numpy()
 
-        residual_vmax = torch.ceil(residuals_final.max().cpu()).numpy()
-        residual_vmin = torch.floor(residuals_final.min().cpu()).numpy()
+    #     plt.ioff()
 
-        plt.ioff()
+        # fig = plt.figure(figsize=(15, 25))
+        # for i in range(num_examples):
+        #     image = images[i, 0].data.cpu()
+        #     recon_final = recon_mean_final[i, 0].data.cpu()
+        #     recon_main = recon_mean_main[i, 0].data.cpu()
+        #     recon_residual = recon_mean_residual[i, 0].data.cpu()
+        #     res_main = residuals_main[i, 0].data.cpu()
+        #     res_final = residuals_final[i, 0].data.cpu()
 
-        fig = plt.figure(figsize=(15, 25))
-        for i in range(num_examples):
-            image = images[i, 0].data.cpu()
-            recon_final = recon_mean_final[i, 0].data.cpu()
-            recon_main = recon_mean_main[i, 0].data.cpu()
-            recon_residual = recon_mean_residual[i, 0].data.cpu()
-            res_main = residuals_main[i, 0].data.cpu()
-            res_final = residuals_final[i, 0].data.cpu()
+        #     image_vmax = torch.ceil(torch.max(image.max(), recon_final.max())).cpu().numpy()
+        #     image_vmin = torch.floor(torch.min(image.min(), recon_final.min())).cpu().numpy()
 
-            image_vmax = torch.ceil(torch.max(image.max(), recon_final.max())).cpu().numpy()
-            image_vmin = torch.floor(torch.min(image.min(), recon_final.min())).cpu().numpy()
+        #     plots = {
+        #         "images": image,
+        #         "recon_mean_main": recon_main,
+        #         "residuals_main": res_main,
+        #         "recon_mean_residual": recon_residual,
+        #         "recon_mean_final": recon_final,
+        #         "residuals_final": res_final,
+        #     }
 
-            plots = {
-                "images": image,
-                "recon_mean_main": recon_main,
-                "residuals_main": res_main,
-                "recon_mean_residual": recon_residual,
-                "recon_mean_final": recon_final,
-                "residuals_final": res_final,
-            }
+        #     for j, (title, plot) in enumerate(plots.items()):
+        #         plt.subplot(num_examples, num_cols, num_cols * i + j + 1)
+        #         plt.title(title)
+        #         if "residual" in title:
+        #             vmin, vmax = residual_vmin, residual_vmax
+        #         else:
+        #             vmin, vmax = image_vmin, image_vmax
+        #         plt.imshow(plot.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
+        #         plt.colorbar()
+        # plt.tight_layout()
 
-            for j, (title, plot) in enumerate(plots.items()):
-                plt.subplot(num_examples, num_cols, num_cols * i + j + 1)
-                plt.title(title)
-                if "residual" in title:
-                    vmin, vmax = residual_vmin, residual_vmax
-                else:
-                    vmin, vmax = image_vmin, image_vmax
-                plt.imshow(plot.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
-                plt.colorbar()
-        plt.tight_layout()
-
-        return fig
+        # return fig
 
     def test_step(self, batch, batch_idx):
         """Testing step (pytorch lightning)."""
