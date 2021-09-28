@@ -200,6 +200,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         # metrics
         residuals = (images - recon_mean_final) / torch.sqrt(recon_mean_final)
         residuals_main = (images - recon_mean_main) / torch.sqrt(recon_mean_main)
+        recon_mean_residual = recon_mean_residual / torch.sqrt(recon_mean_main)
         self.log("val/max_residual", residuals.abs().max())
         return {
             "images": images,
