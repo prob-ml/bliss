@@ -276,13 +276,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         """Validation epoch end (pytorch lightning)."""
 
-        # combine all images and recon_mean's into a single tensor
-        images = torch.cat([output["images"] for output in outputs])
-        recon_mean = torch.cat([output["recon_mean"] for output in outputs])
-        residuals = torch.cat([output["residuals"] for output in outputs])
+        output_tensors = {label:torch.cat([output[label] for output in outputs]) for label in outputs[0]}
 
-        fig_random = self.plot_reconstruction(images, recon_mean, residuals, mode="random")
-        fig_worst = self.plot_reconstruction(images, recon_mean, residuals, mode="worst")
+        fig_random = self.plot_reconstruction(output_tensors, mode="random")
+        fig_worst = self.plot_reconstruction(output_tensors, mode="worst")
         if self.logger:
             self.logger.experiment.add_figure(f"Random Images {self.current_epoch}", fig_random)
             self.logger.experiment.add_figure(f"Worst Images {self.current_epoch}", fig_worst)
@@ -306,8 +303,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     #         )
 
     def plot_reconstruction(
-        self, images, recon_mean, residuals, n_examples=10, mode="random", width=10, pad=6.0
+        self, outputs, n_examples=10, mode="random", width=10, pad=6.0
     ):
+        # combine all images and recon_mean's into a single tensor
+        images = outputs["images"]
+        recon_mean = outputs["recon_mean"]
+        residuals = outputs["residuals"]
         # only plot i band if available, otherwise the highest band given.
         assert images.size(0) >= n_examples
         assert images.shape[1] == recon_mean.shape[1] == residuals.shape[1] == 1, "1 band only."
