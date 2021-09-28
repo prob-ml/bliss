@@ -354,6 +354,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
             plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
         
+        plt.tight_layout()
         return fig
     # def plot_reconstruction(self, images, recon_mean_main, recon_mean_residual, recon_mean_final):
 

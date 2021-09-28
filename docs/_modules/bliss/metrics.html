@@ -1,0 +1,449 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>bliss.metrics &mdash; bliss  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> bliss
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/index.html">Bliss API</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">bliss</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>bliss.metrics</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for bliss.metrics</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">galsim</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">tqdm</span>
+<span class="kn">from</span> <span class="nn">einops</span> <span class="kn">import</span> <span class="n">rearrange</span><span class="p">,</span> <span class="n">reduce</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="kn">import</span> <span class="n">optimize</span> <span class="k">as</span> <span class="n">sp_optim</span>
+
+
+<div class="viewcode-block" id="get_single_galaxy_measurements"><a class="viewcode-back" href="../../api/bliss.html#bliss.metrics.get_single_galaxy_measurements">[docs]</a><span class="k">def</span> <span class="nf">get_single_galaxy_measurements</span><span class="p">(</span>
+    <span class="n">slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">true_images</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">recon_images</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">psf_image</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">pixel_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.396</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute individual galaxy measurements comparing true images with reconstructed images.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        slen: Side-length of square input images.</span>
+<span class="sd">        pixel_scale: Conversion from arcseconds to pixel.</span>
+<span class="sd">        true_images: Array of shape (samples, n_bands, slen, slen) containing images of</span>
+<span class="sd">            single-centered galaxies without noise or background.</span>
+<span class="sd">        recon_images: Array of shape (samples, n_bands, slen, slen) containing</span>
+<span class="sd">            reconstructions of `true_images` without noise or background.</span>
+<span class="sd">        psf_image: Array of shape (n_bands, slen, slen) containing PSF image used for</span>
+<span class="sd">            convolving the galaxies in `true_images`.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dictionary containing second-moment measurements for `true_images` and `recon_images`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># TODO: Consider multiprocessing? (if necessary)</span>
+    <span class="k">assert</span> <span class="n">true_images</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">recon_images</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">true_images</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">recon_images</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">,</span> <span class="s2">&quot;Incorrect array format.&quot;</span>
+    <span class="k">assert</span> <span class="n">true_images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">recon_images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">psf_image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>  <span class="c1"># one band</span>
+    <span class="n">n_samples</span> <span class="o">=</span> <span class="n">true_images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">true_images</span> <span class="o">=</span> <span class="n">true_images</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">slen</span><span class="p">,</span> <span class="n">slen</span><span class="p">)</span>
+    <span class="n">recon_images</span> <span class="o">=</span> <span class="n">recon_images</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">slen</span><span class="p">,</span> <span class="n">slen</span><span class="p">)</span>
+    <span class="n">psf_image</span> <span class="o">=</span> <span class="n">psf_image</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">slen</span><span class="p">,</span> <span class="n">slen</span><span class="p">)</span>
+
+    <span class="n">true_fluxes</span> <span class="o">=</span> <span class="n">true_images</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+    <span class="n">recon_fluxes</span> <span class="o">=</span> <span class="n">recon_images</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+
+    <span class="n">true_hlrs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">))</span>
+    <span class="n">recon_hlrs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">))</span>
+    <span class="n">true_ellip</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>  <span class="c1"># 2nd shape: e1, e2</span>
+    <span class="n">recon_ellip</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+
+    <span class="c1"># get galsim PSF</span>
+    <span class="n">galsim_psf_image</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">psf_image</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">pixel_scale</span><span class="p">)</span>
+
+    <span class="c1"># Now we use galsim to measure size and ellipticity</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)):</span>
+        <span class="n">true_image</span> <span class="o">=</span> <span class="n">true_images</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">recon_image</span> <span class="o">=</span> <span class="n">recon_images</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+        <span class="n">galsim_true_image</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">true_image</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">pixel_scale</span><span class="p">)</span>
+        <span class="n">galsim_recon_image</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">recon_image</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">pixel_scale</span><span class="p">)</span>
+
+        <span class="n">true_hlrs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">galsim_true_image</span><span class="o">.</span><span class="n">calculateHLR</span><span class="p">()</span>  <span class="c1"># PSF-convolved.</span>
+        <span class="n">recon_hlrs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">galsim_recon_image</span><span class="o">.</span><span class="n">calculateHLR</span><span class="p">()</span>
+
+        <span class="n">res_true</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">hsm</span><span class="o">.</span><span class="n">EstimateShear</span><span class="p">(</span>
+            <span class="n">galsim_true_image</span><span class="p">,</span> <span class="n">galsim_psf_image</span><span class="p">,</span> <span class="n">shear_est</span><span class="o">=</span><span class="s2">&quot;KSB&quot;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="n">res_recon</span> <span class="o">=</span> <span class="n">galsim</span><span class="o">.</span><span class="n">hsm</span><span class="o">.</span><span class="n">EstimateShear</span><span class="p">(</span>
+            <span class="n">galsim_recon_image</span><span class="p">,</span> <span class="n">galsim_psf_image</span><span class="p">,</span> <span class="n">shear_est</span><span class="o">=</span><span class="s2">&quot;KSB&quot;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+
+        <span class="n">true_ellip</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="p">(</span><span class="n">res_true</span><span class="o">.</span><span class="n">corrected_g1</span><span class="p">,</span> <span class="n">res_true</span><span class="o">.</span><span class="n">corrected_g2</span><span class="p">)</span>
+        <span class="n">recon_ellip</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="p">(</span><span class="n">res_recon</span><span class="o">.</span><span class="n">corrected_g1</span><span class="p">,</span> <span class="n">res_recon</span><span class="o">.</span><span class="n">corrected_g2</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;true_fluxes&quot;</span><span class="p">:</span> <span class="n">true_fluxes</span><span class="p">,</span>
+        <span class="s2">&quot;recon_fluxes&quot;</span><span class="p">:</span> <span class="n">recon_fluxes</span><span class="p">,</span>
+        <span class="s2">&quot;true_ellip&quot;</span><span class="p">:</span> <span class="n">true_ellip</span><span class="p">,</span>
+        <span class="s2">&quot;recon_ellip&quot;</span><span class="p">:</span> <span class="n">recon_ellip</span><span class="p">,</span>
+        <span class="s2">&quot;true_hlrs&quot;</span><span class="p">:</span> <span class="n">true_hlrs</span><span class="p">,</span>
+        <span class="s2">&quot;recon_hlrs&quot;</span><span class="p">:</span> <span class="n">recon_hlrs</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+
+<span class="k">def</span> <span class="nf">inner_join_locs</span><span class="p">(</span><span class="n">locs1</span><span class="p">,</span> <span class="n">locs2</span><span class="p">):</span>
+
+    <span class="c1"># locs1 and locs2 are arrays of locations,</span>
+    <span class="c1"># each of shape (number of sources) x 2</span>
+
+    <span class="c1"># permutes locs2 to find minimal error between locs1 and locs2.</span>
+    <span class="c1"># The matching is done using scipy.optimize.linear_sum_assignment,</span>
+    <span class="c1"># which implements the Hungarian algorithm.</span>
+
+    <span class="c1"># if locs1 is less than locs2, not every locs2 is returned;</span>
+    <span class="c1"># if locs2 is less than locs1, not every locs1 is returned.</span>
+    <span class="c1"># Only those with a match is returned, hence the &quot;inner_join.&quot;</span>
+
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">locs1</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+    <span class="k">assert</span> <span class="n">locs1</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span>
+
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">locs2</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+    <span class="k">assert</span> <span class="n">locs2</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span>
+
+    <span class="c1"># mse of locs:</span>
+    <span class="c1"># entry (i,j) is l1 distance between of ith loc in locs1</span>
+    <span class="c1"># and to jth loc in locs2</span>
+    <span class="n">locs_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">rearrange</span><span class="p">(</span><span class="n">locs1</span><span class="p">,</span> <span class="s2">&quot;i j -&gt; i 1 j&quot;</span><span class="p">)</span> <span class="o">-</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">locs2</span><span class="p">,</span> <span class="s2">&quot;i j -&gt; 1 i j&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+    <span class="n">locs_err</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="n">locs_err</span><span class="p">,</span> <span class="s2">&quot;i j k -&gt; i j&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">)</span>
+
+    <span class="c1"># find minimal permutation</span>
+    <span class="n">row_indx</span><span class="p">,</span> <span class="n">col_indx</span> <span class="o">=</span> <span class="n">sp_optim</span><span class="o">.</span><span class="n">linear_sum_assignment</span><span class="p">(</span><span class="n">locs_err</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">())</span>
+
+    <span class="c1"># return locations with their match</span>
+    <span class="k">return</span> <span class="n">locs1</span><span class="p">[</span><span class="n">row_indx</span><span class="p">],</span> <span class="n">locs2</span><span class="p">[</span><span class="n">col_indx</span><span class="p">],</span> <span class="n">row_indx</span><span class="p">,</span> <span class="n">col_indx</span>
+
+
+<span class="k">def</span> <span class="nf">inner_join_locs_and_fluxes</span><span class="p">(</span><span class="n">locs1</span><span class="p">,</span> <span class="n">fluxes1</span><span class="p">,</span> <span class="n">locs2</span><span class="p">,</span> <span class="n">fluxes2</span><span class="p">):</span>
+    <span class="c1"># permutes locations and fluxes using the Hungarian algorithm</span>
+    <span class="c1"># on locations to find matches.</span>
+    <span class="c1"># see `inner_join_locs`.</span>
+
+    <span class="c1"># find matches based on locations,</span>
+    <span class="c1"># and permute locations.</span>
+    <span class="n">locs1</span><span class="p">,</span> <span class="n">locs2</span><span class="p">,</span> <span class="n">row_indx</span><span class="p">,</span> <span class="n">col_indx</span> <span class="o">=</span> <span class="n">inner_join_locs</span><span class="p">(</span><span class="n">locs1</span><span class="p">,</span> <span class="n">locs2</span><span class="p">)</span>
+
+    <span class="c1"># permute fluxes based on how we permuted locations</span>
+    <span class="n">fluxes1</span> <span class="o">=</span> <span class="n">fluxes1</span><span class="p">[</span><span class="n">row_indx</span><span class="p">]</span>
+    <span class="n">fluxes2</span> <span class="o">=</span> <span class="n">fluxes2</span><span class="p">[</span><span class="n">col_indx</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">locs1</span><span class="p">,</span> <span class="n">fluxes1</span><span class="p">,</span> <span class="n">locs2</span><span class="p">,</span> <span class="n">fluxes2</span>
+
+
+<span class="k">def</span> <span class="nf">get_l1_error</span><span class="p">(</span><span class="n">true_locs</span><span class="p">,</span> <span class="n">true_mag</span><span class="p">,</span> <span class="n">est_locs</span><span class="p">,</span> <span class="n">est_mag</span><span class="p">):</span>
+
+    <span class="c1"># returns a vector of absolute errors for locations and fluxes,</span>
+    <span class="c1"># one for each star.</span>
+
+    <span class="c1"># The number of estimated stars does not have to equal the number of true stars!</span>
+
+    <span class="c1"># We only evaluate the error on the sources that have a match:</span>
+    <span class="c1"># the returned vector of absolute erros have length min(num. true sources, num. est. sources).</span>
+    <span class="c1"># See `inner_join_locs_and_fluxes` above.</span>
+
+    <span class="n">true_locs</span><span class="p">,</span> <span class="n">true_mag</span><span class="p">,</span> <span class="n">est_locs</span><span class="p">,</span> <span class="n">est_mag</span> <span class="o">=</span> <span class="n">inner_join_locs_and_fluxes</span><span class="p">(</span>
+        <span class="n">true_locs</span><span class="p">,</span> <span class="n">true_mag</span><span class="p">,</span> <span class="n">est_locs</span><span class="p">,</span> <span class="n">est_mag</span>
+    <span class="p">)</span>
+
+    <span class="c1"># L1 error over locations</span>
+    <span class="n">locs_mae</span> <span class="o">=</span> <span class="p">(</span><span class="n">true_locs</span> <span class="o">-</span> <span class="n">est_locs</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># flux error (for all bands)</span>
+    <span class="n">fluxes_mae</span> <span class="o">=</span> <span class="p">(</span><span class="n">true_mag</span> <span class="o">-</span> <span class="n">est_mag</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">locs_mae</span><span class="p">,</span> <span class="n">fluxes_mae</span>
+
+
+<span class="k">def</span> <span class="nf">get_tpr_ppv</span><span class="p">(</span><span class="n">true_locs</span><span class="p">,</span> <span class="n">true_mag</span><span class="p">,</span> <span class="n">est_locs</span><span class="p">,</span> <span class="n">est_mag</span><span class="p">,</span> <span class="n">slack</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+
+    <span class="c1"># l-infty error in location,</span>
+    <span class="c1"># matrix of true x est error</span>
+    <span class="n">locs_error</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">est_locs</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">true_locs</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># worst error in either band</span>
+    <span class="n">mag_error</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">est_mag</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">true_mag</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">tpr_bool</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">((</span><span class="n">locs_error</span> <span class="o">&lt;</span> <span class="n">slack</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">mag_error</span> <span class="o">&lt;</span> <span class="n">slack</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+    <span class="n">ppv_bool</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">((</span><span class="n">locs_error</span> <span class="o">&lt;</span> <span class="n">slack</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">mag_error</span> <span class="o">&lt;</span> <span class="n">slack</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">tpr_bool</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span> <span class="n">ppv_bool</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+
+<span class="k">def</span> <span class="nf">eval_error_on_batch</span><span class="p">(</span><span class="n">true_params</span><span class="p">,</span> <span class="n">est_params</span><span class="p">,</span> <span class="n">slen</span><span class="p">):</span>
+
+    <span class="c1"># check batch sizes are equal</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">])</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">])</span>
+
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">])</span>
+    <span class="n">n_bands</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">tpr_vec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+    <span class="n">ppv_vec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+
+    <span class="n">locs_mae_vec</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">fluxes_mae_vec</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">galaxy_params_mae_vec</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># accuracy of counting number of sources</span>
+    <span class="n">count_bool</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">])</span>
+
+    <span class="c1"># accuracy of galaxy counts</span>
+    <span class="n">est_n_gal</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;galaxy_bool&quot;</span><span class="p">],</span> <span class="s2">&quot;b n 1 -&gt; b&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">)</span>
+
+    <span class="n">true_n_gal</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;galaxy_bool&quot;</span><span class="p">],</span> <span class="s2">&quot;b n 1 -&gt; b&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">)</span>
+
+    <span class="n">galaxy_counts_bool</span> <span class="o">=</span> <span class="n">est_n_gal</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">true_n_gal</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+
+        <span class="c1"># get number of sources</span>
+        <span class="n">ntrue</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">])</span>
+        <span class="n">nest</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">nest</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">ntrue</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">):</span>
+
+            <span class="c1"># prepare locs and get them in units of pixels.</span>
+            <span class="n">true_locs</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">ntrue</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">ntrue</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">slen</span>
+            <span class="n">est_locs</span> <span class="o">=</span> <span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">nest</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nest</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">slen</span>
+
+            <span class="c1"># prepare fluxes</span>
+            <span class="n">true_fluxes</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">ntrue</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">ntrue</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">)</span>
+            <span class="n">est_fluxes</span> <span class="o">=</span> <span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;fluxes&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">nest</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nest</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">)</span>
+
+            <span class="c1"># prepare galaxy params.</span>
+            <span class="n">true_galaxy_params</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;galaxy_params&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">ntrue</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">ntrue</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">est_galaxy_params</span> <span class="o">=</span> <span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;galaxy_params&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">nest</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nest</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># convert fluxes to magnitude (off by a constant, but</span>
+            <span class="c1"># doesn&#39;t matter since we are looking at the diff)</span>
+            <span class="n">true_mag</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">true_fluxes</span><span class="p">)</span> <span class="o">*</span> <span class="mf">2.5</span>
+            <span class="n">est_mag</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">est_fluxes</span><span class="p">)</span> <span class="o">*</span> <span class="mf">2.5</span>
+
+            <span class="c1"># get TPR and PPV</span>
+            <span class="n">tpr_i</span><span class="p">,</span> <span class="n">ppv_i</span> <span class="o">=</span> <span class="n">get_tpr_ppv</span><span class="p">(</span><span class="n">true_locs</span><span class="p">,</span> <span class="n">true_mag</span><span class="p">,</span> <span class="n">est_locs</span><span class="p">,</span> <span class="n">est_mag</span><span class="p">)</span>
+
+            <span class="n">tpr_vec</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">tpr_i</span>
+            <span class="n">ppv_vec</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">ppv_i</span>
+
+            <span class="c1"># get l1 error in locations and fluxes</span>
+            <span class="n">locs_mae_i</span><span class="p">,</span> <span class="n">fluxes_mae_i</span> <span class="o">=</span> <span class="n">get_l1_error</span><span class="p">(</span><span class="n">true_locs</span><span class="p">,</span> <span class="n">true_mag</span><span class="p">,</span> <span class="n">est_locs</span><span class="p">,</span> <span class="n">est_mag</span><span class="p">)</span>
+
+            <span class="c1"># get l1 error in galaxy_params</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">galaxy_params_mae_i</span> <span class="o">=</span> <span class="n">get_l1_error</span><span class="p">(</span>
+                <span class="n">true_locs</span><span class="p">,</span> <span class="n">true_galaxy_params</span><span class="p">,</span> <span class="n">est_locs</span><span class="p">,</span> <span class="n">est_galaxy_params</span>
+            <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">locs_mae_i</span><span class="p">):</span>
+                <span class="n">locs_mae_vec</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">locs_mae_i</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+                <span class="n">fluxes_mae_vec</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fluxes_mae_i</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+                <span class="n">galaxy_params_mae_vec</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">galaxy_params_mae_i</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+    <span class="n">locs_mae_vec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">locs_mae_vec</span><span class="p">)</span>
+    <span class="n">fluxes_mae_vec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">fluxes_mae_vec</span><span class="p">)</span>
+    <span class="n">galaxy_params_mae_vec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">galaxy_params_mae_vec</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;locs_mae_vec&quot;</span><span class="p">:</span> <span class="n">locs_mae_vec</span><span class="p">,</span>
+        <span class="s2">&quot;fluxes_mae_vec&quot;</span><span class="p">:</span> <span class="n">fluxes_mae_vec</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_params_mae_vec&quot;</span><span class="p">:</span> <span class="n">galaxy_params_mae_vec</span><span class="p">,</span>
+        <span class="s2">&quot;count_bool&quot;</span><span class="p">:</span> <span class="n">count_bool</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_counts_bool&quot;</span><span class="p">:</span> <span class="n">galaxy_counts_bool</span><span class="p">,</span>
+        <span class="s2">&quot;tpr_vec&quot;</span><span class="p">:</span> <span class="n">tpr_vec</span><span class="p">,</span>
+        <span class="s2">&quot;ppv_vec&quot;</span><span class="p">:</span> <span class="n">ppv_vec</span><span class="p">,</span>
+    <span class="p">}</span>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Probabilistic Machine Learning Research Group.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
