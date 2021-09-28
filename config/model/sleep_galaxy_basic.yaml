@@ -19,7 +19,7 @@ decoder:
     gal_slen: 53
     autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt
     latents_file: ${paths.data}/latents_simulated_sdss_galaxies.pt
-    psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
+    psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
     background_values:
       - 633.0
 encoder:
