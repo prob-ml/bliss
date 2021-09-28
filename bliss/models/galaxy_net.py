@@ -248,32 +248,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         }
         # return {"images": images, "recon_mean": recon_mean, "residuals": residuals}
 
-    # def plot_grid_examples(self, images, recon_mean):
-    #     # 1.  plot a grid of all input images and recon_mean
-    #     # 2.  only plot the highest band
-
-    #     nrow = 16
-    #     residuals = (images - recon_mean) / torch.sqrt(images)
-
-    #     image_grid = make_grid(images, nrow=nrow)[0]
-    #     recon_grid = make_grid(recon_mean, nrow=nrow)[0]
-    #     residual_grid = make_grid(residuals, nrow=nrow)[0]
-    #     h, w = image_grid.size()
-    #     base_size = 8
-    #     fig = plt.figure(figsize=(3 * base_size, int(h / w * base_size)))
-    #     for i, grid in enumerate([image_grid, recon_grid, residual_grid]):
-    #         plt.subplot(1, 3, i + 1)
-    #         plt.imshow(grid.cpu().numpy(), interpolation=None)
-    #         if i == 0:
-    #             plt.title("images")
-    #         elif i == 1:
-    #             plt.title("recon_mean")
-    #         else:
-    #             plt.title("residuals")
-    #         plt.xticks([])
-    #         plt.yticks([])
-    #     return fig
-
     def validation_epoch_end(self, outputs):
         """Validation epoch end (pytorch lightning)."""
 
@@ -283,9 +257,16 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         fig_random = self.plot_reconstruction(output_tensors, mode="random")
         fig_worst = self.plot_reconstruction(output_tensors, mode="worst")
+        grid_example = self.plot_grid_examples(output_tensors)
+
         if self.logger:
-            self.logger.experiment.add_figure(f"Random Images {self.current_epoch}", fig_random)
-            self.logger.experiment.add_figure(f"Worst Images {self.current_epoch}", fig_worst)
+            self.logger.experiment.add_figure(
+                f"Epoch:{self.current_epoch}/Random Images", fig_random
+            )
+            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Worst Images", fig_worst)
+            self.logger.experiment.add_figure(
+                f"Epoch:{self.current_epoch}/grid_examples", grid_example
+            )
 
     # def validation_epoch_end(self, outputs):
     #     """Validation epoch end (pytorch lightning)."""
@@ -373,6 +354,33 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plot_image(fig, ax_recon_res, recon_mean_residual_i, vrange=(vmin_res, vmax_res))
 
         plt.tight_layout()
+        return fig
+
+    def plot_grid_examples(self, outputs):
+        images, recon_mean = outputs["images"], outputs["recon_mean"]
+        # 1.  plot a grid of all input images and recon_mean
+        # 2.  only plot the highest band
+
+        nrow = 16
+        residuals = (images - recon_mean) / torch.sqrt(images)
+
+        image_grid = make_grid(images, nrow=nrow)[0]
+        recon_grid = make_grid(recon_mean, nrow=nrow)[0]
+        residual_grid = make_grid(residuals, nrow=nrow)[0]
+        h, w = image_grid.size()
+        base_size = 8
+        fig = plt.figure(figsize=(3 * base_size, int(h / w * base_size)))
+        for i, grid in enumerate([image_grid, recon_grid, residual_grid]):
+            plt.subplot(1, 3, i + 1)
+            plt.imshow(grid.cpu().numpy(), interpolation=None)
+            if i == 0:
+                plt.title("images")
+            elif i == 1:
+                plt.title("recon_mean")
+            else:
+                plt.title("residuals")
+            plt.xticks([])
+            plt.yticks([])
         return fig
 
     # def plot_reconstruction(self, images, recon_mean_main, recon_mean_residual, recon_mean_final):
