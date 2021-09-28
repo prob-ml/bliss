@@ -151,15 +151,14 @@
            <div itemprop="articleBody">
             
   <h1>Source code for bliss.models.galaxy_net</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">pytorch_lightning</span> <span class="k">as</span> <span class="nn">pl</span>
+<span></span><span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">pytorch_lightning</span> <span class="k">as</span> <span class="nn">pl</span>
 <span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">einops</span> <span class="kn">import</span> <span class="n">rearrange</span>
 <span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Normal</span>
 <span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
 <span class="kn">from</span> <span class="nn">torch.nn.modules.conv</span> <span class="kn">import</span> <span class="n">Conv2d</span><span class="p">,</span> <span class="n">ConvTranspose2d</span>
-<span class="kn">from</span> <span class="nn">torch.nn.modules.module</span> <span class="kn">import</span> <span class="n">Module</span>
 
 <span class="kn">from</span> <span class="nn">bliss.optimizer</span> <span class="kn">import</span> <span class="n">get_optimizer</span>
 <span class="kn">from</span> <span class="nn">bliss.utils</span> <span class="kn">import</span> <span class="n">make_grid</span>
@@ -177,17 +176,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="n">slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">latent_dim</span> <span class="o">=</span> <span class="n">latent_dim</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
-            <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-        <span class="p">)</span>
+        <span class="n">kernels</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">kernels</span><span class="p">):</span>
+            <span class="n">layer</span> <span class="o">=</span> <span class="n">ResidualConvDownsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">i</span><span class="p">),</span> <span class="mi">8</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">kernels</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="o">*</span><span class="n">layers</span><span class="p">)</span>
 
 <div class="viewcode-block" id="CenteredGalaxyEncoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyEncoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Encodes galaxy from image.&quot;&quot;&quot;</span>
@@ -200,18 +196,19 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="n">slen</span>
 
-        <span class="n">output_padding</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
-            <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
-            <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(),</span>
-            <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span><span class="n">n_bands</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
-        <span class="p">)</span>
+        <span class="n">kernels</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">slen_current</span> <span class="o">=</span> <span class="n">slen</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">kernels</span><span class="p">):</span>
+            <span class="n">output_padding</span> <span class="o">=</span> <span class="p">(</span><span class="n">slen_current</span> <span class="o">-</span> <span class="n">kernel_size</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span> <span class="k">if</span> <span class="p">(</span><span class="n">slen_current</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span>
+            <span class="n">layer</span> <span class="o">=</span> <span class="n">ResidualConvUpsampleBlock</span><span class="p">(</span>
+                <span class="n">n_bands</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)),</span> <span class="mi">8</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">output_padding</span>
+            <span class="p">)</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">kernels</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">())</span>
+            <span class="n">slen_current</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">((</span><span class="n">slen_current</span> <span class="o">-</span> <span class="n">kernel_size</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="o">*</span><span class="n">layers</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
 
 <div class="viewcode-block" id="CenteredGalaxyDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Decodes image from latent representation.&quot;&quot;&quot;</span>

@@ -1,12 +1,11 @@
+import math
 import pytorch_lightning as pl
 import torch
-from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
-from torch.nn.modules.module import Module
 
 from bliss.optimizer import get_optimizer
 from bliss.utils import make_grid
@@ -24,17 +23,14 @@ class CenteredGalaxyEncoder(nn.Module):
         self.slen = slen
         self.latent_dim = latent_dim
 
-        self.features = nn.Sequential(
-            ResidualConvDownsampleBlock(n_bands, 8, 3, 4),
-            nn.LeakyReLU(),
-            ResidualConvDownsampleBlock(n_bands * 2, 8, 3, 4),
-            nn.LeakyReLU(),
-            ResidualConvDownsampleBlock(n_bands * 4, 8, 3, 4),
-            nn.LeakyReLU(),
-            ResidualConvDownsampleBlock(n_bands * 8, 8, 3, 4),
-            nn.LeakyReLU(),
-            ResidualConvDownsampleBlock(n_bands * 16, 8, 1, 4),
-        )
+        kernels = [3, 3, 3, 3, 1]
+        layers = []
+        for (i, kernel_size) in enumerate(kernels):
+            layer = ResidualConvDownsampleBlock(n_bands * (2 ** i), 8, kernel_size, 4)
+            layers.append(layer)
+            if i < len(kernels) - 1:
+                layers.append(nn.LeakyReLU())
+        self.features = nn.Sequential(*layers)
 
     def forward(self, image):
         """Encodes galaxy from image."""
@@ -47,18 +43,19 @@ class CenteredGalaxyDecoder(nn.Module):
 
         self.slen = slen
 
-        output_padding = [0, 0, 1, 1, 0]
-        self.features = nn.Sequential(
-            ResidualConvUpsampleBlock(n_bands * 32, 8, 1, 4, output_padding[0]),
-            nn.LeakyReLU(),
-            ResidualConvUpsampleBlock(n_bands * 16, 8, 3, 4, output_padding[1]),
-            nn.LeakyReLU(),
-            ResidualConvUpsampleBlock(n_bands * 8, 8, 3, 4, output_padding[2]),
-            nn.LeakyReLU(),
-            ResidualConvUpsampleBlock(n_bands * 4, 8, 3, 4, output_padding[3]),
-            nn.LeakyReLU(),
-            ResidualConvUpsampleBlock(n_bands * 2, 8, 3, 4, output_padding[4]),
-        )
+        kernels = [3, 3, 3, 3, 1]
+        layers = []
+        slen_current = slen
+        for (i, kernel_size) in enumerate(kernels):
+            output_padding = (slen_current - kernel_size) % 2 if (slen_current != 2) else 0
+            layer = ResidualConvUpsampleBlock(
+                n_bands * (2 ** (i + 1)), 8, kernel_size, 4, output_padding
+            )
+            layers.append(layer)
+            if i < len(kernels) - 1:
+                layers.append(nn.LeakyReLU())
+            slen_current = math.floor((slen_current - kernel_size) / 2 + 1)
+        self.features = nn.Sequential(*layers[::-1])
 
     def forward(self, z):
         """Decodes image from latent representation."""
