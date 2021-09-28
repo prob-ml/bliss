@@ -26,7 +26,7 @@ class CenteredGalaxyEncoder(nn.Module):
         kernels = [3, 3, 3, 3, 1]
         layers = []
         for (i, kernel_size) in enumerate(kernels):
-            layer = ResidualConvDownsampleBlock(n_bands * (2 ** i), 8, kernel_size, 4)
+            layer = ResidualConvBlock(n_bands * (2 ** i), 8, kernel_size, 4, mode="downsample")
             layers.append(layer)
             if i < len(kernels) - 1:
                 layers.append(nn.LeakyReLU())
@@ -48,8 +48,13 @@ class CenteredGalaxyDecoder(nn.Module):
         slen_current = slen
         for (i, kernel_size) in enumerate(kernels):
             output_padding = (slen_current - kernel_size) % 2 if (slen_current != 2) else 0
-            layer = ResidualConvUpsampleBlock(
-                n_bands * (2 ** (i + 1)), 8, kernel_size, 4, output_padding
+            layer = ResidualConvBlock(
+                n_bands * (2 ** (i + 1)),
+                8,
+                kernel_size,
+                4,
+                mode="upsample",
+                output_padding=output_padding,
             )
             layers.append(layer)
             if i < len(kernels) - 1:
@@ -337,16 +342,35 @@ class ResConv2dBlock(Conv2d):
         y = F.relu(y)
         return input + y
 
-
-class ResidualConvDownsampleBlock(nn.Module):
-    def __init__(self, in_channels, expand_factor, kernel_size, n_layers):
+class ResidualConvBlock(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        expand_factor,
+        kernel_size,
+        n_layers,
+        mode="downsample",
+        output_padding=None,
+    ):
         super().__init__()
+        self.mode = mode
         expand_channels = in_channels * expand_factor
-        out_channels = in_channels * 2
         padding = kernel_size // 2
         conv_initial = Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding)
-        down_kernel_size = max(kernel_size, 2)
-        conv = Conv2d(expand_channels, expand_channels, down_kernel_size, stride=2)
+        kernel_size_dim_change = max(kernel_size, 2)
+        if self.mode == "downsample":
+            conv = Conv2d(expand_channels, expand_channels, kernel_size_dim_change, stride=2)
+            out_channels = in_channels * 2
+        elif self.mode == "upsample":
+            assert output_padding is not None
+            conv = ConvTranspose2d(
+                expand_channels,
+                expand_channels,
+                kernel_size_dim_change,
+                stride=2,
+                output_padding=output_padding,
+            )
+            out_channels = in_channels // 2
         layers = [conv_initial, nn.ReLU(), conv, nn.ReLU()]
         for _ in range(n_layers - 1):
             layers.append(
@@ -359,38 +383,12 @@ class ResidualConvDownsampleBlock(nn.Module):
 
     def forward(self, x):
         y = self.f(x)
-        x_downsampled = F.interpolate(x, size=y.shape[-2:], mode="bilinear", align_corners=True)
-        x_downsampled = x_downsampled.repeat(1, 2, 1, 1)
-        return y + x_downsampled
-
-
-class ResidualConvUpsampleBlock(nn.Module):
-    def __init__(self, in_channels, expand_factor, kernel_size, n_layers, output_padding):
-        super().__init__()
-        expand_channels = in_channels * expand_factor
-        out_channels = in_channels // 2
-        padding = kernel_size // 2
-        conv_initial = Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding)
-        up_kernel_size = max(kernel_size, 2)
-        conv = ConvTranspose2d(
-            expand_channels,
-            expand_channels,
-            up_kernel_size,
-            stride=2,
-            output_padding=output_padding,
-        )
-        layers = [conv_initial, nn.ReLU(), conv, nn.ReLU()]
-        for _ in range(n_layers - 1):
-            layers.append(
-                ResConv2dBlock(
-                    expand_channels, expand_channels, kernel_size, stride=1, padding=padding
-                )
-            )
-        layers.append(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding))
-        self.f = nn.Sequential(*layers)
-
-    def forward(self, x):
-        y = self.f(x)
-        x_upsampled = F.interpolate(x, size=y.shape[-2:], mode="nearest")
-        x_upsampled = x_upsampled[:, : y.shape[1], :, :]
-        return y + x_upsampled
+        if self.mode == "downsample":
+            x_downsampled = F.interpolate(x, size=y.shape[-2:], mode="bilinear", align_corners=True)
+            x_downsampled = x_downsampled.repeat(1, 2, 1, 1)
+            x_trans = x_downsampled
+        elif self.mode == "upsample":
+            x_upsampled = F.interpolate(x, size=y.shape[-2:], mode="nearest")
+            x_upsampled = x_upsampled[:, : y.shape[1], :, :]
+            x_trans = x_upsampled
+        return y + x_trans
