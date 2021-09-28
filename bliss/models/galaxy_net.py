@@ -277,7 +277,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         """Validation epoch end (pytorch lightning)."""
 
-        output_tensors = {label:torch.cat([output[label] for output in outputs]) for label in outputs[0]}
+        output_tensors = {
+            label: torch.cat([output[label] for output in outputs]) for label in outputs[0]
+        }
 
         fig_random = self.plot_reconstruction(output_tensors, mode="random")
         fig_worst = self.plot_reconstruction(output_tensors, mode="worst")
@@ -303,9 +305,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     #             f"Epoch:{self.current_epoch}/grid_examples", grid_example
     #         )
 
-    def plot_reconstruction(
-        self, outputs, n_examples=10, mode="random", width=20, pad=6.0
-    ):
+    def plot_reconstruction(self, outputs, n_examples=10, mode="random", width=20, pad=6.0):
         # combine all images and recon_mean's into a single tensor
         images = outputs["images"]
         recon_mean = outputs["recon_mean"]
@@ -371,9 +371,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plot_image(fig, ax_recon_main, recon_mean_main_i, vrange=(vmin, vmax))
             plot_image(fig, ax_res_main, residuals_main_i, vrange=(vmin_res, vmax_res))
             plot_image(fig, ax_recon_res, recon_mean_residual_i, vrange=(vmin_res, vmax_res))
-        
+
         plt.tight_layout()
         return fig
+
     # def plot_reconstruction(self, images, recon_mean_main, recon_mean_residual, recon_mean_final):
 
     #     # 1. only plot i band if available, otherwise the highest band given.
@@ -410,39 +411,39 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     #     plt.ioff()
 
-        # fig = plt.figure(figsize=(15, 25))
-        # for i in range(num_examples):
-        #     image = images[i, 0].data.cpu()
-        #     recon_final = recon_mean_final[i, 0].data.cpu()
-        #     recon_main = recon_mean_main[i, 0].data.cpu()
-        #     recon_residual = recon_mean_residual[i, 0].data.cpu()
-        #     res_main = residuals_main[i, 0].data.cpu()
-        #     res_final = residuals_final[i, 0].data.cpu()
+    # fig = plt.figure(figsize=(15, 25))
+    # for i in range(num_examples):
+    #     image = images[i, 0].data.cpu()
+    #     recon_final = recon_mean_final[i, 0].data.cpu()
+    #     recon_main = recon_mean_main[i, 0].data.cpu()
+    #     recon_residual = recon_mean_residual[i, 0].data.cpu()
+    #     res_main = residuals_main[i, 0].data.cpu()
+    #     res_final = residuals_final[i, 0].data.cpu()
 
-        #     image_vmax = torch.ceil(torch.max(image.max(), recon_final.max())).cpu().numpy()
-        #     image_vmin = torch.floor(torch.min(image.min(), recon_final.min())).cpu().numpy()
+    #     image_vmax = torch.ceil(torch.max(image.max(), recon_final.max())).cpu().numpy()
+    #     image_vmin = torch.floor(torch.min(image.min(), recon_final.min())).cpu().numpy()
 
-        #     plots = {
-        #         "images": image,
-        #         "recon_mean_main": recon_main,
-        #         "residuals_main": res_main,
-        #         "recon_mean_residual": recon_residual,
-        #         "recon_mean_final": recon_final,
-        #         "residuals_final": res_final,
-        #     }
+    #     plots = {
+    #         "images": image,
+    #         "recon_mean_main": recon_main,
+    #         "residuals_main": res_main,
+    #         "recon_mean_residual": recon_residual,
+    #         "recon_mean_final": recon_final,
+    #         "residuals_final": res_final,
+    #     }
 
-        #     for j, (title, plot) in enumerate(plots.items()):
-        #         plt.subplot(num_examples, num_cols, num_cols * i + j + 1)
-        #         plt.title(title)
-        #         if "residual" in title:
-        #             vmin, vmax = residual_vmin, residual_vmax
-        #         else:
-        #             vmin, vmax = image_vmin, image_vmax
-        #         plt.imshow(plot.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
-        #         plt.colorbar()
-        # plt.tight_layout()
+    #     for j, (title, plot) in enumerate(plots.items()):
+    #         plt.subplot(num_examples, num_cols, num_cols * i + j + 1)
+    #         plt.title(title)
+    #         if "residual" in title:
+    #             vmin, vmax = residual_vmin, residual_vmax
+    #         else:
+    #             vmin, vmax = image_vmin, image_vmax
+    #         plt.imshow(plot.numpy(), interpolation=None, vmin=vmin, vmax=vmax)
+    #         plt.colorbar()
+    # plt.tight_layout()
 
-        # return fig
+    # return fig
 
     def test_step(self, batch, batch_idx):
         """Testing step (pytorch lightning)."""
