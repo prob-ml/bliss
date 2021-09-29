@@ -12,7 +12,7 @@ decoder:
     ptile_slen: 52
     border_padding: 24
     prob_galaxy: 0.7
-    n_galaxy_params: 8
+    n_galaxy_params: 32
     max_sources: 1
     mean_sources: 0.03
     min_sources: 0

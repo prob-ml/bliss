@@ -1,7 +1,7 @@
 name: OneCenteredGalaxyAE
 kwargs:
   slen: 53
-  latent_dim: 8
+  latent_dim: 32
   n_bands: 1
   hidden: 32
   optimizer_params: ${optimizer}

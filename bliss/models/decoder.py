@@ -40,7 +40,7 @@ class ImageDecoder(pl.LightningModule):
         f_max=1e6,
         alpha=0.5,
         prob_galaxy=0.0,
-        n_galaxy_params=8,
+        n_galaxy_params=32,
         gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
@@ -765,11 +765,10 @@ class GalaxyTileDecoder(nn.Module):
 
         # load decoder after loading autoencoder from checkpoint.
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        autoencoder.eval().requires_grad_(False)
         assert gal_slen == autoencoder.hparams.slen
         assert n_galaxy_params == autoencoder.hparams.latent_dim
-        dec = autoencoder.dec
-        dec.eval().requires_grad_(False)
-        self.galaxy_decoder = dec
+        self.galaxy_decoder = autoencoder.dec
 
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params

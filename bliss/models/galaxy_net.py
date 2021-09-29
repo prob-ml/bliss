@@ -30,6 +30,7 @@ class CenteredGalaxyEncoder(nn.Module):
             layers.append(layer)
             if i < len(kernels) - 1:
                 layers.append(nn.LeakyReLU())
+        layers.append(nn.Flatten())
         self.features = nn.Sequential(*layers)
 
     def forward(self, image):
@@ -60,6 +61,11 @@ class CenteredGalaxyDecoder(nn.Module):
             if i < len(kernels) - 1:
                 layers.append(nn.LeakyReLU())
             slen_current = math.floor((slen_current - kernel_size) / 2 + 1)
+        layers.append(
+            nn.Unflatten(
+                -1, torch.Size((n_bands * (2 ** len(kernels)), slen_current, slen_current))
+            )
+        )
         self.features = nn.Sequential(*layers[::-1])
 
     def forward(self, z):
@@ -76,7 +82,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def __init__(
         self,
         slen=53,
-        latent_dim=8,
+        latent_dim=32,
         hidden=32,
         n_bands=1,
         mse_residual_model_loss: bool = False,
@@ -86,19 +92,28 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.main_autoencoder = nn.Sequential(
-            CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands),
-            CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands),
+        self.main_encoder = CenteredGalaxyEncoder(
+            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
         )
-        self.residual_autoencoder = nn.Sequential(
-            CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands),
-            CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands),
+        self.main_decoder = CenteredGalaxyDecoder(
+            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
         )
+        self.main_autoencoder = nn.Sequential(self.main_encoder, self.main_decoder)
+
+        self.residual_encoder = CenteredGalaxyEncoder(
+            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+        )
+        self.residual_decoder = CenteredGalaxyDecoder(
+            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+        )
+        self.residual_autoencoder = nn.Sequential(self.residual_encoder, self.residual_decoder)
+
         self.mse_residual_model_loss = mse_residual_model_loss
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
         self.min_sd = min_sd
+        self.latent_dim = latent_dim
 
     def _main_forward(self, image, background):
         return F.relu(self.main_autoencoder(image - background)) + background
@@ -110,6 +125,19 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         """Gets reconstructed image from running through encoder and decoder."""
         recon_mean_main = self._main_forward(image, background)
         recon_mean_residual = self._residual_forward(image - recon_mean_main)
+        return recon_mean_main + recon_mean_residual
+
+    def enc(self, image, background):
+        latent_main = self.main_encoder(image - background)
+        recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
+        latent_residual = self.residual_encoder(image - recon_mean_main)
+        return torch.cat((latent_main, latent_residual), dim=-1)
+
+    def dec(self, latent):
+        latent_main, latent_residual = torch.split(latent, 2, -1)
+        assert latent_main.size(-1) == latent_residual.size(-1) == self.latent_dim
+        recon_mean_main = F.relu(self.main_decoder(latent_main))
+        recon_mean_residual = self.residual_decoder(latent_residual)
         return recon_mean_main + recon_mean_residual
 
     def get_likelihood_loss(self, image, recon_mean):
@@ -342,6 +370,7 @@ class ResConv2dBlock(Conv2d):
         y = super().forward(input)
         y = F.relu(y)
         return input + y
+
 
 class ResidualConvBlock(nn.Module):
     def __init__(
