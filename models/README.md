@@ -7,8 +7,8 @@ in this directory. Please also specify most recent **validation loss** and numbe
 * ``sdss_autoencoder.ckpt``
 
 ```bash
-# Validation Loss = 781677.125
-# Epochs = 969
+# Validation Loss = 782252.688
+# Epochs = 999
 poetry run bliss +experiment=sdss_autoencoder
 ```
 
