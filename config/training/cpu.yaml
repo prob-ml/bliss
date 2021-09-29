@@ -1,4 +1,3 @@
-plotting: False
 n_epochs: 1
 experiment: default
 version: null

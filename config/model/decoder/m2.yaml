@@ -10,7 +10,7 @@ min_sources: 0
 f_min: 1e3
 f_max: 1e6
 alpha: 0.5
-psf_params_file: ${paths.root}/data/psField-002583-2-0136.fits
+psf_params_file: ${paths.data}/sdss/2583/2/136/psField-002583-2-0136.fits
 prob_galaxy: 0.0
 background_values:
   - 686.0

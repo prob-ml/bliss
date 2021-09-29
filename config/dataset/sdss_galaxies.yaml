@@ -3,7 +3,7 @@ num_workers: 0
 batch_size: 64
 n_batches: 10
 background: 865
-noise_factor: 0.05
+noise_factor: 0.01
 slen: 53
 min_flux: 1e3
 max_flux: 3.5e5
@@ -12,18 +12,4 @@ max_a_d: 6.5
 min_a_b: 0.8
 max_a_b: 3.6 # from catalog with mag < 22.2 cut.
 flux_sample: "uniform"
-psf_points:
-  - 450
-  - 550
-sdss_kwargs:
-  bands:
-    - 2
-  camcol: 1
-  center_subpixel: true
-  fields:
-    - 12
-  overwrite_cache: false
-  overwrite_fits_cache: false
-  run: 94
-  sdss_dir: "${paths.data}/sdss"
-  stampsize: 5
+psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
