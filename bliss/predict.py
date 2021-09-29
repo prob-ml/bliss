@@ -1,6 +1,7 @@
 """File to produce BLISS estimates on survey images. Currently only SDSS is supported."""
 import torch
 from einops import rearrange
+from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 from bliss.datasets import sdss
@@ -75,8 +76,14 @@ def predict(cfg: DictConfig):
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 
     sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss_kwargs)
-    sleep_net = SleepPhase.load_from_checkpoint(cfg.predict.sleep_checkpoint)
-    galaxy_encoder = GalaxyEncoder.load_from_checkpoint(cfg.predict.galaxy_checkpoint)
+    encoder = instantiate(cfg.model.encoder)
+    decoder = instantiate(cfg.model.decoder)
+    sleep_net = SleepPhase.load_from_checkpoint(
+        cfg.predict.sleep_checkpoint, encoder=encoder, decoder=decoder
+    )
+    galaxy_encoder = GalaxyEncoder.load_from_checkpoint(
+        cfg.predict.galaxy_checkpoint, decoder=decoder
+    )
     binary_encoder = BinaryEncoder.load_from_checkpoint(cfg.predict.binary_checkpoint)
 
     # load images from SDSS for prediction.
