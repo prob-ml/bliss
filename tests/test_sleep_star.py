@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 
@@ -49,19 +47,6 @@ class TestSleepStarTiles:
         overrides.update({"testing": "default"})
         results = model_setup.test_model(overrides, trained_sleep)
         assert {"acc_counts", "locs_mae", "star_fluxes_mae"}.issubset(results.keys())
-
-        # only expect tests to pass if gpu
-        if not devices.use_cuda:
-            return
-
-        assert results["acc_counts"] > 0.7
-        assert results["locs_mae"] < 0.5
-        assert results["star_fluxes_mae"] < 0.5
-
-    def test_saved(self, overrides, trained_sleep, model_setup, devices, paths):
-        test_file = Path(paths["data"]).joinpath("star_test1.pt").as_posix()
-        overrides.update({"testing.file": test_file})
-        results = model_setup.test_model(overrides, trained_sleep)
 
         # only expect tests to pass if gpu
         if not devices.use_cuda:
