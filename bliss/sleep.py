@@ -148,7 +148,8 @@ class SleepPhase(pl.LightningModule):
             optimizer_params: Parameters passed to optimizer. Defaults to None.
         """
         super().__init__()
-        self.save_hyperparameters()
+        # prevent saving the entire `encoder` and `decoder` object
+        self.save_hyperparameters("annotate_probs", "optimizer_params")
 
         self.image_encoder = encoder
         self.image_decoder = decoder

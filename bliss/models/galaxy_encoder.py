@@ -55,7 +55,8 @@ class GalaxyEncoder(pl.LightningModule):
         optimizer_params: dict = None,
     ):
         super().__init__()
-        self.save_hyperparameters()
+        # prevent saving `decoder`
+        self.save_hyperparameters("hidden", "optimizer_params")
 
         self.max_sources = 1  # by construction.
 
