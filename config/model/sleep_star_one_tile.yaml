@@ -20,7 +20,7 @@ decoder:
     min_sources: 0
     f_min: 1e5
     f_max: 1e6
-    psf_params_file: ${paths.root}/data/fitted_powerlaw_psf_params.npy
+    psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
     background_values:
       - 633.0
     loc_min: 0.
