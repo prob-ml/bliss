@@ -5,4 +5,4 @@ defaults:
 _target_: bliss.sleep.SleepPhase
 
 optimizer_params: ${optimizer}
-annotate_probs: True # FIXME: True or False?
+annotate_probs: false

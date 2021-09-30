@@ -19,7 +19,6 @@ poetry run bliss +experiment=sdss_autoencoder
 # Epochs = 439
 # Notes:
 # - 20/09/21: Slight increase since galaxy PSF exactly equals decoder PSF
-# - 20/09/29: Slightly worse than the previous one (0.571)
 poetry run bliss +experiment=sdss_binary
 ```
 
