@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 
-from bliss.models.decoder import get_mgrid
+from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.encoder import get_full_params, get_images_in_tiles
 from bliss.models.galaxy_net import CenteredGalaxyEncoder
 from bliss.optimizer import get_optimizer
@@ -55,13 +55,12 @@ class GalaxyEncoder(pl.LightningModule):
         optimizer_params: dict = None,
     ):
         super().__init__()
-        # prevent saving `decoder`
-        self.save_hyperparameters("hidden", "optimizer_params")
+        self.save_hyperparameters()
 
         self.max_sources = 1  # by construction.
 
         # to produce images to train on.
-        self.image_decoder = decoder
+        self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 
         # extract useful info from image_decoder

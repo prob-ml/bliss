@@ -17,7 +17,8 @@ from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 
 from bliss.metrics import eval_error_on_batch
-from bliss.models.encoder import get_full_params, get_is_on_from_n_sources
+from bliss.models.decoder import ImageDecoder
+from bliss.models.encoder import ImageEncoder, get_full_params, get_is_on_from_n_sources
 from bliss.optimizer import get_optimizer
 from bliss.plotting import plot_image_and_locs
 
@@ -142,17 +143,17 @@ class SleepPhase(pl.LightningModule):
         """Initializes SleepPhase class.
 
         Args:
-            encoder: instantiated ImageEncoder
-            decoder: instantiated ImageDecoder
+            encoder: dict to passed to ImageEncoder
+            decoder: dict to be passed to ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
             optimizer_params: Parameters passed to optimizer. Defaults to None.
         """
         super().__init__()
         # prevent saving the entire `encoder` and `decoder` object
-        self.save_hyperparameters("annotate_probs", "optimizer_params")
+        self.save_hyperparameters()
 
-        self.image_encoder = encoder
-        self.image_decoder = decoder
+        self.image_encoder = ImageEncoder(**encoder)
+        self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 
         # consistency

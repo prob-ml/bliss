@@ -1,4 +1,3 @@
-_target_: bliss.models.decoder.ImageDecoder
 n_bands: 1
 slen: 10
 tile_slen: 10

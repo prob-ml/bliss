@@ -1,4 +1,3 @@
-_target_: bliss.models.encoder.ImageEncoder
 n_bands: ${model.decoder.n_bands}
 max_detections: ${model.decoder.max_sources}
 tile_slen: ${model.decoder.tile_slen}
