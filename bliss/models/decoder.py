@@ -134,7 +134,7 @@ class ImageDecoder(pl.LightningModule):
             )
             # load dataset of encoded simulated galaxies.
             if self.latents_file.exists():
-                latents = torch.load(self.latents_file)
+                latents = torch.load(self.latents_file, "cpu")
             else:
                 autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(
                     self.autoencoder_ckpt
