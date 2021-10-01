@@ -609,6 +609,12 @@ and the encoded reference labels (yR).</p>
 </dd></dl>
 
 <dl class="py method">
+<dt id="bliss.models.galaxy_net.OneCenteredGalaxyAE.generate_latents">
+<code class="sig-name descname"><span class="pre">generate_latents</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#OneCenteredGalaxyAE.generate_latents"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxyAE.generate_latents" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hacky way to induce a latent distribution for a non-probabilistic autoencoder</p>
+</dd></dl>
+
+<dl class="py method">
 <dt id="bliss.models.galaxy_net.OneCenteredGalaxyAE.optimizer_step">
 <code class="sig-name descname"><span class="pre">optimizer_step</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epoch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_idx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optimizer_idx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optimizer_closure</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">on_tpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">using_native_amp</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">using_lbfgs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#OneCenteredGalaxyAE.optimizer_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxyAE.optimizer_step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Override this method to adjust the default way the

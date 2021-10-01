@@ -151,8 +151,7 @@
            <div itemprop="articleBody">
             
   <h1>Source code for bliss.models.decoder</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">auto</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
+<span></span><span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
@@ -234,7 +233,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">n_galaxy_params</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">autoencoder_ckpt</span> <span class="o">=</span> <span class="n">autoencoder_ckpt</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span> <span class="o">=</span> <span class="n">latents_file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">latents_file</span><span class="p">)</span>
         <span class="c1"># Star Decoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">=</span> <span class="n">psf_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sdss_bands</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">sdss_bands</span><span class="p">)</span>
@@ -287,7 +286,12 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">autoencoder_ckpt</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="c1"># load dataset of encoded simulated galaxies.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">latents_file</span><span class="p">))</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="n">latents</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">autoencoder</span> <span class="o">=</span> <span class="n">galaxy_net</span><span class="o">.</span><span class="n">OneCenteredGalaxyAE</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">autoencoder_ckpt</span><span class="p">)</span>
+                <span class="n">latents</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">generate_latents</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">latents</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
@@ -922,8 +926,6 @@
         <span class="n">autoencoder</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">gal_slen</span> <span class="o">==</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">slen</span>
         <span class="k">assert</span> <span class="n">n_galaxy_params</span> <span class="o">==</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">latent_dim</span>
-        <span class="c1"># dec = autoencoder.dec</span>
-        <span class="c1"># dec.eval().requires_grad_(False)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_decoder</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">dec</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>

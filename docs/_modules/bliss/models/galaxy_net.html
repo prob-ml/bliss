@@ -159,6 +159,7 @@
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Normal</span>
 <span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
 <span class="kn">from</span> <span class="nn">torch.nn.modules.conv</span> <span class="kn">import</span> <span class="n">Conv2d</span><span class="p">,</span> <span class="n">ConvTranspose2d</span>
+<span class="kn">from</span> <span class="nn">bliss.datasets.galsim_galaxies</span> <span class="kn">import</span> <span class="n">SDSSGalaxies</span>
 
 <span class="kn">from</span> <span class="nn">bliss.optimizer</span> <span class="kn">import</span> <span class="n">get_optimizer</span>
 <span class="kn">from</span> <span class="nn">bliss.utils</span> <span class="kn">import</span> <span class="n">make_grid</span>
@@ -292,6 +293,19 @@
         <span class="n">recon_mean_main</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span><span class="p">(</span><span class="n">latent_main</span><span class="p">))</span>
         <span class="n">recon_mean_residual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">residual_decoder</span><span class="p">(</span><span class="n">latent_residual</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">recon_mean_main</span> <span class="o">+</span> <span class="n">recon_mean_residual</span>
+
+<div class="viewcode-block" id="OneCenteredGalaxyAE.generate_latents"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.generate_latents">[docs]</a>    <span class="k">def</span> <span class="nf">generate_latents</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Hacky way to induce a latent distribution for a non-probabilistic autoencoder&quot;&quot;&quot;</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">SDSSGalaxies</span><span class="p">(</span><span class="n">noise_factor</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+        <span class="n">images</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">64</span> <span class="o">*</span> <span class="mi">160</span><span class="p">):</span>
+            <span class="n">galaxy</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">galaxy</span><span class="p">[</span><span class="s2">&quot;noiseless&quot;</span><span class="p">])</span>
+        <span class="n">images_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">latents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">enc</span><span class="p">(</span><span class="n">images_tensor</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">latents</span></div>
+
 
     <span class="k">def</span> <span class="nf">get_likelihood_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">recon_mean</span><span class="p">):</span>
         <span class="c1"># this is nan whenever recon_mean is not strictly positive</span>
