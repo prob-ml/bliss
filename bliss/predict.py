@@ -11,6 +11,7 @@ from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.sleep import SleepPhase
 
 
+# TODO: Go back here: https://gist.github.com/ismael-mendoza/85e6c245a177c82b071557d9d097ebc0
 def prediction(image, image_encoder, galaxy_encoder=None, binary_encoder=None):
     # prepare and check consistency
     assert not image_encoder.training
