@@ -80,6 +80,7 @@ class GalaxyEncoder(pl.LightningModule):
         autoencoder_ckpt = decoder_kwargs["autoencoder_ckpt"]
         autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         # self.autoencoder.eval().requires_grad_(False)
+        # autoencoder = OneCenteredGalaxyAE()
         self.enc = autoencoder.get_encoder(allow_pad=True)
 
         # grid for center cropped tiles
@@ -148,7 +149,9 @@ class GalaxyEncoder(pl.LightningModule):
             add_noise=False,
         )
 
-        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
+        # recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
+        # recon_losses = -Normal(recon_mean, recon_var.sqrt().clamp_min(1e-3)).log_prob(images)
+        recon_losses = (recon_mean - images).pow(2)
         return recon_losses.sum()
 
     def training_step(self, batch, batch_idx):
