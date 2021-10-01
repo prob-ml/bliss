@@ -35,7 +35,7 @@ poetry run bliss +experiment=sdss_galaxy_encoder
 * ``sdss_sleep.ckpt``
 
 ```bash
-# Validation Loss = -0.042
+# Validation Loss = -0.102
 # Epochs = 1499
 # Notes:
 # - Optimization can be a bit unstable and not always reach < -0.09 level (which seems to be significant cutoff)
