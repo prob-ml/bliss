@@ -15,20 +15,22 @@ poetry run bliss +experiment=sdss_autoencoder
 * ``sdss_binary.ckpt``
 
 ```bash
-# Validation Loss = 7.472
-# Epochs = 439
+# Validation Loss = 10.772
+# Epochs = 139
 # Notes:
 # - 20/09/21: Slight increase since galaxy PSF exactly equals decoder PSF
+# - 01/10/21: The loss was never imporved beyond 10.772 for 500 epochs
 poetry run bliss +experiment=sdss_binary
 ```
 
 * ``sdss_galaxy_encoder.ckpt``
 
 ```bash
-# Validation Loss = 1293265.625
-# Epochs = 1849
+# Validation Loss = 1609357.750
+# Epochs = 1674
 # Notes:
 # - 20/09/21: Training for even longer might be possible.
+# - 01/10/21: The loss is significantly higher the previous result (1293265.525)
 poetry run bliss +experiment=sdss_galaxy_encoder
 ```
 
