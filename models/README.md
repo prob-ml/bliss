@@ -7,19 +7,22 @@ in this directory. Please also specify most recent **validation loss** and numbe
 * ``sdss_autoencoder.ckpt``
 
 ```bash
-# Validation Loss = 781677.125
-# Epochs = 969
+# Validation Loss = 777883.625
+# Epochs = 2699
+# Notes:
+# - 2021-10-01: Changed to fully-convolutional dual-autoencoder
 poetry run bliss mode="train" model="galaxy_net" dataset="sdss_galaxies" optimizer="adam" \
-training.n_epochs=1001 training.trainer.check_val_every_n_epoch=10 dataset.kwargs.noise_factor=0.01 \
+training.n_epochs=7500 training.trainer.check_val_every_n_epoch=10 dataset.kwargs.noise_factor=0.01 \
 dataset.kwargs.num_workers=5 training.trainer.checkpoint_callback=True
 ```
 
 * ``sdss_binary.ckpt``
 
 ```bash
-# Validation Loss = 6.571
-# Epochs = 359
+# Validation Loss = 5.420
+# Epochs = 379
 # Notes:
+# - 2021-10-01: Changed to fully-convolutional dual-autoencoder
 # - 20/09/21: Slight increase since galaxy PSF exactly equals decoder PSF
 poetry run bliss mode="train" model="binary_sdss" dataset="default" \
 optimizer.kwargs.lr=1e-4 training.n_epochs=501 training.trainer.checkpoint_callback=True \
