@@ -80,7 +80,7 @@ class ImageDecoder(pl.LightningModule):
         self.n_galaxy_params = n_galaxy_params
         self.gal_slen = gal_slen
         self.autoencoder_ckpt = autoencoder_ckpt
-        self.latents_file = latents_file
+        self.latents_file = Path(latents_file)
         # Star Decoder
         self.psf_slen = psf_slen
         self.sdss_bands = tuple(sdss_bands)
@@ -133,7 +133,20 @@ class ImageDecoder(pl.LightningModule):
                 self.autoencoder_ckpt,
             )
             # load dataset of encoded simulated galaxies.
-            self.register_buffer("latents", torch.load(latents_file))
+            if self.latents_file.exists():
+                latents = torch.load(self.latents_file)
+            else:
+                autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(
+                    self.autoencoder_ckpt
+                )
+                # autoencoder = autoencoder.to(self.device)
+                autoencoder.psf_image_file = (
+                    self.latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
+                )
+                autoencoder = autoencoder.cuda()
+                latents = autoencoder.generate_latents()
+                torch.save(latents, self.latents_file)
+            self.register_buffer("latents", latents)
         else:
             self.galaxy_tile_decoder = None
             self.register_buffer("latents", torch.zeros(1, 8))

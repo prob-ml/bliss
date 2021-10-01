@@ -6,6 +6,8 @@ from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
+from tqdm import tqdm
+from bliss.datasets.galsim_galaxies import SDSSGalaxies
 
 from bliss.optimizer import get_optimizer
 from bliss.utils import make_grid
@@ -88,6 +90,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         mse_residual_model_loss: bool = False,
         optimizer_params: dict = None,
         min_sd=1e-3,
+        psf_image_file=None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -114,6 +117,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.register_buffer("one", torch.ones(1))
         self.min_sd = min_sd
         self.latent_dim = latent_dim
+        self.psf_image_file = psf_image_file
 
     def _main_forward(self, image, background):
         return F.relu(self.main_autoencoder(image - background)) + background
@@ -139,6 +143,22 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean_main = F.relu(self.main_decoder(latent_main))
         recon_mean_residual = self.residual_decoder(latent_residual)
         return recon_mean_main + recon_mean_residual
+
+    def generate_latents(self):
+        """Hacky way to induce a latent distribution for a non-probabilistic autoencoder"""
+        assert self.psf_image_file is not None
+        dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=self.psf_image_file)
+        dataloader = dataset.train_dataloader()
+        latent_list = []
+        print("Creating latents from Galsim galaxies...")
+        with torch.no_grad():
+            for _ in tqdm(range(160)):
+                galaxy = next(iter(dataloader))
+                noiseless = galaxy["noiseless"].to(self.device)
+                latent_batch = self.enc(noiseless, 0.0)
+                latent_list.append(latent_batch)
+        latents = torch.cat(latent_list, dim=0)
+        return latents
 
     def get_likelihood_loss(self, image, recon_mean):
         # this is nan whenever recon_mean is not strictly positive

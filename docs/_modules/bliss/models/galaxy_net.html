@@ -159,6 +159,7 @@
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Normal</span>
 <span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
 <span class="kn">from</span> <span class="nn">torch.nn.modules.conv</span> <span class="kn">import</span> <span class="n">Conv2d</span><span class="p">,</span> <span class="n">ConvTranspose2d</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
 <span class="kn">from</span> <span class="nn">bliss.datasets.galsim_galaxies</span> <span class="kn">import</span> <span class="n">SDSSGalaxies</span>
 
 <span class="kn">from</span> <span class="nn">bliss.optimizer</span> <span class="kn">import</span> <span class="n">get_optimizer</span>
@@ -242,6 +243,7 @@
         <span class="n">mse_residual_model_loss</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">optimizer_params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">min_sd</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+        <span class="n">psf_image_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>
@@ -268,6 +270,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;one&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">min_sd</span> <span class="o">=</span> <span class="n">min_sd</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">latent_dim</span> <span class="o">=</span> <span class="n">latent_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">psf_image_file</span> <span class="o">=</span> <span class="n">psf_image_file</span>
 
     <span class="k">def</span> <span class="nf">_main_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">background</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">main_autoencoder</span><span class="p">(</span><span class="n">image</span> <span class="o">-</span> <span class="n">background</span><span class="p">))</span> <span class="o">+</span> <span class="n">background</span>
@@ -296,16 +299,19 @@
 
 <div class="viewcode-block" id="OneCenteredGalaxyAE.generate_latents"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.generate_latents">[docs]</a>    <span class="k">def</span> <span class="nf">generate_latents</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Hacky way to induce a latent distribution for a non-probabilistic autoencoder&quot;&quot;&quot;</span>
-        <span class="n">dataset</span> <span class="o">=</span> <span class="n">SDSSGalaxies</span><span class="p">(</span><span class="n">noise_factor</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
-        <span class="n">images</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">64</span> <span class="o">*</span> <span class="mi">160</span><span class="p">):</span>
-            <span class="n">galaxy</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="n">images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">galaxy</span><span class="p">[</span><span class="s2">&quot;noiseless&quot;</span><span class="p">])</span>
-        <span class="n">images_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_image_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">SDSSGalaxies</span><span class="p">(</span><span class="n">noise_factor</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">psf_image_file</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">psf_image_file</span><span class="p">)</span>
+        <span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">train_dataloader</span><span class="p">()</span>
+        <span class="n">latent_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Creating latents from Galsim galaxies...&quot;</span><span class="p">)</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-            <span class="n">latents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">enc</span><span class="p">(</span><span class="n">images_tensor</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">160</span><span class="p">)):</span>
+                <span class="n">galaxy</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">dataloader</span><span class="p">))</span>
+                <span class="n">noiseless</span> <span class="o">=</span> <span class="n">galaxy</span><span class="p">[</span><span class="s2">&quot;noiseless&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">latent_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">enc</span><span class="p">(</span><span class="n">noiseless</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+                <span class="n">latent_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">latent_batch</span><span class="p">)</span>
+        <span class="n">latents</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">latent_list</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">latents</span></div>
-
 
     <span class="k">def</span> <span class="nf">get_likelihood_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">recon_mean</span><span class="p">):</span>
         <span class="c1"># this is nan whenever recon_mean is not strictly positive</span>

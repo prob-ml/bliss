@@ -6,3 +6,4 @@ kwargs:
   hidden: 32
   optimizer_params: ${optimizer}
   mse_residual_model_loss: false
+  psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
