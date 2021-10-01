@@ -87,7 +87,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         n_bands=1,
         mse_residual_model_loss: bool = False,
         optimizer_params: dict = None,
-        min_sd=1e-4,
+        min_sd=1e-3,
     ):
         super().__init__()
         self.save_hyperparameters()
