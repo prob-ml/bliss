@@ -40,7 +40,7 @@ class ImageDecoder(pl.LightningModule):
         f_max=1e6,
         alpha=0.5,
         prob_galaxy=0.0,
-        n_galaxy_params=32,
+        n_galaxy_params=64,
         gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
