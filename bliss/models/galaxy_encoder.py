@@ -74,13 +74,13 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        self.enc = CenteredGalaxyEncoder(
-            slen=self.slen, latent_dim=self.latent_dim, n_bands=self.n_bands, hidden=hidden
-        )
+        # self.enc = CenteredGalaxyEncoder(
+        #     slen=self.slen, latent_dim=self.latent_dim, n_bands=self.n_bands, hidden=hidden
+        # )
         autoencoder_ckpt = decoder_kwargs["autoencoder_ckpt"]
-        self.autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
-        self.autoencoder.eval().requires_grad_(False)
-        self.enc = self.autoencoder.enc
+        autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        # self.autoencoder.eval().requires_grad_(False)
+        self.enc = autoencoder.get_encoder(allow_pad=True)
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)

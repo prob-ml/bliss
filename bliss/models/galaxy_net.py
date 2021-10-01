@@ -115,6 +115,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
+        self.slen = slen
         self.min_sd = min_sd
         self.latent_dim = latent_dim
         self.psf_image_file = psf_image_file
@@ -136,6 +137,15 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
         latent_residual = self.residual_encoder(image - recon_mean_main)
         return torch.cat((latent_main, latent_residual), dim=-1)
+
+    def get_encoder(self, allow_pad=False):
+        return OneCenteredGalaxyEncoder(
+            self.main_encoder,
+            self.main_decoder,
+            self.residual_encoder,
+            slen=self.slen,
+            allow_pad=allow_pad,
+        )
 
     def get_decoder(self):
         return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
@@ -379,6 +389,31 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean = self(images, background)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("max_residual", residuals.abs().max())
+
+
+class OneCenteredGalaxyEncoder(nn.Module):
+    def __init__(self, main_encoder, main_decoder, residual_encoder, slen=None, allow_pad=False):
+        super().__init__()
+        self.main_encoder = main_encoder
+        self.main_decoder = main_decoder
+        self.residual_encoder = residual_encoder
+        self.slen = slen
+        self.allow_pad = allow_pad
+
+    def forward(self, image, background=0):
+        assert image.shape[-2] == image.shape[-1]
+        if self.allow_pad:
+            if image.shape[-1] < self.slen:
+                d = self.slen - image.shape[-1]
+                lpad = d // 2
+                upad = d - lpad
+                image = F.pad(image, (lpad, upad, lpad, upad))
+                if isinstance(background, torch.Tensor):
+                    background = F.pad(background, (lpad, upad, lpad, upad))
+        latent_main = self.main_encoder(image - background)
+        recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
+        latent_residual = self.residual_encoder(image - recon_mean_main)
+        return torch.cat((latent_main, latent_residual), dim=-1)
 
 
 class OneCenteredGalaxyDecoder(nn.Module):
