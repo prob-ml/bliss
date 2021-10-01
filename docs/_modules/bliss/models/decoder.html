@@ -933,8 +933,8 @@
         <span class="n">autoencoder</span> <span class="o">=</span> <span class="n">galaxy_net</span><span class="o">.</span><span class="n">OneCenteredGalaxyAE</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span><span class="n">autoencoder_ckpt</span><span class="p">)</span>
         <span class="n">autoencoder</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">gal_slen</span> <span class="o">==</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">slen</span>
-        <span class="k">assert</span> <span class="n">n_galaxy_params</span> <span class="o">==</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">latent_dim</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_decoder</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">dec</span>
+        <span class="c1"># assert n_galaxy_params == autoencoder.hparams.latent_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_decoder</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">get_decoder</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">n_galaxy_params</span>

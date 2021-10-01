@@ -780,8 +780,8 @@ class GalaxyTileDecoder(nn.Module):
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         autoencoder.eval().requires_grad_(False)
         assert gal_slen == autoencoder.hparams.slen
-        assert n_galaxy_params == autoencoder.hparams.latent_dim
-        self.galaxy_decoder = autoencoder.dec
+        # assert n_galaxy_params == autoencoder.hparams.latent_dim
+        self.galaxy_decoder = autoencoder.get_decoder()
 
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params

@@ -137,12 +137,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_residual = self.residual_encoder(image - recon_mean_main)
         return torch.cat((latent_main, latent_residual), dim=-1)
 
-    def dec(self, latent):
-        latent_main, latent_residual = torch.split(latent, 2, -1)
-        assert latent_main.size(-1) == latent_residual.size(-1) == self.latent_dim
-        recon_mean_main = F.relu(self.main_decoder(latent_main))
-        recon_mean_residual = self.residual_decoder(latent_residual)
-        return recon_mean_main + recon_mean_residual
+    def get_decoder(self):
+        return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
 
     def generate_latents(self):
         """Hacky way to induce a latent distribution for a non-probabilistic autoencoder"""
@@ -383,6 +379,19 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean = self(images, background)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("max_residual", residuals.abs().max())
+
+
+class OneCenteredGalaxyDecoder(nn.Module):
+    def __init__(self, main_decoder, residual_decoder):
+        super().__init__()
+        self.main_decoder = main_decoder
+        self.residual_decoder = residual_decoder
+
+    def forward(self, latent):
+        latent_main, latent_residual = torch.split(latent, latent.shape[-1] // 2, -1)
+        recon_mean_main = F.relu(self.main_decoder(latent_main))
+        recon_mean_residual = self.residual_decoder(latent_residual)
+        return recon_mean_main + recon_mean_residual
 
 
 class ResConv2dBlock(Conv2d):
