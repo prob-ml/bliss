@@ -3,6 +3,29 @@ from matplotlib import pyplot as plt
 
 from bliss.models.encoder import get_is_on_from_n_sources
 
+def filter_catalog(catalog, which_keep): 
+    for key in catalog.keys(): 
+        
+        catalog_k = catalog[key]
+        
+        assert catalog_k.shape[0] == len(which_keep)
+        assert len(catalog_k.shape) == 2
+        
+        catalog[key] = catalog_k[which_keep, :]
+    
+    return catalog
+
+def filter_catalog_by_locs(catalog, x0, x1, slen): 
+    
+    locs = catalog['locs']
+    
+    assert len(locs.shape) == 2
+    
+    which_keep = (locs[:, 0] > x0) & (locs[:, 1] > x1) & \
+                    (locs[:, 0] < x0 + slen) & (locs[:, 1] < x1 + slen)
+    
+    
+    return filter_catalog(catalog, which_keep)
 
 def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
 

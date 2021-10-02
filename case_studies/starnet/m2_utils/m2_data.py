@@ -134,11 +134,8 @@ def convert_mag_to_nmgy(mag):
 def convert_nmgy_to_mag(nmgy):
     return 22.5 - 2.5 * torch.log10(nmgy)
 
-def load_m2_data(sdss_dir = '../../sdss_stage_dir/',
-                    hubble_dir = '../hubble_data/',
-                    slen = 100,
-                    x0 = 630,
-                    x1 = 310, 
+def load_m2_data(sdss_dir = '../../data/sdss/',
+                    hubble_dir = './hubble_data/',
                     f_min = 1000.): 
     # returns the SDSS image of M2 in the r and i bands
     # along with the corresponding Hubble catalog
@@ -158,8 +155,8 @@ def load_m2_data(sdss_dir = '../../sdss_stage_dir/',
                                       bands = [2, 3])
     
     # the full SDSS image, ~1500 x 2000 pixels
-    sdss_image_full = torch.Tensor(sdss_data[0]['image'])
-    sdss_background_full = torch.Tensor(sdss_data[0]['background'])
+    sdss_image = torch.Tensor(sdss_data[0]['image'])
+    sdss_background = torch.Tensor(sdss_data[0]['background'])
 
     #####################
     # load hubble catalog
@@ -170,13 +167,13 @@ def load_m2_data(sdss_dir = '../../sdss_stage_dir/',
     HTcat = np.loadtxt(hubble_cat_file, skiprows=True)
 
     # hubble magnitude
-    hubble_rmag_full = HTcat[:,9]
+    hubble_rmag = HTcat[:,9]
     # right ascension and declination
-    hubble_ra_full = HTcat[:,21]
-    hubble_dc_full = HTcat[:,22]
+    hubble_ra = HTcat[:,21]
+    hubble_dc = HTcat[:,22]
 
     # convert hubble r.a and declination to pixel coordinates
-    # (0, 0) is top left of sdss_image_full
+    # (0, 0) is top left of sdss_image
     frame_name = "frame-{}-{:06d}-{:d}-{:04d}.fits".format('r', run, camcol, field)
     field_dir = pathlib.Path(sdss_dir).joinpath(str(run), str(camcol), str(field))
     frame_path = str(field_dir.joinpath(frame_name))
@@ -185,17 +182,22 @@ def load_m2_data(sdss_dir = '../../sdss_stage_dir/',
     wcs = WCS(hdulist['primary'].header)
     # NOTE: pix_coordinates are (column x row), i.e. pix_coord[0] corresponds to a column
     pix_coordinates = \
-        wcs.wcs_world2pix(hubble_ra_full, hubble_dc_full, 0, ra_dec_order = True)
-    hubble_locs_full_x0 = pix_coordinates[1] # the row of pixel
-    hubble_locs_full_x1 = pix_coordinates[0] # the column of pixel
+        wcs.wcs_world2pix(hubble_ra, hubble_dc, 0, ra_dec_order = True)
+    hubble_locs_x0 = pix_coordinates[1] # the row of pixel
+    hubble_locs_x1 = pix_coordinates[0] # the column of pixel
+    
+    hubble_locs = np.stack([hubble_locs_x0, hubble_locs_x1]).transpose(1, 0)
     
     # convert hubble magnitude to n_electron count
     # only take r band
-    nelec_per_nmgy_full = sdss_data[0]['nelec_per_nmgy'][0].squeeze()
-    which_cols = np.floor(hubble_locs_full_x1 / len(nelec_per_nmgy_full)).astype(int)
-    hubble_nmgy = convert_mag_to_nmgy(hubble_rmag_full)
+    nelec_per_nmgy = sdss_data[0]['nelec_per_nmgy'][0].squeeze()
+    which_cols = np.floor(hubble_locs_x1 / len(nelec_per_nmgy)).astype(int)
+    hubble_nmgy = convert_mag_to_nmgy(hubble_rmag)
+       
+    hubble_r_fluxes = hubble_nmgy * nelec_per_nmgy[which_cols]
     
-    hubble_r_fluxes_full = hubble_nmgy * nelec_per_nmgy_full[which_cols]
+    hubble_fluxes = np.stack([hubble_r_fluxes, 
+                              hubble_r_fluxes]).transpose(1, 0)
 
     #####################
     # using hubble ground truth locations,
@@ -209,45 +211,24 @@ def load_m2_data(sdss_dir = '../../sdss_stage_dir/',
     wcs_other = WCS(hdu['primary'].header)
 
     # get pixel coords
-    pix_coordinates_other = wcs_other.wcs_world2pix(hubble_ra_full,
-                                                    hubble_dc_full, 0, 
+    pix_coordinates_other = wcs_other.wcs_world2pix(hubble_ra,
+                                                    hubble_dc, 0, 
                                                     ra_dec_order = True)
     
     # estimate the amount to shift
-    shift_x0 = np.median(hubble_locs_full_x0 - pix_coordinates_other[1]) / (sdss_image_full.shape[-2] - 1)
-    shift_x1 = np.median(hubble_locs_full_x1 - pix_coordinates_other[0]) / (sdss_image_full.shape[-1] - 1)
+    shift_x0 = np.median(hubble_locs_x0 - pix_coordinates_other[1]) / (sdss_image.shape[-2] - 1)
+    shift_x1 = np.median(hubble_locs_x1 - pix_coordinates_other[0]) / (sdss_image.shape[-1] - 1)
     shift = torch.Tensor([[[[shift_x1, shift_x0 ]]]]) * 2
     
     # align image
-    grid = _get_mgrid2(sdss_image_full.shape[-2],
-                   sdss_image_full.shape[-1]).unsqueeze(0) - shift
-    sdss_image_full[1] = \
-        torch.nn.functional.grid_sample(sdss_image_full[1].unsqueeze(0).unsqueeze(0),
+    grid = _get_mgrid2(sdss_image.shape[-2],
+                       sdss_image.shape[-1]).unsqueeze(0) - shift
+    sdss_image[1] = \
+        torch.nn.functional.grid_sample(sdss_image[1].unsqueeze(0).unsqueeze(0),
                                         grid, align_corners=True).squeeze()
-    ##################
-    # Filter to desired subimage
-    ##################
-    print('\n returning image at x0 = {}, x1 = {}'.format(x0, x1))
-    which_locs = (hubble_locs_full_x0 > x0) & (hubble_locs_full_x0 < (x0 + slen - 1)) & \
-                (hubble_locs_full_x1 > x1) & (hubble_locs_full_x1 < (x1 + slen - 1))
-
-    # just a subset
-    sdss_image = sdss_image_full[:, x0:(x0 + slen), x1:(x1 + slen)].to(device)
-    sdss_background = sdss_background_full[:, x0:(x0 + slen), x1:(x1 + slen)].to(device)
     
-    locs = np.array([hubble_locs_full_x0[which_locs] - x0,
-                        hubble_locs_full_x1[which_locs] - x1]).transpose()
-    hubble_r_fluxes = torch.Tensor(hubble_r_fluxes_full[which_locs])
     
-    hubble_locs = torch.Tensor(locs) / (slen - 1)
-    hubble_fluxes = torch.stack([hubble_r_fluxes, 
-                                 hubble_r_fluxes]).transpose(0, 1)
-
-    # filter by bright stars only
-    which_bright = hubble_fluxes[:, 0] > f_min
-    hubble_locs = hubble_locs[which_bright].to(device)
-    hubble_fluxes = hubble_fluxes[which_bright].to(device)
-
-    return sdss_image, sdss_background, \
-            hubble_locs, hubble_fluxes, \
-                sdss_data, wcs
+    hubble_catalog = dict(locs = hubble_locs,
+                          fluxes = hubble_fluxes)
+    
+    return sdss_image, hubble_catalog, sdss_background
