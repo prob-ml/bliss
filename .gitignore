@@ -23,3 +23,9 @@ output/
 hydra_temp/
 bin/
 .pytest_cache/
+
+./case_studies/starnet/fits/*
+*.zpt
+*.npz
+*.phot
+*deleteme*
