@@ -186,7 +186,10 @@ def load_m2_data(sdss_dir = '../../data/sdss/',
     hubble_locs_x0 = pix_coordinates[1] # the row of pixel
     hubble_locs_x1 = pix_coordinates[0] # the column of pixel
     
-    hubble_locs = np.stack([hubble_locs_x0, hubble_locs_x1]).transpose(1, 0)
+    # this is so that (0, 0) is the top left of the pixel 
+    # (currently, (0, 0) the center of the pixel
+    hubble_locs = np.stack([hubble_locs_x0, 
+                            hubble_locs_x1]).transpose(1, 0) + 0.5
     
     # convert hubble magnitude to n_electron count
     # only take r band
@@ -228,7 +231,7 @@ def load_m2_data(sdss_dir = '../../data/sdss/',
                                         grid, align_corners=True).squeeze()
     
     
-    hubble_catalog = dict(locs = hubble_locs,
-                          fluxes = hubble_fluxes)
+    hubble_catalog = dict(locs = torch.Tensor(hubble_locs),
+                          fluxes = torch.Tensor(hubble_fluxes))
     
     return sdss_image, hubble_catalog, sdss_background

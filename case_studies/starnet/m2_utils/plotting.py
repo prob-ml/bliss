@@ -1,31 +1,40 @@
 import torch
 from matplotlib import pyplot as plt
+from copy import deepcopy
 
 from bliss.models.encoder import get_is_on_from_n_sources
 
 def filter_catalog(catalog, which_keep): 
-    for key in catalog.keys(): 
+    catalog_filtered = dict()
+    
+    for key in ['locs', 'fluxes']: 
         
         catalog_k = catalog[key]
+        
+        if len(catalog[key].shape) == 3: 
+            catalog_k = catalog_k.squeeze(0)
         
         assert catalog_k.shape[0] == len(which_keep)
         assert len(catalog_k.shape) == 2
         
-        catalog[key] = catalog_k[which_keep, :]
+        catalog_filtered[key] = catalog_k[which_keep, :]
     
-    return catalog
+    return catalog_filtered
 
-def filter_catalog_by_locs(catalog, x0, x1, slen): 
+def filter_catalog_by_locs(catalog, x0, x1, slen0, slen1): 
     
     locs = catalog['locs']
     
     assert len(locs.shape) == 2
     
     which_keep = (locs[:, 0] > x0) & (locs[:, 1] > x1) & \
-                    (locs[:, 0] < x0 + slen) & (locs[:, 1] < x1 + slen)
+                    (locs[:, 0] < x0 + slen0) & (locs[:, 1] < x1 + slen1)
     
     
     return filter_catalog(catalog, which_keep)
+
+def crop_image(image, x0, x1, slen0, slen1): 
+    return image[..., x0:(x0 + slen0), x1:(x1 + slen1)]
 
 def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
 
@@ -40,10 +49,10 @@ def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
     return im
 
 
-def plot_locations(locs, slen, border_padding, ax, marker="o", color="b"):
+def plot_locations(locs, ax, marker="o", color="b"):
     ax.scatter(
-        locs[:, 1].cpu() * slen - 0.5 + border_padding,
-        locs[:, 0].cpu() * slen - 0.5 + border_padding,
+        locs[:, 1] - 0.5,
+        locs[:, 0] - 0.5,
         marker=marker,
         color=color,
     )
