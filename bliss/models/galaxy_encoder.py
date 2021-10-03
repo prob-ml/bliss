@@ -151,7 +151,10 @@ class GalaxyEncoder(pl.LightningModule):
 
         # recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
         # recon_losses = -Normal(recon_mean, recon_var.sqrt().clamp_min(1e-3)).log_prob(images)
-        recon_losses = (recon_mean - images).pow(2)
+        sd_min, sd_max = images.min().sqrt(), images.max().sqrt()
+        recon_losses = -Normal(recon_mean, recon_var.sqrt().clamp(min=sd_min, max=sd_max)).log_prob(
+            images
+        )
         return recon_losses.sum()
 
     def training_step(self, batch, batch_idx):

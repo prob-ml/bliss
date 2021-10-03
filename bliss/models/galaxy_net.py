@@ -407,7 +407,8 @@ class OneCenteredGalaxyEncoder(nn.Module):
                 d = self.slen - image.shape[-1]
                 lpad = d // 2
                 upad = d - lpad
-                image = F.pad(image, (lpad, upad, lpad, upad))
+                min_val = image.min()
+                image = F.pad(image, (lpad, upad, lpad, upad), value=min_val)
                 if isinstance(background, torch.Tensor):
                     background = F.pad(background, (lpad, upad, lpad, upad))
         latent_main = self.main_encoder(image - background)
@@ -426,7 +427,7 @@ class OneCenteredGalaxyDecoder(nn.Module):
         latent_main, latent_residual = torch.split(latent, latent.shape[-1] // 2, -1)
         recon_mean_main = F.relu(self.main_decoder(latent_main))
         recon_mean_residual = self.residual_decoder(latent_residual)
-        return recon_mean_main + recon_mean_residual
+        return F.relu(recon_mean_main + recon_mean_residual)
 
 
 class ResConv2dBlock(Conv2d):
