@@ -32,7 +32,7 @@ def visualize(batch, path, n_samples, figsize=(12, 12)):
 def generate(cfg: DictConfig):
     # setup
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
-    output = Path(paths["root"]).joinpath(paths["output"])
+    output = Path(paths["output"])
     if not os.path.exists(output.as_posix()):
         os.makedirs(output.as_posix())
 
