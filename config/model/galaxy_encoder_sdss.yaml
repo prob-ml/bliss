@@ -16,7 +16,7 @@ decoder: # SDSS standard decoder.
     f_min: 1e3
     f_max: 1e6
     alpha: 0.5
-    psf_params_file: ${paths.data}/psField-000094-1-0012.fits
+    psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
     prob_galaxy: 0.7
     n_galaxy_params: 64
     gal_slen: 53
