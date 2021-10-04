@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytorch_lightning as pl
@@ -18,7 +19,7 @@ def setup_logger(cfg, paths):
     logger = False
     if cfg.training.trainer.logger:
         logger = TensorBoardLogger(
-            save_dir=paths["output"],
+            save_dir=os.path.join(paths["root"], "output"),
             name=cfg.training.experiment,
             version=cfg.training.version,
             default_hp_metric=False,
