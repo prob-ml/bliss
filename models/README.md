@@ -32,10 +32,10 @@ model.decoder.kwargs.mean_sources=0.03 training.save_top_k=5
 * ``sdss_galaxy_encoder.ckpt``
 
 ```bash
-# Validation Loss = (AWAITING NEW) 1295313.875
-# Epochs = (AWAITING NEW) 1174
+# Validation Loss = 302512
+# Epochs = 3374
 # Notes:
-# - 2021-10-01: Changed to fully-convolutional dual-autoencoder
+# - 2021-10-04: Changed to fully-convolutional dual-autoencoder
 # - 20/09/21: Training for even longer might be possible.
 poetry run bliss mode="train" model="galaxy_encoder_sdss" dataset="default" \
 optimizer="adam" optimizer.kwargs.lr=1e-4 training.n_epochs=5001 training.trainer.checkpoint_callback=True \
