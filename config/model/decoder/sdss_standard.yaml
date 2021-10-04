@@ -9,12 +9,12 @@ min_sources: 0
 f_min: 1e3
 f_max: 1e6
 alpha: 0.5
-psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
+psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
 prob_galaxy: 0.7
 n_galaxy_params: 8
 gal_slen: 53
-autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt
-latents_file: ${paths.data}/latents_simulated_sdss_galaxies.pt
+autoencoder_ckpt: models/sdss_autoencoder.ckpt
+latents_file: data/latents_simulated_sdss_galaxies.pt
 background_values:
   - 865.0
 sdss_bands:

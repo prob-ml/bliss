@@ -40,5 +40,5 @@ class TestTune:
     def test_tune_run(self, paths, overrides):
         with initialize(config_path="../config"):
             cfg = compose("config", overrides=overrides)
-            tune.tune(cfg)
+            tune.tune(cfg, local_mode=True)
         shutil.rmtree(f"{paths['root']}/tuning")

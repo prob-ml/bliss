@@ -15,6 +15,8 @@ from ray.tune.suggest.hyperopt import HyperOptSearch
 
 
 def sleep_trainable(search_space, cfg: DictConfig):
+    # ugly work-around for using relative path
+    os.chdir("../../..")
     # set up the config for SleepPhase
     cfg.model.encoder.channel = search_space["channel"]
     cfg.model.encoder.hidden = search_space["hidden"]

@@ -12,4 +12,4 @@ max_a_d: 6.5
 min_a_b: 0.8
 max_a_b: 3.6 # from catalog with mag < 22.2 cut.
 flux_sample: "uniform"
-psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+psf_image_file: data/psField-000094-1-0012-PSF-image.npy
