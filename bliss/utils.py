@@ -24,9 +24,6 @@ def log_hyperparameters(config, model, trainer) -> None:
     hparams["dataset"] = config["dataset"]
     hparams["optimizer"] = config["optimizer"]
 
-    if hparams["mode"] == "tune":
-        hparams["tunning"] = config["tuning"]
-
     # save number of model parameters
     hparams["model/params_total"] = sum(p.numel() for p in model.parameters())
     hparams["model/params_trainable"] = sum(
