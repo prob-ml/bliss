@@ -45,9 +45,10 @@ model.decoder.kwargs.mean_sources=0.04 training.trainer.check_val_every_n_epoch=
 * ``sdss_sleep.ckpt``
 
 ```bash
-# Validation Loss = -0.102
-# Epochs = 1349
+# Validation Loss = -0.097
+# Epochs = 1279
 # Notes:
+# - 2021-10-05: Changed to fully-convolutional dual-autoencoder
 # - Optimization can be a bit unstable and not always reach < -0.09 level (which seems to be significant cutoff)
 # - Results on SDSS Stripe 82 frame vary +- 10% depending on optimization (at least current metrics), might become
 # clear if differences are significant once we make metrics as a function of magnitude. Another possibility
