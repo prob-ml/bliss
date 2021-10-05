@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+  - override /model: galaxy_encoder_sdss
+  - override /dataset: default
+
+mode: train
+
+training:
+  n_epochs: 2001
+  trainer:
+    checkpoint_callback: true
+    check_val_every_n_epoch: 25
+
+model:
+  decoder:
+    mean_sources: 0.04
+
+optimizer:
+  kwargs:
+    lr: 1e-4

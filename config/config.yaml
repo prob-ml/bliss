@@ -8,11 +8,14 @@ defaults:
   - generate: default
   - optional tuning: ${model}
   - predict: sdss
+  - override hydra/job_logging: stdout
 
+# completely disable hydra logging
+# https://github.com/facebookresearch/hydra/issues/910
 hydra:
   output_subdir: null
   run:
-    dir: ./output/hydra_temp/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: .
 
 mode: train
 
@@ -20,7 +23,6 @@ gpus: 1 # use a single gpu by default.
 
 paths:
   root: ${oc.env:BLISS_HOME}
-  data: ${paths.root}/data
-  models: ${paths.root}/models
   output: ${paths.root}/output
   sdss: ${paths.root}/data/sdss
+  data: ${paths.root}/data
