@@ -149,7 +149,7 @@ class ImageDecoder(pl.LightningModule):
             self.register_buffer("latents", latents)
         else:
             self.galaxy_tile_decoder = None
-            self.register_buffer("latents", torch.zeros(1, 8))
+            self.register_buffer("latents", torch.zeros(1, n_galaxy_params))
 
         # background
         assert len(background_values) == n_bands
