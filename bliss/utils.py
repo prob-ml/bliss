@@ -1,7 +1,46 @@
 import torch
+from pytorch_lightning.utilities import rank_zero_only
 from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
+
+
+def empty(*args, **kwargs):
+    pass
+
+
+# https://github.com/ashleve/lightning-hydra-template/blob/main/src/utils/utils.py
+@rank_zero_only
+def log_hyperparameters(config, model, trainer) -> None:
+    """Log config and num of model parameters to all Lightning loggers."""
+
+    hparams = {}
+
+    # choose which parts of hydra config will be saved to loggers
+    hparams["mode"] = config["mode"]
+    hparams["gpus"] = config["gpus"]
+    hparams["training"] = config["training"]
+    hparams["model"] = config["model"]
+    hparams["dataset"] = config["dataset"]
+    hparams["optimizer"] = config["optimizer"]
+
+    if hparams["mode"] == "tune":
+        hparams["tunning"] = config["tuning"]
+
+    # save number of model parameters
+    hparams["model/params_total"] = sum(p.numel() for p in model.parameters())
+    hparams["model/params_trainable"] = sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
+    hparams["model/params_not_trainable"] = sum(
+        p.numel() for p in model.parameters() if not p.requires_grad
+    )
+
+    # send hparams to all loggers
+    trainer.logger.log_hyperparams(hparams)
+
+    # trick to disable logging any more hyperparameters for all loggers
+    trainer.logger.log_hyperparams = empty
 
 
 class MLP(nn.Sequential):
