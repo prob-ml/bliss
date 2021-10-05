@@ -192,15 +192,16 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def optimizer_step(
         self,
-        epoch,
-        batch_idx,
-        optimizer,
-        optimizer_idx,
-        optimizer_closure,
-        on_tpu=False,
-        using_native_amp=False,
-        using_lbfgs=False,
-    ):
+        epoch: int = None,
+        batch_idx: int = None,
+        optimizer=None,
+        optimizer_idx: int = None,
+        optimizer_closure=None,
+        on_tpu: bool = None,
+        using_native_amp: bool = None,
+        using_lbfgs: bool = None,
+    ) -> None:
+
         # update generator every step
         if optimizer_idx == 0:
             optimizer.step(closure=optimizer_closure)
@@ -431,10 +432,10 @@ class OneCenteredGalaxyDecoder(nn.Module):
 
 
 class ResConv2dBlock(Conv2d):
-    def forward(self, input):
-        y = super().forward(input)
+    def forward(self, x):  # pylint: disable=arguments-renamed
+        y = super().forward(x)
         y = F.relu(y)
-        return input + y
+        return x + y
 
 
 class ResidualConvBlock(nn.Module):

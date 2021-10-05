@@ -345,15 +345,16 @@
 
 <div class="viewcode-block" id="OneCenteredGalaxyAE.optimizer_step"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.optimizer_step">[docs]</a>    <span class="k">def</span> <span class="nf">optimizer_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">epoch</span><span class="p">,</span>
-        <span class="n">batch_idx</span><span class="p">,</span>
-        <span class="n">optimizer</span><span class="p">,</span>
-        <span class="n">optimizer_idx</span><span class="p">,</span>
-        <span class="n">optimizer_closure</span><span class="p">,</span>
-        <span class="n">on_tpu</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">using_native_amp</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">using_lbfgs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-    <span class="p">):</span>
+        <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batch_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimizer_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimizer_closure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">on_tpu</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">using_native_amp</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">using_lbfgs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+
         <span class="c1"># update generator every step</span>
         <span class="k">if</span> <span class="n">optimizer_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">closure</span><span class="o">=</span><span class="n">optimizer_closure</span><span class="p">)</span>
@@ -584,10 +585,10 @@
 
 
 <div class="viewcode-block" id="ResConv2dBlock"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResConv2dBlock">[docs]</a><span class="k">class</span> <span class="nc">ResConv2dBlock</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">):</span>
-<div class="viewcode-block" id="ResConv2dBlock.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResConv2dBlock.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">):</span>
-        <span class="n">y</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<div class="viewcode-block" id="ResConv2dBlock.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResConv2dBlock.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>  <span class="c1"># pylint: disable=arguments-renamed</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
         <span class="n">y</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">input</span> <span class="o">+</span> <span class="n">y</span></div></div>
+        <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span></div></div>
 
 
 <div class="viewcode-block" id="ResidualConvBlock"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResidualConvBlock">[docs]</a><span class="k">class</span> <span class="nc">ResidualConvBlock</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
