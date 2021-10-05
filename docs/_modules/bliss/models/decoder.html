@@ -233,7 +233,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">n_galaxy_params</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">autoencoder_ckpt</span> <span class="o">=</span> <span class="n">autoencoder_ckpt</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">latents_file</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">latents_file</span><span class="p">)</span> <span class="k">if</span> <span class="n">latents_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="c1"># Star Decoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">=</span> <span class="n">psf_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sdss_bands</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">sdss_bands</span><span class="p">)</span>
@@ -302,7 +302,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">latents</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_galaxy_params</span><span class="p">))</span>
 
         <span class="c1"># background</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">background_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_bands</span>

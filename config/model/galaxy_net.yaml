@@ -1,9 +1,6 @@
-name: OneCenteredGalaxyAE
-kwargs:
-  slen: 53
-  latent_dim: 64
-  n_bands: 1
-  hidden: 32
-  optimizer_params: ${optimizer}
-  mse_residual_model_loss: false
-  psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+_target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
+slen: 53
+latent_dim: 64
+n_bands: 1
+hidden: 32
+optimizer_params: ${optimizer}

@@ -17,8 +17,8 @@ from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 
 from bliss.metrics import eval_error_on_batch
-from bliss.models import decoder, encoder
-from bliss.models.encoder import get_full_params
+from bliss.models.decoder import ImageDecoder
+from bliss.models.encoder import ImageEncoder, get_full_params, get_is_on_from_n_sources
 from bliss.optimizer import get_optimizer
 from bliss.plotting import plot_image_and_locs
 
@@ -135,24 +135,24 @@ class SleepPhase(pl.LightningModule):
 
     def __init__(
         self,
-        encoder_kwargs: dict,
-        decoder_kwargs: dict,
+        encoder: dict,
+        decoder: dict,
         annotate_probs: bool = False,
         optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         """Initializes SleepPhase class.
 
         Args:
-            encoder_kwargs: Keyword args passed to ImageEncoder
-            decoder_kwargs: Keyword args passed to ImageDecoder
+            encoder: keyword arguments to instantiate ImageEncoder
+            decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
             optimizer_params: Parameters passed to optimizer. Defaults to None.
         """
         super().__init__()
         self.save_hyperparameters()
 
-        self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
-        self.image_decoder = decoder.ImageDecoder(**decoder_kwargs)
+        self.image_encoder = ImageEncoder(**encoder)
+        self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 
         # consistency
@@ -250,7 +250,7 @@ class SleepPhase(pl.LightningModule):
         true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
         true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
         true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
-        true_tile_is_on_array = encoder.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
+        true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
         image_ptiles = self.image_encoder.get_images_in_tiles(images)

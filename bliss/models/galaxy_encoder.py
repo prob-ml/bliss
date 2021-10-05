@@ -50,8 +50,8 @@ def center_ptiles(
 class GalaxyEncoder(pl.LightningModule):
     def __init__(
         self,
+        decoder,
         hidden: int = 256,
-        decoder_kwargs: dict = None,
         optimizer_params: dict = None,
     ):
         super().__init__()
@@ -60,7 +60,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.max_sources = 1  # by construction.
 
         # to produce images to train on.
-        self.image_decoder = ImageDecoder(**decoder_kwargs)
+        self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 
         # extract useful info from image_decoder
@@ -77,7 +77,7 @@ class GalaxyEncoder(pl.LightningModule):
         # self.enc = CenteredGalaxyEncoder(
         #     slen=self.slen, latent_dim=self.latent_dim, n_bands=self.n_bands, hidden=hidden
         # )
-        autoencoder_ckpt = decoder_kwargs["autoencoder_ckpt"]
+        autoencoder_ckpt = decoder["autoencoder_ckpt"]
         autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         # self.autoencoder.eval().requires_grad_(False)
         # autoencoder = OneCenteredGalaxyAE()

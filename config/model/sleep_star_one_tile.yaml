@@ -1,38 +1,6 @@
-name: SleepPhase
-image:
-  slen: 10
-  n_bands: 1
+defaults:
+  - decoder: 1tile
+  - encoder: 1tile
 
-kwargs:
-  decoder_kwargs: ${model.decoder.kwargs}
-  encoder_kwargs: ${model.encoder.kwargs}
-  optimizer_params: ${optimizer}
-
-decoder:
-  kwargs:
-    n_bands: 1
-    slen: 10
-    tile_slen: 10
-    ptile_slen: 10
-    prob_galaxy: 0.0
-    max_sources: 2
-    mean_sources: 1.2
-    min_sources: 0
-    f_min: 1e5
-    f_max: 1e6
-    psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
-    background_values:
-      - 633.0
-    loc_min: 0.
-    loc_max: 1.0
-
-encoder:
-  kwargs:
-    n_bands: 1
-    tile_slen: ${model.decoder.kwargs.tile_slen}
-    ptile_slen: ${model.decoder.kwargs.ptile_slen}
-    max_detections: ${model.decoder.kwargs.max_sources}
-    channel: 17
-    spatial_dropout: 0.11399
-    dropout: 0.013123
-    hidden: 185
+_target_: bliss.sleep.SleepPhase
+optimizer_params: ${optimizer}

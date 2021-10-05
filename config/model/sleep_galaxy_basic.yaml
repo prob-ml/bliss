@@ -1,30 +1,7 @@
-name: SleepPhase
-kwargs:
-  decoder_kwargs: ${model.decoder.kwargs}
-  encoder_kwargs: ${model.encoder.kwargs}
-  optimizer_params: ${optimizer}
-  annotate_probs: False
-decoder:
-  kwargs:
-    n_bands: 1
-    slen: 40
-    tile_slen: 4
-    ptile_slen: 36
-    border_padding: 4
-    prob_galaxy: 1.0
-    n_galaxy_params: 64
-    max_sources: 1
-    mean_sources: 0.015
-    min_sources: 0
-    gal_slen: 53
-    autoencoder_ckpt: ${paths.models}/sdss_autoencoder.ckpt
-    latents_file: ${paths.data}/latents_simulated_sdss_galaxies.pt
-    psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
-    background_values:
-      - 633.0
-encoder:
-  kwargs:
-    n_bands: ${model.decoder.kwargs.n_bands}
-    max_detections: ${model.decoder.kwargs.max_sources}
-    tile_slen: ${model.decoder.kwargs.tile_slen}
-    ptile_slen: 12
+defaults:
+  - decoder: galaxy_basic
+  - encoder: galaxy_basic
+
+_target_: bliss.sleep.SleepPhase
+optimizer_params: ${optimizer}
+annotate_probs: False

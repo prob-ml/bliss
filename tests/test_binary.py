@@ -1,11 +1,14 @@
 def test_binary(model_setup, devices):
     overrides = {
         "model": "binary_sdss",
-        "dataset": "default" if devices.use_cuda else "cpu",
+        "dataset": "binary",
+        "dataset.n_batches": 10 if devices.use_cuda else 1,
+        "dataset.batch_size": 32 if devices.use_cuda else 2,
+        "dataset.generate_device": "cuda:0" if devices.use_cuda else "cpu",
         "training": "unittest" if devices.use_cuda else "cpu",
         "optimizer": "adam",
         "optimizer.kwargs.lr": 1e-4,
-        "model.decoder.kwargs.mean_sources": 0.03,
+        "dataset.decoder.mean_sources": 0.03,
         "training.n_epochs": 50 if devices.use_cuda else 2,
     }
 

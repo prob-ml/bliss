@@ -170,8 +170,8 @@
 <span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">CrossEntropyLoss</span>
 
 <span class="kn">from</span> <span class="nn">bliss.metrics</span> <span class="kn">import</span> <span class="n">eval_error_on_batch</span>
-<span class="kn">from</span> <span class="nn">bliss.models</span> <span class="kn">import</span> <span class="n">decoder</span><span class="p">,</span> <span class="n">encoder</span>
-<span class="kn">from</span> <span class="nn">bliss.models.encoder</span> <span class="kn">import</span> <span class="n">get_full_params</span>
+<span class="kn">from</span> <span class="nn">bliss.models.decoder</span> <span class="kn">import</span> <span class="n">ImageDecoder</span>
+<span class="kn">from</span> <span class="nn">bliss.models.encoder</span> <span class="kn">import</span> <span class="n">ImageEncoder</span><span class="p">,</span> <span class="n">get_full_params</span><span class="p">,</span> <span class="n">get_is_on_from_n_sources</span>
 <span class="kn">from</span> <span class="nn">bliss.optimizer</span> <span class="kn">import</span> <span class="n">get_optimizer</span>
 <span class="kn">from</span> <span class="nn">bliss.plotting</span> <span class="kn">import</span> <span class="n">plot_image_and_locs</span>
 
@@ -288,24 +288,24 @@
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">encoder_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-        <span class="n">decoder_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">encoder</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">decoder</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">annotate_probs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">optimizer_params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># pylint: disable=unused-argument</span>
     <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Initializes SleepPhase class.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            encoder_kwargs: Keyword args passed to ImageEncoder</span>
-<span class="sd">            decoder_kwargs: Keyword args passed to ImageDecoder</span>
+<span class="sd">            encoder: keyword arguments to instantiate ImageEncoder</span>
+<span class="sd">            decoder: keyword arguments to instantiate ImageDecoder</span>
 <span class="sd">            annotate_probs: Should probabilities be annotated on plot? Defaults to False.</span>
 <span class="sd">            optimizer_params: Parameters passed to optimizer. Defaults to None.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span> <span class="o">=</span> <span class="n">encoder</span><span class="o">.</span><span class="n">ImageEncoder</span><span class="p">(</span><span class="o">**</span><span class="n">encoder_kwargs</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span> <span class="o">=</span> <span class="n">decoder</span><span class="o">.</span><span class="n">ImageDecoder</span><span class="p">(</span><span class="o">**</span><span class="n">decoder_kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span> <span class="o">=</span> <span class="n">ImageEncoder</span><span class="p">(</span><span class="o">**</span><span class="n">encoder</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span> <span class="o">=</span> <span class="n">ImageDecoder</span><span class="p">(</span><span class="o">**</span><span class="n">decoder</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
 
         <span class="c1"># consistency</span>
@@ -403,7 +403,7 @@
         <span class="n">true_tile_log_fluxes</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">true_tile_log_fluxes</span><span class="p">,</span> <span class="s2">&quot;b n s bands -&gt; (b n) s bands&quot;</span><span class="p">)</span>
         <span class="n">true_tile_galaxy_bool</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">true_tile_galaxy_bool</span><span class="p">,</span> <span class="s2">&quot;b n s 1 -&gt; (b n) s&quot;</span><span class="p">)</span>
         <span class="n">true_tile_n_sources</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">true_tile_n_sources</span><span class="p">,</span> <span class="s2">&quot;b n -&gt; (b n)&quot;</span><span class="p">)</span>
-        <span class="n">true_tile_is_on_array</span> <span class="o">=</span> <span class="n">encoder</span><span class="o">.</span><span class="n">get_is_on_from_n_sources</span><span class="p">(</span><span class="n">true_tile_n_sources</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">)</span>
+        <span class="n">true_tile_is_on_array</span> <span class="o">=</span> <span class="n">get_is_on_from_n_sources</span><span class="p">(</span><span class="n">true_tile_n_sources</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">)</span>
 
         <span class="c1"># extract image tiles</span>
         <span class="n">image_ptiles</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="o">.</span><span class="n">get_images_in_tiles</span><span class="p">(</span><span class="n">images</span><span class="p">)</span>
