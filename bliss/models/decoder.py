@@ -80,7 +80,7 @@ class ImageDecoder(pl.LightningModule):
         self.n_galaxy_params = n_galaxy_params
         self.gal_slen = gal_slen
         self.autoencoder_ckpt = autoencoder_ckpt
-        self.latents_file = Path(latents_file)
+        self.latents_file = Path(latents_file) if latents_file is not None else None
         # Star Decoder
         self.psf_slen = psf_slen
         self.sdss_bands = tuple(sdss_bands)
