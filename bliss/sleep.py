@@ -143,8 +143,8 @@ class SleepPhase(pl.LightningModule):
         """Initializes SleepPhase class.
 
         Args:
-            encoder: dict to passed to ImageEncoder
-            decoder: dict to be passed to ImageDecoder
+            encoder: keyword arguments to instantiate ImageEncoder
+            decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
             optimizer_params: Parameters passed to optimizer. Defaults to None.
         """

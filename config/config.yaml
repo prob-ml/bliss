@@ -10,7 +10,7 @@ defaults:
   - predict: sdss
   - override hydra/job_logging: stdout
 
-# completely disalbe hydra logging
+# completely disable hydra logging
 # https://github.com/facebookresearch/hydra/issues/910
 hydra:
   output_subdir: null
