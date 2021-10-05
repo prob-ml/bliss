@@ -12,7 +12,7 @@ from bliss import train
 def test_train_run(devices):
     if devices.use_cuda:
         overrides = {
-            "dataset.kwargs.n_batches": 5,
+            "dataset.n_batches": 5,
             "training.trainer.logger": "False",
             "training.n_epochs": 5,
             "gpus": min(3, torch.cuda.device_count()),

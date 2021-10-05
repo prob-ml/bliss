@@ -1,0 +1,17 @@
+# @package _global_
+defaults:
+  - override /model: galaxy_net
+  - override /dataset: sdss_galaxies
+  - override /optimizer: adam
+
+mode: train
+
+training:
+  n_epochs: 1001
+  trainer:
+    check_val_every_n_epoch: 10
+    checkpoint_callback: true
+
+dataset:
+  noise_factor: 0.01
+  num_workers: 5

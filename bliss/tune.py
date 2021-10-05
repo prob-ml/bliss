@@ -5,6 +5,7 @@ import hydra
 import numpy as np
 import pytorch_lightning as pl
 import ray
+from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from ray.tune import CLIReporter
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
@@ -12,24 +13,23 @@ from ray.tune.schedulers import ASHAScheduler
 from ray.tune.suggest import ConcurrencyLimiter
 from ray.tune.suggest.hyperopt import HyperOptSearch
 
-from bliss import sleep
-from bliss.datasets.simulated import SimulatedDataset
-
 
 def sleep_trainable(search_space, cfg: DictConfig):
+    # ugly work-around for using relative path
+    os.chdir("../../..")
     # set up the config for SleepPhase
-    cfg.model.kwargs.encoder_kwargs.channel = search_space["channel"]
-    cfg.model.kwargs.encoder_kwargs.hidden = search_space["hidden"]
-    cfg.model.kwargs.encoder_kwargs.spatial_dropout = search_space["spatial_dropout"]
-    cfg.model.kwargs.encoder_kwargs.dropout = search_space["dropout"]
+    cfg.model.encoder.channel = search_space["channel"]
+    cfg.model.encoder.hidden = search_space["hidden"]
+    cfg.model.encoder.spatial_dropout = search_space["spatial_dropout"]
+    cfg.model.encoder.dropout = search_space["dropout"]
     cfg.optimizer.kwargs.lr = search_space["lr"]
     cfg.optimizer.kwargs.weight_decay = search_space["weight_decay"]
 
     # model
-    model = sleep.SleepPhase(**cfg.model.kwargs)
+    model = instantiate(cfg.model)
 
     # data module
-    dataset = SimulatedDataset(**cfg.dataset.kwargs)
+    dataset = instantiate(cfg.dataset)
 
     # set up trainer
     logging.getLogger("lightning").setLevel(0)

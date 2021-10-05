@@ -1,5 +1,8 @@
+defaults:
+  - /model/decoder/sdss_standard@decoder
+
 _target_: bliss.datasets.simulated.SimulatedDataset
-decoder: ${model.decoder}
 n_batches: 10
-batch_size: 20
+batch_size: 32
 generate_device: "cuda:0"
+testing_file: null

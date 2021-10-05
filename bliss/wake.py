@@ -99,10 +99,10 @@ class WakeNet(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         loss = self._get_loss(batch)
-        self.log("train_loss", loss)
+        self.log("train/loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         loss = self._get_loss(batch)
-        self.log("validation_loss", loss)
+        self.log("val/loss", loss)

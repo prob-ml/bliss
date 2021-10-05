@@ -1,0 +1,8 @@
+n_bands: 1
+tile_slen: ${model.decoder.tile_slen}
+ptile_slen: 12
+max_detections: ${model.decoder.max_sources}
+channel: 17
+spatial_dropout: 0.11399
+dropout: 0.013123
+hidden: 185

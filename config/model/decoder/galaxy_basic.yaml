@@ -1,0 +1,16 @@
+n_bands: 1
+slen: 40
+tile_slen: 4
+ptile_slen: 36
+border_padding: 4
+prob_galaxy: 1.0
+n_galaxy_params: 8
+max_sources: 1
+mean_sources: 0.015
+min_sources: 0
+gal_slen: 53
+autoencoder_ckpt: models/sdss_autoencoder.ckpt
+latents_file: data/latents_simulated_sdss_galaxies.pt
+psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
+background_values:
+  - 633.0

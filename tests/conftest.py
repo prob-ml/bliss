@@ -2,23 +2,7 @@ import pytest
 import pytorch_lightning as pl
 import torch
 from hydra import compose, initialize
-
-from bliss import sleep
-from bliss.datasets import galsim_galaxies, simulated
-from bliss.models import binary, galaxy_encoder, galaxy_net
-
-models = {
-    "SleepPhase": sleep.SleepPhase,
-    "GalaxyEncoder": galaxy_encoder.GalaxyEncoder,
-    "OneCenteredGalaxyAE": galaxy_net.OneCenteredGalaxyAE,
-    "BinaryEncoder": binary.BinaryEncoder,
-}
-
-datasets = {
-    "ToyGaussian": galsim_galaxies.ToyGaussian,
-    "SDSSGalaxies": galsim_galaxies.SDSSGalaxies,
-    "SimulatedDataset": simulated.SimulatedDataset,
-}
+from hydra.utils import instantiate
 
 
 # command line arguments for tests
@@ -68,18 +52,17 @@ class ModelSetup:
 
     def get_trainer(self, overrides):
         cfg = self.get_cfg(overrides)
-        if cfg.training.deterministic:
+        if cfg.training.trainer.deterministic:
             pl.seed_everything(cfg.training.seed)
-            return pl.Trainer(**cfg.training.trainer, deterministic=True)
-        return pl.Trainer(**cfg.training.trainer)
+        return instantiate(cfg.training.trainer)
 
     def get_dataset(self, overrides):
         cfg = self.get_cfg(overrides)
-        return datasets[cfg.dataset.name](**cfg.dataset.kwargs)
+        return instantiate(cfg.dataset)
 
     def get_model(self, overrides):
         cfg = self.get_cfg(overrides)
-        model = models[cfg.model.name](**cfg.model.kwargs)
+        model = instantiate(cfg.model)
         return model.to(self.devices.device)
 
     def get_trained_model(self, overrides):

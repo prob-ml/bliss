@@ -1,11 +1,10 @@
-deterministic: False
 seed: 42
-plotting: False
 n_epochs: 400
 experiment: default
 version: null
 save_top_k: 1
 trainer:
+  _target_: pytorch_lightning.Trainer
   logger: False
   checkpoint_callback: False
   profiler: null
@@ -15,3 +14,4 @@ trainer:
   min_epochs: ${training.n_epochs}
   gpus: ${gpus}
   log_every_n_steps: 10
+  deterministic: False
