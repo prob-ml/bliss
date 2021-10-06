@@ -165,10 +165,6 @@ def _loc_mean_func(x):
     return torch.sigmoid(x) * (x != 0).float()
 
 
-def _prob_galaxy_func(x):
-    return torch.sigmoid(x).clamp(1e-4, 1 - 1e-4)
-
-
 def _identity_func(x):
     return x
 
@@ -293,7 +289,7 @@ class ImageEncoder(nn.Module):
         self.border_padding = int(border_padding)
 
         # Number of variational parameters used to characterize each source in an image.
-        self.n_params_per_source = sum(param["dim"] for _, param in self.variational_params.items())
+        self.n_params_per_source = sum(param["dim"] for param in self.variational_params.values())
 
         # There are self.max_detections * (self.max_detections + 1) total possible detections.
         # For each param, for each possible number of detection d, there are d ways of assignment.
@@ -518,22 +514,16 @@ class ImageEncoder(nn.Module):
         # get var_params conditioned on n_sources
         pred = self.forward_sampled(image_ptiles, tile_n_sources)
 
-        # other quantities based on var_params
-        # tile_galaxy_bool shape = (n_samples x n_ptiles x max_detections x 1)
-        tile_galaxy_bool = torch.bernoulli(pred["prob_galaxy"]).float()
-        tile_galaxy_bool *= tile_is_on_array
-        tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
         tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
         tile_log_fluxes = self._get_normal_samples(
-            pred["log_flux_mean"], pred["log_flux_sd"], tile_star_bool
+            pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
         )
-        tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
+        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
         return {
             "n_sources": tile_n_sources,
             "locs": tile_locs,
-            "galaxy_bool": tile_galaxy_bool,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
         }
@@ -549,10 +539,6 @@ class ImageEncoder(nn.Module):
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
-        # galaxy booleans
-        tile_galaxy_bool = (pred["prob_galaxy"] > 0.5).float()
-        tile_galaxy_bool *= tile_is_on_array
-
         # set sd so we return map estimates.
         # first locs
         locs_sd = torch.zeros_like(pred["loc_logvar"])
@@ -560,33 +546,24 @@ class ImageEncoder(nn.Module):
         tile_locs = tile_locs.clamp(0, 1)
 
         # then log_fluxes
-        tile_star_bool = get_star_bool(tile_n_sources, tile_galaxy_bool)
+        log_flux_mean = pred["log_flux_mean"]
         log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
-        tile_log_fluxes = self._get_normal_samples(
-            pred["log_flux_mean"], log_flux_sd, tile_is_on_array
-        )
-        tile_log_fluxes *= tile_star_bool
-        tile_fluxes = tile_log_fluxes.exp() * tile_star_bool
+        tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, tile_is_on_array)
+        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
 
-        tile_estimate = {
-            "locs": tile_locs,
-            "galaxy_bool": tile_galaxy_bool,
-            "star_bool": tile_star_bool,
-            "log_fluxes": tile_log_fluxes,
-            "fluxes": tile_fluxes,
-            "prob_galaxy": pred["prob_galaxy"],
-        }
-
-        # reshape with images' batch_size.
-        tile_estimate = {
-            key: value.view(batch_size, n_tiles_per_image, self.max_detections, -1)
-            for key, value in tile_estimate.items()
-        }
-        tile_estimate["prob_n_sources"] = torch.exp(pred["n_source_log_probs"]).reshape(
+        # finally prob_n_sources
+        prob_n_sources = torch.exp(pred["n_source_log_probs"]).reshape(
             batch_size, n_tiles_per_image, 1, self.max_detections + 1
         )
-        tile_estimate["n_sources"] = tile_n_sources.reshape(batch_size, -1)
-        return tile_estimate
+
+        bshape = (batch_size, n_tiles_per_image, self.max_detections, -1)  # -1 = param_dim
+        return {
+            "locs": tile_locs.reshape(*bshape),
+            "log_fluxes": tile_log_fluxes.reshape(*bshape),
+            "fluxes": tile_fluxes.reshape(*bshape),
+            "prob_n_sources": prob_n_sources,
+            "n_sources": tile_n_sources.reshape(batch_size, -1),
+        }
 
     def tile_map_n_sources(self, image_ptiles):
         h = self.get_var_params_all(image_ptiles)
@@ -633,8 +610,4 @@ class ImageEncoder(nn.Module):
             "loc_logvar": {"dim": 2, "transform": _identity_func},
             "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
             "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
-            "prob_galaxy": {
-                "dim": 1,
-                "transform": _prob_galaxy_func,
-            },
         }

@@ -105,10 +105,9 @@ class TestStarEncoderObjective:
             true_log_fluxes, log_flux_mean, log_flux_logvar
         )
 
-        (locs_loss, star_params_loss, galaxy_bool_loss) = get_min_perm_loss(
+        (locs_loss, star_params_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
-            prob_galaxy,
             true_galaxy_bool,
             true_is_on_array,
         )
@@ -116,7 +115,6 @@ class TestStarEncoderObjective:
         # when no sources, all losses should be zero
         assert (locs_loss[true_n_sources == 0] == 0).all()
         assert (star_params_loss[true_n_sources == 0] == 0).all()
-        assert (galaxy_bool_loss[true_n_sources == 0] == 0).all()
         assert (
             locs_loss[true_n_sources == 1] == -locs_log_probs_all[true_n_sources == 1][:, 0, 0]
         ).all()
@@ -139,7 +137,6 @@ class TestStarEncoderObjective:
             if true_n_sources[i] == 0:
                 assert locs_loss[i] == 0
                 assert star_params_loss[i] == 0
-                assert galaxy_bool_loss[i] == 0
                 continue
 
             # get parameters for ith observation
@@ -155,7 +152,6 @@ class TestStarEncoderObjective:
 
             min_locs_loss = 1e16
             min_star_params_loss = 1e16
-            min_galaxy_bool_loss = 1e16
             for perm in permutations(range(local_true_n_sources)):
                 locs_loss_perm = -Normal(
                     local_loc_mean[perm, :], (torch.exp(local_loc_logvar[perm, :]) + 1e-5).sqrt()
@@ -179,8 +175,6 @@ class TestStarEncoderObjective:
                     min_star_params_loss = (
                         star_params_loss_perm * (1 - local_true_galaxy_bool)
                     ).sum()
-                    min_galaxy_bool_loss = galaxy_bool_loss_perm.sum()
 
             assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5
             assert torch.abs(star_params_loss[i] - min_star_params_loss) < 1e-5
-            assert torch.abs(galaxy_bool_loss[i] - min_galaxy_bool_loss) < 1e-5

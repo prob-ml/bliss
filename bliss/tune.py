@@ -44,8 +44,7 @@ def sleep_trainable(search_space, cfg: DictConfig):
             TuneReportCallback(
                 {
                     "loss": "val/loss",
-                    "star_count_acc": "val/acc_counts",
-                    "galaxy_counts_acc": "val/gal_counts",
+                    "count_acc": "val/acc_counts",
                     "locs_mae": "val/locs_mae",
                     "fluxes_mae": "val/star_fluxes_mae",
                 },
@@ -124,8 +123,7 @@ def tune(cfg: DictConfig, local_mode=False):
         },
         metric_columns={
             "loss": "loss",
-            "star_count_accuracy": "star_ct_acc",
-            "galaxy_counts_acc": "gal_ct_acc",
+            "count_acc": "count_acc",
             "locs_median_mse": "loc_med_mse",
             "fluxes_avg_err": "flux_avg_err",
         },

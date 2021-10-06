@@ -47,6 +47,9 @@ def plot_image_and_locs(
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
+    if prob_galaxy is not None:
+        assert "galaxy_bool" in estimate, "Inconsistent inputs to plot_image_and_locs"
+    use_galaxy_bool = "galaxy_bool" in estimate if estimate is not None else False
     bpad = int((images.shape[-1] - slen) / 2)
 
     image = images[idx, 0].cpu().numpy()
@@ -63,10 +66,6 @@ def plot_image_and_locs(
     if estimate is not None:
         n_sources = estimate["n_sources"][idx].cpu().numpy()
         locs = estimate["locs"][idx].cpu().numpy()
-        galaxy_bool = estimate["galaxy_bool"][idx].cpu().numpy()
-        star_bool = estimate["star_bool"][idx].cpu().numpy()
-        galaxy_locs = locs * galaxy_bool
-        star_locs = locs * star_bool
 
     if prob_galaxy is not None:
         prob_galaxy = prob_galaxy[idx].cpu().numpy().reshape(-1)
@@ -92,11 +91,17 @@ def plot_image_and_locs(
     plot_locs(ax, slen, bpad, true_star_locs, "c", "x", s=20, prob_galaxy=None)
 
     if estimate is not None:
-        plot_locs(ax, slen, bpad, galaxy_locs, "b", "+", s=30, prob_galaxy=prob_galaxy)
-        plot_locs(ax, slen, bpad, star_locs, "m", "+", s=30, prob_galaxy=prob_galaxy)
+        if use_galaxy_bool:
+            galaxy_bool = estimate["galaxy_bool"][idx].cpu().numpy()
+            star_bool = estimate["star_bool"][idx].cpu().numpy()
+            galaxy_locs = locs * galaxy_bool
+            star_locs = locs * star_bool
+            plot_locs(ax, slen, bpad, galaxy_locs, "b", "+", s=30, prob_galaxy=prob_galaxy)
+            plot_locs(ax, slen, bpad, star_locs, "m", "+", s=30, prob_galaxy=prob_galaxy)
+        else:
+            plot_locs(ax, slen, bpad, locs, "b", "+", s=30, prob_galaxy=None)
 
     if labels is not None:
-        assert len(labels) == 4
         colors = ["r", "b", "c", "m"]
         markers = ["x", "+", "x", "+"]
         sizes = [25, 35, 25, 35]
