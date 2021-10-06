@@ -34,6 +34,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         residual_encoder: The encoder from the second, "residual" AE.
         residual_decoder: The decoder from the second, "residual" AE.
         mse_residual_model_loss: If true, use MSE rather than log-likelihood to train residual model.
+        slen: Side length of input images.
+        latent_dim: Latent dimension of encoded representation.
+        min_sd: Minimum sd for log-likelihood.
+        psf_image_file: For generating latent variables from SDSSGalaxies (could be None).
     """
 
     def __init__(

@@ -643,6 +643,30 @@ The residual AE, whose reconstructed is added to the main autoencoder, is traine
 <dd><p>If true, use MSE rather than log-likelihood to train residual model.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt id="bliss.models.galaxy_net.OneCenteredGalaxyAE.slen">
+<code class="sig-name descname"><span class="pre">slen</span></code><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxyAE.slen" title="Permalink to this definition">¶</a></dt>
+<dd><p>Side length of input images.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="bliss.models.galaxy_net.OneCenteredGalaxyAE.latent_dim">
+<code class="sig-name descname"><span class="pre">latent_dim</span></code><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxyAE.latent_dim" title="Permalink to this definition">¶</a></dt>
+<dd><p>Latent dimension of encoded representation.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="bliss.models.galaxy_net.OneCenteredGalaxyAE.min_sd">
+<code class="sig-name descname"><span class="pre">min_sd</span></code><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxyAE.min_sd" title="Permalink to this definition">¶</a></dt>
+<dd><p>Minimum sd for log-likelihood.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="bliss.models.galaxy_net.OneCenteredGalaxyAE.psf_image_file">
+<code class="sig-name descname"><span class="pre">psf_image_file</span></code><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxyAE.psf_image_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>For generating latent variables from SDSSGalaxies (could be None).</p>
+</dd></dl>
+
 <dl class="py method">
 <dt id="bliss.models.galaxy_net.OneCenteredGalaxyAE.configure_optimizers">
 <code class="sig-name descname"><span class="pre">configure_optimizers</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/models/galaxy_net.html#OneCenteredGalaxyAE.configure_optimizers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.galaxy_net.OneCenteredGalaxyAE.configure_optimizers" title="Permalink to this definition">¶</a></dt>

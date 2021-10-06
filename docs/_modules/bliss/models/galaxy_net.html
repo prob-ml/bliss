@@ -187,6 +187,10 @@
 <span class="sd">        residual_encoder: The encoder from the second, &quot;residual&quot; AE.</span>
 <span class="sd">        residual_decoder: The decoder from the second, &quot;residual&quot; AE.</span>
 <span class="sd">        mse_residual_model_loss: If true, use MSE rather than log-likelihood to train residual model.</span>
+<span class="sd">        slen: Side length of input images.</span>
+<span class="sd">        latent_dim: Latent dimension of encoded representation.</span>
+<span class="sd">        min_sd: Minimum sd for log-likelihood.</span>
+<span class="sd">        psf_image_file: For generating latent variables from SDSSGalaxies (could be None).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
