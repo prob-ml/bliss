@@ -229,7 +229,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             loss = self.get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
             self.log("train/loss_residual", loss, prog_bar=True)
 
-            recon_mean_final = recon_mean_main + recon_mean_residual
+            recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
             loss_final = self.get_likelihood_loss(images, recon_mean_final)
             self.log("train/loss", loss_final, prog_bar=True)
         return loss
@@ -249,7 +249,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         loss_residual = self.get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
         self.log("val/loss_residual", loss_residual)
 
-        recon_mean_final = recon_mean_main + recon_mean_residual
+        recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
         loss = self.get_likelihood_loss(images, recon_mean_final)
         self.log("val/loss", loss)
 
