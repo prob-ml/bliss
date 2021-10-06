@@ -18,64 +18,6 @@ plt.switch_backend("Agg")
 plt.ioff()
 
 
-class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=32):
-
-        super().__init__()
-
-        self.slen = slen
-        self.latent_dim = latent_dim
-
-        kernels = [3, 3, 3, 3, 1]
-        layers = []
-        for (i, kernel_size) in enumerate(kernels):
-            layer = ResidualConvBlock(n_bands * (2 ** i), 8, kernel_size, 4, mode="downsample")
-            layers.append(layer)
-            if i < len(kernels) - 1:
-                layers.append(nn.LeakyReLU())
-        layers.append(nn.Flatten())
-        self.features = nn.Sequential(*layers)
-
-    def forward(self, image):
-        """Encodes galaxy from image."""
-        return self.features(image)
-
-
-class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=32):
-        super().__init__()
-
-        self.slen = slen
-
-        kernels = [3, 3, 3, 3, 1]
-        layers = []
-        slen_current = slen
-        for (i, kernel_size) in enumerate(kernels):
-            output_padding = (slen_current - kernel_size) % 2 if (slen_current != 2) else 0
-            layer = ResidualConvBlock(
-                n_bands * (2 ** (i + 1)),
-                8,
-                kernel_size,
-                4,
-                mode="upsample",
-                output_padding=output_padding,
-            )
-            layers.append(layer)
-            if i < len(kernels) - 1:
-                layers.append(nn.LeakyReLU())
-            slen_current = math.floor((slen_current - kernel_size) / 2 + 1)
-        layers.append(
-            nn.Unflatten(
-                -1, torch.Size((n_bands * (2 ** len(kernels)), slen_current, slen_current))
-            )
-        )
-        self.features = nn.Sequential(*layers[::-1])
-
-    def forward(self, z):
-        """Decodes image from latent representation."""
-        return self.features(z)
-
-
 class OneCenteredGalaxyAE(pl.LightningModule):
 
     # ---------------
@@ -431,11 +373,62 @@ class OneCenteredGalaxyDecoder(nn.Module):
         return F.relu(recon_mean_main + recon_mean_residual)
 
 
-class ResConv2dBlock(Conv2d):
-    def forward(self, x):  # pylint: disable=arguments-renamed
-        y = super().forward(x)
-        y = F.relu(y)
-        return x + y
+class CenteredGalaxyEncoder(nn.Module):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=32):
+
+        super().__init__()
+
+        self.slen = slen
+        self.latent_dim = latent_dim
+
+        kernels = [3, 3, 3, 3, 1]
+        layers = []
+        for (i, kernel_size) in enumerate(kernels):
+            layer = ResidualConvBlock(n_bands * (2 ** i), 8, kernel_size, 4, mode="downsample")
+            layers.append(layer)
+            if i < len(kernels) - 1:
+                layers.append(nn.LeakyReLU())
+        layers.append(nn.Flatten())
+        self.features = nn.Sequential(*layers)
+
+    def forward(self, image):
+        """Encodes galaxy from image."""
+        return self.features(image)
+
+
+class CenteredGalaxyDecoder(nn.Module):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=32):
+        super().__init__()
+
+        self.slen = slen
+
+        kernels = [3, 3, 3, 3, 1]
+        layers = []
+        slen_current = slen
+        for (i, kernel_size) in enumerate(kernels):
+            output_padding = (slen_current - kernel_size) % 2 if (slen_current != 2) else 0
+            layer = ResidualConvBlock(
+                n_bands * (2 ** (i + 1)),
+                8,
+                kernel_size,
+                4,
+                mode="upsample",
+                output_padding=output_padding,
+            )
+            layers.append(layer)
+            if i < len(kernels) - 1:
+                layers.append(nn.LeakyReLU())
+            slen_current = math.floor((slen_current - kernel_size) / 2 + 1)
+        layers.append(
+            nn.Unflatten(
+                -1, torch.Size((n_bands * (2 ** len(kernels)), slen_current, slen_current))
+            )
+        )
+        self.features = nn.Sequential(*layers[::-1])
+
+    def forward(self, z):
+        """Decodes image from latent representation."""
+        return self.features(z)
 
 
 class ResidualConvBlock(nn.Module):
@@ -488,3 +481,10 @@ class ResidualConvBlock(nn.Module):
             x_upsampled = x_upsampled[:, : y.shape[1], :, :]
             x_trans = x_upsampled
         return y + x_trans
+
+
+class ResConv2dBlock(Conv2d):
+    def forward(self, x):  # pylint: disable=arguments-renamed
+        y = super().forward(x)
+        y = F.relu(y)
+        return x + y
