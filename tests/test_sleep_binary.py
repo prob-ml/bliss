@@ -16,5 +16,4 @@ def test_binary(model_setup, devices):
 
     # check testing results are sensible.
     assert results["acc_counts"] > 0.6
-    assert results["acc_gal_counts"] > 0.6
     assert results["locs_mae"] < 0.65
