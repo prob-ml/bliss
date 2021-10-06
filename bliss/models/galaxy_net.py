@@ -19,11 +19,6 @@ plt.ioff()
 
 
 class OneCenteredGalaxyAE(pl.LightningModule):
-
-    # ---------------
-    # Model
-    # ----------------
-
     def __init__(
         self,
         slen=53,
@@ -62,12 +57,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.min_sd = min_sd
         self.latent_dim = latent_dim
         self.psf_image_file = psf_image_file
-
-    def _main_forward(self, image, background):
-        return F.relu(self.main_autoencoder(image - background)) + background
-
-    def _residual_forward(self, residual):
-        return self.residual_autoencoder(residual)
 
     def forward(self, image, background):
         """Gets reconstructed image from running through encoder and decoder."""
@@ -108,21 +97,80 @@ class OneCenteredGalaxyAE(pl.LightningModule):
                 latent_list.append(latent_batch)
         return torch.cat(latent_list, dim=0)
 
-    def get_likelihood_loss(self, image, recon_mean):
-        # this is nan whenever recon_mean is not strictly positive
-        return -Normal(recon_mean, recon_mean.sqrt().clamp(min=self.min_sd)).log_prob(image).sum()
+    def training_step(self, batch, batch_idx, optimizer_idx):
+        """Training step (pytorch lightning)."""
+        images, background = batch["images"], batch["background"]
+        if optimizer_idx == 0:
+            recon_mean_main = self._main_forward(images, background)
+            loss = self._get_likelihood_loss(images, recon_mean_main)
+            self.log("train/loss_main", loss, prog_bar=True)
+        if optimizer_idx == 1:
+            with torch.no_grad():
+                recon_mean_main = self._main_forward(images, background)
+            recon_mean_residual = self._residual_forward(images - recon_mean_main)
+            loss = self._get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
+            self.log("train/loss_residual", loss, prog_bar=True)
 
-    def get_residual_model_loss(self, image, recon_mean_main, recon_mean_residual):
-        if self.mse_residual_model_loss:
-            loss = F.mse_loss(image - recon_mean_main, recon_mean_residual)
-        else:
-            recon_mean = F.relu(recon_mean_main + recon_mean_residual)
-            loss = self.get_likelihood_loss(image, recon_mean)
+            recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
+            loss_final = self._get_likelihood_loss(images, recon_mean_final)
+            self.log("train/loss", loss_final, prog_bar=True)
         return loss
 
-    # ---------------
-    # Optimizer
-    # ----------------
+    def validation_step(self, batch, batch_idx):
+        """Validation step (pytorch lightning)."""
+        images, background = batch["images"], batch["background"]
+        recon_mean_main = self._main_forward(images, background)
+        loss_main = self._get_likelihood_loss(images, recon_mean_main)
+        self.log("val/loss_main", loss_main)
+
+        recon_mean_residual = self._residual_forward(images - recon_mean_main)
+        loss_residual = self._get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
+        self.log("val/loss_residual", loss_residual)
+
+        recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
+        loss = self._get_likelihood_loss(images, recon_mean_final)
+        self.log("val/loss", loss)
+
+        # metrics
+        residuals = (images - recon_mean_final) / torch.sqrt(recon_mean_final)
+        residuals_main = (images - recon_mean_main) / torch.sqrt(recon_mean_main)
+        recon_mean_residual = recon_mean_residual / torch.sqrt(recon_mean_main)
+        self.log("val/max_residual", residuals.abs().max())
+        return {
+            "images": images,
+            "recon_mean_main": recon_mean_main,
+            "recon_mean_residual": recon_mean_residual,
+            "recon_mean": recon_mean_final,
+            "residuals": residuals,
+            "residuals_main": residuals_main,
+        }
+
+    def validation_epoch_end(self, outputs):
+        """Validation epoch end (pytorch lightning)."""
+
+        output_tensors = {
+            label: torch.cat([output[label] for output in outputs]) for label in outputs[0]
+        }
+
+        fig_random = self._plot_reconstruction(output_tensors, mode="random")
+        fig_worst = self._plot_reconstruction(output_tensors, mode="worst")
+        grid_example = self._plot_grid_examples(output_tensors)
+
+        if self.logger:
+            self.logger.experiment.add_figure(
+                f"Epoch:{self.current_epoch}/Random Images", fig_random
+            )
+            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Worst Images", fig_worst)
+            self.logger.experiment.add_figure(
+                f"Epoch:{self.current_epoch}/grid_examples", grid_example
+            )
+
+    def test_step(self, batch, batch_idx):
+        """Testing step (pytorch lightning)."""
+        images, background = batch["images"], batch["background"]
+        recon_mean = self(images, background)
+        residuals = (images - recon_mean) / torch.sqrt(images)
+        self.log("max_residual", residuals.abs().max())
 
     def configure_optimizers(self):
         """Configures optimizers for training (pytorch lightning)."""
@@ -153,83 +201,25 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             if self.trainer.global_step > 500:
                 optimizer.step(closure=optimizer_closure)
 
-    # ---------------
-    # Training
-    # ----------------
+    def _get_likelihood_loss(self, image, recon_mean):
+        # this is nan whenever recon_mean is not strictly positive
+        return -Normal(recon_mean, recon_mean.sqrt().clamp(min=self.min_sd)).log_prob(image).sum()
 
-    def training_step(self, batch, batch_idx, optimizer_idx):
-        """Training step (pytorch lightning)."""
-        images, background = batch["images"], batch["background"]
-        if optimizer_idx == 0:
-            recon_mean_main = self._main_forward(images, background)
-            loss = self.get_likelihood_loss(images, recon_mean_main)
-            self.log("train/loss_main", loss, prog_bar=True)
-        if optimizer_idx == 1:
-            with torch.no_grad():
-                recon_mean_main = self._main_forward(images, background)
-            recon_mean_residual = self._residual_forward(images - recon_mean_main)
-            loss = self.get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
-            self.log("train/loss_residual", loss, prog_bar=True)
-
-            recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
-            loss_final = self.get_likelihood_loss(images, recon_mean_final)
-            self.log("train/loss", loss_final, prog_bar=True)
+    def _get_residual_model_loss(self, image, recon_mean_main, recon_mean_residual):
+        if self.mse_residual_model_loss:
+            loss = F.mse_loss(image - recon_mean_main, recon_mean_residual)
+        else:
+            recon_mean = F.relu(recon_mean_main + recon_mean_residual)
+            loss = self._get_likelihood_loss(image, recon_mean)
         return loss
 
-    # ----------------
-    # Validation
-    # ----------------
+    def _main_forward(self, image, background):
+        return F.relu(self.main_autoencoder(image - background)) + background
 
-    def validation_step(self, batch, batch_idx):
-        """Validation step (pytorch lightning)."""
-        images, background = batch["images"], batch["background"]
-        recon_mean_main = self._main_forward(images, background)
-        loss_main = self.get_likelihood_loss(images, recon_mean_main)
-        self.log("val/loss_main", loss_main)
+    def _residual_forward(self, residual):
+        return self.residual_autoencoder(residual)
 
-        recon_mean_residual = self._residual_forward(images - recon_mean_main)
-        loss_residual = self.get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
-        self.log("val/loss_residual", loss_residual)
-
-        recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
-        loss = self.get_likelihood_loss(images, recon_mean_final)
-        self.log("val/loss", loss)
-
-        # metrics
-        residuals = (images - recon_mean_final) / torch.sqrt(recon_mean_final)
-        residuals_main = (images - recon_mean_main) / torch.sqrt(recon_mean_main)
-        recon_mean_residual = recon_mean_residual / torch.sqrt(recon_mean_main)
-        self.log("val/max_residual", residuals.abs().max())
-        return {
-            "images": images,
-            "recon_mean_main": recon_mean_main,
-            "recon_mean_residual": recon_mean_residual,
-            "recon_mean": recon_mean_final,
-            "residuals": residuals,
-            "residuals_main": residuals_main,
-        }
-
-    def validation_epoch_end(self, outputs):
-        """Validation epoch end (pytorch lightning)."""
-
-        output_tensors = {
-            label: torch.cat([output[label] for output in outputs]) for label in outputs[0]
-        }
-
-        fig_random = self.plot_reconstruction(output_tensors, mode="random")
-        fig_worst = self.plot_reconstruction(output_tensors, mode="worst")
-        grid_example = self.plot_grid_examples(output_tensors)
-
-        if self.logger:
-            self.logger.experiment.add_figure(
-                f"Epoch:{self.current_epoch}/Random Images", fig_random
-            )
-            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Worst Images", fig_worst)
-            self.logger.experiment.add_figure(
-                f"Epoch:{self.current_epoch}/grid_examples", grid_example
-            )
-
-    def plot_reconstruction(self, outputs, n_examples=10, mode="random", width=20, pad=6.0):
+    def _plot_reconstruction(self, outputs, n_examples=10, mode="random", width=20, pad=6.0):
         # combine all images and recon_mean's into a single tensor
         images = outputs["images"]
         recon_mean = outputs["recon_mean"]
@@ -299,7 +289,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         plt.tight_layout()
         return fig
 
-    def plot_grid_examples(self, outputs):
+    def _plot_grid_examples(self, outputs):
         images, recon_mean = outputs["images"], outputs["recon_mean"]
         # 1.  plot a grid of all input images and recon_mean
         # 2.  only plot the highest band
@@ -325,13 +315,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plt.xticks([])
             plt.yticks([])
         return fig
-
-    def test_step(self, batch, batch_idx):
-        """Testing step (pytorch lightning)."""
-        images, background = batch["images"], batch["background"]
-        recon_mean = self(images, background)
-        residuals = (images - recon_mean) / torch.sqrt(images)
-        self.log("max_residual", residuals.abs().max())
 
 
 class OneCenteredGalaxyEncoder(nn.Module):
