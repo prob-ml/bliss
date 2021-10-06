@@ -217,12 +217,6 @@
         <span class="n">recon_mean_residual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residual_forward</span><span class="p">(</span><span class="n">image</span> <span class="o">-</span> <span class="n">recon_mean_main</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">recon_mean_main</span> <span class="o">+</span> <span class="n">recon_mean_residual</span></div>
 
-    <span class="k">def</span> <span class="nf">enc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">background</span><span class="p">):</span>
-        <span class="n">latent_main</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">main_encoder</span><span class="p">(</span><span class="n">image</span> <span class="o">-</span> <span class="n">background</span><span class="p">)</span>
-        <span class="n">recon_mean_main</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span><span class="p">(</span><span class="n">latent_main</span><span class="p">))</span> <span class="o">+</span> <span class="n">background</span>
-        <span class="n">latent_residual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">residual_encoder</span><span class="p">(</span><span class="n">image</span> <span class="o">-</span> <span class="n">recon_mean_main</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">latent_main</span><span class="p">,</span> <span class="n">latent_residual</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
-
     <span class="k">def</span> <span class="nf">get_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">allow_pad</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">OneCenteredGalaxyEncoder</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">main_encoder</span><span class="p">,</span>
@@ -242,11 +236,12 @@
         <span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">train_dataloader</span><span class="p">()</span>
         <span class="n">latent_list</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Creating latents from Galsim galaxies...&quot;</span><span class="p">)</span>
+        <span class="n">enc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_encoder</span><span class="p">()</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
             <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">160</span><span class="p">)):</span>
                 <span class="n">galaxy</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">dataloader</span><span class="p">))</span>
                 <span class="n">noiseless</span> <span class="o">=</span> <span class="n">galaxy</span><span class="p">[</span><span class="s2">&quot;noiseless&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-                <span class="n">latent_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">enc</span><span class="p">(</span><span class="n">noiseless</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+                <span class="n">latent_batch</span> <span class="o">=</span> <span class="n">enc</span><span class="p">(</span><span class="n">noiseless</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
                 <span class="n">latent_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">latent_batch</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">latent_list</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
 

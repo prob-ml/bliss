@@ -64,12 +64,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean_residual = self._residual_forward(image - recon_mean_main)
         return recon_mean_main + recon_mean_residual
 
-    def enc(self, image, background):
-        latent_main = self.main_encoder(image - background)
-        recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
-        latent_residual = self.residual_encoder(image - recon_mean_main)
-        return torch.cat((latent_main, latent_residual), dim=-1)
-
     def get_encoder(self, allow_pad=False):
         return OneCenteredGalaxyEncoder(
             self.main_encoder,
@@ -89,11 +83,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         dataloader = dataset.train_dataloader()
         latent_list = []
         print("Creating latents from Galsim galaxies...")
+        enc = self.get_encoder()
         with torch.no_grad():
             for _ in tqdm(range(160)):
                 galaxy = next(iter(dataloader))
                 noiseless = galaxy["noiseless"].to(self.device)
-                latent_batch = self.enc(noiseless, 0.0)
+                latent_batch = enc(noiseless, 0.0)
                 latent_list.append(latent_batch)
         return torch.cat(latent_list, dim=0)
 
