@@ -19,17 +19,45 @@ plt.ioff()
 
 
 class OneCenteredGalaxyAE(pl.LightningModule):
+    """Autoencoder for single, centered galaxy images.
+
+    This module implements an autoencoder(AE) + training procedure on images of centered
+    galaxies. The architecture consists of a "main" AE followed by a "residual" AE.
+    The main AE is trained to minimize loss on its own.
+    The residual AE, whose reconstructed is added to the main autoencoder, is trained to minimize the entire loss.
+
+    Attributes:
+        main_autoencoder: The first, "main" AE.
+        main_encoder: The encoder from the first, "main" AE.
+        main_decoder: The decoder from the first, "main" AE.
+        residual_autoencoder: The second, "residual" AE.
+        residual_encoder: The encoder from the second, "residual" AE.
+        residual_decoder: The decoder from the second, "residual" AE.
+        mse_residual_model_loss: If true, use MSE rather than log-likelihood to train residual model.
+    """
+
     def __init__(
         self,
-        slen=53,
-        latent_dim=32,
         hidden=32,
-        n_bands=1,
+        slen: int = 53,
+        latent_dim: int = 64,
+        n_bands: int = 1,
         mse_residual_model_loss: bool = False,
         optimizer_params: dict = None,
         min_sd=1e-3,
         psf_image_file=None,
     ):
+        """Initializer.
+
+        Args:
+            slen (optional): Image side length. Defaults to 53.
+            latent_dim (optional): Latent size of each autoencoder. Defaults to 64.
+            n_bands optional): [description]. Defaults to 1.
+            mse_residual_model_loss (optional): Use MSE instead of log-likelihood to train residual AE?. Defaults to False.
+            optimizer_params (optional): Parameters used to construct training optimizer. Defaults to None.
+            min_sd (optional): Minimum sd for log-likelihood. Defaults to 1e-3.
+            psf_image_file (optional): For generating latent variables from SDSSGalaxies. Defaults to None.
+        """
         super().__init__()
         self.save_hyperparameters()
 
@@ -53,9 +81,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
+        assert slen == 53, "Currently slen is fixed at 53"
         self.slen = slen
-        self.min_sd = min_sd
+        assert latent_dim == 64, "Currently latent_dim is fixed at 64"
         self.latent_dim = latent_dim
+        self.min_sd = min_sd
         self.psf_image_file = psf_image_file
 
     def forward(self, image, background):

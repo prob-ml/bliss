@@ -172,33 +172,56 @@
 
 
 <div class="viewcode-block" id="OneCenteredGalaxyAE"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE">[docs]</a><span class="k">class</span> <span class="nc">OneCenteredGalaxyAE</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Autoencoder for single, centered galaxy images.</span>
+
+<span class="sd">    This module implements an autoencoder(AE) + training procedure on images of centered</span>
+<span class="sd">    galaxies. The architecture consists of a &quot;main&quot; AE followed by a &quot;residual&quot; AE.</span>
+<span class="sd">    The main AE is trained to minimize loss on its own.</span>
+<span class="sd">    The residual AE, whose reconstructed is added to the main autoencoder, is trained to minimize the entire loss.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        main_autoencoder: The first, &quot;main&quot; AE.</span>
+<span class="sd">        main_encoder: The encoder from the first, &quot;main&quot; AE.</span>
+<span class="sd">        main_decoder: The decoder from the first, &quot;main&quot; AE.</span>
+<span class="sd">        residual_autoencoder: The second, &quot;residual&quot; AE.</span>
+<span class="sd">        residual_encoder: The encoder from the second, &quot;residual&quot; AE.</span>
+<span class="sd">        residual_decoder: The decoder from the second, &quot;residual&quot; AE.</span>
+<span class="sd">        mse_residual_model_loss: If true, use MSE rather than log-likelihood to train residual model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span>
-        <span class="n">latent_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
-        <span class="n">hidden</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
-        <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">53</span><span class="p">,</span>
+        <span class="n">latent_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">64</span><span class="p">,</span>
+        <span class="n">n_bands</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">mse_residual_model_loss</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">optimizer_params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">min_sd</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
         <span class="n">psf_image_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initializer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            slen (optional): Image side length. Defaults to 53.</span>
+<span class="sd">            latent_dim (optional): Latent size of each autoencoder. Defaults to 64.</span>
+<span class="sd">            n_bands optional): [description]. Defaults to 1.</span>
+<span class="sd">            mse_residual_model_loss (optional): Use MSE instead of log-likelihood to train residual AE?. Defaults to False.</span>
+<span class="sd">            optimizer_params (optional): Parameters used to construct training optimizer. Defaults to None.</span>
+<span class="sd">            min_sd (optional): Minimum sd for log-likelihood. Defaults to 1e-3.</span>
+<span class="sd">            psf_image_file (optional): For generating latent variables from SDSSGalaxies. Defaults to None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">main_encoder</span> <span class="o">=</span> <span class="n">CenteredGalaxyEncoder</span><span class="p">(</span>
-            <span class="n">slen</span><span class="o">=</span><span class="n">slen</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">hidden</span><span class="o">=</span><span class="n">hidden</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="n">n_bands</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span> <span class="o">=</span> <span class="n">CenteredGalaxyDecoder</span><span class="p">(</span>
-            <span class="n">slen</span><span class="o">=</span><span class="n">slen</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">hidden</span><span class="o">=</span><span class="n">hidden</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="n">n_bands</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">main_encoder</span> <span class="o">=</span> <span class="n">CenteredGalaxyEncoder</span><span class="p">(</span><span class="n">slen</span><span class="o">=</span><span class="n">slen</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="n">n_bands</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span> <span class="o">=</span> <span class="n">CenteredGalaxyDecoder</span><span class="p">(</span><span class="n">slen</span><span class="o">=</span><span class="n">slen</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="n">n_bands</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">main_autoencoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">main_encoder</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">residual_encoder</span> <span class="o">=</span> <span class="n">CenteredGalaxyEncoder</span><span class="p">(</span>
-            <span class="n">slen</span><span class="o">=</span><span class="n">slen</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">hidden</span><span class="o">=</span><span class="n">hidden</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="n">n_bands</span>
+            <span class="n">slen</span><span class="o">=</span><span class="n">slen</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="n">n_bands</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">residual_decoder</span> <span class="o">=</span> <span class="n">CenteredGalaxyDecoder</span><span class="p">(</span>
-            <span class="n">slen</span><span class="o">=</span><span class="n">slen</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">hidden</span><span class="o">=</span><span class="n">hidden</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="n">n_bands</span>
+            <span class="n">slen</span><span class="o">=</span><span class="n">slen</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="n">n_bands</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">residual_autoencoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">residual_encoder</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">residual_decoder</span><span class="p">)</span>
 
@@ -206,9 +229,11 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;zero&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;one&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="n">slen</span> <span class="o">==</span> <span class="mi">53</span><span class="p">,</span> <span class="s2">&quot;Currently slen is fixed at 53&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="n">slen</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">min_sd</span> <span class="o">=</span> <span class="n">min_sd</span>
+        <span class="k">assert</span> <span class="n">latent_dim</span> <span class="o">==</span> <span class="mi">64</span><span class="p">,</span> <span class="s2">&quot;Currently latent_dim is fixed at 64&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">latent_dim</span> <span class="o">=</span> <span class="n">latent_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_sd</span> <span class="o">=</span> <span class="n">min_sd</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">psf_image_file</span> <span class="o">=</span> <span class="n">psf_image_file</span>
 
 <div class="viewcode-block" id="OneCenteredGalaxyAE.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">background</span><span class="p">):</span>
@@ -505,7 +530,7 @@
 
 
 <div class="viewcode-block" id="CenteredGalaxyEncoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyEncoder">[docs]</a><span class="k">class</span> <span class="nc">CenteredGalaxyEncoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">hidden</span><span class="o">=</span><span class="mi">32</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
@@ -528,7 +553,7 @@
 
 
 <div class="viewcode-block" id="CenteredGalaxyDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyDecoder">[docs]</a><span class="k">class</span> <span class="nc">CenteredGalaxyDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">hidden</span><span class="o">=</span><span class="mi">32</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="n">slen</span>
