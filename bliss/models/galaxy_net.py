@@ -38,7 +38,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def __init__(
         self,
-        hidden=32,
         slen: int = 53,
         latent_dim: int = 64,
         n_bands: int = 1,
@@ -61,19 +60,15 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.main_encoder = CenteredGalaxyEncoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
-        self.main_decoder = CenteredGalaxyDecoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
+        self.main_encoder = CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
+        self.main_decoder = CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
         self.main_autoencoder = nn.Sequential(self.main_encoder, self.main_decoder)
 
         self.residual_encoder = CenteredGalaxyEncoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+            slen=slen, latent_dim=latent_dim, n_bands=n_bands
         )
         self.residual_decoder = CenteredGalaxyDecoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
+            slen=slen, latent_dim=latent_dim, n_bands=n_bands
         )
         self.residual_autoencoder = nn.Sequential(self.residual_encoder, self.residual_decoder)
 
@@ -382,7 +377,7 @@ class OneCenteredGalaxyDecoder(nn.Module):
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=32):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1):
 
         super().__init__()
 
@@ -405,7 +400,7 @@ class CenteredGalaxyEncoder(nn.Module):
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=32):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1):
         super().__init__()
 
         self.slen = slen
