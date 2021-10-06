@@ -337,13 +337,6 @@
     <span class="c1"># accuracy of counting number of sources</span>
     <span class="n">count_bool</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">])</span>
 
-    <span class="c1"># accuracy of galaxy counts</span>
-    <span class="n">est_n_gal</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="n">est_params</span><span class="p">[</span><span class="s2">&quot;galaxy_bool&quot;</span><span class="p">],</span> <span class="s2">&quot;b n 1 -&gt; b&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">)</span>
-
-    <span class="n">true_n_gal</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;galaxy_bool&quot;</span><span class="p">],</span> <span class="s2">&quot;b n 1 -&gt; b&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">)</span>
-
-    <span class="n">galaxy_counts_bool</span> <span class="o">=</span> <span class="n">est_n_gal</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">true_n_gal</span><span class="p">)</span>
-
     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
 
         <span class="c1"># get number of sources</span>
@@ -397,7 +390,6 @@
         <span class="s2">&quot;fluxes_mae_vec&quot;</span><span class="p">:</span> <span class="n">fluxes_mae_vec</span><span class="p">,</span>
         <span class="s2">&quot;galaxy_params_mae_vec&quot;</span><span class="p">:</span> <span class="n">galaxy_params_mae_vec</span><span class="p">,</span>
         <span class="s2">&quot;count_bool&quot;</span><span class="p">:</span> <span class="n">count_bool</span><span class="p">,</span>
-        <span class="s2">&quot;galaxy_counts_bool&quot;</span><span class="p">:</span> <span class="n">galaxy_counts_bool</span><span class="p">,</span>
         <span class="s2">&quot;tpr_vec&quot;</span><span class="p">:</span> <span class="n">tpr_vec</span><span class="p">,</span>
         <span class="s2">&quot;ppv_vec&quot;</span><span class="p">:</span> <span class="n">ppv_vec</span><span class="p">,</span>
     <span class="p">}</span>

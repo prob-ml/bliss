@@ -18,12 +18,11 @@ class TestBasicGalaxyTiles:
     def test_simulated(self, overrides, trained_sleep, model_setup, devices):
         overrides.update({"testing": "default"})
         results = model_setup.test_model(overrides, trained_sleep)
-        assert {"acc_gal_counts", "locs_mae"}.issubset(results.keys())
+        assert "locs_mae" in results
 
         # only check testing results if GPU available
         if not devices.use_cuda:
             return
 
         # check testing results are sensible.
-        assert results["acc_gal_counts"] > 0.7
         assert results["locs_mae"] < 0.85

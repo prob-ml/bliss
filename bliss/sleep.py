@@ -28,7 +28,6 @@ plt.switch_backend("Agg")
 def _get_log_probs_all_perms(
     locs_log_probs_all,
     star_params_log_probs_all,
-    prob_galaxy,
     true_galaxy_bool,
     is_on_array,
 ):
@@ -41,7 +40,6 @@ def _get_log_probs_all_perms(
         n_ptiles, n_permutations, device=locs_log_probs_all.device
     )
     star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
-    galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
 
     for i, perm in enumerate(permutations(range(max_detections))):
         # note that we multiply is_on_array, we only evaluate the loss if the source is on.
@@ -59,46 +57,30 @@ def _get_log_probs_all_perms(
             * (1 - true_galaxy_bool)
         ).sum(1)
 
-        prob_galaxy_i = prob_galaxy[:, perm]
-        galaxy_bool_loss = true_galaxy_bool * torch.log(prob_galaxy_i)
-        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - prob_galaxy_i)
-        galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
-
-    return (
-        locs_log_probs_all_perm,
-        star_params_log_probs_all_perm,
-        galaxy_bool_log_probs_all_perm,
-    )
+    return locs_log_probs_all_perm, star_params_log_probs_all_perm
 
 
 def get_min_perm_loss(
     locs_log_probs_all,
     star_params_log_probs_all,
-    prob_galaxy,
     true_galaxy_bool,
     is_on_array,
 ):
     # get log-probability under every possible matching of estimated star to true star
-    (
-        locs_log_probs_all_perm,
-        star_params_log_probs_all_perm,
-        galaxy_bool_log_probs_all_perm,
-    ) = _get_log_probs_all_perms(
+    locs_log_probs_all_perm, star_params_log_probs_all_perm = _get_log_probs_all_perms(
         locs_log_probs_all,
         star_params_log_probs_all,
-        prob_galaxy,
         true_galaxy_bool,
         is_on_array,
     )
 
     # find the permutation that minimizes the location losses
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
-
-    # get the star & galaxy losses according to the found permutation
     indx = indx.unsqueeze(1)
+
+    # get the star losses according to the found permutation.
     star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, indx).squeeze()
-    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, indx).squeeze()
-    return locs_loss, star_params_loss, galaxy_bool_loss
+    return locs_loss, star_params_loss
 
 
 def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
@@ -193,7 +175,6 @@ class SleepPhase(pl.LightningModule):
                 counter_loss:
                 locs_loss:
                 star_params_loss:
-                galaxy_bool_loss:
 
         Notes:
             loc_mean shape = (n_ptiles x max_detections x 2)
@@ -270,33 +251,20 @@ class SleepPhase(pl.LightningModule):
         star_params_log_probs_all = get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
-        prob_galaxy = rearrange(pred["prob_galaxy"], "bn s 1 -> bn s")
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
-        (locs_loss, star_params_loss, galaxy_bool_loss) = get_min_perm_loss(
+        (locs_loss, star_params_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
-            prob_galaxy,
             true_tile_galaxy_bool,
             true_tile_is_on_array,
         )
 
-        loss_vec = (
-            locs_loss * (locs_loss.detach() < 1e6).float()
-            + counter_loss
-            + star_params_loss
-            + galaxy_bool_loss
-        )
+        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss + star_params_loss
         loss = loss_vec.mean()
 
-        return (
-            loss,
-            counter_loss,
-            locs_loss,
-            star_params_loss,
-            galaxy_bool_loss,
-        )
+        return loss, counter_loss, locs_loss, star_params_loss
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
@@ -318,19 +286,16 @@ class SleepPhase(pl.LightningModule):
             counter_loss,
             locs_loss,
             star_params_loss,
-            galaxy_bool_loss,
         ) = self._get_loss(batch)
 
         self.log("val/loss", detection_loss)
         self.log("val/counter_loss", counter_loss.mean())
         self.log("val/locs_loss", locs_loss.mean())
-        self.log("val/gal_bool_loss", galaxy_bool_loss.mean())
         self.log("val/star_params_loss", star_params_loss.mean())
 
         # calculate metrics for this batch
         metrics = self._get_metrics(batch)
         self.log("val/acc_counts", metrics["counts_acc"])
-        self.log("val/gal_counts", metrics["galaxy_counts_acc"])
         self.log("val/locs_mae", metrics["locs_mae"])
         self.log("val/star_fluxes_mae", metrics["star_fluxes_mae"])
         self.log("val/avg_tpr", metrics["avg_tpr"])
@@ -346,7 +311,6 @@ class SleepPhase(pl.LightningModule):
         """Pytorch lightning method."""
         metrics = self._get_metrics(batch)
         self.log("acc_counts", metrics["counts_acc"])
-        self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
         self.log("locs_mae", metrics["locs_mae"])
         self.log("star_fluxes_mae", metrics["star_fluxes_mae"])
         self.log("avg_tpr", metrics["avg_tpr"])
@@ -378,13 +342,11 @@ class SleepPhase(pl.LightningModule):
         locs_mae = errors["locs_mae_vec"].mean()
         star_fluxes_mae = errors["fluxes_mae_vec"].mean()
         counts_acc = errors["count_bool"].float().mean()
-        galaxy_counts_acc = errors["galaxy_counts_bool"].float().mean()
         avg_tpr = errors["tpr_vec"].mean()
         avg_ppv = errors["ppv_vec"].mean()
 
         return {
             "counts_acc": counts_acc,
-            "galaxy_counts_acc": galaxy_counts_acc,
             "locs_mae": locs_mae,
             "star_fluxes_mae": star_fluxes_mae,
             "avg_tpr": avg_tpr,
@@ -424,10 +386,9 @@ class SleepPhase(pl.LightningModule):
                 slen,
                 true_params,
                 estimate=estimate,
-                labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),
+                labels=None if i > 0 else ("t. gal", "p. source", "t. star"),
                 annotate_axis=True,
                 add_borders=True,
-                prob_galaxy=estimate["prob_galaxy"],
             )
 
         fig.tight_layout()

@@ -184,13 +184,6 @@ def eval_error_on_batch(true_params, est_params, slen):
     # accuracy of counting number of sources
     count_bool = true_params["n_sources"].eq(est_params["n_sources"])
 
-    # accuracy of galaxy counts
-    est_n_gal = reduce(est_params["galaxy_bool"], "b n 1 -> b", "sum")
-
-    true_n_gal = reduce(true_params["galaxy_bool"], "b n 1 -> b", "sum")
-
-    galaxy_counts_bool = est_n_gal.eq(true_n_gal)
-
     for i in range(batch_size):
 
         # get number of sources
@@ -244,7 +237,6 @@ def eval_error_on_batch(true_params, est_params, slen):
         "fluxes_mae_vec": fluxes_mae_vec,
         "galaxy_params_mae_vec": galaxy_params_mae_vec,
         "count_bool": count_bool,
-        "galaxy_counts_bool": galaxy_counts_bool,
         "tpr_vec": tpr_vec,
         "ppv_vec": ppv_vec,
     }

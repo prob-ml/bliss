@@ -318,10 +318,6 @@
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
 
 
-<span class="k">def</span> <span class="nf">_prob_galaxy_func</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mf">1e-4</span><span class="p">,</span> <span class="mi">1</span> <span class="o">-</span> <span class="mf">1e-4</span><span class="p">)</span>
-
-
 <span class="k">def</span> <span class="nf">_identity_func</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">x</span>
 
@@ -446,7 +442,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">border_padding</span><span class="p">)</span>
 
         <span class="c1"># Number of variational parameters used to characterize each source in an image.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">n_params_per_source</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">param</span><span class="p">[</span><span class="s2">&quot;dim&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variational_params</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_params_per_source</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">param</span><span class="p">[</span><span class="s2">&quot;dim&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variational_params</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
 
         <span class="c1"># There are self.max_detections * (self.max_detections + 1) total possible detections.</span>
         <span class="c1"># For each param, for each possible number of detection d, there are d ways of assignment.</span>
@@ -671,22 +667,16 @@
         <span class="c1"># get var_params conditioned on n_sources</span>
         <span class="n">pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward_sampled</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">,</span> <span class="n">tile_n_sources</span><span class="p">)</span>
 
-        <span class="c1"># other quantities based on var_params</span>
-        <span class="c1"># tile_galaxy_bool shape = (n_samples x n_ptiles x max_detections x 1)</span>
-        <span class="n">tile_galaxy_bool</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">bernoulli</span><span class="p">(</span><span class="n">pred</span><span class="p">[</span><span class="s2">&quot;prob_galaxy&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
-        <span class="n">tile_galaxy_bool</span> <span class="o">*=</span> <span class="n">tile_is_on_array</span>
-        <span class="n">tile_star_bool</span> <span class="o">=</span> <span class="n">get_star_bool</span><span class="p">(</span><span class="n">tile_n_sources</span><span class="p">,</span> <span class="n">tile_galaxy_bool</span><span class="p">)</span>
         <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;loc_sd&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;loc_logvar&quot;</span><span class="p">])</span>
         <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_sd&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_logvar&quot;</span><span class="p">])</span>
         <span class="n">tile_locs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_normal_samples</span><span class="p">(</span><span class="n">pred</span><span class="p">[</span><span class="s2">&quot;loc_mean&quot;</span><span class="p">],</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;loc_sd&quot;</span><span class="p">],</span> <span class="n">tile_is_on_array</span><span class="p">)</span>
         <span class="n">tile_log_fluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_normal_samples</span><span class="p">(</span>
-            <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_mean&quot;</span><span class="p">],</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_sd&quot;</span><span class="p">],</span> <span class="n">tile_star_bool</span>
+            <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_mean&quot;</span><span class="p">],</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_sd&quot;</span><span class="p">],</span> <span class="n">tile_is_on_array</span>
         <span class="p">)</span>
-        <span class="n">tile_fluxes</span> <span class="o">=</span> <span class="n">tile_log_fluxes</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span> <span class="o">*</span> <span class="n">tile_star_bool</span>
+        <span class="n">tile_fluxes</span> <span class="o">=</span> <span class="n">tile_log_fluxes</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span> <span class="o">*</span> <span class="n">tile_is_on_array</span>
         <span class="k">return</span> <span class="p">{</span>
             <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="n">tile_n_sources</span><span class="p">,</span>
             <span class="s2">&quot;locs&quot;</span><span class="p">:</span> <span class="n">tile_locs</span><span class="p">,</span>
-            <span class="s2">&quot;galaxy_bool&quot;</span><span class="p">:</span> <span class="n">tile_galaxy_bool</span><span class="p">,</span>
             <span class="s2">&quot;log_fluxes&quot;</span><span class="p">:</span> <span class="n">tile_log_fluxes</span><span class="p">,</span>
             <span class="s2">&quot;fluxes&quot;</span><span class="p">:</span> <span class="n">tile_fluxes</span><span class="p">,</span>
         <span class="p">}</span>
@@ -702,10 +692,6 @@
         <span class="n">tile_is_on_array</span> <span class="o">=</span> <span class="n">get_is_on_from_n_sources</span><span class="p">(</span><span class="n">tile_n_sources</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_detections</span><span class="p">)</span>
         <span class="n">tile_is_on_array</span> <span class="o">=</span> <span class="n">tile_is_on_array</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
 
-        <span class="c1"># galaxy booleans</span>
-        <span class="n">tile_galaxy_bool</span> <span class="o">=</span> <span class="p">(</span><span class="n">pred</span><span class="p">[</span><span class="s2">&quot;prob_galaxy&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
-        <span class="n">tile_galaxy_bool</span> <span class="o">*=</span> <span class="n">tile_is_on_array</span>
-
         <span class="c1"># set sd so we return map estimates.</span>
         <span class="c1"># first locs</span>
         <span class="n">locs_sd</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">pred</span><span class="p">[</span><span class="s2">&quot;loc_logvar&quot;</span><span class="p">])</span>
@@ -713,33 +699,24 @@
         <span class="n">tile_locs</span> <span class="o">=</span> <span class="n">tile_locs</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
         <span class="c1"># then log_fluxes</span>
-        <span class="n">tile_star_bool</span> <span class="o">=</span> <span class="n">get_star_bool</span><span class="p">(</span><span class="n">tile_n_sources</span><span class="p">,</span> <span class="n">tile_galaxy_bool</span><span class="p">)</span>
+        <span class="n">log_flux_mean</span> <span class="o">=</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_mean&quot;</span><span class="p">]</span>
         <span class="n">log_flux_sd</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_logvar&quot;</span><span class="p">])</span>
-        <span class="n">tile_log_fluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_normal_samples</span><span class="p">(</span>
-            <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;log_flux_mean&quot;</span><span class="p">],</span> <span class="n">log_flux_sd</span><span class="p">,</span> <span class="n">tile_is_on_array</span>
-        <span class="p">)</span>
-        <span class="n">tile_log_fluxes</span> <span class="o">*=</span> <span class="n">tile_star_bool</span>
-        <span class="n">tile_fluxes</span> <span class="o">=</span> <span class="n">tile_log_fluxes</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span> <span class="o">*</span> <span class="n">tile_star_bool</span>
+        <span class="n">tile_log_fluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_normal_samples</span><span class="p">(</span><span class="n">log_flux_mean</span><span class="p">,</span> <span class="n">log_flux_sd</span><span class="p">,</span> <span class="n">tile_is_on_array</span><span class="p">)</span>
+        <span class="n">tile_fluxes</span> <span class="o">=</span> <span class="n">tile_log_fluxes</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span> <span class="o">*</span> <span class="n">tile_is_on_array</span>
 
-        <span class="n">tile_estimate</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;locs&quot;</span><span class="p">:</span> <span class="n">tile_locs</span><span class="p">,</span>
-            <span class="s2">&quot;galaxy_bool&quot;</span><span class="p">:</span> <span class="n">tile_galaxy_bool</span><span class="p">,</span>
-            <span class="s2">&quot;star_bool&quot;</span><span class="p">:</span> <span class="n">tile_star_bool</span><span class="p">,</span>
-            <span class="s2">&quot;log_fluxes&quot;</span><span class="p">:</span> <span class="n">tile_log_fluxes</span><span class="p">,</span>
-            <span class="s2">&quot;fluxes&quot;</span><span class="p">:</span> <span class="n">tile_fluxes</span><span class="p">,</span>
-            <span class="s2">&quot;prob_galaxy&quot;</span><span class="p">:</span> <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;prob_galaxy&quot;</span><span class="p">],</span>
-        <span class="p">}</span>
-
-        <span class="c1"># reshape with images&#39; batch_size.</span>
-        <span class="n">tile_estimate</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">key</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">n_tiles_per_image</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_detections</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">tile_estimate</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-        <span class="p">}</span>
-        <span class="n">tile_estimate</span><span class="p">[</span><span class="s2">&quot;prob_n_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">pred</span><span class="p">[</span><span class="s2">&quot;n_source_log_probs&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+        <span class="c1"># finally prob_n_sources</span>
+        <span class="n">prob_n_sources</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">pred</span><span class="p">[</span><span class="s2">&quot;n_source_log_probs&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
             <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_tiles_per_image</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_detections</span> <span class="o">+</span> <span class="mi">1</span>
         <span class="p">)</span>
-        <span class="n">tile_estimate</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tile_n_sources</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">tile_estimate</span>
+
+        <span class="n">bshape</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">n_tiles_per_image</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_detections</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># -1 = param_dim</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;locs&quot;</span><span class="p">:</span> <span class="n">tile_locs</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">*</span><span class="n">bshape</span><span class="p">),</span>
+            <span class="s2">&quot;log_fluxes&quot;</span><span class="p">:</span> <span class="n">tile_log_fluxes</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">*</span><span class="n">bshape</span><span class="p">),</span>
+            <span class="s2">&quot;fluxes&quot;</span><span class="p">:</span> <span class="n">tile_fluxes</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">*</span><span class="n">bshape</span><span class="p">),</span>
+            <span class="s2">&quot;prob_n_sources&quot;</span><span class="p">:</span> <span class="n">prob_n_sources</span><span class="p">,</span>
+            <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="n">tile_n_sources</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="p">}</span>
 
     <span class="k">def</span> <span class="nf">tile_map_n_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_ptiles</span><span class="p">):</span>
         <span class="n">h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_var_params_all</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">)</span>
@@ -786,10 +763,6 @@
             <span class="s2">&quot;loc_logvar&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;dim&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;transform&quot;</span><span class="p">:</span> <span class="n">_identity_func</span><span class="p">},</span>
             <span class="s2">&quot;log_flux_mean&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;dim&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span> <span class="s2">&quot;transform&quot;</span><span class="p">:</span> <span class="n">_identity_func</span><span class="p">},</span>
             <span class="s2">&quot;log_flux_logvar&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;dim&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span> <span class="s2">&quot;transform&quot;</span><span class="p">:</span> <span class="n">_identity_func</span><span class="p">},</span>
-            <span class="s2">&quot;prob_galaxy&quot;</span><span class="p">:</span> <span class="p">{</span>
-                <span class="s2">&quot;dim&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                <span class="s2">&quot;transform&quot;</span><span class="p">:</span> <span class="n">_prob_galaxy_func</span><span class="p">,</span>
-            <span class="p">},</span>
         <span class="p">}</span></div>
 </pre></div>
 
