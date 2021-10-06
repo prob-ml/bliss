@@ -12,6 +12,7 @@ from torch.nn import functional as F
 
 from bliss.models import galaxy_net
 from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.datasets.galsim_galaxies import SDSSGalaxies
 
 
 def get_mgrid(slen):
@@ -139,11 +140,12 @@ class ImageDecoder(pl.LightningModule):
                 autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(
                     self.autoencoder_ckpt
                 )
-                autoencoder.psf_image_file = (
-                    self.latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
-                )
+                psf_image_file = self.latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
+                dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
+                dataloader = dataset.train_dataloader()
                 autoencoder = autoencoder.cuda()
-                latents = autoencoder.generate_latents()
+                print("Creating latents from Galsim galaxies...")
+                latents = autoencoder.generate_latents(dataloader)
                 torch.save(latents, self.latents_file)
             self.register_buffer("latents", latents)
         else:

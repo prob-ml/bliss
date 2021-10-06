@@ -165,6 +165,7 @@
 
 <span class="kn">from</span> <span class="nn">bliss.models</span> <span class="kn">import</span> <span class="n">galaxy_net</span>
 <span class="kn">from</span> <span class="nn">bliss.models.encoder</span> <span class="kn">import</span> <span class="n">get_is_on_from_n_sources</span>
+<span class="kn">from</span> <span class="nn">bliss.datasets.galsim_galaxies</span> <span class="kn">import</span> <span class="n">SDSSGalaxies</span>
 
 
 <span class="k">def</span> <span class="nf">get_mgrid</span><span class="p">(</span><span class="n">slen</span><span class="p">):</span>
@@ -292,11 +293,12 @@
                 <span class="n">autoencoder</span> <span class="o">=</span> <span class="n">galaxy_net</span><span class="o">.</span><span class="n">OneCenteredGalaxyAE</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">autoencoder_ckpt</span>
                 <span class="p">)</span>
-                <span class="n">autoencoder</span><span class="o">.</span><span class="n">psf_image_file</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;psField-000094-1-0012-PSF-image.npy&quot;</span>
-                <span class="p">)</span>
+                <span class="n">psf_image_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;psField-000094-1-0012-PSF-image.npy&quot;</span>
+                <span class="n">dataset</span> <span class="o">=</span> <span class="n">SDSSGalaxies</span><span class="p">(</span><span class="n">noise_factor</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">psf_image_file</span><span class="o">=</span><span class="n">psf_image_file</span><span class="p">)</span>
+                <span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">train_dataloader</span><span class="p">()</span>
                 <span class="n">autoencoder</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
-                <span class="n">latents</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">generate_latents</span><span class="p">()</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Creating latents from Galsim galaxies...&quot;</span><span class="p">)</span>
+                <span class="n">latents</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">generate_latents</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">latents</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">latents</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>

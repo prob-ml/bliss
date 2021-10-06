@@ -162,7 +162,6 @@
 <span class="kn">from</span> <span class="nn">torch.nn.modules.conv</span> <span class="kn">import</span> <span class="n">Conv2d</span><span class="p">,</span> <span class="n">ConvTranspose2d</span>
 <span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
 
-<span class="kn">from</span> <span class="nn">bliss.datasets.galsim_galaxies</span> <span class="kn">import</span> <span class="n">SDSSGalaxies</span>
 <span class="kn">from</span> <span class="nn">bliss.optimizer</span> <span class="kn">import</span> <span class="n">get_optimizer</span>
 <span class="kn">from</span> <span class="nn">bliss.utils</span> <span class="kn">import</span> <span class="n">make_grid</span>
 <span class="kn">from</span> <span class="nn">bliss.plotting</span> <span class="kn">import</span> <span class="n">plot_image</span>
@@ -190,7 +189,6 @@
 <span class="sd">        slen: Side length of input images.</span>
 <span class="sd">        latent_dim: Latent dimension of encoded representation.</span>
 <span class="sd">        min_sd: Minimum sd for log-likelihood.</span>
-<span class="sd">        psf_image_file: For generating latent variables from SDSSGalaxies (could be None).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -201,7 +199,6 @@
         <span class="n">mse_residual_model_loss</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">optimizer_params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">min_sd</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
-        <span class="n">psf_image_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Initializer.</span>
 
@@ -212,7 +209,6 @@
 <span class="sd">            mse_residual_model_loss (optional): Use MSE instead of log-likelihood to train residual AE?. Defaults to False.</span>
 <span class="sd">            optimizer_params (optional): Parameters used to construct training optimizer. Defaults to None.</span>
 <span class="sd">            min_sd (optional): Minimum sd for log-likelihood. Defaults to 1e-3.</span>
-<span class="sd">            psf_image_file (optional): For generating latent variables from SDSSGalaxies. Defaults to None.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>
@@ -236,7 +232,6 @@
         <span class="k">assert</span> <span class="n">latent_dim</span> <span class="o">==</span> <span class="mi">64</span><span class="p">,</span> <span class="s2">&quot;Currently latent_dim is fixed at 64&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">latent_dim</span> <span class="o">=</span> <span class="n">latent_dim</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">min_sd</span> <span class="o">=</span> <span class="n">min_sd</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">psf_image_file</span> <span class="o">=</span> <span class="n">psf_image_file</span>
 
 <div class="viewcode-block" id="OneCenteredGalaxyAE.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">background</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Gets reconstructed image from running through encoder and decoder.&quot;&quot;&quot;</span>
@@ -256,13 +251,9 @@
     <span class="k">def</span> <span class="nf">get_decoder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">OneCenteredGalaxyDecoder</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">residual_decoder</span><span class="p">)</span>
 
-<div class="viewcode-block" id="OneCenteredGalaxyAE.generate_latents"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.generate_latents">[docs]</a>    <span class="k">def</span> <span class="nf">generate_latents</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="OneCenteredGalaxyAE.generate_latents"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.generate_latents">[docs]</a>    <span class="k">def</span> <span class="nf">generate_latents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataloader</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Induces a latent distribution for a non-probabilistic autoencoder.&quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_image_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="n">dataset</span> <span class="o">=</span> <span class="n">SDSSGalaxies</span><span class="p">(</span><span class="n">noise_factor</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">psf_image_file</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">psf_image_file</span><span class="p">)</span>
-        <span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">train_dataloader</span><span class="p">()</span>
         <span class="n">latent_list</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Creating latents from Galsim galaxies...&quot;</span><span class="p">)</span>
         <span class="n">enc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_encoder</span><span class="p">()</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
             <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">160</span><span class="p">)):</span>

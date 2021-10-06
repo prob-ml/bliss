@@ -9,7 +9,6 @@ from torch.nn import functional as F
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from tqdm import tqdm
 
-from bliss.datasets.galsim_galaxies import SDSSGalaxies
 from bliss.optimizer import get_optimizer
 from bliss.utils import make_grid
 from bliss.plotting import plot_image
@@ -37,7 +36,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         slen: Side length of input images.
         latent_dim: Latent dimension of encoded representation.
         min_sd: Minimum sd for log-likelihood.
-        psf_image_file: For generating latent variables from SDSSGalaxies (could be None).
     """
 
     def __init__(
@@ -48,7 +46,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         mse_residual_model_loss: bool = False,
         optimizer_params: dict = None,
         min_sd=1e-3,
-        psf_image_file=None,
     ):
         """Initializer.
 
@@ -59,7 +56,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             mse_residual_model_loss (optional): Use MSE instead of log-likelihood to train residual AE?. Defaults to False.
             optimizer_params (optional): Parameters used to construct training optimizer. Defaults to None.
             min_sd (optional): Minimum sd for log-likelihood. Defaults to 1e-3.
-            psf_image_file (optional): For generating latent variables from SDSSGalaxies. Defaults to None.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -83,7 +79,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         assert latent_dim == 64, "Currently latent_dim is fixed at 64"
         self.latent_dim = latent_dim
         self.min_sd = min_sd
-        self.psf_image_file = psf_image_file
 
     def forward(self, image, background):
         """Gets reconstructed image from running through encoder and decoder."""
@@ -103,13 +98,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def get_decoder(self):
         return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
 
-    def generate_latents(self):
+    def generate_latents(self, dataloader):
         """Induces a latent distribution for a non-probabilistic autoencoder."""
-        assert self.psf_image_file is not None
-        dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=self.psf_image_file)
-        dataloader = dataset.train_dataloader()
         latent_list = []
-        print("Creating latents from Galsim galaxies...")
         enc = self.get_encoder()
         with torch.no_grad():
             for _ in tqdm(range(160)):
