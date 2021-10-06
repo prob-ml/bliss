@@ -78,8 +78,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         self.mse_residual_model_loss = mse_residual_model_loss
 
-        self.register_buffer("zero", torch.zeros(1))
-        self.register_buffer("one", torch.ones(1))
         assert slen == 53, "Currently slen is fixed at 53"
         self.slen = slen
         assert latent_dim == 64, "Currently latent_dim is fixed at 64"

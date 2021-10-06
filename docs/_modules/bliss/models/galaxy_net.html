@@ -231,8 +231,6 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">mse_residual_model_loss</span> <span class="o">=</span> <span class="n">mse_residual_model_loss</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;zero&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;one&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
         <span class="k">assert</span> <span class="n">slen</span> <span class="o">==</span> <span class="mi">53</span><span class="p">,</span> <span class="s2">&quot;Currently slen is fixed at 53&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="n">slen</span>
         <span class="k">assert</span> <span class="n">latent_dim</span> <span class="o">==</span> <span class="mi">64</span><span class="p">,</span> <span class="s2">&quot;Currently latent_dim is fixed at 64&quot;</span>
