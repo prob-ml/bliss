@@ -139,7 +139,6 @@ class ImageDecoder(pl.LightningModule):
                 autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(
                     self.autoencoder_ckpt
                 )
-                # autoencoder = autoencoder.to(self.device)
                 autoencoder.psf_image_file = (
                     self.latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
                 )
@@ -780,7 +779,7 @@ class GalaxyTileDecoder(nn.Module):
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         autoencoder.eval().requires_grad_(False)
         assert gal_slen == autoencoder.hparams.slen
-        # assert n_galaxy_params == autoencoder.hparams.latent_dim
+        assert n_galaxy_params == autoencoder.hparams.latent_dim
         self.galaxy_decoder = autoencoder.get_decoder()
 
         self.gal_slen = gal_slen

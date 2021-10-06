@@ -74,13 +74,8 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        # self.enc = CenteredGalaxyEncoder(
-        #     slen=self.slen, latent_dim=self.latent_dim, n_bands=self.n_bands, hidden=hidden
-        # )
         autoencoder_ckpt = decoder["autoencoder_ckpt"]
         autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
-        # self.autoencoder.eval().requires_grad_(False)
-        # autoencoder = OneCenteredGalaxyAE()
         self.enc = autoencoder.get_encoder(allow_pad=True)
 
         # grid for center cropped tiles
@@ -149,8 +144,6 @@ class GalaxyEncoder(pl.LightningModule):
             add_noise=False,
         )
 
-        # recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
-        # recon_losses = -Normal(recon_mean, recon_var.sqrt().clamp_min(1e-3)).log_prob(images)
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
         return recon_losses.sum()
 

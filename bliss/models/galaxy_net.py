@@ -1,4 +1,5 @@
 import math
+
 import pytorch_lightning as pl
 import torch
 from matplotlib import pyplot as plt
@@ -7,8 +8,8 @@ from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from tqdm import tqdm
-from bliss.datasets.galsim_galaxies import SDSSGalaxies
 
+from bliss.datasets.galsim_galaxies import SDSSGalaxies
 from bliss.optimizer import get_optimizer
 from bliss.utils import make_grid
 from bliss.plotting import plot_image
@@ -151,7 +152,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
 
     def generate_latents(self):
-        """Hacky way to induce a latent distribution for a non-probabilistic autoencoder"""
+        """Induces a latent distribution for a non-probabilistic autoencoder."""
         assert self.psf_image_file is not None
         dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=self.psf_image_file)
         dataloader = dataset.train_dataloader()
@@ -163,8 +164,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
                 noiseless = galaxy["noiseless"].to(self.device)
                 latent_batch = self.enc(noiseless, 0.0)
                 latent_list.append(latent_batch)
-        latents = torch.cat(latent_list, dim=0)
-        return latents
+        return torch.cat(latent_list, dim=0)
 
     def get_likelihood_loss(self, image, recon_mean):
         # this is nan whenever recon_mean is not strictly positive
@@ -265,7 +265,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             "residuals": residuals,
             "residuals_main": residuals_main,
         }
-        # return {"images": images, "recon_mean": recon_mean, "residuals": residuals}
 
     def validation_epoch_end(self, outputs):
         """Validation epoch end (pytorch lightning)."""
