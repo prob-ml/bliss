@@ -196,6 +196,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             if self.trainer.global_step > 500:
                 optimizer.step(closure=optimizer_closure)
 
+    def _main_forward(self, image, background):
+        return F.relu(self.main_autoencoder(image - background)) + background
+
+    def _residual_forward(self, residual):
+        return self.residual_autoencoder(residual)
+
     def _get_likelihood_loss(self, image, recon_mean):
         # this is nan whenever recon_mean is not strictly positive
         return -Normal(recon_mean, recon_mean.sqrt().clamp(min=self.min_sd)).log_prob(image).sum()
@@ -207,12 +213,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             recon_mean = F.relu(recon_mean_main + recon_mean_residual)
             loss = self._get_likelihood_loss(image, recon_mean)
         return loss
-
-    def _main_forward(self, image, background):
-        return F.relu(self.main_autoencoder(image - background)) + background
-
-    def _residual_forward(self, residual):
-        return self.residual_autoencoder(residual)
 
     def _plot_reconstruction(self, outputs, n_examples=10, mode="random", width=20, pad=6.0):
         # combine all images and recon_mean's into a single tensor
