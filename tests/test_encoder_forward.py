@@ -172,3 +172,26 @@ class TestSourceEncoder:
                 assert torch.all(pred_i["loc_logvar"].eq(pred["loc_logvar"][i]))
                 assert torch.all(pred_i["log_flux_mean"].eq(pred["log_flux_mean"][i]))
                 assert torch.all(pred_i["log_flux_logvar"].eq(pred["log_flux_logvar"][i]))
+
+    def test_sample(self, devices):
+        device = devices.device
+
+        max_detections = 4
+        ptile_slen = 10
+        n_bands = 2
+        tile_slen = 2
+        n_samples = 5
+
+        images = torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(device)
+
+        star_encoder = encoder.ImageEncoder(
+            channel=8,
+            dropout=0,
+            hidden=64,
+            ptile_slen=ptile_slen,
+            tile_slen=tile_slen,
+            n_bands=n_bands,
+            max_detections=max_detections,
+        ).to(device)
+
+        star_encoder.sample_encoder(images, n_samples)
