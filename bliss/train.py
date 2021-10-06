@@ -7,6 +7,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.profiler import AdvancedProfiler
 
+from bliss.utils import log_hyperparameters
+
 
 def setup_seed(cfg):
     if cfg.training.trainer.deterministic:
@@ -72,6 +74,9 @@ def train(cfg: DictConfig):
     trainer = instantiate(
         cfg.training.trainer, logger=logger, profiler=profiler, callbacks=callbacks
     )
+
+    if logger:
+        log_hyperparameters(config=cfg, model=model, trainer=trainer)
 
     # train!
     trainer.fit(model, datamodule=dataset)
