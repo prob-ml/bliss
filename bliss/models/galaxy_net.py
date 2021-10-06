@@ -174,7 +174,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         if self.mse_residual_model_loss:
             loss = F.mse_loss(image - recon_mean_main, recon_mean_residual)
         else:
-            loss = self.get_likelihood_loss(image, recon_mean_main + recon_mean_residual)
+            recon_mean = F.relu(recon_mean_main + recon_mean_residual)
+            loss = self.get_likelihood_loss(image, recon_mean)
         return loss
 
     # ---------------
