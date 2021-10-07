@@ -50,12 +50,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         """Initializer.
 
         Args:
-            slen (optional): Image side length. Defaults to 53.
-            latent_dim (optional): Latent size of each autoencoder. Defaults to 64.
-            n_bands optional): [description]. Defaults to 1.
-            mse_residual_model_loss (optional): Use MSE instead of log-likelihood to train residual AE?. Defaults to False.
-            optimizer_params (optional): Parameters used to construct training optimizer. Defaults to None.
-            min_sd (optional): Minimum sd for log-likelihood. Defaults to 1e-3.
+            slen: (optional) Image side length.
+            latent_dim: (optional) Latent size of each autoencoder.
+            n_bands: (optional )Number of bands in mimage.
+            mse_residual_model_loss: (optional) Use MSE instead of log-likelihood to train residual AE?.
+            optimizer_params: (optional)Parameters used to construct training optimizer.
+            min_sd: (optional) Minimum sd for log-likelihood.
         """
         super().__init__()
         self.save_hyperparameters()

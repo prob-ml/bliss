@@ -203,12 +203,12 @@
         <span class="sd">&quot;&quot;&quot;Initializer.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            slen (optional): Image side length. Defaults to 53.</span>
-<span class="sd">            latent_dim (optional): Latent size of each autoencoder. Defaults to 64.</span>
-<span class="sd">            n_bands optional): [description]. Defaults to 1.</span>
-<span class="sd">            mse_residual_model_loss (optional): Use MSE instead of log-likelihood to train residual AE?. Defaults to False.</span>
-<span class="sd">            optimizer_params (optional): Parameters used to construct training optimizer. Defaults to None.</span>
-<span class="sd">            min_sd (optional): Minimum sd for log-likelihood. Defaults to 1e-3.</span>
+<span class="sd">            slen: (optional) Image side length.</span>
+<span class="sd">            latent_dim: (optional) Latent size of each autoencoder.</span>
+<span class="sd">            n_bands: (optional )Number of bands in mimage.</span>
+<span class="sd">            mse_residual_model_loss: (optional) Use MSE instead of log-likelihood to train residual AE?.</span>
+<span class="sd">            optimizer_params: (optional)Parameters used to construct training optimizer.</span>
+<span class="sd">            min_sd: (optional) Minimum sd for log-likelihood.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>
