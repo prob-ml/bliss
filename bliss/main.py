@@ -1,7 +1,10 @@
 import hydra
 
+from bliss.utils import fixed_workdir
+
 
 @hydra.main(config_path="../config", config_name="config")
+@fixed_workdir
 def main(cfg):
     if cfg.mode == "train":
         from bliss.train import train as task
