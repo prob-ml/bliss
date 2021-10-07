@@ -23,7 +23,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     This module implements an autoencoder(AE) + training procedure on images of centered
     galaxies. The architecture consists of a "main" AE followed by a "residual" AE.
     The main AE is trained to minimize loss on its own.
-    The residual AE, whose reconstructed is added to the main autoencoder, is trained to minimize the entire loss.
+    The residual AE, whose reconstructed is added to the main autoencoder,
+    is trained to minimize the entire loss.
 
     Attributes:
         main_autoencoder: The first, "main" AE.
@@ -32,7 +33,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         residual_autoencoder: The second, "residual" AE.
         residual_encoder: The encoder from the second, "residual" AE.
         residual_decoder: The decoder from the second, "residual" AE.
-        mse_residual_model_loss: If true, use MSE rather than log-likelihood to train residual model.
+        mse_residual_model_loss: If true, use MSE rather than log-likelihood
+            to train residual model.
         slen: Side length of input images.
         latent_dim: Latent dimension of encoded representation.
         min_sd: Minimum sd for log-likelihood.
@@ -53,7 +55,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             slen: (optional) Image side length.
             latent_dim: (optional) Latent size of each autoencoder.
             n_bands: (optional )Number of bands in mimage.
-            mse_residual_model_loss: (optional) Use MSE instead of log-likelihood to train residual AE?.
+            mse_residual_model_loss: (optional) Use MSE instead of log-likelihood to
+                train residual AE?.
             optimizer_params: (optional)Parameters used to construct training optimizer.
             min_sd: (optional) Minimum sd for log-likelihood.
         """
