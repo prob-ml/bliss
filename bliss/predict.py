@@ -1,7 +1,8 @@
 """File to produce BLISS estimates on survey images. Currently only SDSS is supported."""
 import torch
 from einops import rearrange
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
+from tqdm import tqdm
 
 from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
@@ -72,6 +73,8 @@ def prediction(image, image_encoder, galaxy_encoder=None, binary_encoder=None):
 
 def predict(cfg: DictConfig):
     bands = list(cfg.predict.bands)
+    print("-" * 20 + " Predicting Configuration " + "-" * 20)
+    print(OmegaConf.to_yaml(cfg.predict))
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 
     sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss_kwargs)
@@ -98,22 +101,26 @@ def predict(cfg: DictConfig):
     iwic = w // clen if not cfg.predict.testing else 1
 
     with torch.no_grad():
-        for i in range(ihic):
-            for j in range(iwic):
-                chunk = image[:, :, i * clen : (i + 1) * clen, j * clen : (j + 1) * clen]
-                chunk = chunk.to(cfg.predict.device)
+        with tqdm(total=ihic * iwic) as pbar:
+            for i in range(ihic):
+                for j in range(iwic):
+                    chunk = image[:, :, i * clen : (i + 1) * clen, j * clen : (j + 1) * clen]
+                    chunk = chunk.to(cfg.predict.device)
 
-                # predict!
-                var_params, _, _ = prediction(chunk, image_encoder, galaxy_encoder, binary_encoder)
+                    # predict!
+                    var_params, _, _ = prediction(
+                        chunk, image_encoder, galaxy_encoder, binary_encoder
+                    )
 
-                # put everything in the cpu before saving
-                var_params = {key: value.cpu() for key, value in var_params.items()}
-                list_var_params.append(var_params)
+                    # put everything in the cpu before saving
+                    var_params = {key: value.cpu() for key, value in var_params.items()}
+                    list_var_params.append(var_params)
 
-                # delete extra stuff in GPU and clear cache for next iteration.
-                del chunk
-                if "cuda" in cfg.predict.device:
-                    torch.cuda.empty_cache()
+                    # delete extra stuff in GPU and clear cache for next iteration.
+                    del chunk
+                    if "cuda" in cfg.predict.device:
+                        torch.cuda.empty_cache()
+                    pbar.update(1)
 
     all_var_params = {}
     for var_params in list_var_params:
@@ -123,3 +130,4 @@ def predict(cfg: DictConfig):
 
     if cfg.predict.output_file is not None:
         torch.save(var_params, cfg.predict.output_file)
+        print(f"Prediction saved to {cfg.predict.output_file}")
