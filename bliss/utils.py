@@ -143,23 +143,7 @@ def make_grid(
     pad_value: int = 0,
 ) -> torch.Tensor:
 
-    if tensor.dim() == 2:  # single image H x W
-        tensor = tensor.unsqueeze(0)
-    if tensor.dim() == 3:  # single image
-        tensor = tensor.unsqueeze(0)
-
-        def norm_ip(img, low, high):
-            img.clamp_(min=low, max=high)
-            img.sub_(low).div_(max(high - low, 1e-5))
-
-        def norm_range(t):
-            norm_ip(t, float(t.min()), float(t.max()))
-
-        if scale_each is True:
-            for t in tensor:  # loop over mini-batch dimension
-                norm_range(t)
-        else:
-            norm_range(tensor)
+    assert tensor.dim() == 4
 
     if tensor.size(0) == 1:
         return tensor.squeeze(0)
