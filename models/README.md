@@ -1,7 +1,7 @@
 # Models
 -  All checkpoints were generated with `./scripts/train_all.sh`.
 -  Results from the latest run are in `./scripts/results`.
--  This README should be regularly updated with any notes on training
+-  This README should be regularly updated with any notes on significant changes to model training or performance.
 
 
 * ``sdss_autoencoder.ckpt``
