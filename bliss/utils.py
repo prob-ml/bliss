@@ -1,10 +1,19 @@
 import math
+import os
 
 import torch
 from pytorch_lightning.utilities import rank_zero_only
 from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
+
+
+def fixed_workdir(fn):
+    def wrapper(cfg):
+        os.chdir(cfg.paths.root)
+        return fn(cfg)
+
+    return wrapper
 
 
 def empty(*args, **kwargs):
