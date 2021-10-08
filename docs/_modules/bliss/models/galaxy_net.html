@@ -471,7 +471,26 @@
 
 
 <div class="viewcode-block" id="OneCenteredGalaxyEncoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyEncoder">[docs]</a><span class="k">class</span> <span class="nc">OneCenteredGalaxyEncoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">main_encoder</span><span class="p">,</span> <span class="n">main_decoder</span><span class="p">,</span> <span class="n">residual_encoder</span><span class="p">,</span> <span class="n">slen</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">allow_pad</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Encoder part of OneCenteredGalaxyAE.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">main_encoder</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">main_decoder</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">residual_encoder</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">allow_pad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initializer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            main_encoder: The main encoder</span>
+<span class="sd">            main_decoder: The main decoder</span>
+<span class="sd">            residual_encoder: The residual encoder</span>
+<span class="sd">            slen: (optional) The side-length of the galaxy image. Only needed if allow_pad is True.</span>
+<span class="sd">            allow_pad: (optional) Should padding be added to an image</span>
+<span class="sd">                if its size is less than slen? Defaults to False.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">main_encoder</span> <span class="o">=</span> <span class="n">main_encoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span> <span class="o">=</span> <span class="n">main_decoder</span>
@@ -497,7 +516,15 @@
 
 
 <div class="viewcode-block" id="OneCenteredGalaxyDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyDecoder">[docs]</a><span class="k">class</span> <span class="nc">OneCenteredGalaxyDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">main_decoder</span><span class="p">,</span> <span class="n">residual_decoder</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Decoder part of OneCenteredGalaxyAE.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">main_decoder</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">residual_decoder</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initializer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            main_decoder: The main decoder.</span>
+<span class="sd">            residual_decoder: The residual decoder.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span> <span class="o">=</span> <span class="n">main_decoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">residual_decoder</span> <span class="o">=</span> <span class="n">residual_decoder</span>
@@ -510,6 +537,8 @@
 
 
 <div class="viewcode-block" id="CenteredGalaxyEncoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyEncoder">[docs]</a><span class="k">class</span> <span class="nc">CenteredGalaxyEncoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Fully-convolutional image encoder (for use in an autoencoder).&quot;&quot;&quot;</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span> <span class="n">latent_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>

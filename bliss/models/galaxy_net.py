@@ -318,7 +318,26 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
 
 class OneCenteredGalaxyEncoder(nn.Module):
-    def __init__(self, main_encoder, main_decoder, residual_encoder, slen=None, allow_pad=False):
+    """Encoder part of OneCenteredGalaxyAE."""
+
+    def __init__(
+        self,
+        main_encoder: nn.Module,
+        main_decoder: nn.Module,
+        residual_encoder: nn.Module,
+        slen: int = None,
+        allow_pad: bool = False,
+    ):
+        """Initializer.
+
+        Args:
+            main_encoder: The main encoder
+            main_decoder: The main decoder
+            residual_encoder: The residual encoder
+            slen: (optional) The side-length of the galaxy image. Only needed if allow_pad is True.
+            allow_pad: (optional) Should padding be added to an image
+                if its size is less than slen? Defaults to False.
+        """
         super().__init__()
         self.main_encoder = main_encoder
         self.main_decoder = main_decoder
@@ -344,7 +363,15 @@ class OneCenteredGalaxyEncoder(nn.Module):
 
 
 class OneCenteredGalaxyDecoder(nn.Module):
-    def __init__(self, main_decoder, residual_decoder):
+    """Decoder part of OneCenteredGalaxyAE."""
+
+    def __init__(self, main_decoder: nn.Module, residual_decoder: nn.Module):
+        """Initializer.
+
+        Args:
+            main_decoder: The main decoder.
+            residual_decoder: The residual decoder.
+        """
         super().__init__()
         self.main_decoder = main_decoder
         self.residual_decoder = residual_decoder
