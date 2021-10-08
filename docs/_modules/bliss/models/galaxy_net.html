@@ -186,13 +186,13 @@
 <span class="sd">        residual_autoencoder: The second, &quot;residual&quot; AE.</span>
 <span class="sd">        residual_encoder: The encoder from the second, &quot;residual&quot; AE.</span>
 <span class="sd">        residual_decoder: The decoder from the second, &quot;residual&quot; AE.</span>
+<span class="sd">        slen: Side length of input images.</span>
+<span class="sd">        latent_dim: Latent dimension of encoded representation.</span>
+<span class="sd">        min_sd: Minimum sd for log-likelihood.</span>
 <span class="sd">        residual_delay_n_steps: Number of training steps before starting to</span>
 <span class="sd">            train residual model.</span>
 <span class="sd">        mse_residual_model_loss: If true, use MSE rather than log-likelihood</span>
 <span class="sd">            to train residual model.</span>
-<span class="sd">        slen: Side length of input images.</span>
-<span class="sd">        latent_dim: Latent dimension of encoded representation.</span>
-<span class="sd">        min_sd: Minimum sd for log-likelihood.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -211,12 +211,14 @@
 <span class="sd">            slen: (optional) Image side length.</span>
 <span class="sd">            latent_dim: (optional) Latent size of each autoencoder.</span>
 <span class="sd">            n_bands: (optional) Number of bands in image.</span>
-<span class="sd">            residual_delay_n_steps: (optional) Number of training steps before</span>
-<span class="sd">                starting to train residual model.</span>
-<span class="sd">            mse_residual_model_loss: (optional) Use MSE instead of log-likelihood to</span>
-<span class="sd">                train residual AE?.</span>
-<span class="sd">            optimizer_params: (optional)Parameters used to construct training optimizer.</span>
-<span class="sd">            min_sd: (optional) Minimum sd for log-likelihood.</span>
+<span class="sd">            residual_delay_n_steps: (optional)</span>
+<span class="sd">                Number of training steps before starting to train residual model.</span>
+<span class="sd">            mse_residual_model_loss: (optional)</span>
+<span class="sd">                Use MSE instead of log-likelihood to train residual AE?</span>
+<span class="sd">            optimizer_params: (optional)</span>
+<span class="sd">                Parameters used to construct training optimizer.</span>
+<span class="sd">            min_sd: (optional)</span>
+<span class="sd">                Minimum sd for log-likelihood.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>

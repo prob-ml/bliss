@@ -33,13 +33,13 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         residual_autoencoder: The second, "residual" AE.
         residual_encoder: The encoder from the second, "residual" AE.
         residual_decoder: The decoder from the second, "residual" AE.
+        slen: Side length of input images.
+        latent_dim: Latent dimension of encoded representation.
+        min_sd: Minimum sd for log-likelihood.
         residual_delay_n_steps: Number of training steps before starting to
             train residual model.
         mse_residual_model_loss: If true, use MSE rather than log-likelihood
             to train residual model.
-        slen: Side length of input images.
-        latent_dim: Latent dimension of encoded representation.
-        min_sd: Minimum sd for log-likelihood.
     """
 
     def __init__(
@@ -58,12 +58,14 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             slen: (optional) Image side length.
             latent_dim: (optional) Latent size of each autoencoder.
             n_bands: (optional) Number of bands in image.
-            residual_delay_n_steps: (optional) Number of training steps before
-                starting to train residual model.
-            mse_residual_model_loss: (optional) Use MSE instead of log-likelihood to
-                train residual AE?.
-            optimizer_params: (optional)Parameters used to construct training optimizer.
-            min_sd: (optional) Minimum sd for log-likelihood.
+            residual_delay_n_steps: (optional)
+                Number of training steps before starting to train residual model.
+            mse_residual_model_loss: (optional)
+                Use MSE instead of log-likelihood to train residual AE?
+            optimizer_params: (optional)
+                Parameters used to construct training optimizer.
+            min_sd: (optional)
+                Minimum sd for log-likelihood.
         """
         super().__init__()
         self.save_hyperparameters()
