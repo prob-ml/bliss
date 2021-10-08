@@ -172,13 +172,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         grid_example = self._plot_grid_examples(output_tensors)
 
         if self.logger:
-            self.logger.experiment.add_figure(
-                f"Epoch:{self.current_epoch}/Random Images", fig_random
-            )
-            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Worst Images", fig_worst)
-            self.logger.experiment.add_figure(
-                f"Epoch:{self.current_epoch}/grid_examples", grid_example
-            )
+            heading = "Epoch:{self.current_epoch}"
+            self.logger.experiment.add_figure(f"{heading}/Random Images", fig_random)
+            self.logger.experiment.add_figure(f"{heading}/Worst Images", fig_worst)
+            self.logger.experiment.add_figure(f"{heading}/grid_examples", grid_example)
 
     def test_step(self, batch, batch_idx):
         """Testing step (pytorch lightning)."""
