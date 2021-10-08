@@ -48,7 +48,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim: int = 64,
         n_bands: int = 1,
         residual_delay_n_steps: int = 500,
-        mse_residual_model_loss: bool = False,
         optimizer_params: dict = None,
         min_sd=1e-3,
     ):
@@ -81,8 +80,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             slen=slen, latent_dim=latent_dim, n_bands=n_bands
         )
         self.residual_autoencoder = nn.Sequential(self.residual_encoder, self.residual_decoder)
-
-        self.mse_residual_model_loss = mse_residual_model_loss
 
         self.residual_delay_n_steps = residual_delay_n_steps
         assert slen == 53, "Currently slen is fixed at 53"
@@ -132,12 +129,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             with torch.no_grad():
                 recon_mean_main = self._main_forward(images, background)
             recon_mean_residual = self._residual_forward(images - recon_mean_main)
-            loss = self._get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
-            self.log("train/loss_residual", loss, prog_bar=True)
-
             recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
-            loss_final = self._get_likelihood_loss(images, recon_mean_final)
-            self.log("train/loss", loss_final, prog_bar=True)
+            loss = self._get_likelihood_loss(images, recon_mean_final)
+            self.log("train/loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -148,9 +142,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.log("val/loss_main", loss_main)
 
         recon_mean_residual = self._residual_forward(images - recon_mean_main)
-        loss_residual = self._get_residual_model_loss(images, recon_mean_main, recon_mean_residual)
-        self.log("val/loss_residual", loss_residual)
-
         recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
         loss = self._get_likelihood_loss(images, recon_mean_final)
         self.log("val/loss", loss)
@@ -234,14 +225,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def _get_likelihood_loss(self, image, recon_mean):
         # this is nan whenever recon_mean is not strictly positive
         return -Normal(recon_mean, recon_mean.sqrt().clamp(min=self.min_sd)).log_prob(image).sum()
-
-    def _get_residual_model_loss(self, image, recon_mean_main, recon_mean_residual):
-        if self.mse_residual_model_loss:
-            loss = F.mse_loss(image - recon_mean_main, recon_mean_residual)
-        else:
-            recon_mean = F.relu(recon_mean_main + recon_mean_residual)
-            loss = self._get_likelihood_loss(image, recon_mean)
-        return loss
 
     def _plot_reconstruction(self, outputs, n_examples=10, mode="random", width=20, pad=6.0):
         # combine all images and recon_mean's into a single tensor
