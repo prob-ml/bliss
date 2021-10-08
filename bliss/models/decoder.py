@@ -45,6 +45,7 @@ class ImageDecoder(pl.LightningModule):
         gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
+        n_latent_batches=160,
         psf_params_file=None,
         psf_slen=25,
         background_values=(686.0,),
@@ -145,7 +146,7 @@ class ImageDecoder(pl.LightningModule):
                 dataloader = dataset.train_dataloader()
                 autoencoder = autoencoder.cuda()
                 print("INFO: Creating latents from Galsim galaxies...")
-                latents = autoencoder.generate_latents(dataloader)
+                latents = autoencoder.generate_latents(dataloader, n_latent_batches)
                 torch.save(latents, self.latents_file)
             self.register_buffer("latents", latents)
         else:

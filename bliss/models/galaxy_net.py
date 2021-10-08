@@ -106,12 +106,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def get_decoder(self):
         return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
 
-    def generate_latents(self, dataloader):
+    def generate_latents(self, dataloader, n_batches):
         """Induces a latent distribution for a non-probabilistic autoencoder."""
         latent_list = []
         enc = self.get_encoder()
         with torch.no_grad():
-            for _ in tqdm(range(160)):
+            for _ in tqdm(range(n_batches)):
                 galaxy = next(iter(dataloader))
                 noiseless = galaxy["noiseless"].to(self.device)
                 latent_batch = enc(noiseless, 0.0)

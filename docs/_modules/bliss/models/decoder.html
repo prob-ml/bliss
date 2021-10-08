@@ -198,6 +198,7 @@
         <span class="n">gal_slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span>
         <span class="n">autoencoder_ckpt</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">latents_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">n_latent_batches</span><span class="o">=</span><span class="mi">160</span><span class="p">,</span>
         <span class="n">psf_params_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">psf_slen</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
         <span class="n">background_values</span><span class="o">=</span><span class="p">(</span><span class="mf">686.0</span><span class="p">,),</span>
@@ -298,7 +299,7 @@
                 <span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">train_dataloader</span><span class="p">()</span>
                 <span class="n">autoencoder</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
                 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;INFO: Creating latents from Galsim galaxies...&quot;</span><span class="p">)</span>
-                <span class="n">latents</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">generate_latents</span><span class="p">(</span><span class="n">dataloader</span><span class="p">)</span>
+                <span class="n">latents</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">generate_latents</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">n_latent_batches</span><span class="p">)</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">latents</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">latents_file</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">latents</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
