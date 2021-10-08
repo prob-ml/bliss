@@ -2,4 +2,5 @@ _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
 slen: 53
 latent_dim: 64
 n_bands: 1
+residual_delay_n_steps: 500
 optimizer_params: ${optimizer}

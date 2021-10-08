@@ -33,6 +33,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         residual_autoencoder: The second, "residual" AE.
         residual_encoder: The encoder from the second, "residual" AE.
         residual_decoder: The decoder from the second, "residual" AE.
+        residual_delay_n_steps: Number of training steps before starting to
+            train residual model.
         mse_residual_model_loss: If true, use MSE rather than log-likelihood
             to train residual model.
         slen: Side length of input images.
@@ -45,6 +47,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         slen: int = 53,
         latent_dim: int = 64,
         n_bands: int = 1,
+        residual_delay_n_steps: int = 500,
         mse_residual_model_loss: bool = False,
         optimizer_params: dict = None,
         min_sd=1e-3,
@@ -54,7 +57,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         Args:
             slen: (optional) Image side length.
             latent_dim: (optional) Latent size of each autoencoder.
-            n_bands: (optional )Number of bands in mimage.
+            n_bands: (optional) Number of bands in image.
+            residual_delay_n_steps: (optional) Number of training steps before
+                starting to train residual model.
             mse_residual_model_loss: (optional) Use MSE instead of log-likelihood to
                 train residual AE?.
             optimizer_params: (optional)Parameters used to construct training optimizer.
@@ -77,6 +82,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         self.mse_residual_model_loss = mse_residual_model_loss
 
+        self.residual_delay_n_steps = residual_delay_n_steps
         assert slen == 53, "Currently slen is fixed at 53"
         self.slen = slen
         assert latent_dim == 64, "Currently latent_dim is fixed at 64"
@@ -214,7 +220,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             optimizer.step(closure=optimizer_closure)
 
         if optimizer_idx == 1:
-            if self.trainer.global_step > 500:
+            if self.trainer.global_step > self.residual_delay_n_steps:
                 optimizer.step(closure=optimizer_closure)
 
     def _main_forward(self, image, background):
