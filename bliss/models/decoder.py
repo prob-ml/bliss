@@ -12,6 +12,7 @@ from torch.nn import functional as F
 
 from bliss.models import galaxy_net
 from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.datasets.galsim_galaxies import SDSSGalaxies
 
 
 def get_mgrid(slen):
@@ -40,10 +41,11 @@ class ImageDecoder(pl.LightningModule):
         f_max=1e6,
         alpha=0.5,
         prob_galaxy=0.0,
-        n_galaxy_params=8,
+        n_galaxy_params=64,
         gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
+        n_latent_batches=160,
         psf_params_file=None,
         psf_slen=25,
         background_values=(686.0,),
@@ -80,7 +82,7 @@ class ImageDecoder(pl.LightningModule):
         self.n_galaxy_params = n_galaxy_params
         self.gal_slen = gal_slen
         self.autoencoder_ckpt = autoencoder_ckpt
-        self.latents_file = latents_file
+        self.latents_file = Path(latents_file) if latents_file is not None else None
         # Star Decoder
         self.psf_slen = psf_slen
         self.sdss_bands = tuple(sdss_bands)
@@ -133,10 +135,23 @@ class ImageDecoder(pl.LightningModule):
                 self.autoencoder_ckpt,
             )
             # load dataset of encoded simulated galaxies.
-            self.register_buffer("latents", torch.load(latents_file))
+            if self.latents_file.exists():
+                latents = torch.load(self.latents_file, "cpu")
+            else:
+                autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(
+                    self.autoencoder_ckpt
+                )
+                psf_image_file = self.latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
+                dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
+                dataloader = dataset.train_dataloader()
+                autoencoder = autoencoder.cuda()
+                print("INFO: Creating latents from Galsim galaxies...")
+                latents = autoencoder.generate_latents(dataloader, n_latent_batches)
+                torch.save(latents, self.latents_file)
+            self.register_buffer("latents", latents)
         else:
             self.galaxy_tile_decoder = None
-            self.register_buffer("latents", torch.zeros(1, 8))
+            self.register_buffer("latents", torch.zeros(1, n_galaxy_params))
 
         # background
         assert len(background_values) == n_bands
@@ -765,11 +780,10 @@ class GalaxyTileDecoder(nn.Module):
 
         # load decoder after loading autoencoder from checkpoint.
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        autoencoder.eval().requires_grad_(False)
         assert gal_slen == autoencoder.hparams.slen
         assert n_galaxy_params == autoencoder.hparams.latent_dim
-        dec = autoencoder.dec
-        dec.eval().requires_grad_(False)
-        self.galaxy_decoder = dec
+        self.galaxy_decoder = autoencoder.get_decoder()
 
         self.gal_slen = gal_slen
         self.n_galaxy_params = n_galaxy_params

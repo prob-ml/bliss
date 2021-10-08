@@ -170,6 +170,29 @@
 </div>
 <div class="section" id="module-bliss.metrics">
 <span id="bliss-metrics-module"></span><h2>bliss.metrics module<a class="headerlink" href="#module-bliss.metrics" title="Permalink to this headline">¶</a></h2>
+<dl class="py function">
+<dt id="bliss.metrics.get_single_galaxy_measurements">
+<code class="sig-prename descclassname"><span class="pre">bliss.metrics.</span></code><code class="sig-name descname"><span class="pre">get_single_galaxy_measurements</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">slen</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_images</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><span class="pre">numpy.ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">recon_images</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><span class="pre">numpy.ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">psf_image</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v1.21)"><span class="pre">numpy.ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">pixel_scale</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><span class="pre">float</span></a></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">0.396</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/metrics.html#get_single_galaxy_measurements"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.metrics.get_single_galaxy_measurements" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute individual galaxy measurements comparing true images with reconstructed images.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>slen</strong> – Side-length of square input images.</p></li>
+<li><p><strong>pixel_scale</strong> – Conversion from arcseconds to pixel.</p></li>
+<li><p><strong>true_images</strong> – Array of shape (samples, n_bands, slen, slen) containing images of
+single-centered galaxies without noise or background.</p></li>
+<li><p><strong>recon_images</strong> – Array of shape (samples, n_bands, slen, slen) containing
+reconstructions of <cite>true_images</cite> without noise or background.</p></li>
+<li><p><strong>psf_image</strong> – Array of shape (n_bands, slen, slen) containing PSF image used for
+convolving the galaxies in <cite>true_images</cite>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Dictionary containing second-moment measurements for <cite>true_images</cite> and <cite>recon_images</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
 </div>
 <div class="section" id="module-bliss.plotting">
 <span id="bliss-plotting-module"></span><h2>bliss.plotting module<a class="headerlink" href="#module-bliss.plotting" title="Permalink to this headline">¶</a></h2>
@@ -182,7 +205,7 @@ pytorch-lightning framework. Users should use this class to construct the sleep-
 model.</p>
 <dl class="py class">
 <dt id="bliss.sleep.SleepPhase">
-<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">bliss.sleep.</span></code><code class="sig-name descname"><span class="pre">SleepPhase</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">encoder_kwargs</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.9)"><span class="pre">dict</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">decoder_kwargs</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.9)"><span class="pre">dict</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotate_probs</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.9)"><span class="pre">bool</span></a></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optimizer_params</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.9)"><span class="pre">dict</span></a><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/sleep.html#SleepPhase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.sleep.SleepPhase" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">bliss.sleep.</span></code><code class="sig-name descname"><span class="pre">SleepPhase</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">encoder</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.10)"><span class="pre">dict</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">decoder</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.10)"><span class="pre">dict</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotate_probs</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><span class="pre">bool</span></a></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optimizer_params</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.10)"><span class="pre">dict</span></a><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/sleep.html#SleepPhase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.sleep.SleepPhase" title="Permalink to this definition">¶</a></dt>
 <dd><p>Summary line.</p>
 <p>Implementation of sleep-phase training using pytorch-lightning framework.</p>
 <p class="rubric">Example</p>
@@ -190,8 +213,7 @@ model.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pytorch_lightning</span> <span class="k">as</span> <span class="nn">pl</span>
 <span class="kn">from</span> <span class="nn">bliss.sleep</span> <span class="kn">import</span> <span class="n">SleepPhase</span>
 
-
-<span class="n">model</span> <span class="o">=</span> <span class="n">SleepPhase</span><span class="p">(</span><span class="o">**</span><span class="n">cfg</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">optimizer_params</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">optimizer</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">SleepPhase</span><span class="p">(</span><span class="o">**</span><span class="n">cfg</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
 <span class="n">trainer</span> <span class="o">=</span> <span class="n">pl</span><span class="o">.</span><span class="n">Trainer</span><span class="p">()</span>
 <span class="n">trainer</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">dataset</span><span class="p">)</span>
 </pre></div>
@@ -247,49 +269,8 @@ model.</p>
 <div class="section" id="module-bliss.tune">
 <span id="bliss-tune-module"></span><h2>bliss.tune module<a class="headerlink" href="#module-bliss.tune" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-bliss.wake">
-<span id="bliss-wake-module"></span><h2>bliss.wake module<a class="headerlink" href="#module-bliss.wake" title="Permalink to this headline">¶</a></h2>
-<dl class="py class">
-<dt id="bliss.wake.WakeNet">
-<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">bliss.wake.</span></code><code class="sig-name descname"><span class="pre">WakeNet</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">star_encoder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_decoder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observed_img</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hparams</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/wake.html#WakeNet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.wake.WakeNet" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="py method">
-<dt id="bliss.wake.WakeNet.configure_optimizers">
-<code class="sig-name descname"><span class="pre">configure_optimizers</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/wake.html#WakeNet.configure_optimizers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.wake.WakeNet.configure_optimizers" title="Permalink to this definition">¶</a></dt>
-<dd><p>Configures optimizers (pytorch lightning).</p>
-</dd></dl>
-
-<dl class="py method">
-<dt id="bliss.wake.WakeNet.forward">
-<code class="sig-name descname"><span class="pre">forward</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obs_img</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/wake.html#WakeNet.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.wake.WakeNet.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get reconstructed mean from running encoder and then decoder.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt id="bliss.wake.WakeNet.train_dataloader">
-<code class="sig-name descname"><span class="pre">train_dataloader</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/wake.html#WakeNet.train_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.wake.WakeNet.train_dataloader" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns training dataloader (pytorch lightning).</p>
-</dd></dl>
-
-<dl class="py method">
-<dt id="bliss.wake.WakeNet.training_step">
-<code class="sig-name descname"><span class="pre">training_step</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/wake.html#WakeNet.training_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.wake.WakeNet.training_step" title="Permalink to this definition">¶</a></dt>
-<dd><p>Training step (pytorch lightning).</p>
-</dd></dl>
-
-<dl class="py method">
-<dt id="bliss.wake.WakeNet.val_dataloader">
-<code class="sig-name descname"><span class="pre">val_dataloader</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/wake.html#WakeNet.val_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.wake.WakeNet.val_dataloader" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns validation dataloader (pytorch lightning).</p>
-</dd></dl>
-
-<dl class="py method">
-<dt id="bliss.wake.WakeNet.validation_step">
-<code class="sig-name descname"><span class="pre">validation_step</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/wake.html#WakeNet.validation_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.wake.WakeNet.validation_step" title="Permalink to this definition">¶</a></dt>
-<dd><p>Validation step (pytorch lightning).</p>
-</dd></dl>
-
-</dd></dl>
-
+<div class="section" id="bliss-wake-module">
+<h2>bliss.wake module<a class="headerlink" href="#bliss-wake-module" title="Permalink to this headline">¶</a></h2>
 </div>
 <div class="section" id="datasets">
 <h2>Datasets<a class="headerlink" href="#datasets" title="Permalink to this headline">¶</a></h2>

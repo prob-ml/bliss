@@ -170,7 +170,6 @@
  | <a href="#S"><strong>S</strong></a>
  | <a href="#T"><strong>T</strong></a>
  | <a href="#V"><strong>V</strong></a>
- | <a href="#W"><strong>W</strong></a>
  
 </div>
 <h2 id="A">A</h2>
@@ -226,6 +225,8 @@
         <li><a href="api/bliss.models.html#module-bliss.models.encoder">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     bliss.models.fnp
 
@@ -233,8 +234,6 @@
         <li><a href="api/bliss.models.html#module-bliss.models.fnp">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     bliss.models.galaxy_net
 
@@ -270,13 +269,6 @@
         <li><a href="api/bliss.html#module-bliss.tune">module</a>
 </li>
       </ul></li>
-      <li>
-    bliss.wake
-
-      <ul>
-        <li><a href="api/bliss.html#module-bliss.wake">module</a>
-</li>
-      </ul></li>
       <li><a href="api/bliss.datasets.html#bliss.datasets.simulated.BlissDataset">BlissDataset (class in bliss.datasets.simulated)</a>
 </li>
   </ul></td>
@@ -291,16 +283,14 @@
 </li>
       <li><a href="api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyEncoder">CenteredGalaxyEncoder (class in bliss.models.galaxy_net)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.configure_optimizers">configure_optimizers() (bliss.models.galaxy_net.OneCenteredGalaxyAE method)</a>
 
       <ul>
         <li><a href="api/bliss.html#bliss.sleep.SleepPhase.configure_optimizers">(bliss.sleep.SleepPhase method)</a>
 </li>
-        <li><a href="api/bliss.html#bliss.wake.WakeNet.configure_optimizers">(bliss.wake.WakeNet method)</a>
-</li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.models.html#bliss.models.encoder.ConvBlock">ConvBlock (class in bliss.models.encoder)</a>
 </li>
       <li><a href="api/bliss.models.html#bliss.models.fnp.FNP.cov_vencoder">cov_vencoder (bliss.models.fnp.FNP attribute)</a>
@@ -374,9 +364,15 @@
 </li>
         <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.forward">(bliss.models.galaxy_net.OneCenteredGalaxyAE method)</a>
 </li>
-        <li><a href="api/bliss.html#bliss.sleep.SleepPhase.forward">(bliss.sleep.SleepPhase method)</a>
+        <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyDecoder.forward">(bliss.models.galaxy_net.OneCenteredGalaxyDecoder method)</a>
 </li>
-        <li><a href="api/bliss.html#bliss.wake.WakeNet.forward">(bliss.wake.WakeNet method)</a>
+        <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyEncoder.forward">(bliss.models.galaxy_net.OneCenteredGalaxyEncoder method)</a>
+</li>
+        <li><a href="api/bliss.models.html#bliss.models.galaxy_net.ResConv2dBlock.forward">(bliss.models.galaxy_net.ResConv2dBlock method)</a>
+</li>
+        <li><a href="api/bliss.models.html#bliss.models.galaxy_net.ResidualConvBlock.forward">(bliss.models.galaxy_net.ResidualConvBlock method)</a>
+</li>
+        <li><a href="api/bliss.html#bliss.sleep.SleepPhase.forward">(bliss.sleep.SleepPhase method)</a>
 </li>
       </ul></li>
   </ul></td>
@@ -387,6 +383,8 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.models.html#bliss.models.decoder.GalaxyTileDecoder">GalaxyTileDecoder (class in bliss.models.decoder)</a>
 </li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.generate_latents">generate_latents() (bliss.models.galaxy_net.OneCenteredGalaxyAE method)</a>
+</li>
       <li><a href="api/bliss.models.html#bliss.models.encoder.ImageEncoder.get_images_in_tiles">get_images_in_tiles() (bliss.models.encoder.ImageEncoder method)</a>
 
       <ul>
@@ -396,6 +394,8 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.models.html#bliss.models.encoder.get_is_on_from_n_sources">get_is_on_from_n_sources() (in module bliss.models.encoder)</a>
+</li>
+      <li><a href="api/bliss.html#bliss.metrics.get_single_galaxy_measurements">get_single_galaxy_measurements() (in module bliss.metrics)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -418,12 +418,24 @@
       <li><a href="api/bliss.models.html#bliss.models.fnp.FNP.label_vdecoder">label_vdecoder (bliss.models.fnp.FNP attribute)</a>
 </li>
   </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.latent_dim">latent_dim (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
+</li>
+  </ul></td>
 </tr></table>
 
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.models.html#bliss.models.fnp.MAB">MAB (class in bliss.models.fnp)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.main_autoencoder">main_autoencoder (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.main_decoder">main_decoder (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.main_encoder">main_encoder (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.min_sd">min_sd (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
 </li>
       <li>
     module
@@ -453,8 +465,6 @@
 </li>
         <li><a href="api/bliss.html#module-bliss.tune">bliss.tune</a>
 </li>
-        <li><a href="api/bliss.html#module-bliss.wake">bliss.wake</a>
-</li>
       </ul></li>
   </ul></td>
 </tr></table>
@@ -463,6 +473,14 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE">OneCenteredGalaxyAE (class in bliss.models.galaxy_net)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyDecoder">OneCenteredGalaxyDecoder (class in bliss.models.galaxy_net)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyEncoder">OneCenteredGalaxyEncoder (class in bliss.models.galaxy_net)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.optimizer_step">optimizer_step() (bliss.models.galaxy_net.OneCenteredGalaxyAE method)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -488,11 +506,23 @@
 </li>
       <li><a href="api/bliss.models.html#bliss.models.decoder.Tiler.render_tile">render_tile() (bliss.models.decoder.Tiler method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.models.html#bliss.models.fnp.FNP.rep_encoder">rep_encoder (bliss.models.fnp.FNP attribute)</a>
 </li>
       <li><a href="api/bliss.models.html#bliss.models.fnp.RepEncoder">RepEncoder (class in bliss.models.fnp)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.ResConv2dBlock">ResConv2dBlock (class in bliss.models.galaxy_net)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.residual_autoencoder">residual_autoencoder (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.residual_decoder">residual_decoder (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.residual_delay_n_steps">residual_delay_n_steps (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.residual_encoder">residual_encoder (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.ResidualConvBlock">ResidualConvBlock (class in bliss.models.galaxy_net)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -509,6 +539,8 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.html#bliss.sleep.SleepPhase">SleepPhase (class in bliss.sleep)</a>
+</li>
+      <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.slen">slen (bliss.models.galaxy_net.OneCenteredGalaxyAE attribute)</a>
 </li>
       <li><a href="api/bliss.datasets.html#bliss.datasets.sdss.SloanDigitalSkySurvey">SloanDigitalSkySurvey (class in bliss.datasets.sdss)</a>
 </li>
@@ -530,22 +562,16 @@
         <li><a href="api/bliss.html#bliss.sleep.SleepPhase.test_step">(bliss.sleep.SleepPhase method)</a>
 </li>
       </ul></li>
-      <li><a href="api/bliss.models.html#bliss.models.decoder.Tiler">Tiler (class in bliss.models.decoder)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api/bliss.datasets.html#bliss.datasets.simulated.SimulatedDataset.train_dataloader">train_dataloader() (bliss.datasets.simulated.SimulatedDataset method)</a>
-
-      <ul>
-        <li><a href="api/bliss.html#bliss.wake.WakeNet.train_dataloader">(bliss.wake.WakeNet method)</a>
+      <li><a href="api/bliss.models.html#bliss.models.decoder.Tiler">Tiler (class in bliss.models.decoder)</a>
 </li>
-      </ul></li>
+      <li><a href="api/bliss.datasets.html#bliss.datasets.simulated.SimulatedDataset.train_dataloader">train_dataloader() (bliss.datasets.simulated.SimulatedDataset method)</a>
+</li>
       <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.training_step">training_step() (bliss.models.galaxy_net.OneCenteredGalaxyAE method)</a>
 
       <ul>
         <li><a href="api/bliss.html#bliss.sleep.SleepPhase.training_step">(bliss.sleep.SleepPhase method)</a>
-</li>
-        <li><a href="api/bliss.html#bliss.wake.WakeNet.training_step">(bliss.wake.WakeNet method)</a>
 </li>
       </ul></li>
       <li><a href="api/bliss.models.html#bliss.models.fnp.FNP.trans_cond_y">trans_cond_y (bliss.models.fnp.FNP attribute)</a>
@@ -557,11 +583,7 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/bliss.datasets.html#bliss.datasets.simulated.SimulatedDataset.val_dataloader">val_dataloader() (bliss.datasets.simulated.SimulatedDataset method)</a>
-
-      <ul>
-        <li><a href="api/bliss.html#bliss.wake.WakeNet.val_dataloader">(bliss.wake.WakeNet method)</a>
 </li>
-      </ul></li>
       <li><a href="api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyAE.validation_epoch_end">validation_epoch_end() (bliss.models.galaxy_net.OneCenteredGalaxyAE method)</a>
 
       <ul>
@@ -575,17 +597,7 @@
       <ul>
         <li><a href="api/bliss.html#bliss.sleep.SleepPhase.validation_step">(bliss.sleep.SleepPhase method)</a>
 </li>
-        <li><a href="api/bliss.html#bliss.wake.WakeNet.validation_step">(bliss.wake.WakeNet method)</a>
-</li>
       </ul></li>
-  </ul></td>
-</tr></table>
-
-<h2 id="W">W</h2>
-<table style="width: 100%" class="indextable genindextable"><tr>
-  <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api/bliss.html#bliss.wake.WakeNet">WakeNet (class in bliss.wake)</a>
-</li>
   </ul></td>
 </tr></table>
 

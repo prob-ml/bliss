@@ -4,7 +4,7 @@ tile_slen: 4
 ptile_slen: 36
 border_padding: 4
 prob_galaxy: 1.0
-n_galaxy_params: 8
+n_galaxy_params: 64
 max_sources: 1
 mean_sources: 0.015
 min_sources: 0
