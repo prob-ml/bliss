@@ -318,7 +318,18 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
 
 class OneCenteredGalaxyEncoder(nn.Module):
-    """Encoder part of OneCenteredGalaxyAE."""
+    """Encoder part of OneCenteredGalaxyAE.
+
+    This module isolates the part of OneCenteredGalaxyAE which encodes
+    a latent representation of an image. Mostly used within larger modules
+    such as the galaxy deblender.
+
+    Notes:
+        The `allow_pad` argument is used so that the same architecture
+        can be used for encoding galaxies from Galsim and encoding galaxies in the deblender.
+        It is often the case that the side length (`slen`) is smaller in the second setting
+        than the first. Without padding, the downsampling architecture likely won't work.
+    """
 
     def __init__(
         self,

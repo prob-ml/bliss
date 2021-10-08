@@ -471,7 +471,18 @@
 
 
 <div class="viewcode-block" id="OneCenteredGalaxyEncoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyEncoder">[docs]</a><span class="k">class</span> <span class="nc">OneCenteredGalaxyEncoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Encoder part of OneCenteredGalaxyAE.&quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;Encoder part of OneCenteredGalaxyAE.</span>
+
+<span class="sd">    This module isolates the part of OneCenteredGalaxyAE which encodes</span>
+<span class="sd">    a latent representation of an image. Mostly used within larger modules</span>
+<span class="sd">    such as the galaxy deblender.</span>
+
+<span class="sd">    Notes:</span>
+<span class="sd">        The `allow_pad` argument is used so that the same architecture</span>
+<span class="sd">        can be used for encoding galaxies from Galsim and encoding galaxies in the deblender.</span>
+<span class="sd">        It is often the case that the side length (`slen`) is smaller in the second setting</span>
+<span class="sd">        than the first. Without padding, the downsampling architecture likely won&#39;t work.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
