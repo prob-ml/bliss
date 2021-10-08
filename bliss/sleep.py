@@ -120,7 +120,7 @@ class SleepPhase(pl.LightningModule):
         encoder: dict,
         decoder: dict,
         annotate_probs: bool = False,
-        optimizer_params: dict = None,
+        optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         """Initializes SleepPhase class.
 

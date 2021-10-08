@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.encoder import get_full_params, get_images_in_tiles
-from bliss.models.galaxy_net import CenteredGalaxyEncoder
+from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.optimizer import get_optimizer
 from bliss.plotting import plot_image, plot_image_and_locs
 
@@ -74,9 +74,9 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        self.enc = CenteredGalaxyEncoder(
-            slen=self.slen, latent_dim=self.latent_dim, n_bands=self.n_bands, hidden=hidden
-        )
+        autoencoder_ckpt = decoder["autoencoder_ckpt"]
+        autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        self.enc = autoencoder.get_encoder(allow_pad=True)
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
