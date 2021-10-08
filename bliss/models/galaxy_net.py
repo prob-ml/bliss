@@ -38,8 +38,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         min_sd: Minimum sd for log-likelihood.
         residual_delay_n_steps: Number of training steps before starting to
             train residual model.
-        mse_residual_model_loss: If true, use MSE rather than log-likelihood
-            to train residual model.
     """
 
     def __init__(
@@ -59,8 +57,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             n_bands: (optional) Number of bands in image.
             residual_delay_n_steps: (optional)
                 Number of training steps before starting to train residual model.
-            mse_residual_model_loss: (optional)
-                Use MSE instead of log-likelihood to train residual AE?
             optimizer_params: (optional)
                 Parameters used to construct training optimizer.
             min_sd: (optional)
