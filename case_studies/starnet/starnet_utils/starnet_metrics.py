@@ -14,14 +14,17 @@ def get_tpr_vec(
         which_true = (true_mags > mag_bins[i]) & (true_mags < mag_bins[i + 1])
         which_true = which_true.squeeze()
         counts_vec[i] = torch.sum(which_true)
-
-        tpr_vec[i] = get_tpr_ppv(
-            true_locs[which_true],
-            true_mags[which_true],
-            est_locs,
-            est_mags,
-            slack = 0.5
-        )[0]
+           
+        if counts_vec[i] > 0: 
+            tpr_vec[i] = get_tpr_ppv(
+                true_locs[which_true],
+                true_mags[which_true],
+                est_locs,
+                est_mags,
+                slack = 0.5
+            )[0]
+        else: 
+            tpr_vec[i] = 0
 
     return tpr_vec, mag_bins, counts_vec
 
@@ -39,12 +42,15 @@ def get_ppv_vec(
         
         counts_vec[i] = torch.sum(which_est)
         
-        ppv_vec[i] = get_tpr_ppv(
-                    true_locs,
-                    true_mags,
-                    est_locs[which_est],
-                    est_mags[which_est],
-                    slack = 0.5
-                )[1]
-    
+        if counts_vec[i] > 0: 
+            ppv_vec[i] = get_tpr_ppv(
+                        true_locs,
+                        true_mags,
+                        est_locs[which_est],
+                        est_mags[which_est],
+                        slack = 0.5
+                    )[1]
+        else: 
+            ppv_vec[i] = 0
+            
     return ppv_vec, mag_bins, counts_vec
