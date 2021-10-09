@@ -135,8 +135,8 @@ def convert_nmgy_to_mag(nmgy):
     return 22.5 - 2.5 * torch.log10(nmgy)
 
 def load_m2_data(sdss_dir = '../../data/sdss/',
-                    hubble_dir = './hubble_data/',
-                    f_min = 1000.): 
+                 hubble_dir = './hubble_data/'): 
+    
     # returns the SDSS image of M2 in the r and i bands
     # along with the corresponding Hubble catalog
     
