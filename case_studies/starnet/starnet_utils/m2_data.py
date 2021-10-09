@@ -4,14 +4,14 @@ import os
 import pickle
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
-import scipy.stats as stats
 import torch
 from torch.utils.data import Dataset
 
 from astropy.io import fits
 from astropy.wcs import WCS
 
-import matplotlib.pyplot as plt
+
+from utils import convert_mag_to_nmgy, convert_nmgy_to_mag
 
 def _get_mgrid2(slen0, slen1):
     offset0 = (slen0 - 1) / 2
@@ -127,12 +127,6 @@ class SloanDigitalSkySurvey(Dataset):
         pickle.dump(ret, field_dir.joinpath("cache.pkl").open("wb+"))
 
         return ret
-
-def convert_mag_to_nmgy(mag):
-    return 10**((22.5 - mag) / 2.5)
-
-def convert_nmgy_to_mag(nmgy):
-    return 22.5 - 2.5 * torch.log10(nmgy)
 
 def load_m2_data(sdss_dir = '../../data/sdss/',
                  hubble_dir = './hubble_data/'): 
