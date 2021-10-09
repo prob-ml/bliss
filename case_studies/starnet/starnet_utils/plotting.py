@@ -36,8 +36,14 @@ def filter_catalog_by_locs(catalog, x0, x1, slen0, slen1):
 def crop_image(image, x0, x1, slen0, slen1): 
     return image[..., x0:(x0 + slen0), x1:(x1 + slen1)]
 
-def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
-
+def plot_image(axarr, image, x0=0, x1=0, slen0=None, slen1=None):
+    
+    if slen0 == None: 
+        slen0 = image.shape[0] - x0
+    
+    if slen1 == None: 
+        slen1 = image.shape[1] - x1
+        
     subimage = image[x0 : (x0 + slen0), x1 : (x1 + slen1)]
     vmin = subimage.min()
     vmax = subimage.max()
@@ -49,12 +55,13 @@ def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
     return im
 
 
-def plot_locations(locs, ax, marker="o", color="b"):
+def plot_locations(locs, ax, marker="o", color="b", alpha=1):
     ax.scatter(
         locs[:, 1] - 0.5,
         locs[:, 0] - 0.5,
         marker=marker,
         color=color,
+        alpha = alpha
     )
 
 
