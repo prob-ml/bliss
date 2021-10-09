@@ -234,4 +234,4 @@ def load_m2_data(sdss_dir = '../../data/sdss/',
     hubble_catalog = dict(locs = torch.Tensor(hubble_locs),
                           fluxes = torch.Tensor(hubble_fluxes))
     
-    return sdss_image, hubble_catalog, sdss_background
+    return sdss_image, hubble_catalog, sdss_background, sdss_data
