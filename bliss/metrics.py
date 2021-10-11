@@ -19,7 +19,7 @@ def match_by_locs(true_locs, est_locs, batch_size=64, slack=1.0):
 
 
     Args:
-        batch_size: Batch size for location inputs.
+        batch_size: Batch size being used for inputs.
         slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
         true_locs: Tensor of shape `(b x n1 x 2)`, where `n1` is the true number of sources and
             `b` is the batch_size. The centroids should be in units of pixels.
@@ -77,7 +77,6 @@ class DetectionMetrics(Metric):
     def __init__(
         self,
         slen=53,
-        batch_size=64,
         slack=1.0,
         dist_sync_on_step=False,
     ) -> None:
@@ -85,7 +84,6 @@ class DetectionMetrics(Metric):
 
         Args:
             slen: Size of image (w/out border paddding) in pixels.
-            batch_size: Batch size being used for inputs.
             slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
             dist_sync_on_step: See torchmetrics documentation.
 
@@ -100,7 +98,6 @@ class DetectionMetrics(Metric):
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.batch_size = batch_size
         self.slack = slack
         self.slen = slen
 
@@ -116,21 +113,22 @@ class DetectionMetrics(Metric):
     def update(self, true_locs, est_locs, true_n_sources, est_n_sources):
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
         assert len(true_n_sources.shape) == len(est_n_sources.shape) == 1
-        assert true_n_sources.shape[0] == est_n_sources.shape[0] == self.batch_size
+        assert true_n_sources.shape[0] == est_n_sources.shape[0]
         assert len(true_locs.shape) == len(est_locs.shape) == 3
         assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-        assert true_locs.shape[0] == est_locs.shape[0] == self.batch_size
+        assert true_locs.shape[0] == est_locs.shape[0] == true_n_sources.shape[0]
+        batch_size = true_n_sources.shape[0]
 
         # get matches based on locations.
         true_locs *= self.slen
         est_locs *= self.slen
         _, match_est, dist_keep, avg_distance = self.match_by_locs(
-            true_locs, est_locs, batch_size=self.batch_size, slack=self.slack
+            true_locs, est_locs, batch_size=batch_size, slack=self.slack
         )
 
         self.total_true_n_sources += true_n_sources.sum().int().item()
 
-        for b in range(self.batch_size):
+        for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             mest = match_est[b]
             dkeep = dist_keep[b]
@@ -144,7 +142,7 @@ class DetectionMetrics(Metric):
             self.fp += fp
             self.total_n_matches += len(elocs)
             self.avg_distance += avg_distance
-        self.avg_distance /= self.batch_size
+        self.avg_distance /= batch_size
 
     def compute(self):
         precision = self.tp / (self.tp + self.tp)  # = PPV = positive predictive value
@@ -163,14 +161,12 @@ class ClassificationMetrics(Metric):
 
     def __init__(
         self,
-        batch_size=64,
         slack=1.0,
         dist_sync_on_step=False,
     ) -> None:
         """Computes matches between true and estimated locations.
 
         Args:
-            batch_size: Batch size being used for inputs.
             slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
             dist_sync_on_step: See torchmetrics documentation.
 
@@ -181,7 +177,6 @@ class ClassificationMetrics(Metric):
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.batch_size = batch_size
         self.slack = slack
 
         self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -191,18 +186,19 @@ class ClassificationMetrics(Metric):
     # pylint: disable=no-member
     def update(self, true_locs, est_locs, true_galaxy_bool, est_galaxy_bool):
         """Update the internal state of the metric including correct # of classifications."""
+        batch_size = true_locs.shape[0]
         assert len(true_galaxy_bool.shape) == len(est_galaxy_bool.shape) == 2
-        assert true_galaxy_bool.shape[0] == est_galaxy_bool.shape[0] == self.batch_size
+        assert true_galaxy_bool.shape[0] == est_galaxy_bool.shape[0] == batch_size
         assert len(true_locs.shape) == len(est_locs.shape) == 3
         assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-        assert true_locs.shape[0] == est_locs.shape[0] == self.batch_size
+        assert true_locs.shape[0] == est_locs.shape[0] == batch_size
 
         # get matches based on locations.
         match_true, match_est, dist_keep, _ = self.match_by_locs(
-            true_locs, est_locs, batch_size=self.batch_size, slack=self.slack
+            true_locs, est_locs, batch_size=batch_size, slack=self.slack
         )
 
-        for b in range(self.batch_size):
+        for b in range(batch_size):
             mtrue, mest, dkeep = match_true[b], match_est[b], dist_keep[b]
             tgbool = true_galaxy_bool[b][mtrue][dkeep].reshape(-1)
             egbool = est_galaxy_bool[b][mest][dkeep].reshape(-1)
