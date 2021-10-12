@@ -4,6 +4,208 @@ import torch
 import tqdm
 from einops import rearrange, reduce
 from scipy import optimize as sp_optim
+from sklearn.metrics import confusion_matrix
+from torchmetrics import Metric
+
+
+def match_by_locs(true_locs, est_locs, slack=1.0):
+    """Match true and estimated locations and returned indices to match.
+
+    Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
+    The matching is done with `scipy.optimize.linear_sum_assignment`, which implements
+    the Hungarian algorithm.
+
+    Automatically discards leftover locations with coordinates **exactly** (0, 0).
+
+    Args:
+        slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
+        true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
+            The centroids should be in units of pixels.
+        est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
+            number of sources. The centroids should be in units of pixels.
+
+    Returns:
+        dist_keep: Matched objects to keep based on l1 distances.
+        distances: Average l-infinity distance over matched objects.
+        match_true, match_est: Tensors corresponding to indices matched, so
+            that `true_locs[true_match]`, `est_locs[est_match]` will have the matched
+            locations for each pair of matched objects at the same position.
+    """
+    assert len(true_locs.shape) == len(est_locs.shape) == 2
+    assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+
+    locs1 = true_locs.view(-1, 2)
+    locs2 = est_locs.view(-1, 2)
+
+    # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
+    locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+    locs_err = reduce(locs_err, "i j k -> i j", "sum")
+
+    # find minimal permutation and return matches
+    row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
+
+    # we match objects based on distance too.
+    # only match objects that satisfy threshold on l-infinity distance.
+    # do not match fake objects with locs = (0, 0)
+    dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
+    origin_dist = torch.min(locs1[row_indx].pow(2).sum(1), locs2[col_indx].pow(2).sum(1))
+    cond1 = (dist < slack).bool()
+    cond2 = (origin_dist > 0).bool()
+    dist_keep = torch.logical_and(cond1, cond2)
+    avg_distance = dist[cond2].mean()  # average l-infinity distance over matched objects.
+
+    return row_indx, col_indx, dist_keep, avg_distance
+
+
+class DetectionMetrics(Metric):
+    """Class that calculates aggregate detection metrics over batches."""
+
+    def __init__(
+        self,
+        slen,
+        slack=1.0,
+        dist_sync_on_step=False,
+    ) -> None:
+        """Computes matches between true and estimated locations.
+
+        Args:
+            slen: Size of image (w/out border paddding) in pixels.
+            slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
+            dist_sync_on_step: See torchmetrics documentation.
+
+        Attributes:
+            tp: true positives = # of sources matched with a true source.
+            fp: false positives = # of predicted sources not matched with true source
+            avg_distance: Average l-infinity distance over matched objects.
+            total_true_n_sources: Total number of true sources over batches seen.
+            total_correct_class: Total # of correct classifications over matched objects.
+            total_n_matches: Total # of matches over batches.
+            conf_matrix: Confusion matrix (galaxy vs star)
+        """
+        super().__init__(dist_sync_on_step=dist_sync_on_step)
+
+        self.slen = slen
+        self.slack = slack
+
+        self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("fp", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
+
+    # pylint: disable=no-member
+    def update(self, true_params: dict, est_params: dict):
+        """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
+        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
+        true_locs, est_locs = true_params["locs"], est_params["locs"]
+        assert len(true_n_sources.shape) == len(est_n_sources.shape) == 1
+        assert true_n_sources.shape[0] == est_n_sources.shape[0]
+        assert len(true_locs.shape) == len(est_locs.shape) == 3
+        assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+        assert true_locs.shape[0] == est_locs.shape[0] == true_n_sources.shape[0]
+        batch_size = true_n_sources.shape[0]
+
+        self.total_true_n_sources += true_n_sources.sum().int().item()
+
+        count = 0
+        for b in range(batch_size):
+            ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
+            if ntrue > 0 and nest > 0:
+                _, mest, dkeep, avg_distance = match_by_locs(
+                    true_locs[b] * self.slen,
+                    est_locs[b] * self.slen,
+                    slack=self.slack,
+                )
+                elocs = est_locs[b][mest][dkeep]
+
+                tp = len(elocs)
+                fp = nest - len(elocs)
+                assert fp >= 0
+                self.tp += tp
+                self.fp += fp
+                self.total_n_matches += len(elocs)
+                self.avg_distance += avg_distance
+                count += 1
+        self.avg_distance /= count
+
+    def compute(self):
+        precision = self.tp / (self.tp + self.fp)  # = PPV = positive predictive value
+        recall = self.tp / self.total_true_n_sources  # = TPR = true positive rate
+        f1 = (2 * precision * recall) / (precision + recall)
+        return {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "avg_distance": self.avg_distance,
+        }
+
+
+class ClassificationMetrics(Metric):
+    """Class that calculates aggregate classification metrics over batches."""
+
+    def __init__(
+        self,
+        slen,
+        slack=1.0,
+        dist_sync_on_step=False,
+    ) -> None:
+        """Computes matches between true and estimated locations.
+
+        Args:
+            slen: Side-length of image.
+            slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
+            dist_sync_on_step: See torchmetrics documentation.
+
+        Attributes:
+            total_n_matches: Total number of true matches.
+            total_correct_class: Total number of correct classifications.
+            Confusion matrix: Confusion matrix of galaxy vs. star
+        """
+        super().__init__(dist_sync_on_step=dist_sync_on_step)
+
+        self.slen = slen
+        self.slack = slack
+
+        self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
+
+    # pylint: disable=no-member
+    def update(self, true_params: dict, est_params: dict):
+        """Update the internal state of the metric including correct # of classifications."""
+        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
+        true_locs, est_locs = true_params["locs"], est_params["locs"]
+        true_galaxy_bool, est_galaxy_bool = true_params["galaxy_bool"], est_params["galaxy_bool"]
+        batch_size = len(true_n_sources)
+        assert len(true_galaxy_bool.shape) == len(est_galaxy_bool.shape) == 3
+        assert true_galaxy_bool.shape[0] == est_galaxy_bool.shape[0] == batch_size
+        assert len(true_locs.shape) == len(est_locs.shape) == 3
+        assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+        assert true_locs.shape[0] == est_locs.shape[0] == batch_size
+
+        for b in range(batch_size):
+            ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
+            if ntrue > 0 and nest > 0:
+                mtrue, mest, dkeep, _ = match_by_locs(
+                    true_locs[b] * self.slen,
+                    est_locs[b] * self.slen,
+                    slack=self.slack,
+                )
+                tgbool = true_galaxy_bool[b][mtrue][dkeep].reshape(-1)
+                egbool = est_galaxy_bool[b][mest][dkeep].reshape(-1)
+                self.total_n_matches += len(egbool)
+                self.total_correct_class += tgbool.eq(egbool).sum().int()
+                self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
+
+    # pylint: disable=no-member
+    def compute(self):
+        """Calculate misclassification accuracy, and confusion matrix."""
+        return {
+            "class_acc": self.total_correct_class / self.total_n_matches,
+            "conf_matrix": self.conf_matrix,
+        }
 
 
 def get_single_galaxy_measurements(
@@ -18,9 +220,9 @@ def get_single_galaxy_measurements(
     Args:
         slen: Side-length of square input images.
         pixel_scale: Conversion from arcseconds to pixel.
-        true_images: Array of shape (samples, n_bands, slen, slen) containing images of
+        true_images: Array of shape (n_samples, n_bands, slen, slen) containing images of
             single-centered galaxies without noise or background.
-        recon_images: Array of shape (samples, n_bands, slen, slen) containing
+        recon_images: Array of shape (n_samples, n_bands, slen, slen) containing
             reconstructions of `true_images` without noise or background.
         psf_image: Array of shape (n_bands, slen, slen) containing PSF image used for
             convolving the galaxies in `true_images`.
@@ -76,167 +278,4 @@ def get_single_galaxy_measurements(
         "recon_ellip": recon_ellip,
         "true_hlrs": true_hlrs,
         "recon_hlrs": recon_hlrs,
-    }
-
-
-def inner_join_locs(locs1, locs2):
-
-    # locs1 and locs2 are arrays of locations,
-    # each of shape (number of sources) x 2
-
-    # permutes locs2 to find minimal error between locs1 and locs2.
-    # The matching is done using scipy.optimize.linear_sum_assignment,
-    # which implements the Hungarian algorithm.
-
-    # if locs1 is less than locs2, not every locs2 is returned;
-    # if locs2 is less than locs1, not every locs1 is returned.
-    # Only those with a match is returned, hence the "inner_join."
-
-    assert len(locs1.shape) == 2
-    assert locs1.shape[1] == 2
-
-    assert len(locs2.shape) == 2
-    assert locs2.shape[1] == 2
-
-    # mse of locs:
-    # entry (i,j) is l1 distance between of ith loc in locs1
-    # and to jth loc in locs2
-    locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
-    locs_err = reduce(locs_err, "i j k -> i j", "sum")
-
-    # find minimal permutation
-    row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
-
-    # return locations with their match
-    return locs1[row_indx], locs2[col_indx], row_indx, col_indx
-
-
-def inner_join_locs_and_fluxes(locs1, fluxes1, locs2, fluxes2):
-    # permutes locations and fluxes using the Hungarian algorithm
-    # on locations to find matches.
-    # see `inner_join_locs`.
-
-    # find matches based on locations,
-    # and permute locations.
-    locs1, locs2, row_indx, col_indx = inner_join_locs(locs1, locs2)
-
-    # permute fluxes based on how we permuted locations
-    fluxes1 = fluxes1[row_indx]
-    fluxes2 = fluxes2[col_indx]
-
-    return locs1, fluxes1, locs2, fluxes2
-
-
-def get_l1_error(true_locs, true_mag, est_locs, est_mag):
-
-    # returns a vector of absolute errors for locations and fluxes,
-    # one for each star.
-
-    # The number of estimated stars does not have to equal the number of true stars!
-
-    # We only evaluate the error on the sources that have a match:
-    # the returned vector of absolute erros have length min(num. true sources, num. est. sources).
-    # See `inner_join_locs_and_fluxes` above.
-
-    true_locs, true_mag, est_locs, est_mag = inner_join_locs_and_fluxes(
-        true_locs, true_mag, est_locs, est_mag
-    )
-
-    # L1 error over locations
-    locs_mae = (true_locs - est_locs).abs().sum(1)
-
-    # flux error (for all bands)
-    fluxes_mae = (true_mag - est_mag).abs().flatten()
-
-    return locs_mae, fluxes_mae
-
-
-def get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
-
-    # l-infty error in location,
-    # matrix of true x est error
-    locs_error = torch.abs(est_locs.unsqueeze(0) - true_locs.unsqueeze(1)).max(-1)[0]
-
-    # worst error in either band
-    mag_error = torch.abs(est_mag.unsqueeze(0) - true_mag.unsqueeze(1)).max(-1)[0]
-
-    tpr_bool = torch.any((locs_error < slack) * (mag_error < slack), dim=1).float()
-    ppv_bool = torch.any((locs_error < slack) * (mag_error < slack), dim=0).float()
-
-    return tpr_bool.mean(), ppv_bool.mean()
-
-
-def eval_error_on_batch(true_params, est_params, slen):
-
-    # check batch sizes are equal
-    assert len(true_params["n_sources"]) == len(est_params["n_sources"])
-
-    batch_size = len(true_params["n_sources"])
-    n_bands = true_params["fluxes"].shape[-1]
-
-    tpr_vec = torch.zeros(batch_size)
-    ppv_vec = torch.zeros(batch_size)
-
-    locs_mae_vec = []
-    fluxes_mae_vec = []
-    galaxy_params_mae_vec = []
-
-    # accuracy of counting number of sources
-    count_bool = true_params["n_sources"].eq(est_params["n_sources"])
-
-    for i in range(batch_size):
-
-        # get number of sources
-        ntrue = int(true_params["n_sources"][i])
-        nest = int(est_params["n_sources"][i])
-
-        if (nest > 0) and (ntrue > 0):
-
-            # prepare locs and get them in units of pixels.
-            true_locs = true_params["locs"][i, 0:ntrue].view(ntrue, 2) * slen
-            est_locs = est_params["locs"][i, 0:nest].view(nest, 2) * slen
-
-            # prepare fluxes
-            true_fluxes = true_params["fluxes"][i, 0:ntrue].view(ntrue, n_bands)
-            est_fluxes = est_params["fluxes"][i, 0:nest].view(nest, n_bands)
-
-            # prepare galaxy params.
-            true_galaxy_params = true_params["galaxy_params"][i, 0:ntrue].view(ntrue, -1)
-            est_galaxy_params = est_params["galaxy_params"][i, 0:nest].view(nest, -1)
-
-            # convert fluxes to magnitude (off by a constant, but
-            # doesn't matter since we are looking at the diff)
-            true_mag = torch.log10(true_fluxes) * 2.5
-            est_mag = torch.log10(est_fluxes) * 2.5
-
-            # get TPR and PPV
-            tpr_i, ppv_i = get_tpr_ppv(true_locs, true_mag, est_locs, est_mag)
-
-            tpr_vec[i] = tpr_i
-            ppv_vec[i] = ppv_i
-
-            # get l1 error in locations and fluxes
-            locs_mae_i, fluxes_mae_i = get_l1_error(true_locs, true_mag, est_locs, est_mag)
-
-            # get l1 error in galaxy_params
-            _, galaxy_params_mae_i = get_l1_error(
-                true_locs, true_galaxy_params, est_locs, est_galaxy_params
-            )
-
-            for k, _ in enumerate(locs_mae_i):
-                locs_mae_vec.append(locs_mae_i[k].item())
-                fluxes_mae_vec.append(fluxes_mae_i[k].item())
-                galaxy_params_mae_vec.append(galaxy_params_mae_i[k].item())
-
-    locs_mae_vec = torch.tensor(locs_mae_vec)
-    fluxes_mae_vec = torch.tensor(fluxes_mae_vec)
-    galaxy_params_mae_vec = torch.tensor(galaxy_params_mae_vec)
-
-    return {
-        "locs_mae_vec": locs_mae_vec,
-        "fluxes_mae_vec": fluxes_mae_vec,
-        "galaxy_params_mae_vec": galaxy_params_mae_vec,
-        "count_bool": count_bool,
-        "tpr_vec": tpr_vec,
-        "ppv_vec": ppv_vec,
     }

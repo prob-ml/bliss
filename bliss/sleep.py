@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 
-from bliss.metrics import eval_error_on_batch
+from bliss.metrics import DetectionMetrics
 from bliss.models.decoder import ImageDecoder
 from bliss.models.encoder import ImageEncoder, get_full_params, get_is_on_from_n_sources
 from bliss.optimizer import get_optimizer
@@ -120,6 +120,7 @@ class SleepPhase(pl.LightningModule):
         encoder: dict,
         decoder: dict,
         annotate_probs: bool = False,
+        slack=1.0,
         optimizer_params: dict = None,  # pylint: disable=unused-argument
     ):
         """Initializes SleepPhase class.
@@ -128,6 +129,7 @@ class SleepPhase(pl.LightningModule):
             encoder: keyword arguments to instantiate ImageEncoder
             decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
+            slack: Threshold distance in pixels for matching objects.
             optimizer_params: Parameters passed to optimizer. Defaults to None.
         """
         super().__init__()
@@ -144,6 +146,10 @@ class SleepPhase(pl.LightningModule):
 
         # plotting
         self.annotate_probs = annotate_probs
+
+        # metrics
+        self.val_detection_metrics = DetectionMetrics(self.image_decoder.slen, slack=slack)
+        self.test_detection_metrics = DetectionMetrics(self.image_decoder.slen, slack=slack)
 
     def forward(self, image_ptiles, tile_n_sources):
         """Encodes parameters from image tiles."""
@@ -288,18 +294,19 @@ class SleepPhase(pl.LightningModule):
             star_params_loss,
         ) = self._get_loss(batch)
 
+        # log all losses
         self.log("val/loss", detection_loss)
         self.log("val/counter_loss", counter_loss.mean())
         self.log("val/locs_loss", locs_loss.mean())
         self.log("val/star_params_loss", star_params_loss.mean())
 
-        # calculate metrics for this batch
-        metrics = self._get_metrics(batch)
-        self.log("val/acc_counts", metrics["counts_acc"])
-        self.log("val/locs_mae", metrics["locs_mae"])
-        self.log("val/star_fluxes_mae", metrics["star_fluxes_mae"])
-        self.log("val/avg_tpr", metrics["avg_tpr"])
-        self.log("val/avg_ppv", metrics["avg_ppv"])
+        # get metrics and log on full image parameters.
+        true_params, est_params, _ = self._get_full_params(batch)
+        metrics = self.val_detection_metrics(true_params, est_params)
+        self.log("val/precision", metrics["precision"])
+        self.log("val/recall", metrics["recall"])
+        self.log("val/f1", metrics["f1"])
+        self.log("val/avg_distance", metrics["avg_distance"])
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -309,49 +316,27 @@ class SleepPhase(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        metrics = self._get_metrics(batch)
-        self.log("acc_counts", metrics["counts_acc"])
-        self.log("locs_mae", metrics["locs_mae"])
-        self.log("star_fluxes_mae", metrics["star_fluxes_mae"])
-        self.log("avg_tpr", metrics["avg_tpr"])
-        self.log("avg_ppv", metrics["avg_ppv"])
+        true_params, est_params, _ = self._get_full_params(batch)
+        metrics = self.test_detection_metrics(true_params, est_params)
+        self.log("precision", metrics["precision"])
+        self.log("recall", metrics["recall"])
+        self.log("f1", metrics["f1"])
+        self.log("avg_distance", metrics["avg_distance"])
 
         return batch
 
-    def test_epoch_end(self, outputs):
-        """Pytorch lightning method."""
-        if self.image_decoder.n_bands == 1:
-            self._make_plots(outputs[-1], kind="testing")
-
-    def _get_metrics(self, batch):
-        # get images and properties
+    def _get_full_params(self, batch):
+        # true
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
-        true_params = {k: v for k, v in batch.items() if k not in exclude}
+        true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
+        true_params = get_full_params(true_tile_params, slen)
 
-        # get params on full image.
-        true_params = get_full_params(true_params, slen)
-
-        # get map estimates
+        # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        estimates = get_full_params(tile_estimate, slen)
+        est_params = get_full_params(tile_estimate, slen)
 
-        # get detection and star fluxes metrics
-        errors = eval_error_on_batch(true_params, estimates, slen)
-
-        locs_mae = errors["locs_mae_vec"].mean()
-        star_fluxes_mae = errors["fluxes_mae_vec"].mean()
-        counts_acc = errors["count_bool"].float().mean()
-        avg_tpr = errors["tpr_vec"].mean()
-        avg_ppv = errors["ppv_vec"].mean()
-
-        return {
-            "counts_acc": counts_acc,
-            "locs_mae": locs_mae,
-            "star_fluxes_mae": star_fluxes_mae,
-            "avg_tpr": avg_tpr,
-            "avg_ppv": avg_ppv,
-        }
+        return true_params, est_params, slen
 
     # pylint: disable=too-many-statements
     def _make_plots(self, batch, kind="validation", n_samples=16):
@@ -363,15 +348,7 @@ class SleepPhase(pl.LightningModule):
             return
         nrows = int(n_samples ** 0.5)  # for figure
 
-        # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
-        true_params_dict = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(true_params_dict, slen)
-
-        # obtain map estimates
-        tile_estimate = self.tile_map_estimate(batch)
-        estimate = get_full_params(tile_estimate, slen)
+        true_params, est_params, slen = self._get_full_params(batch)
 
         # setup figure and axes.
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
@@ -385,7 +362,7 @@ class SleepPhase(pl.LightningModule):
                 batch["images"],
                 slen,
                 true_params,
-                estimate=estimate,
+                estimate=est_params,
                 labels=None if i > 0 else ("t. gal", "p. source", "t. star"),
                 annotate_axis=True,
                 add_borders=True,

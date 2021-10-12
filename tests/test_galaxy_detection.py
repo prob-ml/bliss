@@ -18,11 +18,15 @@ class TestBasicGalaxyTiles:
     def test_simulated(self, overrides, trained_sleep, model_setup, devices):
         overrides.update({"testing": "default"})
         results = model_setup.test_model(overrides, trained_sleep)
-        assert "locs_mae" in results
+        assert "avg_distance" in results
+        assert "precision" in results
+        assert "f1" in results
 
         # only check testing results if GPU available
         if not devices.use_cuda:
             return
 
         # check testing results are sensible.
-        assert results["locs_mae"] < 0.85
+        assert results["avg_distance"] < 1.5
+        assert results["precision"] > 0.85
+        assert results["f1"] > 0.8

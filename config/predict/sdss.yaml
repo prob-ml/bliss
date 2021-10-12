@@ -12,6 +12,9 @@ sdss_kwargs:
 bands:
   - 2
 
+# chunk properties
+clen: 300
+
 # i/o parameters
 sleep_checkpoint: models/sdss_sleep.ckpt
 galaxy_checkpoint: models/sdss_galaxy_encoder.ckpt
