@@ -18,4 +18,4 @@ def test_binary(model_setup, devices):
     assert results["precision"] > 0.8
     assert results["recall"] > 0.7
     assert results["f1"] > 0.7
-    assert results["avg_distance"] < 2.0
+    assert results["avg_distance"] < 1.0
