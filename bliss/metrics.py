@@ -107,10 +107,6 @@ class DetectionMetrics(Metric):
         assert true_locs.shape[0] == est_locs.shape[0] == true_n_sources.shape[0]
         batch_size = true_n_sources.shape[0]
 
-        # get matches based on locations.
-        true_locs *= self.slen
-        est_locs *= self.slen
-
         self.total_true_n_sources += true_n_sources.sum().int().item()
 
         count = 0
@@ -118,7 +114,9 @@ class DetectionMetrics(Metric):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             if ntrue > 0 and nest > 0:
                 _, mest, dkeep, avg_distance = match_by_locs(
-                    true_locs[b], est_locs[b], slack=self.slack
+                    true_locs[b] * self.slen,
+                    est_locs[b] * self.slen,
+                    slack=self.slack,
                 )
                 elocs = est_locs[b][mest][dkeep]
 
@@ -133,7 +131,7 @@ class DetectionMetrics(Metric):
         self.avg_distance /= count
 
     def compute(self):
-        precision = self.tp / (self.tp + self.tp)  # = PPV = positive predictive value
+        precision = self.tp / (self.tp + self.fp)  # = PPV = positive predictive value
         recall = self.tp / self.total_true_n_sources  # = TPR = true positive rate
         f1 = (2 * precision * recall) / (precision + recall)
         return {
@@ -187,14 +185,14 @@ class ClassificationMetrics(Metric):
         assert true_locs.shape[-1] == est_locs.shape[-1] == 2
         assert true_locs.shape[0] == est_locs.shape[0] == batch_size
 
-        # get matches based on locations.
-        true_locs *= self.slen
-        est_locs *= self.slen
-
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             if ntrue > 0 and nest > 0:
-                mtrue, mest, dkeep, _ = match_by_locs(true_locs[b], est_locs[b], slack=self.slack)
+                mtrue, mest, dkeep, _ = match_by_locs(
+                    true_locs[b] * self.slen,
+                    est_locs[b] * self.slen,
+                    slack=self.slack,
+                )
                 tgbool = true_galaxy_bool[b][mtrue][dkeep].reshape(-1)
                 egbool = est_galaxy_bool[b][mest][dkeep].reshape(-1)
                 self.total_n_matches += len(egbool)
