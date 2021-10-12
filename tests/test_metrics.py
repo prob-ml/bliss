@@ -30,6 +30,7 @@ def test_metrics():
     results_detection = detect(true_params, est_params)
     precision = results_detection["precision"]
     recall = results_detection["recall"]
+    avg_distance = results_detection["avg_distance"]
 
     results_classify = classify(true_params, est_params)
     class_acc = results_classify["class_acc"]
@@ -39,3 +40,4 @@ def test_metrics():
     assert recall == 2 / 3
     assert class_acc == 1 / 2
     assert conf_matrix.eq(torch.tensor([[1, 1], [0, 0]])).all()
+    assert avg_distance.item() == 50 * (0.01 + (0.01 + 0.09) / 2) / 2
