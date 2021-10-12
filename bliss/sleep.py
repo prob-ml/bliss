@@ -318,10 +318,10 @@ class SleepPhase(pl.LightningModule):
         """Pytorch lightning method."""
         true_params, est_params, _ = self._get_full_params(batch)
         metrics = self.test_detection_metrics(true_params, est_params)
-        self.log("test/precision", metrics["precision"])
-        self.log("test/recall", metrics["recall"])
-        self.log("test/f1", metrics["f1"])
-        self.log("test/avg_distance", metrics["avg_distance"])
+        self.log("precision", metrics["precision"])
+        self.log("recall", metrics["recall"])
+        self.log("f1", metrics["f1"])
+        self.log("avg_distance", metrics["avg_distance"])
 
         return batch
 

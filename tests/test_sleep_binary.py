@@ -15,5 +15,7 @@ def test_binary(model_setup, devices):
         return
 
     # check testing results are sensible.
-    assert results["acc_counts"] > 0.6
-    assert results["locs_mae"] < 0.65
+    assert results["precision"] > 0.8
+    assert results["recall"] > 0.7
+    assert results["f1"] > 0.7
+    assert results["avg_distance"] < 2.0
