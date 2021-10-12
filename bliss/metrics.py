@@ -113,6 +113,7 @@ class DetectionMetrics(Metric):
 
         self.total_true_n_sources += true_n_sources.sum().int().item()
 
+        count = 0
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             if ntrue > 0 and nest > 0:
@@ -128,7 +129,8 @@ class DetectionMetrics(Metric):
                 self.fp += fp
                 self.total_n_matches += len(elocs)
                 self.avg_distance += avg_distance
-        self.avg_distance /= batch_size
+                count += 1
+        self.avg_distance /= count
 
     def compute(self):
         precision = self.tp / (self.tp + self.tp)  # = PPV = positive predictive value
