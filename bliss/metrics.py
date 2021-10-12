@@ -179,7 +179,7 @@ class ClassificationMetrics(Metric):
         true_locs, est_locs = true_params["locs"], est_params["locs"]
         true_galaxy_bool, est_galaxy_bool = true_params["galaxy_bool"], est_params["galaxy_bool"]
         batch_size = len(true_n_sources)
-        assert len(true_galaxy_bool.shape) == len(est_galaxy_bool.shape) == 2
+        assert len(true_galaxy_bool.shape) == len(est_galaxy_bool.shape) == 3
         assert true_galaxy_bool.shape[0] == est_galaxy_bool.shape[0] == batch_size
         assert len(true_locs.shape) == len(est_locs.shape) == 3
         assert true_locs.shape[-1] == est_locs.shape[-1] == 2
@@ -197,7 +197,7 @@ class ClassificationMetrics(Metric):
                 egbool = est_galaxy_bool[b][mest][dkeep].reshape(-1)
                 self.total_n_matches += len(egbool)
                 self.total_correct_class += tgbool.eq(egbool).sum().int()
-                self.conf_matrix += confusion_matrix(tgbool, egbool)
+                self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
 
     # pylint: disable=no-member
     def compute(self):
