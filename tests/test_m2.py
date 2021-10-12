@@ -4,7 +4,20 @@ import numpy as np
 import pytest
 import torch
 
-from bliss import metrics as metrics_lib
+
+def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
+
+    # l-infty error in location,
+    # matrix of true x est error
+    locs_error = torch.abs(est_locs.unsqueeze(0) - true_locs.unsqueeze(1)).max(-1)[0]
+
+    # worst error in either band
+    mag_error = torch.abs(est_mag.unsqueeze(0) - true_mag.unsqueeze(1)).max(-1)[0]
+
+    tpr_bool = torch.any((locs_error < slack) * (mag_error < slack), dim=1).float()
+    ppv_bool = torch.any((locs_error < slack) * (mag_error < slack), dim=0).float()
+
+    return tpr_bool.mean(), ppv_bool.mean()
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +61,7 @@ class TestStarSleepEncoderM2:
             return
 
         # summary statistics
-        sleep_tpr, sleep_ppv = metrics_lib.get_tpr_ppv(
+        sleep_tpr, sleep_ppv = _get_tpr_ppv(
             true_locs * slen,
             2.5 * torch.log10(true_fluxes[:, 0:1]),
             estimate["locs"][0] * slen,

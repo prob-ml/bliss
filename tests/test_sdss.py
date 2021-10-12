@@ -1,13 +1,18 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
+from astropy.table import Table
+from hydra import compose, initialize
+from hydra.utils import instantiate
 
-from bliss.datasets import sdss
+from bliss.datasets.sdss import SloanDigitalSkySurvey, get_flux_coadd, get_hlr_coadd
 
 
 class TestSDSS:
     def test_sdss(self, paths):
         sdss_dir = paths["sdss"]
-        sdss_obj = sdss.SloanDigitalSkySurvey(
+        sdss_obj = SloanDigitalSkySurvey(
             sdss_dir,
             run=3900,
             camcol=6,
@@ -32,7 +37,7 @@ class TestSDSS:
 
         assert len(an_obj["sdss_psfs"]) == 43
 
-        sdss_obj9 = sdss.SloanDigitalSkySurvey(
+        sdss_obj9 = SloanDigitalSkySurvey(
             sdss_dir, run=3900, camcol=6, fields=[269, 745], bands=range(5), stampsize=9
         )
 
@@ -42,7 +47,7 @@ class TestSDSS:
         assert another_obj["sdss_psfs"].shape[1] == 9
         assert another_obj["sdss_psfs"].shape[2] == 9
 
-        sdss_obj9_cached = sdss.SloanDigitalSkySurvey(
+        sdss_obj9_cached = SloanDigitalSkySurvey(
             sdss_dir, run=3900, camcol=6, fields=[269, 745], bands=range(5), stampsize=9
         )
 
@@ -52,3 +57,15 @@ class TestSDSS:
         sdss_obj.clear_cache()
         sdss_obj9.clear_cache()
         sdss_obj9_cached.clear_cache()
+
+    def test_coadd(self, paths):
+
+        # get psf
+        with initialize(config_path="../config"):
+            cfg = compose("config", overrides=["dataset=sdss_galaxies"])
+        ds = instantiate(cfg.dataset)
+        psf = ds.psf
+        coadd_cat_file = Path(paths["data"]).joinpath("coadd_catalog_94_1_12.fits")
+        coadd_cat = Table.read(coadd_cat_file)
+        _ = get_flux_coadd(coadd_cat)
+        _ = get_hlr_coadd(coadd_cat[:5], psf)
