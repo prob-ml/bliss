@@ -294,13 +294,15 @@ class SleepPhase(pl.LightningModule):
             star_params_loss,
         ) = self._get_loss(batch)
 
+        # log all losses
         self.log("val/loss", detection_loss)
         self.log("val/counter_loss", counter_loss.mean())
         self.log("val/locs_loss", locs_loss.mean())
         self.log("val/star_params_loss", star_params_loss.mean())
 
-        # calculate metrics for this batch
-        metrics = self._get_metrics(batch, self.val_detection_metrics)
+        # get metrics and log on full image parameters.
+        true_params, est_params, _ = self._get_full_params(batch)
+        metrics = self.val_detection_metrics(true_params, est_params)
         self.log("val/precision", metrics["precision"])
         self.log("val/recall", metrics["recall"])
         self.log("val/f1", metrics["f1"])
@@ -314,7 +316,8 @@ class SleepPhase(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        metrics = self._get_metrics(batch, self.test_detection_metrics)
+        true_params, est_params, _ = self._get_full_params(batch)
+        metrics = self.test_detection_metrics(true_params, est_params)
         self.log("test/precision", metrics["precision"])
         self.log("test/recall", metrics["recall"])
         self.log("test/f1", metrics["f1"])
@@ -322,22 +325,18 @@ class SleepPhase(pl.LightningModule):
 
         return batch
 
-    def _get_metrics(self, batch, detection_metrics):
-        # get images and properties
+    def _get_full_params(self, batch):
+        # true
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
-        true_params = {k: v for k, v in batch.items() if k not in exclude}
+        true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
+        true_params = get_full_params(true_tile_params, slen)
 
-        # get params on full image.
-        true_params = get_full_params(true_params, slen)
-
-        # get map estimates
+        # estimate
         tile_estimate = self.tile_map_estimate(batch)
         est_params = get_full_params(tile_estimate, slen)
 
-        true_locs, est_locs = true_params["locs"], est_params["locs"]
-        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
-        return detection_metrics(true_locs, est_locs, true_n_sources, est_n_sources)
+        return true_params, est_params, slen
 
     # pylint: disable=too-many-statements
     def _make_plots(self, batch, kind="validation", n_samples=16):
@@ -349,15 +348,7 @@ class SleepPhase(pl.LightningModule):
             return
         nrows = int(n_samples ** 0.5)  # for figure
 
-        # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
-        true_params_dict = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(true_params_dict, slen)
-
-        # obtain map estimates
-        tile_estimate = self.tile_map_estimate(batch)
-        estimate = get_full_params(tile_estimate, slen)
+        true_params, est_params, slen = self._get_full_params(batch)
 
         # setup figure and axes.
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
@@ -371,7 +362,7 @@ class SleepPhase(pl.LightningModule):
                 batch["images"],
                 slen,
                 true_params,
-                estimate=estimate,
+                estimate=est_params,
                 labels=None if i > 0 else ("t. gal", "p. source", "t. star"),
                 annotate_axis=True,
                 add_borders=True,
