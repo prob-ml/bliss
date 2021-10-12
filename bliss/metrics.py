@@ -8,7 +8,7 @@ from sklearn.metrics import confusion_matrix
 from torchmetrics import Metric
 
 
-def match_by_locs(true_locs, est_locs, batch_size=64, slack=1.0):
+def match_by_locs(true_locs, est_locs, slack=1.0):
     """Match true and estimated locations and returned indices to match.
 
     Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
@@ -17,15 +17,12 @@ def match_by_locs(true_locs, est_locs, batch_size=64, slack=1.0):
 
     Automatically discards leftover locations with coordinates **exactly** (0, 0).
 
-
     Args:
-        batch_size: Batch size being used for inputs.
         slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
-        true_locs: Tensor of shape `(b x n1 x 2)`, where `n1` is the true number of sources and
-            `b` is the batch_size. The centroids should be in units of pixels.
-        est_locs: Tensor of shape `(b x n2 x 2)`, where `n2` is the predicted
-            number of sources and `b` is the batch_size. The centroids should be
-            in units of pixels.
+        true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
+            The centroids should be in units of pixels.
+        est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
+            number of sources. The centroids should be in units of pixels.
 
     Returns:
         dist_keep: Matched objects to keep based on l1 distances.
@@ -34,41 +31,30 @@ def match_by_locs(true_locs, est_locs, batch_size=64, slack=1.0):
             that `true_locs[true_match]`, `est_locs[est_match]` will have the matched
             locations for each pair of matched objects at the same position.
     """
-    assert len(true_locs.shape) == len(est_locs.shape) == 3
+    assert len(true_locs.shape) == len(est_locs.shape) == 2
     assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-    assert true_locs.shape[0] == est_locs.shape[0] == batch_size
 
-    match_true = []
-    match_est = []
-    dist_keep = []
-    avg_distance = 0.0  # for metrics related to average distance of matched objects.
+    locs1 = true_locs.view(-1, 2)
+    locs2 = est_locs.view(-1, 2)
 
-    for b in range(batch_size):
-        locs1 = true_locs[b].view(-1, 2)
-        locs2 = est_locs[b].view(-1, 2)
+    # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
+    locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+    locs_err = reduce(locs_err, "i j k -> i j", "sum")
 
-        # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
-        locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
-        locs_err = reduce(locs_err, "i j k -> i j", "sum")
+    # find minimal permutation and return matches
+    row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
 
-        # find minimal permutation and return matches
-        row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
+    # we match objects based on distance too.
+    # only match objects that satisfy threshold on l-infinity distance.
+    # do not match fake objects with locs = (0, 0)
+    dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
+    origin_dist = locs1[row_indx].pow(2).sum(1) + locs2[col_indx].pow(2).sum(1)  # avoid (0,0)
+    cond1 = (dist < slack).bool()
+    cond2 = (origin_dist > 0).bool()
+    dist_keep = torch.logical_and(cond1, cond2)
+    avg_distance = dist[cond2].mean()  # average l-infinity distance over matched objects.
 
-        # we match objects based on distance too.
-        # only match objects that satisfy threshold on l-infinity distance.
-        # do not match fake objects with locs = (0, 0)
-        dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
-        origin_dist = locs1[row_indx].pow(2).sum(1) + locs2[col_indx].pow(2).sum(1)  # avoid (0,0)
-        cond1 = (dist < slack).bool()
-        cond2 = (origin_dist > 0).bool()
-        dkeep = torch.logical_and(cond1, cond2)
-
-        match_true.append(row_indx)
-        match_est.append(col_indx)
-        dist_keep.append(dkeep)
-        avg_distance += dist[cond2].mean()  # average l-infinity distance over matched objects.
-
-    return match_true, match_est, dist_keep, avg_distance
+    return row_indx, col_indx, dist_keep, avg_distance
 
 
 class DetectionMetrics(Metric):
@@ -76,7 +62,7 @@ class DetectionMetrics(Metric):
 
     def __init__(
         self,
-        slen=53,
+        slen,
         slack=1.0,
         dist_sync_on_step=False,
     ) -> None:
@@ -98,20 +84,22 @@ class DetectionMetrics(Metric):
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.slack = slack
         self.slen = slen
+        self.slack = slack
 
         self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("fp", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("avg_distance", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true_locs, est_locs, true_n_sources, est_n_sources):
+    def update(self, true_params: dict, est_params: dict):
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
+        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
+        true_locs, est_locs = true_params["locs"], est_params["locs"]
         assert len(true_n_sources.shape) == len(est_n_sources.shape) == 1
         assert true_n_sources.shape[0] == est_n_sources.shape[0]
         assert len(true_locs.shape) == len(est_locs.shape) == 3
@@ -122,26 +110,24 @@ class DetectionMetrics(Metric):
         # get matches based on locations.
         true_locs *= self.slen
         est_locs *= self.slen
-        _, match_est, dist_keep, avg_distance = self.match_by_locs(
-            true_locs, est_locs, batch_size=batch_size, slack=self.slack
-        )
 
         self.total_true_n_sources += true_n_sources.sum().int().item()
 
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
-            mest = match_est[b]
-            dkeep = dist_keep[b]
-            assert len(mest) == min(ntrue, nest)
-            elocs = est_locs[b][mest][dkeep]
+            if ntrue > 0 and nest > 0:
+                _, mest, dkeep, avg_distance = match_by_locs(
+                    true_locs[b], est_locs[b], slack=self.slack
+                )
+                elocs = est_locs[b][mest][dkeep]
 
-            tp = len(elocs)
-            fp = nest - len(elocs)
-            assert fp >= 0
-            self.tp += tp
-            self.fp += fp
-            self.total_n_matches += len(elocs)
-            self.avg_distance += avg_distance
+                tp = len(elocs)
+                fp = nest - len(elocs)
+                assert fp >= 0
+                self.tp += tp
+                self.fp += fp
+                self.total_n_matches += len(elocs)
+                self.avg_distance += avg_distance
         self.avg_distance /= batch_size
 
     def compute(self):
@@ -161,12 +147,14 @@ class ClassificationMetrics(Metric):
 
     def __init__(
         self,
+        slen,
         slack=1.0,
         dist_sync_on_step=False,
     ) -> None:
         """Computes matches between true and estimated locations.
 
         Args:
+            slen: Side-length of image.
             slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
             dist_sync_on_step: See torchmetrics documentation.
 
@@ -177,6 +165,7 @@ class ClassificationMetrics(Metric):
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
+        self.slen = slen
         self.slack = slack
 
         self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -184,9 +173,12 @@ class ClassificationMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true_locs, est_locs, true_galaxy_bool, est_galaxy_bool):
+    def update(self, true_params: dict, est_params: dict):
         """Update the internal state of the metric including correct # of classifications."""
-        batch_size = true_locs.shape[0]
+        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
+        true_locs, est_locs = true_params["locs"], est_params["locs"]
+        true_galaxy_bool, est_galaxy_bool = true_params["galaxy_bool"], est_params["galaxy_bool"]
+        batch_size = len(true_n_sources)
         assert len(true_galaxy_bool.shape) == len(est_galaxy_bool.shape) == 2
         assert true_galaxy_bool.shape[0] == est_galaxy_bool.shape[0] == batch_size
         assert len(true_locs.shape) == len(est_locs.shape) == 3
@@ -194,18 +186,18 @@ class ClassificationMetrics(Metric):
         assert true_locs.shape[0] == est_locs.shape[0] == batch_size
 
         # get matches based on locations.
-        match_true, match_est, dist_keep, _ = self.match_by_locs(
-            true_locs, est_locs, batch_size=batch_size, slack=self.slack
-        )
+        true_locs *= self.slen
+        est_locs *= self.slen
 
         for b in range(batch_size):
-            mtrue, mest, dkeep = match_true[b], match_est[b], dist_keep[b]
-            tgbool = true_galaxy_bool[b][mtrue][dkeep].reshape(-1)
-            egbool = est_galaxy_bool[b][mest][dkeep].reshape(-1)
-
-            self.total_n_matches += len(egbool)
-            self.total_correct_class += tgbool.eq(egbool).sum().int()
-            self.conf_matrix += confusion_matrix(tgbool, egbool)
+            ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
+            if ntrue > 0 and nest > 0:
+                mtrue, mest, dkeep, _ = match_by_locs(true_locs[b], est_locs[b], slack=self.slack)
+                tgbool = true_galaxy_bool[b][mtrue][dkeep].reshape(-1)
+                egbool = est_galaxy_bool[b][mest][dkeep].reshape(-1)
+                self.total_n_matches += len(egbool)
+                self.total_correct_class += tgbool.eq(egbool).sum().int()
+                self.conf_matrix += confusion_matrix(tgbool, egbool)
 
     # pylint: disable=no-member
     def compute(self):
