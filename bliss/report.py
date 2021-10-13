@@ -33,9 +33,10 @@ def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: 
         coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
 
 
-def get_params_from_coadd(coadd_cat: str, bp: int, h: int, w: int):
+def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int, clen: int):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
     assert {"x", "y", "galaxy_bool", "flux", "mag", "hlr"}.issubset(set(coadd_cat.columns))
+    print("NOTE: clen necessary for determining x,y to keep from coadd???")
 
     # filter saturated objects
     coadd_cat = coadd_cat[~coadd_cat["is_saturated"]]
@@ -73,11 +74,13 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
     return {k: v[keep] for k, v in params.items()}
 
 
-def coadd_metrics(coadd_cat, est_params: dict, bp: int, h: int, w: int, mag_cut=25.0, slack=1.0):
+def coadd_metrics(
+    coadd_cat, est_params: dict, bp: int, h: int, w: int, clen: int, mag_cut=25.0, slack=1.0
+):
     """Metrics based on usign coadd catalog as truth."""
 
     # extract 'true' parameters based on coadd catalog.
-    true_params = get_params_from_coadd(coadd_cat, bp, h, w)
+    true_params = get_params_from_coadd(coadd_cat, h, w, bp, clen)
 
     # apply magnitude specified magnitude_cut
     true_params = apply_mag_cut(true_params, mag_cut)
