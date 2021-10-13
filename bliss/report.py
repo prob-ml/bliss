@@ -1,13 +1,14 @@
 """Functions to generate metrics on real data."""
 import torch
 from astropy.table import Table
+from astropy.wcs.wcs import WCS
 
 from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.datasets.sdss import get_flux_coadd, get_hlr_coadd
 from bliss.metrics import ClassificationMetrics, DetectionMetrics
 
 
-def add_extra_coadd(coadd_cat_file: str, psf_image_file: str, pixel_scale: float, wcs):
+def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: float, wcs: WCS):
     """Add additional useful information to coadd catalog."""
     coadd_cat = Table.read(coadd_cat_file)
 
@@ -29,7 +30,7 @@ def add_extra_coadd(coadd_cat_file: str, psf_image_file: str, pixel_scale: float
         coadd_cat["mag"] = mag
         coadd_cat["hlr"] = hlr
 
-        coadd_cat.write(coadd_cat_file)  # overwrite with additional info.
+        coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
 
 
 def get_params_from_coadd(coadd_cat: str, bp: int, h: int, w: int):
