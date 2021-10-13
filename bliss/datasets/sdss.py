@@ -6,6 +6,7 @@ from math import ceil, floor
 import galsim
 import numpy as np
 import torch
+import tqdm
 from astropy.io import fits
 from astropy.table.table import Table
 from astropy.wcs import WCS, FITSFixedWarning
@@ -55,7 +56,7 @@ def get_hlr_coadd(coadd_cat: Table, psf: galsim.GSObject, nelec_per_nmgy: float 
 
     hlrs = []
     psf_hlr = psf.calculateHLR()
-    for entry in coadd_cat:
+    for entry in tqdm(coadd_cat, desc="Calculating HLR..."):
 
         is_star = bool(entry["probpsf"])
         if is_star:
