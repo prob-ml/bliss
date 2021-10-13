@@ -56,7 +56,7 @@ def get_hlr_coadd(coadd_cat: Table, psf: galsim.GSObject, nelec_per_nmgy: float 
 
     hlrs = []
     psf_hlr = psf.calculateHLR()
-    for entry in tqdm(coadd_cat, desc="Calculating HLR..."):
+    for entry in tqdm.tqdm(coadd_cat, desc="Calculating HLR..."):
 
         is_star = bool(entry["probpsf"])
         if is_star:
