@@ -36,7 +36,7 @@ def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: 
 def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int, clen: int):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
     assert {"x", "y", "galaxy_bool", "flux", "mag", "hlr"}.issubset(set(coadd_cat.columns))
-    print("NOTE: clen necessary for determining x,y to keep from coadd???")
+    print(f"NOTE: clen:{clen} necessary for determining x,y to keep from coadd???")
 
     # filter saturated objects
     coadd_cat = coadd_cat[~coadd_cat["is_saturated"]]
