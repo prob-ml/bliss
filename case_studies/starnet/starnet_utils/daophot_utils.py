@@ -16,12 +16,17 @@ def load_daophot_results(data_file,
     daophot_decl = daophot_file[:, 5]
     daophot_mags = daophot_file[:, 22]
     
+    # "99" is a mis-estimatd flux
+    which_fluxes = daophot_mags < 99
+    
     # get pixel coordinates
     pix_coords = wcs.wcs_world2pix(daophot_ra, daophot_decl, 0, ra_dec_order = True)
     
     # get locations inside our square
     which_locs = (pix_coords[1] > x0) & (pix_coords[1] < (x0 + slen - 1)) & \
                         (pix_coords[0] > x1) & (pix_coords[0] < (x1 + slen - 1))
+    
+    which_locs = which_locs & which_fluxes
     
     # scale between zero and ones
     daophot_locs0 = pix_coords[1][which_locs]
