@@ -98,7 +98,7 @@ def predict_on_scene(
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
     galaxy_decoder: OneCenteredGalaxyDecoder,
-    device="cpu",
+    device: torch.device = "cpu",
     testing=False,
 ):
     """Perform predictions chunk-by-chunk when image is larger than 300x300 pixels.
@@ -129,8 +129,8 @@ def predict_on_scene(
     assert scene.shape[1] == image_encoder.n_bands == 1, "Only 1 band supported"
     h, w = scene.shape[-2], scene.shape[-1]
     bp = image_encoder.border_padding
-    ihic = h // clen if not testing else 1  # height in chunks
-    iwic = w // clen if not testing else 1  # width in chunks
+    ihic = h // clen - 1 if not testing else 1  # height in chunks
+    iwic = w // clen - 1 if not testing else 1  # width in chunks
 
     # galaxies
     latent_dim = galaxy_encoder.latent_dim
@@ -149,28 +149,35 @@ def predict_on_scene(
                 for j in range(iwic):
                     x1, y1 = i * clen + bp, j * clen + bp
                     pchunk = scene[:, :, y1 - bp : y1 + clen + bp, x1 - bp : x1 + clen + bp]
+                    print(pchunk.shape)
                     assert pchunk.shape[-1] == pchunk.shape[-2] == clen + 2 * bp
                     pchunk = pchunk.to(device)
 
                     _, est_params, vparams = predict_on_image(
-                        pchunk, image_encoder, galaxy_encoder, binary_encoder
+                        pchunk, image_encoder, binary_encoder, galaxy_encoder
                     )
 
                     est_locs = est_params["locs"].cpu().reshape(-1, 2)
                     est_gbool = est_params["galaxy_bool"].cpu().reshape(-1)
                     est_pgalaxy = est_params["prob_galaxy"].cpu().reshape(-1)
-                    est_star_flux = est_params["flux"].cpu().reshape(-1)
+                    est_star_flux = est_params["fluxes"].cpu().reshape(-1)
+                    est_galaxy_params = est_params["galaxy_params"].cpu().reshape(-1, latent_dim)
+
+                    # delete parameters we stopped using so we have enough GPU space.
+                    if "cuda" in device.type:
+                        del est_params
+                        del pchunk
+                        torch.cuda.empty_cache()
+
+                    # get fluxes from galaxy parameters by passing them though galaxy_decoder.
+                    latents = est_galaxy_params.to(device).reshape(-1, latent_dim)
+                    est_galaxy_flux = galaxy_decoder(latents).sum((-1, -2, -3)).cpu().reshape(-1)
 
                     # locations in pixels consistent with full scene.
                     # 0.5 comes from pt/pr definition (plotting both -> off by half a pixel).
                     x = est_locs[:, 1].reshape(-1, 1) * clen + x1 - 0.5
                     y = est_locs[:, 0].reshape(-1, 1) * clen + y1 - 0.5
                     est_locs = torch.hstack((x, y)).reshape(-1, 2)
-
-                    # get fluxes from galaxy parameters by passing them though galaxy_decoder.
-                    latents = est_params["galaxy_params"].to(device).reshape(-1, latent_dim)
-                    single_galaxies = galaxy_decoder(latents)
-                    est_galaxy_flux = single_galaxies.sum((-1, -2, -3)).cpu().reshape(-1)
 
                     # collect flux and magnitude into a single tensor
                     est_fluxes = est_star_flux * (1 - est_gbool) + est_galaxy_flux * est_gbool
@@ -186,11 +193,6 @@ def predict_on_scene(
                     # save variational parameters
                     vparams = {key: value.cpu() for key, value in vparams.items()}
                     var_params.append(vparams)
-
-                    # delete extra stuff in GPU and clear cache for next iteration.
-                    if "cuda" in device:
-                        del est_params
-                        torch.cuda.empty_cache()
 
                     # update progress bar
                     pbar.update(1)
@@ -213,8 +215,8 @@ def predict(cfg: DictConfig):
     assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
 
     # setup params from config
-    device = cfg.predict.device
     clen = cfg.predict.clen
+    device = torch.device(cfg.predict.device)
     testing = cfg.predict.testing
 
     # load images from SDSS for prediction.
