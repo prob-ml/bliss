@@ -148,8 +148,8 @@ class SleepPhase(pl.LightningModule):
         self.annotate_probs = annotate_probs
 
         # metrics
-        self.val_detection_metrics = DetectionMetrics(self.image_decoder.slen, slack=slack)
-        self.test_detection_metrics = DetectionMetrics(self.image_decoder.slen, slack=slack)
+        self.val_detection_metrics = DetectionMetrics(slack)
+        self.test_detection_metrics = DetectionMetrics(slack)
 
     def forward(self, image_ptiles, tile_n_sources):
         """Encodes parameters from image tiles."""

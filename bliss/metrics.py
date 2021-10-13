@@ -15,14 +15,14 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     The matching is done with `scipy.optimize.linear_sum_assignment`, which implements
     the Hungarian algorithm.
 
-    Automatically discards leftover locations with coordinates **exactly** (0, 0).
+    Automatically discards matches where at least one location has coordinates **exactly** (0, 0).
 
     Args:
         slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
         true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
-            The centroids should be in units of pixels.
+            The centroids should be in units of PIXELS.
         est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
-            number of sources. The centroids should be in units of pixels.
+            number of sources. The centroids should be in units of PIXELS.
 
     Returns:
         dist_keep: Matched objects to keep based on l1 distances.
@@ -58,18 +58,16 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 
 
 class DetectionMetrics(Metric):
-    """Class that calculates aggregate detection metrics over batches."""
+    """Calculates aggregate detection metrics on batches over full images (not tiles)."""
 
     def __init__(
         self,
-        slen,
         slack=1.0,
         dist_sync_on_step=False,
     ) -> None:
         """Computes matches between true and estimated locations.
 
         Args:
-            slen: Size of image (w/out border paddding) in pixels.
             slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
             dist_sync_on_step: See torchmetrics documentation.
 
@@ -84,7 +82,6 @@ class DetectionMetrics(Metric):
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.slen = slen
         self.slack = slack
 
         self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -99,8 +96,8 @@ class DetectionMetrics(Metric):
     def update(self, true_params: dict, est_params: dict):
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
         true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
-        true_locs, est_locs = true_params["locs"], est_params["locs"]
-        assert len(true_n_sources.shape) == len(est_n_sources.shape) == 1
+        true_locs, est_locs = true_params["plocs"], est_params["plocs"]  # plocs = pixel locs.
+        assert len(true_n_sources.shape) == len(est_n_sources.shape) == 1, "Not tiles."
         assert true_n_sources.shape[0] == est_n_sources.shape[0]
         assert len(true_locs.shape) == len(est_locs.shape) == 3
         assert true_locs.shape[-1] == est_locs.shape[-1] == 2
@@ -113,19 +110,15 @@ class DetectionMetrics(Metric):
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             if ntrue > 0 and nest > 0:
-                _, mest, dkeep, avg_distance = match_by_locs(
-                    true_locs[b] * self.slen,
-                    est_locs[b] * self.slen,
-                    slack=self.slack,
-                )
-                elocs = est_locs[b][mest][dkeep]
+                _, mest, dkeep, avg_distance = match_by_locs(true_locs[b], est_locs[b], self.slack)
+                n_matched = len(est_locs[b][mest][dkeep])
 
-                tp = len(elocs)
-                fp = nest - len(elocs)
+                tp = n_matched
+                fp = nest - n_matched
                 assert fp >= 0
                 self.tp += tp
                 self.fp += fp
-                self.total_n_matches += len(elocs)
+                self.total_n_matches += n_matched
                 self.avg_distance += avg_distance
                 count += 1
         self.avg_distance /= count
@@ -143,18 +136,16 @@ class DetectionMetrics(Metric):
 
 
 class ClassificationMetrics(Metric):
-    """Class that calculates aggregate classification metrics over batches."""
+    """Calculates aggregate classification metrics on batches over full images (not tiles)."""
 
     def __init__(
         self,
-        slen,
         slack=1.0,
         dist_sync_on_step=False,
     ) -> None:
         """Computes matches between true and estimated locations.
 
         Args:
-            slen: Side-length of image.
             slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
             dist_sync_on_step: See torchmetrics documentation.
 
@@ -165,7 +156,6 @@ class ClassificationMetrics(Metric):
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.slen = slen
         self.slack = slack
 
         self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -176,7 +166,7 @@ class ClassificationMetrics(Metric):
     def update(self, true_params: dict, est_params: dict):
         """Update the internal state of the metric including correct # of classifications."""
         true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
-        true_locs, est_locs = true_params["locs"], est_params["locs"]
+        true_locs, est_locs = true_params["plocs"], est_params["plocs"]
         true_galaxy_bool, est_galaxy_bool = true_params["galaxy_bool"], est_params["galaxy_bool"]
         batch_size = len(true_n_sources)
         assert len(true_galaxy_bool.shape) == len(est_galaxy_bool.shape) == 3
@@ -188,11 +178,7 @@ class ClassificationMetrics(Metric):
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             if ntrue > 0 and nest > 0:
-                mtrue, mest, dkeep, _ = match_by_locs(
-                    true_locs[b] * self.slen,
-                    est_locs[b] * self.slen,
-                    slack=self.slack,
-                )
+                mtrue, mest, dkeep, _ = match_by_locs(true_locs[b], est_locs[b], self.slack)
                 tgbool = true_galaxy_bool[b][mtrue][dkeep].reshape(-1)
                 egbool = est_galaxy_bool[b][mest][dkeep].reshape(-1)
                 self.total_n_matches += len(egbool)
