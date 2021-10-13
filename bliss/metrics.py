@@ -103,25 +103,31 @@ class DetectionMetrics(Metric):
         assert true_locs.shape[-1] == est_locs.shape[-1] == 2
         assert true_locs.shape[0] == est_locs.shape[0] == true_n_sources.shape[0]
         batch_size = true_n_sources.shape[0]
-
         self.total_true_n_sources += true_n_sources.sum().int().item()
 
         count = 0
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
-            if ntrue > 0 and nest > 0:
-                _, mest, dkeep, avg_distance = match_by_locs(true_locs[b], est_locs[b], self.slack)
-                n_matched = len(est_locs[b][mest][dkeep])
-
-                tp = n_matched
-                fp = nest - n_matched
-                assert fp >= 0
-                self.tp += tp
-                self.fp += fp
-                self.total_n_matches += n_matched
-                self.avg_distance += avg_distance
-                count += 1
+            tlocs, elocs = true_locs[b], est_locs[b]
+            self.update_single(ntrue, nest, tlocs, elocs)
+            count = (count + 1) if (ntrue > 0 and nest > 0) else count
         self.avg_distance /= count
+
+    def update_single(self, ntrue: int, nest: int, tlocs: torch.Tensor, elocs: torch.Tensor):
+        """Update on single image parameters, not batches."""
+        assert isinstance(ntrue, int), isinstance(nest, int)
+        assert len(tlocs.shape) == len(elocs.shape) == 2
+        assert tlocs.shape[-1] == elocs.shape[-1] == 2
+        if ntrue > 0 and nest > 0:
+            _, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
+            n_matched = len(elocs[mest][dkeep])
+            tp = n_matched
+            fp = nest - n_matched
+            assert fp >= 0
+            self.tp += tp
+            self.fp += fp
+            self.total_n_matches += n_matched
+            self.avg_distance += avg_distance
 
     def compute(self):
         precision = self.tp / (self.tp + self.fp)  # = PPV = positive predictive value
@@ -177,13 +183,31 @@ class ClassificationMetrics(Metric):
 
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
-            if ntrue > 0 and nest > 0:
-                mtrue, mest, dkeep, _ = match_by_locs(true_locs[b], est_locs[b], self.slack)
-                tgbool = true_galaxy_bool[b][mtrue][dkeep].reshape(-1)
-                egbool = est_galaxy_bool[b][mest][dkeep].reshape(-1)
-                self.total_n_matches += len(egbool)
-                self.total_correct_class += tgbool.eq(egbool).sum().int()
-                self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
+            tlocs, elocs = true_locs[b], est_locs[b]
+            tgbool, egbool = true_galaxy_bool[b].reshape(-1), est_galaxy_bool[b].reshape(-1)
+            self.update_single(ntrue, nest, tlocs, elocs, tgbool, egbool)
+
+    def update_single(
+        self,
+        ntrue: int,
+        nest: int,
+        tlocs: torch.Tensor,
+        elocs: torch.Tensor,
+        tgbool: torch.Tensor,
+        egbool: torch.Tensor,
+    ):
+        """Update on single image parameters, not batches."""
+        assert isinstance(ntrue, int), isinstance(nest, int)
+        assert len(tlocs.shape) == len(elocs.shape) == 2
+        assert tlocs.shape[-1] == elocs.shape[-1] == 2
+        assert len(tgbool.shape) == len(egbool.shape) == 1
+        if ntrue > 0 and nest > 0:
+            mtrue, mest, dkeep, _ = match_by_locs(tlocs, elocs, self.slack)
+            tgbool = tgbool[mtrue][dkeep].reshape(-1)
+            egbool = egbool[mest][dkeep].reshape(-1)
+            self.total_n_matches += len(egbool)
+            self.total_correct_class += tgbool.eq(egbool).sum().int()
+            self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
 
     # pylint: disable=no-member
     def compute(self):
