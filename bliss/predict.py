@@ -15,8 +15,8 @@ from bliss.sleep import SleepPhase
 def predict_on_image(
     image: torch.Tensor,
     image_encoder: encoder.ImageEncoder,
+    binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder = None,
-    binary_encoder: BinaryEncoder = None,
 ):
     """This function takes in a single image and outputs the prediction from trained models.
 
@@ -51,45 +51,39 @@ def predict_on_image(
     # get padded tiles.
     ptiles = image_encoder.get_images_in_tiles(image)
 
-    # get MAP estimates
+    # get MAP estimates and variational parameters from image_encoder
     tile_n_sources = image_encoder.tile_map_n_sources(ptiles)
     tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
     tile_map = image_encoder.tile_map_estimate(image)
-
-    # get var_params in tiles (excluding galaxy params)
     var_params = image_encoder(ptiles, tile_n_sources)
 
+    # binary prediction
+    assert not binary_encoder.training
+    assert image.shape[1] == binary_encoder.n_bands
+    prob_galaxy = binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
+    galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
+    star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)
+    var_params["galaxy_bool"] = galaxy_bool
+    var_params["star_bool"] = star_bool
+    var_params["prob_galaxy"] = prob_galaxy
+    tile_map["galaxy_bool"] = galaxy_bool
+    tile_map["star_bool"] = star_bool
+    tile_map["prob_galaxy"] = prob_galaxy
+
+    # get galaxy measurement predictions if galaxy_encoder is available.
     if galaxy_encoder is not None:
-        # get galaxy params per tile
         assert not galaxy_encoder.training
         assert image.shape[1] == galaxy_encoder.n_bands
         assert image_encoder.border_padding == galaxy_encoder.border_padding
         assert galaxy_encoder.image_decoder.max_sources == 1
         assert image_encoder.tile_slen == galaxy_encoder.tile_slen
 
-        # TODO: Do we need to zero out tiles with stars?
         galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
         latent_dim = galaxy_param_mean.shape[-1]
         galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-        galaxy_param_mean *= tile_is_on_array
+        galaxy_param_mean *= tile_is_on_array * galaxy_bool
         var_params["galaxy_param_mean"] = galaxy_param_mean
         tile_map["galaxy_params"] = galaxy_param_mean
-
-    if binary_encoder is not None:
-        # get classification params per tile
-        assert not binary_encoder.training
-        assert image.shape[1] == binary_encoder.n_bands
-        prob_galaxy = (
-            binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
-        )
-        galaxy_bool = (prob_galaxy > 0.5).float().reshape(1, -1, 1, 1) * tile_is_on_array
-        star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool).reshape(1, -1, 1, 1)
-        var_params["galaxy_bool"] = galaxy_bool
-        tile_map["galaxy_bool"] = galaxy_bool
-        var_params["star_bool"] = star_bool
-        tile_map["star_bool"] = star_bool
-        tile_map["prob_galaxy"] = prob_galaxy
-        var_params["prob_galaxy"] = prob_galaxy
 
     # full parameters on chunk
     full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
@@ -101,7 +95,7 @@ def predict_on_scene(
     clen: int,
     scene: torch.Tensor,
     image_encoder: encoder.ImageEncoder,
-    binary_encoder: BinaryEncoder = None,
+    binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder = None,
     device="cpu",
     testing=False,
