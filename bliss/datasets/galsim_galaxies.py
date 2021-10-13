@@ -7,6 +7,15 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 
+def load_psf_from_file(psf_image_file: str, pixel_scale: float):
+    """Return normalized PSF galsim.GSObject from numpy psf_file."""
+    assert Path(psf_image_file).suffix == ".npy"
+    psf_image = np.load(psf_image_file)
+    assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
+    psf_image = galsim.Image(psf_image[0], scale=pixel_scale)
+    return galsim.InterpolatedImage(psf_image).withFlux(1.0)
+
+
 class ToyGaussian(pl.LightningDataModule, Dataset):
     def __init__(
         self,
@@ -139,12 +148,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
         self.flux_sample = flux_sample
 
-        # load psf from file
-        assert Path(psf_image_file).suffix == ".npy"
-        psf_image = np.load(psf_image_file)
-        assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
-        psf_image = galsim.Image(psf_image[0], scale=self.pixel_scale)
-        self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
 
     @staticmethod
     def _uniform(a, b):
