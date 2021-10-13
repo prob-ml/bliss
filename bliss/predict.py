@@ -9,6 +9,7 @@ from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
 from bliss.models.encoder import get_full_params, get_is_on_from_n_sources, get_star_bool
 from bliss.models.galaxy_encoder import GalaxyEncoder
+from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 from bliss.sleep import SleepPhase
 
 
@@ -16,7 +17,7 @@ def predict_on_image(
     image: torch.Tensor,
     image_encoder: encoder.ImageEncoder,
     binary_encoder: BinaryEncoder,
-    galaxy_encoder: GalaxyEncoder = None,
+    galaxy_encoder: GalaxyEncoder,
 ):
     """This function takes in a single image and outputs the prediction from trained models.
 
@@ -41,7 +42,7 @@ def predict_on_image(
     assert not image_encoder.training
     assert len(image.shape) == 4
     assert image.shape[0] == 1
-    assert image.shape[1] == image_encoder.n_bands
+    assert image.shape[1] == image_encoder.n_bands == 1
     assert image_encoder.max_detections == 1
 
     # prepare dimensions
@@ -70,20 +71,19 @@ def predict_on_image(
     tile_map["star_bool"] = star_bool
     tile_map["prob_galaxy"] = prob_galaxy
 
-    # get galaxy measurement predictions if galaxy_encoder is available.
-    if galaxy_encoder is not None:
-        assert not galaxy_encoder.training
-        assert image.shape[1] == galaxy_encoder.n_bands
-        assert image_encoder.border_padding == galaxy_encoder.border_padding
-        assert galaxy_encoder.image_decoder.max_sources == 1
-        assert image_encoder.tile_slen == galaxy_encoder.tile_slen
+    # get galaxy measurement predictions
+    assert not galaxy_encoder.training
+    assert image.shape[1] == galaxy_encoder.n_bands
+    assert image_encoder.border_padding == galaxy_encoder.border_padding
+    assert galaxy_encoder.image_decoder.max_sources == 1
+    assert image_encoder.tile_slen == galaxy_encoder.tile_slen
 
-        galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
-        latent_dim = galaxy_param_mean.shape[-1]
-        galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-        galaxy_param_mean *= tile_is_on_array * galaxy_bool
-        var_params["galaxy_param_mean"] = galaxy_param_mean
-        tile_map["galaxy_params"] = galaxy_param_mean
+    galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
+    latent_dim = galaxy_param_mean.shape[-1]
+    galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
+    galaxy_param_mean *= tile_is_on_array * galaxy_bool
+    var_params["galaxy_param_mean"] = galaxy_param_mean
+    tile_map["galaxy_params"] = galaxy_param_mean
 
     # full parameters on chunk
     full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
@@ -96,7 +96,8 @@ def predict_on_scene(
     scene: torch.Tensor,
     image_encoder: encoder.ImageEncoder,
     binary_encoder: BinaryEncoder,
-    galaxy_encoder: GalaxyEncoder = None,
+    galaxy_encoder: GalaxyEncoder,
+    galaxy_decoder: OneCenteredGalaxyDecoder,
     device="cpu",
     testing=False,
 ):
@@ -115,6 +116,7 @@ def predict_on_scene(
         device: Device where each model is currently and where padded chunks will be moved.
         image_encoder: Trained ImageEncoder model.
         galaxy_encoder: Trained GalaxyEncoder model.
+        galaxy_decoder: Trained OneCenteredGalaxyDecoder model.
         binary_encoder: Trained BinaryEncoder model.
         testing: Whether we are unit testing and we only want to run 1 chunk.
 
@@ -124,16 +126,22 @@ def predict_on_scene(
     """
     assert len(scene.shape) == 4
     assert scene.shape[0] == 1
+    assert scene.shape[1] == image_encoder.n_bands == 1, "Only 1 band supported"
     h, w = scene.shape[-2], scene.shape[-1]
     bp = image_encoder.border_padding
     ihic = h // clen if not testing else 1  # height in chunks
     iwic = w // clen if not testing else 1  # width in chunks
+
+    # galaxies
+    latent_dim = galaxy_encoder.latent_dim
 
     # where to collect results.
     var_params = []
     locs = torch.tensor([])
     galaxy_bool = torch.tensor([])
     prob_galaxy = torch.tensor([])
+    fluxes = torch.tensor([])
+    mags = torch.tensor([])
 
     with torch.no_grad():
         with tqdm(total=ihic * iwic) as pbar:
@@ -149,19 +157,31 @@ def predict_on_scene(
                     )
 
                     est_locs = est_params["locs"].cpu().reshape(-1, 2)
-                    est_gbool = est_params["galaxy_bool"].cpu().reshape(-1, 1)
-                    est_pgalaxy = est_params["prob_galaxy"].cpu().reshape(-1, 1)
+                    est_gbool = est_params["galaxy_bool"].cpu().reshape(-1)
+                    est_pgalaxy = est_params["prob_galaxy"].cpu().reshape(-1)
+                    est_star_flux = est_params["flux"].cpu().reshape(-1)
 
                     # locations in pixels consistent with full scene.
+                    # 0.5 comes from pt/pr definition (plotting both -> off by half a pixel).
                     x = est_locs[:, 1].reshape(-1, 1) * clen + x1 - 0.5
                     y = est_locs[:, 0].reshape(-1, 1) * clen + y1 - 0.5
-
                     est_locs = torch.hstack((x, y)).reshape(-1, 2)
+
+                    # get fluxes from galaxy parameters by passing them though galaxy_decoder.
+                    latents = est_params["galaxy_params"].to(device).reshape(-1, latent_dim)
+                    single_galaxies = galaxy_decoder(latents)
+                    est_galaxy_flux = single_galaxies.sum((-1, -2, -3)).cpu().reshape(-1)
+
+                    # collect flux and magnitude into a single tensor
+                    est_fluxes = est_star_flux * (1 - est_gbool) + est_galaxy_flux * est_gbool
+                    est_mags = sdss.convert_flux_to_mag(est_fluxes)
 
                     # concatenate to obtain tensors on full image.
                     locs = torch.cat((locs, est_locs))
                     galaxy_bool = torch.cat((galaxy_bool, est_gbool))
                     prob_galaxy = torch.cat((prob_galaxy, est_pgalaxy))
+                    fluxes = torch.cat((fluxes, est_fluxes))
+                    mags = torch.cat((mags, est_mags))
 
                     # save variational parameters
                     vparams = {key: value.cpu() for key, value in vparams.items()}
@@ -175,7 +195,13 @@ def predict_on_scene(
                     # update progress bar
                     pbar.update(1)
 
-    full_map = {"locs": locs, "galaxy_bool": galaxy_bool, "prob_galaxy": prob_galaxy}
+    full_map = {
+        "plocs": locs,
+        "galaxy_bool": galaxy_bool,
+        "prob_galaxy": prob_galaxy,
+        "flux": fluxes,
+        "mag": mags,
+    }
 
     return vparams, full_map
 
@@ -203,11 +229,12 @@ def predict(cfg: DictConfig):
 
     # move everything to specified GPU
     image_encoder = sleep_net.image_encoder.eval().to(device)
-    galaxy_encoder = galaxy_encoder.to(device).eval()
     binary_encoder = binary_encoder.to(device).eval()
+    galaxy_encoder = galaxy_encoder.to(device).eval()
+    galaxy_decoder = sleep_net.image_decoder.galaxy_tile_decoder.galaxy_decoder.eval().to(device)
 
     var_params, _ = predict_on_scene(
-        clen, image, image_encoder, binary_encoder, galaxy_encoder, device, testing
+        clen, image, image_encoder, binary_encoder, galaxy_encoder, galaxy_decoder, device, testing
     )
 
     if cfg.predict.output_file is not None:
