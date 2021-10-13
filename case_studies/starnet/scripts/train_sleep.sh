@@ -1,7 +1,7 @@
 #!/bin/bash
 
 outfolder='../fits/'
-encoder_name='starnet'
+encoder_name='starnet-random_bg'
 
 python train_sleep.py \
   --outfolder $outfolder \

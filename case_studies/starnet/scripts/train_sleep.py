@@ -9,7 +9,7 @@ parser.add_argument('--config_path', type=str, default='../../../config')
 
 parser.add_argument('--seed', type=int, default=23423)
 
-parser.add_argument('--cuda_no', type=int, default=2)
+parser.add_argument('--cuda_no', type=int, default=6)
 
 args = parser.parse_args()
 
@@ -30,8 +30,12 @@ from hydra.experimental import initialize, compose
 import numpy as np
 import time 
 
+from bliss.datasets import simulated
 from bliss import sleep
-from bliss.datasets import simulated, sdss
+
+import sys
+sys.path.append('../starnet_utils/')
+from starnet_sleep_dataset import SimulatedStarnetDataset
 
 
 torch.manual_seed(args.seed)
@@ -62,6 +66,7 @@ print(cfg)
 ###################
 # initialize data set and model
 ###################
+# dataset = SimulatedStarnetDataset(**cfg.dataset.kwargs)
 dataset = simulated.SimulatedDataset(**cfg.dataset.kwargs)
 sleep_net = sleep.SleepPhase(**cfg.model.kwargs)
 trainer = pl.Trainer(**cfg.training.trainer)
