@@ -37,7 +37,7 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
     def sample_backgrounds(self, slen, batch_size): 
         
         mu = torch.Tensor(self.mean_background_vals).to(self.image_decoder.device).unsqueeze(0)
-        sd = 50 
+        sd = 100
         
         normal_samples = torch.randn(size = (batch_size, 2)).to(self.image_decoder.device)
         
@@ -67,7 +67,6 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
             batch.update(
                 {
                     "images": images,
-#                     "background": background,
                     "slen": torch.tensor([self.image_decoder.slen]),
                 }
             )
@@ -89,16 +88,3 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
 
         return dl
 
-# class SimulatedStarnetDataset:
-#     def __init__(
-#         self, decoder_kwargs, n_batches=10, batch_size=32, generate_device="cpu", testing_file=None
-#     ):
-#         super().__init__(decoder_kwargs, n_batches=10, batch_size=32, generate_device="cpu", testing_file=None)
-        
-#         self.device = self.image_decoder.device
-        
-#         # set the original background to be zero
-#         # DEBUG
-#         # self.image_decoder.background_values = [0, 0]
-#         self.mean_background_vals = [686., 1123.]
-    
