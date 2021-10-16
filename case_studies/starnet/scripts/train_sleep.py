@@ -9,7 +9,7 @@ parser.add_argument('--config_path', type=str, default='../../../config')
 
 parser.add_argument('--seed', type=int, default=23423)
 
-parser.add_argument('--cuda_no', type=int, default=6)
+parser.add_argument('--cuda_no', type=int, default=2)
 
 args = parser.parse_args()
 
@@ -66,8 +66,8 @@ print(cfg)
 ###################
 # initialize data set and model
 ###################
-# dataset = SimulatedStarnetDataset(**cfg.dataset.kwargs)
-dataset = simulated.SimulatedDataset(**cfg.dataset.kwargs)
+dataset = SimulatedStarnetDataset(**cfg.dataset.kwargs)
+# dataset = simulated.SimulatedDataset(**cfg.dataset.kwargs)
 sleep_net = sleep.SleepPhase(**cfg.model.kwargs)
 trainer = pl.Trainer(**cfg.training.trainer)
 
