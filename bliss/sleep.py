@@ -16,11 +16,10 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 
-from bliss.metrics import DetectionMetrics
 from bliss.models.decoder import ImageDecoder
 from bliss.models.encoder import ImageEncoder, get_full_params, get_is_on_from_n_sources
 from bliss.optimizer import get_optimizer
-from bliss.plotting import plot_image_and_locs
+from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
 

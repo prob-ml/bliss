@@ -7,7 +7,7 @@ from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 
-from bliss import plotting
+from bliss.reporting import plot_image
 
 
 def visualize(batch, path, n_samples, figsize=(12, 12)):
@@ -23,7 +23,7 @@ def visualize(batch, path, n_samples, figsize=(12, 12)):
         # get first band of image in numpy format.
         ax = axes[i]
         image = images[i][0].cpu().numpy()
-        plotting.plot_image(fig, ax, image)
+        plot_image(fig, ax, image)
 
     plt.tight_layout()
     fig.savefig(path, bbox_inches="tight")
