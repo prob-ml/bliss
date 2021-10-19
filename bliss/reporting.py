@@ -49,7 +49,6 @@ class DetectionMetrics(Metric):
         self.add_state("fp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
@@ -64,7 +63,6 @@ class DetectionMetrics(Metric):
         assert true_locs.shape[-1] == est_locs.shape[-1] == 2
         assert true_locs.shape[0] == est_locs.shape[0] == true_n_sources.shape[0]
         batch_size = true_n_sources.shape[0]
-        self.total_true_n_sources += true_n_sources.sum().int().item()
 
         count = 0
         for b in range(batch_size):
@@ -81,14 +79,13 @@ class DetectionMetrics(Metric):
         assert tlocs.shape[-1] == elocs.shape[-1] == 2
         if ntrue > 0 and nest > 0:
             _, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
-            n_matched = len(elocs[mest][dkeep])
-            tp = n_matched
-            fp = nest - n_matched
+            tp = len(elocs[mest][dkeep])  # n_matches
+            fp = nest - tp
             assert fp >= 0
             self.tp += tp
             self.fp += fp
-            self.total_n_matches += n_matched
             self.avg_distance += avg_distance
+            self.total_true_n_sources += ntrue
 
     def compute(self):
         precision = self.tp / (self.tp + self.fp)  # = PPV = positive predictive value
@@ -228,47 +225,116 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     return row_indx, col_indx, dist_keep, avg_distance
 
 
-def coadd_metrics(
-    coadd_cat,
+def scene_metrics(
+    true_params,
     est_params: dict,
-    bp: int,
-    h: int,
-    w: int,
-    clen: int,
     mag_cut=25.0,
     slack=1.0,
-    mag_slack=0.5,
+    mag_slack=0.25,
 ):
-    """Metrics based on using the coadd catalog as truth."""
+    """Metrics based on using the coadd catalog as truth.
 
-    # extract 'true' parameters based on coadd catalog.
-    true_params = get_params_from_coadd(coadd_cat, h, w, bp, clen)
+    We apply the given magnitude cut to both the coadd and estimated objects, and only consider
+    objects brighter than a certain magnitude. Additionally a slack in the estimated magnitude
+    is used so that objects close to the magnitude boundary do not negatively affect performance.
 
-    # apply magnitude specified magnitude_cut
-    true_params = apply_mag_cut(true_params, mag_cut)
-    est_params = apply_mag_cut(true_params, mag_cut)
+    Args:
+        true_params: True parameters of each source in the scene (e.g. from coadd catalog)
+        est_params: Predictions on scene obtained from predict_on_scene function.
+        mag_cut: Magnitude cut, discard all objects with magnitude higher than this.
+        slack: Pixel L-infinity distance slack when doing matching for metrics.
+        mag_slack: Consider objects above mag_cut for precision/recall to avoid edge effects.
 
+    Returns:
+        Dictionary with output from DetectionMetrics, ClassificationMetrics.
+    """
+
+    # prepare metrics
     detection_metrics = DetectionMetrics(slack)
     classification_metrics = ClassificationMetrics(slack)
 
+    # For calculating precision, we consider a wider bin for the 'true' objects, this way
+    # we ensure that underestimating the magnitude of a true object close and above the
+    # boundary does not mark this estimated object as FP, thus reducing our precision.
+    tparams = apply_mag_cut(true_params, mag_cut + mag_slack)
+    eparams = apply_mag_cut(est_params, mag_cut)
+
     # collect params
-    ntrue, nest = true_params["n_sources"], est_params["n_sources"]
-    tlocs, elocs = true_params["plocs"], est_params["plocs"]
-    tgbool, egbool = true_params["galaxy_bool"], est_params["galaxy_bool"]
+    ntrue, nest = tparams["n_sources"].item(), eparams["n_sources"].item()
+    tlocs, elocs = tparams["plocs"], eparams["plocs"]
 
     # update
     detection_metrics.update_single(ntrue, nest, tlocs, elocs)
+    precision = detection_metrics.compute()["precision"]
+    detection_metrics.reset()  # reset global state.
+    assert detection_metrics.tp == 0  # pylint: disable=no-member
+
+    # For calculating recall, we consider a wider bin for the 'estimated' objects, this way
+    # we ensure that overestimating the magnitude of a true object close and below the boundary
+    # does not mean that we missed this object, reducing our TP, and reducing recall.
+    tparams = apply_mag_cut(true_params, mag_cut)
+    eparams = apply_mag_cut(est_params, mag_cut + mag_slack)
+    ntrue, nest = tparams["n_sources"].item(), eparams["n_sources"].item()
+    tlocs, elocs = tparams["plocs"], eparams["plocs"]
+    detection_metrics.update_single(ntrue, nest, tlocs, elocs)
+    recall = detection_metrics.compute()["recall"]
+    detection_metrics.reset()
+
+    # combine into f1 score and into single dictionary
+    f1 = 2 * precision * recall / (precision + recall)
+    detection_result = {"precision": precision, "recall": recall, "f1": f1}
+
+    # compute classification metrics, these are only computed on matches so ignore mag_slack.
+    tparams = apply_mag_cut(true_params, mag_cut)
+    eparams = apply_mag_cut(est_params, mag_cut)
+    ntrue, nest = tparams["n_sources"].item(), eparams["n_sources"].item()
+    tlocs, elocs = tparams["plocs"], eparams["plocs"]
+    tgbool, egbool = tparams["galaxy_bool"], eparams["galaxy_bool"]
     classification_metrics.update_single(ntrue, nest, tlocs, elocs, tgbool, egbool)
+    classification_result = classification_metrics.compute()
 
     # compute and return results
-    return {**detection_metrics.compute(), **classification_metrics.compute()}
+    return {**detection_result, **classification_result}
 
 
 def apply_mag_cut(params: dict, mag_cut=25.0):
     """Apply magnitude cut to given parameters."""
     assert "mag" in params
     keep = params["mag"] < mag_cut
-    return {k: v[keep] for k, v in params.items()}
+    d = {k: v[keep] for k, v in params.items() if k != "n_sources"}
+    d["n_sources"] = torch.tensor([len(d["mag"])])
+    return d
+
+
+def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
+    """Load coadd catalog from file, add extra useful information, convert to tensors."""
+    names = {"x", "y", "galaxy_bool", "flux", "mag", "hlr"}
+    assert names.issubset(set(coadd_cat.columns))
+
+    # filter saturated objects
+    coadd_cat = coadd_cat[~coadd_cat["is_saturated"].data]
+
+    # filter objects in border, outside of image, or that do not fit in a chunk.
+    # NOTE: This assumes tiling scheme used in `predict.py`
+    x, y = coadd_cat["x"], coadd_cat["y"]
+    keep = (x > bp) & (x < w - bp) & (y > bp) & (y < h - bp)
+    coadd_cat = coadd_cat[keep]
+
+    # extract required arrays with correct byte order, otherwise torch error.
+    data = {}
+    for n in names:
+        arr = []
+        for v in coadd_cat[n]:
+            arr.append(v)
+        data[n] = torch.from_numpy(np.array(arr)).reshape(-1)
+
+    # final adjustments.
+    data["galaxy_bool"] = data["galaxy_bool"].bool()
+    x, y = data["x"].reshape(-1, 1), data["y"].reshape(-1, 1)
+    data["plocs"] = torch.hstack((x, y)).reshape(-1, 2)
+    data["n_sources"] = len(x)
+
+    return data
 
 
 def get_flux_coadd(coadd_cat, nelec_per_nmgy=987.31, band="r"):
@@ -340,59 +406,20 @@ def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: 
     """Add additional useful information to coadd catalog."""
     coadd_cat = Table.read(coadd_cat_file)
 
-    if not {"x", "y", "galaxy_bool", "flux", "mag", "hlr"}.issubset(set(coadd_cat.columns)):
+    psf = load_psf_from_file(psf_image_file, pixel_scale)
+    x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
+    galaxy_bool = ~coadd_cat["probpsf"].data.astype(bool)
+    flux, mag = get_flux_coadd(coadd_cat)
+    hlr = get_hlr_coadd(coadd_cat, psf)
 
-        psf = load_psf_from_file(psf_image_file, pixel_scale)
-        x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
-        galaxy_bool = ~coadd_cat["probpsf"].data.astype(bool)
-        is_saturated = coadd_cat["is_saturated"].data.astype(bool)
-        flux, mag = get_flux_coadd(coadd_cat)
-        hlr = get_hlr_coadd(coadd_cat, psf)
-
-        # add info to catalog directly
-        coadd_cat["x"] = x
-        coadd_cat["y"] = y
-        coadd_cat["galaxy_bool"] = galaxy_bool
-        coadd_cat["is_saturated"] = is_saturated
-        coadd_cat["flux"] = flux
-        coadd_cat["mag"] = mag
-        coadd_cat["hlr"] = hlr
-
-        coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
-
-
-def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int, clen: int):
-    """Load coadd catalog from file, add extra useful information, convert to tensors."""
-    assert {"x", "y", "galaxy_bool", "flux", "mag", "hlr"}.issubset(set(coadd_cat.columns))
-    print(f"NOTE: clen:{clen} necessary for determining x,y to keep from coadd???")
-
-    # filter saturated objects
-    coadd_cat = coadd_cat[~coadd_cat["is_saturated"]]
-
-    # filter objects in border or beyond.
-    # NOTE: This assumes tiling scheme used in `predict.py`
-    x, y = coadd_cat["x"], coadd_cat["y"]
-    coadd_cat = coadd_cat[(x > bp) & (x < w - bp) & (y > bp) & (y < h - bp)]
-
-    # extract all information we need for metrics.
-    x = torch.from_numpy(coadd_cat["x"].data).reshape(-1, 1)
-    y = torch.from_numpy(coadd_cat["y"].data).reshape(-1, 1)
-    locs = torch.hstack((x, y)).reshape(-1, 2)
-
-    galaxy_bool = torch.from_numpy(coadd_cat["galaxy_bool"].data).bool().reshape(-1)
-    is_saturated = torch.from_numpy(coadd_cat["is_saturated"].data).bool().reshape(-1)
-
-    flux = torch.from_numpy(coadd_cat["flux"].data).reshape(-1)
-    mag = torch.from_numpy(coadd_cat["mag"].data).reshape(-1)
-
-    return {
-        "n_sources": len(locs),
-        "plocs": locs,
-        "galaxy_bool": galaxy_bool,
-        "is_saturated": is_saturated,
-        "flux": flux,
-        "mag": mag,
-    }
+    coadd_cat["x"] = x
+    coadd_cat["y"] = y
+    coadd_cat["galaxy_bool"] = galaxy_bool
+    coadd_cat["flux"] = flux
+    coadd_cat["mag"] = mag
+    coadd_cat["hlr"] = hlr
+    coadd_cat.replace_column("is_saturated", coadd_cat["is_saturated"].data.astype(bool))
+    coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
 
 
 def get_single_galaxy_measurements(
