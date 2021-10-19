@@ -3,12 +3,9 @@ import pickle
 import warnings
 from math import ceil, floor
 
-import galsim
 import numpy as np
 import torch
-import tqdm
 from astropy.io import fits
-from astropy.table.table import Table
 from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
@@ -24,71 +21,6 @@ def convert_mag_to_flux(mag, nelec_per_nmgy=987.31):
 def convert_flux_to_mag(flux, nelec_per_nmgy=987.31):
     # default corresponds to average value of columns for run 94, camcol 1, field 12
     return 22.5 - 2.5 * np.log10(flux / nelec_per_nmgy)
-
-
-def get_flux_coadd(coadd_cat, nelec_per_nmgy=987.31, band="r"):
-    """Get flux and magnitude measurements for a given SDSS Coadd catalog."""
-    fluxes = []
-    mags = []
-    for entry in coadd_cat:
-        is_star = bool(entry["probpsf"])
-        if is_star:
-            psfmag = entry[f"psfmag_{band}"]
-            flux = convert_mag_to_flux(psfmag, nelec_per_nmgy)
-            mag = psfmag
-        else:  # is galaxy
-            devmag = entry[f"devmag_{band}"]
-            expmag = entry[f"expmag_{band}"]
-            devflux = convert_mag_to_flux(devmag, nelec_per_nmgy)
-            expflux = convert_mag_to_flux(expmag, nelec_per_nmgy)
-            flux = devflux + expflux
-            mag = convert_flux_to_mag(flux, nelec_per_nmgy)
-
-        fluxes.append(flux)
-        mags.append(mag)
-
-    return np.array(fluxes), np.array(mags)
-
-
-def get_hlr_coadd(coadd_cat: Table, psf: galsim.GSObject, nelec_per_nmgy: float = 987.31):
-    if "hlr" in coadd_cat.colnames:
-        return coadd_cat["hlr"]
-
-    hlrs = []
-    psf_hlr = psf.calculateHLR()
-    for entry in tqdm.tqdm(coadd_cat, desc="Calculating HLR"):
-
-        is_star = bool(entry["probpsf"])
-        if is_star:
-            hlrs.append(psf_hlr)
-        else:
-            components = []
-            disk_flux = convert_mag_to_flux(entry["expmag_r"], nelec_per_nmgy)
-            bulge_flux = convert_mag_to_flux(entry["devmag_r"], nelec_per_nmgy)
-
-            if disk_flux > 0:
-                disk_beta = np.radians(entry["expphi_r"])  # radians
-                disk_hlr = entry["exprad_r"]  # arcsecs
-                disk_q = entry["expab_r"]
-                disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr)
-                disk = disk.shear(q=disk_q, beta=disk_beta * galsim.radians)
-                components.append(disk)
-
-            if bulge_flux > 0:
-                bulge_beta = np.radians(entry["devphi_r"])
-                bulge_hlr = entry["devrad_r"]
-                bulge_q = entry["devab_r"]
-                bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr)
-                bulge = bulge.shear(q=bulge_q, beta=bulge_beta * galsim.radians)
-                components.append(bulge)
-            gal = galsim.Add(components)
-            gal = galsim.Convolution(gal, psf)
-            try:
-                hlr = gal.calculateHLR()
-            except galsim.errors.GalSimFFTSizeError:
-                hlr = np.nan
-            hlrs.append(hlr)
-    return np.array(hlrs)
 
 
 class StarStamper:
