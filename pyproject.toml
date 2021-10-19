@@ -1,5 +1,5 @@
 [tool.poetry]
-authors = ["Bryan Liu", "Ismael Mendoza", "Zhe Zhao", "Jeffrey Regier"]
+authors = ["Ismael Mendoza", "Runjing Liu", "Derek Hansen", "Ziteng Pang", "Zhe Zhao", "Jeffrey Regier"]
 description = "Bayesian Light Source Separator"
 license = "MIT"
 name = "bliss"
