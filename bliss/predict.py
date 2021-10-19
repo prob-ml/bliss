@@ -1,4 +1,4 @@
-"""File to produce BLISS estimates on survey images. Currently only SDSS is supported."""
+"""Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
 import torch
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
@@ -129,8 +129,11 @@ def predict_on_scene(
     assert scene.shape[1] == image_encoder.n_bands == 1, "Only 1 band supported"
     h, w = scene.shape[-2], scene.shape[-1]
     bp = image_encoder.border_padding
-    ihic = h // clen - 1 if not testing else 1  # height in chunks
-    iwic = w // clen - 1 if not testing else 1  # width in chunks
+    ihic = h // clen + 1 if not testing else 1  # height in chunks
+    iwic = w // clen + 1 if not testing else 1  # width in chunks
+
+    # tiles
+    tile_slen = image_encoder.tile_slen
 
     # galaxies
     latent_dim = galaxy_encoder.latent_dim
@@ -145,19 +148,26 @@ def predict_on_scene(
 
     with torch.no_grad():
         with tqdm(total=ihic * iwic) as pbar:
-            for i in range(ihic):
-                for j in range(iwic):
+            for i in range(iwic):
+                for j in range(ihic):
                     x1, y1 = i * clen + bp, j * clen + bp
+
+                    # the following two statements ensure divisibility by tile_slen
+                    # of the resulting chunk near the edges.
+                    if clen + bp > w - x1:
+                        x1 = x1 + (w - x1 - bp) % tile_slen
+
+                    if clen + bp > h - y1:
+                        y1 = y1 + (h - y1 - bp) % tile_slen
+
                     pchunk = scene[:, :, y1 - bp : y1 + clen + bp, x1 - bp : x1 + clen + bp]
-                    print(pchunk.shape)
-                    assert pchunk.shape[-1] == pchunk.shape[-2] == clen + 2 * bp
                     pchunk = pchunk.to(device)
 
                     _, est_params, vparams = predict_on_image(
                         pchunk, image_encoder, binary_encoder, galaxy_encoder
                     )
 
-                    est_locs = est_params["locs"].cpu().reshape(-1, 2)
+                    est_locs = est_params["plocs"].cpu().reshape(-1, 2)
                     est_gbool = est_params["galaxy_bool"].cpu().reshape(-1)
                     est_pgalaxy = est_params["prob_galaxy"].cpu().reshape(-1)
                     est_star_flux = est_params["fluxes"].cpu().reshape(-1)
@@ -175,8 +185,8 @@ def predict_on_scene(
 
                     # locations in pixels consistent with full scene.
                     # 0.5 comes from pt/pr definition (plotting both -> off by half a pixel).
-                    x = est_locs[:, 1].reshape(-1, 1) * clen + x1 - 0.5
-                    y = est_locs[:, 0].reshape(-1, 1) * clen + y1 - 0.5
+                    x = est_locs[:, 1].reshape(-1, 1) + x1 - 0.5
+                    y = est_locs[:, 0].reshape(-1, 1) + y1 - 0.5
                     est_locs = torch.hstack((x, y)).reshape(-1, 2)
 
                     # collect flux and magnitude into a single tensor
@@ -191,8 +201,7 @@ def predict_on_scene(
                     mags = torch.cat((mags, est_mags))
 
                     # save variational parameters
-                    vparams = {key: value.cpu() for key, value in vparams.items()}
-                    var_params.append(vparams)
+                    var_params.append({key: value.cpu() for key, value in vparams.items()})
 
                     # update progress bar
                     pbar.update(1)
@@ -203,6 +212,7 @@ def predict_on_scene(
         "prob_galaxy": prob_galaxy,
         "flux": fluxes,
         "mag": mags,
+        "n_sources": torch.tensor([len(locs)]),
     }
 
     return vparams, full_map
