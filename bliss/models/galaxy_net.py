@@ -10,8 +10,8 @@ from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from tqdm import tqdm
 
 from bliss.optimizer import get_optimizer
+from bliss.reporting import plot_image
 from bliss.utils import make_grid
-from bliss.plotting import plot_image
 
 plt.switch_backend("Agg")
 plt.ioff()

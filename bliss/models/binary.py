@@ -8,7 +8,7 @@ from bliss.models.decoder import get_mgrid
 from bliss.models.encoder import EncoderCNN, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.galaxy_encoder import center_ptiles, get_full_params
 from bliss.optimizer import get_optimizer
-from bliss.plotting import plot_image_and_locs
+from bliss.reporting import plot_image_and_locs
 
 
 class BinaryEncoder(pl.LightningModule):

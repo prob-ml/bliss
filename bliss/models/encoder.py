@@ -145,6 +145,11 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     assert len(params["locs"].shape) == 3
     assert params["locs"].shape[1] == params["n_sources"].max().int().item()
 
+    # add plocs = pixel locs.
+    params["plocs"] = params["locs"].clone()
+    params["plocs"][:, :, 0] = params["locs"][:, :, 0] * slen
+    params["plocs"][:, :, 1] = params["locs"][:, :, 1] * wlen
+
     return params
 
 
