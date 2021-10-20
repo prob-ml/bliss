@@ -1,12 +1,7 @@
-from pathlib import Path
-
 import numpy as np
 import pytest
-from astropy.table import Table
-from hydra import compose, initialize
-from hydra.utils import instantiate
 
-from bliss.datasets.sdss import SloanDigitalSkySurvey, get_flux_coadd, get_hlr_coadd
+from bliss.datasets.sdss import SloanDigitalSkySurvey
 
 
 class TestSDSS:
@@ -57,15 +52,3 @@ class TestSDSS:
         sdss_obj.clear_cache()
         sdss_obj9.clear_cache()
         sdss_obj9_cached.clear_cache()
-
-    def test_coadd(self, paths):
-
-        # get psf
-        with initialize(config_path="../config"):
-            cfg = compose("config", overrides=["dataset=sdss_galaxies"])
-        ds = instantiate(cfg.dataset)
-        psf = ds.psf
-        coadd_cat_file = Path(paths["data"]).joinpath("coadd_catalog_94_1_12.fits")
-        coadd_cat = Table.read(coadd_cat_file)
-        _ = get_flux_coadd(coadd_cat)
-        _ = get_hlr_coadd(coadd_cat[:5], psf)

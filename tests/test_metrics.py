@@ -1,6 +1,6 @@
 import torch
 
-from bliss.metrics import ClassificationMetrics, DetectionMetrics
+from bliss.reporting import ClassificationMetrics, DetectionMetrics
 
 
 def test_metrics():
