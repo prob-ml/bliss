@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import tqdm
 from astropy.table import Table
-from astropy.wcs.wcs import WCS
 from einops import rearrange, reduce
 from matplotlib.figure import Figure
 from matplotlib.pyplot import Axes
@@ -14,7 +13,6 @@ from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
 
-from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.datasets.sdss import convert_flux_to_mag, convert_mag_to_flux
 
 
@@ -226,7 +224,7 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 
 
 def scene_metrics(
-    true_params,
+    true_params: dict,
     est_params: dict,
     mag_cut=25.0,
     slack=1.0,
@@ -400,26 +398,6 @@ def get_hlr_coadd(coadd_cat: Table, psf: galsim.GSObject, nelec_per_nmgy: float 
                 hlr = np.nan
             hlrs.append(hlr)
     return np.array(hlrs)
-
-
-def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: float, wcs: WCS):
-    """Add additional useful information to coadd catalog."""
-    coadd_cat = Table.read(coadd_cat_file)
-
-    psf = load_psf_from_file(psf_image_file, pixel_scale)
-    x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
-    galaxy_bool = ~coadd_cat["probpsf"].data.astype(bool)
-    flux, mag = get_flux_coadd(coadd_cat)
-    hlr = get_hlr_coadd(coadd_cat, psf)
-
-    coadd_cat["x"] = x
-    coadd_cat["y"] = y
-    coadd_cat["galaxy_bool"] = galaxy_bool
-    coadd_cat["flux"] = flux
-    coadd_cat["mag"] = mag
-    coadd_cat["hlr"] = hlr
-    coadd_cat.replace_column("is_saturated", coadd_cat["is_saturated"].data.astype(bool))
-    coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
 
 
 def get_single_galaxy_measurements(
