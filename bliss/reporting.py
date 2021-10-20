@@ -66,24 +66,17 @@ class DetectionMetrics(Metric):
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             tlocs, elocs = true_locs[b], est_locs[b]
-            self.update_single(ntrue, nest, tlocs, elocs)
-            count = (count + 1) if (ntrue > 0 and nest > 0) else count
+            if ntrue > 0 and nest > 0:
+                _, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
+                tp = len(elocs[mest][dkeep])  # n_matches
+                fp = nest - tp
+                assert fp >= 0
+                self.tp += tp
+                self.fp += fp
+                self.avg_distance += avg_distance
+                self.total_true_n_sources += ntrue
+                count += 1
         self.avg_distance /= count
-
-    def update_single(self, ntrue: int, nest: int, tlocs: torch.Tensor, elocs: torch.Tensor):
-        """Update on single image parameters, not batches."""
-        assert isinstance(ntrue, int), isinstance(nest, int)
-        assert len(tlocs.shape) == len(elocs.shape) == 2
-        assert tlocs.shape[-1] == elocs.shape[-1] == 2
-        if ntrue > 0 and nest > 0:
-            _, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
-            tp = len(elocs[mest][dkeep])  # n_matches
-            fp = nest - tp
-            assert fp >= 0
-            self.tp += tp
-            self.fp += fp
-            self.avg_distance += avg_distance
-            self.total_true_n_sources += ntrue
 
     def compute(self):
         precision = self.tp / (self.tp + self.fp)  # = PPV = positive predictive value
@@ -141,29 +134,13 @@ class ClassificationMetrics(Metric):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             tlocs, elocs = true_locs[b], est_locs[b]
             tgbool, egbool = true_galaxy_bool[b].reshape(-1), est_galaxy_bool[b].reshape(-1)
-            self.update_single(ntrue, nest, tlocs, elocs, tgbool, egbool)
-
-    def update_single(
-        self,
-        ntrue: int,
-        nest: int,
-        tlocs: torch.Tensor,
-        elocs: torch.Tensor,
-        tgbool: torch.Tensor,
-        egbool: torch.Tensor,
-    ):
-        """Update on single image parameters, not batches."""
-        assert isinstance(ntrue, int), isinstance(nest, int)
-        assert len(tlocs.shape) == len(elocs.shape) == 2
-        assert tlocs.shape[-1] == elocs.shape[-1] == 2
-        assert len(tgbool.shape) == len(egbool.shape) == 1
-        if ntrue > 0 and nest > 0:
-            mtrue, mest, dkeep, _ = match_by_locs(tlocs, elocs, self.slack)
-            tgbool = tgbool[mtrue][dkeep].reshape(-1)
-            egbool = egbool[mest][dkeep].reshape(-1)
-            self.total_n_matches += len(egbool)
-            self.total_correct_class += tgbool.eq(egbool).sum().int()
-            self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
+            if ntrue > 0 and nest > 0:
+                mtrue, mest, dkeep, _ = match_by_locs(tlocs, elocs, self.slack)
+                tgbool = tgbool[mtrue][dkeep].reshape(-1)
+                egbool = egbool[mest][dkeep].reshape(-1)
+                self.total_n_matches += len(egbool)
+                self.total_correct_class += tgbool.eq(egbool).sum().int()
+                self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
 
     # pylint: disable=no-member
     def compute(self):
@@ -257,12 +234,12 @@ def scene_metrics(
     tparams = apply_mag_cut(true_params, mag_cut + mag_slack)
     eparams = apply_mag_cut(est_params, mag_cut)
 
-    # collect params
-    ntrue, nest = tparams["n_sources"].item(), eparams["n_sources"].item()
-    tlocs, elocs = tparams["plocs"], eparams["plocs"]
+    # collect params in correct format
+    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
+    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
 
     # update
-    detection_metrics.update_single(ntrue, nest, tlocs, elocs)
+    detection_metrics.update(tparams, eparams)
     precision = detection_metrics.compute()["precision"]
     detection_metrics.reset()  # reset global state.
     assert detection_metrics.tp == 0  # pylint: disable=no-member
@@ -272,9 +249,9 @@ def scene_metrics(
     # does not mean that we missed this object, reducing our TP, and reducing recall.
     tparams = apply_mag_cut(true_params, mag_cut)
     eparams = apply_mag_cut(est_params, mag_cut + mag_slack)
-    ntrue, nest = tparams["n_sources"].item(), eparams["n_sources"].item()
-    tlocs, elocs = tparams["plocs"], eparams["plocs"]
-    detection_metrics.update_single(ntrue, nest, tlocs, elocs)
+    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
+    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
+    detection_metrics.update(tparams, eparams)
     recall = detection_metrics.compute()["recall"]
     detection_metrics.reset()
 
@@ -285,10 +262,11 @@ def scene_metrics(
     # compute classification metrics, these are only computed on matches so ignore mag_slack.
     tparams = apply_mag_cut(true_params, mag_cut)
     eparams = apply_mag_cut(est_params, mag_cut)
-    ntrue, nest = tparams["n_sources"].item(), eparams["n_sources"].item()
-    tlocs, elocs = tparams["plocs"], eparams["plocs"]
-    tgbool, egbool = tparams["galaxy_bool"], eparams["galaxy_bool"]
-    classification_metrics.update_single(ntrue, nest, tlocs, elocs, tgbool, egbool)
+    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
+    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
+    tparams["galaxy_bool"] = tparams["galaxy_bool"].reshape(1, -1, 1)
+    eparams["galaxy_bool"] = eparams["galaxy_bool"].reshape(1, -1, 1)
+    classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
     # compute and return results

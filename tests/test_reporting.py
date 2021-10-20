@@ -29,9 +29,10 @@ def test_coadd(paths):
 
     # read file and get flux / hlr
     coadd_cat_file = Path(paths["data"]).joinpath("coadd_catalog_94_1_12.fits")
-    coadd_cat = Table.read(coadd_cat_file)
+    coadd_cat = Table.read(coadd_cat_file)[:5]
+    coadd_cat.remove_column("hlr")
     _ = reporting.get_flux_coadd(coadd_cat)
-    _ = reporting.get_hlr_coadd(coadd_cat[:5], psf)
+    coadd_cat["hlr"] = reporting.get_hlr_coadd(coadd_cat[:5], psf)
 
     # params for calculating metrics
     _ = reporting.get_params_from_coadd(coadd_cat, h=1489, w=2048, bp=24)
