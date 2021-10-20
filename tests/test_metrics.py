@@ -1,13 +1,13 @@
 import torch
 
-from bliss.metrics import ClassificationMetrics, DetectionMetrics
+from bliss.reporting import ClassificationMetrics, DetectionMetrics
 
 
 def test_metrics():
     slen = 50
     slack = 1.0
-    detect = DetectionMetrics(slen, slack)
-    classify = ClassificationMetrics(slen, slack)
+    detect = DetectionMetrics(slack)
+    classify = ClassificationMetrics(slack)
 
     true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]]).reshape(2, 2, 2)
     est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]]).reshape(
@@ -18,12 +18,12 @@ def test_metrics():
 
     true_params = {
         "n_sources": torch.tensor([1, 2]),
-        "locs": true_locs,
+        "plocs": true_locs * slen,
         "galaxy_bool": true_galaxy_bool,
     }
     est_params = {
         "n_sources": torch.tensor([2, 2]),
-        "locs": est_locs,
+        "plocs": est_locs * slen,
         "galaxy_bool": est_galaxy_bool,
     }
 

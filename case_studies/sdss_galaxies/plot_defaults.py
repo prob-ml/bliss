@@ -56,13 +56,17 @@ def set_rc_params(
             "lines.markersize": lines_marker_size,
             # legend
             "legend.fontsize": legend_fontsize,
+            # colors
+            "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
         }
     )
 
 
 def format_plot(ax, xlims=None, ylims=None, xticks=None, yticks=None, xlabel="", ylabel=""):
-    ax.set_xlim(xlims)
-    ax.set_ylim(ylims)
+    if xlims is not None:
+        ax.set_xlim(xlims)
+    if ylims is not None:
+        ax.set_ylim(ylims)
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)

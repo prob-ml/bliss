@@ -9,7 +9,7 @@ from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.encoder import get_full_params, get_images_in_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.optimizer import get_optimizer
-from bliss.plotting import plot_image, plot_image_and_locs
+from bliss.reporting import plot_image, plot_image_and_locs
 
 
 def center_ptiles(
