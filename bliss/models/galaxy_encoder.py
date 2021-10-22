@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.encoder import get_full_params, get_images_in_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.optimizer import get_optimizer
+from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image, plot_image_and_locs
 
 
@@ -99,10 +99,7 @@ class GalaxyEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Set up optimizers (pytorch-lightning method)."""
-        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
-        name = self.hparams["optimizer_params"]["name"]
-        kwargs = self.hparams["optimizer_params"]["kwargs"]
-        return get_optimizer(name, self.enc.parameters(), kwargs)
+        return load_optimizer(self.enc.parameters(), self.hparams)
 
     def forward_image(self, images, tile_locs):
         batch_size = images.shape[0]
