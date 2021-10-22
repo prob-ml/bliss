@@ -18,7 +18,7 @@ from torch.nn import CrossEntropyLoss
 
 from bliss.models.decoder import ImageDecoder
 from bliss.models.encoder import ImageEncoder, get_full_params, get_is_on_from_n_sources
-from bliss.optimizer import get_optimizer
+from bliss.optimizer import load_optimizer
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
@@ -273,10 +273,7 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
-        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
-        name = self.hparams["optimizer_params"]["name"]
-        kwargs = self.hparams["optimizer_params"]["kwargs"]
-        return get_optimizer(name, self.image_encoder.parameters(), kwargs)
+        return load_optimizer(self.image_encoder.parameters(), self.hparams)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""

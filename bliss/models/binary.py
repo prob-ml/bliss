@@ -7,7 +7,7 @@ from torch.nn import BCELoss
 from bliss.models.decoder import get_mgrid
 from bliss.models.encoder import EncoderCNN, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.galaxy_encoder import center_ptiles, get_full_params
-from bliss.optimizer import get_optimizer
+from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image_and_locs
 
 
@@ -146,10 +146,7 @@ class BinaryEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Pytorch lightning method."""
-        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
-        name = self.hparams["optimizer_params"]["name"]
-        kwargs = self.hparams["optimizer_params"]["kwargs"]
-        return get_optimizer(name, self.parameters(), kwargs)
+        return load_optimizer(self.parameters(), self.hparams)
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning method."""

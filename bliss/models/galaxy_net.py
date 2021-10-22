@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from tqdm import tqdm
 
-from bliss.optimizer import get_optimizer
+from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image
 from bliss.utils import make_grid
 
@@ -182,11 +182,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configures optimizers for training (pytorch lightning)."""
-        assert self.hparams["optimizer_params"] is not None, "Need to specify `optimizer_params`."
-        name = self.hparams["optimizer_params"]["name"]
-        kwargs = self.hparams["optimizer_params"]["kwargs"]
-        opt_main = get_optimizer(name, self.main_autoencoder.parameters(), kwargs)
-        opt_residual = get_optimizer(name, self.residual_autoencoder.parameters(), kwargs)
+        opt_main = load_optimizer(self.main_autoencoder.parameters(), self.hparams)
+        opt_residual = load_optimizer(self.residual_autoencoder.parameters(), self.hparams)
         return opt_main, opt_residual
 
     def optimizer_step(
