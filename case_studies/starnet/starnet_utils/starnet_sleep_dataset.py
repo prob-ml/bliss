@@ -2,6 +2,8 @@ import torch
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
+from torch.distributions import Poisson
+
 from bliss.models.decoder import ImageDecoder
 
 
@@ -25,7 +27,11 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
         # custom backgrounds 
         self.image_decoder.background_values = [0, 0]
         self.mean_background_vals = [686., 1123.]
-
+        
+        # we overwrote these methods
+        self.image_decoder._sample_n_sources = self._sample_n_sources
+        
+        
         
     def __iter__(self):
         return self.batch_generator()
@@ -44,10 +50,50 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
         sampled_background_vals = mu + normal_samples * sd
         
         return sampled_background_vals
+    
+    def _sample_n_sources(self, batch_size=1):
         
+        print('foooooo')
+        print(self.image_decoder.max_sources)
+        print(self.image_decoder.min_sources)
+        
+        # sample number of sources
+        # first sample poisson prior parameter
+        pois_prior_lambda = torch.rand(batch_size).to(self.image_decoder.device) * 500 + 1000
+        poisson = Poisson(pois_prior_lambda)
+        n_sources = poisson.sample((self.image_decoder.n_tiles_per_image, )).transpose(0, 1)
+        
+        # long() here is necessary because used for indexing and one_hot encoding.
+        n_sources = n_sources.clamp(max=self.image_decoder.max_sources,
+                                    min=self.image_decoder.min_sources)
+        
+        return rearrange(n_sources.long(), "b n 1 -> b n")
+        
+    
+#         n_sources = self._sample_n_sources(batch_size)
+#         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
+#         locs = self._sample_locs(is_on_array, batch_size)
+
+#         _, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(n_sources, is_on_array)
+#         galaxy_params = self._sample_galaxy_params(galaxy_bool)
+#         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
+#         log_fluxes = self._get_log_fluxes(fluxes)
+
+#         # per tile quantities.
+#         return {
+#             "n_sources": n_sources,
+#             "locs": locs,
+#             "galaxy_bool": galaxy_bool,
+#             "star_bool": star_bool,
+#             "galaxy_params": galaxy_params,
+#             "fluxes": fluxes,
+#             "log_fluxes": log_fluxes,
+#         }
+
+
     def get_batch(self):
         with torch.no_grad():
-            batch = self.image_decoder.sample_prior(batch_size=self.batch_size)
+            batch = self.sample_prior(batch_size=self.batch_size)
             images, _ = self.image_decoder.render_images(
                 batch["n_sources"],
                 batch["locs"],
