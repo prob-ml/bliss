@@ -1,37 +1,57 @@
 #!/usr/bin/env python3
 """Produce all figures. Save to nice PDF format."""
+import argparse
 import os
 from abc import abstractmethod
 from pathlib import Path
 
+import galsim
 import matplotlib as mpl
 import numpy as np
+import pytorch_lightning as pl
 import seaborn as sns
 import torch
 from astropy.table import Table
 from astropy.wcs.wcs import WCS
+from hydra import compose, initialize
 from matplotlib import pyplot as plt
 
-from bliss import reporting
+from bliss import generate, reporting
 from bliss.datasets import sdss
 from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
+from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.predict import predict_on_scene
 from bliss.sleep import SleepPhase
 
-sns.set_theme(style="darkgrid")
-
 device = torch.device("cuda:0")
+pl.seed_everything(0)
 
 files_dict = {
     "sleep_ckpt": "models/sdss_sleep.ckpt",
     "galaxy_encoder_ckpt": "models/sdss_galaxy_encoder.ckpt",
     "binary_ckpt": "models/sdss_binary.ckpt",
+    "ae_ckpt": "models/sdss_autoencoder.ckpt",
     "coadd_cat": "data/coadd_catalog_94_1_12.fits",
     "sdss_dir": "data/sdss",
     "psf_file": "data/psField-000094-1-0012-PSF-image.npy",
 }
+
+
+def remove_outliers(*args, level=0.99):
+    # each arg in args should be 1D numpy.array with same number of data points.
+    for arg in args:
+        assert len(arg) == len(args[0])
+        assert isinstance(arg, np.ndarray)
+        assert len(arg.shape) == 1
+    keep = np.ones(args[0].shape).astype(bool)
+    for x in args:
+        x_min, x_max = np.quantile(x, 1 - level), np.quantile(x, level)
+        keep_x = (x > x_min) & (x < x_max)
+        keep &= keep_x
+
+    return (arg[keep] for arg in args)
 
 
 def get_sdss_data():
@@ -85,7 +105,7 @@ def recreate_coadd_cat(self):
 
 
 class BlissFigures:
-    def __init__(self, outdir="", cache="temp.pt") -> None:
+    def __init__(self, outdir="", cache="temp.pt", overwrite=False) -> None:
         os.chdir(os.getenv("BLISS_HOME"))
         outdir = Path(outdir)
 
@@ -94,6 +114,7 @@ class BlissFigures:
 
         self.outdir = Path(outdir)
         self.cache = self.outdir / cache
+        self.overwrite = overwrite
         self.figures = {}
 
     @property
@@ -104,7 +125,7 @@ class BlissFigures:
 
     def get_data(self, *args, **kwargs):
         """Return summary of data for producing plot, must be cachable w/ torch.save()."""
-        if self.cache.exists():
+        if self.cache.exists() and not self.overwrite:
             return torch.load(self.cache)
 
         data = self.compute_data(*args, **kwargs)
@@ -120,7 +141,7 @@ class BlissFigures:
         data = self.get_data(*args, **kwargs)
         figs = self.create_figures(data)
         for k, fname in self.fignames.items():
-            figs[k].savefig(fname, format="pdf")
+            figs[k].savefig(self.outdir / fname, format="pdf")
 
     @abstractmethod
     def create_figures(self, data):
@@ -129,14 +150,14 @@ class BlissFigures:
 
 
 class DetectionClassificationFigures(BlissFigures):
-    def __init__(self, outdir="", cache="detect_class.pt") -> None:
-        super().__init__(outdir=outdir, cache=cache)
+    def __init__(self, outdir="", cache="detect_class.pt", overwrite=False) -> None:
+        super().__init__(outdir=outdir, cache=cache, overwrite=overwrite)
 
     @property
     def fignames(self):
         return {
-            "detection": self.outdir / "sdss-precision-recall.pdf",
-            "classification": self.outdir / "sdss-classification-acc.pdf",
+            "detection": "sdss-precision-recall.pdf",
+            "classification": "sdss-classification-acc.pdf",
         }
 
     def compute_data(self, scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
@@ -206,6 +227,7 @@ class DetectionClassificationFigures(BlissFigures):
 
     def create_figures(self, data):
         """Make figures related to detection and classification in SDSS."""
+        sns.set_theme(style="darkgrid")
 
         mag_bins = data["mag_bins"]
         recalls = data["recalls"]
@@ -253,24 +275,232 @@ class DetectionClassificationFigures(BlissFigures):
         )
 
 
-def main():
+class AEReconstructionFigures(BlissFigures):
+    def __init__(self, outdir="", cache="ae_cache.pt", overwrite=False, n_examples=5) -> None:
+        super().__init__(outdir=outdir, cache=cache, overwrite=overwrite)
+        self.n_examples = n_examples
+
+    @property
+    def fignames(self):
+        return {
+            "random_recon": "random_reconstructions.pdf",
+            "worst_recon": "worst_reconstructions.pdf",
+            "measure": "single_galaxy_measurements.pdf",
+        }
+
+    def compute_data(self, autoencoder, images_file, psf_file):
+        # NOTE: For very dim objects (max_pixel < 6, flux ~ 1000), autoencoder can return
+        # 0.1% objects with negative flux. This objects are discarded.
+        device = autoencoder.device  # GPU is better otherwise slow.
+
+        image_data = torch.load(images_file)
+        images = image_data["images"]
+        recon_means = torch.tensor([])
+        background = image_data["background"].reshape(1, 1, 53, 53).to(device)
+        true_images = image_data["noiseless"].numpy()
+
+        print("Computing reconstructions from saved autoencoder model...")
+        n_images = images.shape[0]
+        batch_size = 128
+        n_iters = int(np.ceil(n_images // 128))
+        for i in range(n_iters):
+            bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
+            recon_mean = autoencoder.forward(bimages, background).detach().to("cpu")
+            recon_means = torch.cat((recon_means, recon_mean))
+        residuals = (images - recon_means) / recon_means.sqrt()
+        assert recon_means.shape[0] == true_images.shape[0]
+
+        # random
+        rand_indices = torch.randint(0, len(images), size=(self.n_examples,))
+
+        # worst
+        absolute_residual = residuals.abs().sum(axis=(1, 2, 3))
+        worst_indices = absolute_residual.argsort()[-self.n_examples :]
+
+        # measurements
+        psf_array = np.load(psf_file)
+        galsim_psf_image = galsim.Image(psf_array[0], scale=0.396)  # sdss scale
+        psf = galsim.InterpolatedImage(galsim_psf_image).withFlux(1.0)
+        psf_image = psf.drawImage(nx=53, ny=53, scale=0.396).array
+
+        recon_no_background = recon_means.numpy() - background.cpu().numpy()
+        good_bool = recon_no_background.sum(axis=(1, 2, 3)) > 0
+        measurements = reporting.get_single_galaxy_measurements(
+            slen=53,
+            true_images=true_images[good_bool],
+            recon_images=recon_no_background[good_bool],
+            psf_image=psf_image.reshape(-1, 53, 53),
+            pixel_scale=0.396,
+        )
+
+        return {
+            "random": (images[rand_indices], recon_means[rand_indices], residuals[rand_indices]),
+            "worst": (images[worst_indices], recon_means[worst_indices], residuals[worst_indices]),
+            "measurements": measurements,
+        }
+
+    def reconstruction_figure(self, images, recons, residuals):
+        plt.style.use("seaborn-colorblind")
+        pad = 6.0
+        reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
+        fig, axes = plt.subplots(nrows=self.n_examples, ncols=3, figsize=(12, 20))
+
+        assert images.shape[0] == recons.shape[0] == residuals.shape[0] == self.n_examples
+        assert images.shape[1] == recons.shape[1] == residuals.shape[1] == 1, "1 band only."
+
+        # pick standard ranges for residuals
+        vmin_res = residuals.min().item()
+        vmax_res = residuals.max().item()
+
+        for i in range(self.n_examples):
+
+            ax_true = axes[i, 0]
+            ax_recon = axes[i, 1]
+            ax_res = axes[i, 2]
+
+            # only add titles to the first axes.
+            if i == 0:
+                ax_true.set_title("Images $x$", pad=pad)
+                ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
+                ax_res.set_title(
+                    r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad
+                )
+
+            # standarize ranges of true and reconstruction
+            image = images[i, 0].detach().cpu().numpy()
+            recon = recons[i, 0].detach().cpu().numpy()
+            residual = residuals[i, 0].detach().cpu().numpy()
+
+            vmin = min(image.min().item(), recon.min().item())
+            vmax = max(image.max().item(), recon.max().item())
+
+            # plot images
+            reporting.plot_image(fig, ax_true, image, vrange=(vmin, vmax))
+            reporting.plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
+            reporting.plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
+
+        plt.subplots_adjust(hspace=-0.4)
+        plt.tight_layout()
+
+        return fig
+
+    def make_scatter_hist_kde(self, ax, x, y, **plot_kwargs):
+        sns.scatterplot(x=x, y=y, s=5, color="0.15", ax=ax)
+        sns.histplot(x=x, y=y, pthresh=0.1, cmap="mako", ax=ax, cbar=True)
+        sns.kdeplot(x=x, y=y, levels=5, color="w", linewidths=1, ax=ax)
+        reporting.format_plot(ax, **plot_kwargs)
+
+    def make_scatter_figure(self, meas):
+        sns.set_theme(style="darkgrid")
+        reporting.set_rc_params(
+            fontsize=24, legend_fontsize="small", tick_label_size="small", label_size="medium"
+        )
+        fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+        ax1, ax2, ax3, ax4 = axes.flatten()
+
+        # fluxes / magnitudes
+        x, y = remove_outliers(meas["true_mags"], meas["recon_mags"], level=0.95)
+        mag_ticks = (16, 17, 18, 19)
+        self.make_scatter_hist_kde(
+            ax1,
+            x,
+            y,
+            xlabel=r"\rm true mag.",
+            ylabel=r"\rm recon mag.",
+            xticks=mag_ticks,
+            yticks=mag_ticks,
+        )
+
+        # hlrs
+        x, y = remove_outliers(meas["true_hlrs"], meas["recon_hlrs"], level=0.95)
+        self.make_scatter_hist_kde(ax2, x, y, xlabel=r"\rm true HLR", ylabel=r"\rm recon HLR")
+
+        # ellipticities
+        x, y = remove_outliers(meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0], level=0.95)
+        g_ticks = (-1.0, -0.5, 0.0, 0.5, 1.0)
+        self.make_scatter_hist_kde(
+            ax3,
+            x,
+            y,
+            xticks=g_ticks,
+            yticks=g_ticks,
+            xlabel=r"$g_{1}^{\rm true}$",
+            ylabel=r"$g_{1}^{\rm recon}$",
+        )
+
+        x, y = remove_outliers(meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1], level=0.95)
+        self.make_scatter_hist_kde(
+            ax4,
+            x,
+            y,
+            xticks=g_ticks,
+            yticks=g_ticks,
+            xlabel=r"$g_{2}^{\rm true}$",
+            ylabel=r"$g_{2}^{\rm recon}$",
+        )
+
+        plt.tight_layout()
+        return fig
+
+    def create_figures(self, data):
+
+        return {
+            "random_recon": self.reconstruction_figure(*data["random"]),
+            "worst_recon": self.reconstruction_figure(*data["worst"]),
+            "measure": self.make_scatter_figure(data["measurements"]),
+        }
+
+
+def main(n_fig, overwrite=False):
     os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
+    outdir = "output/sdss_figures"
 
-    # load data
-    scene = get_sdss_data()["image"]
-    coadd_cat = Table.read(files_dict["coadd_cat"], format="fits")
+    if n_fig == 1:
+        # FIGURE 1: Autoencoder performance.
+        # first, create images of individually simulated galaxies if they do not exist.
+        autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(files_dict["ae_ckpt"]).eval()
+        autoencoder = autoencoder.eval().to(device)
+        galaxies_file = Path("data/simulated_sdss_individual_galaxies.pt")
+        if not galaxies_file.exists():
+            print(f"Generating individual galaxy images and saving to: {galaxies_file}")
+            overrides = ["experiment=sdss_individual_galaxies"]
+            with initialize(config_path="config"):
+                cfg = compose("config", overrides=overrides)
+                generate.generate(cfg)
 
-    # load models
-    sleep_net = SleepPhase.load_from_checkpoint(files_dict["sleep_ckpt"]).to(device)
-    binary_encoder = BinaryEncoder.load_from_checkpoint(files_dict["binary_ckpt"]).to(device).eval()
-    galaxy_encoder = (
-        GalaxyEncoder.load_from_checkpoint(files_dict["galaxy_encoder_ckpt"]).to(device).eval()
-    )
+        # create figure classes and plot.
+        ae_figures = AEReconstructionFigures(outdir=outdir, overwrite=overwrite, n_examples=5)
+        ae_figures.save_figures(autoencoder, galaxies_file, files_dict["psf_file"])
 
-    # FIGURE 1 : Classification and Detection metrics
-    bfigure1 = DetectionClassificationFigures(outdir="case_studies/sdss_galaxies/output")
-    bfigure1.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+    # FIGURE 2: Classification and Detection metrics
+    elif n_fig == 2:
+        scene = get_sdss_data()["image"]
+        coadd_cat = Table.read(files_dict["coadd_cat"], format="fits")
+        sleep_net = SleepPhase.load_from_checkpoint(files_dict["sleep_ckpt"]).to(device)
+        binary_encoder = BinaryEncoder.load_from_checkpoint(files_dict["binary_ckpt"])
+        binary_encoder = binary_encoder.to(device).eval()
+        galaxy_encoder = GalaxyEncoder.load_from_checkpoint(files_dict["galaxy_encoder_ckpt"])
+        galaxy_encoder = galaxy_encoder.to(device).eval()
+
+        dc_fig = DetectionClassificationFigures(outdir=outdir, overwrite=overwrite)
+        dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+
+    else:
+        raise NotImplementedError("That Figure has not been created.")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Create figures related to galaxies.")
+    parser.add_argument(
+        "-f",
+        "--fig",
+        help="Which figures do you want to create?",
+        required=True,
+        choices=["1", "2"],
+    )
+    parser.add_argument(
+        "-o", "--overwrite", action="store_true", default=False, help="Recreate cache?"
+    )
+    args = vars(parser.parse_args())
+    n_fig = int(args["fig"])
+    main(n_fig, args["overwrite"])
