@@ -236,7 +236,6 @@ class DetectionClassificationFigures(BlissFigure):
         ax.plot(mag_bins, precisions, "-o", label=r"\rm precision")
         plt.xlim(18, 23)
         ax.legend(loc="best", prop={"size": 22})
-        f1.savefig(self.figures["detection"], format="pdf")
 
         reporting.set_rc_params(tick_label_size=22, label_size=30)
         f2, ax = plt.subplots(1, 1, figsize=(10, 10))
