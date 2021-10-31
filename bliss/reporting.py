@@ -2,6 +2,7 @@
 import galsim
 import matplotlib as mpl
 import numpy as np
+import seaborn as sns
 import torch
 import tqdm
 from astropy.table import Table
@@ -434,7 +435,7 @@ def get_single_galaxy_measurements(
     galsim_psf_image = galsim.Image(psf_image, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
-    for i in tqdm.tqdm(range(n_samples)):
+    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
         true_image = true_images[i]
         recon_image = recon_images[i]
 
@@ -461,6 +462,8 @@ def get_single_galaxy_measurements(
         "recon_ellip": recon_ellip,
         "true_hlrs": true_hlrs,
         "recon_hlrs": recon_hlrs,
+        "true_mags": convert_flux_to_mag(true_fluxes),
+        "recon_mags": convert_flux_to_mag(recon_fluxes),
     }
 
 
@@ -591,38 +594,38 @@ def set_rc_params(
     lines_marker_size=8,
 ):
     # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
-    mpl.rcParams.update(
-        {
-            # font.
-            "font.family": "STIXGeneral",
-            "font.sans-serif": "Helvetica",
-            "text.usetex": True,
-            "mathtext.fontset": "cm",
-            "font.size": fontsize,
-            # figure
-            "figure.figsize": figsize,
-            # axes
-            "axes.labelsize": label_size,
-            "axes.titlesize": title_size,
-            # ticks
-            "xtick.labelsize": tick_label_size,
-            "ytick.labelsize": tick_label_size,
-            "xtick.major.size": major_tick_size,
-            "ytick.major.size": major_tick_size,
-            "xtick.major.width": major_tick_width,
-            "ytick.major.width": major_tick_width,
-            "ytick.minor.size": minor_tick_size,
-            "xtick.minor.size": minor_tick_size,
-            "xtick.minor.width": minor_tick_width,
-            "ytick.minor.width": minor_tick_width,
-            # markers
-            "lines.markersize": lines_marker_size,
-            # legend
-            "legend.fontsize": legend_fontsize,
-            # colors
-            "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
-        }
-    )
+    rc_params = {
+        # font.
+        "font.family": "STIXGeneral",
+        "font.sans-serif": "Helvetica",
+        "text.usetex": True,
+        "mathtext.fontset": "cm",
+        "font.size": fontsize,
+        # figure
+        "figure.figsize": figsize,
+        # axes
+        "axes.labelsize": label_size,
+        "axes.titlesize": title_size,
+        # ticks
+        "xtick.labelsize": tick_label_size,
+        "ytick.labelsize": tick_label_size,
+        "xtick.major.size": major_tick_size,
+        "ytick.major.size": major_tick_size,
+        "xtick.major.width": major_tick_width,
+        "ytick.major.width": major_tick_width,
+        "ytick.minor.size": minor_tick_size,
+        "xtick.minor.size": minor_tick_size,
+        "xtick.minor.width": minor_tick_width,
+        "ytick.minor.width": minor_tick_width,
+        # markers
+        "lines.markersize": lines_marker_size,
+        # legend
+        "legend.fontsize": legend_fontsize,
+        # colors
+        "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
+    }
+    mpl.rcParams.update(rc_params)
+    sns.set_context(rc=rc_params)
 
 
 def format_plot(ax, xlims=None, ylims=None, xticks=None, yticks=None, xlabel="", ylabel=""):
