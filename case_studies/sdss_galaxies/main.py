@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Produce all figures. Save to nice PDF format."""
 import os
 from abc import abstractmethod
@@ -20,7 +21,6 @@ from bliss.predict import predict_on_scene
 from bliss.sleep import SleepPhase
 
 sns.set_theme(style="darkgrid")
-
 
 device = torch.device("cuda:0")
 
@@ -84,7 +84,7 @@ def recreate_coadd_cat(self):
     add_extra_coadd_info(self.files["coadd_cat"], self.files["psf_image"], pixel_scale, wcs)
 
 
-class BlissFigure:
+class BlissFigures:
     def __init__(self, outdir="", cache="temp.pt") -> None:
         os.chdir(os.getenv("BLISS_HOME"))
         outdir = Path(outdir)
@@ -106,44 +106,29 @@ class BlissFigure:
         """Return summary of data for producing plot, must be cachable w/ torch.save()."""
         if self.cache.exists():
             return torch.load(self.cache)
-        return self.compute_data(*args, **kwargs)
+
+        data = self.compute_data(*args, **kwargs)
+        torch.save(data, self.cache)
+        return data
 
     @abstractmethod
     def compute_data(self, *args, **kwargs):
         return {}
 
-    def save_figure(self, *args, **kwargs):
+    def save_figures(self, *args, **kwargs):
         """Create figures and save to output directory with names from `self.fignames`."""
         data = self.get_data(*args, **kwargs)
-        figs = self.create_figure(data)
+        figs = self.create_figures(data)
         for k, fname in self.fignames.items():
             figs[k].savefig(fname, format="pdf")
 
     @abstractmethod
-    def create_figure(self, data):
+    def create_figures(self, data):
         """Return matplotlib figure instances to save based on data."""
         return mpl.figure.Figure()
 
-    def scatter_plot_misclass(self, ax, prob_galaxy, misclass, true_mags):
 
-        # scatter plot of miscclassification probs
-        probs_correct = prob_galaxy[~misclass]
-        probs_misclass = prob_galaxy[misclass]
-
-        ax.scatter(true_mags[~misclass], probs_correct, marker="x", c="b")
-        ax.scatter(true_mags[misclass], probs_misclass, marker="x", c="r")
-        ax.axhline(0.5, linestyle="--")
-        ax.axhline(0.1, linestyle="--")
-        ax.axhline(0.9, linestyle="--")
-
-        uncertain = (prob_galaxy[misclass] > 0.2) & (prob_galaxy[misclass] < 0.8)
-        r_uncertain = sum(uncertain) / len(prob_galaxy[misclass])
-        print(
-            f"ratio misclass with probability between 10%-90%: {r_uncertain:.3f}",
-        )
-
-
-class DetectionClassificationFigures(BlissFigure):
+class DetectionClassificationFigures(BlissFigures):
     def __init__(self, outdir="", cache="detect_class.pt") -> None:
         super().__init__(outdir=outdir, cache=cache)
 
@@ -219,7 +204,7 @@ class DetectionClassificationFigures(BlissFigure):
             "galaxy_accs": galaxy_accs,
         }
 
-    def make_figures(self, data):
+    def create_figures(self, data):
         """Make figures related to detection and classification in SDSS."""
 
         mag_bins = data["mag_bins"]
@@ -248,6 +233,25 @@ class DetectionClassificationFigures(BlissFigure):
 
         return {"detection": f1, "classification": f2}
 
+    def scatter_plot_misclass(self, ax, prob_galaxy, misclass, true_mags):
+        # TODO: Revive if necessary later on.
+
+        # scatter plot of miscclassification probs
+        probs_correct = prob_galaxy[~misclass]
+        probs_misclass = prob_galaxy[misclass]
+
+        ax.scatter(true_mags[~misclass], probs_correct, marker="x", c="b")
+        ax.scatter(true_mags[misclass], probs_misclass, marker="x", c="r")
+        ax.axhline(0.5, linestyle="--")
+        ax.axhline(0.1, linestyle="--")
+        ax.axhline(0.9, linestyle="--")
+
+        uncertain = (prob_galaxy[misclass] > 0.2) & (prob_galaxy[misclass] < 0.8)
+        r_uncertain = sum(uncertain) / len(prob_galaxy[misclass])
+        print(
+            f"ratio misclass with probability between 10%-90%: {r_uncertain:.3f}",
+        )
+
 
 def main():
     os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
@@ -265,7 +269,7 @@ def main():
 
     # FIGURE 1 : Classification and Detection metrics
     bfigure1 = DetectionClassificationFigures(outdir="case_studies/sdss_galaxies/output")
-    bfigure1.save_figure(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+    bfigure1.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
 
 
 if __name__ == "__main__":
