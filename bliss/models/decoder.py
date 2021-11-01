@@ -2,7 +2,6 @@ import warnings
 from pathlib import Path
 
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from astropy.io import fits
 from einops import rearrange, reduce
@@ -25,7 +24,7 @@ def get_mgrid(slen):
     return mgrid.float() * (slen - 1) / slen
 
 
-class ImageDecoder(pl.LightningModule):
+class ImageDecoder(nn.Module):
     # pylint: disable=too-many-statements
     def __init__(
         self,
