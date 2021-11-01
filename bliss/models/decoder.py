@@ -250,23 +250,13 @@ class ImageDecoder(pl.LightningModule):
         tile_slen=2,
         ptile_slen=10,
         border_padding=None,
-        max_sources=2,
-        mean_sources=0.4,
-        min_sources=0,
-        f_min=1e4,
-        f_max=1e6,
-        alpha=0.5,
         prob_galaxy=0.0,
         n_galaxy_params=64,
         gal_slen=53,
         autoencoder_ckpt=None,
-        latents_file=None,
-        n_latent_batches=160,
         psf_params_file=None,
         psf_slen=25,
         background_values=(686.0,),
-        loc_min=0.0,
-        loc_max=1.0,
         sdss_bands=(2,),
     ):
         super().__init__()
@@ -274,65 +264,41 @@ class ImageDecoder(pl.LightningModule):
         self.n_bands = n_bands
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
-        self.slen = int(slen)
         assert self.slen % tile_slen == 0, "slen must be divisible by tile_slen"
+        self.slen = int(slen)
         # side-length of an image tile.
         # latent variables (locations, fluxes, etc) are drawn per-tile
         assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-        # Galaxy decoder
-        self.n_galaxy_params = n_galaxy_params
-        self.gal_slen = gal_slen
-        self.autoencoder_ckpt = autoencoder_ckpt
-        self.latents_file = Path(latents_file) if latents_file is not None else None
-        # Star Decoder
-        self.psf_slen = psf_slen
-        self.sdss_bands = tuple(sdss_bands)
 
-        # Border Padding
-        # Images are first rendered on *padded* tiles (aka ptiles).
-        # The padded tile consists of the tile and neighboring tiles
-        # The width of the padding is given by ptile_slen.
-        # border_padding is the amount of padding we leave in the final image. Useful for
-        # avoiding sources getting too close to the edges.
-        if border_padding is None:
-            # default value matches encoder default.
-            border_padding = (self.ptile_slen - self.tile_slen) / 2
-
-        n_tiles_of_padding = (self.ptile_slen / self.tile_slen - 1) / 2
-        ptile_padding = n_tiles_of_padding * self.tile_slen
-        assert border_padding % 1 == 0, "amount of border padding must be an integer"
-        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
-        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
-        self.border_padding = int(border_padding)
+        self.border_padding = self._validate_border_padding(border_padding)
 
         # Background
         assert len(background_values) == n_bands
         self.background_values = background_values
 
         # Submodule for managing tiles (no learned parameters)
-        self.tiler = Tiler(tile_slen, ptile_slen)
+        tiler = Tiler(tile_slen, ptile_slen)
 
         # Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
-            self.tiler,
+            tiler,
             self.n_bands,
-            self.psf_slen,
-            self.sdss_bands,
+            psf_slen,
+            tuple(sdss_bands),
             psf_params_file=psf_params_file,
         )
 
         # Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
-            assert self.autoencoder_ckpt is not None
+            assert autoencoder_ckpt is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
+                tiler,
                 self.n_bands,
-                self.tile_slen,
-                self.ptile_slen,
-                self.gal_slen,
-                self.n_galaxy_params,
-                self.autoencoder_ckpt,
+                gal_slen,
+                n_galaxy_params,
+                autoencoder_ckpt,
             )
         else:
             self.galaxy_tile_decoder = None
@@ -389,6 +355,12 @@ class ImageDecoder(pl.LightningModule):
         if self.galaxy_tile_decoder is None:
             return None
         return self.galaxy_tile_decoder.galaxy_decoder
+
+    @property
+    def n_galaxy_params(self):
+        if self.galaxy_tile_decoder is None:
+            return None
+        return self.galaxy_tile_decoder.n_galaxy_params
 
     @property
     def n_tiles_per_image(self):
@@ -556,6 +528,24 @@ class ImageDecoder(pl.LightningModule):
         x0 = n_tiles_of_padding * tile_slen - border_padding
         x1 = (n_tiles1 + n_tiles_of_padding) * tile_slen + border_padding
         return canvas[:, :, x0:x1, x0:x1]
+
+    def _validate_border_padding(self, border_padding):
+        # Border Padding
+        # Images are first rendered on *padded* tiles (aka ptiles).
+        # The padded tile consists of the tile and neighboring tiles
+        # The width of the padding is given by ptile_slen.
+        # border_padding is the amount of padding we leave in the final image. Useful for
+        # avoiding sources getting too close to the edges.
+        if border_padding is None:
+            # default value matches encoder default.
+            border_padding = (self.ptile_slen - self.tile_slen) / 2
+
+        n_tiles_of_padding = (self.ptile_slen / self.tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * self.tile_slen
+        assert border_padding % 1 == 0, "amount of border padding must be an integer"
+        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
+        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
+        return int(border_padding)
 
 
 class Tiler(nn.Module):
@@ -808,17 +798,16 @@ class StarTileDecoder(nn.Module):
 class GalaxyTileDecoder(nn.Module):
     def __init__(
         self,
+        tiler: Tiler,
         n_bands,
-        tile_slen,
-        ptile_slen,
         gal_slen,
         n_galaxy_params,
         autoencoder_ckpt,
     ):
         super().__init__()
         self.n_bands = n_bands
-        self.tiler = Tiler(tile_slen, ptile_slen)
-        self.ptile_slen = ptile_slen
+        self.tiler = tiler
+        self.ptile_slen = tiler.ptile_slen
 
         # load decoder after loading autoencoder from checkpoint.
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
