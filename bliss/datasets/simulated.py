@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
-from bliss.models.decoder import ImageDecoder
+from bliss.models.decoder import ImageDecoder, ImagePrior
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -20,6 +20,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.n_batches = n_batches
         self.batch_size = batch_size
+        self.image_prior = ImagePrior(**decoder).to(generate_device)
+        self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.image_decoder = ImageDecoder(**decoder).to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
@@ -38,7 +40,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def get_batch(self):
         with torch.no_grad():
-            batch = self.image_decoder.sample_prior(batch_size=self.batch_size)
+            batch = self.image_prior.sample_prior(batch_size=self.batch_size)
             images, _ = self.image_decoder.render_images(
                 batch["n_sources"],
                 batch["locs"],
