@@ -141,7 +141,6 @@ class SleepPhase(pl.LightningModule):
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
         assert self.image_decoder.border_padding == self.image_encoder.border_padding
-        assert self.image_encoder.max_detections <= self.image_decoder.max_sources
 
         # plotting
         self.annotate_probs = annotate_probs

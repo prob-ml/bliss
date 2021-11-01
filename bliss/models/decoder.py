@@ -340,20 +340,7 @@ class ImageDecoder(pl.LightningModule):
         assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-        # per-tile prior parameters on number (and type) of sources
-        assert max_sources > 0, "No sources will be drawn."
-        self.max_sources = max_sources
-        self.mean_sources = mean_sources
-        self.min_sources = min_sources
-        # per-tile constraints on the location of sources
-        self.loc_min = loc_min
-        self.loc_max = loc_max
-        # prior parameters on fluxes
-        self.f_min = f_min
-        self.f_max = f_max
-        self.alpha = alpha  # pareto parameter.
         # Galaxy decoder
-        self.prob_galaxy = float(prob_galaxy)
         self.n_galaxy_params = n_galaxy_params
         self.gal_slen = gal_slen
         self.autoencoder_ckpt = autoencoder_ckpt
@@ -361,9 +348,6 @@ class ImageDecoder(pl.LightningModule):
         # Star Decoder
         self.psf_slen = psf_slen
         self.sdss_bands = tuple(sdss_bands)
-        # number of tiles per image
-        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
-        self.n_tiles_per_image = int(n_tiles_per_image)
 
         # Border Padding
         # Images are first rendered on *padded* tiles (aka ptiles).
@@ -428,10 +412,6 @@ class ImageDecoder(pl.LightningModule):
             self.galaxy_tile_decoder = None
             self.register_buffer("latents", torch.zeros(1, n_galaxy_params))
 
-        # background
-        assert len(background_values) == n_bands
-        self.background_values = background_values
-
     def forward(self):
         """Decodes latent representation into an image."""
         return self.star_tile_decoder.psf_forward()
@@ -484,6 +464,11 @@ class ImageDecoder(pl.LightningModule):
         if self.galaxy_tile_decoder is None:
             return None
         return self.galaxy_tile_decoder.galaxy_decoder
+
+    @property
+    def n_tiles_per_image(self):
+        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
+        return int(n_tiles_per_image)
 
     @staticmethod
     def _apply_noise(images_mean):

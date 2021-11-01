@@ -294,7 +294,6 @@
         <span class="c1"># consistency</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="o">.</span><span class="n">tile_slen</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">border_padding</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="o">.</span><span class="n">border_padding</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="o">.</span><span class="n">max_detections</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">max_sources</span>
 
         <span class="c1"># plotting</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">annotate_probs</span> <span class="o">=</span> <span class="n">annotate_probs</span>

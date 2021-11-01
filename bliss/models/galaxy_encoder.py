@@ -83,7 +83,6 @@ class GalaxyEncoder(pl.LightningModule):
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
         # consistency
-        assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
 
     def center_ptiles(self, image_ptiles, tile_locs):

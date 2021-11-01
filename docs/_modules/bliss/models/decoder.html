@@ -493,20 +493,7 @@
         <span class="k">assert</span> <span class="n">tile_slen</span> <span class="o">&lt;=</span> <span class="n">ptile_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">=</span> <span class="n">ptile_slen</span>
-        <span class="c1"># per-tile prior parameters on number (and type) of sources</span>
-        <span class="k">assert</span> <span class="n">max_sources</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;No sources will be drawn.&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span> <span class="o">=</span> <span class="n">max_sources</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">mean_sources</span> <span class="o">=</span> <span class="n">mean_sources</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">min_sources</span> <span class="o">=</span> <span class="n">min_sources</span>
-        <span class="c1"># per-tile constraints on the location of sources</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">loc_min</span> <span class="o">=</span> <span class="n">loc_min</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">loc_max</span> <span class="o">=</span> <span class="n">loc_max</span>
-        <span class="c1"># prior parameters on fluxes</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">f_min</span> <span class="o">=</span> <span class="n">f_min</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">f_max</span> <span class="o">=</span> <span class="n">f_max</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>  <span class="c1"># pareto parameter.</span>
         <span class="c1"># Galaxy decoder</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">prob_galaxy</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">prob_galaxy</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">n_galaxy_params</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">autoencoder_ckpt</span> <span class="o">=</span> <span class="n">autoencoder_ckpt</span>
@@ -514,9 +501,6 @@
         <span class="c1"># Star Decoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">=</span> <span class="n">psf_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sdss_bands</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">sdss_bands</span><span class="p">)</span>
-        <span class="c1"># number of tiles per image</span>
-        <span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_tiles_per_image</span><span class="p">)</span>
 
         <span class="c1"># Border Padding</span>
         <span class="c1"># Images are first rendered on *padded* tiles (aka ptiles).</span>
@@ -581,10 +565,6 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_galaxy_params</span><span class="p">))</span>
 
-        <span class="c1"># background</span>
-        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">background_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_bands</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">background_values</span> <span class="o">=</span> <span class="n">background_values</span>
-
 <div class="viewcode-block" id="ImageDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Decodes latent representation into an image.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span><span class="o">.</span><span class="n">psf_forward</span><span class="p">()</span></div>
@@ -637,6 +617,11 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span><span class="o">.</span><span class="n">galaxy_decoder</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">n_tiles_per_image</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_tiles_per_image</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_apply_noise</span><span class="p">(</span><span class="n">images_mean</span><span class="p">):</span>
