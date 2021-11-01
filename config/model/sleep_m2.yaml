@@ -1,5 +1,6 @@
 defaults:
   - decoder: m2
+  - prior: m2
   - encoder: m2
 
 _target_: bliss.sleep.SleepPhase

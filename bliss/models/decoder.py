@@ -89,51 +89,8 @@ class ImagePrior(pl.LightningModule):
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
 
-        # Border Padding
-        # Images are first rendered on *padded* tiles (aka ptiles).
-        # The padded tile consists of the tile and neighboring tiles
-        # The width of the padding is given by ptile_slen.
-        # border_padding is the amount of padding we leave in the final image. Useful for
-        # avoiding sources getting too close to the edges.
-        if border_padding is None:
-            # default value matches encoder default.
-            border_padding = (self.ptile_slen - self.tile_slen) / 2
-
-        n_tiles_of_padding = (self.ptile_slen / self.tile_slen - 1) / 2
-        ptile_padding = n_tiles_of_padding * self.tile_slen
-        assert border_padding % 1 == 0, "amount of border padding must be an integer"
-        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
-        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
-        self.border_padding = int(border_padding)
-
-        # Background
-        assert len(background_values) == n_bands
-        self.background_values = background_values
-
-        # Submodule for managing tiles (no learned parameters)
-        self.tiler = Tiler(tile_slen, ptile_slen)
-
-        # Submodule for rendering stars on a tile
-        self.star_tile_decoder = StarTileDecoder(
-            self.tiler,
-            self.n_bands,
-            self.psf_slen,
-            self.sdss_bands,
-            psf_params_file=psf_params_file,
-        )
-
-        # Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
-            assert self.autoencoder_ckpt is not None and self.latents_file is not None
-            self.galaxy_tile_decoder = GalaxyTileDecoder(
-                self.n_bands,
-                self.tile_slen,
-                self.ptile_slen,
-                self.gal_slen,
-                self.n_galaxy_params,
-                self.autoencoder_ckpt,
-            )
-            # load dataset of encoded simulated galaxies.
+            assert self.latents_file is not None
             if self.latents_file.exists():
                 latents = torch.load(self.latents_file, "cpu")
             else:
@@ -149,12 +106,7 @@ class ImagePrior(pl.LightningModule):
                 torch.save(latents, self.latents_file)
             self.register_buffer("latents", latents)
         else:
-            self.galaxy_tile_decoder = None
             self.register_buffer("latents", torch.zeros(1, n_galaxy_params))
-
-        # background
-        assert len(background_values) == n_bands
-        self.background_values = background_values
 
     def sample_prior(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
@@ -384,7 +336,7 @@ class ImageDecoder(pl.LightningModule):
 
         # Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
-            assert self.autoencoder_ckpt is not None and self.latents_file is not None
+            assert self.autoencoder_ckpt is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
                 self.n_bands,
                 self.tile_slen,
@@ -393,24 +345,8 @@ class ImageDecoder(pl.LightningModule):
                 self.n_galaxy_params,
                 self.autoencoder_ckpt,
             )
-            # load dataset of encoded simulated galaxies.
-            if self.latents_file.exists():
-                latents = torch.load(self.latents_file, "cpu")
-            else:
-                autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(
-                    self.autoencoder_ckpt
-                )
-                psf_image_file = self.latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
-                dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
-                dataloader = dataset.train_dataloader()
-                autoencoder = autoencoder.cuda()
-                print("INFO: Creating latents from Galsim galaxies...")
-                latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-                torch.save(latents, self.latents_file)
-            self.register_buffer("latents", latents)
         else:
             self.galaxy_tile_decoder = None
-            self.register_buffer("latents", torch.zeros(1, n_galaxy_params))
 
     def forward(self):
         """Decodes latent representation into an image."""

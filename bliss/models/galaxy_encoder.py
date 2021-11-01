@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 
-from bliss.models.decoder import ImageDecoder, get_mgrid
+from bliss.models.decoder import ImageDecoder, ImagePrior, get_mgrid
 from bliss.models.encoder import get_full_params, get_images_in_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.optimizer import load_optimizer
@@ -50,6 +50,7 @@ def center_ptiles(
 class GalaxyEncoder(pl.LightningModule):
     def __init__(
         self,
+        prior,
         decoder,
         hidden: int = 256,
         optimizer_params: dict = None,
@@ -60,6 +61,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.max_sources = 1  # by construction.
 
         # to produce images to train on.
+        self.image_prior = ImagePrior(**prior)
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 

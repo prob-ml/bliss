@@ -1,4 +1,5 @@
 _target_: bliss.datasets.simulated.SimulatedDataset
+prior: ${model.prior}
 decoder: ${model.decoder}
 n_batches: 10
 batch_size: 20

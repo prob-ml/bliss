@@ -14,13 +14,13 @@ warnings.filterwarnings(
 
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
-        self, decoder, n_batches=10, batch_size=32, generate_device="cpu", testing_file=None
+        self, prior, decoder, n_batches=10, batch_size=32, generate_device="cpu", testing_file=None
     ):
         super().__init__()
 
         self.n_batches = n_batches
         self.batch_size = batch_size
-        self.image_prior = ImagePrior(**decoder).to(generate_device)
+        self.image_prior = ImagePrior(**prior).to(generate_device)
         self.image_prior.requires_grad_(False)  # freeze decoder weights.
         self.image_decoder = ImageDecoder(**decoder).to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.

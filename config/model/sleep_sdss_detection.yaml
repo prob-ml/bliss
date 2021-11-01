@@ -1,5 +1,6 @@
 defaults:
   - decoder: sdss_standard
+  - prior: sdss_standard
   - encoder: sdss_standard
 
 _target_: bliss.sleep.SleepPhase

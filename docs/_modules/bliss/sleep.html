@@ -169,7 +169,7 @@
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Normal</span>
 <span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">CrossEntropyLoss</span>
 
-<span class="kn">from</span> <span class="nn">bliss.models.decoder</span> <span class="kn">import</span> <span class="n">ImageDecoder</span>
+<span class="kn">from</span> <span class="nn">bliss.models.decoder</span> <span class="kn">import</span> <span class="n">ImageDecoder</span><span class="p">,</span> <span class="n">ImagePrior</span>
 <span class="kn">from</span> <span class="nn">bliss.models.encoder</span> <span class="kn">import</span> <span class="n">ImageEncoder</span><span class="p">,</span> <span class="n">get_full_params</span><span class="p">,</span> <span class="n">get_is_on_from_n_sources</span>
 <span class="kn">from</span> <span class="nn">bliss.optimizer</span> <span class="kn">import</span> <span class="n">load_optimizer</span>
 <span class="kn">from</span> <span class="nn">bliss.reporting</span> <span class="kn">import</span> <span class="n">DetectionMetrics</span><span class="p">,</span> <span class="n">plot_image_and_locs</span>
@@ -270,6 +270,7 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">encoder</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">prior</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">decoder</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">annotate_probs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">slack</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
@@ -279,6 +280,7 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            encoder: keyword arguments to instantiate ImageEncoder</span>
+<span class="sd">            prior: keyword arguments to instantiate ImagePrior</span>
 <span class="sd">            decoder: keyword arguments to instantiate ImageDecoder</span>
 <span class="sd">            annotate_probs: Should probabilities be annotated on plot? Defaults to False.</span>
 <span class="sd">            slack: Threshold distance in pixels for matching objects.</span>
@@ -288,6 +290,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span> <span class="o">=</span> <span class="n">ImageEncoder</span><span class="p">(</span><span class="o">**</span><span class="n">encoder</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_prior</span> <span class="o">=</span> <span class="n">ImagePrior</span><span class="p">(</span><span class="o">**</span><span class="n">prior</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span> <span class="o">=</span> <span class="n">ImageDecoder</span><span class="p">(</span><span class="o">**</span><span class="n">decoder</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
 

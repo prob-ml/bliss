@@ -1,5 +1,6 @@
 defaults:
   - /model/decoder/sdss_standard@decoder
+  - /model/prior/sdss_standard@prior
 
 _target_: bliss.datasets.simulated.SimulatedDataset
 n_batches: 10

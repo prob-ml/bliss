@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 
-from bliss.models.decoder import ImageDecoder
+from bliss.models.decoder import ImageDecoder, ImagePrior
 from bliss.models.encoder import ImageEncoder, get_full_params, get_is_on_from_n_sources
 from bliss.optimizer import load_optimizer
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
@@ -117,6 +117,7 @@ class SleepPhase(pl.LightningModule):
     def __init__(
         self,
         encoder: dict,
+        prior: dict,
         decoder: dict,
         annotate_probs: bool = False,
         slack=1.0,
@@ -126,6 +127,7 @@ class SleepPhase(pl.LightningModule):
 
         Args:
             encoder: keyword arguments to instantiate ImageEncoder
+            prior: keyword arguments to instantiate ImagePrior
             decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
             slack: Threshold distance in pixels for matching objects.
@@ -135,6 +137,7 @@ class SleepPhase(pl.LightningModule):
         self.save_hyperparameters()
 
         self.image_encoder = ImageEncoder(**encoder)
+        self.image_prior = ImagePrior(**prior)
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 
