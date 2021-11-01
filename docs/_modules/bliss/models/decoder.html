@@ -156,6 +156,7 @@
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">pytorch_lightning</span> <span class="k">as</span> <span class="nn">pl</span>
 <span class="kn">from</span> <span class="nn">astropy.io</span> <span class="kn">import</span> <span class="n">fits</span>
 <span class="kn">from</span> <span class="nn">einops</span> <span class="kn">import</span> <span class="n">rearrange</span><span class="p">,</span> <span class="n">reduce</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
@@ -177,7 +178,7 @@
     <span class="k">return</span> <span class="n">mgrid</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">*</span> <span class="p">(</span><span class="n">slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">slen</span>
 
 
-<div class="viewcode-block" id="ImagePrior"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImagePrior">[docs]</a><span class="k">class</span> <span class="nc">ImagePrior</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="ImagePrior"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImagePrior">[docs]</a><span class="k">class</span> <span class="nc">ImagePrior</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
@@ -452,7 +453,7 @@
         <span class="k">return</span> <span class="n">galaxy_params</span> <span class="o">*</span> <span class="n">galaxy_bool</span></div>
 
 
-<div class="viewcode-block" id="ImageDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder">[docs]</a><span class="k">class</span> <span class="nc">ImageDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="ImageDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder">[docs]</a><span class="k">class</span> <span class="nc">ImageDecoder</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
     <span class="c1"># pylint: disable=too-many-statements</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>

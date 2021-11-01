@@ -21,7 +21,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.n_batches = n_batches
         self.batch_size = batch_size
         self.image_prior = ImagePrior(**decoder).to(generate_device)
-        self.image_decoder.requires_grad_(False)  # freeze decoder weights.
+        self.image_prior.requires_grad_(False)  # freeze decoder weights.
         self.image_decoder = ImageDecoder(**decoder).to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file

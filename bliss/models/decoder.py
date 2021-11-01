@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import pytorch_lightning as pl
 from astropy.io import fits
 from einops import rearrange, reduce
 from torch import nn
@@ -24,7 +25,7 @@ def get_mgrid(slen):
     return mgrid.float() * (slen - 1) / slen
 
 
-class ImagePrior(nn.Module):
+class ImagePrior(pl.LightningModule):
     def __init__(
         self,
         n_bands=1,
@@ -299,7 +300,7 @@ class ImagePrior(nn.Module):
         return galaxy_params * galaxy_bool
 
 
-class ImageDecoder(nn.Module):
+class ImageDecoder(pl.LightningModule):
     # pylint: disable=too-many-statements
     def __init__(
         self,
