@@ -31,8 +31,6 @@ class ImagePrior(pl.LightningModule):
         n_bands=1,
         slen=50,
         tile_slen=2,
-        ptile_slen=10,
-        border_padding=None,
         max_sources=2,
         mean_sources=0.4,
         min_sources=0,
@@ -41,29 +39,24 @@ class ImagePrior(pl.LightningModule):
         alpha=0.5,
         prob_galaxy=0.0,
         n_galaxy_params=64,
-        gal_slen=53,
         autoencoder_ckpt=None,
         latents_file=None,
         n_latent_batches=160,
-        psf_params_file=None,
-        psf_slen=25,
-        background_values=(686.0,),
         loc_min=0.0,
         loc_max=1.0,
-        sdss_bands=(2,),
     ):
         super().__init__()
         # Set class attributes
         self.n_bands = n_bands
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
+        assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
         self.slen = int(slen)
-        assert self.slen % tile_slen == 0, "slen must be divisible by tile_slen"
         # side-length of an image tile.
         # latent variables (locations, fluxes, etc) are drawn per-tile
-        assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
-        self.ptile_slen = ptile_slen
+        n_tiles_per_image = (self.slen / tile_slen) ** 2
+        self.n_tiles_per_image = int(n_tiles_per_image)
         # per-tile prior parameters on number (and type) of sources
         assert max_sources > 0, "No sources will be drawn."
         self.max_sources = max_sources
@@ -79,34 +72,13 @@ class ImagePrior(pl.LightningModule):
         # Galaxy decoder
         self.prob_galaxy = float(prob_galaxy)
         self.n_galaxy_params = n_galaxy_params
-        self.gal_slen = gal_slen
-        self.autoencoder_ckpt = autoencoder_ckpt
-        self.latents_file = Path(latents_file) if latents_file is not None else None
-        # Star Decoder
-        self.psf_slen = psf_slen
-        self.sdss_bands = tuple(sdss_bands)
-        # number of tiles per image
-        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
-        self.n_tiles_per_image = int(n_tiles_per_image)
+        # self.latents_file = Path(latents_file) if latents_file is not None else None
 
         if prob_galaxy > 0.0:
-            assert self.latents_file is not None
-            if self.latents_file.exists():
-                latents = torch.load(self.latents_file, "cpu")
-            else:
-                autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(
-                    self.autoencoder_ckpt
-                )
-                psf_image_file = self.latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
-                dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
-                dataloader = dataset.train_dataloader()
-                autoencoder = autoencoder.cuda()
-                print("INFO: Creating latents from Galsim galaxies...")
-                latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-                torch.save(latents, self.latents_file)
-            self.register_buffer("latents", latents)
+            latents = self._get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt)
         else:
-            self.register_buffer("latents", torch.zeros(1, n_galaxy_params))
+            latents = torch.zeros(1, n_galaxy_params)
+        self.register_buffer("latents", latents)
 
     def sample_prior(self, batch_size=1):
         n_sources = self._sample_n_sources(batch_size)
@@ -230,6 +202,23 @@ class ImagePrior(pl.LightningModule):
 
     def _pareto_cdf(self, x):
         return 1 - (self.f_min / x) ** self.alpha
+
+    @staticmethod
+    def _get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt=None):
+        assert latents_file is not None
+        latents_file = Path(latents_file)
+        if latents_file.exists():
+            latents = torch.load(latents_file, "cpu")
+        else:
+            autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+            psf_image_file = latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
+            dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
+            dataloader = dataset.train_dataloader()
+            autoencoder = autoencoder.cuda()
+            print("INFO: Creating latents from Galsim galaxies...")
+            latents = autoencoder.generate_latents(dataloader, n_latent_batches)
+            torch.save(latents, latents_file)
+        return latents
 
     def _sample_galaxy_params(self, galaxy_bool):
         # galaxy latent variables are obtaind from previously encoded variables from
