@@ -10,5 +10,5 @@ sdss_galaxy_encoder
 epoch=3349-val_loss=302573.344.ckpt
 
 sdss_sleep
-epoch=1149-val_loss=-0.102.ckpt
+epoch=1439-val_loss=-0.102.ckpt
 
