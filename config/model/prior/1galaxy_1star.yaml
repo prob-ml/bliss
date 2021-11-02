@@ -2,7 +2,6 @@ n_bands: 1
 slen: 40
 tile_slen: 4
 prob_galaxy: 0.5
-n_galaxy_params: 64
 max_sources: 1
 mean_sources: 0.035
 min_sources: 0

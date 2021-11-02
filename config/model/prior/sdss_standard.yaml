@@ -8,7 +8,6 @@ f_min: 1e3
 f_max: 1e6
 alpha: 0.5
 prob_galaxy: 0.7
-n_galaxy_params: 64
 autoencoder_ckpt: models/sdss_autoencoder.ckpt
 latents_file: data/latents_simulated_sdss_galaxies.pt
 

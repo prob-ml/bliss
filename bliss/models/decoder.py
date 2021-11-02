@@ -38,7 +38,6 @@ class ImagePrior(pl.LightningModule):
         f_max=1e6,
         alpha=0.5,
         prob_galaxy=0.0,
-        n_galaxy_params=64,
         autoencoder_ckpt=None,
         latents_file=None,
         n_latent_batches=160,
@@ -51,11 +50,8 @@ class ImagePrior(pl.LightningModule):
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
         assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
-        self.slen = int(slen)
-        # side-length of an image tile.
         # latent variables (locations, fluxes, etc) are drawn per-tile
-        self.tile_slen = tile_slen
-        n_tiles_per_image = (self.slen / tile_slen) ** 2
+        n_tiles_per_image = (int(slen) / tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
         # per-tile prior parameters on number (and type) of sources
         assert max_sources > 0, "No sources will be drawn."
@@ -71,13 +67,12 @@ class ImagePrior(pl.LightningModule):
         self.alpha = alpha  # pareto parameter.
         # Galaxy decoder
         self.prob_galaxy = float(prob_galaxy)
-        self.n_galaxy_params = n_galaxy_params
         # self.latents_file = Path(latents_file) if latents_file is not None else None
 
         if prob_galaxy > 0.0:
             latents = self._get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt)
         else:
-            latents = torch.zeros(1, n_galaxy_params)
+            latents = torch.zeros(1, 1)
         self.register_buffer("latents", latents)
 
     def sample_prior(self, batch_size=1):
@@ -234,9 +229,9 @@ class ImagePrior(pl.LightningModule):
         galaxy_params = rearrange(
             self.latents[indices],
             "(b n s) g -> b n s g",
+            b=batch_size,
             n=self.n_tiles_per_image,
             s=self.max_sources,
-            g=self.n_galaxy_params,
         )
         return galaxy_params * galaxy_bool
 

@@ -191,7 +191,6 @@
         <span class="n">f_max</span><span class="o">=</span><span class="mf">1e6</span><span class="p">,</span>
         <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
         <span class="n">prob_galaxy</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">n_galaxy_params</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
         <span class="n">autoencoder_ckpt</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">latents_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">n_latent_batches</span><span class="o">=</span><span class="mi">160</span><span class="p">,</span>
@@ -204,11 +203,8 @@
         <span class="c1"># side-length in pixels of an image (image is assumed to be square)</span>
         <span class="k">assert</span> <span class="n">slen</span> <span class="o">%</span> <span class="mi">1</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;slen must be an integer.&quot;</span>
         <span class="k">assert</span> <span class="n">slen</span> <span class="o">%</span> <span class="n">tile_slen</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;slen must be divisible by tile_slen&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">slen</span><span class="p">)</span>
-        <span class="c1"># side-length of an image tile.</span>
         <span class="c1"># latent variables (locations, fluxes, etc) are drawn per-tile</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
-        <span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">/</span> <span class="n">tile_slen</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">slen</span><span class="p">)</span> <span class="o">/</span> <span class="n">tile_slen</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_tiles_per_image</span><span class="p">)</span>
         <span class="c1"># per-tile prior parameters on number (and type) of sources</span>
         <span class="k">assert</span> <span class="n">max_sources</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;No sources will be drawn.&quot;</span>
@@ -224,13 +220,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>  <span class="c1"># pareto parameter.</span>
         <span class="c1"># Galaxy decoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prob_galaxy</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">prob_galaxy</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">n_galaxy_params</span>
         <span class="c1"># self.latents_file = Path(latents_file) if latents_file is not None else None</span>
 
         <span class="k">if</span> <span class="n">prob_galaxy</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
             <span class="n">latents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_galaxy_latents</span><span class="p">(</span><span class="n">latents_file</span><span class="p">,</span> <span class="n">n_latent_batches</span><span class="p">,</span> <span class="n">autoencoder_ckpt</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">latents</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_galaxy_params</span><span class="p">)</span>
+            <span class="n">latents</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;latents&quot;</span><span class="p">,</span> <span class="n">latents</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">sample_prior</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
@@ -387,9 +382,9 @@
         <span class="n">galaxy_params</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">latents</span><span class="p">[</span><span class="n">indices</span><span class="p">],</span>
             <span class="s2">&quot;(b n s) g -&gt; b n s g&quot;</span><span class="p">,</span>
+            <span class="n">b</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
             <span class="n">n</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_per_image</span><span class="p">,</span>
             <span class="n">s</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span>
-            <span class="n">g</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">galaxy_params</span> <span class="o">*</span> <span class="n">galaxy_bool</span></div>
 
