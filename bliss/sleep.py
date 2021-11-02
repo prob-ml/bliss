@@ -16,7 +16,8 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 
-from bliss.models.decoder import ImageDecoder, ImagePrior
+from bliss.models.prior import ImagePrior
+from bliss.models.decoder import ImageDecoder
 from bliss.models.encoder import ImageEncoder, get_full_params, get_is_on_from_n_sources
 from bliss.optimizer import load_optimizer
 from bliss.reporting import DetectionMetrics, plot_image_and_locs

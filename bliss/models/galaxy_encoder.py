@@ -5,7 +5,8 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 
-from bliss.models.decoder import ImageDecoder, ImagePrior, get_mgrid
+from bliss.models.prior import ImagePrior
+from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.encoder import get_full_params, get_images_in_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.optimizer import load_optimizer
