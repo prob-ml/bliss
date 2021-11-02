@@ -220,7 +220,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>  <span class="c1"># pareto parameter.</span>
         <span class="c1"># Galaxy decoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prob_galaxy</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">prob_galaxy</span><span class="p">)</span>
-        <span class="c1"># self.latents_file = Path(latents_file) if latents_file is not None else None</span>
 
         <span class="k">if</span> <span class="n">prob_galaxy</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
             <span class="n">latents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_galaxy_latents</span><span class="p">(</span><span class="n">latents_file</span><span class="p">,</span> <span class="n">n_latent_batches</span><span class="p">,</span> <span class="n">autoencoder_ckpt</span><span class="p">)</span>
@@ -390,7 +389,6 @@
 
 
 <div class="viewcode-block" id="ImageDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder">[docs]</a><span class="k">class</span> <span class="nc">ImageDecoder</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
-    <span class="c1"># pylint: disable=too-many-statements</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>

@@ -67,7 +67,6 @@ class ImagePrior(pl.LightningModule):
         self.alpha = alpha  # pareto parameter.
         # Galaxy decoder
         self.prob_galaxy = float(prob_galaxy)
-        # self.latents_file = Path(latents_file) if latents_file is not None else None
 
         if prob_galaxy > 0.0:
             latents = self._get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt)
@@ -237,7 +236,6 @@ class ImagePrior(pl.LightningModule):
 
 
 class ImageDecoder(pl.LightningModule):
-    # pylint: disable=too-many-statements
     def __init__(
         self,
         n_bands=1,
