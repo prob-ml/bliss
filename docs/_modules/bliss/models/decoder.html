@@ -417,11 +417,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="n">n_bands</span>
         <span class="c1"># side-length in pixels of an image (image is assumed to be square)</span>
         <span class="k">assert</span> <span class="n">slen</span> <span class="o">%</span> <span class="mi">1</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;slen must be an integer.&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">%</span> <span class="n">tile_slen</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;slen must be divisible by tile_slen&quot;</span>
+        <span class="k">assert</span> <span class="n">slen</span> <span class="o">%</span> <span class="n">tile_slen</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;slen must be divisible by tile_slen&quot;</span>
+        <span class="k">assert</span> <span class="n">tile_slen</span> <span class="o">&lt;=</span> <span class="n">ptile_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">slen</span><span class="p">)</span>
         <span class="c1"># side-length of an image tile.</span>
         <span class="c1"># latent variables (locations, fluxes, etc) are drawn per-tile</span>
-        <span class="k">assert</span> <span class="n">tile_slen</span> <span class="o">&lt;=</span> <span class="n">ptile_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">=</span> <span class="n">ptile_slen</span>
 

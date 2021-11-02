@@ -12,7 +12,7 @@ training:
     checkpoint_callback: true
 
 model:
-  decoder:
+  prior:
     mean_sources: 0.03
 
 optimizer:

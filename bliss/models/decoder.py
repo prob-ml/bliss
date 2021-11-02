@@ -264,11 +264,11 @@ class ImageDecoder(pl.LightningModule):
         self.n_bands = n_bands
         # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
-        assert self.slen % tile_slen == 0, "slen must be divisible by tile_slen"
+        assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
+        assert tile_slen <= ptile_slen
         self.slen = int(slen)
         # side-length of an image tile.
         # latent variables (locations, fluxes, etc) are drawn per-tile
-        assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
 
