@@ -248,10 +248,6 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="o">=</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="ImageDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Decodes latent representation into an image.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span><span class="o">.</span><span class="n">psf_forward</span><span class="p">()</span></div>
-
     <span class="k">def</span> <span class="nf">render_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_sources</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">add_noise</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="c1"># returns the **full** image in shape (batch_size x n_bands x slen x slen)</span>
 
@@ -311,6 +307,10 @@
     <span class="k">def</span> <span class="nf">n_tiles_per_image</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">n_tiles_per_image</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_tiles_per_image</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ImageDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Decodes latent representation into an image.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span><span class="o">.</span><span class="n">psf_forward</span><span class="p">()</span></div>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_apply_noise</span><span class="p">(</span><span class="n">images_mean</span><span class="p">):</span>

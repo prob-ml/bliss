@@ -95,10 +95,6 @@ class ImageDecoder(pl.LightningModule):
         else:
             self.galaxy_tile_decoder = None
 
-    def forward(self):
-        """Decodes latent representation into an image."""
-        return self.star_tile_decoder.psf_forward()
-
     def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True):
         # returns the **full** image in shape (batch_size x n_bands x slen x slen)
 
@@ -158,6 +154,10 @@ class ImageDecoder(pl.LightningModule):
     def n_tiles_per_image(self):
         n_tiles_per_image = (self.slen / self.tile_slen) ** 2
         return int(n_tiles_per_image)
+
+    def forward(self):
+        """Decodes latent representation into an image."""
+        return self.star_tile_decoder.psf_forward()
 
     @staticmethod
     def _apply_noise(images_mean):
