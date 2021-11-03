@@ -228,9 +228,9 @@
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">background_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_bands</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">background_values</span> <span class="o">=</span> <span class="n">background_values</span>
 
-        <span class="n">tiler</span> <span class="o">=</span> <span class="n">Tiler</span><span class="p">(</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span> <span class="o">=</span> <span class="n">StarTileDecoder</span><span class="p">(</span>
-            <span class="n">tiler</span><span class="p">,</span>
+            <span class="n">tile_slen</span><span class="p">,</span>
+            <span class="n">ptile_slen</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span>
             <span class="n">psf_slen</span><span class="p">,</span>
             <span class="nb">tuple</span><span class="p">(</span><span class="n">sdss_bands</span><span class="p">),</span>
@@ -240,7 +240,8 @@
         <span class="k">if</span> <span class="n">prob_galaxy</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
             <span class="k">assert</span> <span class="n">autoencoder_ckpt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="o">=</span> <span class="n">GalaxyTileDecoder</span><span class="p">(</span>
-                <span class="n">tiler</span><span class="p">,</span>
+                <span class="n">tile_slen</span><span class="p">,</span>
+                <span class="n">ptile_slen</span><span class="p">,</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span>
                 <span class="n">gal_slen</span><span class="p">,</span>
                 <span class="n">n_galaxy_params</span><span class="p">,</span>
@@ -646,9 +647,11 @@
 
 
 <div class="viewcode-block" id="StarTileDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.StarTileDecoder">[docs]</a><span class="k">class</span> <span class="nc">StarTileDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiler</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">,</span> <span class="n">psf_slen</span><span class="p">,</span> <span class="n">sdss_bands</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,),</span> <span class="n">psf_params_file</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">,</span> <span class="n">n_bands</span><span class="p">,</span> <span class="n">psf_slen</span><span class="p">,</span> <span class="n">sdss_bands</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,),</span> <span class="n">psf_params_file</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span> <span class="o">=</span> <span class="n">tiler</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span> <span class="o">=</span> <span class="n">Tiler</span><span class="p">(</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="n">n_bands</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">psf_slen</span> <span class="o">=</span> <span class="n">psf_slen</span>
 
@@ -773,7 +776,8 @@
 <div class="viewcode-block" id="GalaxyTileDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.GalaxyTileDecoder">[docs]</a><span class="k">class</span> <span class="nc">GalaxyTileDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">tiler</span><span class="p">:</span> <span class="n">Tiler</span><span class="p">,</span>
+        <span class="n">tile_slen</span><span class="p">,</span>
+        <span class="n">ptile_slen</span><span class="p">,</span>
         <span class="n">n_bands</span><span class="p">,</span>
         <span class="n">gal_slen</span><span class="p">,</span>
         <span class="n">n_galaxy_params</span><span class="p">,</span>
@@ -781,8 +785,8 @@
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="n">n_bands</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span> <span class="o">=</span> <span class="n">tiler</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">=</span> <span class="n">tiler</span><span class="o">.</span><span class="n">ptile_slen</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span> <span class="o">=</span> <span class="n">Tiler</span><span class="p">(</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">=</span> <span class="n">ptile_slen</span>
 
         <span class="c1"># load decoder after loading autoencoder from checkpoint.</span>
         <span class="n">autoencoder</span> <span class="o">=</span> <span class="n">galaxy_net</span><span class="o">.</span><span class="n">OneCenteredGalaxyAE</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span><span class="n">autoencoder_ckpt</span><span class="p">)</span>

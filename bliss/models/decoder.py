@@ -75,9 +75,9 @@ class ImageDecoder(pl.LightningModule):
         assert len(background_values) == n_bands
         self.background_values = background_values
 
-        tiler = Tiler(tile_slen, ptile_slen)
         self.star_tile_decoder = StarTileDecoder(
-            tiler,
+            tile_slen,
+            ptile_slen,
             self.n_bands,
             psf_slen,
             tuple(sdss_bands),
@@ -87,7 +87,8 @@ class ImageDecoder(pl.LightningModule):
         if prob_galaxy > 0.0:
             assert autoencoder_ckpt is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
-                tiler,
+                tile_slen,
+                ptile_slen,
                 self.n_bands,
                 gal_slen,
                 n_galaxy_params,
@@ -493,9 +494,11 @@ def get_mgrid(slen):
 
 
 class StarTileDecoder(nn.Module):
-    def __init__(self, tiler, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None):
+    def __init__(
+        self, tile_slen, ptile_slen, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None
+    ):
         super().__init__()
-        self.tiler = tiler
+        self.tiler = Tiler(tile_slen, ptile_slen)
         self.n_bands = n_bands
         self.psf_slen = psf_slen
 
@@ -620,7 +623,8 @@ class StarTileDecoder(nn.Module):
 class GalaxyTileDecoder(nn.Module):
     def __init__(
         self,
-        tiler: Tiler,
+        tile_slen,
+        ptile_slen,
         n_bands,
         gal_slen,
         n_galaxy_params,
@@ -628,8 +632,8 @@ class GalaxyTileDecoder(nn.Module):
     ):
         super().__init__()
         self.n_bands = n_bands
-        self.tiler = tiler
-        self.ptile_slen = tiler.ptile_slen
+        self.tiler = Tiler(tile_slen, ptile_slen)
+        self.ptile_slen = ptile_slen
 
         # load decoder after loading autoencoder from checkpoint.
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
