@@ -11,48 +11,81 @@ from bliss.datasets.galsim_galaxies import SDSSGalaxies
 
 
 class ImagePrior(pl.LightningModule):
+    """Prior distribution of objects in an astronomical image.
+
+    After the module is initialized, sampling is done with the sample_prior method.
+    The input parameters correspond to the number of sources, the fluxes, whether an
+    object is a galaxy or star, and the distributions of galaxy and star shapes.
+
+    Attributes:
+        n_bands: Number of bands (colors) in the image
+        n_tiles_per_image: Number of tiles per image
+        min_sources: Minimum number of sources in a tile
+        max_sources: Maximum number of sources in a tile
+        mean_sources: Mean rate of sources appearing in a tile
+        loc_min: Per-tile lower-bound on the location of sources
+        loc_max: Per-tile upper-bound on the location of sources
+        f_min: Prior parameter on fluxes
+        f_max: Prior parameter on fluxes
+        alpha: Prior parameter on fluxes
+        prob_galaxy: Prior probability a source is a galaxy
+    """
+
     def __init__(
         self,
-        n_bands=1,
-        slen=50,
-        tile_slen=2,
-        max_sources=2,
-        mean_sources=0.4,
-        min_sources=0,
-        f_min=1e4,
-        f_max=1e6,
-        alpha=0.5,
-        prob_galaxy=0.0,
-        autoencoder_ckpt=None,
-        latents_file=None,
-        n_latent_batches=160,
-        loc_min=0.0,
-        loc_max=1.0,
+        n_bands: int = 1,
+        slen: int = 50,
+        tile_slen: int = 2,
+        min_sources: int = 0,
+        max_sources: int = 2,
+        mean_sources: int = 0.4,
+        loc_min: float = 0.0,
+        loc_max: float = 1.0,
+        f_min: float = 1e4,
+        f_max: float = 1e6,
+        alpha: float = 0.5,
+        prob_galaxy: float = 0.0,
+        autoencoder_ckpt: str = None,
+        latents_file: str = None,
+        n_latent_batches: int = 160,
     ):
+        """Initializes ImagePrior.
+
+        Args:
+            n_bands: Number of bands (colors) in the image.
+            slen: Side-length of astronomical image (image is assumed to be square).
+            tile_slen: Side-length of each tile.
+            min_sources: Minimum number of sources in a tile
+            max_sources: Maximum number of sources in a tile
+            mean_sources: Mean rate of sources appearing in a tile
+            loc_min: Per-tile lower-bound on the location of sources
+            loc_max: Per-tile upper-bound on the location of sources
+            f_min: Prior parameter on fluxes
+            f_max: Prior parameter on fluxes
+            alpha: Prior parameter on fluxes (pareto parameter)
+            prob_galaxy: Prior probability a source is a galaxy
+            autoencoder_ckpt: Location of checkpoint of galaxy encoder.
+            latents_file: Location of previously sampled galaxy latent variables.
+            n_latent_batches: Number of batches for galaxy latent samples.
+        """
         super().__init__()
-        # Set class attributes
         self.n_bands = n_bands
-        # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
         assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
-        # latent variables (locations, fluxes, etc) are drawn per-tile
         n_tiles_per_image = (int(slen) / tile_slen) ** 2
         self.n_tiles_per_image = int(n_tiles_per_image)
-        # per-tile prior parameters on number (and type) of sources
+
         assert max_sources > 0, "No sources will be drawn."
+        self.min_sources = min_sources
         self.max_sources = max_sources
         self.mean_sources = mean_sources
-        self.min_sources = min_sources
-        # per-tile constraints on the location of sources
         self.loc_min = loc_min
         self.loc_max = loc_max
-        # prior parameters on fluxes
         self.f_min = f_min
         self.f_max = f_max
-        self.alpha = alpha  # pareto parameter.
-        # Galaxy decoder
-        self.prob_galaxy = float(prob_galaxy)
+        self.alpha = alpha
 
+        self.prob_galaxy = float(prob_galaxy)
         if prob_galaxy > 0.0:
             latents = get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt)
         else:
@@ -203,7 +236,7 @@ class ImagePrior(pl.LightningModule):
         return galaxy_params * galaxy_bool
 
 
-def get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt=None):
+def get_galaxy_latents(latents_file: str, n_latent_batches: int, autoencoder_ckpt: str = None):
     assert latents_file is not None
     latents_file = Path(latents_file)
     if latents_file.exists():
