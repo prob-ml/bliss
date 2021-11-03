@@ -4,7 +4,6 @@ tile_slen: 4
 ptile_slen: 36
 border_padding: 4
 prob_galaxy: 1.0
-n_galaxy_params: 64
 gal_slen: 53
 autoencoder_ckpt: models/sdss_autoencoder.ckpt
 psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits

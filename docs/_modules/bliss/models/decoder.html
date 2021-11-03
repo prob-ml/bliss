@@ -190,7 +190,6 @@
         <span class="n">ptile_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
         <span class="n">border_padding</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">prob_galaxy</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">n_galaxy_params</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">64</span><span class="p">,</span>
         <span class="n">gal_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">53</span><span class="p">,</span>
         <span class="n">autoencoder_ckpt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">psf_params_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -244,7 +243,6 @@
                 <span class="n">ptile_slen</span><span class="p">,</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span>
                 <span class="n">gal_slen</span><span class="p">,</span>
-                <span class="n">n_galaxy_params</span><span class="p">,</span>
                 <span class="n">autoencoder_ckpt</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -255,12 +253,6 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span><span class="o">.</span><span class="n">galaxy_decoder</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">n_galaxy_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span><span class="o">.</span><span class="n">n_galaxy_params</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">n_tiles_per_image</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -517,7 +509,7 @@
 <div class="viewcode-block" id="Tiler"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.Tiler">[docs]</a><span class="k">class</span> <span class="nc">Tiler</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;This class creates an image tile from multiple sources.&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">=</span> <span class="n">ptile_slen</span>
@@ -530,11 +522,39 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;cached_grid&quot;</span><span class="p">,</span> <span class="n">get_mgrid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span><span class="p">),</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;swap&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Tiler.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.Tiler.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;See render_one_source.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_one_source</span><span class="p">(</span><span class="n">locs</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span></div>
+<div class="viewcode-block" id="Tiler.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.Tiler.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">sources</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Renders tile from locations and sources.</span>
 
-<div class="viewcode-block" id="Tiler.render_one_source"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.Tiler.render_one_source">[docs]</a>    <span class="k">def</span> <span class="nf">render_one_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
+<span class="sd">        Arguments:</span>
+<span class="sd">            locs: is (n_ptiles x max_num_stars x 2)</span>
+<span class="sd">            sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ptile = (n_ptiles x n_bands x slen x slen)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">max_sources</span> <span class="o">=</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">ptile_shape</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">sources</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">sources</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ptile</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">ptile_shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">locs</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_sources</span><span class="p">):</span>
+            <span class="n">one_star</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_render_one_source</span><span class="p">(</span><span class="n">locs</span><span class="p">[:,</span> <span class="n">n</span><span class="p">,</span> <span class="p">:],</span> <span class="n">sources</span><span class="p">[:,</span> <span class="n">n</span><span class="p">])</span>
+            <span class="n">ptile</span> <span class="o">+=</span> <span class="n">one_star</span>
+
+        <span class="k">return</span> <span class="n">ptile</span></div>
+
+    <span class="k">def</span> <span class="nf">fit_source_to_ptile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">&gt;=</span> <span class="n">source</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">fitted_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expand_source</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fitted_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trim_source</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">fitted_source</span>
+
+    <span class="k">def</span> <span class="nf">_render_one_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Renders one source at a location from shape.</span>
 
 <span class="sd">        Arguments:</span>
@@ -562,41 +582,9 @@
         <span class="n">locs_swapped</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">locs_swapped</span><span class="p">,</span> <span class="s2">&quot;np xy -&gt; np 1 1 xy&quot;</span><span class="p">)</span>
 
         <span class="n">grid_loc</span> <span class="o">=</span> <span class="n">local_grid</span> <span class="o">-</span> <span class="n">locs_swapped</span>
-        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">grid_sample</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">grid_loc</span><span class="p">,</span> <span class="n">align_corners</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">grid_sample</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">grid_loc</span><span class="p">,</span> <span class="n">align_corners</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Tiler.render_tile"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.Tiler.render_tile">[docs]</a>    <span class="k">def</span> <span class="nf">render_tile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">sources</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Renders tile from locations and sources.</span>
-
-<span class="sd">        Arguments:</span>
-<span class="sd">            locs: is (n_ptiles x max_num_stars x 2)</span>
-<span class="sd">            sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            ptile = (n_ptiles x n_bands x slen x slen)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">max_sources</span> <span class="o">=</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-        <span class="n">ptile_shape</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">sources</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
-            <span class="n">sources</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">ptile</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">ptile_shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">locs</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-
-        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_sources</span><span class="p">):</span>
-            <span class="n">one_star</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_one_source</span><span class="p">(</span><span class="n">locs</span><span class="p">[:,</span> <span class="n">n</span><span class="p">,</span> <span class="p">:],</span> <span class="n">sources</span><span class="p">[:,</span> <span class="n">n</span><span class="p">])</span>
-            <span class="n">ptile</span> <span class="o">+=</span> <span class="n">one_star</span>
-
-        <span class="k">return</span> <span class="n">ptile</span></div>
-
-    <span class="k">def</span> <span class="nf">fit_source_to_ptile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">&gt;=</span> <span class="n">source</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
-            <span class="n">fitted_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expand_source</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">fitted_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trim_source</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">fitted_source</span>
-
-    <span class="k">def</span> <span class="nf">_expand_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_expand_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Pad the source with zeros so that it is size ptile_slen.&quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
 
@@ -616,7 +604,7 @@
 
         <span class="k">return</span> <span class="n">source_expanded</span>
 
-    <span class="k">def</span> <span class="nf">_trim_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_trim_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Crop the source to length ptile_slen x ptile_slen, centered at the middle.&quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
 
@@ -636,7 +624,7 @@
         <span class="k">return</span> <span class="n">source</span><span class="p">[:,</span> <span class="n">l_indx</span><span class="p">:</span><span class="n">u_indx</span><span class="p">,</span> <span class="n">l_indx</span><span class="p">:</span><span class="n">u_indx</span><span class="p">]</span></div>
 
 
-<span class="k">def</span> <span class="nf">get_mgrid</span><span class="p">(</span><span class="n">slen</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">get_mgrid</span><span class="p">(</span><span class="n">slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
     <span class="n">offset</span> <span class="o">=</span> <span class="p">(</span><span class="n">slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
     <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[</span><span class="o">-</span><span class="n">offset</span> <span class="p">:</span> <span class="p">(</span><span class="n">offset</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="n">offset</span> <span class="p">:</span> <span class="p">(</span><span class="n">offset</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
     <span class="n">mgrid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dstack</span><span class="p">((</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">)))</span> <span class="o">/</span> <span class="n">offset</span>
@@ -704,7 +692,7 @@
         <span class="n">sources</span> <span class="o">=</span> <span class="n">expanded_psf</span> <span class="o">*</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">fluxes</span><span class="p">,</span> <span class="s2">&quot;np ms nb -&gt; np ms nb 1 1&quot;</span><span class="p">)</span>
         <span class="n">sources</span> <span class="o">*=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">star_bool</span><span class="p">,</span> <span class="s2">&quot;np ms 1 -&gt; np ms 1 1 1&quot;</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="o">.</span><span class="n">render_tile</span><span class="p">(</span><span class="n">locs</span><span class="p">,</span> <span class="n">sources</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="p">(</span><span class="n">locs</span><span class="p">,</span> <span class="n">sources</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">psf_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">psf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_psf</span><span class="p">()</span>
@@ -780,7 +768,6 @@
         <span class="n">ptile_slen</span><span class="p">,</span>
         <span class="n">n_bands</span><span class="p">,</span>
         <span class="n">gal_slen</span><span class="p">,</span>
-        <span class="n">n_galaxy_params</span><span class="p">,</span>
         <span class="n">autoencoder_ckpt</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
@@ -792,31 +779,29 @@
         <span class="n">autoencoder</span> <span class="o">=</span> <span class="n">galaxy_net</span><span class="o">.</span><span class="n">OneCenteredGalaxyAE</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span><span class="n">autoencoder_ckpt</span><span class="p">)</span>
         <span class="n">autoencoder</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">gal_slen</span> <span class="o">==</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">slen</span>
-        <span class="k">assert</span> <span class="n">n_galaxy_params</span> <span class="o">==</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">latent_dim</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_decoder</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">get_decoder</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">n_galaxy_params</span>
 
 <div class="viewcode-block" id="GalaxyTileDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.GalaxyTileDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Renders galaxy tile from locations and galaxy parameters.&quot;&quot;&quot;</span>
         <span class="c1"># max_sources obtained from locs, allows for more flexibility when rendering.</span>
         <span class="n">n_ptiles</span> <span class="o">=</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">max_sources</span> <span class="o">=</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 
-        <span class="n">galaxy_params</span> <span class="o">=</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">n_ptiles</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span><span class="p">)</span>
+        <span class="n">galaxy_params</span> <span class="o">=</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">n_ptiles</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">,</span> <span class="n">n_galaxy_params</span><span class="p">)</span>
         <span class="k">assert</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">n_ptiles</span>
         <span class="k">assert</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">max_sources</span>
-        <span class="k">assert</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span>
         <span class="k">assert</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
 
         <span class="n">single_galaxies</span><span class="p">,</span> <span class="n">single_vars</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_render_single_galaxies</span><span class="p">(</span><span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">)</span>
 
-        <span class="n">ptile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="o">.</span><span class="n">render_tile</span><span class="p">(</span>
+        <span class="n">ptile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="p">(</span>
             <span class="n">locs</span><span class="p">,</span>
             <span class="n">single_galaxies</span> <span class="o">*</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="n">var_ptile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="o">.</span><span class="n">render_tile</span><span class="p">(</span>
+        <span class="n">var_ptile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiler</span><span class="p">(</span>
             <span class="n">locs</span><span class="p">,</span>
             <span class="n">single_vars</span> <span class="o">*</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
         <span class="p">)</span>
@@ -826,7 +811,8 @@
     <span class="k">def</span> <span class="nf">_render_single_galaxies</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>
 
         <span class="c1"># flatten parameters</span>
-        <span class="n">z</span> <span class="o">=</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_galaxy_params</span><span class="p">)</span>
+        <span class="n">n_galaxy_params</span> <span class="o">=</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">galaxy_params</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_galaxy_params</span><span class="p">)</span>
         <span class="n">b</span> <span class="o">=</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
 
         <span class="c1"># allocate memory</span>

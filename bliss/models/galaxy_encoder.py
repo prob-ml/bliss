@@ -67,7 +67,6 @@ class GalaxyEncoder(pl.LightningModule):
         self.image_decoder.requires_grad_(False)
 
         # extract useful info from image_decoder
-        self.latent_dim = self.image_decoder.n_galaxy_params
         self.n_bands = self.image_decoder.n_bands
 
         # put image dimensions together
@@ -80,6 +79,7 @@ class GalaxyEncoder(pl.LightningModule):
         autoencoder_ckpt = decoder["autoencoder_ckpt"]
         autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         self.enc = autoencoder.get_encoder(allow_pad=True)
+        self.latent_dim = autoencoder.latent_dim
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)

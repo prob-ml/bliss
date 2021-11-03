@@ -37,7 +37,6 @@ class ImageDecoder(pl.LightningModule):
         ptile_slen: int = 10,
         border_padding: int = None,
         prob_galaxy: float = 0.0,
-        n_galaxy_params: int = 64,
         gal_slen: int = 53,
         autoencoder_ckpt: str = None,
         psf_params_file: str = None,
@@ -91,7 +90,6 @@ class ImageDecoder(pl.LightningModule):
                 ptile_slen,
                 self.n_bands,
                 gal_slen,
-                n_galaxy_params,
                 autoencoder_ckpt,
             )
         else:
@@ -102,12 +100,6 @@ class ImageDecoder(pl.LightningModule):
         if self.galaxy_tile_decoder is None:
             return None
         return self.galaxy_tile_decoder.galaxy_decoder
-
-    @property
-    def n_galaxy_params(self):
-        if self.galaxy_tile_decoder is None:
-            return None
-        return self.galaxy_tile_decoder.n_galaxy_params
 
     @property
     def n_tiles_per_image(self):
@@ -623,7 +615,6 @@ class GalaxyTileDecoder(nn.Module):
         ptile_slen,
         n_bands,
         gal_slen,
-        n_galaxy_params,
         autoencoder_ckpt,
     ):
         super().__init__()
@@ -635,22 +626,20 @@ class GalaxyTileDecoder(nn.Module):
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         autoencoder.eval().requires_grad_(False)
         assert gal_slen == autoencoder.hparams.slen
-        assert n_galaxy_params == autoencoder.hparams.latent_dim
         self.galaxy_decoder = autoencoder.get_decoder()
 
         self.gal_slen = gal_slen
-        self.n_galaxy_params = n_galaxy_params
 
     def forward(self, locs, galaxy_params, galaxy_bool):
         """Renders galaxy tile from locations and galaxy parameters."""
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
+        n_galaxy_params = galaxy_params.shape[-1]
 
-        galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
+        galaxy_params = galaxy_params.view(n_ptiles, max_sources, n_galaxy_params)
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
-        assert galaxy_params.shape[2] == self.n_galaxy_params
         assert galaxy_bool.shape[2] == 1
 
         single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bool)
@@ -669,7 +658,8 @@ class GalaxyTileDecoder(nn.Module):
     def _render_single_galaxies(self, galaxy_params, galaxy_bool):
 
         # flatten parameters
-        z = galaxy_params.view(-1, self.n_galaxy_params)
+        n_galaxy_params = galaxy_params.shape[-1]
+        z = galaxy_params.view(-1, n_galaxy_params)
         b = galaxy_bool.flatten()
 
         # allocate memory
