@@ -153,6 +153,7 @@
   <h1>Source code for bliss.models.decoder</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Tuple</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">torch</span>
@@ -167,45 +168,66 @@
 
 
 <div class="viewcode-block" id="ImageDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder">[docs]</a><span class="k">class</span> <span class="nc">ImageDecoder</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Decodes latent variances into reconstructed astronomical image.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        n_bands: Number of bands (colors) in the image</span>
+<span class="sd">        slen: Side-length of astronomical image (image is assumed to be square).</span>
+<span class="sd">        tile_slen: Side-length of each tile.</span>
+<span class="sd">        ptile_slen: Padded side-length of each tile (for reconstructing image).</span>
+<span class="sd">        border_padding: Size of border around the final image where sources will not be present.</span>
+<span class="sd">        background_values: Magnitude of the background (per-band)</span>
+<span class="sd">        star_tile_decoder: Module which renders stars on individual tiles.</span>
+<span class="sd">        galaxy_tile_decoder: Module which renders galaxies on individual tiles.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">n_bands</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">slen</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
-        <span class="n">tile_slen</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="n">ptile_slen</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
-        <span class="n">border_padding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">prob_galaxy</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">n_galaxy_params</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
-        <span class="n">gal_slen</span><span class="o">=</span><span class="mi">53</span><span class="p">,</span>
-        <span class="n">autoencoder_ckpt</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">psf_params_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">psf_slen</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
-        <span class="n">background_values</span><span class="o">=</span><span class="p">(</span><span class="mf">686.0</span><span class="p">,),</span>
-        <span class="n">sdss_bands</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,),</span>
+        <span class="n">n_bands</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span>
+        <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">ptile_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="n">border_padding</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">prob_galaxy</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">n_galaxy_params</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">64</span><span class="p">,</span>
+        <span class="n">gal_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">53</span><span class="p">,</span>
+        <span class="n">autoencoder_ckpt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">psf_params_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">psf_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">25</span><span class="p">,</span>
+        <span class="n">background_values</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">686.0</span><span class="p">,),</span>
+        <span class="n">sdss_bands</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,),</span>
     <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initializes ImageDecoder.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            n_bands: Number of bands (colors) in the image</span>
+<span class="sd">            slen: Side-length of astronomical image (image is assumed to be square).</span>
+<span class="sd">            tile_slen: Side-length of each tile.</span>
+<span class="sd">            ptile_slen: Padded side-length of each tile (for reconstructing image).</span>
+<span class="sd">            border_padding: Size of border around the final image where sources will not be present.</span>
+<span class="sd">            prob_galaxy: Prior probability a source is a galaxy</span>
+<span class="sd">            n_galaxy_params: Dimension of latent variable governing the galaxy shape.</span>
+<span class="sd">            gal_slen: Side-length of reconstruced galaxy image.</span>
+<span class="sd">            autoencoder_ckpt: Path where trained galaxy autoencoder is located.</span>
+<span class="sd">            psf_params_file: Path where point-spread-function (PSF) data is located.</span>
+<span class="sd">            psf_slen: Side-length of reconstruced star image from PSF.</span>
+<span class="sd">            background_values: Magnitude of the background (per-band)</span>
+<span class="sd">            sdss_bands: Bands to retrieve from PSF.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="c1"># Set class attributes</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span> <span class="o">=</span> <span class="n">n_bands</span>
-        <span class="c1"># side-length in pixels of an image (image is assumed to be square)</span>
         <span class="k">assert</span> <span class="n">slen</span> <span class="o">%</span> <span class="mi">1</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;slen must be an integer.&quot;</span>
         <span class="k">assert</span> <span class="n">slen</span> <span class="o">%</span> <span class="n">tile_slen</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;slen must be divisible by tile_slen&quot;</span>
         <span class="k">assert</span> <span class="n">tile_slen</span> <span class="o">&lt;=</span> <span class="n">ptile_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">slen</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">slen</span><span class="p">)</span>
-        <span class="c1"># side-length of an image tile.</span>
-        <span class="c1"># latent variables (locations, fluxes, etc) are drawn per-tile</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ptile_slen</span> <span class="o">=</span> <span class="n">ptile_slen</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_border_padding</span><span class="p">(</span><span class="n">border_padding</span><span class="p">)</span>
 
-        <span class="c1"># Background</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">background_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_bands</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">background_values</span> <span class="o">=</span> <span class="n">background_values</span>
 
-        <span class="c1"># Submodule for managing tiles (no learned parameters)</span>
         <span class="n">tiler</span> <span class="o">=</span> <span class="n">Tiler</span><span class="p">(</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">)</span>
-
-        <span class="c1"># Submodule for rendering stars on a tile</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">star_tile_decoder</span> <span class="o">=</span> <span class="n">StarTileDecoder</span><span class="p">(</span>
             <span class="n">tiler</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span>
@@ -214,7 +236,6 @@
             <span class="n">psf_params_file</span><span class="o">=</span><span class="n">psf_params_file</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="c1"># Submodule for rendering galaxies on a tile</span>
         <span class="k">if</span> <span class="n">prob_galaxy</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
             <span class="k">assert</span> <span class="n">autoencoder_ckpt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="o">=</span> <span class="n">GalaxyTileDecoder</span><span class="p">(</span>

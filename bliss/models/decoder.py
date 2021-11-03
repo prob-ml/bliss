@@ -1,5 +1,6 @@
 import warnings
 from pathlib import Path
+from typing import Tuple
 
 import numpy as np
 import torch
@@ -14,45 +15,66 @@ from bliss.models.encoder import get_is_on_from_n_sources
 
 
 class ImageDecoder(pl.LightningModule):
+    """Decodes latent variances into reconstructed astronomical image.
+
+    Attributes:
+        n_bands: Number of bands (colors) in the image
+        slen: Side-length of astronomical image (image is assumed to be square).
+        tile_slen: Side-length of each tile.
+        ptile_slen: Padded side-length of each tile (for reconstructing image).
+        border_padding: Size of border around the final image where sources will not be present.
+        background_values: Magnitude of the background (per-band)
+        star_tile_decoder: Module which renders stars on individual tiles.
+        galaxy_tile_decoder: Module which renders galaxies on individual tiles.
+    """
+
     def __init__(
         self,
-        n_bands=1,
-        slen=50,
-        tile_slen=2,
-        ptile_slen=10,
-        border_padding=None,
-        prob_galaxy=0.0,
-        n_galaxy_params=64,
-        gal_slen=53,
-        autoencoder_ckpt=None,
-        psf_params_file=None,
-        psf_slen=25,
-        background_values=(686.0,),
-        sdss_bands=(2,),
+        n_bands: int = 1,
+        slen: int = 50,
+        tile_slen: int = 2,
+        ptile_slen: int = 10,
+        border_padding: int = None,
+        prob_galaxy: float = 0.0,
+        n_galaxy_params: int = 64,
+        gal_slen: int = 53,
+        autoencoder_ckpt: str = None,
+        psf_params_file: str = None,
+        psf_slen: int = 25,
+        background_values: Tuple[float, ...] = (686.0,),
+        sdss_bands: Tuple[int, ...] = (2,),
     ):
+        """Initializes ImageDecoder.
+
+        Args:
+            n_bands: Number of bands (colors) in the image
+            slen: Side-length of astronomical image (image is assumed to be square).
+            tile_slen: Side-length of each tile.
+            ptile_slen: Padded side-length of each tile (for reconstructing image).
+            border_padding: Size of border around the final image where sources will not be present.
+            prob_galaxy: Prior probability a source is a galaxy
+            n_galaxy_params: Dimension of latent variable governing the galaxy shape.
+            gal_slen: Side-length of reconstruced galaxy image.
+            autoencoder_ckpt: Path where trained galaxy autoencoder is located.
+            psf_params_file: Path where point-spread-function (PSF) data is located.
+            psf_slen: Side-length of reconstruced star image from PSF.
+            background_values: Magnitude of the background (per-band)
+            sdss_bands: Bands to retrieve from PSF.
+        """
         super().__init__()
-        # Set class attributes
         self.n_bands = n_bands
-        # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
         assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
         assert tile_slen <= ptile_slen
         self.slen = int(slen)
-        # side-length of an image tile.
-        # latent variables (locations, fluxes, etc) are drawn per-tile
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-
         self.border_padding = self._validate_border_padding(border_padding)
 
-        # Background
         assert len(background_values) == n_bands
         self.background_values = background_values
 
-        # Submodule for managing tiles (no learned parameters)
         tiler = Tiler(tile_slen, ptile_slen)
-
-        # Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
             tiler,
             self.n_bands,
@@ -61,7 +83,6 @@ class ImageDecoder(pl.LightningModule):
             psf_params_file=psf_params_file,
         )
 
-        # Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
             assert autoencoder_ckpt is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
