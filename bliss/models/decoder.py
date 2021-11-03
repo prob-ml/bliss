@@ -13,16 +13,6 @@ from bliss.models import galaxy_net
 from bliss.models.encoder import get_is_on_from_n_sources
 
 
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    # mgrid is between -1 and 1
-    # then scale slightly because of the way f.grid_sample
-    # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float() * (slen - 1) / slen
-
-
 class ImageDecoder(pl.LightningModule):
     def __init__(
         self,
@@ -449,6 +439,16 @@ class Tiler(nn.Module):
         u_indx = int(source_center + r + 1)
 
         return source[:, l_indx:u_indx, l_indx:u_indx]
+
+
+def get_mgrid(slen):
+    offset = (slen - 1) / 2
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    # mgrid is between -1 and 1
+    # then scale slightly because of the way f.grid_sample
+    # parameterizes the edges: (0, 0) is center of edge pixel
+    return mgrid.float() * (slen - 1) / slen
 
 
 class StarTileDecoder(nn.Module):

@@ -166,16 +166,6 @@
 <span class="kn">from</span> <span class="nn">bliss.models.encoder</span> <span class="kn">import</span> <span class="n">get_is_on_from_n_sources</span>
 
 
-<span class="k">def</span> <span class="nf">get_mgrid</span><span class="p">(</span><span class="n">slen</span><span class="p">):</span>
-    <span class="n">offset</span> <span class="o">=</span> <span class="p">(</span><span class="n">slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
-    <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[</span><span class="o">-</span><span class="n">offset</span> <span class="p">:</span> <span class="p">(</span><span class="n">offset</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="n">offset</span> <span class="p">:</span> <span class="p">(</span><span class="n">offset</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
-    <span class="n">mgrid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dstack</span><span class="p">((</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">)))</span> <span class="o">/</span> <span class="n">offset</span>
-    <span class="c1"># mgrid is between -1 and 1</span>
-    <span class="c1"># then scale slightly because of the way f.grid_sample</span>
-    <span class="c1"># parameterizes the edges: (0, 0) is center of edge pixel</span>
-    <span class="k">return</span> <span class="n">mgrid</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">*</span> <span class="p">(</span><span class="n">slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">slen</span>
-
-
 <div class="viewcode-block" id="ImageDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder">[docs]</a><span class="k">class</span> <span class="nc">ImageDecoder</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -602,6 +592,16 @@
         <span class="n">u_indx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">source_center</span> <span class="o">+</span> <span class="n">r</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">source</span><span class="p">[:,</span> <span class="n">l_indx</span><span class="p">:</span><span class="n">u_indx</span><span class="p">,</span> <span class="n">l_indx</span><span class="p">:</span><span class="n">u_indx</span><span class="p">]</span></div>
+
+
+<span class="k">def</span> <span class="nf">get_mgrid</span><span class="p">(</span><span class="n">slen</span><span class="p">):</span>
+    <span class="n">offset</span> <span class="o">=</span> <span class="p">(</span><span class="n">slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[</span><span class="o">-</span><span class="n">offset</span> <span class="p">:</span> <span class="p">(</span><span class="n">offset</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="n">offset</span> <span class="p">:</span> <span class="p">(</span><span class="n">offset</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+    <span class="n">mgrid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dstack</span><span class="p">((</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">)))</span> <span class="o">/</span> <span class="n">offset</span>
+    <span class="c1"># mgrid is between -1 and 1</span>
+    <span class="c1"># then scale slightly because of the way f.grid_sample</span>
+    <span class="c1"># parameterizes the edges: (0, 0) is center of edge pixel</span>
+    <span class="k">return</span> <span class="n">mgrid</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">*</span> <span class="p">(</span><span class="n">slen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">slen</span>
 
 
 <div class="viewcode-block" id="StarTileDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.StarTileDecoder">[docs]</a><span class="k">class</span> <span class="nc">StarTileDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
