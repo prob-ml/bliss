@@ -54,7 +54,7 @@ class ImagePrior(pl.LightningModule):
         self.prob_galaxy = float(prob_galaxy)
 
         if prob_galaxy > 0.0:
-            latents = self._get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt)
+            latents = get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt)
         else:
             latents = torch.zeros(1, 1)
         self.register_buffer("latents", latents)
@@ -182,23 +182,6 @@ class ImagePrior(pl.LightningModule):
     def _pareto_cdf(self, x):
         return 1 - (self.f_min / x) ** self.alpha
 
-    @staticmethod
-    def _get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt=None):
-        assert latents_file is not None
-        latents_file = Path(latents_file)
-        if latents_file.exists():
-            latents = torch.load(latents_file, "cpu")
-        else:
-            autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
-            psf_image_file = latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
-            dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
-            dataloader = dataset.train_dataloader()
-            autoencoder = autoencoder.cuda()
-            print("INFO: Creating latents from Galsim galaxies...")
-            latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-            torch.save(latents, latents_file)
-        return latents
-
     def _sample_galaxy_params(self, galaxy_bool):
         # galaxy latent variables are obtaind from previously encoded variables from
         # large dataset of simulated galaxies stored in `self.latents`
@@ -218,3 +201,20 @@ class ImagePrior(pl.LightningModule):
             s=self.max_sources,
         )
         return galaxy_params * galaxy_bool
+
+
+def get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt=None):
+    assert latents_file is not None
+    latents_file = Path(latents_file)
+    if latents_file.exists():
+        latents = torch.load(latents_file, "cpu")
+    else:
+        autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        psf_image_file = latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
+        dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
+        dataloader = dataset.train_dataloader()
+        autoencoder = autoencoder.cuda()
+        print("INFO: Creating latents from Galsim galaxies...")
+        latents = autoencoder.generate_latents(dataloader, n_latent_batches)
+        torch.save(latents, latents_file)
+    return latents
