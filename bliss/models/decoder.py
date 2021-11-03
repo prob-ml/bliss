@@ -9,6 +9,7 @@ from astropy.io import fits
 from einops import rearrange, reduce
 from torch import nn
 from torch.nn import functional as F
+from torch.tensor import Tensor
 
 from bliss.models import galaxy_net
 from bliss.models.encoder import get_is_on_from_n_sources
@@ -95,15 +96,34 @@ class ImageDecoder(pl.LightningModule):
         else:
             self.galaxy_tile_decoder = None
 
-    def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True):
-        # returns the **full** image in shape (batch_size x n_bands x slen x slen)
+    def render_images(
+        self,
+        n_sources: Tensor,
+        locs: Tensor,
+        galaxy_bool: Tensor,
+        galaxy_params: Tensor,
+        fluxes: Tensor,
+        add_noise: bool = True,
+    ) -> Tuple[Tensor, Tensor]:
+        """Renders catalog latent variables into a full astronomical image.
 
-        # n_sources: is (batch_size x n_tiles_per_image)
-        # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
-        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources x 1)
-        # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
-        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x n_bands)
+        Args:
+            n_sources: Number of sources in each tile (batch_size x n_tiles_per_image)
+            locs: Locations of sources in each tile
+                (batch_size x n_tiles_per_image x max_sources x 2)
+            galaxy_bool: Whether each source is a galaxy in each tile
+                (batch_size x n_tiles_per_image x max_sources x 1)
+            galaxy_params : Parameters of each galaxy in each tile
+                (batch_size x n_tiles_per_image x max_sources x latent_dim)
+            fluxes: Flux of each source in each time
+                (batch_size x n_tiles_per_image x max_sources x n_bands)
+            add_noise: Add noise to the output image?
+                (defaults to True)
 
+        Returns:
+            A tuple of the **full** image in shape (batch_size x n_bands x slen x slen) and
+            its variance (same size).
+        """
         assert n_sources.shape[0] == locs.shape[0]
         assert n_sources.shape[1] == locs.shape[1]
         assert galaxy_bool.shape[-1] == 1

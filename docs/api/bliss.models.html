@@ -237,6 +237,33 @@
 <dd><p>Decodes latent representation into an image.</p>
 </dd></dl>
 
+<dl class="py method">
+<dt id="bliss.models.decoder.ImageDecoder.render_images">
+<code class="sig-name descname"><span class="pre">render_images</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_sources</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.11.0a0+git755da00 ))"><span class="pre">torch.Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">locs</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.11.0a0+git755da00 ))"><span class="pre">torch.Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">galaxy_bool</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.11.0a0+git755da00 ))"><span class="pre">torch.Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">galaxy_params</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.11.0a0+git755da00 ))"><span class="pre">torch.Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">fluxes</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.11.0a0+git755da00 ))"><span class="pre">torch.Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">add_noise</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><span class="pre">bool</span></a></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.11.0a0+git755da00 ))"><span class="pre">torch.Tensor</span></a><span class="p"><span class="pre">,</span> </span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.11.0a0+git755da00 ))"><span class="pre">torch.Tensor</span></a><span class="p"><span class="pre">]</span></span><a class="reference internal" href="../_modules/bliss/models/decoder.html#ImageDecoder.render_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.models.decoder.ImageDecoder.render_images" title="Permalink to this definition">¶</a></dt>
+<dd><p>Renders catalog latent variables into a full astronomical image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_sources</strong> – Number of sources in each tile (batch_size x n_tiles_per_image)</p></li>
+<li><p><strong>locs</strong> – Locations of sources in each tile
+(batch_size x n_tiles_per_image x max_sources x 2)</p></li>
+<li><p><strong>galaxy_bool</strong> – Whether each source is a galaxy in each tile
+(batch_size x n_tiles_per_image x max_sources x 1)</p></li>
+<li><p><strong>galaxy_params</strong> – Parameters of each galaxy in each tile
+(batch_size x n_tiles_per_image x max_sources x latent_dim)</p></li>
+<li><p><strong>fluxes</strong> – Flux of each source in each time
+(batch_size x n_tiles_per_image x max_sources x n_bands)</p></li>
+<li><p><strong>add_noise</strong> – Add noise to the output image?
+(defaults to True)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A tuple of the <strong>full</strong> image in shape (batch_size x n_bands x slen x slen) and
+its variance (same size).</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">

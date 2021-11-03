@@ -162,6 +162,7 @@
 <span class="kn">from</span> <span class="nn">einops</span> <span class="kn">import</span> <span class="n">rearrange</span><span class="p">,</span> <span class="n">reduce</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
+<span class="kn">from</span> <span class="nn">torch.tensor</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
 <span class="kn">from</span> <span class="nn">bliss.models</span> <span class="kn">import</span> <span class="n">galaxy_net</span>
 <span class="kn">from</span> <span class="nn">bliss.models.encoder</span> <span class="kn">import</span> <span class="n">get_is_on_from_n_sources</span>
@@ -248,15 +249,34 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_tile_decoder</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="nf">render_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_sources</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">add_noise</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="c1"># returns the **full** image in shape (batch_size x n_bands x slen x slen)</span>
+<div class="viewcode-block" id="ImageDecoder.render_images"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.ImageDecoder.render_images">[docs]</a>    <span class="k">def</span> <span class="nf">render_images</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">n_sources</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">locs</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">galaxy_bool</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">galaxy_params</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">fluxes</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">add_noise</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Renders catalog latent variables into a full astronomical image.</span>
 
-        <span class="c1"># n_sources: is (batch_size x n_tiles_per_image)</span>
-        <span class="c1"># locs: is (batch_size x n_tiles_per_image x max_sources x 2)</span>
-        <span class="c1"># galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources x 1)</span>
-        <span class="c1"># galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)</span>
-        <span class="c1"># fluxes: Is (batch_size x n_tiles_per_image x max_sources x n_bands)</span>
+<span class="sd">        Args:</span>
+<span class="sd">            n_sources: Number of sources in each tile (batch_size x n_tiles_per_image)</span>
+<span class="sd">            locs: Locations of sources in each tile</span>
+<span class="sd">                (batch_size x n_tiles_per_image x max_sources x 2)</span>
+<span class="sd">            galaxy_bool: Whether each source is a galaxy in each tile</span>
+<span class="sd">                (batch_size x n_tiles_per_image x max_sources x 1)</span>
+<span class="sd">            galaxy_params : Parameters of each galaxy in each tile</span>
+<span class="sd">                (batch_size x n_tiles_per_image x max_sources x latent_dim)</span>
+<span class="sd">            fluxes: Flux of each source in each time</span>
+<span class="sd">                (batch_size x n_tiles_per_image x max_sources x n_bands)</span>
+<span class="sd">            add_noise: Add noise to the output image?</span>
+<span class="sd">                (defaults to True)</span>
 
+<span class="sd">        Returns:</span>
+<span class="sd">            A tuple of the **full** image in shape (batch_size x n_bands x slen x slen) and</span>
+<span class="sd">            its variance (same size).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="n">n_sources</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">assert</span> <span class="n">n_sources</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">locs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
         <span class="k">assert</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
@@ -281,7 +301,7 @@
         <span class="k">if</span> <span class="n">add_noise</span><span class="p">:</span>
             <span class="n">images</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_noise</span><span class="p">(</span><span class="n">images</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">images</span><span class="p">,</span> <span class="n">var_images</span>
+        <span class="k">return</span> <span class="n">images</span><span class="p">,</span> <span class="n">var_images</span></div>
 
     <span class="k">def</span> <span class="nf">get_background</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slen</span><span class="p">):</span>
         <span class="n">background_shape</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span> <span class="n">slen</span><span class="p">,</span> <span class="n">slen</span><span class="p">)</span>
