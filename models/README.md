@@ -1,6 +1,6 @@
 # Models
--  All checkpoints were generated with `./scripts/train_all.sh`.
--  Results from the latest run are in `./scripts/results`.
+-  All checkpoints were generated using `make all`. See the Makefile for details.
+-  Results from the latest run for each `$EXPERIMENT` are in `results_$EXPERIMENT`.
 -  This README should be regularly updated with any notes on significant changes to model training or performance.
 
 

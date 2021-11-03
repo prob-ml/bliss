@@ -190,7 +190,6 @@
         <span class="n">ptile_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
         <span class="n">border_padding</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">prob_galaxy</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">gal_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">53</span><span class="p">,</span>
         <span class="n">autoencoder_ckpt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">psf_params_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">psf_slen</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">25</span><span class="p">,</span>
@@ -206,8 +205,6 @@
 <span class="sd">            ptile_slen: Padded side-length of each tile (for reconstructing image).</span>
 <span class="sd">            border_padding: Size of border around the final image where sources will not be present.</span>
 <span class="sd">            prob_galaxy: Prior probability a source is a galaxy</span>
-<span class="sd">            n_galaxy_params: Dimension of latent variable governing the galaxy shape.</span>
-<span class="sd">            gal_slen: Side-length of reconstruced galaxy image.</span>
 <span class="sd">            autoencoder_ckpt: Path where trained galaxy autoencoder is located.</span>
 <span class="sd">            psf_params_file: Path where point-spread-function (PSF) data is located.</span>
 <span class="sd">            psf_slen: Side-length of reconstruced star image from PSF.</span>
@@ -242,7 +239,6 @@
                 <span class="n">tile_slen</span><span class="p">,</span>
                 <span class="n">ptile_slen</span><span class="p">,</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">n_bands</span><span class="p">,</span>
-                <span class="n">gal_slen</span><span class="p">,</span>
                 <span class="n">autoencoder_ckpt</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -767,7 +763,6 @@
         <span class="n">tile_slen</span><span class="p">,</span>
         <span class="n">ptile_slen</span><span class="p">,</span>
         <span class="n">n_bands</span><span class="p">,</span>
-        <span class="n">gal_slen</span><span class="p">,</span>
         <span class="n">autoencoder_ckpt</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
@@ -778,10 +773,7 @@
         <span class="c1"># load decoder after loading autoencoder from checkpoint.</span>
         <span class="n">autoencoder</span> <span class="o">=</span> <span class="n">galaxy_net</span><span class="o">.</span><span class="n">OneCenteredGalaxyAE</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span><span class="n">autoencoder_ckpt</span><span class="p">)</span>
         <span class="n">autoencoder</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="n">gal_slen</span> <span class="o">==</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">slen</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_decoder</span> <span class="o">=</span> <span class="n">autoencoder</span><span class="o">.</span><span class="n">get_decoder</span><span class="p">()</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">gal_slen</span> <span class="o">=</span> <span class="n">gal_slen</span>
 
 <div class="viewcode-block" id="GalaxyTileDecoder.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.GalaxyTileDecoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locs</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Renders galaxy tile from locations and galaxy parameters.&quot;&quot;&quot;</span>
