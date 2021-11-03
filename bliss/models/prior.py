@@ -92,7 +92,17 @@ class ImagePrior(pl.LightningModule):
             latents = torch.zeros(1, 1)
         self.register_buffer("latents", latents)
 
-    def sample_prior(self, batch_size=1):
+    def sample_prior(self, batch_size: int = 1) -> dict:
+        """Samples latent variables from the prior of an astronomical image.
+
+        Args:
+            batch_size: The number of samples to draw.
+
+        Returns:
+            A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.
+            the first two dimensions of each tensor are batch_size and self.n_tiles_per_image.
+            The remaining dimensions are variable-specific.
+        """
         n_sources = self._sample_n_sources(batch_size)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
         locs = self._sample_locs(is_on_array, batch_size)
