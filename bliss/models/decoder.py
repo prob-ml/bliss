@@ -37,7 +37,6 @@ class ImageDecoder(pl.LightningModule):
         ptile_slen: int = 10,
         border_padding: int = None,
         prob_galaxy: float = 0.0,
-        gal_slen: int = 53,
         autoencoder_ckpt: str = None,
         psf_params_file: str = None,
         psf_slen: int = 25,
@@ -53,8 +52,6 @@ class ImageDecoder(pl.LightningModule):
             ptile_slen: Padded side-length of each tile (for reconstructing image).
             border_padding: Size of border around the final image where sources will not be present.
             prob_galaxy: Prior probability a source is a galaxy
-            n_galaxy_params: Dimension of latent variable governing the galaxy shape.
-            gal_slen: Side-length of reconstruced galaxy image.
             autoencoder_ckpt: Path where trained galaxy autoencoder is located.
             psf_params_file: Path where point-spread-function (PSF) data is located.
             psf_slen: Side-length of reconstruced star image from PSF.
@@ -89,7 +86,6 @@ class ImageDecoder(pl.LightningModule):
                 tile_slen,
                 ptile_slen,
                 self.n_bands,
-                gal_slen,
                 autoencoder_ckpt,
             )
         else:
@@ -614,7 +610,6 @@ class GalaxyTileDecoder(nn.Module):
         tile_slen,
         ptile_slen,
         n_bands,
-        gal_slen,
         autoencoder_ckpt,
     ):
         super().__init__()
@@ -625,10 +620,7 @@ class GalaxyTileDecoder(nn.Module):
         # load decoder after loading autoencoder from checkpoint.
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         autoencoder.eval().requires_grad_(False)
-        assert gal_slen == autoencoder.hparams.slen
         self.galaxy_decoder = autoencoder.get_decoder()
-
-        self.gal_slen = gal_slen
 
     def forward(self, locs, galaxy_params, galaxy_bool):
         """Renders galaxy tile from locations and galaxy parameters."""
