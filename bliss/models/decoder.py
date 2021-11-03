@@ -364,7 +364,7 @@ class ImageDecoder(pl.LightningModule):
 class Tiler(nn.Module):
     """This class creates an image tile from multiple sources."""
 
-    def __init__(self, tile_slen, ptile_slen):
+    def __init__(self, tile_slen: int, ptile_slen: int):
         super().__init__()
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
@@ -377,11 +377,39 @@ class Tiler(nn.Module):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def forward(self, locs, source):
-        """See render_one_source."""
-        return self.render_one_source(locs, source)
+    def forward(self, locs: Tensor, sources: Tensor):
+        """Renders tile from locations and sources.
 
-    def render_one_source(self, locs, source):
+        Arguments:
+            locs: is (n_ptiles x max_num_stars x 2)
+            sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
+
+        Returns:
+            ptile = (n_ptiles x n_bands x slen x slen)
+        """
+        max_sources = locs.shape[1]
+        ptile_shape = (
+            sources.size(0),
+            sources.size(2),
+            self.ptile_slen,
+            self.ptile_slen,
+        )
+        ptile = torch.zeros(ptile_shape, device=locs.device)
+
+        for n in range(max_sources):
+            one_star = self._render_one_source(locs[:, n, :], sources[:, n])
+            ptile += one_star
+
+        return ptile
+
+    def fit_source_to_ptile(self, source: Tensor):
+        if self.ptile_slen >= source.shape[-1]:
+            fitted_source = self._expand_source(source)
+        else:
+            fitted_source = self._trim_source(source)
+        return fitted_source
+
+    def _render_one_source(self, locs: Tensor, source: Tensor):
         """Renders one source at a location from shape.
 
         Arguments:
@@ -411,39 +439,7 @@ class Tiler(nn.Module):
         grid_loc = local_grid - locs_swapped
         return F.grid_sample(source, grid_loc, align_corners=True)
 
-    def render_tile(self, locs, sources):
-        """Renders tile from locations and sources.
-
-        Arguments:
-            locs: is (n_ptiles x max_num_stars x 2)
-            sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
-
-        Returns:
-            ptile = (n_ptiles x n_bands x slen x slen)
-        """
-        max_sources = locs.shape[1]
-        ptile_shape = (
-            sources.size(0),
-            sources.size(2),
-            self.ptile_slen,
-            self.ptile_slen,
-        )
-        ptile = torch.zeros(ptile_shape, device=locs.device)
-
-        for n in range(max_sources):
-            one_star = self.render_one_source(locs[:, n, :], sources[:, n])
-            ptile += one_star
-
-        return ptile
-
-    def fit_source_to_ptile(self, source):
-        if self.ptile_slen >= source.shape[-1]:
-            fitted_source = self._expand_source(source)
-        else:
-            fitted_source = self._trim_source(source)
-        return fitted_source
-
-    def _expand_source(self, source):
+    def _expand_source(self, source: Tensor):
         """Pad the source with zeros so that it is size ptile_slen."""
         assert len(source.shape) == 3
 
@@ -463,7 +459,7 @@ class Tiler(nn.Module):
 
         return source_expanded
 
-    def _trim_source(self, source):
+    def _trim_source(self, source: Tensor):
         """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
         assert len(source.shape) == 3
 
@@ -483,7 +479,7 @@ class Tiler(nn.Module):
         return source[:, l_indx:u_indx, l_indx:u_indx]
 
 
-def get_mgrid(slen):
+def get_mgrid(slen: int):
     offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
@@ -551,7 +547,7 @@ class StarTileDecoder(nn.Module):
         sources = expanded_psf * rearrange(fluxes, "np ms nb -> np ms nb 1 1")
         sources *= rearrange(star_bool, "np ms 1 -> np ms 1 1 1")
 
-        return self.tiler.render_tile(locs, sources)
+        return self.tiler(locs, sources)
 
     def psf_forward(self):
         psf = self._get_psf()
@@ -659,11 +655,11 @@ class GalaxyTileDecoder(nn.Module):
 
         single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bool)
 
-        ptile = self.tiler.render_tile(
+        ptile = self.tiler(
             locs,
             single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
         )
-        var_ptile = self.tiler.render_tile(
+        var_ptile = self.tiler(
             locs,
             single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
         )
