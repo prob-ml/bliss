@@ -96,6 +96,23 @@ class ImageDecoder(pl.LightningModule):
         else:
             self.galaxy_tile_decoder = None
 
+    @property
+    def galaxy_decoder(self):
+        if self.galaxy_tile_decoder is None:
+            return None
+        return self.galaxy_tile_decoder.galaxy_decoder
+
+    @property
+    def n_galaxy_params(self):
+        if self.galaxy_tile_decoder is None:
+            return None
+        return self.galaxy_tile_decoder.n_galaxy_params
+
+    @property
+    def n_tiles_per_image(self):
+        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
+        return int(n_tiles_per_image)
+
     def render_images(
         self,
         n_sources: Tensor,
@@ -157,23 +174,6 @@ class ImageDecoder(pl.LightningModule):
             background[i] = self.background_values[i]
 
         return background
-
-    @property
-    def galaxy_decoder(self):
-        if self.galaxy_tile_decoder is None:
-            return None
-        return self.galaxy_tile_decoder.galaxy_decoder
-
-    @property
-    def n_galaxy_params(self):
-        if self.galaxy_tile_decoder is None:
-            return None
-        return self.galaxy_tile_decoder.n_galaxy_params
-
-    @property
-    def n_tiles_per_image(self):
-        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
-        return int(n_tiles_per_image)
 
     def forward(self):
         """Decodes latent representation into an image."""
