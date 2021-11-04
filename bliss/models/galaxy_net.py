@@ -87,8 +87,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         )
         self.residual_autoencoder = nn.Sequential(self.residual_encoder, self.residual_decoder)
 
-        self.dist_main = Normal(0.0, 1.0)
-        self.dist_residual = Normal(0.0, 1.0)
+        self.register_buffer("prior_mean", torch.tensor(0.0))
+        self.register_buffer("prior_var", torch.tensor(1.0))
+        self.dist_main = Normal(self.prior_mean, self.prior_var)
+        self.dist_residual = Normal(self.prior_mean, self.prior_var)
 
         self.residual_delay_n_steps = residual_delay_n_steps
         assert slen == 53, "Currently slen is fixed at 53"

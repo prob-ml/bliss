@@ -29,6 +29,7 @@ class ImagePrior(pl.LightningModule):
         f_max: Prior parameter on fluxes
         alpha: Prior parameter on fluxes
         prob_galaxy: Prior probability a source is a galaxy
+        vae: Trained VAE modeling single, centered galaxies
     """
 
     def __init__(
@@ -46,8 +47,6 @@ class ImagePrior(pl.LightningModule):
         alpha: float = 0.5,
         prob_galaxy: float = 0.0,
         autoencoder_ckpt: str = None,
-        latents_file: str = None,
-        n_latent_batches: int = 160,
     ):
         """Initializes ImagePrior.
 
@@ -87,10 +86,9 @@ class ImagePrior(pl.LightningModule):
 
         self.prob_galaxy = float(prob_galaxy)
         if prob_galaxy > 0.0:
-            latents = get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt)
+            self.vae = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         else:
-            latents = torch.zeros(1, 1)
-        self.register_buffer("latents", latents)
+            self.vae = None
 
     def sample_prior(self, batch_size: int = 1) -> dict:
         """Samples latent variables from the prior of an astronomical image.
@@ -226,18 +224,13 @@ class ImagePrior(pl.LightningModule):
         return 1 - (self.f_min / x) ** self.alpha
 
     def _sample_galaxy_params(self, galaxy_bool):
-        # galaxy latent variables are obtaind from previously encoded variables from
-        # large dataset of simulated galaxies stored in `self.latents`
-        # NOTE: These latent variables DO NOT follow a specific distribution.
-
         assert galaxy_bool.shape[1:] == (self.n_tiles_per_image, self.max_sources, 1)
         batch_size = galaxy_bool.size(0)
-        total_latent = batch_size * self.n_tiles_per_image * self.max_sources
+        n_latent_samples = batch_size * self.n_tiles_per_image * self.max_sources
+        latents = self.vae.sample_latent(n_latent_samples)
 
-        # first get random subset of indices to extract from self.latents
-        indices = torch.randint(0, len(self.latents), (total_latent,), device=galaxy_bool.device)
         galaxy_params = rearrange(
-            self.latents[indices],
+            latents,
             "(b n s) g -> b n s g",
             b=batch_size,
             n=self.n_tiles_per_image,

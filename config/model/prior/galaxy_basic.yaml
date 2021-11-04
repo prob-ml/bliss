@@ -6,5 +6,4 @@ max_sources: 1
 mean_sources: 0.015
 min_sources: 0
 autoencoder_ckpt: models/sdss_autoencoder.ckpt
-latents_file: data/latents_simulated_sdss_galaxies.pt
 
