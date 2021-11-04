@@ -1,8 +1,0 @@
-See train_all.sh for commands used to produce these results.
-
-sdss_autoencoder
-epoch=7189-val_loss=777470.125.ckpt
-
-sdss_binary
-epoch=459-val_loss=4.573.ckpt
-

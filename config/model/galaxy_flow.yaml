@@ -1,0 +1,6 @@
+
+_target_: bliss.models.galaxy_flow.CenteredGalaxyLatentFlow
+latent_dim: 64
+optimizer_params: ${optimizer}
+autoencoder_ckpt: models/sdss_autoencoder.ckpt
+latents_file: data/latents_simulated_sdss_galaxies.pt

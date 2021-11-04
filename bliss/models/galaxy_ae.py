@@ -6,14 +6,12 @@ from matplotlib import pyplot as plt
 from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
-from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
-from torch.nn.utils import weight_norm as wn
 from tqdm import tqdm
 
-from bliss.optimizer import load_optimizer
-from bliss.reporting import plot_image
+from bliss.optimizer import get_optimizer
 from bliss.utils import make_grid
+from bliss.plotting import plot_image
 
 plt.switch_backend("Agg")
 plt.ioff()
@@ -45,7 +43,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def __init__(
         self,
         slen: int = 53,
-        latent_dim: int = 16,
+        latent_dim: int = 64,
         n_bands: int = 1,
         residual_delay_n_steps: int = 500,
         optimizer_params: dict = None,
@@ -67,41 +65,30 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.main_encoder = CenteredGalaxyEncoder(
-            slen=slen,
-            latent_dim=(latent_dim // 2) * 2,
-            n_bands=n_bands,
-        )
-        self.main_decoder = CenteredGalaxyDecoder(
-            slen=slen, latent_dim=latent_dim // 2, n_bands=n_bands
-        )
+        self.main_encoder = CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
+        self.main_decoder = CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
         self.main_autoencoder = nn.Sequential(self.main_encoder, self.main_decoder)
 
         self.residual_encoder = CenteredGalaxyEncoder(
-            slen=slen,
-            latent_dim=(latent_dim // 2) * 2,
-            n_bands=n_bands,
+            slen=slen, latent_dim=latent_dim, n_bands=n_bands
         )
         self.residual_decoder = CenteredGalaxyDecoder(
-            slen=slen, latent_dim=latent_dim // 2, n_bands=n_bands
+            slen=slen, latent_dim=latent_dim, n_bands=n_bands
         )
         self.residual_autoencoder = nn.Sequential(self.residual_encoder, self.residual_decoder)
-
-        self.dist_main = Normal(0.0, 1.0)
-        self.dist_residual = Normal(0.0, 1.0)
-        self.latent_flow = None
 
         self.residual_delay_n_steps = residual_delay_n_steps
         assert slen == 53, "Currently slen is fixed at 53"
         self.slen = slen
+        assert latent_dim == 64, "Currently latent_dim is fixed at 64"
         self.latent_dim = latent_dim
         self.min_sd = min_sd
 
     def forward(self, image, background):
         """Gets reconstructed image from running through encoder and decoder."""
-        recon_mean_main, pq_latent_main = self._main_forward(image, background)
-        recon_mean_residual, pq_latent_residual = self._residual_forward(image - recon_mean_main)
-        return recon_mean_main + recon_mean_residual, pq_latent_main + pq_latent_residual
+        recon_mean_main = self._main_forward(image, background)
+        recon_mean_residual = self._residual_forward(image - recon_mean_main)
+        return recon_mean_main + recon_mean_residual
 
     def get_encoder(self, allow_pad=False):
         return OneCenteredGalaxyEncoder(
@@ -114,22 +101,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def get_decoder(self):
         return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
-
-    def sample_latent(self, n_samples):
-        if self.latent_flow is None:
-            latent_main = self.dist_main.sample(torch.Size((n_samples, self.latent_dim // 2)))
-            latent_residual = self.dist_residual.sample(
-                torch.Size((n_samples, self.latent_dim // 2))
-            )
-            z = torch.cat((latent_main, latent_residual), dim=-1)
-        else:
-            z = self.latent_flow.sample(n_samples)
-        return z
-
-    def sample(self, n_samples):
-        z = self.sample_latent(n_samples)
-        decoder = self.get_decoder()
-        return decoder(z)
 
     def generate_latents(self, dataloader, n_batches):
         """Induces a latent distribution for a non-probabilistic autoencoder."""
@@ -147,40 +118,28 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         if optimizer_idx == 0:
-            recon_mean_main, pq_latent_main = self._main_forward(images, background)
-            loss_recon = self._get_likelihood_loss(images, recon_mean_main)
-            loss_prior = -pq_latent_main.sum()
-            loss = loss_recon + loss_prior
+            recon_mean_main = self._main_forward(images, background)
+            loss = self._get_likelihood_loss(images, recon_mean_main)
             self.log("train/loss_main", loss, prog_bar=True)
-            self.log("train/loss_main_recon", loss_recon)
         if optimizer_idx == 1:
             with torch.no_grad():
-                recon_mean_main, pq_latent_main = self._main_forward(images, background)
-            recon_mean_residual, pq_latent_residual = self._residual_forward(
-                images - recon_mean_main
-            )
+                recon_mean_main = self._main_forward(images, background)
+            recon_mean_residual = self._residual_forward(images - recon_mean_main)
             recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
-            loss_recon = self._get_likelihood_loss(images, recon_mean_final)
-            loss_prior = -(pq_latent_main.sum() + pq_latent_residual.sum())
-            loss = loss_recon + loss_prior
+            loss = self._get_likelihood_loss(images, recon_mean_final)
             self.log("train/loss", loss, prog_bar=True)
-            self.log("train/loss_recon", loss_recon, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        recon_mean_main, p_latent_main = self._main_forward(images, background)
-        loss_recon_main = self._get_likelihood_loss(images, recon_mean_main)
-        loss_prior_main = -p_latent_main.sum()
-        loss_main = loss_recon_main + loss_prior_main
+        recon_mean_main = self._main_forward(images, background)
+        loss_main = self._get_likelihood_loss(images, recon_mean_main)
         self.log("val/loss_main", loss_main)
 
-        recon_mean_residual, p_latent_residual = self._residual_forward(images - recon_mean_main)
+        recon_mean_residual = self._residual_forward(images - recon_mean_main)
         recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
-        loss_recon = self._get_likelihood_loss(images, recon_mean_final)
-        loss_prior = loss_prior_main - p_latent_residual.sum()
-        loss = loss_recon + loss_prior
+        loss = self._get_likelihood_loss(images, recon_mean_final)
         self.log("val/loss", loss)
 
         # metrics
@@ -188,10 +147,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         residuals_main = (images - recon_mean_main) / torch.sqrt(recon_mean_main)
         recon_mean_residual = recon_mean_residual / torch.sqrt(recon_mean_main)
         self.log("val/max_residual", residuals.abs().max())
-
-        # Latents mapped to noise by flow
-        u_main = self.main_encoder(images - background)
-        u_residual = self.residual_encoder(images - recon_mean_main)
         return {
             "images": images,
             "recon_mean_main": recon_mean_main,
@@ -199,8 +154,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             "recon_mean": recon_mean_final,
             "residuals": residuals,
             "residuals_main": residuals_main,
-            "u_main": u_main,
-            "u_residual": u_residual,
         }
 
     def validation_epoch_end(self, outputs):
@@ -214,17 +167,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         fig_worst = self._plot_reconstruction(output_tensors, mode="worst")
         grid_example = self._plot_grid_examples(output_tensors)
 
-        base_size = 8
-        flow_noise_main = plt.figure(figsize=(base_size, base_size))
-        u_main = output_tensors["u_main"].cpu().detach().numpy()
-        plt.scatter(u_main[:, 0], u_main[:, 1])
-
         if self.logger:
-            heading = f"Epoch:{self.current_epoch}"
+            heading = "Epoch:{self.current_epoch}"
             self.logger.experiment.add_figure(f"{heading}/Random Images", fig_random)
             self.logger.experiment.add_figure(f"{heading}/Worst Images", fig_worst)
             self.logger.experiment.add_figure(f"{heading}/grid_examples", grid_example)
-            self.logger.experiment.add_figure(f"{heading}/flow_noise_main", flow_noise_main)
 
     def test_step(self, batch, batch_idx):
         """Testing step (pytorch lightning)."""
@@ -235,8 +182,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configures optimizers for training (pytorch lightning)."""
-        opt_main = load_optimizer(self.main_autoencoder.parameters(), self.hparams)
-        opt_residual = load_optimizer(self.residual_autoencoder.parameters(), self.hparams)
+        assert self.hparams["optimizer_params"] is not None, "Need to specify `optimizer_params`."
+        name = self.hparams["optimizer_params"]["name"]
+        kwargs = self.hparams["optimizer_params"]["kwargs"]
+        opt_main = get_optimizer(name, self.main_autoencoder.parameters(), kwargs)
+        opt_residual = get_optimizer(name, self.residual_autoencoder.parameters(), kwargs)
         return opt_main, opt_residual
 
     def optimizer_step(
@@ -260,26 +210,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
                 optimizer.step(closure=optimizer_closure)
 
     def _main_forward(self, image, background):
-        latent_main_mean, latent_main_sd = torch.split(
-            self.main_encoder(image - background), (self.latent_dim // 2, self.latent_dim // 2), -1
-        )
-        latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd))
-        latent_main = latent_dist.rsample()
-        p_latent_main = self.dist_main.log_prob(latent_main)
-        q_latent_main = latent_dist.log_prob(latent_main)
-        recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
-        return recon_mean_main, p_latent_main - q_latent_main
+        return F.relu(self.main_autoencoder(image - background)) + background
 
     def _residual_forward(self, residual):
-        latent_residual_mean, latent_residual_sd = torch.split(
-            self.residual_encoder(residual), (self.latent_dim // 2, self.latent_dim // 2), -1
-        )
-        latent_dist = Normal(latent_residual_mean, F.softplus(latent_residual_sd))
-        latent_residual = latent_dist.rsample()
-        p_latent_residual = self.dist_residual.log_prob(latent_residual)
-        q_latent_residual = latent_dist.log_prob(latent_residual)
-        recon_mean_residual = self.residual_decoder(latent_residual)
-        return recon_mean_residual, p_latent_residual - q_latent_residual
+        return self.residual_autoencoder(residual)
 
     def _get_likelihood_loss(self, image, recon_mean):
         # this is nan whenever recon_mean is not strictly positive
@@ -383,70 +317,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return fig
 
 
-class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1):
-
-        super().__init__()
-
-        self.slen = slen
-        self.latent_dim = latent_dim
-
-        kernels = [3, 3, 3, 3, 1]
-        in_size = 2 ** len(kernels)
-        layers = []
-        for (i, kernel_size) in enumerate(kernels):
-            layer = ResidualConvBlock(n_bands * (2 ** i), 8, kernel_size, 4, mode="downsample")
-            layers.append(layer)
-            if i < len(kernels) - 1:
-                layers.append(nn.LeakyReLU())
-        layers.append(nn.Flatten())
-        layers.append(nn.BatchNorm1d(in_size))
-        layers.append(ResidualDenseBlock(in_size, 3, latent_dim))
-        layers.append(nn.BatchNorm1d(latent_dim))
-        self.features = nn.Sequential(*layers)
-
-    def forward(self, image):
-        """Encodes galaxy from image."""
-        return self.features(image)
-
-
-class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1):
-        super().__init__()
-
-        self.slen = slen
-
-        kernels = [3, 3, 3, 3, 1]
-        in_size = 2 ** len(kernels)
-        layers = []
-        slen_current = slen
-        for (i, kernel_size) in enumerate(kernels):
-            output_padding = (slen_current - kernel_size) % 2 if (slen_current != 2) else 0
-            layer = ResidualConvBlock(
-                n_bands * (2 ** (i + 1)),
-                8,
-                kernel_size,
-                4,
-                mode="upsample",
-                output_padding=output_padding,
-            )
-            layers.append(layer)
-            if i < len(kernels) - 1:
-                layers.append(nn.LeakyReLU())
-            slen_current = math.floor((slen_current - kernel_size) / 2 + 1)
-        layers.append(
-            nn.Unflatten(
-                -1, torch.Size((n_bands * (2 ** len(kernels)), slen_current, slen_current))
-            )
-        )
-        layers.append(ResidualDenseBlock(latent_dim, 3, in_size))
-        self.features = nn.Sequential(*layers[::-1])
-
-    def forward(self, z):
-        """Decodes image from latent representation."""
-        return self.features(z)
-
-
 class OneCenteredGalaxyEncoder(nn.Module):
     """Encoder part of OneCenteredGalaxyAE.
 
@@ -463,9 +333,9 @@ class OneCenteredGalaxyEncoder(nn.Module):
 
     def __init__(
         self,
-        main_encoder: CenteredGalaxyEncoder,
-        main_decoder: CenteredGalaxyDecoder,
-        residual_encoder: CenteredGalaxyEncoder,
+        main_encoder: nn.Module,
+        main_decoder: nn.Module,
+        residual_encoder: nn.Module,
         slen: int = None,
         allow_pad: bool = False,
     ):
@@ -486,7 +356,7 @@ class OneCenteredGalaxyEncoder(nn.Module):
         self.slen = slen
         self.allow_pad = allow_pad
 
-    def forward(self, image, background=0, deterministic=False):
+    def forward(self, image, background=0):
         assert image.shape[-2] == image.shape[-1]
         if self.allow_pad:
             if image.shape[-1] < self.slen:
@@ -497,25 +367,9 @@ class OneCenteredGalaxyEncoder(nn.Module):
                 image = F.pad(image, (lpad, upad, lpad, upad), value=min_val)
                 if isinstance(background, torch.Tensor):
                     background = F.pad(background, (lpad, upad, lpad, upad))
-        latent_main_params = self.main_encoder(image - background)
-        d_main = latent_main_params.shape[-1] // 2
-        latent_main_mean, latent_main_sd = torch.split(latent_main_params, (d_main, d_main), -1)
-        if deterministic:
-            latent_main = latent_main_mean
-        else:
-            latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd))
-            latent_main = latent_dist.rsample()
+        latent_main = self.main_encoder(image - background)
         recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
-        latent_residual_params = self.residual_encoder(image - recon_mean_main)
-        d_residual = latent_residual_params.shape[-1] // 2
-        latent_residual_mean, latent_residual_sd = torch.split(
-            latent_residual_params, (d_residual, d_residual), -1
-        )
-        if deterministic:
-            latent_residual = latent_residual_mean
-        else:
-            latent_residual_dist = Normal(latent_residual_mean, F.softplus(latent_residual_sd))
-            latent_residual = latent_residual_dist.rsample()
+        latent_residual = self.residual_encoder(image - recon_mean_main)
         return torch.cat((latent_main, latent_residual), dim=-1)
 
 
@@ -540,6 +394,64 @@ class OneCenteredGalaxyDecoder(nn.Module):
         return F.relu(recon_mean_main + recon_mean_residual)
 
 
+class CenteredGalaxyEncoder(nn.Module):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1):
+
+        super().__init__()
+
+        self.slen = slen
+        self.latent_dim = latent_dim
+
+        kernels = [3, 3, 3, 3, 1]
+        layers = []
+        for (i, kernel_size) in enumerate(kernels):
+            layer = ResidualConvBlock(n_bands * (2 ** i), 8, kernel_size, 4, mode="downsample")
+            layers.append(layer)
+            if i < len(kernels) - 1:
+                layers.append(nn.LeakyReLU())
+        layers.append(nn.Flatten())
+        self.features = nn.Sequential(*layers)
+
+    def forward(self, image):
+        """Encodes galaxy from image."""
+        return self.features(image)
+
+
+class CenteredGalaxyDecoder(nn.Module):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1):
+        super().__init__()
+
+        self.slen = slen
+
+        kernels = [3, 3, 3, 3, 1]
+        layers = []
+        slen_current = slen
+        for (i, kernel_size) in enumerate(kernels):
+            output_padding = (slen_current - kernel_size) % 2 if (slen_current != 2) else 0
+            layer = ResidualConvBlock(
+                n_bands * (2 ** (i + 1)),
+                8,
+                kernel_size,
+                4,
+                mode="upsample",
+                output_padding=output_padding,
+            )
+            layers.append(layer)
+            if i < len(kernels) - 1:
+                layers.append(nn.LeakyReLU())
+            slen_current = math.floor((slen_current - kernel_size) / 2 + 1)
+        layers.append(
+            nn.Unflatten(
+                -1, torch.Size((n_bands * (2 ** len(kernels)), slen_current, slen_current))
+            )
+        )
+        self.features = nn.Sequential(*layers[::-1])
+
+    def forward(self, z):
+        """Decodes image from latent representation."""
+        return self.features(z)
+
+
 class ResidualConvBlock(nn.Module):
     def __init__(
         self,
@@ -554,29 +466,29 @@ class ResidualConvBlock(nn.Module):
         self.mode = mode
         expand_channels = in_channels * expand_factor
         padding = kernel_size // 2
-        conv_initial = wn(Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding))
+        conv_initial = Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding)
         kernel_size_dim_change = max(kernel_size, 2)
         if self.mode == "downsample":
-            conv = wn(Conv2d(expand_channels, expand_channels, kernel_size_dim_change, stride=2))
+            conv = Conv2d(expand_channels, expand_channels, kernel_size_dim_change, stride=2)
             out_channels = in_channels * 2
         elif self.mode == "upsample":
             assert output_padding is not None
-            conv = wn(ConvTranspose2d(
+            conv = ConvTranspose2d(
                 expand_channels,
                 expand_channels,
                 kernel_size_dim_change,
                 stride=2,
                 output_padding=output_padding,
-            ))
+            )
             out_channels = in_channels // 2
         layers = [conv_initial, nn.ReLU(), conv, nn.ReLU()]
         for _ in range(n_layers - 1):
             layers.append(
-                wn(ResConv2dBlock(
+                ResConv2dBlock(
                     expand_channels, expand_channels, kernel_size, stride=1, padding=padding
-                ))
+                )
             )
-        layers.append(wn(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding)))
+        layers.append(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding))
         self.f = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -597,43 +509,3 @@ class ResConv2dBlock(Conv2d):
         y = super().forward(x)
         y = F.relu(y)
         return x + y
-
-
-class ResidualDenseBlock(nn.Sequential):
-    def __init__(self, in_size, n_layers, out_size):
-        layers = []
-        if in_size >= out_size:
-            size = in_size
-        else:
-            layers.append(nn.Linear(in_size, out_size))
-            layers.append(nn.ReLU())
-            size = out_size
-            layers.append(BatchNorm1d(size))
-        for _ in range(n_layers):
-            layers.append(ResidualLinear(size))
-            layers.append(BatchNorm1d(size))
-        layers.append(nn.Linear(size, out_size))
-        super().__init__(*layers)
-
-        self.in_size = in_size
-        self.out_size = out_size
-
-    def forward(self, x):  # pylint: disable=arguments-renamed
-        y = super().forward(x)
-        if self.in_size == self.out_size:
-            x_trans = x
-        elif self.in_size < self.out_size:
-            repetitions = math.ceil(y.shape[1] / x.shape[1])
-            x_trans = x.repeat(1, repetitions)[:, : y.shape[1]]
-        else:
-            x_trans = x[:, : y.shape[1]]
-        return x_trans + y
-
-
-class ResidualLinear(nn.Linear):
-    def __init__(self, in_size: int) -> None:
-        super().__init__(in_size, in_size)
-
-    def forward(self, x):  # pylint: disable=arguments-renamed
-        y = super().forward(x)
-        return x + F.relu(y)
