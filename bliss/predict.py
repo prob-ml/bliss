@@ -75,7 +75,6 @@ def predict_on_image(
     assert not galaxy_encoder.training
     assert image.shape[1] == galaxy_encoder.n_bands
     assert image_encoder.border_padding == galaxy_encoder.border_padding
-    assert galaxy_encoder.image_decoder.max_sources == 1
     assert image_encoder.tile_slen == galaxy_encoder.tile_slen
 
     galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])

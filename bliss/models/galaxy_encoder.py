@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 
+from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.encoder import get_full_params, get_images_in_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
@@ -50,6 +51,7 @@ def center_ptiles(
 class GalaxyEncoder(pl.LightningModule):
     def __init__(
         self,
+        prior,
         decoder,
         hidden: int = 256,
         optimizer_params: dict = None,
@@ -60,11 +62,11 @@ class GalaxyEncoder(pl.LightningModule):
         self.max_sources = 1  # by construction.
 
         # to produce images to train on.
+        self.image_prior = ImagePrior(**prior)
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 
         # extract useful info from image_decoder
-        self.latent_dim = self.image_decoder.n_galaxy_params
         self.n_bands = self.image_decoder.n_bands
 
         # put image dimensions together
@@ -77,13 +79,13 @@ class GalaxyEncoder(pl.LightningModule):
         autoencoder_ckpt = decoder["autoencoder_ckpt"]
         autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         self.enc = autoencoder.get_encoder(allow_pad=True)
+        self.latent_dim = autoencoder.latent_dim
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
         # consistency
-        assert self.image_decoder.max_sources == 1, "1 galaxy per tile is supported"
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
 
     def center_ptiles(self, image_ptiles, tile_locs):

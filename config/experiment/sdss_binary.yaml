@@ -12,7 +12,7 @@ training:
     checkpoint_callback: true
 
 dataset:
-  decoder:
+  prior:
     mean_sources: 0.03
 
 optimizer:

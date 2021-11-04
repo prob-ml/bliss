@@ -16,6 +16,7 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 
+from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder
 from bliss.models.encoder import ImageEncoder, get_full_params, get_is_on_from_n_sources
 from bliss.optimizer import load_optimizer
@@ -117,6 +118,7 @@ class SleepPhase(pl.LightningModule):
     def __init__(
         self,
         encoder: dict,
+        prior: dict,
         decoder: dict,
         annotate_probs: bool = False,
         slack=1.0,
@@ -126,6 +128,7 @@ class SleepPhase(pl.LightningModule):
 
         Args:
             encoder: keyword arguments to instantiate ImageEncoder
+            prior: keyword arguments to instantiate ImagePrior
             decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
             slack: Threshold distance in pixels for matching objects.
@@ -135,13 +138,13 @@ class SleepPhase(pl.LightningModule):
         self.save_hyperparameters()
 
         self.image_encoder = ImageEncoder(**encoder)
+        self.image_prior = ImagePrior(**prior)
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
         assert self.image_decoder.border_padding == self.image_encoder.border_padding
-        assert self.image_encoder.max_detections <= self.image_decoder.max_sources
 
         # plotting
         self.annotate_probs = annotate_probs

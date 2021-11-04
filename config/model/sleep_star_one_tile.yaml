@@ -1,5 +1,6 @@
 defaults:
   - decoder: 1tile
+  - prior: 1tile
   - encoder: 1tile
 
 _target_: bliss.sleep.SleepPhase

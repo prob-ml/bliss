@@ -6,9 +6,3 @@ epoch=7189-val_loss=777470.125.ckpt
 sdss_binary
 epoch=459-val_loss=4.573.ckpt
 
-sdss_galaxy_encoder
-epoch=3349-val_loss=302573.344.ckpt
-
-sdss_sleep
-epoch=1149-val_loss=-0.102.ckpt
-
