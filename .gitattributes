@@ -7,3 +7,7 @@ data/gold_dc2_catalog.fits filter=lfs diff=lfs merge=lfs -text
 data/gold_sdss_galaxy_images.pt filter=lfs diff=lfs merge=lfs -text
 data/sdss/94/1/12/* filter=lfs diff=lfs merge=lfs -text
 data/sdss/94/1/photoField-000094-1.fits filter=lfs diff=lfs merge=lfs -text
+models/sdss_galaxy_encoder.ckpt filter=lfs diff=lfs merge=lfs -text
+models/sdss_sleep.ckpt filter=lfs diff=lfs merge=lfs -text
+models/sdss_autoencoder.ckpt filter=lfs diff=lfs merge=lfs -text
+models/sdss_binary.ckpt filter=lfs diff=lfs merge=lfs -text
