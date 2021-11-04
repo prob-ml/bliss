@@ -183,7 +183,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean_residual = recon_mean_residual / torch.sqrt(recon_mean_main)
         self.log("val/max_residual", residuals.abs().max())
 
-        # Latents mapped to noise by flow
+        # Aggregate posterior
         u_main = self.main_encoder(images - background)
         u_residual = self.residual_encoder(images - recon_mean_main)
         return {
@@ -209,7 +209,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         grid_example = self._plot_grid_examples(output_tensors)
 
         base_size = 8
-        flow_noise_main = plt.figure(figsize=(base_size, base_size))
+        agg_posterior = plt.figure(figsize=(base_size, base_size))
         u_main = output_tensors["u_main"].cpu().detach().numpy()
         plt.scatter(u_main[:, 0], u_main[:, 1])
 
@@ -218,7 +218,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             self.logger.experiment.add_figure(f"{heading}/Random Images", fig_random)
             self.logger.experiment.add_figure(f"{heading}/Worst Images", fig_worst)
             self.logger.experiment.add_figure(f"{heading}/grid_examples", grid_example)
-            self.logger.experiment.add_figure(f"{heading}/flow_noise_main", flow_noise_main)
+            self.logger.experiment.add_figure(f"{heading}/Aggregate posterior", agg_posterior)
 
     def test_step(self, batch, batch_idx):
         """Testing step (pytorch lightning)."""
