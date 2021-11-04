@@ -554,29 +554,37 @@ class ResidualConvBlock(nn.Module):
         self.mode = mode
         expand_channels = in_channels * expand_factor
         padding = kernel_size // 2
-        conv_initial = wn(Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding))
+        conv_initial = wn(
+            Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding)
+        )
         kernel_size_dim_change = max(kernel_size, 2)
         if self.mode == "downsample":
             conv = wn(Conv2d(expand_channels, expand_channels, kernel_size_dim_change, stride=2))
             out_channels = in_channels * 2
         elif self.mode == "upsample":
             assert output_padding is not None
-            conv = wn(ConvTranspose2d(
-                expand_channels,
-                expand_channels,
-                kernel_size_dim_change,
-                stride=2,
-                output_padding=output_padding,
-            ))
+            conv = wn(
+                ConvTranspose2d(
+                    expand_channels,
+                    expand_channels,
+                    kernel_size_dim_change,
+                    stride=2,
+                    output_padding=output_padding,
+                )
+            )
             out_channels = in_channels // 2
         layers = [conv_initial, nn.ReLU(), conv, nn.ReLU()]
         for _ in range(n_layers - 1):
             layers.append(
-                wn(ResConv2dBlock(
-                    expand_channels, expand_channels, kernel_size, stride=1, padding=padding
-                ))
+                wn(
+                    ResConv2dBlock(
+                        expand_channels, expand_channels, kernel_size, stride=1, padding=padding
+                    )
+                )
             )
-        layers.append(wn(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding)))
+        layers.append(
+            wn(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding))
+        )
         self.f = nn.Sequential(*layers)
 
     def forward(self, x):

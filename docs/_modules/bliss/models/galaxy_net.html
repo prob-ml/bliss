@@ -707,29 +707,37 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
         <span class="n">expand_channels</span> <span class="o">=</span> <span class="n">in_channels</span> <span class="o">*</span> <span class="n">expand_factor</span>
         <span class="n">padding</span> <span class="o">=</span> <span class="n">kernel_size</span> <span class="o">//</span> <span class="mi">2</span>
-        <span class="n">conv_initial</span> <span class="o">=</span> <span class="n">wn</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">in_channels</span><span class="p">,</span> <span class="n">expand_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="n">padding</span><span class="p">))</span>
+        <span class="n">conv_initial</span> <span class="o">=</span> <span class="n">wn</span><span class="p">(</span>
+            <span class="n">Conv2d</span><span class="p">(</span><span class="n">in_channels</span><span class="p">,</span> <span class="n">expand_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="n">padding</span><span class="p">)</span>
+        <span class="p">)</span>
         <span class="n">kernel_size_dim_change</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;downsample&quot;</span><span class="p">:</span>
             <span class="n">conv</span> <span class="o">=</span> <span class="n">wn</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">expand_channels</span><span class="p">,</span> <span class="n">expand_channels</span><span class="p">,</span> <span class="n">kernel_size_dim_change</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
             <span class="n">out_channels</span> <span class="o">=</span> <span class="n">in_channels</span> <span class="o">*</span> <span class="mi">2</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;upsample&quot;</span><span class="p">:</span>
             <span class="k">assert</span> <span class="n">output_padding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="n">conv</span> <span class="o">=</span> <span class="n">wn</span><span class="p">(</span><span class="n">ConvTranspose2d</span><span class="p">(</span>
-                <span class="n">expand_channels</span><span class="p">,</span>
-                <span class="n">expand_channels</span><span class="p">,</span>
-                <span class="n">kernel_size_dim_change</span><span class="p">,</span>
-                <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-                <span class="n">output_padding</span><span class="o">=</span><span class="n">output_padding</span><span class="p">,</span>
-            <span class="p">))</span>
+            <span class="n">conv</span> <span class="o">=</span> <span class="n">wn</span><span class="p">(</span>
+                <span class="n">ConvTranspose2d</span><span class="p">(</span>
+                    <span class="n">expand_channels</span><span class="p">,</span>
+                    <span class="n">expand_channels</span><span class="p">,</span>
+                    <span class="n">kernel_size_dim_change</span><span class="p">,</span>
+                    <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                    <span class="n">output_padding</span><span class="o">=</span><span class="n">output_padding</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
             <span class="n">out_channels</span> <span class="o">=</span> <span class="n">in_channels</span> <span class="o">//</span> <span class="mi">2</span>
         <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span><span class="n">conv_initial</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span> <span class="n">conv</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()]</span>
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
             <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">wn</span><span class="p">(</span><span class="n">ResConv2dBlock</span><span class="p">(</span>
-                    <span class="n">expand_channels</span><span class="p">,</span> <span class="n">expand_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="n">padding</span>
-                <span class="p">))</span>
+                <span class="n">wn</span><span class="p">(</span>
+                    <span class="n">ResConv2dBlock</span><span class="p">(</span>
+                        <span class="n">expand_channels</span><span class="p">,</span> <span class="n">expand_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="n">padding</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
             <span class="p">)</span>
-        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">wn</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">expand_channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="n">padding</span><span class="p">)))</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">wn</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">expand_channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="n">padding</span><span class="p">))</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">f</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="o">*</span><span class="n">layers</span><span class="p">)</span>
 
 <div class="viewcode-block" id="ResidualConvBlock.forward"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.ResidualConvBlock.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
