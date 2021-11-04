@@ -6,5 +6,3 @@ prob_galaxy: 0.0
 psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
 background_values:
   - 633.0
-loc_min: 0.
-loc_max: 1.0
