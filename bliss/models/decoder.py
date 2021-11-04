@@ -647,19 +647,6 @@ class GalaxyTileDecoder(nn.Module):
 
         return ptile, var_ptile
 
-    def sample_galaxy_params(self, galaxy_bool):
-        batch_size, n_tiles_per_image, max_sources, _ = galaxy_bool.shape
-        total_latent = batch_size * n_tiles_per_image * max_sources
-        galaxy_params_long = self.galaxy_autoencoder.sample_latent(total_latent)
-        galaxy_params = rearrange(
-            galaxy_params_long,
-            "(b n s) g -> b n s g",
-            b=batch_size,
-            n=n_tiles_per_image,
-            s=max_sources,
-        )
-        return galaxy_params * galaxy_bool
-
     def _render_single_galaxies(self, galaxy_params, galaxy_bool):
 
         # flatten parameters

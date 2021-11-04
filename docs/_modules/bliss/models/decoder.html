@@ -800,19 +800,6 @@
 
         <span class="k">return</span> <span class="n">ptile</span><span class="p">,</span> <span class="n">var_ptile</span></div>
 
-    <span class="k">def</span> <span class="nf">sample_galaxy_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>
-        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_tiles_per_image</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">galaxy_bool</span><span class="o">.</span><span class="n">shape</span>
-        <span class="n">total_latent</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">n_tiles_per_image</span> <span class="o">*</span> <span class="n">max_sources</span>
-        <span class="n">galaxy_params_long</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_autoencoder</span><span class="o">.</span><span class="n">sample_latent</span><span class="p">(</span><span class="n">total_latent</span><span class="p">)</span>
-        <span class="n">galaxy_params</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span>
-            <span class="n">galaxy_params_long</span><span class="p">,</span>
-            <span class="s2">&quot;(b n s) g -&gt; b n s g&quot;</span><span class="p">,</span>
-            <span class="n">b</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
-            <span class="n">n</span><span class="o">=</span><span class="n">n_tiles_per_image</span><span class="p">,</span>
-            <span class="n">s</span><span class="o">=</span><span class="n">max_sources</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">galaxy_params</span> <span class="o">*</span> <span class="n">galaxy_bool</span>
-
     <span class="k">def</span> <span class="nf">_render_single_galaxies</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">galaxy_params</span><span class="p">,</span> <span class="n">galaxy_bool</span><span class="p">):</span>
 
         <span class="c1"># flatten parameters</span>
