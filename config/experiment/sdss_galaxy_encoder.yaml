@@ -12,7 +12,7 @@ training:
     check_val_every_n_epoch: 25
 
 model:
-  decoder:
+  prior:
     mean_sources: 0.04
 
 optimizer:

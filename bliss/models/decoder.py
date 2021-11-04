@@ -1,196 +1,135 @@
 import warnings
 from pathlib import Path
+from typing import Tuple
 
 import numpy as np
-import pytorch_lightning as pl
 import torch
+import pytorch_lightning as pl
 from astropy.io import fits
 from einops import rearrange, reduce
 from torch import nn
-from torch.distributions import Poisson
 from torch.nn import functional as F
+from torch.tensor import Tensor
 
 from bliss.models import galaxy_net
 from bliss.models.encoder import get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import SDSSGalaxies
-
-
-def get_mgrid(slen):
-    offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    # mgrid is between -1 and 1
-    # then scale slightly because of the way f.grid_sample
-    # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float() * (slen - 1) / slen
 
 
 class ImageDecoder(pl.LightningModule):
-    # pylint: disable=too-many-statements
+    """Decodes latent variances into reconstructed astronomical image.
+
+    Attributes:
+        n_bands: Number of bands (colors) in the image
+        slen: Side-length of astronomical image (image is assumed to be square).
+        tile_slen: Side-length of each tile.
+        ptile_slen: Padded side-length of each tile (for reconstructing image).
+        border_padding: Size of border around the final image where sources will not be present.
+        background_values: Magnitude of the background (per-band)
+        star_tile_decoder: Module which renders stars on individual tiles.
+        galaxy_tile_decoder: Module which renders galaxies on individual tiles.
+    """
+
     def __init__(
         self,
-        n_bands=1,
-        slen=50,
-        tile_slen=2,
-        ptile_slen=10,
-        border_padding=None,
-        max_sources=2,
-        mean_sources=0.4,
-        min_sources=0,
-        f_min=1e4,
-        f_max=1e6,
-        alpha=0.5,
-        prob_galaxy=0.0,
-        n_galaxy_params=64,
-        gal_slen=53,
-        autoencoder_ckpt=None,
-        latents_file=None,
-        n_latent_batches=160,
-        psf_params_file=None,
-        psf_slen=25,
-        background_values=(686.0,),
-        loc_min=0.0,
-        loc_max=1.0,
-        sdss_bands=(2,),
+        n_bands: int = 1,
+        slen: int = 50,
+        tile_slen: int = 2,
+        ptile_slen: int = 10,
+        border_padding: int = None,
+        prob_galaxy: float = 0.0,
+        autoencoder_ckpt: str = None,
+        psf_params_file: str = None,
+        psf_slen: int = 25,
+        background_values: Tuple[float, ...] = (686.0,),
+        sdss_bands: Tuple[int, ...] = (2,),
     ):
+        """Initializes ImageDecoder.
+
+        Args:
+            n_bands: Number of bands (colors) in the image
+            slen: Side-length of astronomical image (image is assumed to be square).
+            tile_slen: Side-length of each tile.
+            ptile_slen: Padded side-length of each tile (for reconstructing image).
+            border_padding: Size of border around the final image where sources will not be present.
+            prob_galaxy: Prior probability a source is a galaxy
+            autoencoder_ckpt: Path where trained galaxy autoencoder is located.
+            psf_params_file: Path where point-spread-function (PSF) data is located.
+            psf_slen: Side-length of reconstruced star image from PSF.
+            background_values: Magnitude of the background (per-band)
+            sdss_bands: Bands to retrieve from PSF.
+        """
         super().__init__()
-        # Set class attributes
         self.n_bands = n_bands
-        # side-length in pixels of an image (image is assumed to be square)
         assert slen % 1 == 0, "slen must be an integer."
-        self.slen = int(slen)
-        assert self.slen % tile_slen == 0, "slen must be divisible by tile_slen"
-        # side-length of an image tile.
-        # latent variables (locations, fluxes, etc) are drawn per-tile
+        assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
         assert tile_slen <= ptile_slen
+        self.slen = int(slen)
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-        # per-tile prior parameters on number (and type) of sources
-        assert max_sources > 0, "No sources will be drawn."
-        self.max_sources = max_sources
-        self.mean_sources = mean_sources
-        self.min_sources = min_sources
-        # per-tile constraints on the location of sources
-        self.loc_min = loc_min
-        self.loc_max = loc_max
-        # prior parameters on fluxes
-        self.f_min = f_min
-        self.f_max = f_max
-        self.alpha = alpha  # pareto parameter.
-        # Galaxy decoder
-        self.prob_galaxy = float(prob_galaxy)
-        self.n_galaxy_params = n_galaxy_params
-        self.gal_slen = gal_slen
-        self.autoencoder_ckpt = autoencoder_ckpt
-        self.latents_file = Path(latents_file) if latents_file is not None else None
-        # Star Decoder
-        self.psf_slen = psf_slen
-        self.sdss_bands = tuple(sdss_bands)
-        # number of tiles per image
-        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
-        self.n_tiles_per_image = int(n_tiles_per_image)
+        self.border_padding = self._validate_border_padding(border_padding)
 
-        # Border Padding
-        # Images are first rendered on *padded* tiles (aka ptiles).
-        # The padded tile consists of the tile and neighboring tiles
-        # The width of the padding is given by ptile_slen.
-        # border_padding is the amount of padding we leave in the final image. Useful for
-        # avoiding sources getting too close to the edges.
-        if border_padding is None:
-            # default value matches encoder default.
-            border_padding = (self.ptile_slen - self.tile_slen) / 2
-
-        n_tiles_of_padding = (self.ptile_slen / self.tile_slen - 1) / 2
-        ptile_padding = n_tiles_of_padding * self.tile_slen
-        assert border_padding % 1 == 0, "amount of border padding must be an integer"
-        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
-        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
-        self.border_padding = int(border_padding)
-
-        # Background
         assert len(background_values) == n_bands
         self.background_values = background_values
 
-        # Submodule for managing tiles (no learned parameters)
-        self.tiler = Tiler(tile_slen, ptile_slen)
-
-        # Submodule for rendering stars on a tile
         self.star_tile_decoder = StarTileDecoder(
-            self.tiler,
+            tile_slen,
+            ptile_slen,
             self.n_bands,
-            self.psf_slen,
-            self.sdss_bands,
+            psf_slen,
+            tuple(sdss_bands),
             psf_params_file=psf_params_file,
         )
 
-        # Submodule for rendering galaxies on a tile
         if prob_galaxy > 0.0:
-            assert self.autoencoder_ckpt is not None and self.latents_file is not None
+            assert autoencoder_ckpt is not None
             self.galaxy_tile_decoder = GalaxyTileDecoder(
+                tile_slen,
+                ptile_slen,
                 self.n_bands,
-                self.tile_slen,
-                self.ptile_slen,
-                self.gal_slen,
-                self.n_galaxy_params,
-                self.autoencoder_ckpt,
+                autoencoder_ckpt,
             )
-            # load dataset of encoded simulated galaxies.
-            if self.latents_file.exists():
-                latents = torch.load(self.latents_file, "cpu")
-            else:
-                autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(
-                    self.autoencoder_ckpt
-                )
-                psf_image_file = self.latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
-                dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
-                dataloader = dataset.train_dataloader()
-                autoencoder = autoencoder.cuda()
-                print("INFO: Creating latents from Galsim galaxies...")
-                latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-                torch.save(latents, self.latents_file)
-            self.register_buffer("latents", latents)
         else:
             self.galaxy_tile_decoder = None
-            self.register_buffer("latents", torch.zeros(1, n_galaxy_params))
 
-        # background
-        assert len(background_values) == n_bands
-        self.background_values = background_values
+    @property
+    def galaxy_decoder(self):
+        if self.galaxy_tile_decoder is None:
+            return None
+        return self.galaxy_tile_decoder.galaxy_decoder
 
-    def forward(self):
-        """Decodes latent representation into an image."""
-        return self.star_tile_decoder.psf_forward()
+    @property
+    def n_tiles_per_image(self):
+        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
+        return int(n_tiles_per_image)
 
-    def sample_prior(self, batch_size=1):
-        n_sources = self._sample_n_sources(batch_size)
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-        locs = self._sample_locs(is_on_array, batch_size)
+    def render_images(
+        self,
+        n_sources: Tensor,
+        locs: Tensor,
+        galaxy_bool: Tensor,
+        galaxy_params: Tensor,
+        fluxes: Tensor,
+        add_noise: bool = True,
+    ) -> Tuple[Tensor, Tensor]:
+        """Renders catalog latent variables into a full astronomical image.
 
-        _, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(n_sources, is_on_array)
-        galaxy_params = self._sample_galaxy_params(galaxy_bool)
-        fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
-        log_fluxes = self._get_log_fluxes(fluxes)
+        Args:
+            n_sources: Number of sources in each tile (batch_size x n_tiles_per_image)
+            locs: Locations of sources in each tile
+                (batch_size x n_tiles_per_image x max_sources x 2)
+            galaxy_bool: Whether each source is a galaxy in each tile
+                (batch_size x n_tiles_per_image x max_sources x 1)
+            galaxy_params : Parameters of each galaxy in each tile
+                (batch_size x n_tiles_per_image x max_sources x latent_dim)
+            fluxes: Flux of each source in each time
+                (batch_size x n_tiles_per_image x max_sources x n_bands)
+            add_noise: Add noise to the output image?
+                (defaults to True)
 
-        # per tile quantities.
-        return {
-            "n_sources": n_sources,
-            "locs": locs,
-            "galaxy_bool": galaxy_bool,
-            "star_bool": star_bool,
-            "galaxy_params": galaxy_params,
-            "fluxes": fluxes,
-            "log_fluxes": log_fluxes,
-        }
-
-    def render_images(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes, add_noise=True):
-        # returns the **full** image in shape (batch_size x n_bands x slen x slen)
-
-        # n_sources: is (batch_size x n_tiles_per_image)
-        # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
-        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources x 1)
-        # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
-        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x n_bands)
-
+        Returns:
+            A tuple of the **full** image in shape (batch_size x n_bands x slen x slen) and
+            its variance (same size).
+        """
         assert n_sources.shape[0] == locs.shape[0]
         assert n_sources.shape[1] == locs.shape[1]
         assert galaxy_bool.shape[-1] == 1
@@ -217,12 +156,6 @@ class ImageDecoder(pl.LightningModule):
 
         return images, var_images
 
-    @property
-    def galaxy_decoder(self):
-        if self.galaxy_tile_decoder is None:
-            return None
-        return self.galaxy_tile_decoder.galaxy_decoder
-
     def get_background(self, slen):
         background_shape = (self.n_bands, slen, slen)
         background = torch.zeros(*background_shape, device=self.device)
@@ -231,127 +164,9 @@ class ImageDecoder(pl.LightningModule):
 
         return background
 
-    def _sample_n_sources(self, batch_size):
-        # returns number of sources for each batch x tile
-        # output dimension is batch_size x n_tiles_per_image
-
-        # always poisson distributed.
-        p = torch.full((1,), self.mean_sources, device=self.device, dtype=torch.float)
-        m = Poisson(p)
-        n_sources = m.sample([batch_size, self.n_tiles_per_image])
-
-        # long() here is necessary because used for indexing and one_hot encoding.
-        n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
-        return rearrange(n_sources.long(), "b n 1 -> b n")
-
-    def _sample_locs(self, is_on_array, batch_size):
-        # output dimension is batch_size x n_tiles_per_image x max_sources x 2
-
-        # 2 = (x,y)
-        shape = (
-            batch_size,
-            self.n_tiles_per_image,
-            self.max_sources,
-            2,
-        )
-        locs = torch.rand(*shape, device=is_on_array.device)
-        locs *= self.loc_max - self.loc_min
-        locs += self.loc_min
-        locs *= is_on_array.unsqueeze(-1)
-
-        return locs
-
-    def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
-        # the counts returned (n_galaxies, n_stars) are of shape (batch_size x n_tiles_per_image)
-        # the booleans returned (galaxy_bool, star_bool) are of shape
-        # (batch_size x n_tiles_per_image x max_sources x 1)
-        # this last dimension is so it is parallel to other galaxy/star params.
-
-        batch_size = n_sources.size(0)
-        uniform = torch.rand(
-            batch_size,
-            self.n_tiles_per_image,
-            self.max_sources,
-            1,
-            device=is_on_array.device,
-        )
-        galaxy_bool = uniform < self.prob_galaxy
-        galaxy_bool = (galaxy_bool * is_on_array.unsqueeze(-1)).float()
-        star_bool = (1 - galaxy_bool) * is_on_array.unsqueeze(-1)
-        n_galaxies = galaxy_bool.sum((-2, -1))
-        n_stars = star_bool.sum((-2, -1))
-        assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
-
-        return n_galaxies, n_stars, galaxy_bool, star_bool
-
-    def _pareto_cdf(self, x):
-        return 1 - (self.f_min / x) ** self.alpha
-
-    def _draw_pareto_maxed(self, shape):
-        # draw pareto conditioned on being less than f_max
-
-        u_max = self._pareto_cdf(self.f_max)
-        uniform_samples = torch.rand(*shape, device=self.device) * u_max
-        return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
-
-    def _sample_fluxes(self, n_stars, star_bool, batch_size):
-        """Samples fluxes.
-
-        Arguments:
-            n_stars: Tensor indicating number of stars per tile
-            star_bool: Tensor indicating whether each object is a star or not
-            batch_size: Size of the batches
-
-        Returns:
-            fluxes, tensor shape (batch_size x self.n_tiles_per_image x self.max_sources x n_bands)
-        """
-        assert n_stars.shape[0] == batch_size
-
-        shape = (batch_size, self.n_tiles_per_image, self.max_sources, 1)
-        base_fluxes = self._draw_pareto_maxed(shape)
-
-        if self.n_bands > 1:
-            shape = (
-                batch_size,
-                self.n_tiles_per_image,
-                self.max_sources,
-                self.n_bands - 1,
-            )
-            colors = torch.randn(*shape, device=base_fluxes.device)
-            fluxes = 10 ** (colors / 2.5) * base_fluxes
-            fluxes = torch.cat((base_fluxes, fluxes), dim=3)
-            fluxes *= star_bool.float()
-        else:
-            fluxes = base_fluxes * star_bool.float()
-
-        return fluxes
-
-    def _sample_galaxy_params(self, galaxy_bool):
-        # galaxy latent variables are obtaind from previously encoded variables from
-        # large dataset of simulated galaxies stored in `self.latents`
-        # NOTE: These latent variables DO NOT follow a specific distribution.
-
-        assert galaxy_bool.shape[1:] == (self.n_tiles_per_image, self.max_sources, 1)
-        batch_size = galaxy_bool.size(0)
-        total_latent = batch_size * self.n_tiles_per_image * self.max_sources
-
-        # first get random subset of indices to extract from self.latents
-        indices = torch.randint(0, len(self.latents), (total_latent,), device=galaxy_bool.device)
-        galaxy_params = rearrange(
-            self.latents[indices],
-            "(b n s) g -> b n s g",
-            n=self.n_tiles_per_image,
-            s=self.max_sources,
-            g=self.n_galaxy_params,
-        )
-        return galaxy_params * galaxy_bool
-
-    @staticmethod
-    def _get_log_fluxes(fluxes):
-        log_fluxes = torch.where(
-            fluxes > 0, fluxes, torch.ones_like(fluxes)
-        )  # prevent log(0) errors.
-        return torch.log(log_fluxes)
+    def forward(self):
+        """Decodes latent representation into an image."""
+        return self.star_tile_decoder.psf_forward()
 
     @staticmethod
     def _apply_noise(images_mean):
@@ -515,11 +330,29 @@ class ImageDecoder(pl.LightningModule):
         x1 = (n_tiles1 + n_tiles_of_padding) * tile_slen + border_padding
         return canvas[:, :, x0:x1, x0:x1]
 
+    def _validate_border_padding(self, border_padding):
+        # Border Padding
+        # Images are first rendered on *padded* tiles (aka ptiles).
+        # The padded tile consists of the tile and neighboring tiles
+        # The width of the padding is given by ptile_slen.
+        # border_padding is the amount of padding we leave in the final image. Useful for
+        # avoiding sources getting too close to the edges.
+        if border_padding is None:
+            # default value matches encoder default.
+            border_padding = (self.ptile_slen - self.tile_slen) / 2
+
+        n_tiles_of_padding = (self.ptile_slen / self.tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * self.tile_slen
+        assert border_padding % 1 == 0, "amount of border padding must be an integer"
+        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
+        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
+        return int(border_padding)
+
 
 class Tiler(nn.Module):
     """This class creates an image tile from multiple sources."""
 
-    def __init__(self, tile_slen, ptile_slen):
+    def __init__(self, tile_slen: int, ptile_slen: int):
         super().__init__()
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
@@ -532,11 +365,39 @@ class Tiler(nn.Module):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def forward(self, locs, source):
-        """See render_one_source."""
-        return self.render_one_source(locs, source)
+    def forward(self, locs: Tensor, sources: Tensor):
+        """Renders tile from locations and sources.
 
-    def render_one_source(self, locs, source):
+        Arguments:
+            locs: is (n_ptiles x max_num_stars x 2)
+            sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
+
+        Returns:
+            ptile = (n_ptiles x n_bands x slen x slen)
+        """
+        max_sources = locs.shape[1]
+        ptile_shape = (
+            sources.size(0),
+            sources.size(2),
+            self.ptile_slen,
+            self.ptile_slen,
+        )
+        ptile = torch.zeros(ptile_shape, device=locs.device)
+
+        for n in range(max_sources):
+            one_star = self._render_one_source(locs[:, n, :], sources[:, n])
+            ptile += one_star
+
+        return ptile
+
+    def fit_source_to_ptile(self, source: Tensor):
+        if self.ptile_slen >= source.shape[-1]:
+            fitted_source = self._expand_source(source)
+        else:
+            fitted_source = self._trim_source(source)
+        return fitted_source
+
+    def _render_one_source(self, locs: Tensor, source: Tensor):
         """Renders one source at a location from shape.
 
         Arguments:
@@ -566,39 +427,7 @@ class Tiler(nn.Module):
         grid_loc = local_grid - locs_swapped
         return F.grid_sample(source, grid_loc, align_corners=True)
 
-    def render_tile(self, locs, sources):
-        """Renders tile from locations and sources.
-
-        Arguments:
-            locs: is (n_ptiles x max_num_stars x 2)
-            sources: is (n_ptiles x max_num_stars x n_bands x stampsize x stampsize)
-
-        Returns:
-            ptile = (n_ptiles x n_bands x slen x slen)
-        """
-        max_sources = locs.shape[1]
-        ptile_shape = (
-            sources.size(0),
-            sources.size(2),
-            self.ptile_slen,
-            self.ptile_slen,
-        )
-        ptile = torch.zeros(ptile_shape, device=locs.device)
-
-        for n in range(max_sources):
-            one_star = self.render_one_source(locs[:, n, :], sources[:, n])
-            ptile += one_star
-
-        return ptile
-
-    def fit_source_to_ptile(self, source):
-        if self.ptile_slen >= source.shape[-1]:
-            fitted_source = self._expand_source(source)
-        else:
-            fitted_source = self._trim_source(source)
-        return fitted_source
-
-    def _expand_source(self, source):
+    def _expand_source(self, source: Tensor):
         """Pad the source with zeros so that it is size ptile_slen."""
         assert len(source.shape) == 3
 
@@ -618,7 +447,7 @@ class Tiler(nn.Module):
 
         return source_expanded
 
-    def _trim_source(self, source):
+    def _trim_source(self, source: Tensor):
         """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
         assert len(source.shape) == 3
 
@@ -638,10 +467,22 @@ class Tiler(nn.Module):
         return source[:, l_indx:u_indx, l_indx:u_indx]
 
 
+def get_mgrid(slen: int):
+    offset = (slen - 1) / 2
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    mgrid = torch.tensor(np.dstack((y, x))) / offset
+    # mgrid is between -1 and 1
+    # then scale slightly because of the way f.grid_sample
+    # parameterizes the edges: (0, 0) is center of edge pixel
+    return mgrid.float() * (slen - 1) / slen
+
+
 class StarTileDecoder(nn.Module):
-    def __init__(self, tiler, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None):
+    def __init__(
+        self, tile_slen, ptile_slen, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None
+    ):
         super().__init__()
-        self.tiler = tiler
+        self.tiler = Tiler(tile_slen, ptile_slen)
         self.n_bands = n_bands
         self.psf_slen = psf_slen
 
@@ -694,7 +535,7 @@ class StarTileDecoder(nn.Module):
         sources = expanded_psf * rearrange(fluxes, "np ms nb -> np ms nb 1 1")
         sources *= rearrange(star_bool, "np ms 1 -> np ms 1 1 1")
 
-        return self.tiler.render_tile(locs, sources)
+        return self.tiler(locs, sources)
 
     def psf_forward(self):
         psf = self._get_psf()
@@ -766,11 +607,9 @@ class StarTileDecoder(nn.Module):
 class GalaxyTileDecoder(nn.Module):
     def __init__(
         self,
-        n_bands,
         tile_slen,
         ptile_slen,
-        gal_slen,
-        n_galaxy_params,
+        n_bands,
         autoencoder_ckpt,
     ):
         super().__init__()
@@ -781,32 +620,27 @@ class GalaxyTileDecoder(nn.Module):
         # load decoder after loading autoencoder from checkpoint.
         autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         autoencoder.eval().requires_grad_(False)
-        assert gal_slen == autoencoder.hparams.slen
-        assert n_galaxy_params == autoencoder.hparams.latent_dim
         self.galaxy_decoder = autoencoder.get_decoder()
-
-        self.gal_slen = gal_slen
-        self.n_galaxy_params = n_galaxy_params
 
     def forward(self, locs, galaxy_params, galaxy_bool):
         """Renders galaxy tile from locations and galaxy parameters."""
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
+        n_galaxy_params = galaxy_params.shape[-1]
 
-        galaxy_params = galaxy_params.view(n_ptiles, max_sources, self.n_galaxy_params)
+        galaxy_params = galaxy_params.view(n_ptiles, max_sources, n_galaxy_params)
         assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
         assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
-        assert galaxy_params.shape[2] == self.n_galaxy_params
         assert galaxy_bool.shape[2] == 1
 
         single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bool)
 
-        ptile = self.tiler.render_tile(
+        ptile = self.tiler(
             locs,
             single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
         )
-        var_ptile = self.tiler.render_tile(
+        var_ptile = self.tiler(
             locs,
             single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
         )
@@ -816,7 +650,8 @@ class GalaxyTileDecoder(nn.Module):
     def _render_single_galaxies(self, galaxy_params, galaxy_bool):
 
         # flatten parameters
-        z = galaxy_params.view(-1, self.n_galaxy_params)
+        n_galaxy_params = galaxy_params.shape[-1]
+        z = galaxy_params.view(-1, n_galaxy_params)
         b = galaxy_bool.flatten()
 
         # allocate memory

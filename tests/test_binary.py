@@ -8,7 +8,7 @@ def test_binary(model_setup, devices):
         "training": "unittest" if devices.use_cuda else "cpu",
         "optimizer": "adam",
         "optimizer.kwargs.lr": 1e-4,
-        "dataset.decoder.mean_sources": 0.03,
+        "dataset.prior.mean_sources": 0.03,
         "training.n_epochs": 50 if devices.use_cuda else 2,
     }
 

@@ -157,6 +157,7 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">DataLoader</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">IterableDataset</span>
 
+<span class="kn">from</span> <span class="nn">bliss.models.prior</span> <span class="kn">import</span> <span class="n">ImagePrior</span>
 <span class="kn">from</span> <span class="nn">bliss.models.decoder</span> <span class="kn">import</span> <span class="n">ImageDecoder</span>
 
 <span class="c1"># prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset</span>
@@ -167,12 +168,14 @@
 
 <div class="viewcode-block" id="SimulatedDataset"><a class="viewcode-back" href="../../../api/bliss.datasets.html#bliss.datasets.simulated.SimulatedDataset">[docs]</a><span class="k">class</span> <span class="nc">SimulatedDataset</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">LightningDataModule</span><span class="p">,</span> <span class="n">IterableDataset</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">decoder</span><span class="p">,</span> <span class="n">n_batches</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">generate_device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">testing_file</span><span class="o">=</span><span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">prior</span><span class="p">,</span> <span class="n">decoder</span><span class="p">,</span> <span class="n">n_batches</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">generate_device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">testing_file</span><span class="o">=</span><span class="kc">None</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">n_batches</span> <span class="o">=</span> <span class="n">n_batches</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_prior</span> <span class="o">=</span> <span class="n">ImagePrior</span><span class="p">(</span><span class="o">**</span><span class="n">prior</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">generate_device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_prior</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># freeze decoder weights.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span> <span class="o">=</span> <span class="n">ImageDecoder</span><span class="p">(</span><span class="o">**</span><span class="n">decoder</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">generate_device</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># freeze decoder weights.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">testing_file</span> <span class="o">=</span> <span class="n">testing_file</span>
@@ -191,7 +194,7 @@
 
     <span class="k">def</span> <span class="nf">get_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-            <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">sample_prior</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_prior</span><span class="o">.</span><span class="n">sample_prior</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
             <span class="n">images</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">render_images</span><span class="p">(</span>
                 <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">],</span>
                 <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">],</span>

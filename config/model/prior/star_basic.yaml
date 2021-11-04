@@ -1,0 +1,10 @@
+n_bands: 1
+slen: 30
+tile_slen: 2
+prob_galaxy: 0.0
+max_sources: 1
+mean_sources: 0.015
+min_sources: 0
+f_min: 1e5
+f_max: 1e6
+

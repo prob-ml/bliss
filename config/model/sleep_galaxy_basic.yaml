@@ -1,5 +1,6 @@
 defaults:
   - decoder: galaxy_basic
+  - prior: galaxy_basic
   - encoder: galaxy_basic
 
 _target_: bliss.sleep.SleepPhase
