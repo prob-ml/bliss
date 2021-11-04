@@ -89,7 +89,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         self.dist_main = Normal(0.0, 1.0)
         self.dist_residual = Normal(0.0, 1.0)
-        self.latent_flow = None
 
         self.residual_delay_n_steps = residual_delay_n_steps
         assert slen == 53, "Currently slen is fixed at 53"
@@ -116,14 +115,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
 
     def sample_latent(self, n_samples):
-        if self.latent_flow is None:
-            latent_main = self.dist_main.sample(torch.Size((n_samples, self.latent_dim // 2)))
-            latent_residual = self.dist_residual.sample(
-                torch.Size((n_samples, self.latent_dim // 2))
-            )
-            z = torch.cat((latent_main, latent_residual), dim=-1)
-        else:
-            z = self.latent_flow.sample(n_samples)
+        latent_main = self.dist_main.sample(torch.Size((n_samples, self.latent_dim // 2)))
+        latent_residual = self.dist_residual.sample(torch.Size((n_samples, self.latent_dim // 2)))
+        z = torch.cat((latent_main, latent_residual), dim=-1)
         return z
 
     def sample(self, n_samples):
