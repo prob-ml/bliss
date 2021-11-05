@@ -106,8 +106,8 @@ class GalaxyEncoder(pl.LightningModule):
     def forward_image(self, images, tile_locs):
         batch_size = images.shape[0]
         ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        galaxy_params = self(ptiles, tile_locs)
-        return galaxy_params.view(batch_size, -1, 1, self.latent_dim)
+        z, pq_z = self(ptiles, tile_locs)
+        return z.view(batch_size, -1, 1, self.latent_dim), pq_z.view(batch_size, -1, 1, 1)
 
     def forward(self, image_ptiles, tile_locs):
         """Runs galaxy encoder on input image ptiles."""
@@ -124,13 +124,13 @@ class GalaxyEncoder(pl.LightningModule):
         centered_ptiles -= ptile_background.unsqueeze(0)
 
         # We can assume there is one galaxy per_tile and encode each tile independently.
-        z = self.enc(centered_ptiles)
+        z, pq_z = self.enc(centered_ptiles)
         assert z.shape[0] == n_ptiles
-        return z
+        return z, pq_z
 
     def get_loss(self, batch):
         images = batch["images"]
-        tile_galaxy_params = self.forward_image(images, batch["locs"])
+        tile_galaxy_params, pq_z = self.forward_image(images, batch["locs"])
 
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
@@ -144,7 +144,8 @@ class GalaxyEncoder(pl.LightningModule):
         )
 
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
-        return recon_losses.sum()
+        divergence_losses = -pq_z.sum()
+        return recon_losses.sum() + divergence_losses
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
@@ -181,7 +182,7 @@ class GalaxyEncoder(pl.LightningModule):
         tile_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # obtain map estimates
-        tile_galaxy_params = self.forward_image(images, batch["locs"])
+        tile_galaxy_params, _ = self.forward_image(images, batch["locs"])
         tile_est = {
             k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
         }

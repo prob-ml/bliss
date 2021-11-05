@@ -227,6 +227,7 @@ class ImagePrior(pl.LightningModule):
         assert galaxy_bool.shape[1:] == (self.n_tiles_per_image, self.max_sources, 1)
         batch_size = galaxy_bool.size(0)
         n_latent_samples = batch_size * self.n_tiles_per_image * self.max_sources
+        self.vae = self.vae.to(device=galaxy_bool.device)
         latents = self.vae.sample_latent(n_latent_samples)
 
         galaxy_params = rearrange(

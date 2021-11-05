@@ -111,14 +111,17 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             self.residual_encoder,
             slen=self.slen,
             allow_pad=allow_pad,
+            min_sd=self.min_sd,
         )
 
     def get_decoder(self):
         return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
 
     def sample_latent(self, n_samples):
+        self._ensure_dist_on_device()
         latent_main = self.dist_main.sample(torch.Size((n_samples, self.latent_dim // 2)))
         latent_residual = self.dist_residual.sample(torch.Size((n_samples, self.latent_dim // 2)))
+
         z = torch.cat((latent_main, latent_residual), dim=-1)
         return z
 
@@ -135,7 +138,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             for _ in tqdm(range(n_batches)):
                 galaxy = next(iter(dataloader))
                 noiseless = galaxy["noiseless"].to(self.device)
-                latent_batch = enc(noiseless, 0.0)
+                latent_batch, _ = enc(noiseless, 0.0)
                 latent_list.append(latent_batch)
         return torch.cat(latent_list, dim=0)
 
@@ -259,7 +262,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_main_mean, latent_main_sd = torch.split(
             self.main_encoder(image - background), (self.latent_dim // 2, self.latent_dim // 2), -1
         )
-        latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd))
+        latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd) + self.min_sd)
         latent_main = latent_dist.rsample()
         p_latent_main = self.dist_main.log_prob(latent_main)
         q_latent_main = latent_dist.log_prob(latent_main)
@@ -270,7 +273,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_residual_mean, latent_residual_sd = torch.split(
             self.residual_encoder(residual), (self.latent_dim // 2, self.latent_dim // 2), -1
         )
-        latent_dist = Normal(latent_residual_mean, F.softplus(latent_residual_sd))
+        latent_dist = Normal(latent_residual_mean, F.softplus(latent_residual_sd) + self.min_sd)
         latent_residual = latent_dist.rsample()
         p_latent_residual = self.dist_residual.log_prob(latent_residual)
         q_latent_residual = latent_dist.log_prob(latent_residual)
@@ -378,6 +381,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             plt.yticks([])
         return fig
 
+    def _ensure_dist_on_device(self):
+        self.dist_main = self.dist_residual = Normal(
+            torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
+        )
+
 
 class CenteredGalaxyEncoder(nn.Module):
     def __init__(self, slen=53, latent_dim=8, n_bands=1):
@@ -464,6 +472,7 @@ class OneCenteredGalaxyEncoder(nn.Module):
         residual_encoder: CenteredGalaxyEncoder,
         slen: int = None,
         allow_pad: bool = False,
+        min_sd: float = 1e-3,
     ):
         """Initializer.
 
@@ -481,6 +490,12 @@ class OneCenteredGalaxyEncoder(nn.Module):
         self.residual_encoder = residual_encoder
         self.slen = slen
         self.allow_pad = allow_pad
+        self.min_sd = min_sd
+
+        self.register_buffer("prior_mean", torch.tensor(0.0))
+        self.register_buffer("prior_scale", torch.tensor(1.0))
+        self.prior_main = Normal(self.prior_mean, self.prior_scale)
+        self.prior_residual = Normal(self.prior_mean, self.prior_scale)
 
     def forward(self, image, background=0, deterministic=False):
         assert image.shape[-2] == image.shape[-1]
@@ -499,8 +514,10 @@ class OneCenteredGalaxyEncoder(nn.Module):
         if deterministic:
             latent_main = latent_main_mean
         else:
-            latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd))
+            latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd) + self.min_sd)
             latent_main = latent_dist.rsample()
+            q_latent_main = latent_dist.log_prob(latent_main)
+            p_latent_main = self.prior_main.log_prob(latent_main)
         recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
         latent_residual_params = self.residual_encoder(image - recon_mean_main)
         d_residual = latent_residual_params.shape[-1] // 2
@@ -510,9 +527,19 @@ class OneCenteredGalaxyEncoder(nn.Module):
         if deterministic:
             latent_residual = latent_residual_mean
         else:
-            latent_residual_dist = Normal(latent_residual_mean, F.softplus(latent_residual_sd))
+            latent_residual_dist = Normal(
+                latent_residual_mean, F.softplus(latent_residual_sd) + self.min_sd
+            )
             latent_residual = latent_residual_dist.rsample()
-        return torch.cat((latent_main, latent_residual), dim=-1)
+            q_latent_residual = latent_residual_dist.log_prob(latent_residual)
+            p_latent_residual = self.prior_residual.log_prob(latent_residual)
+        return (
+            torch.cat((latent_main, latent_residual), dim=-1),
+            p_latent_main.sum(-1)
+            + p_latent_residual.sum(-1)
+            - q_latent_main.sum(-1)
+            - q_latent_main.sum(-1),
+        )
 
 
 class OneCenteredGalaxyDecoder(nn.Module):
