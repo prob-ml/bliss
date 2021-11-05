@@ -140,16 +140,16 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # render the image from padded tiles
-        images = self._construct_full_image_from_ptiles(
+        images_old = self._construct_full_image_from_ptiles(
             image_ptiles, self.tile_slen, self.border_padding
         )
-        images_v2 = fold_full_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
-        assert torch.allclose(images, images_v2)
-        var_images = self._construct_full_image_from_ptiles(
+        images = fold_full_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
+        assert torch.allclose(images, images_old)
+        var_images_old = self._construct_full_image_from_ptiles(
             var_ptiles, self.tile_slen, self.border_padding
         )
-        var_images_v2 = fold_full_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
-        assert torch.allclose(var_images, var_images_v2)
+        var_images = fold_full_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
+        assert torch.allclose(var_images, var_images_old)
 
         # add background and noise
         background = self.get_background(images.shape[-1])
