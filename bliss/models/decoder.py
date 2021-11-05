@@ -260,8 +260,7 @@ def fold_full_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, border_pad
     ntiles_hw = (n_tiles1, n_tiles1)
     output_size = calc_output_size(kernel_size, stride, ntiles_hw)
 
-    folder = nn.Fold(output_size, kernel_size, stride=stride)
-    folded_image = folder(image_ptiles_prefold)
+    folded_image = F.fold(image_ptiles_prefold, output_size, kernel_size, stride=stride)
 
     # In default settings of ImageDecoder, no borders are cropped from
     # output image. However, we may want to crop
