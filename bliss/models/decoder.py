@@ -143,9 +143,13 @@ class ImageDecoder(pl.LightningModule):
         images = self._construct_full_image_from_ptiles(
             image_ptiles, self.tile_slen, self.border_padding
         )
+        images_v2 = fold_full_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
+        assert torch.allclose(images, images_v2)
         var_images = self._construct_full_image_from_ptiles(
             var_ptiles, self.tile_slen, self.border_padding
         )
+        var_images_v2 = fold_full_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
+        assert torch.allclose(var_images, var_images_v2)
 
         # add background and noise
         background = self.get_background(images.shape[-1])
@@ -347,6 +351,34 @@ class ImageDecoder(pl.LightningModule):
         assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
         assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
         return int(border_padding)
+
+
+def fold_full_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, border_padding: int):
+    # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
+    _, n_tiles_per_image, _, ptile_slen, _ = image_ptiles.shape
+    n_tiles1 = np.sqrt(n_tiles_per_image)
+    # check it is an integer
+    assert n_tiles1 % 1 == 0
+    n_tiles1 = int(n_tiles1)
+
+    image_ptiles_prefold = rearrange(image_ptiles, "b n c h w -> b (c h w) n")
+    kernel_size = (ptile_slen, ptile_slen)
+    stride = (tile_slen, tile_slen)
+    ntiles_hw = (n_tiles1, n_tiles1)
+    output_size = calc_output_size(kernel_size, stride, ntiles_hw)
+
+    folder = nn.Fold(output_size, kernel_size, stride=stride)
+    folded_image = folder(image_ptiles_prefold)
+
+    ## As far as I can tell, border padding isn't actually removed in the reconstruction
+    return folded_image
+
+
+def calc_output_size(kernel_size, stride, n_tiles):
+    output_size = []
+    for i in [0, 1]:
+        output_size.append(kernel_size[i] + (n_tiles[i] - 1) * stride[i])
+    return tuple(output_size)
 
 
 class Tiler(nn.Module):

@@ -296,9 +296,13 @@
         <span class="n">images</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_construct_full_image_from_ptiles</span><span class="p">(</span>
             <span class="n">image_ptiles</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span>
         <span class="p">)</span>
+        <span class="n">images_v2</span> <span class="o">=</span> <span class="n">fold_full_image_from_ptiles</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">images_v2</span><span class="p">)</span>
         <span class="n">var_images</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_construct_full_image_from_ptiles</span><span class="p">(</span>
             <span class="n">var_ptiles</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span>
         <span class="p">)</span>
+        <span class="n">var_images_v2</span> <span class="o">=</span> <span class="n">fold_full_image_from_ptiles</span><span class="p">(</span><span class="n">var_ptiles</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">border_padding</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">var_images</span><span class="p">,</span> <span class="n">var_images_v2</span><span class="p">)</span>
 
         <span class="c1"># add background and noise</span>
         <span class="n">background</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_background</span><span class="p">(</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
@@ -500,6 +504,34 @@
         <span class="k">assert</span> <span class="n">n_tiles_of_padding</span> <span class="o">%</span> <span class="mi">1</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;n_tiles_of_padding must be an integer&quot;</span>
         <span class="k">assert</span> <span class="n">border_padding</span> <span class="o">&lt;=</span> <span class="n">ptile_padding</span><span class="p">,</span> <span class="s2">&quot;Too much border, increase ptile_slen&quot;</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">border_padding</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">fold_full_image_from_ptiles</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">border_padding</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="c1"># image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">n_tiles_per_image</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">image_ptiles</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">n_tiles1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_tiles_per_image</span><span class="p">)</span>
+    <span class="c1"># check it is an integer</span>
+    <span class="k">assert</span> <span class="n">n_tiles1</span> <span class="o">%</span> <span class="mi">1</span> <span class="o">==</span> <span class="mi">0</span>
+    <span class="n">n_tiles1</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_tiles1</span><span class="p">)</span>
+
+    <span class="n">image_ptiles_prefold</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">image_ptiles</span><span class="p">,</span> <span class="s2">&quot;b n c h w -&gt; b (c h w) n&quot;</span><span class="p">)</span>
+    <span class="n">kernel_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">ptile_slen</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">)</span>
+    <span class="n">stride</span> <span class="o">=</span> <span class="p">(</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">)</span>
+    <span class="n">ntiles_hw</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_tiles1</span><span class="p">,</span> <span class="n">n_tiles1</span><span class="p">)</span>
+    <span class="n">output_size</span> <span class="o">=</span> <span class="n">calc_output_size</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="p">,</span> <span class="n">ntiles_hw</span><span class="p">)</span>
+
+    <span class="n">folder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Fold</span><span class="p">(</span><span class="n">output_size</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">)</span>
+    <span class="n">folded_image</span> <span class="o">=</span> <span class="n">folder</span><span class="p">(</span><span class="n">image_ptiles_prefold</span><span class="p">)</span>
+
+    <span class="c1">## As far as I can tell, border padding isn&#39;t actually removed in the reconstruction</span>
+    <span class="k">return</span> <span class="n">folded_image</span>
+
+
+<span class="k">def</span> <span class="nf">calc_output_size</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="p">,</span> <span class="n">n_tiles</span><span class="p">):</span>
+    <span class="n">output_size</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]:</span>
+        <span class="n">output_size</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">n_tiles</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">stride</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">output_size</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="Tiler"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.decoder.Tiler">[docs]</a><span class="k">class</span> <span class="nc">Tiler</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
