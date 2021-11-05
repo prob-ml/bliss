@@ -379,7 +379,9 @@ def fold_full_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, border_pad
     return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
 
 
-def calc_output_size(kernel_size, stride, n_tiles):
+def calc_output_size(
+    kernel_size: Tuple[int, int], stride: Tuple[int, int], n_tiles: Tuple[int, int]
+) -> Tuple[int, int]:
     output_size = []
     for i in [0, 1]:
         output_size.append(kernel_size[i] + (n_tiles[i] - 1) * stride[i])
