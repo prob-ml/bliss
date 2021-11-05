@@ -368,10 +368,9 @@ def fold_full_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, border_pad
     output_size = calc_output_size(kernel_size, stride, ntiles_hw)
 
     folder = nn.Fold(output_size, kernel_size, stride=stride)
-    folded_image = folder(image_ptiles_prefold)
 
-    ## As far as I can tell, border padding isn't actually removed in the reconstruction
-    return folded_image
+    # As far as I can tell, border padding isn't actually removed in the reconstruction
+    return folder(image_ptiles_prefold)
 
 
 def calc_output_size(kernel_size, stride, n_tiles):

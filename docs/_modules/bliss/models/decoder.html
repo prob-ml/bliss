@@ -521,10 +521,9 @@
     <span class="n">output_size</span> <span class="o">=</span> <span class="n">calc_output_size</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="p">,</span> <span class="n">ntiles_hw</span><span class="p">)</span>
 
     <span class="n">folder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Fold</span><span class="p">(</span><span class="n">output_size</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">)</span>
-    <span class="n">folded_image</span> <span class="o">=</span> <span class="n">folder</span><span class="p">(</span><span class="n">image_ptiles_prefold</span><span class="p">)</span>
 
-    <span class="c1">## As far as I can tell, border padding isn&#39;t actually removed in the reconstruction</span>
-    <span class="k">return</span> <span class="n">folded_image</span>
+    <span class="c1"># As far as I can tell, border padding isn&#39;t actually removed in the reconstruction</span>
+    <span class="k">return</span> <span class="n">folder</span><span class="p">(</span><span class="n">image_ptiles_prefold</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">calc_output_size</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">stride</span><span class="p">,</span> <span class="n">n_tiles</span><span class="p">):</span>
