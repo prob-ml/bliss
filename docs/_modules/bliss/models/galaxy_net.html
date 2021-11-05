@@ -271,8 +271,10 @@
         <span class="k">return</span> <span class="n">OneCenteredGalaxyDecoder</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">main_decoder</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">residual_decoder</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">sample_latent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_dist_on_device</span><span class="p">()</span>
         <span class="n">latent_main</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dist_main</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">latent_dim</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)))</span>
         <span class="n">latent_residual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dist_residual</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">latent_dim</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)))</span>
+
         <span class="n">z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">latent_main</span><span class="p">,</span> <span class="n">latent_residual</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">z</span>
 
@@ -530,7 +532,12 @@
                 <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;residuals&quot;</span><span class="p">)</span>
             <span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">([])</span>
             <span class="n">plt</span><span class="o">.</span><span class="n">yticks</span><span class="p">([])</span>
-        <span class="k">return</span> <span class="n">fig</span></div>
+        <span class="k">return</span> <span class="n">fig</span>
+
+    <span class="k">def</span> <span class="nf">_ensure_dist_on_device</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dist_main</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dist_residual</span> <span class="o">=</span> <span class="n">Normal</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="CenteredGalaxyEncoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.CenteredGalaxyEncoder">[docs]</a><span class="k">class</span> <span class="nc">CenteredGalaxyEncoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
@@ -673,11 +680,19 @@
         <span class="k">if</span> <span class="n">deterministic</span><span class="p">:</span>
             <span class="n">latent_residual</span> <span class="o">=</span> <span class="n">latent_residual_mean</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">latent_residual_dist</span> <span class="o">=</span> <span class="n">Normal</span><span class="p">(</span><span class="n">latent_residual_mean</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">softplus</span><span class="p">(</span><span class="n">latent_residual_sd</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_sd</span><span class="p">)</span>
+            <span class="n">latent_residual_dist</span> <span class="o">=</span> <span class="n">Normal</span><span class="p">(</span>
+                <span class="n">latent_residual_mean</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">softplus</span><span class="p">(</span><span class="n">latent_residual_sd</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_sd</span>
+            <span class="p">)</span>
             <span class="n">latent_residual</span> <span class="o">=</span> <span class="n">latent_residual_dist</span><span class="o">.</span><span class="n">rsample</span><span class="p">()</span>
             <span class="n">q_latent_residual</span> <span class="o">=</span> <span class="n">latent_residual_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">latent_residual</span><span class="p">)</span>
             <span class="n">p_latent_residual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prior_residual</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">latent_residual</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">latent_main</span><span class="p">,</span> <span class="n">latent_residual</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="n">p_latent_main</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">p_latent_residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">q_latent_main</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">q_latent_main</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div></div>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">latent_main</span><span class="p">,</span> <span class="n">latent_residual</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">p_latent_main</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="o">+</span> <span class="n">p_latent_residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="o">-</span> <span class="n">q_latent_main</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="o">-</span> <span class="n">q_latent_main</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="OneCenteredGalaxyDecoder"><a class="viewcode-back" href="../../../api/bliss.models.html#bliss.models.galaxy_net.OneCenteredGalaxyDecoder">[docs]</a><span class="k">class</span> <span class="nc">OneCenteredGalaxyDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
