@@ -140,16 +140,8 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # render the image from padded tiles
-        images_old = self._construct_full_image_from_ptiles(
-            image_ptiles, self.tile_slen, self.border_padding
-        )
         images = fold_full_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
-        assert torch.allclose(images, images_old)
-        var_images_old = self._construct_full_image_from_ptiles(
-            var_ptiles, self.tile_slen, self.border_padding
-        )
         var_images = fold_full_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
-        assert torch.allclose(var_images, var_images_old)
 
         # add background and noise
         background = self.get_background(images.shape[-1])
@@ -234,105 +226,6 @@ class ImageDecoder(pl.LightningModule):
         var_images = var_images.view(img_shape)
 
         return images, var_images
-
-    @staticmethod
-    def _construct_full_image_from_ptiles(image_ptiles, tile_slen, border_padding):
-        # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
-        batch_size = image_ptiles.shape[0]
-        n_tiles_per_image = image_ptiles.shape[1]
-        n_bands = image_ptiles.shape[2]
-        ptile_slen = image_ptiles.shape[3]
-        assert image_ptiles.shape[4] == ptile_slen
-
-        n_tiles1 = np.sqrt(n_tiles_per_image)
-        # check it is an integer
-        assert n_tiles1 % 1 == 0
-        n_tiles1 = int(n_tiles1)
-
-        # the number of tiles in ptile row
-        # i.e the slen of a ptile but in units of tile_slen
-        n_tiles1_in_ptile = ptile_slen / tile_slen
-        n_tiles_of_padding = (n_tiles1_in_ptile - 1) / 2
-        assert (
-            n_tiles1_in_ptile % 1 == 0
-        ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
-        assert (
-            n_tiles_of_padding % 1 == 0
-        ), "tile_slen and ptile_slen are not compatible. check tile_slen argument"
-        n_tiles1_in_ptile = int(n_tiles1_in_ptile)
-        n_tiles_of_padding = int(n_tiles_of_padding)
-
-        image_tiles_4d = image_ptiles.view(
-            batch_size, n_tiles1, n_tiles1, n_bands, ptile_slen, ptile_slen
-        )
-
-        # zero pad tiles, so that the number of tiles in a row (and column)
-        # are divisible by n_tiles1_in_ptile
-        n_tiles_pad = n_tiles1_in_ptile - (n_tiles1 % n_tiles1_in_ptile)
-        zero_pads1 = torch.zeros(
-            batch_size,
-            n_tiles_pad,
-            n_tiles1,
-            n_bands,
-            ptile_slen,
-            ptile_slen,
-            device=image_ptiles.device,
-        )
-        zero_pads2 = torch.zeros(
-            batch_size,
-            n_tiles1 + n_tiles_pad,
-            n_tiles_pad,
-            n_bands,
-            ptile_slen,
-            ptile_slen,
-            device=image_ptiles.device,
-        )
-        image_tiles_4d = torch.cat((image_tiles_4d, zero_pads1), dim=1)
-        image_tiles_4d = torch.cat((image_tiles_4d, zero_pads2), dim=2)
-
-        # construct the full image
-        n_tiles = n_tiles1 + n_tiles_pad
-        canvas = torch.zeros(
-            batch_size,
-            n_bands,
-            (n_tiles + n_tiles1_in_ptile - 1) * tile_slen,
-            (n_tiles + n_tiles1_in_ptile - 1) * tile_slen,
-            device=image_ptiles.device,
-        )
-
-        # loop through all tiles in a ptile
-        for i in range(n_tiles1_in_ptile):
-            for j in range(n_tiles1_in_ptile):
-                indx_vec1 = torch.arange(
-                    start=i,
-                    end=n_tiles,
-                    step=n_tiles1_in_ptile,
-                    device=image_ptiles.device,
-                )
-                indx_vec2 = torch.arange(
-                    start=j,
-                    end=n_tiles,
-                    step=n_tiles1_in_ptile,
-                    device=image_ptiles.device,
-                )
-
-                canvas_len = len(indx_vec1) * ptile_slen
-
-                image_tile_rows = image_tiles_4d[:, indx_vec1]
-                image_tile_cols = image_tile_rows[:, :, indx_vec2]
-                image_tile_cols = rearrange(
-                    image_tile_cols, "b x1 y1 band x2 y2 -> b band (x1 x2) (y1 y2)"
-                )
-
-                # get canvas
-                a1, a2 = i * tile_slen, j * tile_slen
-                b1, b2 = a1 + canvas_len, a2 + canvas_len
-                canvas[:, :, a1:b1, a2:b2] += image_tile_cols
-
-        # trim to original image size
-        x0 = n_tiles_of_padding * tile_slen - border_padding
-        x1 = (n_tiles1 + n_tiles_of_padding) * tile_slen + border_padding
-        return canvas[:, :, x0:x1, x0:x1]
 
     def _validate_border_padding(self, border_padding):
         # Border Padding
