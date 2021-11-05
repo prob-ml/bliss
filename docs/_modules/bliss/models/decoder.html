@@ -420,7 +420,7 @@
 <span class="sd">            Amount of border padding to keep beyond the original tiles.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        [type]: [description]</span>
+<span class="sd">        Reconstructed image of size (batch_size x n_bands x height x width)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">_</span><span class="p">,</span> <span class="n">n_tiles_per_image</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">ptile_slen</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">image_ptiles</span><span class="o">.</span><span class="n">shape</span>
     <span class="n">n_tiles_width</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_tiles_per_image</span><span class="p">)</span>

@@ -267,7 +267,7 @@ def reconstruct_image_from_ptiles(
             Amount of border padding to keep beyond the original tiles.
 
     Returns:
-        [type]: [description]
+        Reconstructed image of size (batch_size x n_bands x height x width)
     """
     _, n_tiles_per_image, _, ptile_slen, _ = image_ptiles.shape
     n_tiles_width = np.sqrt(n_tiles_per_image)
