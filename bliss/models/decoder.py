@@ -368,9 +368,15 @@ def fold_full_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, border_pad
     output_size = calc_output_size(kernel_size, stride, ntiles_hw)
 
     folder = nn.Fold(output_size, kernel_size, stride=stride)
+    folded_image = folder(image_ptiles_prefold)
 
-    # As far as I can tell, border padding isn't actually removed in the reconstruction
-    return folder(image_ptiles_prefold)
+    # In default settings of ImageDecoder, no borders are cropped from
+    # output image. However, we may want to crop
+    max_padding = (ptile_slen - tile_slen) / 2
+    assert max_padding % 1 == 0
+    max_padding = int(max_padding)
+    crop_idx = max_padding - border_padding
+    return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
 
 
 def calc_output_size(kernel_size, stride, n_tiles):
