@@ -140,8 +140,8 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # render the image from padded tiles
-        images = fold_full_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
-        var_images = fold_full_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
+        images = reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
+        var_images = reconstruct_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
 
         # add background and noise
         background = self.get_background(images.shape[-1])
@@ -246,18 +246,40 @@ class ImageDecoder(pl.LightningModule):
         return int(border_padding)
 
 
-def fold_full_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, border_padding: int):
-    # image_tiles is (batch_size, n_tiles_per_image, n_bands, ptile_slen x ptile_slen)
+def reconstruct_image_from_ptiles(
+    image_ptiles: Tensor, tile_slen: int, border_padding: int
+) -> Tensor:
+    """Reconstruct an image from a tensor of padded tiles.
+
+    Given a tensor of padded tiles and the size of the original tiles, this function
+    combines them into a full image with overlap.
+
+    For now, the reconstructed image is assumed to be square. However, this function
+    can easily be refactored to allow for different numbers of horizontal or vertical
+    tiles.
+
+    Args:
+        image_ptiles: Tensor of size
+            (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
+        tile_slen:
+            Size of the original (non-overlapping) tiles.
+        border_padding:
+            Amount of border padding to keep beyond the original tiles.
+
+    Returns:
+        [type]: [description]
+    """
     _, n_tiles_per_image, _, ptile_slen, _ = image_ptiles.shape
-    n_tiles1 = np.sqrt(n_tiles_per_image)
+    n_tiles_width = np.sqrt(n_tiles_per_image)
     # check it is an integer
-    assert n_tiles1 % 1 == 0
-    n_tiles1 = int(n_tiles1)
+    assert n_tiles_width % 1 == 0
+    n_tiles_width = int(n_tiles_width)
+    n_tiles_height = n_tiles_width
 
     image_ptiles_prefold = rearrange(image_ptiles, "b n c h w -> b (c h w) n")
     kernel_size = (ptile_slen, ptile_slen)
     stride = (tile_slen, tile_slen)
-    ntiles_hw = (n_tiles1, n_tiles1)
+    ntiles_hw = (n_tiles_height, n_tiles_width)
     output_size = calc_output_size(kernel_size, stride, ntiles_hw)
 
     folded_image = F.fold(image_ptiles_prefold, output_size, kernel_size, stride=stride)
