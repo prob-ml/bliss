@@ -538,7 +538,7 @@ class OneCenteredGalaxyEncoder(nn.Module):
             p_latent_main.sum(-1)
             + p_latent_residual.sum(-1)
             - q_latent_main.sum(-1)
-            - q_latent_main.sum(-1),
+            - q_latent_residual.sum(-1),
         )
 
 
