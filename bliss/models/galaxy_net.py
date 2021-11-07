@@ -518,6 +518,7 @@ class OneCenteredGalaxyEncoder(nn.Module):
             latent_main = latent_dist.rsample()
             q_latent_main = latent_dist.log_prob(latent_main)
             p_latent_main = self.prior_main.log_prob(latent_main)
+            pq_latent_main = p_latent_main - q_latent_main
         recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
         latent_residual_params = self.residual_encoder(image - recon_mean_main)
         d_residual = latent_residual_params.shape[-1] // 2
@@ -533,13 +534,9 @@ class OneCenteredGalaxyEncoder(nn.Module):
             latent_residual = latent_residual_dist.rsample()
             q_latent_residual = latent_residual_dist.log_prob(latent_residual)
             p_latent_residual = self.prior_residual.log_prob(latent_residual)
-        return (
-            torch.cat((latent_main, latent_residual), dim=-1),
-            p_latent_main.sum(-1)
-            + p_latent_residual.sum(-1)
-            - q_latent_main.sum(-1)
-            - q_latent_residual.sum(-1),
-        )
+            pq_latent_residual = p_latent_residual - q_latent_residual
+            pq_latent = pq_latent_main.sum(-1) + pq_latent_residual.sum(-1)
+        return (torch.cat((latent_main, latent_residual), dim=-1), pq_latent)
 
 
 class OneCenteredGalaxyDecoder(nn.Module):
