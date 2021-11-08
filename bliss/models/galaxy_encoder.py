@@ -55,6 +55,7 @@ class GalaxyEncoder(pl.LightningModule):
         decoder,
         hidden: int = 256,
         optimizer_params: dict = None,
+        from_scratch: bool = True,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -78,6 +79,10 @@ class GalaxyEncoder(pl.LightningModule):
         # will be trained.
         autoencoder_ckpt = decoder["autoencoder_ckpt"]
         autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        if from_scratch:
+            autoencoder = OneCenteredGalaxyAE(
+                slen=autoencoder.slen, latent_dim=autoencoder.latent_dim
+            )
         self.enc = autoencoder.get_encoder(allow_pad=True)
         self.latent_dim = autoencoder.latent_dim
 

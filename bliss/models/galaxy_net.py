@@ -483,6 +483,7 @@ class OneCenteredGalaxyEncoder(nn.Module):
             slen: (optional) The side-length of the galaxy image. Only needed if allow_pad is True.
             allow_pad: (optional) Should padding be added to an image
                 if its size is less than slen? Defaults to False.
+            min_sd: Minimum sd to use in encoded distribution
         """
         super().__init__()
         self.main_encoder = main_encoder
@@ -497,7 +498,7 @@ class OneCenteredGalaxyEncoder(nn.Module):
         self.prior_main = Normal(self.prior_mean, self.prior_scale)
         self.prior_residual = Normal(self.prior_mean, self.prior_scale)
 
-    def forward(self, image, background=0, deterministic=False):
+    def forward(self, image, background=0):
         assert image.shape[-2] == image.shape[-1]
         if self.allow_pad:
             if image.shape[-1] < self.slen:
@@ -511,31 +512,29 @@ class OneCenteredGalaxyEncoder(nn.Module):
         latent_main_params = self.main_encoder(image - background)
         d_main = latent_main_params.shape[-1] // 2
         latent_main_mean, latent_main_sd = torch.split(latent_main_params, (d_main, d_main), -1)
-        if deterministic:
-            latent_main = latent_main_mean
-        else:
-            latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd) + self.min_sd)
-            latent_main = latent_dist.rsample()
-            q_latent_main = latent_dist.log_prob(latent_main)
-            p_latent_main = self.prior_main.log_prob(latent_main)
-            pq_latent_main = p_latent_main - q_latent_main
+        latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd) + self.min_sd)
+        latent_main = latent_dist.rsample()
+        q_latent_main = latent_dist.log_prob(latent_main)
+        p_latent_main = self.prior_main.log_prob(latent_main)
+        pq_latent_main = p_latent_main - q_latent_main
+
         recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
         latent_residual_params = self.residual_encoder(image - recon_mean_main)
         d_residual = latent_residual_params.shape[-1] // 2
         latent_residual_mean, latent_residual_sd = torch.split(
             latent_residual_params, (d_residual, d_residual), -1
         )
-        if deterministic:
-            latent_residual = latent_residual_mean
-        else:
-            latent_residual_dist = Normal(
-                latent_residual_mean, F.softplus(latent_residual_sd) + self.min_sd
-            )
-            latent_residual = latent_residual_dist.rsample()
-            q_latent_residual = latent_residual_dist.log_prob(latent_residual)
-            p_latent_residual = self.prior_residual.log_prob(latent_residual)
-            pq_latent_residual = p_latent_residual - q_latent_residual
-            pq_latent = pq_latent_main.sum(-1) + pq_latent_residual.sum(-1)
+
+        latent_residual_dist = Normal(
+            latent_residual_mean, F.softplus(latent_residual_sd) + self.min_sd
+        )
+        latent_residual = latent_residual_dist.rsample()
+        q_latent_residual = latent_residual_dist.log_prob(latent_residual)
+        p_latent_residual = self.prior_residual.log_prob(latent_residual)
+        pq_latent_residual = p_latent_residual - q_latent_residual
+
+        pq_latent = pq_latent_main.sum(-1) + pq_latent_residual.sum(-1)
+
         return (torch.cat((latent_main, latent_residual), dim=-1), pq_latent)
 
 
