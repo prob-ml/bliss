@@ -279,8 +279,12 @@ def reconstruct_image_from_ptiles(
     image_ptiles_prefold = rearrange(image_ptiles, "b n c h w -> b (c h w) n")
     kernel_size = (ptile_slen, ptile_slen)
     stride = (tile_slen, tile_slen)
-    ntiles_hw = (n_tiles_height, n_tiles_width)
-    output_size = calc_output_size(kernel_size, stride, ntiles_hw)
+    n_tiles_hw = (n_tiles_height, n_tiles_width)
+
+    output_size = []
+    for i in (0, 1):
+        output_size.append(kernel_size[i] + (n_tiles_hw[i] - 1) * stride[i])
+    output_size = tuple(output_size)
 
     folded_image = F.fold(image_ptiles_prefold, output_size, kernel_size, stride=stride)
 
@@ -291,15 +295,6 @@ def reconstruct_image_from_ptiles(
     max_padding = int(max_padding)
     crop_idx = max_padding - border_padding
     return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
-
-
-def calc_output_size(
-    kernel_size: Tuple[int, int], stride: Tuple[int, int], n_tiles: Tuple[int, int]
-) -> Tuple[int, int]:
-    output_size = []
-    for i in [0, 1]:
-        output_size.append(kernel_size[i] + (n_tiles[i] - 1) * stride[i])
-    return tuple(output_size)
 
 
 class Tiler(nn.Module):
