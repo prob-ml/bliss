@@ -1,3 +1,1 @@
-sdss_galaxy_encoder
-epoch=3774-val_loss=322109.562.ckpt
-
+epoch=3574-val_loss=314710.750.ckpt
