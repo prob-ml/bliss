@@ -65,6 +65,6 @@ jobs:
       uses: ad-m/github-push-action@master
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        branch: ${{ github.ref }}-docs
+        branch: $master-sphinx
         force: true
         
