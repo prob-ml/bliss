@@ -121,9 +121,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self._ensure_dist_on_device()
         latent_main = self.dist_main.sample(torch.Size((n_samples, self.latent_dim // 2)))
         latent_residual = self.dist_residual.sample(torch.Size((n_samples, self.latent_dim // 2)))
-
-        z = torch.cat((latent_main, latent_residual), dim=-1)
-        return z
+        return torch.cat((latent_main, latent_residual), dim=-1)
 
     def sample(self, n_samples):
         z = self.sample_latent(n_samples)
@@ -382,7 +380,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return fig
 
     def _ensure_dist_on_device(self):
-        self.dist_main = self.dist_residual = Normal(
+        self.dist_main = Normal(
+            torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
+        )
+        self.dist_residual = Normal(
             torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
         )
 
