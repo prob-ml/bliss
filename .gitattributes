@@ -15,3 +15,4 @@ models/sdss_binary.ckpt filter=lfs diff=lfs merge=lfs -text
 data/*.npz filter=lfs diff=lfs merge=lfs -text
 data/*.pt filter=lfs diff=lfs merge=lfs -text
 data/*.pkl filter=lfs diff=lfs merge=lfs -text
+data/*.npy filter=lfs diff=lfs merge=lfs -text
