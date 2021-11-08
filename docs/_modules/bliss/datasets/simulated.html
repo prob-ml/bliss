@@ -178,6 +178,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">image_prior</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># freeze decoder weights.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span> <span class="o">=</span> <span class="n">ImageDecoder</span><span class="p">(</span><span class="o">**</span><span class="n">decoder</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">generate_device</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># freeze decoder weights.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">testing_file</span> <span class="o">=</span> <span class="n">testing_file</span>
 
         <span class="c1"># check sleep training will work.</span>

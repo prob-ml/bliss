@@ -294,6 +294,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">image_prior</span> <span class="o">=</span> <span class="n">ImagePrior</span><span class="p">(</span><span class="o">**</span><span class="n">prior</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span> <span class="o">=</span> <span class="n">ImageDecoder</span><span class="p">(</span><span class="o">**</span><span class="n">decoder</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
 
         <span class="c1"># consistency</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_decoder</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_encoder</span><span class="o">.</span><span class="n">tile_slen</span>
