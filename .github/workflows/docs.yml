@@ -52,8 +52,8 @@ jobs:
     - name: Create local changes
       run: |
         pushd ./docs/docsrc
-        make clean
-        make github
+        poetry run make clean
+        poetry run make github
         popd
         git add ./docs
     - name: Commit files
