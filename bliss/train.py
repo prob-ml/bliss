@@ -58,9 +58,11 @@ def train(cfg: DictConfig):
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
     for key in paths.keys():
         path = Path(paths[key])
-        if key == "output" and not path.exists():
-            path.mkdir(parents=True)
-        assert path.exists(), f"path for {key} ({path.as_posix()}) does not exist"
+        if not path.exists():
+            if key == "output":
+                path.mkdir(parents=True)
+            else:
+                raise FileNotFoundError(f"path for {key} ({path.as_posix()}) does not exist")
     setup_seed(cfg)
 
     # setup dataset.
