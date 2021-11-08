@@ -60,7 +60,7 @@ def train(cfg: DictConfig):
         path = Path(paths[key])
         if key == "output" and not path.exists():
             path.mkdir(parents=True)
-        assert path.exists(), f"path {path.as_posix()} does not exist"
+        assert path.exists(), f"path for {key} ({path.as_posix()}) does not exist"
     setup_seed(cfg)
 
     # setup dataset.
