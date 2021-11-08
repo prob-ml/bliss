@@ -76,7 +76,7 @@ jobs:
           poetry run pytest --cov=./bliss --cov-report=xml --durations=0
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2
         with:
           file: ./coverage.xml
           flags: unittests
