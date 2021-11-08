@@ -225,8 +225,11 @@ class ImagePrior(pl.LightningModule):
         assert galaxy_bool.shape[1:] == (self.n_tiles_per_image, self.max_sources, 1)
         batch_size = galaxy_bool.size(0)
         n_latent_samples = batch_size * self.n_tiles_per_image * self.max_sources
-        self.vae = self.vae.to(device=galaxy_bool.device)
-        latents = self.vae.sample_latent(n_latent_samples)
+        if self.vae is not None:
+            self.vae = self.vae.to(device=galaxy_bool.device)
+            latents = self.vae.sample_latent(n_latent_samples)
+        else:
+            latents = torch.zeros((n_latent_samples, 1), device=galaxy_bool.device)
 
         galaxy_params = rearrange(
             latents,

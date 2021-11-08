@@ -2,7 +2,7 @@ def test_galaxy_autoencoder_toy_gaussian(model_setup, devices):
     use_cuda = devices.use_cuda
     overrides = {
         "model": "galaxy_net",
-        "model.residual_delay_n_steps": 50 if use_cuda else 0,
+        "+model.residual_delay_n_steps": 50 if use_cuda else 0,
         "dataset": "toy_gaussian",
         "dataset.batch_size": 64 if use_cuda else 10,
         "dataset.n_batches": 10 if use_cuda else 1,

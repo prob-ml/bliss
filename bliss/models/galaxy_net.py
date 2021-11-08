@@ -226,8 +226,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         """Testing step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        recon_mean = self(images, background)
-        residuals = (images - recon_mean) / torch.sqrt(images)
+        recon_mean, _ = self(images, background)
+        residuals = (images - recon_mean) / torch.sqrt(recon_mean)
         self.log("max_residual", residuals.abs().max())
 
     def configure_optimizers(self):

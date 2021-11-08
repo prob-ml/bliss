@@ -66,6 +66,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.image_prior = ImagePrior(**prior)
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
+        self.image_decoder.eval()
 
         # extract useful info from image_decoder
         self.n_bands = self.image_decoder.n_bands
@@ -139,6 +140,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
+        self.image_decoder.eval()
         recon_mean, recon_var = self.image_decoder.render_images(
             batch["n_sources"],
             batch["locs"],

@@ -25,6 +25,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_prior.requires_grad_(False)  # freeze decoder weights.
         self.image_decoder = ImageDecoder(**decoder).to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
+        self.image_decoder.eval()
         self.testing_file = testing_file
 
         # check sleep training will work.

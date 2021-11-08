@@ -77,7 +77,7 @@ def predict_on_image(
     assert image_encoder.border_padding == galaxy_encoder.border_padding
     assert image_encoder.tile_slen == galaxy_encoder.tile_slen
 
-    galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
+    galaxy_param_mean, _ = galaxy_encoder(ptiles, tile_map["locs"])
     latent_dim = galaxy_param_mean.shape[-1]
     galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
     galaxy_param_mean *= tile_is_on_array * galaxy_bool

@@ -141,6 +141,7 @@ class SleepPhase(pl.LightningModule):
         self.image_prior = ImagePrior(**prior)
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
+        self.image_decoder.eval()
 
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
