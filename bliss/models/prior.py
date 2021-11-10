@@ -239,20 +239,3 @@ class ImagePrior(pl.LightningModule):
             s=self.max_sources,
         )
         return galaxy_params * galaxy_bool
-
-
-def get_galaxy_latents(latents_file: str, n_latent_batches: int, autoencoder_ckpt: str = None):
-    assert latents_file is not None
-    latents_file = Path(latents_file)
-    if latents_file.exists():
-        latents = torch.load(latents_file, "cpu")
-    else:
-        autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
-        psf_image_file = latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
-        dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
-        dataloader = dataset.train_dataloader()
-        autoencoder = autoencoder.cuda()
-        print("INFO: Creating latents from Galsim galaxies...")
-        latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-        torch.save(latents, latents_file)
-    return latents

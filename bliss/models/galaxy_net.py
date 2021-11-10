@@ -128,19 +128,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         decoder = self.get_decoder()
         return decoder(z)
 
-    def generate_latents(self, dataloader, n_batches):
-        """Induces a latent distribution for a non-probabilistic autoencoder."""
-        latent_list = []
-        enc = self.get_encoder()
-        with torch.no_grad():
-            for _ in tqdm(range(n_batches)):
-                galaxy = next(iter(dataloader))
-                images = galaxy["images"].to(self.device)
-                background = galaxy["background"].to(self.device)
-                latent_batch, _ = enc(images, background)
-                latent_list.append(latent_batch)
-        return torch.cat(latent_list, dim=0)
-
     def training_step(self, batch, batch_idx, optimizer_idx):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
