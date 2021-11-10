@@ -9,7 +9,6 @@ from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from torch.nn.utils import weight_norm as wn
-from tqdm import tqdm
 
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image

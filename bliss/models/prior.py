@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import torch
 import pytorch_lightning as pl
 from einops import rearrange
@@ -7,7 +5,6 @@ from torch.distributions import Poisson
 
 from bliss.models import galaxy_net
 from bliss.models.encoder import get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import SDSSGalaxies
 
 
 class ImagePrior(pl.LightningModule):
