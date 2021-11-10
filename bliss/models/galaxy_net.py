@@ -187,8 +187,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.log("val/max_residual", residuals.abs().max())
 
         # Aggregate posterior
-        u_main = self.main_encoder(images - background)
-        u_residual = self.residual_encoder(images - recon_mean_main)
+        latent_main = self.main_encoder(images - background)
+        latent_residual = self.residual_encoder(images - recon_mean_main)
         return {
             "images": images,
             "recon_mean_main": recon_mean_main,
@@ -196,8 +196,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             "recon_mean": recon_mean_final,
             "residuals": residuals,
             "residuals_main": residuals_main,
-            "u_main": u_main,
-            "u_residual": u_residual,
+            "latent_main": latent_main,
+            "latent_residual": latent_residual,
         }
 
     def validation_epoch_end(self, outputs):
@@ -213,8 +213,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         base_size = 8
         agg_posterior = plt.figure(figsize=(base_size, base_size))
-        u_main = output_tensors["u_main"].cpu().detach().numpy()
-        plt.scatter(u_main[:, 0], u_main[:, 1])
+        latent_main = output_tensors["latent_main"].cpu().detach().numpy()
+        plt.scatter(latent_main[:, 0], latent_main[:, 1])
 
         if self.logger:
             heading = f"Epoch:{self.current_epoch}"
