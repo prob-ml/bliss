@@ -155,16 +155,16 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        recon_mean_main, p_latent_main = self._main_forward(images, background)
+        recon_mean_main, pq_latent_main = self._main_forward(images, background)
         loss_recon_main = self._get_likelihood_loss(images, recon_mean_main)
-        loss_prior_main = -p_latent_main.sum()
+        loss_prior_main = -pq_latent_main.sum()
         loss_main = loss_recon_main + loss_prior_main
         self.log("val/loss_main", loss_main)
 
-        recon_mean_residual, p_latent_residual = self._residual_forward(images - recon_mean_main)
+        recon_mean_residual, pq_latent_residual = self._residual_forward(images - recon_mean_main)
         recon_mean_final = F.relu(recon_mean_main + recon_mean_residual)
         loss_recon = self._get_likelihood_loss(images, recon_mean_final)
-        loss_prior = loss_prior_main - p_latent_residual.sum()
+        loss_prior = loss_prior_main - pq_latent_residual.sum()
         loss = loss_recon + loss_prior
         self.log("val/loss", loss)
 
