@@ -474,13 +474,13 @@ class AEReconstructionFigures(BlissFigures):
 
         # fluxes / magnitudes
         true_mags, recon_mags = meas["true_mags"], meas["recon_mags"]
-        x, y = remove_outliers(true_mags, (recon_mags - true_mags) / true_mags, level=0.95)
+        x, y = remove_outliers(true_mags, (recon_mags - true_mags) / true_mags, level=0.99)
         self.scatter_bin_plot(
             ax1,
             x,
             y,
             xlims=(x.min(), x.max()),
-            delta=0.5,
+            delta=0.25,
             xlabel=r"\rm true mag.",
             ylabel=r"\rm mag. relative error",
             xticks=[16, 17, 18, 19, 20],
@@ -501,7 +501,7 @@ class AEReconstructionFigures(BlissFigures):
 
         # ellipticities
         true_ellip1, recon_ellip1 = meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0]
-        x, y = remove_outliers(true_ellip1, recon_ellip1 - true_ellip1, level=0.95)
+        x, y = remove_outliers(true_ellip1, recon_ellip1 - true_ellip1, level=0.99)
         self.scatter_bin_plot(
             ax3,
             x,
@@ -514,13 +514,13 @@ class AEReconstructionFigures(BlissFigures):
         )
 
         true_ellip2, recon_ellip2 = meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1]
-        x, y = remove_outliers(true_ellip2, recon_ellip2 - true_ellip2, level=0.95)
+        x, y = remove_outliers(true_ellip2, recon_ellip2 - true_ellip2, level=0.99)
         self.scatter_bin_plot(
             ax4,
             x,
             y,
             xlims=(-0.85, 0.85),
-            delta=0.1,
+            delta=0.25,
             xticks=[-1.0, -0.5, 0.0, 0.5, 1.0],
             xlabel=r"$g_{2}^{\rm true}$",
             ylabel=r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$",
