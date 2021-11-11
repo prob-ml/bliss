@@ -356,12 +356,10 @@ class SDSSReconstructionFigures(BlissFigures):
         reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname in self.fignames:
             true, recon, res = data[figname]
-            fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 8))
+            fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
             assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
             # pick standard ranges for residuals
-            vmin = min(true.min().item(), recon.min().item())
-            vmax = max(true.max().item(), true.max().item())
             vmin_res, vmax_res = res.min().item(), res.max().item()
 
             ax_true = axes[0]
@@ -373,8 +371,8 @@ class SDSSReconstructionFigures(BlissFigures):
             ax_res.set_title("Residual", pad=pad)
 
             # plot images
-            reporting.plot_image(fig, ax_true, true, vrange=(vmin, vmax))
-            reporting.plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
+            reporting.plot_image(fig, ax_true, true, vrange=(800, 1200))
+            reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
             reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
             plt.subplots_adjust(hspace=-0.4)
