@@ -13,3 +13,4 @@ data/*.npz filter=lfs diff=lfs merge=lfs -text
 data/*.pt filter=lfs diff=lfs merge=lfs -text
 data/*.pkl filter=lfs diff=lfs merge=lfs -text
 data/*.npy filter=lfs diff=lfs merge=lfs -text
+data/simulated_sdss_individual_galaxies.pt filter=lfs diff=lfs merge=lfs -text
