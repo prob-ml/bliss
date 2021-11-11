@@ -1,4 +1,4 @@
-file: data/gold_sdss_galaxy_images.pt
+file: data/sdss_galaxy_images.pt
 n_plots: 25
 common:
   - background

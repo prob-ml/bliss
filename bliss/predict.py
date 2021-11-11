@@ -26,7 +26,7 @@ def predict_on_image(
     corresponding to a border of size `image_encoder.border_padding`.
 
     Args:
-        image: Tensor of shape (1, n_bands, slen, slen) where slen-2*border_padding <= 300.
+        image: Tensor of shape (1, n_bands, h, w) where slen-2*border_padding <= 300.
         image_encoder: Trained ImageEncoder model. Assumed to be in correct device already.
         galaxy_encoder: Trained GalaxyEncoder model. Assumed to be in correct device already.
         binary_encoder: Trained BinaryEncoder model. Assumed to be in correct device already.
@@ -61,6 +61,7 @@ def predict_on_image(
     # binary prediction
     assert not binary_encoder.training
     assert image.shape[1] == binary_encoder.n_bands
+
     prob_galaxy = binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
     galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
     star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)

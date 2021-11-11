@@ -1,0 +1,14 @@
+# @package _global_
+defaults:
+  - override /dataset: sdss_galaxies
+
+mode: generate
+
+generate:
+  file: data/simulated_sdss_individual_galaxies.pt
+
+dataset:
+  batch_size: 512
+  n_batches: 20
+  num_workers: 20
+  flux_sample: uniform
