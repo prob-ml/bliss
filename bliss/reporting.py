@@ -1,6 +1,8 @@
 """Functions to evaluate the performance of BLISS predictions."""
 import galsim
+import matplotlib as mpl
 import numpy as np
+import seaborn as sns
 import torch
 import tqdm
 from astropy.table import Table
@@ -14,6 +16,18 @@ from torch import Tensor
 from torchmetrics import Metric
 
 from bliss.datasets.sdss import convert_flux_to_mag, convert_mag_to_flux
+
+CB_color_cycle = [
+    "#377eb8",
+    "#ff7f00",
+    "#4daf4a",
+    "#f781bf",
+    "#a65628",
+    "#984ea3",
+    "#999999",
+    "#e41a1c",
+    "#dede00",
+]
 
 
 class DetectionMetrics(Metric):
@@ -284,7 +298,7 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
 
 def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
-    names = {"x", "y", "galaxy_bool", "flux", "mag", "hlr"}
+    names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
     assert names.issubset(set(coadd_cat.columns))
 
     # filter saturated objects
@@ -421,7 +435,7 @@ def get_single_galaxy_measurements(
     galsim_psf_image = galsim.Image(psf_image, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
-    for i in tqdm.tqdm(range(n_samples)):
+    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
         true_image = true_images[i]
         recon_image = recon_images[i]
 
@@ -448,6 +462,8 @@ def get_single_galaxy_measurements(
         "recon_ellip": recon_ellip,
         "true_hlrs": true_hlrs,
         "recon_hlrs": recon_hlrs,
+        "true_mags": convert_flux_to_mag(true_fluxes),
+        "recon_mags": convert_flux_to_mag(recon_fluxes),
     }
 
 
@@ -562,3 +578,66 @@ def plot_image_and_locs(
             mode="expand",
             borderaxespad=0.0,
         )
+
+
+def set_rc_params(
+    figsize=(10, 10),
+    fontsize=18,
+    title_size="large",
+    label_size="medium",
+    legend_fontsize="medium",
+    tick_label_size="small",
+    major_tick_size=7,
+    minor_tick_size=4,
+    major_tick_width=0.8,
+    minor_tick_width=0.6,
+    lines_marker_size=8,
+):
+    # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
+    rc_params = {
+        # font.
+        "font.family": "STIXGeneral",
+        "font.sans-serif": "Helvetica",
+        "text.usetex": True,
+        "mathtext.fontset": "cm",
+        "font.size": fontsize,
+        # figure
+        "figure.figsize": figsize,
+        # axes
+        "axes.labelsize": label_size,
+        "axes.titlesize": title_size,
+        # ticks
+        "xtick.labelsize": tick_label_size,
+        "ytick.labelsize": tick_label_size,
+        "xtick.major.size": major_tick_size,
+        "ytick.major.size": major_tick_size,
+        "xtick.major.width": major_tick_width,
+        "ytick.major.width": major_tick_width,
+        "ytick.minor.size": minor_tick_size,
+        "xtick.minor.size": minor_tick_size,
+        "xtick.minor.width": minor_tick_width,
+        "ytick.minor.width": minor_tick_width,
+        # markers
+        "lines.markersize": lines_marker_size,
+        # legend
+        "legend.fontsize": legend_fontsize,
+        # colors
+        "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
+    }
+    mpl.rcParams.update(rc_params)
+    sns.set_context(rc=rc_params)
+
+
+def format_plot(ax, xlims=None, ylims=None, xticks=None, yticks=None, xlabel="", ylabel=""):
+    if xlims is not None:
+        ax.set_xlim(xlims)
+    if ylims is not None:
+        ax.set_ylim(ylims)
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    if xticks:
+        ax.set_xticks(xticks)
+    if yticks:
+        ax.set_yticks(yticks)
