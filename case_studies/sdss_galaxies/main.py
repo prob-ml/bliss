@@ -2,6 +2,7 @@
 """Produce all figures. Save to nice PDF format."""
 import argparse
 import os
+import warnings
 from abc import abstractmethod
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.predict import predict_on_scene
+from bliss.predict import predict_on_image, predict_on_scene
 from bliss.sleep import SleepPhase
 
 device = torch.device("cuda:0")
@@ -107,12 +108,7 @@ def recreate_coadd_cat(self):
 
 
 class BlissFigures:
-    def __init__(self, outdir="", cache="temp.pt", overwrite=False) -> None:
-        os.chdir(os.getenv("BLISS_HOME"))
-        outdir = Path(outdir)
-
-        if not outdir.exists():
-            outdir.mkdir(exist_ok=True)
+    def __init__(self, outdir, cache="temp.pt", overwrite=False) -> None:
 
         self.outdir = Path(outdir)
         self.cache = self.outdir / cache
@@ -258,7 +254,7 @@ class DetectionClassificationFigures(BlissFigures):
         return {"detection": f1, "classification": f2}
 
     def scatter_plot_misclass(self, ax, prob_galaxy, misclass, true_mags):
-        # TODO: Revive if necessary later on.
+        # TODO: Revive if useful later on.
 
         # scatter plot of miscclassification probs
         probs_correct = prob_galaxy[~misclass]
@@ -275,6 +271,118 @@ class DetectionClassificationFigures(BlissFigures):
         print(
             f"ratio misclass with probability between 10%-90%: {r_uncertain:.3f}",
         )
+
+
+class SDSSReconstructionFigures(BlissFigures):
+    def __init__(self, outdir="", cache="recon_sdss.pt", overwrite=False) -> None:
+        super().__init__(outdir=outdir, cache=cache, overwrite=overwrite)
+
+    @property
+    def fignames(self):
+        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.pdf" for i in range(4)}}
+
+    @property
+    def lims(self):
+        """Specificy spatial limits on frame to obtain chunks to reconstruct."""
+
+        # NOTE: Decoder assumes square images.
+        return {
+            "sdss_recon0": ((1700, 2000), (200, 500)),  # scene
+            "sdss_recon1": ((1000, 1300), (1150, 1450)),  # scene
+            "sdss_recon2": ((742, 790), (460, 508)),  # individual blend
+            "sdss_recon3": ((1128, 1160), (25, 57)),  # individual blend
+            "sdss_recon4": ((500, 552), (170, 202)),  # individual blend
+        }
+
+    def compute_data(self, scene, sleep_net, binary_encoder, galaxy_encoder):
+        assert isinstance(scene, (torch.Tensor, np.ndarray))
+        assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
+        device = sleep_net.device
+
+        bp = 24
+
+        image_encoder = sleep_net.image_encoder.to(device).eval()
+        image_decoder = sleep_net.image_decoder.to(device).eval()
+
+        bp = image_encoder.border_padding
+
+        data = {}
+
+        for figname in self.fignames:
+            xlim, ylim = self.lims[figname]
+            h, w = ylim[1] - ylim[0], xlim[1] - xlim[0]
+            assert h >= bp and w >= bp
+            hb = h + 2 * bp
+            wb = w + 2 * bp
+            chunk = scene[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
+            chunk = torch.from_numpy(chunk.reshape(1, 1, hb, wb)).to(device)
+
+            # for plotting
+            chunk_np = chunk.reshape(hb, wb).cpu().numpy()
+
+            with torch.no_grad():
+
+                tile_map, _, _ = predict_on_image(
+                    chunk, image_encoder, binary_encoder, galaxy_encoder
+                )
+
+                # plot image from tile est.
+                recon_image, _ = image_decoder.render_images(
+                    tile_map["n_sources"],
+                    tile_map["locs"],
+                    tile_map["galaxy_bool"],
+                    tile_map["galaxy_params"],
+                    tile_map["fluxes"],
+                    add_noise=False,
+                )
+
+            recon_image = recon_image.cpu().numpy().reshape(hb, wb)
+
+            # only keep section inside obrder padding
+            true_image = chunk_np[bp : hb - bp, bp : wb - bp]
+            recon_image = recon_image[bp : hb - bp, bp : wb - bp]
+            residual = (true_image - recon_image) / np.sqrt(recon_image)
+
+            data[figname] = (true_image, recon_image, residual)
+
+        return data
+
+    def create_figures(self, data):
+        """Make figures related to detection and classification in SDSS."""
+        out_figures = {}
+
+        plt.style.use("seaborn-colorblind")
+        pad = 6.0
+        reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
+        for figname in self.fignames:
+            true, recon, res = data[figname]
+            fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 8))
+            assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
+
+            # pick standard ranges for residuals
+            vmin = min(true.min().item(), recon.min().item())
+            vmax = max(true.max().item(), true.max().item())
+            vmin_res, vmax_res = res.min().item(), res.max().item()
+
+            ax_true = axes[0]
+            ax_recon = axes[1]
+            ax_res = axes[2]
+
+            ax_true.set_title("Original Image", pad=pad)
+            ax_recon.set_title("Reconstruction", pad=pad)
+            ax_res.set_title("Residual", pad=pad)
+
+            # plot images
+            reporting.plot_image(fig, ax_true, true, vrange=(vmin, vmax))
+            reporting.plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
+            reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
+
+            plt.subplots_adjust(hspace=-0.4)
+            plt.tight_layout()
+
+            out_figures[figname] = fig
+
+        return out_figures
 
 
 class AEReconstructionFigures(BlissFigures):
@@ -396,6 +504,7 @@ class AEReconstructionFigures(BlissFigures):
 
     def make_2d_hist(self, x, y, color="m", height=7, **plot_kwargs):
         # NOTE: This creates its own figure object which makes it hard to use.
+        # TODO: Revive if useful later on.
         g = sns.jointplot(x=x, y=y, color=color, kind="hist", marginal_ticks=True, height=height)
         g.ax_joint.axline(xy1=(np.median(x), np.median(y)), slope=1.0)
         reporting.format_plot(g.ax_joint, **plot_kwargs)
@@ -540,11 +649,22 @@ class AEReconstructionFigures(BlissFigures):
         }
 
 
-def main(n_fig, overwrite=False):
+def main(fig, outdir, overwrite=False):
     os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
-    outdir = "output/sdss_figures"
 
-    if n_fig == 1:
+    if not Path(outdir).exists():
+        warnings.warn("Specified output directory does not exist, will attempt to create it.")
+        outdir.mkdir(exist_ok=False)
+
+    # load models necessary for SDSS reconstructions.
+    if fig in {"2", "3", "all"}:
+        sleep_net = SleepPhase.load_from_checkpoint(files_dict["sleep_ckpt"]).to(device)
+        binary_encoder = BinaryEncoder.load_from_checkpoint(files_dict["binary_ckpt"])
+        binary_encoder = binary_encoder.to(device).eval()
+        galaxy_encoder = GalaxyEncoder.load_from_checkpoint(files_dict["galaxy_encoder_ckpt"])
+        galaxy_encoder = galaxy_encoder.to(device).eval()
+
+    if fig in {"1", "all"}:
         # FIGURE 1: Autoencoder performance.
         # first, create images of individually simulated galaxies if they do not exist.
         autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(files_dict["ae_ckpt"]).eval()
@@ -558,24 +678,24 @@ def main(n_fig, overwrite=False):
                 generate.generate(cfg)
 
         # create figure classes and plot.
-        ae_figures = AEReconstructionFigures(outdir=outdir, overwrite=overwrite, n_examples=5)
+        ae_figures = AEReconstructionFigures(outdir, overwrite=overwrite, n_examples=5)
         ae_figures.save_figures(autoencoder, galaxies_file, files_dict["psf_file"])
 
     # FIGURE 2: Classification and Detection metrics
-    elif n_fig == 2:
+    elif fig in {"2", "all"}:
         scene = get_sdss_data()["image"]
         coadd_cat = Table.read(files_dict["coadd_cat"], format="fits")
-        sleep_net = SleepPhase.load_from_checkpoint(files_dict["sleep_ckpt"]).to(device)
-        binary_encoder = BinaryEncoder.load_from_checkpoint(files_dict["binary_ckpt"])
-        binary_encoder = binary_encoder.to(device).eval()
-        galaxy_encoder = GalaxyEncoder.load_from_checkpoint(files_dict["galaxy_encoder_ckpt"])
-        galaxy_encoder = galaxy_encoder.to(device).eval()
-
-        dc_fig = DetectionClassificationFigures(outdir=outdir, overwrite=overwrite)
+        dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
         dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
 
+    # FIGURE 3: Reconstructions on SDSS
+    elif fig in {"3", "all"}:
+        scene = get_sdss_data()["image"]
+        sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
+        sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
+
     else:
-        raise NotImplementedError("That Figure has not been created.")
+        raise NotImplementedError("The figure specified has not been created.")
 
 
 if __name__ == "__main__":
@@ -585,11 +705,15 @@ if __name__ == "__main__":
         "--fig",
         help="Which figures do you want to create?",
         required=True,
-        choices=["1", "2"],
+        choices=["1", "2", "3", "all"],
     )
+    parser.add_argument("--overwrite", action="store_true", default=False, help="Recreate cache?")
     parser.add_argument(
-        "-o", "--overwrite", action="store_true", default=False, help="Recreate cache?"
+        "-o",
+        "--output",
+        default="output/sdss_figures",
+        type=str,
+        help="Where to save figures and caches relative to $BLISS_HOME.",
     )
     args = vars(parser.parse_args())
-    n_fig = int(args["fig"])
-    main(n_fig, args["overwrite"])
+    main(args["fig"], args["output"], args["overwrite"])
