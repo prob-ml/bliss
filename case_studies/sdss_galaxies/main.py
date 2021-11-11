@@ -38,6 +38,8 @@ files_dict = {
     "psf_file": "data/psField-000094-1-0012-PSF-image.npy",
 }
 
+SDSS_PIXEL_SCALE = 0.396
+
 
 def remove_outliers(*args, level=0.99):
     # each arg in args should be 1D numpy.array with same number of data points.
@@ -72,7 +74,7 @@ def get_sdss_data():
     return {
         "image": sdss_data[0]["image"][0],
         "wcs": sdss_data[0]["wcs"][0],
-        "pixel_scale": 0.396,
+        "pixel_scale": SDSS_PIXEL_SCALE,
     }
 
 
@@ -285,7 +287,8 @@ class AEReconstructionFigures(BlissFigures):
         return {
             "random_recon": "random_reconstructions.pdf",
             "worst_recon": "worst_reconstructions.pdf",
-            "measure": "single_galaxy_measurements.pdf",
+            "measure_contours": "single_galaxy_measurements_contours.pdf",
+            "measure_scatter_bins": "single_galaxy_scatter_bins.pdf",
         }
 
     def compute_data(self, autoencoder, images_file, psf_file):
@@ -297,18 +300,18 @@ class AEReconstructionFigures(BlissFigures):
         images = image_data["images"]
         recon_means = torch.tensor([])
         background = image_data["background"].reshape(1, 1, 53, 53).to(device)
-        true_images = image_data["noiseless"].numpy()
+        noiseless_images = image_data["noiseless"].numpy()  # no background or noise.
 
         print("Computing reconstructions from saved autoencoder model...")
         n_images = images.shape[0]
         batch_size = 128
         n_iters = int(np.ceil(n_images // 128))
-        for i in range(n_iters):
+        for i in range(n_iters):  # in batches otherwise GPU error.
             bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
             recon_mean = autoencoder.forward(bimages, background).detach().to("cpu")
             recon_means = torch.cat((recon_means, recon_mean))
         residuals = (images - recon_means) / recon_means.sqrt()
-        assert recon_means.shape[0] == true_images.shape[0]
+        assert recon_means.shape[0] == noiseless_images.shape[0]
 
         # random
         rand_indices = torch.randint(0, len(images), size=(self.n_examples,))
@@ -319,18 +322,19 @@ class AEReconstructionFigures(BlissFigures):
 
         # measurements
         psf_array = np.load(psf_file)
-        galsim_psf_image = galsim.Image(psf_array[0], scale=0.396)  # sdss scale
+        galsim_psf_image = galsim.Image(psf_array[0], scale=SDSS_PIXEL_SCALE)  # sdss scale
         psf = galsim.InterpolatedImage(galsim_psf_image).withFlux(1.0)
-        psf_image = psf.drawImage(nx=53, ny=53, scale=0.396).array
+        psf_image = psf.drawImage(nx=53, ny=53, scale=SDSS_PIXEL_SCALE).array
 
         recon_no_background = recon_means.numpy() - background.cpu().numpy()
+        # a small percentage of low magnitude objects end up predicted with negative flux.
         good_bool = recon_no_background.sum(axis=(1, 2, 3)) > 0
         measurements = reporting.get_single_galaxy_measurements(
             slen=53,
-            true_images=true_images[good_bool],
+            true_images=noiseless_images[good_bool],
             recon_images=recon_no_background[good_bool],
             psf_image=psf_image.reshape(-1, 53, 53),
-            pixel_scale=0.396,
+            pixel_scale=SDSS_PIXEL_SCALE,
         )
 
         return {
@@ -384,16 +388,48 @@ class AEReconstructionFigures(BlissFigures):
 
         return fig
 
-    def make_scatter_hist_kde(self, ax, x, y, **plot_kwargs):
+    def make_scatter_contours(self, ax, x, y, **plot_kwargs):
         sns.scatterplot(x=x, y=y, s=5, color="0.15", ax=ax)
         sns.histplot(x=x, y=y, pthresh=0.1, cmap="mako", ax=ax, cbar=True)
         sns.kdeplot(x=x, y=y, levels=5, color="w", linewidths=1, ax=ax)
         reporting.format_plot(ax, **plot_kwargs)
 
-    def make_scatter_figure(self, meas):
+    def make_2d_hist(self, x, y, color="m", height=7, **plot_kwargs):
+        # NOTE: This creates its own figure object which makes it hard to use.
+        g = sns.jointplot(x=x, y=y, color=color, kind="hist", marginal_ticks=True, height=height)
+        g.ax_joint.axline(xy1=(np.median(x), np.median(y)), slope=1.0)
+        reporting.format_plot(g.ax_joint, **plot_kwargs)
+
+    def scatter_bin_plot(self, ax, x, y, xlims, delta, capsize=5.0, **plot_kwargs):
+
+        xbins = np.arange(xlims[0], xlims[1], delta)
+
+        xs = np.zeros(len(xbins))
+        ys = np.zeros(len(xbins))
+        errs = np.zeros((len(xbins), 2))
+
+        for i, bx in enumerate(xbins):
+            keep_x = (x > bx) & (x < bx + delta)
+            y_bin = y[keep_x]
+
+            xs[i] = bx + delta / 2
+
+            if not y_bin:
+                ys[i] = np.nan
+                errs[i] = (np.nan, np.nan)
+                continue
+
+            ys[i] = np.median(y_bin)
+            errs[i, :] = ys[i] - np.quantile(y_bin, 0.25), np.quantile(y_bin, 0.75) - ys[i]
+
+        errs = errs.T.reshape(2, -1)
+        ax.errorbar(xs, ys, yerr=errs, marker="o", c="m", linestyle="--", capsize=capsize)
+        reporting.format_plot(ax, **plot_kwargs)
+
+    def make_scatter_contours_plot(self, meas):
         sns.set_theme(style="darkgrid")
         reporting.set_rc_params(
-            fontsize=24, legend_fontsize="small", tick_label_size="small", label_size="medium"
+            fontsize=22, legend_fontsize="small", tick_label_size="small", label_size="medium"
         )
         fig, axes = plt.subplots(2, 2, figsize=(12, 12))
         ax1, ax2, ax3, ax4 = axes.flatten()
@@ -401,45 +437,97 @@ class AEReconstructionFigures(BlissFigures):
         # fluxes / magnitudes
         x, y = remove_outliers(meas["true_mags"], meas["recon_mags"], level=0.95)
         mag_ticks = (16, 17, 18, 19)
-        self.make_scatter_hist_kde(
-            ax1,
-            x,
-            y,
-            xlabel=r"\rm true mag.",
-            ylabel=r"\rm recon mag.",
-            xticks=mag_ticks,
-            yticks=mag_ticks,
+        xlabel = r"\rm true mag."
+        ylabel = r"\rm recon mag."
+        self.make_scatter_contours(
+            ax1, x, y, xlabel=xlabel, ylabel=ylabel, xticks=mag_ticks, yticks=mag_ticks
         )
 
         # hlrs
         x, y = remove_outliers(meas["true_hlrs"], meas["recon_hlrs"], level=0.95)
-        self.make_scatter_hist_kde(ax2, x, y, xlabel=r"\rm true HLR", ylabel=r"\rm recon HLR")
+        self.make_scatter_contours(ax2, x, y, xlabel=r"r^{\rm true}", ylabel=r"r^{\rm recon}")
 
-        # ellipticities
+        # ellipticities 1
         x, y = remove_outliers(meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0], level=0.95)
         g_ticks = (-1.0, -0.5, 0.0, 0.5, 1.0)
-        self.make_scatter_hist_kde(
-            ax3,
-            x,
-            y,
-            xticks=g_ticks,
-            yticks=g_ticks,
-            xlabel=r"$g_{1}^{\rm true}$",
-            ylabel=r"$g_{1}^{\rm recon}$",
+        xlabel = r"$g_{1}^{\rm true}$"
+        ylabel = r"$g_{1}^{\rm recon}$"
+        self.make_scatter_contours(
+            ax3, x, y, xticks=g_ticks, yticks=g_ticks, xlabel=xlabel, ylabel=ylabel
         )
 
+        # ellipticities 2
         x, y = remove_outliers(meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1], level=0.95)
-        self.make_scatter_hist_kde(
-            ax4,
-            x,
-            y,
-            xticks=g_ticks,
-            yticks=g_ticks,
-            xlabel=r"$g_{2}^{\rm true}$",
-            ylabel=r"$g_{2}^{\rm recon}$",
+        xlabel = r"$g_{2}^{\rm true}$"
+        ylabel = r"$g_{2}^{\rm recon}$"
+        self.make_scatter_contours(
+            ax4, x, y, xticks=g_ticks, yticks=g_ticks, xlabel=xlabel, ylabel=ylabel
         )
 
         plt.tight_layout()
+        return fig
+
+    def make_scatter_bin_plots(self, meas):
+        fig, axes = plt.subplots(2, 2, figsize=(16, 16))
+        ax1, ax2, ax3, ax4 = axes.flatten()
+        reporting.set_rc_params(fontsize=24)
+
+        # fluxes / magnitudes
+        true_mags, recon_mags = meas["true_mags"], meas["recon_mags"]
+        x, y = remove_outliers(true_mags, (recon_mags - true_mags) / true_mags, level=0.95)
+        self.scatter_bin_plot(
+            ax1,
+            x,
+            y,
+            xlims=(x.min(), x.max()),
+            delta=0.5,
+            xlabel=r"\rm true mag.",
+            ylabel=r"\rm mag. relative error",
+            xticks=[16, 17, 18, 19, 20],
+        )
+
+        # hlrs
+        true_hlrs, recon_hlrs = meas["true_hlrs"], meas["recon_hlrs"]
+        x, y = remove_outliers(true_hlrs, (recon_hlrs - true_hlrs) / true_hlrs, level=0.99)
+        self.scatter_bin_plot(
+            ax2,
+            x,
+            y,
+            xlims=(x.min(), x.max()),
+            delta=0.5,
+            xlabel=r"$r^{\rm true}$",
+            ylabel=r"$(r^{\rm recon} - r^{\rm true}) / r^{\rm true}$",
+        )
+
+        # ellipticities
+        true_ellip1, recon_ellip1 = meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0]
+        x, y = remove_outliers(true_ellip1, recon_ellip1 - true_ellip1, level=0.95)
+        self.scatter_bin_plot(
+            ax3,
+            x,
+            y,
+            xlims=(-0.85, 0.85),
+            delta=0.1,
+            xticks=[-1.0, -0.5, 0.0, 0.5, 1.0],
+            xlabel=r"$g_{1}^{\rm true}$",
+            ylabel=r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$",
+        )
+
+        true_ellip2, recon_ellip2 = meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1]
+        x, y = remove_outliers(true_ellip2, recon_ellip2 - true_ellip2, level=0.95)
+        self.scatter_bin_plot(
+            ax4,
+            x,
+            y,
+            xlims=(-0.85, 0.85),
+            delta=0.1,
+            xticks=[-1.0, -0.5, 0.0, 0.5, 1.0],
+            xlabel=r"$g_{2}^{\rm true}$",
+            ylabel=r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$",
+        )
+
+        plt.tight_layout()
+
         return fig
 
     def create_figures(self, data):
@@ -447,7 +535,8 @@ class AEReconstructionFigures(BlissFigures):
         return {
             "random_recon": self.reconstruction_figure(*data["random"]),
             "worst_recon": self.reconstruction_figure(*data["worst"]),
-            "measure": self.make_scatter_figure(data["measurements"]),
+            "measure_contours": self.make_scatter_contours_plot(data["measurements"]),
+            "measure_scatter_bins": self.make_scatter_bin_plots(data["measurements"]),
         }
 
 
@@ -490,7 +579,7 @@ def main(n_fig, overwrite=False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Create figures related to galaxies.")
+    parser = argparse.ArgumentParser(description="Create figures related to SDSS galaxies.")
     parser.add_argument(
         "-f",
         "--fig",
