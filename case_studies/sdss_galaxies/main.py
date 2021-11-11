@@ -652,7 +652,7 @@ def main(fig, outdir, overwrite=False):
 
     if not Path(outdir).exists():
         warnings.warn("Specified output directory does not exist, will attempt to create it.")
-        outdir.mkdir(exist_ok=False)
+        outdir.mkdir(exist_ok=True, parents=True)
 
     # load models necessary for SDSS reconstructions.
     if fig in {"2", "3", "all"}:
