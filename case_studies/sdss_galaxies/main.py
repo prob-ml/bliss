@@ -389,9 +389,9 @@ class AEReconstructionFigures(BlissFigures):
         return fig
 
     def make_scatter_contours(self, ax, x, y, **plot_kwargs):
-        sns.scatterplot(x=x, y=y, s=5, color="0.15", ax=ax)
+        sns.scatterplot(x=x, y=y, s=10, color="0.15", ax=ax)
         sns.histplot(x=x, y=y, pthresh=0.1, cmap="mako", ax=ax, cbar=True)
-        sns.kdeplot(x=x, y=y, levels=5, color="w", linewidths=1, ax=ax)
+        sns.kdeplot(x=x, y=y, levels=10, color="w", linewidths=1, ax=ax)
         reporting.format_plot(ax, **plot_kwargs)
 
     def make_2d_hist(self, x, y, color="m", height=7, **plot_kwargs):
@@ -414,7 +414,7 @@ class AEReconstructionFigures(BlissFigures):
 
             xs[i] = bx + delta / 2
 
-            if not y_bin:
+            if len(y_bin) == 0:  # noqa: WPS507
                 ys[i] = np.nan
                 errs[i] = (np.nan, np.nan)
                 continue
@@ -445,7 +445,7 @@ class AEReconstructionFigures(BlissFigures):
 
         # hlrs
         x, y = remove_outliers(meas["true_hlrs"], meas["recon_hlrs"], level=0.95)
-        self.make_scatter_contours(ax2, x, y, xlabel=r"r^{\rm true}", ylabel=r"r^{\rm recon}")
+        self.make_scatter_contours(ax2, x, y, xlabel=r"$r^{\rm true}$", ylabel=r"$r^{\rm recon}$")
 
         # ellipticities 1
         x, y = remove_outliers(meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0], level=0.95)
