@@ -10,6 +10,7 @@ from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from torch.nn.utils import weight_norm as wn
 from nflows.flows import SimpleRealNVP
+from nflows.distributions import StandardNormal
 
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image
@@ -94,8 +95,14 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.latent_dim = latent_dim
         self.min_sd = min_sd
 
-        self.dist_main = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
-        self.dist_residual = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
+        # Hack for backward compatiblity with old checkpoint
+        self.register_buffer("prior_mean", torch.tensor(0.0))
+        self.register_buffer("prior_var", torch.tensor(1.0))
+
+        # self.dist_main = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
+        # self.dist_residual = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
+        self.dist_main = StandardNormal([latent_dim//2])
+        self.dist_residual = StandardNormal([latent_dim//2])
 
     def forward(self, image, background):
         """Gets reconstructed image from running through encoder and decoder."""
