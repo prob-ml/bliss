@@ -9,4 +9,4 @@ f_max: 1e6
 alpha: 0.5
 prob_galaxy: 0.7
 autoencoder_ckpt: models/sdss_autoencoder.ckpt
-
+autoencoder_flow_ckpt: models/sdss_autoencoder_flow.ckpt

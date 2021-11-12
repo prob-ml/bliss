@@ -5,6 +5,7 @@ from torch.distributions import Poisson
 
 from bliss.models import galaxy_net
 from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.models.galaxy_flow import CenteredGalaxyLatentFlow
 
 
 class ImagePrior(pl.LightningModule):
@@ -44,6 +45,7 @@ class ImagePrior(pl.LightningModule):
         alpha: float = 0.5,
         prob_galaxy: float = 0.0,
         autoencoder_ckpt: str = None,
+        autoencoder_flow_ckpt: str = None,
     ):
         """Initializes ImagePrior.
 
@@ -82,6 +84,11 @@ class ImagePrior(pl.LightningModule):
         self.prob_galaxy = float(prob_galaxy)
         if prob_galaxy > 0.0:
             self.vae = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+            if autoencoder_flow_ckpt is not None:
+                print("INFO: Loading trained normalizing flow for galaxy latents")
+                flow = CenteredGalaxyLatentFlow.load_from_checkpoint(autoencoder_flow_ckpt)
+                self.vae.dist_main = flow.flow_main
+                self.vae.dist_residual = flow.flow_residual
         else:
             self.vae = None
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
+set -e
 OUTPUT_DIR=$1
 EXPERIMENT=$2
 
-if env | grep -q ^CUDA_VISIBLE_DEVICES=
-then
-    export CUDA_VISIBLE_DEVICES=`./get_available_gpu.sh`
-fi
+NEXT_AVAILABLE_GPU=`./get_available_gpu.sh`
+CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:=$NEXT_AVAILABLE_GPU}
+export CUDA_VISIBLE_DEVICES
+
 
 echo "Starting $EXPERIMENT..."
 echo "CUDA_VISIBLE_DEVICES is $CUDA_VISIBLE_DEVICES"
