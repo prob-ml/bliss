@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch
+from matplotlib import pyplot as plt
 from nflows import transforms, distributions, flows
 from nflows.transforms.base import Transform
 
@@ -10,14 +11,12 @@ from bliss.optimizer import get_optimizer
 class CenteredGalaxyLatentFlow(pl.LightningModule):
     def __init__(
         self,
-        latent_dim=64,
         optimizer_params: dict = None,
         autoencoder_ckpt=None,
         n_layers=10,
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.latent_dim = latent_dim
 
         # Embed the autoencoder
         assert autoencoder_ckpt is not None
@@ -28,48 +27,97 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         self.decoder = autoencoder.get_decoder()
         self.decoder.requires_grad_(False)
 
-        transform_list = [BatchNormTransform(latent_dim)]
+        self.latent_dim = autoencoder.latent_dim
 
-        for _ in range(n_layers):
-            transform_list.extend(
-                [
-                    transforms.MaskedAffineAutoregressiveTransform(
-                        features=self.latent_dim,
-                        hidden_features=64,
-                    ),
-                    transforms.RandomPermutation(self.latent_dim),
-                ]
-            )
-
-        transform = transforms.CompositeTransform(transform_list)
-
-        # Define a base distribution.
-        base_distribution = distributions.StandardNormal(shape=[self.latent_dim])
-
-        # Combine into a flow.
-        self.flow = flows.Flow(transform=transform, distribution=base_distribution)
+        self.flow_main = make_flow(self.latent_dim // 2, n_layers)
+        self.flow_residual = make_flow(self.latent_dim // 2, n_layers)
 
     def forward(self, image, background):
-        latent = self.encoder(image, background)
-        return -self.flow.log_prob(latent).mean()
+        latent, _ = self.encoder(image, background)
+        latent_main, latent_residual = torch.split(
+            latent, (self.latent_dim // 2, self.latent_dim // 2), -1
+        )
+        return (
+            -self.flow_main.log_prob(latent_main).mean()
+            - self.flow_residual.log_prob(latent_residual).mean(),
+            latent,
+        )
 
     def training_step(self, batch, batch_idx):
         images, background = batch["images"], batch["background"]
-        loss = self(images, background)
+        loss, latent = self(images, background)
         self.log("train/loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         images, background = batch["images"], batch["background"]
-        loss = self(images, background)
+        loss, latent = self(images, background)
         self.log("val/loss", loss, prog_bar=True)
-        return loss
+        latent_main, latent_residual = torch.split(
+            latent, (self.latent_dim // 2, self.latent_dim // 2), -1
+        )
+        u_main = self.flow_main.transform_to_noise(latent_main)
+        u_residual = self.flow_residual.transform_to_noise(latent_residual)
+
+        return {
+            "latent_main": latent_main,
+            "latent_residual": latent_residual,
+            "u_main": u_main,
+            "u_residual": u_residual,
+        }
+
+    def validation_epoch_end(self, outputs):
+        """Validation epoch end (pytorch lightning)."""
+
+        output_tensors = {
+            label: torch.cat([output[label] for output in outputs]) for label in outputs[0]
+        }
+
+        base_size = 8
+        agg_posterior_before = plt.figure(figsize=(base_size, base_size))
+        latent_main = output_tensors["latent_main"].cpu().detach().numpy()
+        plt.scatter(latent_main[:, 0], latent_main[:, 1])
+
+        agg_posterior_after = plt.figure(figsize=(base_size, base_size))
+        u_main = output_tensors["u_main"].cpu().detach().numpy()
+        plt.scatter(u_main[:, 0], u_main[:, 1])
+
+        if self.logger:
+            heading = f"Epoch:{self.current_epoch}"
+            self.logger.experiment.add_figure(
+                f"{heading}/Aggregate posterior (before transform)", agg_posterior_before
+            )
+            self.logger.experiment.add_figure(
+                f"{heading}/Aggregate posterior (after transform)", agg_posterior_after
+            )
 
     def configure_optimizers(self):
         assert self.hparams["optimizer_params"] is not None, "Need to specify `optimizer_params`."
         name = self.hparams["optimizer_params"]["name"]
         kwargs = self.hparams["optimizer_params"]["kwargs"]
         return get_optimizer(name, self.parameters(), kwargs)
+
+
+def make_flow(latent_dim, n_layers):
+    transform_list = [BatchNormTransform(latent_dim)]
+    for _ in range(n_layers):
+        transform_list.extend(
+            [
+                transforms.MaskedAffineAutoregressiveTransform(
+                    features=latent_dim,
+                    hidden_features=64,
+                ),
+                transforms.RandomPermutation(latent_dim),
+            ]
+        )
+
+    transform = transforms.CompositeTransform(transform_list)
+
+    # Define a base distribution.
+    base_distribution = distributions.StandardNormal(shape=[latent_dim])
+
+    # Combine into a flow.
+    return flows.Flow(transform=transform, distribution=base_distribution)
 
 
 class StandardizationTransform(Transform):

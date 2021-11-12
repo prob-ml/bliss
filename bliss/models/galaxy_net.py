@@ -88,7 +88,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         )
         self.residual_autoencoder = nn.Sequential(self.residual_encoder, self.residual_decoder)
 
-
         self.residual_delay_n_steps = residual_delay_n_steps
         assert slen == 53, "Currently slen is fixed at 53"
         self.slen = slen
@@ -101,8 +100,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         # self.dist_main = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
         # self.dist_residual = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
-        self.dist_main = StandardNormal([latent_dim//2])
-        self.dist_residual = StandardNormal([latent_dim//2])
+        self.dist_main = StandardNormal([latent_dim // 2])
+        self.dist_residual = StandardNormal([latent_dim // 2])
 
     def forward(self, image, background):
         """Gets reconstructed image from running through encoder and decoder."""
