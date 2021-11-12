@@ -414,7 +414,8 @@ class AEReconstructionFigures(BlissFigures):
         n_iters = int(np.ceil(n_images // 128))
         for i in range(n_iters):  # in batches otherwise GPU error.
             bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
-            recon_mean = autoencoder.forward(bimages, background).detach().to("cpu")
+            recon_mean, _ = autoencoder.forward(bimages, background)
+            recon_mean = recon_mean.detach().to("cpu")
             recon_means = torch.cat((recon_means, recon_mean))
         residuals = (images - recon_means) / recon_means.sqrt()
         assert recon_means.shape[0] == noiseless_images.shape[0]
