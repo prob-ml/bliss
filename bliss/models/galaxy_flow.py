@@ -45,7 +45,7 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         images, background = batch["images"], batch["background"]
-        loss, latent = self(images, background)
+        loss, _ = self(images, background)
         self.log("train/loss", loss, prog_bar=True)
         return loss
 

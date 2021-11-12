@@ -9,8 +9,9 @@ from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from torch.nn.utils import weight_norm as wn
-from nflows.flows import SimpleRealNVP
+
 from nflows.distributions import StandardNormal
+from nflows.flows import Flow
 
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image
@@ -98,8 +99,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.register_buffer("prior_mean", torch.tensor(0.0))
         self.register_buffer("prior_var", torch.tensor(1.0))
 
-        # self.dist_main = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
-        # self.dist_residual = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
         self.dist_main = StandardNormal([latent_dim // 2])
         self.dist_residual = StandardNormal([latent_dim // 2])
 
@@ -184,7 +183,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         )
         latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd) + self.min_sd)
         latent_main = latent_dist.rsample()
-        latent_main = self.dist_main.transform_to_noise(latent_main)
+        if isinstance(self.dist_main, Flow):
+            latent_main = self.dist_main.transform_to_noise(latent_main)
         return {
             "images": images,
             "recon_mean_main": recon_mean_main,

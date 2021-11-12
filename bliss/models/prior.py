@@ -63,6 +63,7 @@ class ImagePrior(pl.LightningModule):
             alpha: Prior parameter on fluxes (pareto parameter)
             prob_galaxy: Prior probability a source is a galaxy
             autoencoder_ckpt: Location of checkpoint of galaxy encoder.
+            autoencoder_flow_ckpt: Location of checkpoint of flow for latent distribution
         """
         super().__init__()
         self.n_bands = n_bands
