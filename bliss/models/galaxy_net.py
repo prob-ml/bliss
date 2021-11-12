@@ -9,6 +9,7 @@ from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from torch.nn.utils import weight_norm as wn
+from nflows.flows import SimpleRealNVP
 
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image
@@ -86,16 +87,15 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         )
         self.residual_autoencoder = nn.Sequential(self.residual_encoder, self.residual_decoder)
 
-        self.register_buffer("prior_mean", torch.tensor(0.0))
-        self.register_buffer("prior_var", torch.tensor(1.0))
-        self.dist_main = Normal(self.prior_mean, self.prior_var)
-        self.dist_residual = Normal(self.prior_mean, self.prior_var)
 
         self.residual_delay_n_steps = residual_delay_n_steps
         assert slen == 53, "Currently slen is fixed at 53"
         self.slen = slen
         self.latent_dim = latent_dim
         self.min_sd = min_sd
+
+        self.dist_main = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
+        self.dist_residual = SimpleRealNVP(latent_dim//2, latent_dim, num_layers=10, num_blocks_per_layer=2)
 
     def forward(self, image, background):
         """Gets reconstructed image from running through encoder and decoder."""
@@ -117,9 +117,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         return OneCenteredGalaxyDecoder(self.main_decoder, self.residual_decoder)
 
     def sample_latent(self, n_samples):
-        self._ensure_dist_on_device()
-        latent_main = self.dist_main.sample(torch.Size((n_samples, self.latent_dim // 2)))
-        latent_residual = self.dist_residual.sample(torch.Size((n_samples, self.latent_dim // 2)))
+        latent_main = self.dist_main.sample(n_samples)
+        latent_residual = self.dist_residual.sample(n_samples)
         return torch.cat((latent_main, latent_residual), dim=-1)
 
     def sample(self, n_samples):
@@ -174,8 +173,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.log("val/max_residual", residuals.abs().max())
 
         # Aggregate posterior
-        latent_main = self.main_encoder(images - background)
-        latent_residual = self.residual_encoder(images - recon_mean_main)
+        latent_main_mean, latent_main_sd = torch.split(
+            self.main_encoder(images - background), (self.latent_dim // 2, self.latent_dim // 2), -1
+        )
+        latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd) + self.min_sd)
+        latent_main = latent_dist.rsample()
+        latent_main = self.dist_main.transform_to_noise(latent_main)
         return {
             "images": images,
             "recon_mean_main": recon_mean_main,
@@ -184,7 +187,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             "residuals": residuals,
             "residuals_main": residuals_main,
             "latent_main": latent_main,
-            "latent_residual": latent_residual,
         }
 
     def validation_epoch_end(self, outputs):
@@ -250,7 +252,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dist = Normal(latent_main_mean, F.softplus(latent_main_sd) + self.min_sd)
         latent_main = latent_dist.rsample()
         p_latent_main = self.dist_main.log_prob(latent_main)
-        q_latent_main = latent_dist.log_prob(latent_main)
+        q_latent_main = latent_dist.log_prob(latent_main).sum(-1)
         recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
         return recon_mean_main, p_latent_main - q_latent_main
 
@@ -261,7 +263,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dist = Normal(latent_residual_mean, F.softplus(latent_residual_sd) + self.min_sd)
         latent_residual = latent_dist.rsample()
         p_latent_residual = self.dist_residual.log_prob(latent_residual)
-        q_latent_residual = latent_dist.log_prob(latent_residual)
+        q_latent_residual = latent_dist.log_prob(latent_residual).sum(-1)
         recon_mean_residual = self.residual_decoder(latent_residual)
         return recon_mean_residual, p_latent_residual - q_latent_residual
 
