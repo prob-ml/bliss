@@ -9,7 +9,14 @@ from bliss.models.decoder import ImageDecoder
 
 class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
-        self, decoder_kwargs, n_batches=10, batch_size=32, generate_device="cpu", testing_file=None
+        self, 
+        decoder_kwargs,
+        n_batches=10,
+        batch_size=32,
+        generate_device="cpu",
+        testing_file=None, 
+        mean_background_vals = [686., 1123.], 
+        background_sd = 100, 
     ):
         super().__init__()
 
@@ -25,12 +32,12 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
         assert total_ptiles > 1, "Need at least 2 tiles over all batches."
         
         # custom backgrounds 
-        self.image_decoder.background_values = [0, 0]
-        self.mean_background_vals = [686., 1123.]
+        self.image_decoder.background_values = [0] * len(mean_background_vals) 
+        self.mean_background_vals = mean_background_vals
+        self.background_sd = background_sd 
         
         # we overwrote these methods
         self.image_decoder._sample_n_sources = self._sample_n_sources
-        
         
         
     def __iter__(self):
@@ -42,10 +49,11 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
 
     def sample_backgrounds(self, slen, batch_size): 
         
+        nbands = len(self.mean_background_vals)
         mu = torch.Tensor(self.mean_background_vals).to(self.image_decoder.device).unsqueeze(0)
-        sd = 100
+        sd = self.background_sd
         
-        normal_samples = torch.randn(size = (batch_size, 2)).to(self.image_decoder.device)
+        normal_samples = torch.randn(size = (batch_size, nbands)).to(self.image_decoder.device)
         
         sampled_background_vals = mu + normal_samples * sd
         
@@ -53,13 +61,9 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
     
     def _sample_n_sources(self, batch_size=1):
         
-        print('foooooo')
-        print(self.image_decoder.max_sources)
-        print(self.image_decoder.min_sources)
-        
         # sample number of sources
         # first sample poisson prior parameter
-        pois_prior_lambda = torch.rand(batch_size).to(self.image_decoder.device) * 500 + 1000
+        pois_prior_lambda = torch.rand(batch_size).to(self.image_decoder.device) * 0.6 + 0.4
         poisson = Poisson(pois_prior_lambda)
         n_sources = poisson.sample((self.image_decoder.n_tiles_per_image, )).transpose(0, 1)
         
@@ -67,33 +71,11 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
         n_sources = n_sources.clamp(max=self.image_decoder.max_sources,
                                     min=self.image_decoder.min_sources)
         
-        return rearrange(n_sources.long(), "b n 1 -> b n")
-        
-    
-#         n_sources = self._sample_n_sources(batch_size)
-#         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-#         locs = self._sample_locs(is_on_array, batch_size)
-
-#         _, _, galaxy_bool, star_bool = self._sample_n_galaxies_and_stars(n_sources, is_on_array)
-#         galaxy_params = self._sample_galaxy_params(galaxy_bool)
-#         fluxes = self._sample_fluxes(n_sources, star_bool, batch_size)
-#         log_fluxes = self._get_log_fluxes(fluxes)
-
-#         # per tile quantities.
-#         return {
-#             "n_sources": n_sources,
-#             "locs": locs,
-#             "galaxy_bool": galaxy_bool,
-#             "star_bool": star_bool,
-#             "galaxy_params": galaxy_params,
-#             "fluxes": fluxes,
-#             "log_fluxes": log_fluxes,
-#         }
-
+        return n_sources.long()
 
     def get_batch(self):
         with torch.no_grad():
-            batch = self.sample_prior(batch_size=self.batch_size)
+            batch = self.image_decoder.sample_prior(batch_size=self.batch_size)
             images, _ = self.image_decoder.render_images(
                 batch["n_sources"],
                 batch["locs"],
