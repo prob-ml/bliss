@@ -23,7 +23,7 @@ from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.predict import predict_on_image, predict_on_scene
+from bliss.predict import predict_on_scene
 from bliss.sleep import SleepPhase
 
 from bliss.case_studies.sdss_galaxies import reconstruction
@@ -297,12 +297,12 @@ class SDSSReconstructionFigures(BlissFigures):
             "sdss_recon4": ((500, 552), (170, 202)),  # individual blend
         }
 
-    def compute_data(self, scene, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, sdss_data, sleep_net, binary_encoder, galaxy_encoder):
         data = {}
         for figname in self.fignames:
             lims = self.lims[figname]
             data[figname] = reconstruction.compute_data(
-                scene, lims, sleep_net, binary_encoder, galaxy_encoder
+                sdss_data, lims, sleep_net, binary_encoder, galaxy_encoder
             )
         return data
 
@@ -622,9 +622,9 @@ def main(fig, outdir, overwrite=False):
 
     # FIGURE 3: Reconstructions on SDSS
     elif fig in {"3", "all"}:
-        scene = get_sdss_data()["image"]
+        sdss_data = get_sdss_data()
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
-        sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
+        sdss_rec_fig.save_figures(sdss_data, sleep_net, binary_encoder, galaxy_encoder)
 
     else:
         raise NotImplementedError("The figure specified has not been created.")

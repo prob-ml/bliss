@@ -15,12 +15,13 @@ from bliss.predict import predict_on_image
 
 
 def compute_data(
-    scene: Tuple[torch.Tensor, np.ndarray],
+    sdss_data: dict,
     lims: Tuple[int, int],
     sleep_net: SleepPhase,
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
 ):
+    scene = sdss_data["image"]
     assert isinstance(scene, (torch.Tensor, np.ndarray))
     assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
     device = sleep_net.device
