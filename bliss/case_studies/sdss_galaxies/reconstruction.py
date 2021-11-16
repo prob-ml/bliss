@@ -21,9 +21,6 @@ def compute_data(
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
 ):
-    # scene = get_sdss_data()["image"]
-    # sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
-    # sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
     assert isinstance(scene, (torch.Tensor, np.ndarray))
     assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
     device = sleep_net.device
@@ -34,8 +31,6 @@ def compute_data(
     image_decoder = sleep_net.image_decoder.to(device).eval()
 
     bp = image_encoder.border_padding
-    # for figname in self.fignames:
-    #     xlim, ylim = self.lims[figname]
     xlim, ylim = lims
     h, w = ylim[1] - ylim[0], xlim[1] - xlim[0]
     assert h >= bp and w >= bp
@@ -103,25 +98,3 @@ def create_figure(data):
     plt.tight_layout()
 
     return fig
-
-
-def get_sdss_data():
-    run = 94
-    camcol = 1
-    field = 12
-    bands = (2,)
-    sdss_data = sdss.SloanDigitalSkySurvey(
-        sdss_dir=files_dict["sdss_dir"],
-        run=run,
-        camcol=camcol,
-        fields=(field,),
-        bands=bands,
-        overwrite_cache=True,
-        overwrite_fits_cache=True,
-    )
-
-    return {
-        "image": sdss_data[0]["image"][0],
-        "wcs": sdss_data[0]["wcs"][0],
-        "pixel_scale": SDSS_PIXEL_SCALE,
-    }
