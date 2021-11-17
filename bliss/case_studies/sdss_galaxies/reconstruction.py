@@ -16,12 +16,14 @@ from bliss.predict import predict_on_image
 
 def compute_data(
     sdss_data: dict,
+    coadd_cat,
     lims: Tuple[int, int],
     sleep_net: SleepPhase,
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
 ):
     scene = sdss_data["image"]
+    # coadd_params = reporting.get_params_from_coadd(coadd_cat, h, w, bp)
     assert isinstance(scene, (torch.Tensor, np.ndarray))
     assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
     device = sleep_net.device
