@@ -66,7 +66,24 @@ def compute_data(
     recon_image = recon_image[bp : hb - bp, bp : wb - bp]
     residual = (true_image - recon_image) / np.sqrt(recon_image)
 
-    data = (true_image, recon_image, residual)
+    locs_true = torch.stack(
+        (
+            torch.from_numpy(np.array(coadd_cat["x"]).astype(float)),
+            torch.from_numpy(np.array(coadd_cat["y"]).astype(float)),
+        ),
+        dim=1,
+    )
+    locs_true = locs_true[xlim[0] < locs_true[:, 0]]
+    locs_true = locs_true[ylim[0] < locs_true[:, 1]]
+
+    locs_true = locs_true[locs_true[:, 0] < xlim[1]]
+    locs_true = locs_true[locs_true[:, 1] < ylim[1]]
+
+    ## Shift locs by lower limit
+    locs_true[:, 0] = locs_true[:, 0] - xlim[0]
+    locs_true[:, 1] = locs_true[:, 1] - ylim[0]
+
+    data = (true_image, recon_image, residual, locs_true)
 
     return data
 
@@ -77,7 +94,7 @@ def create_figure(data):
     pad = 6.0
     reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
     # for figname in self.fignames:
-    true, recon, res = data
+    true, recon, res, locs = data
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
     assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
@@ -96,6 +113,11 @@ def create_figure(data):
     reporting.plot_image(fig, ax_true, true, vrange=(800, 1200))
     reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
     reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
+
+    # reporting.plot_locs(ax_true, slen=53, bpad=24, locs=locs)
+    ax_true.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
+    ax_recon.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
+    ax_res.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
 
     plt.subplots_adjust(hspace=-0.4)
     plt.tight_layout()
