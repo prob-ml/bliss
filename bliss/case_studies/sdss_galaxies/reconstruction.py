@@ -1,8 +1,12 @@
+import os
 from typing import Tuple
 from einops.einops import rearrange
 import torch
 import numpy as np
 from matplotlib import pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
+from astropy.table import Table
 
 from bliss.datasets import sdss
 from bliss import reporting
@@ -130,5 +134,91 @@ def create_figure(data):
 
     plt.subplots_adjust(hspace=-0.4)
     plt.tight_layout()
+
+    return fig
+
+
+files_dict = {
+    "sleep_ckpt": "models/sdss_sleep.ckpt",
+    "galaxy_encoder_ckpt": "models/sdss_galaxy_encoder.ckpt",
+    "binary_ckpt": "models/sdss_binary.ckpt",
+    "ae_ckpt": "models/sdss_autoencoder.ckpt",
+    "coadd_cat": "data/coadd_catalog_94_1_12.fits",
+    "sdss_dir": "data/sdss",
+    "psf_file": "data/psField-000094-1-0012-PSF-image.npy",
+}
+device = torch.device("cuda:0")
+
+
+def get_sdss_data(sdss_pixel_scale=0.396):
+    run = 94
+    camcol = 1
+    field = 12
+    bands = (2,)
+    sdss_data = sdss.SloanDigitalSkySurvey(
+        sdss_dir=files_dict["sdss_dir"],
+        run=run,
+        camcol=camcol,
+        fields=(field,),
+        bands=bands,
+        overwrite_cache=True,
+        overwrite_fits_cache=True,
+    )
+
+    return {
+        "image": sdss_data[0]["image"][0],
+        "wcs": sdss_data[0]["wcs"][0],
+        "pixel_scale": sdss_pixel_scale,
+    }
+
+
+lims = {
+    "sdss_recon0": ((1700, 2000), (200, 500)),  # scene
+    "sdss_recon1": ((1000, 1300), (1150, 1450)),  # scene
+    "sdss_recon2": ((742, 790), (460, 508)),  # individual blend
+    "sdss_recon3": ((1128, 1160), (25, 57)),  # individual blend
+    "sdss_recon4": ((500, 552), (170, 202)),  # individual blend
+}
+
+
+def main_plotly(model_name="sdss_recon0"):
+    os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
+
+    sleep_net = SleepPhase.load_from_checkpoint(files_dict["sleep_ckpt"]).to(device)
+    binary_encoder = BinaryEncoder.load_from_checkpoint(files_dict["binary_ckpt"])
+    binary_encoder = binary_encoder.to(device).eval()
+    galaxy_encoder = GalaxyEncoder.load_from_checkpoint(files_dict["galaxy_encoder_ckpt"])
+    galaxy_encoder = galaxy_encoder.to(device).eval()
+
+    # FIGURE 3: Reconstructions on SDSS
+    sdss_data = get_sdss_data()
+    coadd_cat = Table.read(files_dict["coadd_cat"], format="fits")
+
+    data = compute_data(
+        sdss_data, coadd_cat, lims[model_name], sleep_net, binary_encoder, galaxy_encoder
+    )
+    return create_plotly_figure(data)
+
+
+def create_plotly_figure(data):
+    true, recon, res, true_locs, pred_locs = data
+    images = np.stack((true, recon), axis=0)
+    min_image = np.min(images)
+    max_image = 1200
+    fig = px.imshow(
+        images,
+        facet_col=0,
+        facet_col_wrap=2,
+        range_color=[min_image, max_image],
+        color_continuous_scale=px.colors.sequential.Greys,
+    )
+
+    true_locs_scatter = go.Scatter(x=true_locs[:, 0], y=true_locs[:, 1], mode="markers")
+    pred_locs_scatter = go.Scatter(x=pred_locs[:, 1], y=pred_locs[:, 0], mode="markers")
+
+    # fig.add_trace(true_locs_scatter, row='all', col='all')
+    # fig.add_trace(pred_locs_scatter, row='all', col='all')
+    fig.add_trace(true_locs_scatter)
+    fig.add_trace(pred_locs_scatter)
 
     return fig
