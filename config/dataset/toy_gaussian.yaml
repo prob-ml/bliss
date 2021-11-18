@@ -5,7 +5,6 @@ batch_size: 64
 slen: 53
 background: 865.
 psf_fwhm: 0.8
-noise_factor: 0.1
 pixel_scale: 0.4
 min_flux: 300 # to be observable it cannot be too below background.
 max_flux: 10000

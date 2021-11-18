@@ -13,5 +13,4 @@ training:
     checkpoint_callback: true
 
 dataset:
-  noise_factor: 1.0
   num_workers: 5

@@ -3,7 +3,6 @@ num_workers: 0
 batch_size: 64
 n_batches: 10
 background: 865
-noise_factor: 0.01
 slen: 53
 min_flux: 1e3
 max_flux: 3.5e5

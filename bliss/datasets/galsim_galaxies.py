@@ -111,7 +111,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         n_batches=10,
         n_bands=1,
         slen=53,
-        noise_factor=0.05,
+        noise_factor=1.0,
         min_flux=1e3,
         max_flux=3.5e5,
         min_a_d=0.8,
