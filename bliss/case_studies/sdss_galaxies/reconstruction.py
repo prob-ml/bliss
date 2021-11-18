@@ -210,7 +210,7 @@ def create_plotly_figure(data):
         facet_col=0,
         facet_col_wrap=2,
         range_color=[min_image, max_image],
-        color_continuous_scale=px.colors.sequential.Greys,
+        color_continuous_scale=px.colors.sequential.Greys[::-1],
     )
 
     true_locs_scatter = go.Scatter(x=true_locs[:, 0], y=true_locs[:, 1], mode="markers")
