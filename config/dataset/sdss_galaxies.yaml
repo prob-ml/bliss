@@ -4,7 +4,7 @@ batch_size: 64
 n_batches: 10
 background: 865
 slen: 53
-min_flux: 1e3
+min_flux: 500.0
 max_flux: 3.5e5
 min_a_d: 0.8
 max_a_d: 6.5
