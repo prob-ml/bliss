@@ -198,7 +198,7 @@ class ImagePrior(pl.LightningModule):
         assert n_stars.shape[0] == batch_size
 
         shape = (batch_size, self.n_tiles_per_image, self.max_sources, 1)
-        base_fluxes = self._draw_pareto_maxed(shape)
+        base_fluxes = draw_pareto_maxed(shape, self.device, self.f_min, self.f_max, self.alpha)
 
         if self.n_bands > 1:
             shape = (
@@ -215,16 +215,6 @@ class ImagePrior(pl.LightningModule):
             fluxes = base_fluxes * star_bool.float()
 
         return fluxes
-
-    def _draw_pareto_maxed(self, shape):
-        # draw pareto conditioned on being less than f_max
-
-        u_max = self._pareto_cdf(self.f_max)
-        uniform_samples = torch.rand(*shape, device=self.device) * u_max
-        return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
-
-    def _pareto_cdf(self, x):
-        return 1 - (self.f_min / x) ** self.alpha
 
     def _sample_galaxy_params(self, galaxy_bool):
         assert galaxy_bool.shape[1:] == (self.n_tiles_per_image, self.max_sources, 1)
@@ -244,3 +234,12 @@ class ImagePrior(pl.LightningModule):
             s=self.max_sources,
         )
         return galaxy_params * galaxy_bool
+
+def draw_pareto_maxed(shape, device, f_min, f_max, alpha):
+    # draw pareto conditioned on being less than f_max
+    u_max = pareto_cdf(f_max, f_min, alpha)
+    uniform_samples = torch.rand(*shape, device=device) * u_max
+    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
+
+def pareto_cdf(x, f_min, alpha):
+    return 1 - (f_min / x) ** alpha

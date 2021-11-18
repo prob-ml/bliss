@@ -6,6 +6,8 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, Dataset
 
+from bliss.models.prior import draw_pareto_maxed
+
 
 def load_psf_from_file(psf_image_file: str, pixel_scale: float):
     """Return normalized PSF galsim.GSObject from numpy psf_file."""
@@ -121,7 +123,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         background=865.0,
         pixel_scale=0.396,  # SDSS
         psf_image_file: str = None,
-        flux_sample="uniform",
+        flux_sample="pareto",
     ):
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
@@ -157,10 +159,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         return unif.item()
 
     def _draw_pareto_flux(self):
-        # draw pareto conditioned on being less than f_max
-        u_max = 1 - (self.min_flux / self.max_flux) ** self.alpha
-        uniform_samples = torch.rand(1) * u_max
-        return self.min_flux / (1.0 - uniform_samples) ** (1 / self.alpha)
+        return draw_pareto_maxed((1,), self.device, self.min_flux, self.max_flux, self.alpha)
 
     def __getitem__(self, idx):
 
