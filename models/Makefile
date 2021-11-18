@@ -10,7 +10,7 @@ sdss_autoencoder.ckpt:
 	./run_experiment.sh $(OUTPUT_DIR) sdss_autoencoder $(GPU)
 
 sdss_autoencoder_flow.ckpt: sdss_autoencoder.ckpt
-	./run_experiment.sh $(OUTPUT_DIR) sdss_autoencoder_flow.ckpt $(GPU)
+	./run_experiment.sh $(OUTPUT_DIR) sdss_autoencoder_flow $(GPU)
 
 sdss_binary.ckpt: sdss_autoencoder.ckpt sdss_autoencoder_flow.ckpt
 	./run_experiment.sh $(OUTPUT_DIR) sdss_binary $(GPU_BINARY)
