@@ -1,4 +1,5 @@
 from typing import Tuple
+from einops.einops import rearrange
 import torch
 import numpy as np
 from matplotlib import pyplot as plt
@@ -47,7 +48,9 @@ def compute_data(
 
     with torch.no_grad():
 
-        tile_map, _, _ = predict_on_image(chunk, image_encoder, binary_encoder, galaxy_encoder)
+        tile_map, full_map, _ = predict_on_image(
+            chunk, image_encoder, binary_encoder, galaxy_encoder
+        )
 
         # plot image from tile est.
         recon_image, _ = image_decoder.render_images(
@@ -83,7 +86,9 @@ def compute_data(
     locs_true[:, 0] = locs_true[:, 0] - xlim[0]
     locs_true[:, 1] = locs_true[:, 1] - ylim[0]
 
-    data = (true_image, recon_image, residual, locs_true)
+    locs_pred = rearrange(full_map["plocs"], "a b c -> (a b) c").cpu().numpy()
+
+    data = (true_image, recon_image, residual, locs_true, locs_pred)
 
     return data
 
@@ -94,7 +99,7 @@ def create_figure(data):
     pad = 6.0
     reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
     # for figname in self.fignames:
-    true, recon, res, locs = data
+    true, recon, res, locs, locs_pred = data
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
     assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
@@ -118,6 +123,10 @@ def create_figure(data):
     ax_true.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
     ax_recon.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
     ax_res.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
+
+    ax_true.scatter(locs_pred[:, 1], locs_pred[:, 0], color="b", marker="x", s=20)
+    ax_recon.scatter(locs_pred[:, 1], locs_pred[:, 0], color="b", marker="x", s=20)
+    ax_res.scatter(locs_pred[:, 1], locs_pred[:, 0], color="b", marker="x", s=20)
 
     plt.subplots_adjust(hspace=-0.4)
     plt.tight_layout()
