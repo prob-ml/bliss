@@ -85,14 +85,7 @@ class Predict(nn.Module):
         h, w = image.shape[-2], image.shape[-1]
         bp = self.image_encoder.border_padding
 
-        # get padded tiles.
-        ptiles = self.image_encoder.get_images_in_tiles(image)
-
-        # get MAP estimates and variational parameters from image_encoder
-        tile_n_sources = self.image_encoder.tile_map_n_sources(ptiles)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
-        tile_map = self.image_encoder.tile_map_estimate(image)
-        var_params = self.image_encoder(ptiles, tile_n_sources)
+        ptiles, tile_is_on_array, var_params, tile_map = self.locate_objects(image)
 
         # binary prediction
         assert not self.binary_encoder.training
@@ -127,6 +120,18 @@ class Predict(nn.Module):
         full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
 
         return tile_map, full_map, var_params
+
+    def locate_objects(self, image):
+        # get padded tiles.
+        ptiles = self.image_encoder.get_images_in_tiles(image)
+
+        # get MAP estimates and variational parameters from image_encoder
+        tile_n_sources = self.image_encoder.tile_map_n_sources(ptiles)
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
+        tile_map = self.image_encoder.tile_map_estimate(image)
+        var_params = self.image_encoder(ptiles, tile_n_sources)
+
+        return ptiles, tile_is_on_array, var_params, tile_map
 
     def predict_on_scene(
         self,
