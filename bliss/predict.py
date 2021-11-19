@@ -6,8 +6,6 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from bliss.datasets import sdss
-
-# from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
 from bliss.models.encoder import (
     ImageEncoder,
