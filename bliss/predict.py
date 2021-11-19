@@ -80,34 +80,29 @@ class Predict(nn.Module):
         assert image.shape[0] == 1
         assert image.shape[1] == self.image_encoder.n_bands == 1
         assert self.image_encoder.max_detections == 1
+        # binary prediction
+        assert not self.binary_encoder.training
+        assert image.shape[1] == self.binary_encoder.n_bands
+        # galaxy measurement predictions
+        assert not self.galaxy_encoder.training
+        assert image.shape[1] == self.galaxy_encoder.n_bands
+        assert self.image_encoder.border_padding == self.galaxy_encoder.border_padding
+        assert self.image_encoder.tile_slen == self.galaxy_encoder.tile_slen
 
         # prepare dimensions
         h, w = image.shape[-2], image.shape[-1]
         bp = self.image_encoder.border_padding
 
         ptiles, tile_is_on_array, var_params, tile_map = self.locate_objects(image)
-
-        # binary prediction
-        assert not self.binary_encoder.training
-        assert image.shape[1] == self.binary_encoder.n_bands
-
-        prob_galaxy = (
-            self.binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
+        galaxy_bool, star_bool, prob_galaxy = self.classify_objects(
+            ptiles, tile_map["locs"], tile_is_on_array, tile_map["n_sources"]
         )
-        galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
-        star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)
         var_params["galaxy_bool"] = galaxy_bool
         var_params["star_bool"] = star_bool
         var_params["prob_galaxy"] = prob_galaxy
         tile_map["galaxy_bool"] = galaxy_bool
         tile_map["star_bool"] = star_bool
         tile_map["prob_galaxy"] = prob_galaxy
-
-        # get galaxy measurement predictions
-        assert not self.galaxy_encoder.training
-        assert image.shape[1] == self.galaxy_encoder.n_bands
-        assert self.image_encoder.border_padding == self.galaxy_encoder.border_padding
-        assert self.image_encoder.tile_slen == self.galaxy_encoder.tile_slen
 
         galaxy_param_mean = self.galaxy_encoder(ptiles, tile_map["locs"])
         latent_dim = galaxy_param_mean.shape[-1]
@@ -132,6 +127,13 @@ class Predict(nn.Module):
         var_params = self.image_encoder(ptiles, tile_n_sources)
 
         return ptiles, tile_is_on_array, var_params, tile_map
+
+    def classify_objects(self, ptiles, locs, tile_is_on_array, n_sources):
+        assert not self.binary_encoder.training
+        prob_galaxy = self.binary_encoder(ptiles, locs).reshape(1, -1, 1, 1) * tile_is_on_array
+        galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
+        star_bool = get_star_bool(n_sources, galaxy_bool)
+        return galaxy_bool, star_bool, prob_galaxy
 
     def predict_on_scene(
         self,
