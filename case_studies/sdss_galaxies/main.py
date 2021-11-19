@@ -23,7 +23,7 @@ from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.predict import predict_on_image, predict_on_scene
+from bliss.predict import Predict
 from bliss.sleep import SleepPhase
 
 device = torch.device("cuda:0")
@@ -182,13 +182,10 @@ class DetectionClassificationFigures(BlissFigures):
 
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
-        _, est_params = predict_on_scene(
+        predict_module = Predict(image_encoder, binary_encoder, galaxy_encoder, galaxy_decoder)
+        _, est_params = predict_module.predict_on_scene(
             clen,
             scene_torch,
-            image_encoder,
-            binary_encoder,
-            galaxy_encoder,
-            galaxy_decoder,
             device,
         )
 
@@ -308,6 +305,8 @@ class SDSSReconstructionFigures(BlissFigures):
 
         data = {}
 
+        predict_module = Predict(image_encoder, binary_encoder, galaxy_encoder, galaxy_decoder=None)
+
         for figname in self.fignames:
             xlim, ylim = self.lims[figname]
             h, w = ylim[1] - ylim[0], xlim[1] - xlim[0]
@@ -322,9 +321,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
             with torch.no_grad():
 
-                tile_map, _, _ = predict_on_image(
-                    chunk, image_encoder, binary_encoder, galaxy_encoder
-                )
+                tile_map, _, _ = predict_module.predict_on_image(chunk)
 
                 # plot image from tile est.
                 recon_image, _ = image_decoder.render_images(
