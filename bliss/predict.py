@@ -164,7 +164,7 @@ class Predict(nn.Module):
     def predict_on_image(
         self,
         image: torch.Tensor,
-    ) -> Tuple[TileMAP, FullMAP, TileVarParams]:
+    ) -> Tuple[TileMAP, TileVarParams]:
         """This function takes in a single image and outputs the prediction from trained models.
 
         Prediction requires counts/locations provided by a trained `image_encoder` that is
@@ -184,8 +184,6 @@ class Predict(nn.Module):
         self._validate_image(image)
 
         # prepare dimensions
-        h, w = image.shape[-2], image.shape[-1]
-        bp = self.image_encoder.border_padding
 
         loc_tile_map, loc_var_params = self.locate_objects(image)
         classification_map = self.classify_objects(loc_tile_map)
@@ -194,9 +192,8 @@ class Predict(nn.Module):
         tile_map = TileMAP(loc_tile_map, classification_map, galaxy_param_mean)
         tile_var_params = TileVarParams(loc_var_params, classification_map, galaxy_param_mean)
         # full parameters on chunk
-        full_map = FullMAP(tile_map, h, w, bp)
 
-        return tile_map, full_map, tile_var_params
+        return tile_map, tile_var_params
 
     def locate_objects(self, image) -> Tuple[LocationTileMAP, LocationTileVarParams]:
         # get padded tiles.
@@ -296,7 +293,9 @@ class Predict(nn.Module):
                         pchunk = scene[:, :, y1 - bp : y1 + clen + bp, x1 - bp : x1 + clen + bp]
                         pchunk = pchunk.to(self.device)
 
-                        _, est_params, vparams = self.predict_on_image(pchunk)
+                        tile_map, vparams = self.predict_on_image(pchunk)
+                        h_pchunk, w_pchunk = pchunk.shape[-2], pchunk.shape[-1]
+                        full_map = FullMAP(tile_map, h_pchunk, w_pchunk, bp)
 
                         (
                             est_locs,
@@ -304,11 +303,11 @@ class Predict(nn.Module):
                             est_pgalaxy,
                             est_star_flux,
                             est_galaxy_params,
-                        ) = self._process_est_params(est_params, x1, y1)
+                        ) = self._process_est_params(full_map, x1, y1)
 
                         # delete parameters we stopped using so we have enough GPU space.
                         if "cuda" in self.device.type:
-                            del est_params
+                            del full_map
                             del pchunk
                             torch.cuda.empty_cache()
 
