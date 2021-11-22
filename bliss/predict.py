@@ -81,25 +81,62 @@ class TileMAP:
         return self.__dict__
 
 
-class FullMAP:
+class FullMAP(nn.Module):
     """Maximum a posteriori estimates for each identified object in an image."""
 
-    def __init__(self, tile_map: TileMAP, h : int, w: int, bp: int) -> None:
+    def __init__(
+        self,
+        tile_map: TileMAP,
+        x: float,
+        y: float,
+        h: int,
+        w: int,
+        bp: int,
+        galaxy_decoder: OneCenteredGalaxyDecoder = None,
+    ) -> None:
+        super().__init__()
         full_map_dict = get_full_params(tile_map.asdict(), h - 2 * bp, w - 2 * bp)
-        self.locs = full_map_dict["locs"]
-        self.plocs = full_map_dict["plocs"]
-        self.log_fluxes = full_map_dict["log_fluxes"]
-        self.fluxes = full_map_dict["fluxes"]
-        self.prob_n_sources = full_map_dict["prob_n_sources"]
-        self.n_sources = full_map_dict["n_sources"]
-        self.galaxy_bool = full_map_dict["galaxy_bool"]
-        self.star_bool = full_map_dict["star_bool"]
-        self.prob_galaxy = full_map_dict["prob_galaxy"]
-        self.galaxy_params = full_map_dict["galaxy_params"]
+        plocs = full_map_dict["plocs"]
+        plocs = plocs.reshape(-1, 2)
+
+        plocs_x = plocs[:, 1] + x - 0.5
+        plocs_y = plocs[:, 0] + y - 0.5
+        self.plocs_xy = torch.stack((plocs_x, plocs_y), dim=-1)
+        self.galaxy_bool = full_map_dict["galaxy_bool"].reshape(-1)
+        self.prob_galaxy = full_map_dict["prob_galaxy"].reshape(-1)
+        self.star_flux = full_map_dict["fluxes"].reshape(-1)
+
+        galaxy_params = full_map_dict["galaxy_params"]
+        self.galaxy_params = galaxy_params.reshape(-1, galaxy_params.shape[-1])
+
+        if galaxy_decoder is not None:
+            self.fluxes, self.mags = self._get_fluxes_and_mags(galaxy_decoder)
+        else:
+            self.fluxes = None
+            self.mags = None
+
+    @property
+    def plocs(self):
+        return torch.stack((self.x_plocs, self.y_plocs), dim=-1)
 
     @property
     def n_objects(self):
         return self.locs.shape[1]
+
+    def _get_fluxes_and_mags(self, galaxy_decoder: OneCenteredGalaxyDecoder):
+        # latent_dim = self.galaxy_params.shape[-1]
+        latents = self.galaxy_params
+        galaxy_flux = galaxy_decoder(latents).sum((-1, -2, -3)).cpu().reshape(-1)
+        # collect flux and magnitude into a single tensor
+        est_fluxes = self.star_flux * (1 - self.galaxy_bool) + galaxy_flux * self.galaxy_bool
+        est_mags = sdss.convert_flux_to_mag(est_fluxes)
+        return est_fluxes, est_mags
+
+    def move_to_cpu(self):
+        for name in self.__dict__:
+            obj = getattr(self, name)
+            if isinstance(obj, Tensor):
+                setattr(self, name, obj.cpu())
 
 
 class TileVarParams:
@@ -295,32 +332,22 @@ class Predict(nn.Module):
 
                         tile_map, vparams = self.predict_on_image(pchunk)
                         h_pchunk, w_pchunk = pchunk.shape[-2], pchunk.shape[-1]
-                        full_map = FullMAP(tile_map, h_pchunk, w_pchunk, bp)
-
-                        (
-                            est_locs,
-                            est_gbool,
-                            est_pgalaxy,
-                            est_star_flux,
-                            est_galaxy_params,
-                        ) = self._process_est_params(full_map, x1, y1)
+                        full_map = FullMAP(
+                            tile_map, x1, y1, h_pchunk, w_pchunk, bp, self.galaxy_decoder
+                        )
+                        full_map.move_to_cpu()
 
                         # delete parameters we stopped using so we have enough GPU space.
                         if "cuda" in self.device.type:
-                            del full_map
                             del pchunk
                             torch.cuda.empty_cache()
 
-                        est_fluxes, est_mags = self._get_fluxes_and_mags(
-                            est_gbool, est_star_flux, est_galaxy_params
-                        )
-
                         # concatenate to obtain tensors on full image.
-                        locs = torch.cat((locs, est_locs))
-                        galaxy_bool = torch.cat((galaxy_bool, est_gbool))
-                        prob_galaxy = torch.cat((prob_galaxy, est_pgalaxy))
-                        fluxes = torch.cat((fluxes, est_fluxes))
-                        mags = torch.cat((mags, est_mags))
+                        locs = torch.cat((locs, full_map.plocs_xy))
+                        galaxy_bool = torch.cat((galaxy_bool, full_map.galaxy_bool))
+                        prob_galaxy = torch.cat((prob_galaxy, full_map.prob_galaxy))
+                        fluxes = torch.cat((fluxes, full_map.fluxes))
+                        mags = torch.cat((mags, full_map.mags))
 
                         # save variational parameters
                         var_params.append(vparams)
@@ -338,29 +365,6 @@ class Predict(nn.Module):
         }
 
         return var_params, full_map
-
-    def _process_est_params(self, est_params: FullMAP, x1, y1):
-        est_locs = est_params.plocs.cpu().reshape(-1, 2)
-        est_gbool = est_params.galaxy_bool.cpu().reshape(-1)
-        est_pgalaxy = est_params.prob_galaxy.cpu().reshape(-1)
-        est_star_flux = est_params.fluxes.cpu().reshape(-1)
-        est_galaxy_params = est_params.galaxy_params.cpu().reshape(-1, self.latent_dim)
-
-        # locations in pixels consistent with full scene.
-        # 0.5 comes from pt/pr definition (plotting both -> off by half a pixel).
-        x = est_locs[:, 1].reshape(-1, 1) + x1 - 0.5
-        y = est_locs[:, 0].reshape(-1, 1) + y1 - 0.5
-        est_locs = torch.hstack((x, y)).reshape(-1, 2)
-
-        return est_locs, est_gbool, est_pgalaxy, est_star_flux, est_galaxy_params
-
-    def _get_fluxes_and_mags(self, est_gbool, est_star_flux, est_galaxy_params):
-        latents = est_galaxy_params.to(self.device).reshape(-1, self.latent_dim)
-        est_galaxy_flux = self.galaxy_decoder(latents).sum((-1, -2, -3)).cpu().reshape(-1)
-        # collect flux and magnitude into a single tensor
-        est_fluxes = est_star_flux * (1 - est_gbool) + est_galaxy_flux * est_gbool
-        est_mags = sdss.convert_flux_to_mag(est_fluxes)
-        return est_fluxes, est_mags
 
     def _validate_image(self, image):
         # prepare and check consistency
