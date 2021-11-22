@@ -22,23 +22,63 @@ from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 from bliss.sleep import SleepPhase
 
 
-class TileMAP:
-    """Maximum a posteriori estimates on each tile of an image."""
-
-    def __init__(self, tile_map_dict: Dict[str, Tensor]) -> None:
+class LocationTileMAP:
+    def __init__(
+        self, ptiles: Tensor, tile_is_on_array: Tensor, tile_map_dict: Dict[str, Tensor]
+    ) -> None:
+        self.ptiles = ptiles
+        self.tile_is_on_array = tile_is_on_array
         self.locs = tile_map_dict["locs"]
         self.log_fluxes = tile_map_dict["log_fluxes"]
         self.fluxes = tile_map_dict["fluxes"]
         self.prob_n_sources = tile_map_dict["prob_n_sources"]
         self.n_sources = tile_map_dict["n_sources"]
-        self.galaxy_bool = tile_map_dict["galaxy_bool"]
-        self.star_bool = tile_map_dict["star_bool"]
-        self.prob_galaxy = tile_map_dict["prob_galaxy"]
-        self.galaxy_params = tile_map_dict["galaxy_params"]
+
+
+class LocationTileVarParams:
+    def __init__(self, var_params_dict: Dict[str, Tensor]) -> None:
+        self.loc_mean, self.loc_logvar = var_params_dict["loc_mean"], var_params_dict["loc_logvar"]
+        self.log_flux_mean, self.log_flux_logvar = (
+            var_params_dict["log_flux_mean"],
+            var_params_dict["log_flux_logvar"],
+        )
+        self.n_source_log_probs = var_params_dict["n_source_log_probs"]
+
+
+class ClassificationTileMAP:
+    def __init__(self, galaxy_bool: Tensor, star_bool: Tensor, prob_galaxy: Tensor) -> None:
+        self.galaxy_bool = galaxy_bool
+        self.star_bool = star_bool
+        self.prob_galaxy = prob_galaxy
+
+
+class TileMAP:
+    """Maximum a posteriori estimates on each tile of an image."""
+
+    def __init__(
+        self,
+        loc_tile_map: LocationTileMAP,
+        classification_map: ClassificationTileMAP,
+        galaxy_params: Tensor,
+    ):
+        self.locs = loc_tile_map.locs
+        self.log_fluxes = loc_tile_map.log_fluxes
+        self.fluxes = loc_tile_map.fluxes
+        self.prob_n_sources = loc_tile_map.prob_n_sources
+        self.n_sources = loc_tile_map.n_sources
+
+        self.galaxy_bool = classification_map.galaxy_bool
+        self.star_bool = classification_map.star_bool
+        self.prob_galaxy = classification_map.prob_galaxy
+
+        self.galaxy_params = galaxy_params
 
     @property
     def n_tiles(self):
         return self.locs.shape[1]
+
+    def asdict(self):
+        return self.__dict__
 
 
 class FullMAP:
@@ -64,17 +104,24 @@ class FullMAP:
 class TileVarParams:
     """Variational parameters on each tile of an image."""
 
-    def __init__(self, var_params_dict: Dict[str, Tensor]) -> None:
-        self.loc_mean, self.loc_logvar = var_params_dict["loc_mean"], var_params_dict["loc_logvar"]
+    def __init__(
+        self,
+        loc_var_params: LocationTileVarParams,
+        classification_map: ClassificationTileMAP,
+        galaxy_param_mean: Tensor,
+    ) -> None:
+        self.loc_mean, self.loc_logvar = loc_var_params.loc_mean, loc_var_params.loc_logvar
         self.log_flux_mean, self.log_flux_logvar = (
-            var_params_dict["log_flux_mean"],
-            var_params_dict["log_flux_logvar"],
+            loc_var_params.log_flux_mean,
+            loc_var_params.log_flux_logvar,
         )
-        self.n_source_log_probs = var_params_dict["n_source_log_probs"]
-        self.galaxy_bool = var_params_dict["galaxy_bool"]
-        self.star_bool = var_params_dict["star_bool"]
-        self.prob_galaxy = var_params_dict["prob_galaxy"]
-        self.galaxy_param_mean = var_params_dict["galaxy_param_mean"]
+        self.n_source_log_probs = loc_var_params.n_source_log_probs
+
+        self.galaxy_bool = classification_map.galaxy_bool
+        self.star_bool = classification_map.star_bool
+        self.prob_galaxy = classification_map.galaxy_bool
+
+        self.galaxy_param_mean = galaxy_param_mean
 
 
 class Predict(nn.Module):
@@ -119,19 +166,19 @@ class Predict(nn.Module):
     ) -> Tuple[TileMAP, FullMAP, TileVarParams]:
         """This function takes in a single image and outputs the prediction from trained models.
 
-        Prediction requires counts/locations provided by a trained `image_encoder` so this is
-        a required argument. Note that prediction is done on a central square of the image
+        Prediction requires counts/locations provided by a trained `image_encoder` that is
+        set upon initializing the module.
+        Note that prediction is done on a central square of the image
         corresponding to a border of size `image_encoder.border_padding`.
 
         Args:
             image: Tensor of shape (1, n_bands, h, w) where slen-2*border_padding <= 300.
 
         Returns:
-            tile_map: Dictionary containing MAP estimates for parameters of sources in each tile.
-            full_map: Dictionary containing MAP estimates for parameters of sources on full image.
-            var_params: Dictionary containing tensors of variational parameters corresponding
-                to each tile in `image`. The variational parameters include `prob_galaxy`,
-                `prob_n_sources`, `loc_mean`, `loc_logvar`, etc.
+            tile_map: Object with MAP estimates for parameters of sources in each tile.
+            full_map: Object with MAP estimates for parameters of sources on full image.
+            tile_var_params: Object containing tensors of variational parameters corresponding
+                to each tile in `image`.
         """
         self._validate_image(image)
 
@@ -139,29 +186,18 @@ class Predict(nn.Module):
         h, w = image.shape[-2], image.shape[-1]
         bp = self.image_encoder.border_padding
 
-        ptiles, tile_is_on_array, var_params, tile_map = self.locate_objects(image)
-        galaxy_bool, star_bool, prob_galaxy = self.classify_objects(
-            ptiles, tile_map["locs"], tile_is_on_array, tile_map["n_sources"]
-        )
-        var_params["galaxy_bool"] = galaxy_bool
-        var_params["star_bool"] = star_bool
-        var_params["prob_galaxy"] = prob_galaxy
-        tile_map["galaxy_bool"] = galaxy_bool
-        tile_map["star_bool"] = star_bool
-        tile_map["prob_galaxy"] = prob_galaxy
+        loc_tile_map, loc_var_params = self.locate_objects(image)
+        classification_map = self.classify_objects(loc_tile_map)
+        galaxy_param_mean = self.get_galaxy_params(loc_tile_map, classification_map)
 
-        galaxy_param_mean = self.get_galaxy_params(ptiles, tile_map["locs"])
-        galaxy_param_mean *= tile_is_on_array * galaxy_bool
-        var_params["galaxy_param_mean"] = galaxy_param_mean
-        tile_map["galaxy_params"] = galaxy_param_mean
-
+        tile_map = TileMAP(loc_tile_map, classification_map, galaxy_param_mean)
+        tile_var_params = TileVarParams(loc_var_params, classification_map, galaxy_param_mean)
         # full parameters on chunk
-        full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
+        full_map = FullMAP(get_full_params(tile_map.asdict(), h - 2 * bp, w - 2 * bp))
 
-        # return tile_map, full_map, var_params
-        return TileMAP(tile_map), FullMAP(full_map), TileVarParams(var_params)
+        return tile_map, full_map, tile_var_params
 
-    def locate_objects(self, image):
+    def locate_objects(self, image) -> Tuple[LocationTileMAP, LocationTileVarParams]:
         # get padded tiles.
         ptiles = self.image_encoder.get_images_in_tiles(image)
 
@@ -171,20 +207,28 @@ class Predict(nn.Module):
         tile_map = self.image_encoder.tile_map_estimate(image)
         var_params = self.image_encoder(ptiles, tile_n_sources)
 
-        return ptiles, tile_is_on_array, var_params, tile_map
+        loc_tile_map = LocationTileMAP(ptiles, tile_is_on_array, tile_map)
+        loc_var_params = LocationTileVarParams(var_params)
+        return loc_tile_map, loc_var_params
 
-    def classify_objects(self, ptiles, locs, tile_is_on_array, n_sources):
+    # def classify_objects(self, ptiles, locs, tile_is_on_array, n_sources):
+    def classify_objects(self, loc_tile_map: LocationTileMAP):
         assert not self.binary_encoder.training
-        prob_galaxy = self.binary_encoder(ptiles, locs).reshape(1, -1, 1, 1) * tile_is_on_array
-        galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
-        star_bool = get_star_bool(n_sources, galaxy_bool)
-        return galaxy_bool, star_bool, prob_galaxy
+        prob_galaxy = (
+            self.binary_encoder(loc_tile_map.ptiles, loc_tile_map.locs).reshape(1, -1, 1, 1)
+            * loc_tile_map.tile_is_on_array
+        )
+        galaxy_bool = (prob_galaxy > 0.5).float() * loc_tile_map.tile_is_on_array
+        star_bool = get_star_bool(loc_tile_map.n_sources, galaxy_bool)
+        return ClassificationTileMAP(galaxy_bool, star_bool, prob_galaxy)
 
-    def get_galaxy_params(self, ptiles, locs):
-        galaxy_param_mean = self.galaxy_encoder(ptiles, locs)
+    def get_galaxy_params(
+        self, loc_tile_map: LocationTileMAP, classification_map: ClassificationTileMAP
+    ):
+        galaxy_param_mean = self.galaxy_encoder(loc_tile_map.ptiles, loc_tile_map.locs)
         latent_dim = galaxy_param_mean.shape[-1]
         galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-        # galaxy_param_mean *= tile_is_on_array * galaxy_bool
+        galaxy_param_mean *= loc_tile_map.tile_is_on_array * classification_map.galaxy_bool
         return galaxy_param_mean
 
     def predict_on_scene(
