@@ -104,9 +104,7 @@ class Predict(nn.Module):
         tile_map["star_bool"] = star_bool
         tile_map["prob_galaxy"] = prob_galaxy
 
-        galaxy_param_mean = self.galaxy_encoder(ptiles, tile_map["locs"])
-        latent_dim = galaxy_param_mean.shape[-1]
-        galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
+        galaxy_param_mean = self.get_galaxy_params(ptiles, tile_map["locs"])
         galaxy_param_mean *= tile_is_on_array * galaxy_bool
         var_params["galaxy_param_mean"] = galaxy_param_mean
         tile_map["galaxy_params"] = galaxy_param_mean
@@ -134,6 +132,13 @@ class Predict(nn.Module):
         galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
         star_bool = get_star_bool(n_sources, galaxy_bool)
         return galaxy_bool, star_bool, prob_galaxy
+
+    def get_galaxy_params(self, ptiles, locs):
+        galaxy_param_mean = self.galaxy_encoder(ptiles, locs)
+        latent_dim = galaxy_param_mean.shape[-1]
+        galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
+        # galaxy_param_mean *= tile_is_on_array * galaxy_bool
+        return galaxy_param_mean
 
     def predict_on_scene(
         self,
