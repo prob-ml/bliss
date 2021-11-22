@@ -84,7 +84,8 @@ class TileMAP:
 class FullMAP:
     """Maximum a posteriori estimates for each identified object in an image."""
 
-    def __init__(self, full_map_dict: Dict[str, Tensor]) -> None:
+    def __init__(self, tile_map: TileMAP, h : int, w: int, bp: int) -> None:
+        full_map_dict = get_full_params(tile_map.asdict(), h - 2 * bp, w - 2 * bp)
         self.locs = full_map_dict["locs"]
         self.plocs = full_map_dict["plocs"]
         self.log_fluxes = full_map_dict["log_fluxes"]
@@ -193,7 +194,7 @@ class Predict(nn.Module):
         tile_map = TileMAP(loc_tile_map, classification_map, galaxy_param_mean)
         tile_var_params = TileVarParams(loc_var_params, classification_map, galaxy_param_mean)
         # full parameters on chunk
-        full_map = FullMAP(get_full_params(tile_map.asdict(), h - 2 * bp, w - 2 * bp))
+        full_map = FullMAP(tile_map, h, w, bp)
 
         return tile_map, full_map, tile_var_params
 
