@@ -74,20 +74,7 @@ class Predict(nn.Module):
                 to each tile in `image`. The variational parameters include `prob_galaxy`,
                 `prob_n_sources`, `loc_mean`, `loc_logvar`, etc.
         """
-        # prepare and check consistency
-        assert not self.image_encoder.training
-        assert len(image.shape) == 4
-        assert image.shape[0] == 1
-        assert image.shape[1] == self.image_encoder.n_bands == 1
-        assert self.image_encoder.max_detections == 1
-        # binary prediction
-        assert not self.binary_encoder.training
-        assert image.shape[1] == self.binary_encoder.n_bands
-        # galaxy measurement predictions
-        assert not self.galaxy_encoder.training
-        assert image.shape[1] == self.galaxy_encoder.n_bands
-        assert self.image_encoder.border_padding == self.galaxy_encoder.border_padding
-        assert self.image_encoder.tile_slen == self.galaxy_encoder.tile_slen
+        self._validate_image(image)
 
         # prepare dimensions
         h, w = image.shape[-2], image.shape[-1]
@@ -270,6 +257,22 @@ class Predict(nn.Module):
         est_fluxes = est_star_flux * (1 - est_gbool) + est_galaxy_flux * est_gbool
         est_mags = sdss.convert_flux_to_mag(est_fluxes)
         return est_fluxes, est_mags
+
+    def _validate_image(self, image):
+        # prepare and check consistency
+        assert not self.image_encoder.training
+        assert len(image.shape) == 4
+        assert image.shape[0] == 1
+        assert image.shape[1] == self.image_encoder.n_bands == 1
+        assert self.image_encoder.max_detections == 1
+        # binary prediction
+        assert not self.binary_encoder.training
+        assert image.shape[1] == self.binary_encoder.n_bands
+        # galaxy measurement predictions
+        assert not self.galaxy_encoder.training
+        assert image.shape[1] == self.galaxy_encoder.n_bands
+        assert self.image_encoder.border_padding == self.galaxy_encoder.border_padding
+        assert self.image_encoder.tile_slen == self.galaxy_encoder.tile_slen
 
 
 def predict(cfg: DictConfig):
