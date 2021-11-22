@@ -325,11 +325,11 @@ class SDSSReconstructionFigures(BlissFigures):
 
                 # plot image from tile est.
                 recon_image, _ = image_decoder.render_images(
-                    tile_map["n_sources"],
-                    tile_map["locs"],
-                    tile_map["galaxy_bool"],
-                    tile_map["galaxy_params"],
-                    tile_map["fluxes"],
+                    tile_map.n_sources,
+                    tile_map.locs,
+                    tile_map.galaxy_bool,
+                    tile_map.galaxy_params,
+                    tile_map.fluxes,
                     add_noise=False,
                 )
 

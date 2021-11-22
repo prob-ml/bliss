@@ -1,8 +1,12 @@
 """Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
+from unicodedata import name
 import torch
+from typing import Tuple, Dict, List
+from collections import namedtuple
 from torch import nn
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
+from torch.tensor import Tensor
 from tqdm import tqdm
 
 from bliss.datasets import sdss
@@ -16,6 +20,61 @@ from bliss.models.encoder import (
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 from bliss.sleep import SleepPhase
+
+
+class TileMAP:
+    """Maximum a posteriori estimates on each tile of an image."""
+
+    def __init__(self, tile_map_dict: Dict[str, Tensor]) -> None:
+        self.locs = tile_map_dict["locs"]
+        self.log_fluxes = tile_map_dict["log_fluxes"]
+        self.fluxes = tile_map_dict["fluxes"]
+        self.prob_n_sources = tile_map_dict["prob_n_sources"]
+        self.n_sources = tile_map_dict["n_sources"]
+        self.galaxy_bool = tile_map_dict["galaxy_bool"]
+        self.star_bool = tile_map_dict["star_bool"]
+        self.prob_galaxy = tile_map_dict["prob_galaxy"]
+        self.galaxy_params = tile_map_dict["galaxy_params"]
+
+    @property
+    def n_tiles(self):
+        return self.locs.shape[1]
+
+
+class FullMAP:
+    """Maximum a posteriori estimates for each identified object in an image."""
+
+    def __init__(self, full_map_dict: Dict[str, Tensor]) -> None:
+        self.locs = full_map_dict["locs"]
+        self.plocs = full_map_dict["plocs"]
+        self.log_fluxes = full_map_dict["log_fluxes"]
+        self.fluxes = full_map_dict["fluxes"]
+        self.prob_n_sources = full_map_dict["prob_n_sources"]
+        self.n_sources = full_map_dict["n_sources"]
+        self.galaxy_bool = full_map_dict["galaxy_bool"]
+        self.star_bool = full_map_dict["star_bool"]
+        self.prob_galaxy = full_map_dict["prob_galaxy"]
+        self.galaxy_params = full_map_dict["galaxy_params"]
+
+    @property
+    def n_objects(self):
+        return self.locs.shape[1]
+
+
+class TileVarParams:
+    """Variational parameters on each tile of an image."""
+
+    def __init__(self, var_params_dict: Dict[str, Tensor]) -> None:
+        self.loc_mean, self.loc_logvar = var_params_dict["loc_mean"], var_params_dict["loc_logvar"]
+        self.log_flux_mean, self.log_flux_logvar = (
+            var_params_dict["log_flux_mean"],
+            var_params_dict["log_flux_logvar"],
+        )
+        self.n_source_log_probs = var_params_dict["n_source_log_probs"]
+        self.galaxy_bool = var_params_dict["galaxy_bool"]
+        self.star_bool = var_params_dict["star_bool"]
+        self.prob_galaxy = var_params_dict["prob_galaxy"]
+        self.galaxy_param_mean = var_params_dict["galaxy_param_mean"]
 
 
 class Predict(nn.Module):
@@ -57,7 +116,7 @@ class Predict(nn.Module):
     def predict_on_image(
         self,
         image: torch.Tensor,
-    ):
+    ) -> Tuple[TileMAP, FullMAP, TileVarParams]:
         """This function takes in a single image and outputs the prediction from trained models.
 
         Prediction requires counts/locations provided by a trained `image_encoder` so this is
@@ -99,7 +158,8 @@ class Predict(nn.Module):
         # full parameters on chunk
         full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
 
-        return tile_map, full_map, var_params
+        # return tile_map, full_map, var_params
+        return TileMAP(tile_map), FullMAP(full_map), TileVarParams(var_params)
 
     def locate_objects(self, image):
         # get padded tiles.
@@ -219,7 +279,7 @@ class Predict(nn.Module):
                         mags = torch.cat((mags, est_mags))
 
                         # save variational parameters
-                        var_params.append({key: value.cpu() for key, value in vparams.items()})
+                        var_params.append(vparams)
 
                         # update progress bar
                         pbar.update(1)
@@ -233,14 +293,14 @@ class Predict(nn.Module):
             "n_sources": torch.tensor([len(locs)]),
         }
 
-        return vparams, full_map
+        return var_params, full_map
 
-    def _process_est_params(self, est_params, x1, y1):
-        est_locs = est_params["plocs"].cpu().reshape(-1, 2)
-        est_gbool = est_params["galaxy_bool"].cpu().reshape(-1)
-        est_pgalaxy = est_params["prob_galaxy"].cpu().reshape(-1)
-        est_star_flux = est_params["fluxes"].cpu().reshape(-1)
-        est_galaxy_params = est_params["galaxy_params"].cpu().reshape(-1, self.latent_dim)
+    def _process_est_params(self, est_params: FullMAP, x1, y1):
+        est_locs = est_params.plocs.cpu().reshape(-1, 2)
+        est_gbool = est_params.galaxy_bool.cpu().reshape(-1)
+        est_pgalaxy = est_params.prob_galaxy.cpu().reshape(-1)
+        est_star_flux = est_params.fluxes.cpu().reshape(-1)
+        est_galaxy_params = est_params.galaxy_params.cpu().reshape(-1, self.latent_dim)
 
         # locations in pixels consistent with full scene.
         # 0.5 comes from pt/pr definition (plotting both -> off by half a pixel).
