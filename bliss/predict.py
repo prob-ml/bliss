@@ -126,10 +126,10 @@ class FullMAP(nn.Module):
     def _get_fluxes_and_mags(self, galaxy_decoder: OneCenteredGalaxyDecoder):
         # latent_dim = self.galaxy_params.shape[-1]
         latents = self.galaxy_params
-        galaxy_flux = galaxy_decoder(latents).sum((-1, -2, -3)).cpu().reshape(-1)
+        galaxy_flux = galaxy_decoder(latents).sum((-1, -2, -3)).reshape(-1)
         # collect flux and magnitude into a single tensor
         est_fluxes = self.star_flux * (1 - self.galaxy_bool) + galaxy_flux * self.galaxy_bool
-        est_mags = sdss.convert_flux_to_mag(est_fluxes)
+        est_mags = sdss.convert_flux_to_mag(est_fluxes.cpu())
         return est_fluxes, est_mags
 
     def move_to_cpu(self):

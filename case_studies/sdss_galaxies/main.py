@@ -321,7 +321,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
             with torch.no_grad():
 
-                tile_map, _, _ = predict_module.predict_on_image(chunk)
+                tile_map, _ = predict_module.predict_on_image(chunk)
 
                 # plot image from tile est.
                 recon_image, _ = image_decoder.render_images(
