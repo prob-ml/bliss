@@ -1,7 +1,7 @@
 """Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
 from unicodedata import name
 import torch
-from typing import Tuple, Dict, List
+from typing import Optional, Tuple, Dict, List
 from collections import namedtuple
 from torch import nn
 from einops import rearrange
@@ -58,8 +58,8 @@ class TileMAP:
     def __init__(
         self,
         loc_tile_map: LocationTileMAP,
-        classification_map: ClassificationTileMAP,
-        galaxy_params: Tensor,
+        classification_map: Optional[ClassificationTileMAP] = None,
+        galaxy_params: Optional[Tensor] = None,
     ):
         self.locs = loc_tile_map.locs
         self.log_fluxes = loc_tile_map.log_fluxes
@@ -67,9 +67,15 @@ class TileMAP:
         self.prob_n_sources = loc_tile_map.prob_n_sources
         self.n_sources = loc_tile_map.n_sources
 
-        self.galaxy_bool = classification_map.galaxy_bool
-        self.star_bool = classification_map.star_bool
-        self.prob_galaxy = classification_map.prob_galaxy
+        if classification_map is not None:
+            self.galaxy_bool = classification_map.galaxy_bool
+            self.star_bool = classification_map.star_bool
+            self.prob_galaxy = classification_map.prob_galaxy
+        else:
+            self.galaxy_bool = None
+            self.star_bool = None
+            self.prob_galaxy = None
+
 
         self.galaxy_params = galaxy_params
 
@@ -162,9 +168,9 @@ class Predict(nn.Module):
     def __init__(
         self,
         image_encoder: ImageEncoder,
-        binary_encoder: BinaryEncoder,
-        galaxy_encoder: GalaxyEncoder,
-        galaxy_decoder: OneCenteredGalaxyDecoder,
+        binary_encoder: Optional[BinaryEncoder] = None,
+        galaxy_encoder: Optional[GalaxyEncoder] = None,
+        galaxy_decoder: Optional[OneCenteredGalaxyDecoder] = None,
     ) -> None:
         """Initializes Predict module.
 
@@ -244,6 +250,9 @@ class Predict(nn.Module):
 
     # def classify_objects(self, ptiles, locs, tile_is_on_array, n_sources):
     def classify_objects(self, loc_tile_map: LocationTileMAP):
+        if self.binary_encoder is None:
+            return None
+
         assert not self.binary_encoder.training
         prob_galaxy = (
             self.binary_encoder(loc_tile_map.ptiles, loc_tile_map.locs).reshape(1, -1, 1, 1)
@@ -255,7 +264,9 @@ class Predict(nn.Module):
 
     def get_galaxy_params(
         self, loc_tile_map: LocationTileMAP, classification_map: ClassificationTileMAP
-    ):
+    ) -> Optional[Tensor]:
+        if self.galaxy_encoder is None:
+            return None
         galaxy_param_mean = self.galaxy_encoder(loc_tile_map.ptiles, loc_tile_map.locs)
         latent_dim = galaxy_param_mean.shape[-1]
         galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
