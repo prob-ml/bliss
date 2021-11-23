@@ -76,7 +76,6 @@ class TileMAP:
             self.star_bool = None
             self.prob_galaxy = None
 
-
         self.galaxy_params = galaxy_params
 
     @property
