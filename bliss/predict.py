@@ -116,10 +116,6 @@ class FullMAP(nn.Module):
             self.mags = None
 
     @property
-    def plocs(self):
-        return torch.stack((self.x_plocs, self.y_plocs), dim=-1)
-
-    @property
     def n_objects(self):
         return self.locs.shape[1]
 
