@@ -380,13 +380,15 @@ class Predict(nn.Module):
         assert image.shape[1] == self.image_encoder.n_bands == 1
         assert self.image_encoder.max_detections == 1
         # binary prediction
-        assert not self.binary_encoder.training
-        assert image.shape[1] == self.binary_encoder.n_bands
+        if self.binary_encoder is not None:
+            assert not self.binary_encoder.training
+            assert image.shape[1] == self.binary_encoder.n_bands
         # galaxy measurement predictions
-        assert not self.galaxy_encoder.training
-        assert image.shape[1] == self.galaxy_encoder.n_bands
-        assert self.image_encoder.border_padding == self.galaxy_encoder.border_padding
-        assert self.image_encoder.tile_slen == self.galaxy_encoder.tile_slen
+        if self.galaxy_decoder is not None:
+            assert not self.galaxy_encoder.training
+            assert image.shape[1] == self.galaxy_encoder.n_bands
+            assert self.image_encoder.border_padding == self.galaxy_encoder.border_padding
+            assert self.image_encoder.tile_slen == self.galaxy_encoder.tile_slen
 
 
 def predict(cfg: DictConfig):

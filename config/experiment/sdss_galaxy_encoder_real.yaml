@@ -19,6 +19,6 @@ optimizer:
   kwargs:
     lr: 1e-4
 
-dataset:
-  batch_size: 8
+# dataset:
+#   batch_size: 8
   

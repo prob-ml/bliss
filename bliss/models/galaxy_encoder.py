@@ -68,6 +68,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # extract useful info from image_decoder
         self.n_bands = self.image_decoder.n_bands
+        self.decoder_slen = self.image_decoder.slen
 
         # put image dimensions together
         self.tile_slen = self.image_decoder.tile_slen
@@ -172,19 +173,36 @@ class GalaxyEncoder(pl.LightningModule):
     # pylint: disable=too-many-statements
     def make_plots(self, batch, n_samples=25):
         # validate worst reconstruction images.
+        for k in batch.keys():
+            print(f"{k}: {batch[k].shape}")
+        print(f"n_samples: {n_samples}")
         n_samples = min(len(batch["n_sources"]), n_samples)
+        print(f"n_samples: {n_samples}")
 
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "slen", "background"}
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
-        tile_params = {k: v for k, v in batch.items() if k not in exclude}
+        # slen = self.decoder_slen
+        # slen = images.shape[-1]
+        # print(slen)
+        # tile_params = {k: v for k, v in batch.items() if k not in exclude}
 
         # obtain map estimates
         tile_galaxy_params = self.forward_image(images, batch["locs"])
+
         tile_est = {
-            k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
+            "n_sources": batch["n_sources"],
+            "locs": batch["locs"],
+            "galaxy_bool": batch["galaxy_bool"],
+            "star_bool": batch["star_bool"],
+            "fluxes": batch["fluxes"],
+            "log_fluxes": batch["log_fluxes"],
+            "galaxy_params": tile_galaxy_params,
         }
+        # tile_est = {
+        #     k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
+        # }
         est = get_full_params(tile_est, slen)
 
         # draw all reconstruction images.

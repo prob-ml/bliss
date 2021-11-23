@@ -1,3 +1,4 @@
+from einops.einops import rearrange
 import torch
 import pytorch_lightning as pl
 
@@ -23,7 +24,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
         field=12,
         bands=(2,),
         bp=24,
-        n_batches=1,
+        n_batches=2,
     ) -> None:
         super().__init__()
         sdss_data = SloanDigitalSkySurvey(
@@ -35,14 +36,15 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
             overwrite_cache=True,
             overwrite_fits_cache=True,
         )
-        self.image = sdss_data[0]["image"][0]
+        image = torch.from_numpy(sdss_data[0]["image"][0])
+        self.image = rearrange(image, "h w -> 1 1 h w")
         self.bp = bp
         self.n_batches = n_batches
 
         sleep = SleepPhase.load_from_checkpoint(sleep_ckpt)
         image_encoder = sleep.image_encoder
         binary_encoder = BinaryEncoder.load_from_checkpoint(binary_ckpt)
-        self.predict_module = Predict(image_encoder, binary_encoder)
+        self.predict_module = Predict(image_encoder.eval(), binary_encoder.eval())
 
     def __iter__(self):
         return self.batch_generator()
@@ -54,7 +56,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
     def get_batch(self):
         # Get chunk
         xlim, ylim = self.get_lims()
-        chunk = self.image[ylim[1] - ylim[0], xlim[1] - xlim[0]]
+        chunk = self.image[:, :, ylim[0] : ylim[1], xlim[0] : xlim[1]]
         with torch.no_grad():
             tile_map, _ = self.predict_module.predict_on_image(chunk)
         batch = {
@@ -65,6 +67,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
             "star_bool": tile_map.star_bool,
             "fluxes": tile_map.fluxes,
             "log_fluxes": tile_map.log_fluxes,
+            "slen": torch.tensor([chunk.shape[-1] - 2 * self.bp]),
         }
 
         return batch
