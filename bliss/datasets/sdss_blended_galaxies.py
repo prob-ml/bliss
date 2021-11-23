@@ -43,6 +43,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
 
         sleep = SleepPhase.load_from_checkpoint(sleep_ckpt)
         image_encoder = sleep.image_encoder
+
+        self.slen = 40
+
         binary_encoder = BinaryEncoder.load_from_checkpoint(binary_ckpt)
         self.predict_module = Predict(image_encoder.eval(), binary_encoder.eval())
 
@@ -73,8 +76,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
         return batch
 
     def get_lims(self):
-        xlim = (1700 - self.bp, 2000 + self.bp)
-        ylim = (200 - self.bp, 500 + self.bp)
+        xlim = (1700 - self.bp, 1700 + self.slen + self.bp)
+        ylim = (200 - self.bp, 200 + self.slen + self.bp)
+
         return xlim, ylim
 
     def train_dataloader(self):
