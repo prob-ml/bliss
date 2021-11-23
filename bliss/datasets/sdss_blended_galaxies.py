@@ -70,14 +70,16 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
             "star_bool": tile_map.star_bool,
             "fluxes": tile_map.fluxes,
             "log_fluxes": tile_map.log_fluxes,
-            "slen": torch.tensor([chunk.shape[-1] - 2 * self.bp]),
+            "slen": torch.tensor([self.slen]),
         }
 
         return batch
 
     def get_lims(self):
-        xlim = (1700 - self.bp, 1700 + self.slen + self.bp)
-        ylim = (200 - self.bp, 200 + self.slen + self.bp)
+        x_start = torch.randint(low=0, high=(300 - self.slen), size=(1, ))
+        y_start = torch.randint(low=0, high=(300 - self.slen), size=(1, ))
+        xlim = (x_start + 1700 - self.bp, x_start + 1700 + self.slen + self.bp)
+        ylim = (y_start + 200 - self.bp, y_start + 200 + self.slen + self.bp)
 
         return xlim, ylim
 
