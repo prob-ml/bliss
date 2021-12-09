@@ -67,9 +67,9 @@ cfg.model.decoder.kwargs.update({'n_bands': 1,
                                  'tile_slen': 10, 
                                  'ptile_slen': 30, 
                                  'border_padding': 5, 
-                                 'mean_sources': 0.5, 
+                                 'mean_sources': 0.2, 
                                  'background_values': [680], 
-                                 'psf_params_file': './zband_psf_simple.npy'})
+                                 'psf_params_file': './psf/zband_psf_simple.npy'})
 
 cfg.model.encoder.kwargs.update({'ptile_slen': 20})
 
