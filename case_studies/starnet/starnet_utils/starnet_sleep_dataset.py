@@ -59,21 +59,21 @@ class SimulatedStarnetDataset(pl.LightningDataModule, IterableDataset):
         
         return sampled_background_vals
     
-#     def _sample_n_sources(self, batch_size=1):
+    def _sample_n_sources(self, batch_size=1):
         
-#         # this overwrites the `_sample_n_sources` method in the image decoder
+        # this overwrites the `_sample_n_sources` method in the image decoder
         
-#         # sample number of sources
-#         # first sample poisson prior parameter
-#         pois_prior_lambda = torch.rand(batch_size).to(self.image_decoder.device) * 0.6 + 0.4
-#         poisson = Poisson(pois_prior_lambda)
-#         n_sources = poisson.sample((self.image_decoder.n_tiles_per_image, )).transpose(0, 1)
+        # sample number of sources
+        # first sample poisson prior parameter
+        pois_prior_lambda = torch.rand(batch_size).to(self.image_decoder.device) * 0.6 + 0.4
+        poisson = Poisson(pois_prior_lambda)
+        n_sources = poisson.sample((self.image_decoder.n_tiles_per_image, )).transpose(0, 1)
         
-#         # long() here is necessary because used for indexing and one_hot encoding.
-#         n_sources = n_sources.clamp(max=self.image_decoder.max_sources,
-#                                     min=self.image_decoder.min_sources)
+        # long() here is necessary because used for indexing and one_hot encoding.
+        n_sources = n_sources.clamp(max=self.image_decoder.max_sources,
+                                    min=self.image_decoder.min_sources)
         
-#         return n_sources.long()
+        return n_sources.long()
 
     def get_batch(self):
         with torch.no_grad():
