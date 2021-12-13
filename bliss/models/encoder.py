@@ -145,83 +145,6 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     return params
 
 
-class ConvBlock(nn.Module):
-    """A Convolution Layer.
-
-    This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
-    in the middle, and an option to downsample with a stride of 2.
-
-    Parameters:
-        in_channel: Number of input channels
-        out_channel: Number of output channels
-        dropout: Dropout proportion between [0, 1]
-        downsample (optional): Whether to downsample with stride of 2.
-    """
-
-    def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
-        """Initializes the module layers."""
-        super().__init__()
-        self.downsample = downsample
-        stride = 1
-        if self.downsample:
-            stride = 2
-            self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
-            self.sc_bn = nn.BatchNorm2d(out_channel)
-        self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride)
-        self.bn1 = nn.BatchNorm2d(out_channel)
-        self.drop1 = nn.Dropout2d(dropout)
-        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(out_channel)
-
-    def forward(self, x):
-        """Runs convolutional block on inputs."""
-        identity = x
-
-        x = self.conv1(x)
-        x = F.relu(self.bn1(x))
-
-        x = self.drop1(x)
-
-        x = self.conv2(x)
-        x = self.bn2(x)
-
-        if self.downsample:
-            identity = self.sc_bn(self.sc_conv(identity))
-
-        out = x + identity
-        return F.relu(out)
-
-
-class EncoderCNN(nn.Module):
-    def __init__(self, n_bands, channel, dropout):
-        super().__init__()
-        self.layer = self._make_layer(n_bands, channel, dropout)
-
-    def forward(self, x):
-        """Runs encoder CNN on inputs."""
-        return self.layer(x)
-
-    def _make_layer(self, n_bands, channel, dropout):
-        layers = [
-            nn.Conv2d(n_bands, channel, 3, padding=1),
-            nn.BatchNorm2d(channel),
-            nn.ReLU(True),
-        ]
-        in_channel = channel
-        for i in range(3):
-            downsample = True
-            if i == 0:
-                downsample = False
-            layers += [ConvBlock(in_channel, channel, dropout, downsample)]
-            layers += [
-                ConvBlock(channel, channel, dropout, False),
-                ConvBlock(channel, channel, dropout, False),
-            ]
-            in_channel = channel
-            channel = channel * 2
-        return nn.Sequential(*layers)
-
-
 class ImageEncoder(nn.Module):
     """Encodes the distribution of a latent variable representing an astronomical image.
 
@@ -587,6 +510,83 @@ class ImageEncoder(nn.Module):
             "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
             "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
         }
+
+
+class EncoderCNN(nn.Module):
+    def __init__(self, n_bands, channel, dropout):
+        super().__init__()
+        self.layer = self._make_layer(n_bands, channel, dropout)
+
+    def forward(self, x):
+        """Runs encoder CNN on inputs."""
+        return self.layer(x)
+
+    def _make_layer(self, n_bands, channel, dropout):
+        layers = [
+            nn.Conv2d(n_bands, channel, 3, padding=1),
+            nn.BatchNorm2d(channel),
+            nn.ReLU(True),
+        ]
+        in_channel = channel
+        for i in range(3):
+            downsample = True
+            if i == 0:
+                downsample = False
+            layers += [ConvBlock(in_channel, channel, dropout, downsample)]
+            layers += [
+                ConvBlock(channel, channel, dropout, False),
+                ConvBlock(channel, channel, dropout, False),
+            ]
+            in_channel = channel
+            channel = channel * 2
+        return nn.Sequential(*layers)
+
+
+class ConvBlock(nn.Module):
+    """A Convolution Layer.
+
+    This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
+    in the middle, and an option to downsample with a stride of 2.
+
+    Parameters:
+        in_channel: Number of input channels
+        out_channel: Number of output channels
+        dropout: Dropout proportion between [0, 1]
+        downsample (optional): Whether to downsample with stride of 2.
+    """
+
+    def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
+        """Initializes the module layers."""
+        super().__init__()
+        self.downsample = downsample
+        stride = 1
+        if self.downsample:
+            stride = 2
+            self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
+            self.sc_bn = nn.BatchNorm2d(out_channel)
+        self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride)
+        self.bn1 = nn.BatchNorm2d(out_channel)
+        self.drop1 = nn.Dropout2d(dropout)
+        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channel)
+
+    def forward(self, x):
+        """Runs convolutional block on inputs."""
+        identity = x
+
+        x = self.conv1(x)
+        x = F.relu(self.bn1(x))
+
+        x = self.drop1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+
+        if self.downsample:
+            identity = self.sc_bn(self.sc_conv(identity))
+
+        out = x + identity
+        return F.relu(out)
 
 
 def _argfront(is_on_array, dim):
