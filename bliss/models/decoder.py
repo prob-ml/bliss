@@ -656,14 +656,18 @@ class StarTileDecoder(nn.Module):
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
-    def forward(self, locs, fluxes, star_bool):
+    def forward(self, locs, fluxes, star_bool, detach_psf = False):
         """Renders star tile from locations and fluxes."""
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
         # star_bool: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
-
+        
         psf = self._adjust_psf()
+        
+        if(detach_psf): 
+            psf = psf.detach()
+        
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
 
@@ -683,9 +687,13 @@ class StarTileDecoder(nn.Module):
 
     def psf_forward(self):
         psf = self._get_psf()
-        init_psf_sum = reduce(psf, "n m k -> n", "sum").detach()
-        norm = reduce(psf, "n m k -> n", "sum")
-        psf *= rearrange(init_psf_sum / norm, "n -> n 1 1")
+        
+        # is this necessary? Somwhere along the way, the gradient got blocked... 
+        
+#         init_psf_sum = reduce(psf, "n m k -> n", "sum").detach()
+#         norm = reduce(psf, "n m k -> n", "sum")
+#         psf *= rearrange(init_psf_sum / norm, "n -> n 1 1")
+
         return psf
 
     @staticmethod

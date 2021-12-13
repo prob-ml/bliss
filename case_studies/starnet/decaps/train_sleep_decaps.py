@@ -68,7 +68,7 @@ cfg.model.decoder.kwargs.update({'n_bands': 1,
                                  'ptile_slen': 30, 
                                  'border_padding': 5, 
                                  'background_values': [680], 
-                                 'psf_params_file': './psf/zband_psf_simple.npy'})
+                                 'psf_params_file': './psf/zband_psf_fitted.npy'})
 
 cfg.model.encoder.kwargs.update({'ptile_slen': 20})
 
@@ -82,9 +82,6 @@ print(cfg)
 # initialize data set and model
 ###################
 # dataset = simulated.SimulatedDataset(**cfg.dataset.kwargs)
-
-# cfg.dataset.kwargs['mean_background_vals'] = [680.]
-# cfg.dataset.kwargs['background_sd'] = 15
 
 dataset = SimulatedStarnetDataset(mean_background_vals = [680.], 
                                   background_sd = 15, 
