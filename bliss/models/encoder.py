@@ -274,39 +274,6 @@ class ImageEncoder(nn.Module):
         var_params = self.forward_sampled(image_ptiles, tile_n_sources)
         return {key: value.squeeze(0) for key, value in var_params.items()}
 
-    def sample_encoder(self, images, n_samples):
-        assert len(images.shape) == 4
-        assert images.shape[0] == 1, "Only works for 1 image"
-        image_ptiles = self.get_images_in_tiles(images)
-        h = self.get_var_params_all(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-
-        # sample number of sources.
-        # tile_n_sources shape = (n_samples x n_ptiles)
-        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
-        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
-        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
-        tile_n_sources = tile_n_sources.view(n_samples, -1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-
-        # get var_params conditioned on n_sources
-        pred = self.forward_sampled(image_ptiles, tile_n_sources)
-
-        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
-        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
-        tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
-        tile_log_fluxes = self._get_normal_samples(
-            pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
-        )
-        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
-        return {
-            "n_sources": tile_n_sources,
-            "locs": tile_locs,
-            "log_fluxes": tile_log_fluxes,
-            "fluxes": tile_fluxes,
-        }
-
     def tile_map_estimate_from_var_params(self, pred, n_tiles_per_image, batch_size):
         # batch_size = # of images that will be predicted.
         # n_tiles_per_image = # tiles/padded_tiles each image is subdivided into.
@@ -391,6 +358,8 @@ class ImageEncoder(nn.Module):
             "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
         }
 
+    ## These methods are only used in testing. Do we need them or can
+    ## they be moved to the code that they test? --------------------------------------
     def get_var_params_all(self, image_ptiles):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
@@ -400,6 +369,40 @@ class ImageEncoder(nn.Module):
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(h)
 
+    def sample_encoder(self, images, n_samples):
+        assert len(images.shape) == 4
+        assert images.shape[0] == 1, "Only works for 1 image"
+        image_ptiles = self.get_images_in_tiles(images)
+        h = self.get_var_params_all(image_ptiles)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+
+        # sample number of sources.
+        # tile_n_sources shape = (n_samples x n_ptiles)
+        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
+        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
+        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
+        tile_n_sources = tile_n_sources.view(n_samples, -1)
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+
+        # get var_params conditioned on n_sources
+        pred = self.forward_sampled(image_ptiles, tile_n_sources)
+
+        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
+        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
+        tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
+        tile_log_fluxes = self._get_normal_samples(
+            pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
+        )
+        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+        return {
+            "n_sources": tile_n_sources,
+            "locs": tile_locs,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+        }
+
+    ## --------------------------------------------------------------------------------------
     def _get_var_params_for_n_sources(self, h, n_sources):
         """Gets variational parameters for n_sources.
 
