@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 import torch
 
+from bliss.models.encoder import get_full_params
+
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
 
@@ -35,6 +37,26 @@ def trained_star_encoder_m2(model_setup, devices):
     return sleep_net.image_encoder.to(devices.device)
 
 
+def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
+    # return full estimate of parameters in full image.
+    # NOTE: slen*wlen is size of the image without border padding
+
+    if wlen is None:
+        wlen = slen
+    assert isinstance(slen, int) and isinstance(wlen, int)
+    # check image compatibility
+    border1 = (images.shape[-2] - slen) / 2
+    border2 = (images.shape[-1] - wlen) / 2
+    assert border1 == border2, "border paddings on each dimension differ."
+    assert slen % image_encoder.tile_slen == 0, "incompatible slen"
+    assert wlen % image_encoder.tile_slen == 0, "incompatible wlen"
+    assert border1 == image_encoder.border_padding, "incompatible border"
+
+    # obtained estimates per tile, then on full image.
+    tile_estimate = image_encoder.tile_map_estimate(images)
+    return get_full_params(tile_estimate, slen, wlen)
+
+
 class TestStarSleepEncoderM2:
     def test_star_sleep_m2(self, trained_star_encoder_m2, devices, paths):
         device = devices.device
@@ -54,7 +76,7 @@ class TestStarSleepEncoderM2:
         true_fluxes = torch.from_numpy(hubble_data["true_fluxes"]).to(device)
 
         # get estimated parameters
-        estimate = trained_star_encoder_m2.map_estimate(test_image.to(device), slen)
+        estimate = get_map_estimate(trained_star_encoder_m2, test_image.to(device), slen)
 
         # check metrics if cuda is true
         if not devices.use_cuda:

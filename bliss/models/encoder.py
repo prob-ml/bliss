@@ -334,25 +334,6 @@ class ImageEncoder(nn.Module):
 
     # These methods are only used in testing or case studies, Do we need them or can
     # they be moved to the code that they test? ------------------------
-    def map_estimate(self, images, slen: int, wlen: int = None):
-        # return full estimate of parameters in full image.
-        # NOTE: slen*wlen is size of the image without border padding
-
-        if wlen is None:
-            wlen = slen
-        assert isinstance(slen, int) and isinstance(wlen, int)
-        # check image compatibility
-        border1 = (images.shape[-2] - slen) / 2
-        border2 = (images.shape[-1] - wlen) / 2
-        assert border1 == border2, "border paddings on each dimension differ."
-        assert slen % self.tile_slen == 0, "incompatible slen"
-        assert wlen % self.tile_slen == 0, "incompatible wlen"
-        assert border1 == self.border_padding, "incompatible border"
-
-        # obtained estimates per tile, then on full image.
-        tile_estimate = self.tile_map_estimate(images)
-        return get_full_params(tile_estimate, slen, wlen)
-
     def sample_encoder(self, images, n_samples):
         assert len(images.shape) == 4
         assert images.shape[0] == 1, "Only works for 1 image"

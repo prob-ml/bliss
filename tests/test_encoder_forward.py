@@ -153,4 +153,4 @@ class TestSourceEncoder:
             max_detections=max_detections,
         ).to(device)
 
-        star_encoder.sample_encoder(images, n_samples)
+        star_encoder.sample(images, n_samples)
