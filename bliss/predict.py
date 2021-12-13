@@ -7,7 +7,7 @@ from tqdm import tqdm
 from bliss.datasets import sdss
 from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
-from bliss.models.encoder import get_full_params, get_is_on_from_n_sources
+from bliss.models.encoder import get_full_params, get_is_on_from_n_sources, get_images_in_tiles
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 from bliss.sleep import SleepPhase
@@ -50,7 +50,7 @@ def predict_on_image(
     bp = image_encoder.border_padding
 
     # get padded tiles.
-    ptiles = image_encoder.get_images_in_tiles(image)
+    ptiles = get_images_in_tiles(image, image_encoder.tile_slen, image_encoder.ptile_slen)
 
     # get MAP estimates and variational parameters from image_encoder
     tile_n_sources = image_encoder.tile_map_n_sources(ptiles)
