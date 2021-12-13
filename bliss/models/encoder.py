@@ -246,70 +246,6 @@ class ImageEncoder(nn.Module):
         """
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
-    def _get_hidden_indices(self):
-        """Setup the indices corresponding to entries in h, cached since same for all h."""
-
-        # initialize matrices containing the indices for each variational param.
-        indx_mats = {}
-        for k, param in self.variational_params.items():
-            param_dim = param["dim"]
-            shape = (self.max_detections + 1, param_dim * self.max_detections)
-            indx_mat = torch.full(
-                shape,
-                self.dim_out_all,
-                dtype=torch.long,
-            )
-            indx_mats[k] = indx_mat
-
-        # add corresponding indices to the index matrices of variational params
-        # for a given n_detection.
-        curr_indx = 0
-        for n_detections in range(1, self.max_detections + 1):
-            for k, param in self.variational_params.items():
-                param_dim = param["dim"]
-                new_indx = (param_dim * n_detections) + curr_indx
-                indx_mats[k][n_detections, 0 : (param_dim * n_detections)] = torch.arange(
-                    curr_indx, new_indx
-                )
-                curr_indx = new_indx
-
-        return indx_mats, curr_indx
-
-    def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
-        """Obtains variational parameters for n_sources.
-
-        Indexes into all possible combinations of variational parameters (h) to obtain actually
-        variational parameters for n_sources.
-
-        Arguments:
-            h: shape = (n_ptiles x dim_out_all)
-            n_sources: (n_samples x n_tiles)
-            indx_mat: TODO (to be documented)
-            param_dim: the dimension of the parameter you are indexing h.
-
-        Returns:
-            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
-        """
-        assert len(n_sources.shape) == 2
-        assert h.size(0) == n_sources.size(1)
-        assert h.size(1) == self.dim_out_all
-        n_ptiles = h.size(0)
-        h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
-
-        # select the indices from _h indicated by indx_mat.
-        indices = indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1)
-        var_param = torch.gather(h, 1, indices)
-
-        # np: n_ptiles, ns: n_samples
-        return rearrange(
-            var_param,
-            "np (ns d pd) -> ns np d pd",
-            np=n_ptiles,
-            ns=n_sources.size(0),
-            d=self.max_detections,
-            pd=param_dim,
-        )
-
     def get_var_params_all(self, image_ptiles):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
@@ -510,6 +446,70 @@ class ImageEncoder(nn.Module):
             "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
             "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
         }
+
+    def _get_hidden_indices(self):
+        """Setup the indices corresponding to entries in h, cached since same for all h."""
+
+        # initialize matrices containing the indices for each variational param.
+        indx_mats = {}
+        for k, param in self.variational_params.items():
+            param_dim = param["dim"]
+            shape = (self.max_detections + 1, param_dim * self.max_detections)
+            indx_mat = torch.full(
+                shape,
+                self.dim_out_all,
+                dtype=torch.long,
+            )
+            indx_mats[k] = indx_mat
+
+        # add corresponding indices to the index matrices of variational params
+        # for a given n_detection.
+        curr_indx = 0
+        for n_detections in range(1, self.max_detections + 1):
+            for k, param in self.variational_params.items():
+                param_dim = param["dim"]
+                new_indx = (param_dim * n_detections) + curr_indx
+                indx_mats[k][n_detections, 0 : (param_dim * n_detections)] = torch.arange(
+                    curr_indx, new_indx
+                )
+                curr_indx = new_indx
+
+        return indx_mats, curr_indx
+
+    def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
+        """Obtains variational parameters for n_sources.
+
+        Indexes into all possible combinations of variational parameters (h) to obtain actually
+        variational parameters for n_sources.
+
+        Arguments:
+            h: shape = (n_ptiles x dim_out_all)
+            n_sources: (n_samples x n_tiles)
+            indx_mat: TODO (to be documented)
+            param_dim: the dimension of the parameter you are indexing h.
+
+        Returns:
+            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
+        """
+        assert len(n_sources.shape) == 2
+        assert h.size(0) == n_sources.size(1)
+        assert h.size(1) == self.dim_out_all
+        n_ptiles = h.size(0)
+        h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
+
+        # select the indices from _h indicated by indx_mat.
+        indices = indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1)
+        var_param = torch.gather(h, 1, indices)
+
+        # np: n_ptiles, ns: n_samples
+        return rearrange(
+            var_param,
+            "np (ns d pd) -> ns np d pd",
+            np=n_ptiles,
+            ns=n_sources.size(0),
+            d=self.max_detections,
+            pd=param_dim,
+        )
 
 
 class EncoderCNN(nn.Module):
