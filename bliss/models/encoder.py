@@ -319,6 +319,18 @@ class ImageEncoder(nn.Module):
             "n_sources": tile_n_sources.reshape(batch_size, -1),
         }
 
+    @property
+    def variational_params(self):
+        # transform is a function applied directly on NN output.
+        return {
+            "loc_mean": {"dim": 2, "transform": _loc_mean_func},
+            "loc_logvar": {"dim": 2, "transform": _identity_func},
+            "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
+            "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
+        }
+
+    # These methods are only used in testing or case studies, Do we need them or can
+    # they be moved to the code that they test? ------------------------
     def map_estimate(self, images, slen: int, wlen: int = None):
         # return full estimate of parameters in full image.
         # NOTE: slen*wlen is size of the image without border padding
@@ -338,18 +350,6 @@ class ImageEncoder(nn.Module):
         tile_estimate = self.tile_map_estimate(images)
         return get_full_params(tile_estimate, slen, wlen)
 
-    @property
-    def variational_params(self):
-        # transform is a function applied directly on NN output.
-        return {
-            "loc_mean": {"dim": 2, "transform": _loc_mean_func},
-            "loc_logvar": {"dim": 2, "transform": _identity_func},
-            "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
-            "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
-        }
-
-    # These methods are only used in testing. Do we need them or can
-    # they be moved to the code that they test? ------------------------
     def get_var_params_all(self, image_ptiles):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
