@@ -145,27 +145,6 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     return params
 
 
-def _argfront(is_on_array, dim):
-    # return indices that sort pushing all zeroes of tensor to the back.
-    # dim is dimension along which do the ordering.
-    assert len(is_on_array.shape) == 2
-    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
-
-
-def _sample_class_weights(class_weights, n_samples=1):
-    """Draw a sample from Categorical variable with probabilities class_weights."""
-    cat_rv = categorical.Categorical(probs=class_weights)
-    return cat_rv.sample((n_samples,)).squeeze()
-
-
-def _loc_mean_func(x):
-    return torch.sigmoid(x) * (x != 0).float()
-
-
-def _identity_func(x):
-    return x
-
-
 class ConvBlock(nn.Module):
     """A Convolution Layer.
 
@@ -608,3 +587,24 @@ class ImageEncoder(nn.Module):
             "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
             "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
         }
+
+
+def _argfront(is_on_array, dim):
+    # return indices that sort pushing all zeroes of tensor to the back.
+    # dim is dimension along which do the ordering.
+    assert len(is_on_array.shape) == 2
+    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
+
+
+def _sample_class_weights(class_weights, n_samples=1):
+    """Draw a sample from Categorical variable with probabilities class_weights."""
+    cat_rv = categorical.Categorical(probs=class_weights)
+    return cat_rv.sample((n_samples,)).squeeze()
+
+
+def _loc_mean_func(x):
+    return torch.sigmoid(x) * (x != 0).float()
+
+
+def _identity_func(x):
+    return x
