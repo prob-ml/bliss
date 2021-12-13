@@ -305,6 +305,15 @@ class ImageEncoder(nn.Module):
             "n_sources": tile_n_sources.reshape(batch_size, -1),
         }
 
+    def get_var_params_all(self, image_ptiles):
+        # get h matrix.
+        # Forward to the layer that is shared by all n_sources.
+        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        h = self.enc_conv(log_img)
+
+        # Concatenate all output parameters for all possible n_sources
+        return self.enc_final(h)
+
     @property
     def variational_params(self):
         # transform is a function applied directly on NN output.
@@ -335,15 +344,6 @@ class ImageEncoder(nn.Module):
         # obtained estimates per tile, then on full image.
         tile_estimate = self.tile_map_estimate(images)
         return get_full_params(tile_estimate, slen, wlen)
-
-    def get_var_params_all(self, image_ptiles):
-        # get h matrix.
-        # Forward to the layer that is shared by all n_sources.
-        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
-        h = self.enc_conv(log_img)
-
-        # Concatenate all output parameters for all possible n_sources
-        return self.enc_final(h)
 
     def sample_encoder(self, images, n_samples):
         assert len(images.shape) == 4
