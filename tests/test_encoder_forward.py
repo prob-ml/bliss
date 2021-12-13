@@ -132,47 +132,6 @@ class TestSourceEncoder:
                         == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
                     )
 
-    def test_forward_to_hidden2d(self, devices):
-        """Consistency check of using forward vs get_var_params."""
-        device = devices.device
-
-        n_image_tiles = 30
-        max_detections = 4
-        ptile_slen = 10
-        tile_slen = 2
-        n_bands = 2
-        n_samples = 10
-
-        # get encoder
-        star_encoder = encoder.ImageEncoder(
-            ptile_slen=ptile_slen,
-            tile_slen=tile_slen,
-            n_bands=n_bands,
-            max_detections=max_detections,
-        ).to(device)
-
-        with torch.no_grad():
-            star_encoder.eval()
-
-            # simulate image padded tiles
-            image_ptiles = (
-                torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen, device=device) + 10.0
-            )
-            n_star_per_tile_sampled = torch.from_numpy(
-                np.random.choice(max_detections, (n_samples, n_image_tiles))
-            )
-
-            pred = star_encoder.forward_sampled(image_ptiles, n_star_per_tile_sampled)
-
-            #  test prediction matches tile by tile
-            for i in range(n_samples):
-                pred_i = star_encoder.forward(image_ptiles, n_star_per_tile_sampled[i])
-
-                assert (pred_i["loc_mean"] - pred["loc_mean"][i]).abs().max() < 1e-6
-                assert torch.all(pred_i["loc_logvar"].eq(pred["loc_logvar"][i]))
-                assert torch.all(pred_i["log_flux_mean"].eq(pred["log_flux_mean"][i]))
-                assert torch.all(pred_i["log_flux_logvar"].eq(pred["log_flux_logvar"][i]))
-
     def test_sample(self, devices):
         device = devices.device
 
