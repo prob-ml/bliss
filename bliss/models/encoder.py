@@ -235,6 +235,15 @@ class ImageEncoder(nn.Module):
             "The forward method for ImageEncoder has changed to encode_for_n_sources()"
         )
 
+    def encode(self, image_ptiles):
+        # get h matrix.
+        # Forward to the layer that is shared by all n_sources.
+        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        h = self.enc_conv(log_img)
+
+        # Concatenate all output parameters for all possible n_sources
+        return self.enc_final(h)
+
     def encode_for_n_sources(self, image_ptiles, tile_n_sources):
         """Runs encoder on image ptiles."""
         # images shape = (n_ptiles x n_bands x pslen x pslen)
@@ -251,7 +260,7 @@ class ImageEncoder(nn.Module):
             raise ValueError("tile_n_sources must have shape size 1 or 2")
 
         assert image_ptiles.shape[0] == tile_n_sources.shape[1]
-        var_params = self.get_var_params_all(image_ptiles)
+        var_params = self.encode(image_ptiles)
 
         # get probability of params except n_sources
         # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
@@ -269,7 +278,7 @@ class ImageEncoder(nn.Module):
         return var_params_for_n_sources
 
     def tile_map_n_sources(self, image_ptiles):
-        h = self.get_var_params_all(image_ptiles)
+        h = self.encode(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
         return torch.argmax(log_probs_n_sources_per_tile, dim=1)
 
@@ -313,15 +322,6 @@ class ImageEncoder(nn.Module):
             "n_sources": tile_n_sources.reshape(batch_size, -1),
         }
 
-    def get_var_params_all(self, image_ptiles):
-        # get h matrix.
-        # Forward to the layer that is shared by all n_sources.
-        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
-        h = self.enc_conv(log_img)
-
-        # Concatenate all output parameters for all possible n_sources
-        return self.enc_final(h)
-
     @property
     def variational_params(self):
         # transform is a function applied directly on NN output.
@@ -357,7 +357,7 @@ class ImageEncoder(nn.Module):
         assert len(images.shape) == 4
         assert images.shape[0] == 1, "Only works for 1 image"
         image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        h = self.get_var_params_all(image_ptiles)
+        h = self.encode(image_ptiles)
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
 
         # sample number of sources.
