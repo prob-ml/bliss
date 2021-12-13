@@ -44,7 +44,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
         sleep = SleepPhase.load_from_checkpoint(sleep_ckpt)
         image_encoder = sleep.image_encoder
 
-        self.slen = 40
+        self.slen = 80
 
         binary_encoder = BinaryEncoder.load_from_checkpoint(binary_ckpt)
         self.predict_module = Predict(image_encoder.eval(), binary_encoder.eval())
