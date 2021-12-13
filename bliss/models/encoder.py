@@ -239,10 +239,43 @@ class ImageEncoder(nn.Module):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
-        h = self.enc_conv(log_img)
+        var_params = self.enc_conv(log_img)
 
         # Concatenate all output parameters for all possible n_sources
-        return self.enc_final(h)
+        return self.enc_final(var_params)
+
+    def sample(self, images, n_samples):
+        assert len(images.shape) == 4
+        assert images.shape[0] == 1, "Only works for 1 image"
+        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        var_params = self.encode(image_ptiles)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
+
+        # sample number of sources.
+        # tile_n_sources shape = (n_samples x n_ptiles)
+        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
+        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
+        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
+        tile_n_sources = tile_n_sources.view(n_samples, -1)
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+
+        # get var_params conditioned on n_sources
+        pred = self.encode_for_n_sources(image_ptiles, tile_n_sources)
+
+        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
+        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
+        tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
+        tile_log_fluxes = self._get_normal_samples(
+            pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
+        )
+        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+        return {
+            "n_sources": tile_n_sources,
+            "locs": tile_locs,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+        }
 
     def encode_for_n_sources(self, image_ptiles, tile_n_sources):
         """Runs encoder on image ptiles."""
@@ -334,38 +367,6 @@ class ImageEncoder(nn.Module):
 
     # These methods are only used in testing or case studies, Do we need them or can
     # they be moved to the code that they test? ------------------------
-    def sample_encoder(self, images, n_samples):
-        assert len(images.shape) == 4
-        assert images.shape[0] == 1, "Only works for 1 image"
-        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        h = self.encode(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-
-        # sample number of sources.
-        # tile_n_sources shape = (n_samples x n_ptiles)
-        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
-        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
-        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
-        tile_n_sources = tile_n_sources.view(n_samples, -1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-
-        # get var_params conditioned on n_sources
-        pred = self.encode_for_n_sources(image_ptiles, tile_n_sources)
-
-        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
-        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
-        tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
-        tile_log_fluxes = self._get_normal_samples(
-            pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
-        )
-        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
-        return {
-            "n_sources": tile_n_sources,
-            "locs": tile_locs,
-            "log_fluxes": tile_log_fluxes,
-            "fluxes": tile_fluxes,
-        }
 
     # --------------------------------------------------------------
     def _get_var_params_for_n_sources(self, h, n_sources):
