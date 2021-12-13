@@ -303,7 +303,6 @@ class ImageEncoder(nn.Module):
         # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
         n_source_log_probs = self._get_logprob_n_from_var_params(var_params)
         var_params_for_n_sources["n_source_log_probs"] = n_source_log_probs
-        # var_params = self._forward_sampled(image_ptiles, tile_n_sources)
         if squeeze:
             var_params_for_n_sources = {
                 key: value.squeeze(0) for key, value in var_params_for_n_sources.items()
