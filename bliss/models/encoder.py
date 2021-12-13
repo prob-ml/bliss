@@ -57,8 +57,6 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-
-
 def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
@@ -246,60 +244,6 @@ class ImageEncoder(nn.Module):
         """
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
-    def get_var_params_all(self, image_ptiles):
-        # get h matrix.
-        # Forward to the layer that is shared by all n_sources.
-        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
-        h = self.enc_conv(log_img)
-
-        # Concatenate all output parameters for all possible n_sources
-        return self.enc_final(h)
-
-    def _get_var_params_for_n_sources(self, h, n_sources):
-        """Gets variational parameters for n_sources.
-
-        Arguments:
-            h: shape = (n_ptiles x dim_out_all)
-            n_sources: Tensor with shape (n_samples x n_ptiles)
-
-        Returns:
-            loc_mean.shape = (n_sample x n_ptiles x max_detections x len(x,y))
-        """
-        assert len(n_sources.shape) == 2
-
-        est_params = {}
-        for k, param in self.variational_params.items():
-            indx_mat = getattr(self, k + "_indx")
-            param_dim = param["dim"]
-            transform = param["transform"]
-            param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
-            param = transform(param)
-            est_params[k] = param
-
-        return est_params
-
-    @staticmethod
-    def _get_normal_samples(mean, sd, tile_is_on_array):
-        # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bool'/'tile_star_bool'.
-        # return shape = (n_samples x n_ptiles x max_detections x param_dim)
-        assert tile_is_on_array.shape[-1] == 1
-        return torch.normal(mean, sd) * tile_is_on_array
-
-    def _get_logprob_n_from_var_params(self, h):
-        """Obtains log probability of number of n_sources.
-
-        For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
-        probability of having 0,1,2 stars.
-
-        Arguments:
-            h: Variational parameters
-
-        Returns:
-            Log-probability of number of sources.
-        """
-        free_probs = h[:, self.prob_n_source_indx]
-        return self.log_softmax(free_probs)
-
     def forward_sampled(self, image_ptiles, tile_n_sources_sampled):
         # images shape = (n_ptiles x n_bands x pslen x pslen)
         # tile_n_sources shape = (n_samples x n_ptiles)
@@ -446,6 +390,60 @@ class ImageEncoder(nn.Module):
             "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
             "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
         }
+
+    def get_var_params_all(self, image_ptiles):
+        # get h matrix.
+        # Forward to the layer that is shared by all n_sources.
+        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        h = self.enc_conv(log_img)
+
+        # Concatenate all output parameters for all possible n_sources
+        return self.enc_final(h)
+
+    def _get_var_params_for_n_sources(self, h, n_sources):
+        """Gets variational parameters for n_sources.
+
+        Arguments:
+            h: shape = (n_ptiles x dim_out_all)
+            n_sources: Tensor with shape (n_samples x n_ptiles)
+
+        Returns:
+            loc_mean.shape = (n_sample x n_ptiles x max_detections x len(x,y))
+        """
+        assert len(n_sources.shape) == 2
+
+        est_params = {}
+        for k, param in self.variational_params.items():
+            indx_mat = getattr(self, k + "_indx")
+            param_dim = param["dim"]
+            transform = param["transform"]
+            param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
+            param = transform(param)
+            est_params[k] = param
+
+        return est_params
+
+    @staticmethod
+    def _get_normal_samples(mean, sd, tile_is_on_array):
+        # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bool'/'tile_star_bool'.
+        # return shape = (n_samples x n_ptiles x max_detections x param_dim)
+        assert tile_is_on_array.shape[-1] == 1
+        return torch.normal(mean, sd) * tile_is_on_array
+
+    def _get_logprob_n_from_var_params(self, h):
+        """Obtains log probability of number of n_sources.
+
+        For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        probability of having 0,1,2 stars.
+
+        Arguments:
+            h: Variational parameters
+
+        Returns:
+            Log-probability of number of sources.
+        """
+        free_probs = h[:, self.prob_n_source_indx]
+        return self.log_softmax(free_probs)
 
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, cached since same for all h."""
