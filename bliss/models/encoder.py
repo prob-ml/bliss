@@ -57,14 +57,6 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_star_bool(n_sources, galaxy_bool):
-    assert n_sources.shape[0] == galaxy_bool.shape[0]
-    assert galaxy_bool.shape[-1] == 1
-    max_sources = galaxy_bool.shape[-2]
-    assert n_sources.le(max_sources).all()
-    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-    is_on_array = is_on_array.view(*galaxy_bool.shape)
-    return (1 - galaxy_bool) * is_on_array
 
 
 def get_full_params(tile_params: dict, slen: int, wlen: int = None):

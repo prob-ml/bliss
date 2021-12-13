@@ -7,7 +7,7 @@ from tqdm import tqdm
 from bliss.datasets import sdss
 from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
-from bliss.models.encoder import get_full_params, get_is_on_from_n_sources, get_star_bool
+from bliss.models.encoder import get_full_params, get_is_on_from_n_sources
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 from bliss.sleep import SleepPhase
@@ -252,3 +252,13 @@ def predict(cfg: DictConfig):
     if cfg.predict.output_file is not None:
         torch.save(var_params, cfg.predict.output_file)
         print(f"Prediction saved to {cfg.predict.output_file}")
+
+
+def get_star_bool(n_sources, galaxy_bool):
+    assert n_sources.shape[0] == galaxy_bool.shape[0]
+    assert galaxy_bool.shape[-1] == 1
+    max_sources = galaxy_bool.shape[-2]
+    assert n_sources.le(max_sources).all()
+    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
+    is_on_array = is_on_array.view(*galaxy_bool.shape)
+    return (1 - galaxy_bool) * is_on_array
