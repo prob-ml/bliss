@@ -231,6 +231,9 @@ class ImageEncoder(nn.Module):
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
     def forward(self, image_ptiles, tile_n_sources):
+        raise NotImplementedError("The forward method for ImageEncoder has changed to sample()")
+
+    def sample(self, image_ptiles, tile_n_sources):
         """Runs encoder on image ptiles."""
         # images shape = (n_ptiles x n_bands x pslen x pslen)
         # tile_n_sources shape = (n_ptiles)
@@ -254,7 +257,7 @@ class ImageEncoder(nn.Module):
 
         # MAP (for n_sources) prediction on var params on each tile
         tile_n_sources = self.tile_map_n_sources(image_ptiles)
-        pred = self(image_ptiles, tile_n_sources)
+        pred = self.sample(image_ptiles, tile_n_sources)
 
         tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
