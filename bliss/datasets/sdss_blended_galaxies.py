@@ -76,8 +76,8 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
         return batch
 
     def get_lims(self):
-        x_start = torch.randint(low=0, high=(300 - self.slen), size=(1, ))
-        y_start = torch.randint(low=0, high=(300 - self.slen), size=(1, ))
+        x_start = torch.randint(low=0, high=(300 - self.slen), size=(1,))
+        y_start = torch.randint(low=0, high=(300 - self.slen), size=(1,))
         xlim = (x_start + 1700 - self.bp, x_start + 1700 + self.slen + self.bp)
         ylim = (y_start + 200 - self.bp, y_start + 200 + self.slen + self.bp)
 

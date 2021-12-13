@@ -55,11 +55,13 @@ class GalaxyEncoder(pl.LightningModule):
         decoder,
         hidden: int = 256,
         optimizer_params: dict = None,
+        crop_loss_at_border=False,
     ):
         super().__init__()
         self.save_hyperparameters()
 
         self.max_sources = 1  # by construction.
+        self.crop_loss_at_border = crop_loss_at_border
 
         # to produce images to train on.
         self.image_prior = ImagePrior(**prior)
@@ -145,6 +147,11 @@ class GalaxyEncoder(pl.LightningModule):
         )
 
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
+        if self.crop_loss_at_border:
+            slen = batch["slen"].item()
+            bp = (recon_losses.shape[-1] - slen) // 2
+            recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
+            print(f"recon_losses shape: {recon_losses.shape}")
         return recon_losses.sum()
 
     def training_step(self, batch, batch_idx):
@@ -250,7 +257,18 @@ class GalaxyEncoder(pl.LightningModule):
             plot_image_and_locs(
                 idx, fig, recon_ax, recon_images, slen, est, labels=labels, vrange=vrange
             )
-            plot_image(fig, res_ax, residuals[idx, 0].cpu().numpy(), vrange=(res_vmin, res_vmax))
+            residuals_idx = residuals[idx, 0].cpu().numpy()
+            if self.crop_loss_at_border:
+                bp = (recon_images.shape[-1] - slen) // 2
+                recon_ax.axvline(bp, color="w")
+                recon_ax.axvline(bp + slen, color="w")
+                recon_ax.axhline(bp, color="w")
+                recon_ax.axhline(bp + slen, color="w")
+                residuals_idx[:bp, :] = 0.0
+                residuals_idx[-bp:, :] = 0.0
+                residuals_idx[:, :bp] = 0.0
+                residuals_idx[:, -bp:] = 0.0
+            plot_image(fig, res_ax, residuals_idx, vrange=(res_vmin, res_vmax))
 
         fig.tight_layout()
         if self.logger:
