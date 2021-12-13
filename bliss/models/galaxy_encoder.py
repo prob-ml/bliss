@@ -228,6 +228,12 @@ class GalaxyEncoder(pl.LightningModule):
         worst_indices = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
 
         # use same vmin, vmax throughout for residuals
+        if self.crop_loss_at_border:
+            bp = (recon_images.shape[-1] - slen) // 2
+            residuals[:, :, :bp, :] = 0.0
+            residuals[:, :, -bp:, :] = 0.0
+            residuals[:, :, :, :bp] = 0.0
+            residuals[:, :, :, -bp:] = 0.0
         res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).item()
         res_vmin = torch.floor(residuals[worst_indices].min().cpu()).item()
 
@@ -264,11 +270,12 @@ class GalaxyEncoder(pl.LightningModule):
                 recon_ax.axvline(bp + slen, color="w")
                 recon_ax.axhline(bp, color="w")
                 recon_ax.axhline(bp + slen, color="w")
-                residuals_idx[:bp, :] = 0.0
-                residuals_idx[-bp:, :] = 0.0
-                residuals_idx[:, :bp] = 0.0
-                residuals_idx[:, -bp:] = 0.0
             plot_image(fig, res_ax, residuals_idx, vrange=(res_vmin, res_vmax))
+            if self.crop_loss_at_border:
+                res_ax.axvline(bp, color="w")
+                res_ax.axvline(bp + slen, color="w")
+                res_ax.axhline(bp, color="w")
+                res_ax.axhline(bp + slen, color="w")
 
         fig.tight_layout()
         if self.logger:
