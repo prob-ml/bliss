@@ -274,13 +274,21 @@ class ImageEncoder(nn.Module):
         var_params = self.forward_sampled(image_ptiles, tile_n_sources)
         return {key: value.squeeze(0) for key, value in var_params.items()}
 
-    def tile_map_estimate_from_var_params(self, pred, n_tiles_per_image, batch_size):
-        # batch_size = # of images that will be predicted.
-        # n_tiles_per_image = # tiles/padded_tiles each image is subdivided into.
-        # pred = prediction of variational parameters on each tile.
+    def tile_map_n_sources(self, image_ptiles):
+        h = self.get_var_params_all(image_ptiles)
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+        return torch.argmax(log_probs_n_sources_per_tile, dim=1)
 
-        # tile_n_sources based on log_prob per tile.
-        # tile_is_on_array shape = (n_ptiles x max_detections)
+    def tile_map_estimate(self, images):
+        # extract image_ptiles
+        batch_size = images.shape[0]
+        image_ptiles = self.get_images_in_tiles(images)
+        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+
+        # MAP (for n_sources) prediction on var params on each tile
+        tile_n_sources = self.tile_map_n_sources(image_ptiles)
+        pred = self(image_ptiles, tile_n_sources)
+
         tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
@@ -310,24 +318,6 @@ class ImageEncoder(nn.Module):
             "prob_n_sources": prob_n_sources,
             "n_sources": tile_n_sources.reshape(batch_size, -1),
         }
-
-    def tile_map_n_sources(self, image_ptiles):
-        h = self.get_var_params_all(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        return torch.argmax(log_probs_n_sources_per_tile, dim=1)
-
-    def tile_map_estimate(self, images):
-
-        # extract image_ptiles
-        batch_size = images.shape[0]
-        image_ptiles = self.get_images_in_tiles(images)
-        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
-
-        # MAP (for n_sources) prediction on var params on each tile
-        tile_n_sources = self.tile_map_n_sources(image_ptiles)
-        pred = self(image_ptiles, tile_n_sources)
-
-        return self.tile_map_estimate_from_var_params(pred, n_tiles_per_image, batch_size)
 
     def map_estimate(self, images, slen: int, wlen: int = None):
         # return full estimate of parameters in full image.
