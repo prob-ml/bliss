@@ -348,8 +348,8 @@ class ImageEncoder(nn.Module):
             "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
         }
 
-    ## These methods are only used in testing. Do we need them or can
-    ## they be moved to the code that they test? --------------------------------------
+    # These methods are only used in testing. Do we need them or can
+    # they be moved to the code that they test? ------------------------
     def get_var_params_all(self, image_ptiles):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
@@ -392,7 +392,7 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    ## --------------------------------------------------------------------------------------
+    # --------------------------------------------------------------
     def _get_var_params_for_n_sources(self, h, n_sources):
         """Gets variational parameters for n_sources.
 
