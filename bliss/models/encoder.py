@@ -231,18 +231,42 @@ class ImageEncoder(nn.Module):
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
     def forward(self, image_ptiles, tile_n_sources):
-        raise NotImplementedError("The forward method for ImageEncoder has changed to sample()")
+        raise NotImplementedError(
+            "The forward method for ImageEncoder has changed to encode_for_n_sources()"
+        )
 
-    def sample(self, image_ptiles, tile_n_sources):
+    def encode_for_n_sources(self, image_ptiles, tile_n_sources):
         """Runs encoder on image ptiles."""
         # images shape = (n_ptiles x n_bands x pslen x pslen)
-        # tile_n_sources shape = (n_ptiles)
-        assert len(tile_n_sources.shape) == 1
-        assert len(image_ptiles.shape) == 4
-        assert image_ptiles.shape[0] == tile_n_sources.shape[0]
-        tile_n_sources = tile_n_sources.clamp(max=self.max_detections).unsqueeze(0)
-        var_params = self._forward_sampled(image_ptiles, tile_n_sources)
-        return {key: value.squeeze(0) for key, value in var_params.items()}
+        # tile_n_sources shape = (n_ptiles,) or (n_samples, p_ptiles)
+        # Returns: Dictionary of tensors, with dimensions (n_ptiles x ...)
+
+        tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
+        if len(tile_n_sources.shape) == 1:
+            tile_n_sources = tile_n_sources.unsqueeze(0)
+            squeeze = True
+        elif len(tile_n_sources.shape) == 2:
+            squeeze = False
+        else:
+            raise ValueError("tile_n_sources must have shape size 1 or 2")
+
+        assert image_ptiles.shape[0] == tile_n_sources.shape[1]
+        var_params = self.get_var_params_all(image_ptiles)
+
+        # get probability of params except n_sources
+        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
+        var_params_for_n_sources = self._get_var_params_for_n_sources(var_params, tile_n_sources)
+
+        # get probability of n_sources
+        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
+        n_source_log_probs = self._get_logprob_n_from_var_params(var_params)
+        var_params_for_n_sources["n_source_log_probs"] = n_source_log_probs
+        # var_params = self._forward_sampled(image_ptiles, tile_n_sources)
+        if squeeze:
+            var_params_for_n_sources = {
+                key: value.squeeze(0) for key, value in var_params_for_n_sources.items()
+            }
+        return var_params_for_n_sources
 
     def tile_map_n_sources(self, image_ptiles):
         h = self.get_var_params_all(image_ptiles)
@@ -257,7 +281,7 @@ class ImageEncoder(nn.Module):
 
         # MAP (for n_sources) prediction on var params on each tile
         tile_n_sources = self.tile_map_n_sources(image_ptiles)
-        pred = self.sample(image_ptiles, tile_n_sources)
+        pred = self.encode_for_n_sources(image_ptiles, tile_n_sources)
 
         tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
@@ -297,25 +321,6 @@ class ImageEncoder(nn.Module):
 
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(h)
-
-    def _forward_sampled(self, image_ptiles, tile_n_sources_sampled):
-        # images shape = (n_ptiles x n_bands x pslen x pslen)
-        # tile_n_sources shape = (n_samples x n_ptiles)
-        assert len(tile_n_sources_sampled.shape) == 2
-        assert image_ptiles.shape[0] == tile_n_sources_sampled.shape[1]
-        # h.shape = (n_ptiles x self.dim_out_all)
-        h = self.get_var_params_all(image_ptiles)
-
-        # get probability of params except n_sources
-        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        var_params = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
-
-        # get probability of n_sources
-        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
-        n_source_log_probs = self._get_logprob_n_from_var_params(h)
-        var_params["n_source_log_probs"] = n_source_log_probs
-
-        return var_params
 
     @property
     def variational_params(self):
@@ -365,7 +370,7 @@ class ImageEncoder(nn.Module):
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get var_params conditioned on n_sources
-        pred = self._forward_sampled(image_ptiles, tile_n_sources)
+        pred = self.encode_for_n_sources(image_ptiles, tile_n_sources)
 
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])

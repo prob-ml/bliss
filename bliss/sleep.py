@@ -250,7 +250,7 @@ class SleepPhase(pl.LightningModule):
         image_ptiles = get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
-        pred = self.image_encoder.sample(image_ptiles, true_tile_n_sources)
+        pred = self.image_encoder.encode_for_n_sources(image_ptiles, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)

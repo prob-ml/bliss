@@ -48,7 +48,7 @@ class TestSourceEncoder:
                 .to(device)
             )
 
-            pred = star_encoder.sample(image_ptiles, n_star_per_tile)
+            pred = star_encoder.encode_for_n_sources(image_ptiles, n_star_per_tile)
 
             assert torch.all(pred["loc_mean"] >= 0.0)
             assert torch.all(pred["loc_mean"] <= 1.0)

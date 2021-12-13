@@ -56,7 +56,7 @@ def predict_on_image(
     tile_n_sources = image_encoder.tile_map_n_sources(ptiles)
     tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
     tile_map = image_encoder.tile_map_estimate(image)
-    var_params = image_encoder.sample(ptiles, tile_n_sources)
+    var_params = image_encoder.encode_for_n_sources(ptiles, tile_n_sources)
 
     # binary prediction
     assert not binary_encoder.training
