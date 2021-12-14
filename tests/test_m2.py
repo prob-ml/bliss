@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from bliss.models.encoder import get_full_params
+from bliss.models.encoder import get_full_params, get_images_in_tiles, get_params_in_batches
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
@@ -53,8 +53,13 @@ def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
     assert border1 == image_encoder.border_padding, "incompatible border"
 
     # obtained estimates per tile, then on full image.
-    tile_estimate = image_encoder.tile_map_estimate(images)
-    return get_full_params(tile_estimate, slen, wlen)
+    ptiles = get_images_in_tiles(images, image_encoder.tile_slen, image_encoder.ptile_slen)
+    var_params = image_encoder.encode(ptiles)
+    tile_map = image_encoder.max_a_post(var_params)
+    tile_map = get_params_in_batches(tile_map, images.shape[0])
+    tile_map["prob_n_sources"] = tile_map["prob_n_sources"].unsqueeze(-2)
+
+    return get_full_params(tile_map, slen, wlen)
 
 
 class TestStarSleepEncoderM2:
