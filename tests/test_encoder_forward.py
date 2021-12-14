@@ -152,5 +152,6 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
         ).to(device)
-
-        star_encoder.sample(images, n_samples)
+        image_ptiles = encoder.get_images_in_tiles(images, tile_slen, ptile_slen)
+        var_params = star_encoder.encode(image_ptiles)
+        star_encoder.sample(var_params, n_samples)

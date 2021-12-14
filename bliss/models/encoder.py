@@ -234,14 +234,7 @@ class ImageEncoder(nn.Module):
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(var_params)
 
-    def sample(self, images, n_samples):
-        assert len(images.shape) == 4
-        assert images.shape[0] == 1, "Only works for 1 image"
-        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        var_params = self.encode(image_ptiles)
-        return self._sample(var_params, n_samples)
-
-    def _sample(self, var_params, n_samples):
+    def sample(self, var_params, n_samples):
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
 
         # sample number of sources.
