@@ -1,3 +1,4 @@
+from typing import Dict
 import numpy as np
 import torch
 from einops import rearrange, repeat
@@ -25,6 +26,13 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
     return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
+
+
+def get_params_in_batches(params: Dict["str", torch.Tensor], batch_size):
+    out = {}
+    for k, v in params.items():
+        out[k] = v.reshape(batch_size, -1, *v.shape[2:])
+    return out
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -231,17 +239,10 @@ class ImageEncoder(nn.Module):
         image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
         n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
         var_params = self.encode(image_ptiles)
-
         tile_map = self.max_a_post(var_params)
-        bshape = (batch_size, n_tiles_per_image, self.max_detections, -1)  # -1 = param_dim
-        shape_prob_n_sources = (batch_size, n_tiles_per_image, 1, self.max_detections + 1)
-        return {
-            "locs": tile_map["locs"].view(*bshape),
-            "log_fluxes": tile_map["log_fluxes"].view(*bshape),
-            "fluxes": tile_map["fluxes"].view(*bshape),
-            "prob_n_sources": tile_map["prob_n_sources"].view(*shape_prob_n_sources),
-            "n_sources": tile_map["n_sources"].view(batch_size, -1),
-        }
+        tile_map = get_params_in_batches(tile_map, batch_size)
+        tile_map["prob_n_sources"].unsqueeze(-2)
+        return tile_map
 
     def encode(self, image_ptiles):
         # get h matrix.
