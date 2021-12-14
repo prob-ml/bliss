@@ -7,7 +7,12 @@ from tqdm import tqdm
 from bliss.datasets import sdss
 from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
-from bliss.models.encoder import get_full_params, get_is_on_from_n_sources, get_images_in_tiles
+from bliss.models.encoder import (
+    get_full_params,
+    get_is_on_from_n_sources,
+    get_images_in_tiles,
+    get_params_in_batches,
+)
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 from bliss.sleep import SleepPhase
@@ -56,7 +61,11 @@ def predict_on_image(
     var_params = image_encoder.encode(ptiles)
     tile_n_sources = image_encoder.tile_map_n_sources(var_params)
     tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
-    tile_map = image_encoder.tile_map_estimate(image)
+
+    tile_map = image_encoder.max_a_post(var_params)
+    tile_map = get_params_in_batches(tile_map, image.shape[0])
+    tile_map["prob_n_sources"] = tile_map["prob_n_sources"].unsqueeze(-2)
+
     var_params_n_sources = image_encoder.encode_for_n_sources(var_params, tile_n_sources)
 
     # binary prediction

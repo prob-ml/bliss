@@ -31,7 +31,7 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
 def get_params_in_batches(params: Dict["str", torch.Tensor], batch_size):
     out = {}
     for k, v in params.items():
-        out[k] = v.reshape(batch_size, -1, *v.shape[2:])
+        out[k] = v.view(batch_size, -1, *v.shape[1:])
     return out
 
 
@@ -232,17 +232,6 @@ class ImageEncoder(nn.Module):
         raise NotImplementedError(
             "The forward method for ImageEncoder has changed to encode_for_n_sources()"
         )
-
-    def tile_map_estimate(self, images):
-        # extract image_ptiles
-        batch_size = images.shape[0]
-        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
-        var_params = self.encode(image_ptiles)
-        tile_map = self.max_a_post(var_params)
-        tile_map = get_params_in_batches(tile_map, batch_size)
-        tile_map["prob_n_sources"].unsqueeze(-2)
-        return tile_map
 
     def encode(self, image_ptiles):
         # get h matrix.

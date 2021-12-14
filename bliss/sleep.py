@@ -23,6 +23,7 @@ from bliss.models.encoder import (
     get_full_params,
     get_is_on_from_n_sources,
     get_images_in_tiles,
+    get_params_in_batches,
 )
 from bliss.optimizer import load_optimizer
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
@@ -164,7 +165,15 @@ class SleepPhase(pl.LightningModule):
 
     def tile_map_estimate(self, batch):
         images = batch["images"]
-        tile_est = self.image_encoder.tile_map_estimate(images)
+
+        batch_size = images.shape[0]
+        image_ptiles = get_images_in_tiles(
+            images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
+        )
+        var_params = self.image_encoder.encode(image_ptiles)
+        tile_map = self.image_encoder.max_a_post(var_params)
+        tile_est = get_params_in_batches(tile_map, batch_size)
+        tile_est["prob_n_sources"] = tile_est["prob_n_sources"].unsqueeze(-2)
         tile_est["galaxy_params"] = batch["galaxy_params"]
 
         # FIXME: True galaxy params are not necessarily consistent with other MAP estimates
