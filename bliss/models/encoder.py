@@ -215,16 +215,9 @@ class ImageEncoder(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=1)
 
         # get indices into the triangular array of returned parameters
-        indx_mats, last_indx = self._get_hidden_indices()
+        indx_mats = self._get_hidden_indices()
         for k, v in indx_mats.items():
             self.register_buffer(k + "_indx", v, persistent=False)
-
-        # assigned indices that were not used to `prob_n_source`
-        self.register_buffer(
-            "prob_n_source_indx",
-            torch.arange(last_indx, self.dim_out_all),
-            persistent=False,
-        )
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
     def forward(self, image_ptiles, tile_n_sources):
@@ -447,7 +440,10 @@ class ImageEncoder(nn.Module):
                 )
                 curr_indx = new_indx
 
-        return indx_mats, curr_indx
+        # assigned indices that were not used to `prob_n_source`
+        indx_mats["prob_n_source"] = torch.arange(curr_indx, self.dim_out_all)
+
+        return indx_mats
 
     def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
         """Obtains variational parameters for n_sources.
