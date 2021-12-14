@@ -227,9 +227,6 @@ class ImageEncoder(nn.Module):
         )
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
-        # misc
-        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
-
     def forward(self, image_ptiles, tile_n_sources):
         raise NotImplementedError(
             "The forward method for ImageEncoder has changed to encode_for_n_sources()"
