@@ -225,6 +225,24 @@ class ImageEncoder(nn.Module):
             "The forward method for ImageEncoder has changed to encode_for_n_sources()"
         )
 
+    def tile_map_estimate(self, images):
+        # extract image_ptiles
+        batch_size = images.shape[0]
+        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+        var_params = self.encode(image_ptiles)
+
+        tile_map = self.max_a_post(var_params)
+        bshape = (batch_size, n_tiles_per_image, self.max_detections, -1)  # -1 = param_dim
+        shape_prob_n_sources = (batch_size, n_tiles_per_image, 1, self.max_detections + 1)
+        return {
+            "locs": tile_map["locs"].reshape(*bshape),
+            "log_fluxes": tile_map["log_fluxes"].reshape(*bshape),
+            "fluxes": tile_map["fluxes"].reshape(*bshape),
+            "prob_n_sources": tile_map["prob_n_sources"].reshape(*shape_prob_n_sources),
+            "n_sources": tile_map["n_sources"].reshape(batch_size, -1),
+        }
+
     def encode(self, image_ptiles):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
