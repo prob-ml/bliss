@@ -247,7 +247,7 @@ class ImageEncoder(nn.Module):
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get var_params conditioned on n_sources
-        pred = self._encode_for_n_sources(var_params, tile_n_sources)
+        pred = self.encode_for_n_sources(var_params, tile_n_sources)
 
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
@@ -263,16 +263,38 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def encode_for_n_sources(self, image_ptiles, tile_n_sources):
-        """Runs encoder on image ptiles."""
-        # images shape = (n_ptiles x n_bands x pslen x pslen)
-        # tile_n_sources shape = (n_ptiles,) or (n_samples, p_ptiles)
-        # Returns: Dictionary of tensors, with dimensions (n_ptiles x ...)
+    def max_a_post(self, var_params):
+        tile_n_sources = self.tile_map_n_sources(var_params)
+        pred = self.encode_for_n_sources(var_params, tile_n_sources)
 
-        var_params = self.encode(image_ptiles)
-        return self._encode_for_n_sources(var_params, tile_n_sources)
+        tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
-    def _encode_for_n_sources(self, var_params, tile_n_sources):
+        # set sd so we return map estimates.
+        # first locs
+        locs_sd = torch.zeros_like(pred["loc_logvar"])
+        tile_locs = self._get_normal_samples(pred["loc_mean"], locs_sd, tile_is_on_array)
+        tile_locs = tile_locs.clamp(0, 1)
+
+        # then log_fluxes
+        log_flux_mean = pred["log_flux_mean"]
+        log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
+        tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, tile_is_on_array)
+        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+
+        # finally prob_n_sources
+        prob_n_sources = torch.exp(pred["n_source_log_probs"])
+
+        return {
+            "locs": tile_locs,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+            "prob_n_sources": prob_n_sources,
+            "n_sources": tile_n_sources,
+        }
+
+    def encode_for_n_sources(self, var_params, tile_n_sources):
 
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
         if len(tile_n_sources.shape) == 1:
@@ -298,54 +320,9 @@ class ImageEncoder(nn.Module):
             }
         return var_params_for_n_sources
 
-    def tile_map_n_sources(self, image_ptiles):
-        var_params = self.encode(image_ptiles)
-        return self._tile_map_n_sources(var_params)
-
-    def _tile_map_n_sources(self, var_params):
+    def tile_map_n_sources(self, var_params):
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
         return torch.argmax(log_probs_n_sources_per_tile, dim=1)
-
-    def tile_map_estimate(self, images):
-        # extract image_ptiles
-        batch_size = images.shape[0]
-        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
-
-        # MAP (for n_sources) prediction on var params on each tile
-        var_params = self.encode(image_ptiles)
-        tile_n_sources = self._tile_map_n_sources(var_params)
-        pred = self._encode_for_n_sources(var_params, tile_n_sources)
-
-        tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-
-        # set sd so we return map estimates.
-        # first locs
-        locs_sd = torch.zeros_like(pred["loc_logvar"])
-        tile_locs = self._get_normal_samples(pred["loc_mean"], locs_sd, tile_is_on_array)
-        tile_locs = tile_locs.clamp(0, 1)
-
-        # then log_fluxes
-        log_flux_mean = pred["log_flux_mean"]
-        log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
-        tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, tile_is_on_array)
-        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
-
-        # finally prob_n_sources
-        prob_n_sources = torch.exp(pred["n_source_log_probs"]).reshape(
-            batch_size, n_tiles_per_image, 1, self.max_detections + 1
-        )
-
-        bshape = (batch_size, n_tiles_per_image, self.max_detections, -1)  # -1 = param_dim
-        return {
-            "locs": tile_locs.reshape(*bshape),
-            "log_fluxes": tile_log_fluxes.reshape(*bshape),
-            "fluxes": tile_fluxes.reshape(*bshape),
-            "prob_n_sources": prob_n_sources,
-            "n_sources": tile_n_sources.reshape(batch_size, -1),
-        }
 
     @property
     def variational_params(self):

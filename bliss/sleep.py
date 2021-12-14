@@ -30,6 +30,25 @@ from bliss.reporting import DetectionMetrics, plot_image_and_locs
 plt.switch_backend("Agg")
 
 
+def tile_map_estimate(image_encoder: ImageEncoder, images):
+    # extract image_ptiles
+    batch_size = images.shape[0]
+    image_ptiles = get_images_in_tiles(images, image_encoder.tile_slen, image_encoder.ptile_slen)
+    n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+    var_params = image_encoder.encode(image_ptiles)
+
+    tile_map = image_encoder.max_a_post(var_params)
+    bshape = (batch_size, n_tiles_per_image, image_encoder.max_detections, -1)  # -1 = param_dim
+    shape_prob_n_sources = (batch_size, n_tiles_per_image, 1, image_encoder.max_detections + 1)
+    return {
+        "locs": tile_map["locs"].reshape(*bshape),
+        "log_fluxes": tile_map["log_fluxes"].reshape(*bshape),
+        "fluxes": tile_map["fluxes"].reshape(*bshape),
+        "prob_n_sources": tile_map["prob_n_sources"].reshape(*shape_prob_n_sources),
+        "n_sources": tile_map["n_sources"].reshape(batch_size, -1),
+    }
+
+
 def _get_log_probs_all_perms(
     locs_log_probs_all,
     star_params_log_probs_all,
@@ -164,7 +183,7 @@ class SleepPhase(pl.LightningModule):
 
     def tile_map_estimate(self, batch):
         images = batch["images"]
-        tile_est = self.image_encoder.tile_map_estimate(images)
+        tile_est = tile_map_estimate(self.image_encoder, images)
         tile_est["galaxy_params"] = batch["galaxy_params"]
 
         # FIXME: True galaxy params are not necessarily consistent with other MAP estimates
@@ -250,7 +269,8 @@ class SleepPhase(pl.LightningModule):
         image_ptiles = get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
-        pred = self.image_encoder.encode_for_n_sources(image_ptiles, true_tile_n_sources)
+        var_params = self.image_encoder.encode(image_ptiles)
+        pred = self.image_encoder.encode_for_n_sources(var_params, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)
