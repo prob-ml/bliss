@@ -236,11 +236,11 @@ class ImageEncoder(nn.Module):
         bshape = (batch_size, n_tiles_per_image, self.max_detections, -1)  # -1 = param_dim
         shape_prob_n_sources = (batch_size, n_tiles_per_image, 1, self.max_detections + 1)
         return {
-            "locs": tile_map["locs"].reshape(*bshape),
-            "log_fluxes": tile_map["log_fluxes"].reshape(*bshape),
-            "fluxes": tile_map["fluxes"].reshape(*bshape),
-            "prob_n_sources": tile_map["prob_n_sources"].reshape(*shape_prob_n_sources),
-            "n_sources": tile_map["n_sources"].reshape(batch_size, -1),
+            "locs": tile_map["locs"].view(*bshape),
+            "log_fluxes": tile_map["log_fluxes"].view(*bshape),
+            "fluxes": tile_map["fluxes"].view(*bshape),
+            "prob_n_sources": tile_map["prob_n_sources"].view(*shape_prob_n_sources),
+            "n_sources": tile_map["n_sources"].view(batch_size, -1),
         }
 
     def encode(self, image_ptiles):
