@@ -249,6 +249,9 @@ class ImageEncoder(nn.Module):
         assert images.shape[0] == 1, "Only works for 1 image"
         image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
         var_params = self.encode(image_ptiles)
+        return self._sample(var_params, n_samples)
+
+    def _sample(self, var_params, n_samples):
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
 
         # sample number of sources.
@@ -261,7 +264,7 @@ class ImageEncoder(nn.Module):
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get var_params conditioned on n_sources
-        pred = self.encode_for_n_sources(image_ptiles, tile_n_sources)
+        pred = self._encode_for_n_sources(var_params, tile_n_sources)
 
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
@@ -283,6 +286,11 @@ class ImageEncoder(nn.Module):
         # tile_n_sources shape = (n_ptiles,) or (n_samples, p_ptiles)
         # Returns: Dictionary of tensors, with dimensions (n_ptiles x ...)
 
+        var_params = self.encode(image_ptiles)
+        return self._encode_for_n_sources(var_params, tile_n_sources)
+
+    def _encode_for_n_sources(self, var_params, tile_n_sources):
+
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
         if len(tile_n_sources.shape) == 1:
             tile_n_sources = tile_n_sources.unsqueeze(0)
@@ -292,9 +300,7 @@ class ImageEncoder(nn.Module):
         else:
             raise ValueError("tile_n_sources must have shape size 1 or 2")
 
-        assert image_ptiles.shape[0] == tile_n_sources.shape[1]
-        var_params = self.encode(image_ptiles)
-
+        assert var_params.shape[0] == tile_n_sources.shape[1]
         # get probability of params except n_sources
         # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
         var_params_for_n_sources = self._get_var_params_for_n_sources(var_params, tile_n_sources)
@@ -310,8 +316,11 @@ class ImageEncoder(nn.Module):
         return var_params_for_n_sources
 
     def tile_map_n_sources(self, image_ptiles):
-        h = self.encode(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+        var_params = self.encode(image_ptiles)
+        return self._tile_map_n_sources(var_params)
+
+    def _tile_map_n_sources(self, var_params):
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
         return torch.argmax(log_probs_n_sources_per_tile, dim=1)
 
     def tile_map_estimate(self, images):
@@ -321,8 +330,9 @@ class ImageEncoder(nn.Module):
         n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
 
         # MAP (for n_sources) prediction on var params on each tile
-        tile_n_sources = self.tile_map_n_sources(image_ptiles)
-        pred = self.encode_for_n_sources(image_ptiles, tile_n_sources)
+        var_params = self.encode(image_ptiles)
+        tile_n_sources = self._tile_map_n_sources(var_params)
+        pred = self._encode_for_n_sources(var_params, tile_n_sources)
 
         tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
