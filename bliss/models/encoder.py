@@ -6,6 +6,7 @@ from einops import rearrange, repeat
 from torch import nn
 from torch.distributions import categorical
 from torch.nn import functional as F
+from torch.tensor import Tensor
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
@@ -66,7 +67,32 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_full_params(tile_params: dict, slen: int, wlen: int = None):
+def get_full_params(
+    tile_params: Dict[str, Tensor], slen: int, wlen: int = None
+) -> Dict[str, Tensor]:
+    """Converts image parameters in tiles to parameters of full image.
+
+    By parameters, we mean samples from the variational distribution, not the variational
+    parameters.
+
+    Args:
+        tile_params: A dictionary consisting of tile latent variables. These could be
+            samples from the variational distribution or the maximum a posteriori (such as from
+            ImageEncoder.max_a_post or SleepPhase.tile_map_estimate).
+            The first three dimensions of each tensor in this dictionary
+            should be of shape `n_samples x n_tiles_per_image x max_detections`.
+        slen:
+            The side length in pixels of the whole image.
+        wlen: Defaults to None.
+            If not None, the width of the image in pixels.
+
+    Returns:
+        A dictionary of tensors with the same members as those in `tile_params`.
+        The first two dimensions of each tensor is `n_samples x max(n_sources)`,
+        where `max(n_sources)` is the maximum number of sources detected across samples.
+        Note: The locations (`"locs"`) are between 0 and 1. For convienvence, the additional
+        element `"plocs"` is added which defines the locations between 0 and slen (pixel locations).
+    """
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
 
@@ -234,7 +260,19 @@ class ImageEncoder(nn.Module):
             "The forward method for ImageEncoder has changed to encode_for_n_sources()"
         )
 
-    def encode(self, image_ptiles):
+    def encode(self, image_ptiles: Tensor) -> Tensor:
+        """Encodes variational parameters from image padded tiles.
+
+        Args:
+            image_ptiles: A tensor of padded image tiles,
+                with shape `n_ptiles * n_bands * h * w`.
+
+        Returns:
+            A tensor of variational parameters in matrix form per-tile
+            (`n_ptiles * D`), where `D` is the total flattened dimension
+            of all variational parameters. This matrix is used as input to
+            other methods of this class (typically named `var_params`).
+        """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
@@ -243,7 +281,19 @@ class ImageEncoder(nn.Module):
         # Concatenate all output parameters for all possible n_sources
         return self.enc_final(var_params)
 
-    def sample(self, var_params, n_samples):
+    def sample(self, var_params: Tensor, n_samples: int) -> Dict[str, Tensor]:
+        """Sample from encoded variational distribution.
+
+        Args:
+            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+                in matrix form. Has size `n_ptiles * n_bands`.
+            n_samples:
+                The number of samples to draw
+
+        Returns:
+            A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
+            Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
+        """
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
 
         # sample number of sources.
@@ -272,7 +322,19 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
         }
 
-    def max_a_post(self, var_params):
+    def max_a_post(self, var_params: Tensor) -> Dict[str, Tensor]:
+        """Derive maximum a posteriori from variational parameters.
+
+        Args:
+            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+                in matrix form. Has size `n_ptiles * n_bands`.
+
+        Returns:
+            The maximum a posteriori for each padded tile.
+            Has shape `n_ptiles * max_detections * ...`.
+            The dictionary contains
+            `"locs", "log_fluxes", "fluxes", "prob_n_sources", and "n_sources".`.
+        """
         tile_n_sources = self.tile_map_n_sources(var_params)
         pred = self.encode_for_n_sources(var_params, tile_n_sources)
 
@@ -304,6 +366,22 @@ class ImageEncoder(nn.Module):
         }
 
     def encode_for_n_sources(self, var_params, tile_n_sources):
+        """Get variational parameters conditioned on number of sources in tile.
+
+        Args:
+            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+                in matrix form. Has size `n_ptiles * n_bands`.
+            tile_n_sources:
+                A tensor of the number of sources in each tile.
+
+        Raises:
+            ValueError: If the shape of tile_n_sources is not 1 or 2.
+
+        Returns:
+            A dictionary where each member has either shape
+            `n_samples x n_ptiles x max_detections x ...`
+            or `n_ptiles x max_detections x ...` depending on the shape of `tile_n_sources`.
+        """
 
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
         if len(tile_n_sources.shape) == 1:
@@ -330,6 +408,15 @@ class ImageEncoder(nn.Module):
         return var_params_for_n_sources
 
     def tile_map_n_sources(self, var_params):
+        """Get the maximum a posteriori of the number of soruces in each tile.
+
+        Args:
+            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+                in matrix form. Has size `n_ptiles * n_bands`.
+
+        Returns:
+            A tensor of shape `n_ptiles` with the maximum number of sources in each tile.
+        """
         log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
         return torch.argmax(log_probs_n_sources_per_tile, dim=1)
 
