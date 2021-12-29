@@ -7,7 +7,12 @@ from tqdm import tqdm
 from bliss.datasets import sdss
 from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
-from bliss.models.encoder import get_full_params, get_is_on_from_n_sources, get_star_bool
+from bliss.models.encoder import (
+    get_full_params,
+    get_is_on_from_n_sources,
+    get_images_in_tiles,
+    get_params_in_batches,
+)
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 from bliss.sleep import SleepPhase
@@ -50,13 +55,18 @@ def predict_on_image(
     bp = image_encoder.border_padding
 
     # get padded tiles.
-    ptiles = image_encoder.get_images_in_tiles(image)
+    ptiles = get_images_in_tiles(image, image_encoder.tile_slen, image_encoder.ptile_slen)
 
     # get MAP estimates and variational parameters from image_encoder
-    tile_n_sources = image_encoder.tile_map_n_sources(ptiles)
+    var_params = image_encoder.encode(ptiles)
+    tile_n_sources = image_encoder.tile_map_n_sources(var_params)
     tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
-    tile_map = image_encoder.tile_map_estimate(image)
-    var_params = image_encoder(ptiles, tile_n_sources)
+
+    tile_map = image_encoder.max_a_post(var_params)
+    tile_map = get_params_in_batches(tile_map, image.shape[0])
+    tile_map["prob_n_sources"] = tile_map["prob_n_sources"].unsqueeze(-2)
+
+    var_params_n_sources = image_encoder.encode_for_n_sources(var_params, tile_n_sources)
 
     # binary prediction
     assert not binary_encoder.training
@@ -65,9 +75,9 @@ def predict_on_image(
     prob_galaxy = binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
     galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
     star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)
-    var_params["galaxy_bool"] = galaxy_bool
-    var_params["star_bool"] = star_bool
-    var_params["prob_galaxy"] = prob_galaxy
+    var_params_n_sources["galaxy_bool"] = galaxy_bool
+    var_params_n_sources["star_bool"] = star_bool
+    var_params_n_sources["prob_galaxy"] = prob_galaxy
     tile_map["galaxy_bool"] = galaxy_bool
     tile_map["star_bool"] = star_bool
     tile_map["prob_galaxy"] = prob_galaxy
@@ -82,13 +92,13 @@ def predict_on_image(
     latent_dim = galaxy_param_mean.shape[-1]
     galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
     galaxy_param_mean *= tile_is_on_array * galaxy_bool
-    var_params["galaxy_param_mean"] = galaxy_param_mean
+    var_params_n_sources["galaxy_param_mean"] = galaxy_param_mean
     tile_map["galaxy_params"] = galaxy_param_mean
 
     # full parameters on chunk
     full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
 
-    return tile_map, full_map, var_params
+    return tile_map, full_map, var_params_n_sources
 
 
 def predict_on_scene(
@@ -252,3 +262,13 @@ def predict(cfg: DictConfig):
     if cfg.predict.output_file is not None:
         torch.save(var_params, cfg.predict.output_file)
         print(f"Prediction saved to {cfg.predict.output_file}")
+
+
+def get_star_bool(n_sources, galaxy_bool):
+    assert n_sources.shape[0] == galaxy_bool.shape[0]
+    assert galaxy_bool.shape[-1] == 1
+    max_sources = galaxy_bool.shape[-2]
+    assert n_sources.le(max_sources).all()
+    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
+    is_on_array = is_on_array.view(*galaxy_bool.shape)
+    return (1 - galaxy_bool) * is_on_array

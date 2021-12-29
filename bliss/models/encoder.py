@@ -1,9 +1,12 @@
+from typing import Dict
+
 import numpy as np
 import torch
 from einops import rearrange, repeat
 from torch import nn
 from torch.distributions import categorical
 from torch.nn import functional as F
+from torch.tensor import Tensor
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
@@ -25,6 +28,13 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
     return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
+
+
+def get_params_in_batches(params: Dict["str", torch.Tensor], batch_size):
+    out = {}
+    for k, v in params.items():
+        out[k] = v.view(batch_size, -1, *v.shape[1:])
+    return out
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -57,17 +67,32 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_star_bool(n_sources, galaxy_bool):
-    assert n_sources.shape[0] == galaxy_bool.shape[0]
-    assert galaxy_bool.shape[-1] == 1
-    max_sources = galaxy_bool.shape[-2]
-    assert n_sources.le(max_sources).all()
-    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-    is_on_array = is_on_array.view(*galaxy_bool.shape)
-    return (1 - galaxy_bool) * is_on_array
+def get_full_params(
+    tile_params: Dict[str, Tensor], slen: int, wlen: int = None
+) -> Dict[str, Tensor]:
+    """Converts image parameters in tiles to parameters of full image.
 
+    By parameters, we mean samples from the variational distribution, not the variational
+    parameters.
 
-def get_full_params(tile_params: dict, slen: int, wlen: int = None):
+    Args:
+        tile_params: A dictionary consisting of tile latent variables. These could be
+            samples from the variational distribution or the maximum a posteriori (such as from
+            ImageEncoder.max_a_post or SleepPhase.tile_map_estimate).
+            The first three dimensions of each tensor in this dictionary
+            should be of shape `n_samples x n_tiles_per_image x max_detections`.
+        slen:
+            The side length in pixels of the whole image.
+        wlen: Defaults to None.
+            If not None, the width of the image in pixels.
+
+    Returns:
+        A dictionary of tensors with the same members as those in `tile_params`.
+        The first two dimensions of each tensor is `n_samples x max(n_sources)`,
+        where `max(n_sources)` is the maximum number of sources detected across samples.
+        Note: The locations (`"locs"`) are between 0 and 1. For convienvence, the additional
+        element `"plocs"` is added which defines the locations between 0 and slen (pixel locations).
+    """
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
 
@@ -153,104 +178,6 @@ def get_full_params(tile_params: dict, slen: int, wlen: int = None):
     return params
 
 
-def _argfront(is_on_array, dim):
-    # return indices that sort pushing all zeroes of tensor to the back.
-    # dim is dimension along which do the ordering.
-    assert len(is_on_array.shape) == 2
-    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
-
-
-def _sample_class_weights(class_weights, n_samples=1):
-    """Draw a sample from Categorical variable with probabilities class_weights."""
-    cat_rv = categorical.Categorical(probs=class_weights)
-    return cat_rv.sample((n_samples,)).squeeze()
-
-
-def _loc_mean_func(x):
-    return torch.sigmoid(x) * (x != 0).float()
-
-
-def _identity_func(x):
-    return x
-
-
-class ConvBlock(nn.Module):
-    """A Convolution Layer.
-
-    This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
-    in the middle, and an option to downsample with a stride of 2.
-
-    Parameters:
-        in_channel: Number of input channels
-        out_channel: Number of output channels
-        dropout: Dropout proportion between [0, 1]
-        downsample (optional): Whether to downsample with stride of 2.
-    """
-
-    def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
-        """Initializes the module layers."""
-        super().__init__()
-        self.downsample = downsample
-        stride = 1
-        if self.downsample:
-            stride = 2
-            self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
-            self.sc_bn = nn.BatchNorm2d(out_channel)
-        self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride)
-        self.bn1 = nn.BatchNorm2d(out_channel)
-        self.drop1 = nn.Dropout2d(dropout)
-        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(out_channel)
-
-    def forward(self, x):
-        """Runs convolutional block on inputs."""
-        identity = x
-
-        x = self.conv1(x)
-        x = F.relu(self.bn1(x))
-
-        x = self.drop1(x)
-
-        x = self.conv2(x)
-        x = self.bn2(x)
-
-        if self.downsample:
-            identity = self.sc_bn(self.sc_conv(identity))
-
-        out = x + identity
-        return F.relu(out)
-
-
-class EncoderCNN(nn.Module):
-    def __init__(self, n_bands, channel, dropout):
-        super().__init__()
-        self.layer = self._make_layer(n_bands, channel, dropout)
-
-    def forward(self, x):
-        """Runs encoder CNN on inputs."""
-        return self.layer(x)
-
-    def _make_layer(self, n_bands, channel, dropout):
-        layers = [
-            nn.Conv2d(n_bands, channel, 3, padding=1),
-            nn.BatchNorm2d(channel),
-            nn.ReLU(True),
-        ]
-        in_channel = channel
-        for i in range(3):
-            downsample = True
-            if i == 0:
-                downsample = False
-            layers += [ConvBlock(in_channel, channel, dropout, downsample)]
-            layers += [
-                ConvBlock(channel, channel, dropout, False),
-                ConvBlock(channel, channel, dropout, False),
-            ]
-            in_channel = channel
-            channel = channel * 2
-        return nn.Sequential(*layers)
-
-
 class ImageEncoder(nn.Module):
     """Encodes the distribution of a latent variable representing an astronomical image.
 
@@ -323,108 +250,190 @@ class ImageEncoder(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=1)
 
         # get indices into the triangular array of returned parameters
-        indx_mats, last_indx = self._get_hidden_indices()
+        indx_mats = self._get_hidden_indices()
         for k, v in indx_mats.items():
             self.register_buffer(k + "_indx", v, persistent=False)
-
-        # assigned indices that were not used to `prob_n_source`
-        self.register_buffer(
-            "prob_n_source_indx",
-            torch.arange(last_indx, self.dim_out_all),
-            persistent=False,
-        )
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
-        # misc
-        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
-
-    def get_images_in_tiles(self, images):
-        """Divides a batch of full images into padded tiles.
-
-        This is similar to nn.conv2d with a sliding stride=self.tile_slen
-        and window=self.ptile_slen.
-
-        Arguments:
-            images: Tensor of size (batchsize x n_bands x slen x slen)
-
-        Returns:
-            A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
-        """
-        return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-
-    def _get_hidden_indices(self):
-        """Setup the indices corresponding to entries in h, cached since same for all h."""
-
-        # initialize matrices containing the indices for each variational param.
-        indx_mats = {}
-        for k, param in self.variational_params.items():
-            param_dim = param["dim"]
-            shape = (self.max_detections + 1, param_dim * self.max_detections)
-            indx_mat = torch.full(
-                shape,
-                self.dim_out_all,
-                dtype=torch.long,
-            )
-            indx_mats[k] = indx_mat
-
-        # add corresponding indices to the index matrices of variational params
-        # for a given n_detection.
-        curr_indx = 0
-        for n_detections in range(1, self.max_detections + 1):
-            for k, param in self.variational_params.items():
-                param_dim = param["dim"]
-                new_indx = (param_dim * n_detections) + curr_indx
-                indx_mats[k][n_detections, 0 : (param_dim * n_detections)] = torch.arange(
-                    curr_indx, new_indx
-                )
-                curr_indx = new_indx
-
-        return indx_mats, curr_indx
-
-    def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
-        """Obtains variational parameters for n_sources.
-
-        Indexes into all possible combinations of variational parameters (h) to obtain actually
-        variational parameters for n_sources.
-
-        Arguments:
-            h: shape = (n_ptiles x dim_out_all)
-            n_sources: (n_samples x n_tiles)
-            indx_mat: TODO (to be documented)
-            param_dim: the dimension of the parameter you are indexing h.
-
-        Returns:
-            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
-        """
-        assert len(n_sources.shape) == 2
-        assert h.size(0) == n_sources.size(1)
-        assert h.size(1) == self.dim_out_all
-        n_ptiles = h.size(0)
-        h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
-
-        # select the indices from _h indicated by indx_mat.
-        indices = indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1)
-        var_param = torch.gather(h, 1, indices)
-
-        # np: n_ptiles, ns: n_samples
-        return rearrange(
-            var_param,
-            "np (ns d pd) -> ns np d pd",
-            np=n_ptiles,
-            ns=n_sources.size(0),
-            d=self.max_detections,
-            pd=param_dim,
+    def forward(self, image_ptiles, tile_n_sources):
+        raise NotImplementedError(
+            "The forward method for ImageEncoder has changed to encode_for_n_sources()"
         )
 
-    def get_var_params_all(self, image_ptiles):
+    def encode(self, image_ptiles: Tensor) -> Tensor:
+        """Encodes variational parameters from image padded tiles.
+
+        Args:
+            image_ptiles: A tensor of padded image tiles,
+                with shape `n_ptiles * n_bands * h * w`.
+
+        Returns:
+            A tensor of variational parameters in matrix form per-tile
+            (`n_ptiles * D`), where `D` is the total flattened dimension
+            of all variational parameters. This matrix is used as input to
+            other methods of this class (typically named `var_params`).
+        """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
         log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
-        h = self.enc_conv(log_img)
+        var_params = self.enc_conv(log_img)
 
         # Concatenate all output parameters for all possible n_sources
-        return self.enc_final(h)
+        return self.enc_final(var_params)
 
+    def sample(self, var_params: Tensor, n_samples: int) -> Dict[str, Tensor]:
+        """Sample from encoded variational distribution.
+
+        Args:
+            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+                in matrix form. Has size `n_ptiles * n_bands`.
+            n_samples:
+                The number of samples to draw
+
+        Returns:
+            A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
+            Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
+        """
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
+
+        # sample number of sources.
+        # tile_n_sources shape = (n_samples x n_ptiles)
+        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
+        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
+        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
+        tile_n_sources = tile_n_sources.view(n_samples, -1)
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+
+        # get var_params conditioned on n_sources
+        pred = self.encode_for_n_sources(var_params, tile_n_sources)
+
+        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
+        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
+        tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
+        tile_log_fluxes = self._get_normal_samples(
+            pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
+        )
+        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+        return {
+            "n_sources": tile_n_sources,
+            "locs": tile_locs,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+        }
+
+    def max_a_post(self, var_params: Tensor) -> Dict[str, Tensor]:
+        """Derive maximum a posteriori from variational parameters.
+
+        Args:
+            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+                in matrix form. Has size `n_ptiles * n_bands`.
+
+        Returns:
+            The maximum a posteriori for each padded tile.
+            Has shape `n_ptiles * max_detections * ...`.
+            The dictionary contains
+            `"locs", "log_fluxes", "fluxes", "prob_n_sources", and "n_sources".`.
+        """
+        tile_n_sources = self.tile_map_n_sources(var_params)
+        pred = self.encode_for_n_sources(var_params, tile_n_sources)
+
+        tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+
+        # set sd so we return map estimates.
+        # first locs
+        locs_sd = torch.zeros_like(pred["loc_logvar"])
+        tile_locs = self._get_normal_samples(pred["loc_mean"], locs_sd, tile_is_on_array)
+        tile_locs = tile_locs.clamp(0, 1)
+
+        # then log_fluxes
+        log_flux_mean = pred["log_flux_mean"]
+        log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
+        tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, tile_is_on_array)
+        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+
+        # finally prob_n_sources
+        prob_n_sources = torch.exp(pred["n_source_log_probs"])
+
+        return {
+            "locs": tile_locs,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
+            "prob_n_sources": prob_n_sources,
+            "n_sources": tile_n_sources,
+        }
+
+    def encode_for_n_sources(self, var_params, tile_n_sources):
+        """Get variational parameters conditioned on number of sources in tile.
+
+        Args:
+            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+                in matrix form. Has size `n_ptiles * n_bands`.
+            tile_n_sources:
+                A tensor of the number of sources in each tile.
+
+        Raises:
+            ValueError: If the shape of tile_n_sources is not 1 or 2.
+
+        Returns:
+            A dictionary where each member has either shape
+            `n_samples x n_ptiles x max_detections x ...`
+            or `n_ptiles x max_detections x ...` depending on the shape of `tile_n_sources`.
+        """
+
+        tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
+        if len(tile_n_sources.shape) == 1:
+            tile_n_sources = tile_n_sources.unsqueeze(0)
+            squeeze = True
+        elif len(tile_n_sources.shape) == 2:
+            squeeze = False
+        else:
+            raise ValueError("tile_n_sources must have shape size 1 or 2")
+
+        assert var_params.shape[0] == tile_n_sources.shape[1]
+        # get probability of params except n_sources
+        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
+        var_params_for_n_sources = self._get_var_params_for_n_sources(var_params, tile_n_sources)
+
+        # get probability of n_sources
+        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
+        n_source_log_probs = self._get_logprob_n_from_var_params(var_params)
+        var_params_for_n_sources["n_source_log_probs"] = n_source_log_probs
+        if squeeze:
+            var_params_for_n_sources = {
+                key: value.squeeze(0) for key, value in var_params_for_n_sources.items()
+            }
+        return var_params_for_n_sources
+
+    def tile_map_n_sources(self, var_params):
+        """Get the maximum a posteriori of the number of soruces in each tile.
+
+        Args:
+            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+                in matrix form. Has size `n_ptiles * n_bands`.
+
+        Returns:
+            A tensor of shape `n_ptiles` with the maximum number of sources in each tile.
+        """
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
+        return torch.argmax(log_probs_n_sources_per_tile, dim=1)
+
+    @property
+    def variational_params(self):
+        # transform is a function applied directly on NN output.
+        return {
+            "loc_mean": {"dim": 2, "transform": _loc_mean_func},
+            "loc_logvar": {"dim": 2, "transform": _identity_func},
+            "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
+            "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
+        }
+
+    # These methods are only used in testing or case studies, Do we need them or can
+    # they be moved to the code that they test? ------------------------
+
+    # --------------------------------------------------------------
     def _get_var_params_for_n_sources(self, h, n_sources):
         """Gets variational parameters for n_sources.
 
@@ -470,149 +479,167 @@ class ImageEncoder(nn.Module):
         free_probs = h[:, self.prob_n_source_indx]
         return self.log_softmax(free_probs)
 
-    def forward_sampled(self, image_ptiles, tile_n_sources_sampled):
-        # images shape = (n_ptiles x n_bands x pslen x pslen)
-        # tile_n_sources shape = (n_samples x n_ptiles)
-        assert len(tile_n_sources_sampled.shape) == 2
-        assert image_ptiles.shape[0] == tile_n_sources_sampled.shape[1]
-        # h.shape = (n_ptiles x self.dim_out_all)
-        h = self.get_var_params_all(image_ptiles)
+    def _get_hidden_indices(self):
+        """Setup the indices corresponding to entries in h, cached since same for all h."""
 
-        # get probability of params except n_sources
-        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        var_params = self._get_var_params_for_n_sources(h, tile_n_sources_sampled)
+        # initialize matrices containing the indices for each variational param.
+        indx_mats = {}
+        for k, param in self.variational_params.items():
+            param_dim = param["dim"]
+            shape = (self.max_detections + 1, param_dim * self.max_detections)
+            indx_mat = torch.full(
+                shape,
+                self.dim_out_all,
+                dtype=torch.long,
+            )
+            indx_mats[k] = indx_mat
 
-        # get probability of n_sources
-        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
-        n_source_log_probs = self._get_logprob_n_from_var_params(h)
-        var_params["n_source_log_probs"] = n_source_log_probs
+        # add corresponding indices to the index matrices of variational params
+        # for a given n_detection.
+        curr_indx = 0
+        for n_detections in range(1, self.max_detections + 1):
+            for k, param in self.variational_params.items():
+                param_dim = param["dim"]
+                new_indx = (param_dim * n_detections) + curr_indx
+                indx_mats[k][n_detections, 0 : (param_dim * n_detections)] = torch.arange(
+                    curr_indx, new_indx
+                )
+                curr_indx = new_indx
 
-        return var_params
+        # assigned indices that were not used to `prob_n_source`
+        indx_mats["prob_n_source"] = torch.arange(curr_indx, self.dim_out_all)
 
-    def forward(self, image_ptiles, tile_n_sources):
-        """Runs encoder on image ptiles."""
-        # images shape = (n_ptiles x n_bands x pslen x pslen)
-        # tile_n_sources shape = (n_ptiles)
-        assert len(tile_n_sources.shape) == 1
-        assert len(image_ptiles.shape) == 4
-        assert image_ptiles.shape[0] == tile_n_sources.shape[0]
-        tile_n_sources = tile_n_sources.clamp(max=self.max_detections).unsqueeze(0)
-        var_params = self.forward_sampled(image_ptiles, tile_n_sources)
-        return {key: value.squeeze(0) for key, value in var_params.items()}
+        return indx_mats
 
-    def sample_encoder(self, images, n_samples):
-        assert len(images.shape) == 4
-        assert images.shape[0] == 1, "Only works for 1 image"
-        image_ptiles = self.get_images_in_tiles(images)
-        h = self.get_var_params_all(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
+    def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
+        """Obtains variational parameters for n_sources.
 
-        # sample number of sources.
-        # tile_n_sources shape = (n_samples x n_ptiles)
-        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
-        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
-        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
-        tile_n_sources = tile_n_sources.view(n_samples, -1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+        Indexes into all possible combinations of variational parameters (h) to obtain actually
+        variational parameters for n_sources.
 
-        # get var_params conditioned on n_sources
-        pred = self.forward_sampled(image_ptiles, tile_n_sources)
+        Arguments:
+            h: shape = (n_ptiles x dim_out_all)
+            n_sources: (n_samples x n_tiles)
+            indx_mat: TODO (to be documented)
+            param_dim: the dimension of the parameter you are indexing h.
 
-        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
-        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
-        tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
-        tile_log_fluxes = self._get_normal_samples(
-            pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
-        )
-        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
-        return {
-            "n_sources": tile_n_sources,
-            "locs": tile_locs,
-            "log_fluxes": tile_log_fluxes,
-            "fluxes": tile_fluxes,
-        }
+        Returns:
+            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
+        """
+        assert len(n_sources.shape) == 2
+        assert h.size(0) == n_sources.size(1)
+        assert h.size(1) == self.dim_out_all
+        n_ptiles = h.size(0)
+        h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
 
-    def tile_map_estimate_from_var_params(self, pred, n_tiles_per_image, batch_size):
-        # batch_size = # of images that will be predicted.
-        # n_tiles_per_image = # tiles/padded_tiles each image is subdivided into.
-        # pred = prediction of variational parameters on each tile.
+        # select the indices from _h indicated by indx_mat.
+        indices = indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1)
+        var_param = torch.gather(h, 1, indices)
 
-        # tile_n_sources based on log_prob per tile.
-        # tile_is_on_array shape = (n_ptiles x max_detections)
-        tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-
-        # set sd so we return map estimates.
-        # first locs
-        locs_sd = torch.zeros_like(pred["loc_logvar"])
-        tile_locs = self._get_normal_samples(pred["loc_mean"], locs_sd, tile_is_on_array)
-        tile_locs = tile_locs.clamp(0, 1)
-
-        # then log_fluxes
-        log_flux_mean = pred["log_flux_mean"]
-        log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
-        tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, tile_is_on_array)
-        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
-
-        # finally prob_n_sources
-        prob_n_sources = torch.exp(pred["n_source_log_probs"]).reshape(
-            batch_size, n_tiles_per_image, 1, self.max_detections + 1
+        # np: n_ptiles, ns: n_samples
+        return rearrange(
+            var_param,
+            "np (ns d pd) -> ns np d pd",
+            np=n_ptiles,
+            ns=n_sources.size(0),
+            d=self.max_detections,
+            pd=param_dim,
         )
 
-        bshape = (batch_size, n_tiles_per_image, self.max_detections, -1)  # -1 = param_dim
-        return {
-            "locs": tile_locs.reshape(*bshape),
-            "log_fluxes": tile_log_fluxes.reshape(*bshape),
-            "fluxes": tile_fluxes.reshape(*bshape),
-            "prob_n_sources": prob_n_sources,
-            "n_sources": tile_n_sources.reshape(batch_size, -1),
-        }
 
-    def tile_map_n_sources(self, image_ptiles):
-        h = self.get_var_params_all(image_ptiles)
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(h)
-        return torch.argmax(log_probs_n_sources_per_tile, dim=1)
+class EncoderCNN(nn.Module):
+    def __init__(self, n_bands, channel, dropout):
+        super().__init__()
+        self.layer = self._make_layer(n_bands, channel, dropout)
 
-    def tile_map_estimate(self, images):
+    def forward(self, x):
+        """Runs encoder CNN on inputs."""
+        return self.layer(x)
 
-        # extract image_ptiles
-        batch_size = images.shape[0]
-        image_ptiles = self.get_images_in_tiles(images)
-        n_tiles_per_image = int(image_ptiles.shape[0] / batch_size)
+    def _make_layer(self, n_bands, channel, dropout):
+        layers = [
+            nn.Conv2d(n_bands, channel, 3, padding=1),
+            nn.BatchNorm2d(channel),
+            nn.ReLU(True),
+        ]
+        in_channel = channel
+        for i in range(3):
+            downsample = True
+            if i == 0:
+                downsample = False
+            layers += [ConvBlock(in_channel, channel, dropout, downsample)]
+            layers += [
+                ConvBlock(channel, channel, dropout, False),
+                ConvBlock(channel, channel, dropout, False),
+            ]
+            in_channel = channel
+            channel = channel * 2
+        return nn.Sequential(*layers)
 
-        # MAP (for n_sources) prediction on var params on each tile
-        tile_n_sources = self.tile_map_n_sources(image_ptiles)
-        pred = self(image_ptiles, tile_n_sources)
 
-        return self.tile_map_estimate_from_var_params(pred, n_tiles_per_image, batch_size)
+class ConvBlock(nn.Module):
+    """A Convolution Layer.
 
-    def map_estimate(self, images, slen: int, wlen: int = None):
-        # return full estimate of parameters in full image.
-        # NOTE: slen*wlen is size of the image without border padding
+    This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
+    in the middle, and an option to downsample with a stride of 2.
 
-        if wlen is None:
-            wlen = slen
-        assert isinstance(slen, int) and isinstance(wlen, int)
-        # check image compatibility
-        border1 = (images.shape[-2] - slen) / 2
-        border2 = (images.shape[-1] - wlen) / 2
-        assert border1 == border2, "border paddings on each dimension differ."
-        assert slen % self.tile_slen == 0, "incompatible slen"
-        assert wlen % self.tile_slen == 0, "incompatible wlen"
-        assert border1 == self.border_padding, "incompatible border"
+    Parameters:
+        in_channel: Number of input channels
+        out_channel: Number of output channels
+        dropout: Dropout proportion between [0, 1]
+        downsample (optional): Whether to downsample with stride of 2.
+    """
 
-        # obtained estimates per tile, then on full image.
-        tile_estimate = self.tile_map_estimate(images)
-        return get_full_params(tile_estimate, slen, wlen)
+    def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
+        """Initializes the module layers."""
+        super().__init__()
+        self.downsample = downsample
+        stride = 1
+        if self.downsample:
+            stride = 2
+            self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
+            self.sc_bn = nn.BatchNorm2d(out_channel)
+        self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride)
+        self.bn1 = nn.BatchNorm2d(out_channel)
+        self.drop1 = nn.Dropout2d(dropout)
+        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channel)
 
-    @property
-    def variational_params(self):
-        # transform is a function applied directly on NN output.
-        return {
-            "loc_mean": {"dim": 2, "transform": _loc_mean_func},
-            "loc_logvar": {"dim": 2, "transform": _identity_func},
-            "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
-            "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
-        }
+    def forward(self, x):
+        """Runs convolutional block on inputs."""
+        identity = x
+
+        x = self.conv1(x)
+        x = F.relu(self.bn1(x))
+
+        x = self.drop1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+
+        if self.downsample:
+            identity = self.sc_bn(self.sc_conv(identity))
+
+        out = x + identity
+        return F.relu(out)
+
+
+def _argfront(is_on_array, dim):
+    # return indices that sort pushing all zeroes of tensor to the back.
+    # dim is dimension along which do the ordering.
+    assert len(is_on_array.shape) == 2
+    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
+
+
+def _sample_class_weights(class_weights, n_samples=1):
+    """Draw a sample from Categorical variable with probabilities class_weights."""
+    cat_rv = categorical.Categorical(probs=class_weights)
+    return cat_rv.sample((n_samples,)).squeeze()
+
+
+def _loc_mean_func(x):
+    return torch.sigmoid(x) * (x != 0).float()
+
+
+def _identity_func(x):
+    return x
