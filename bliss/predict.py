@@ -1,12 +1,11 @@
 """Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
-from unicodedata import name
+from typing import Optional, Tuple, Dict
+
 import torch
-from typing import Optional, Tuple, Dict, List
-from collections import namedtuple
 from torch import nn
+from torch.tensor import Tensor
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
-from torch.tensor import Tensor
 from tqdm import tqdm
 
 from bliss.datasets import sdss
@@ -126,7 +125,6 @@ class FullMAP(nn.Module):
         return self.locs.shape[1]
 
     def _get_fluxes_and_mags(self, galaxy_decoder: OneCenteredGalaxyDecoder):
-        # latent_dim = self.galaxy_params.shape[-1]
         latents = self.galaxy_params
         galaxy_flux = galaxy_decoder(latents).sum((-1, -2, -3)).reshape(-1)
         # collect flux and magnitude into a single tensor

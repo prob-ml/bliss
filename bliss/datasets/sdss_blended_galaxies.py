@@ -1,10 +1,10 @@
-from einops.einops import rearrange
-import torch
 import pytorch_lightning as pl
-
+import torch
 from torch import Tensor
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import IterableDataset
+from einops.einops import rearrange
+
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.binary import BinaryEncoder
 from bliss.predict import Predict
@@ -62,7 +62,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
         chunk = self.image[:, :, ylim[0] : ylim[1], xlim[0] : xlim[1]]
         with torch.no_grad():
             tile_map, _ = self.predict_module.predict_on_image(chunk)
-        batch = {
+        return {
             "images": chunk,
             "n_sources": tile_map.n_sources,
             "locs": tile_map.locs,
@@ -72,8 +72,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
             "log_fluxes": tile_map.log_fluxes,
             "slen": torch.tensor([self.slen]),
         }
-
-        return batch
 
     def get_lims(self):
         x_start = torch.randint(low=0, high=(300 - self.slen), size=(1,))
