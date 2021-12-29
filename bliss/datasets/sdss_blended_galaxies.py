@@ -26,8 +26,8 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         bp=24,
         n_batches=10,
         h_start = 200,
-        w_start = 1400,
-        scene_size = 600,
+        w_start = 1000,
+        scene_size = 1000,
     ) -> None:
         super().__init__()
         sdss_data = SloanDigitalSkySurvey(
