@@ -25,6 +25,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         bands=(2,),
         bp=24,
         n_batches=10,
+        h_start = 200,
+        w_start = 1400,
+        scene_size = 600,
     ) -> None:
         super().__init__()
         sdss_data = SloanDigitalSkySurvey(
@@ -41,7 +44,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         self.bp = bp
         self.n_batches = n_batches
         image = image[
-            :, :, (200 - self.bp) : (200 + 300 + self.bp), (1700 - self.bp) : (1700 + 300 + self.bp)
+            :, :, (h_start - self.bp) : (h_start + scene_size + self.bp), (w_start - self.bp) : (w_start + scene_size + self.bp)
         ]
 
         sleep = SleepPhase.load_from_checkpoint(sleep_ckpt)
@@ -84,7 +87,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                 if tile_map["galaxy_bool"].sum() > 0:
                     catalogs.append(tile_map)
                     chunks_with_galaxies.append(chunk)
-        # has_galaxies = torch.tensor(has_galaxies)
         chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
         print(f"n_galaxies: {chunks_with_galaxies.shape[0]}")
         return chunks_with_galaxies, catalogs
