@@ -363,6 +363,7 @@ class ImageEncoder(nn.Module):
             "fluxes": tile_fluxes,
             "prob_n_sources": prob_n_sources,
             "n_sources": tile_n_sources,
+            "is_on_array": tile_is_on_array,
         }
 
     def encode_for_n_sources(self, var_params, tile_n_sources):

@@ -3,15 +3,17 @@ import torch
 from torch import Tensor
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import IterableDataset
+from torch.nn import functional as F
 from einops.einops import rearrange
+from tqdm import tqdm
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.binary import BinaryEncoder
-from bliss.predict import Predict
+from bliss.predict import Encoder
 from bliss.sleep import SleepPhase
 
 
-class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
+class SdssBlendedGalaxies(pl.LightningDataModule):
     image: Tensor
 
     def __init__(
@@ -37,9 +39,12 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
             overwrite_fits_cache=True,
         )
         image = torch.from_numpy(sdss_data[0]["image"][0])
-        self.image = rearrange(image, "h w -> 1 1 h w")
+        image = rearrange(image, "h w -> 1 1 h w")
         self.bp = bp
         self.n_batches = n_batches
+        image = image[
+            :, :, (200 - self.bp) : (200 + 300 + self.bp), (1700 - self.bp) : (1700 + 300 + self.bp)
+        ]
 
         sleep = SleepPhase.load_from_checkpoint(sleep_ckpt)
         image_encoder = sleep.image_encoder
@@ -47,45 +52,44 @@ class SdssBlendedGalaxies(pl.LightningDataModule, IterableDataset):
         self.slen = 80
 
         binary_encoder = BinaryEncoder.load_from_checkpoint(binary_ckpt)
-        self.predict_module = Predict(image_encoder.eval(), binary_encoder.eval())
+        self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
+        self.chunks, self.catalogs = self.prerender_chunks(image)
 
-    def __iter__(self):
-        return self.batch_generator()
+    def __len__(self):
+        return len(self.catalogs)
 
-    def batch_generator(self):
-        for _ in range(self.n_batches):
-            yield self.get_batch()
-
-    def get_batch(self):
-        # Get chunk
-        xlim, ylim = self.get_lims()
-        chunk = self.image[:, :, ylim[0] : ylim[1], xlim[0] : xlim[1]]
-        with torch.no_grad():
-            tile_map, _ = self.predict_module.predict_on_image(chunk)
+    def __getitem__(self, idx):
+        chunk = self.chunks[idx]
+        tile_map = self.catalogs[idx]
         return {
             "images": chunk,
-            "n_sources": tile_map.n_sources,
-            "locs": tile_map.locs,
-            "galaxy_bool": tile_map.galaxy_bool,
-            "star_bool": tile_map.star_bool,
-            "fluxes": tile_map.fluxes,
-            "log_fluxes": tile_map.log_fluxes,
+            **tile_map,
             "slen": torch.tensor([self.slen]),
         }
 
-    def get_lims(self):
-        x_start = torch.randint(low=0, high=(300 - self.slen), size=(1,))
-        y_start = torch.randint(low=0, high=(300 - self.slen), size=(1,))
-        xlim = (x_start + 1700 - self.bp, x_start + 1700 + self.slen + self.bp)
-        ylim = (y_start + 200 - self.bp, y_start + 200 + self.slen + self.bp)
-
-        return xlim, ylim
+    def prerender_chunks(self, image):
+        kernel_size = self.slen + 2 * self.bp
+        chunks = F.unfold(image, kernel_size=kernel_size, stride=self.slen)
+        chunks = rearrange(
+            chunks,
+            "b (c h w) n -> (b n) c h w",
+            c=image.shape[1],
+            h=kernel_size,
+            w=kernel_size,
+        )
+        catalogs = []
+        with torch.no_grad():
+            for chunk in tqdm(chunks):
+                image_ptiles = self.encoder.get_images_in_ptiles(chunk.unsqueeze(0))
+                tile_map = self.encoder.max_a_post(image_ptiles)
+                catalogs.append(tile_map)
+        return chunks, catalogs
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=0)
+        return DataLoader(self, batch_size=1, num_workers=0)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=0)
+        return DataLoader(self, batch_size=1, num_workers=0)
 
     def test_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=0)
+        return DataLoader(self, batch_size=1, num_workers=0)

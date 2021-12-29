@@ -151,7 +151,7 @@ class GalaxyEncoder(pl.LightningModule):
             slen = batch["slen"].item()
             bp = (recon_losses.shape[-1] - slen) // 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
-            print(f"recon_losses shape: {recon_losses.shape}")
+            # print(f"recon_losses shape: {recon_losses.shape}")
         return recon_losses.sum()
 
     def training_step(self, batch, batch_idx):
