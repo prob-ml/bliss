@@ -14,8 +14,6 @@ from bliss.sleep import SleepPhase
 
 
 class SdssBlendedGalaxies(pl.LightningDataModule):
-    image: Tensor
-
     def __init__(
         self,
         sleep_ckpt: str,
@@ -78,12 +76,18 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             w=kernel_size,
         )
         catalogs = []
+        chunks_with_galaxies = []
         with torch.no_grad():
             for chunk in tqdm(chunks):
                 image_ptiles = self.encoder.get_images_in_ptiles(chunk.unsqueeze(0))
                 tile_map = self.encoder.max_a_post(image_ptiles)
-                catalogs.append(tile_map)
-        return chunks, catalogs
+                if tile_map["galaxy_bool"].sum() > 0:
+                    catalogs.append(tile_map)
+                    chunks_with_galaxies.append(chunk)
+        # has_galaxies = torch.tensor(has_galaxies)
+        chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
+        print(f"n_galaxies: {chunks_with_galaxies.shape[0]}")
+        return chunks_with_galaxies, catalogs
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=1, num_workers=0)
