@@ -150,6 +150,7 @@ class GalaxyEncoder(pl.LightningModule):
         if self.crop_loss_at_border:
             slen = batch["slen"].item()
             bp = (recon_losses.shape[-1] - slen) // 2
+            bp = bp * 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
             # print(f"recon_losses shape: {recon_losses.shape}")
         return recon_losses.sum()
@@ -221,6 +222,7 @@ class GalaxyEncoder(pl.LightningModule):
         # use same vmin, vmax throughout for residuals
         if self.crop_loss_at_border:
             bp = (recon_images.shape[-1] - slen) // 2
+            bp = bp * 2
             residuals[:, :, :bp, :] = 0.0
             residuals[:, :, -bp:, :] = 0.0
             residuals[:, :, :, :bp] = 0.0
@@ -257,16 +259,19 @@ class GalaxyEncoder(pl.LightningModule):
             residuals_idx = residuals[idx, 0].cpu().numpy()
             if self.crop_loss_at_border:
                 bp = (recon_images.shape[-1] - slen) // 2
-                recon_ax.axvline(bp, color="w")
-                recon_ax.axvline(bp + slen, color="w")
-                recon_ax.axhline(bp, color="w")
-                recon_ax.axhline(bp + slen, color="w")
+                eff_slen = slen - bp
+                for b in (bp, bp * 2):
+                    recon_ax.axvline(b, color="w")
+                    recon_ax.axvline(b + eff_slen, color="w")
+                    recon_ax.axhline(b, color="w")
+                    recon_ax.axhline(b + eff_slen, color="w")
             plot_image(fig, res_ax, residuals_idx, vrange=(res_vmin, res_vmax))
             if self.crop_loss_at_border:
-                res_ax.axvline(bp, color="w")
-                res_ax.axvline(bp + slen, color="w")
-                res_ax.axhline(bp, color="w")
-                res_ax.axhline(bp + slen, color="w")
+                for b in (bp, bp * 2):
+                    res_ax.axvline(b, color="w")
+                    res_ax.axvline(b + eff_slen, color="w")
+                    res_ax.axhline(b, color="w")
+                    res_ax.axhline(b + eff_slen, color="w")
 
         fig.tight_layout()
         if self.logger:

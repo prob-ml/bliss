@@ -25,9 +25,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         bands=(2,),
         bp=24,
         n_batches=10,
-        h_start = 200,
-        w_start = 1000,
-        scene_size = 1000,
+        h_start=200,
+        w_start=1000,
+        scene_size=1000,
     ) -> None:
         super().__init__()
         sdss_data = SloanDigitalSkySurvey(
@@ -42,15 +42,18 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         image = torch.from_numpy(sdss_data[0]["image"][0])
         image = rearrange(image, "h w -> 1 1 h w")
         self.bp = bp
+        self.slen = 80 + 2 * bp
         self.n_batches = n_batches
         image = image[
-            :, :, (h_start - self.bp) : (h_start + scene_size + self.bp), (w_start - self.bp) : (w_start + scene_size + self.bp)
+            :,
+            :,
+            (h_start - self.bp) : (h_start + scene_size + self.bp),
+            (w_start - self.bp) : (w_start + scene_size + self.bp),
         ]
 
         sleep = SleepPhase.load_from_checkpoint(sleep_ckpt)
         image_encoder = sleep.image_encoder
 
-        self.slen = 80
 
         binary_encoder = BinaryEncoder.load_from_checkpoint(binary_ckpt)
         self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
