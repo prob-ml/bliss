@@ -185,13 +185,16 @@ class GalaxyEncoder(pl.LightningModule):
             self.make_plots(batch)
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, n_samples=25):
+    def make_plots(self, batch, n_samples=5):
         # validate worst reconstruction images.
         for k in batch.keys():
             print(f"{k}: {batch[k].shape}")
         print(f"n_samples: {n_samples}")
         n_samples = min(len(batch["n_sources"]), n_samples)
         print(f"n_samples: {n_samples}")
+
+        for k in batch.keys():
+            batch[k] = batch[k][0:n_samples]
 
         # extract non-params entries so that 'get_full_params' to works.
         images = batch["images"]
