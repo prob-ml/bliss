@@ -236,8 +236,6 @@ class GalaxyEncoder(pl.LightningModule):
             residuals[:, :, -bp:, :] = 0.0
             residuals[:, :, :, :bp] = 0.0
             residuals[:, :, :, -bp:] = 0.0
-        res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).item()
-        res_vmin = torch.floor(residuals[worst_indices].min().cpu()).item()
 
         figsize = (12, 4 * n_samples)
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
@@ -266,6 +264,8 @@ class GalaxyEncoder(pl.LightningModule):
                 idx, fig, recon_ax, recon_images, slen, est, labels=labels, vrange=vrange
             )
             residuals_idx = residuals[idx, 0].cpu().numpy()
+            res_vmax = np.ceil(residuals_idx.max())
+            res_vmin = np.floor(residuals_idx.min())
             if self.crop_loss_at_border:
                 bp = (recon_images.shape[-1] - slen) // 2
                 eff_slen = slen - bp

@@ -54,7 +54,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         sleep = SleepPhase.load_from_checkpoint(sleep_ckpt)
         image_encoder = sleep.image_encoder
 
-
         binary_encoder = BinaryEncoder.load_from_checkpoint(binary_ckpt)
         self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
         self.chunks, self.catalogs = self.prerender_chunks(image)
