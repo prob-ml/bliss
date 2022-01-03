@@ -1,3 +1,4 @@
+from typing import Optional
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -56,6 +57,7 @@ class GalaxyEncoder(pl.LightningModule):
         hidden: int = 256,
         optimizer_params: dict = None,
         crop_loss_at_border=False,
+        checkpoint_path: Optional[str] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -90,6 +92,10 @@ class GalaxyEncoder(pl.LightningModule):
 
         # consistency
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
+
+        if checkpoint_path is not None:
+            ge = GalaxyEncoder.load_from_checkpoint(checkpoint_path)
+            self.load_state_dict(ge.state_dict())
 
     def center_ptiles(self, image_ptiles, tile_locs):
         return center_ptiles(
