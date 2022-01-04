@@ -68,7 +68,7 @@ def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
     est2 = get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
     for k in est:
         assert k in est2
-        assert torch.allclose(est[k], est2)
+        assert torch.allclose(est[k], est2[k])
     return est
 
 

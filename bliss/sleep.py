@@ -348,7 +348,7 @@ class SleepPhase(pl.LightningModule):
         slen = int(batch["slen"].unique().item())
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params(true_tile_params, slen)
-        true_params2 = get_full_params_from_tiles(true_tile_params, self.tile_slen)
+        true_params2 = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
         for k in true_params:
             assert k in true_params2
             assert torch.allclose(true_params[k], true_params2[k])
@@ -356,10 +356,10 @@ class SleepPhase(pl.LightningModule):
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
         est_params = get_full_params(tile_estimate, slen)
-        est_params2 = get_full_params_from_tiles(true_tile_params, self.tile_slen)
+        est_params2 = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
         for k in est_params:
             assert k in est_params2
-            assert torch.allclose(est_params[k], est_params2)
+            assert torch.allclose(est_params[k], est_params2[k])
 
         return true_params, est_params, slen
 

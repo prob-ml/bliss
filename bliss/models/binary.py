@@ -209,7 +209,7 @@ class BinaryEncoder(pl.LightningModule):
         tile_est["star_bool"] = pred["star_bool"]
         tile_est["prob_galaxy"] = pred["prob_galaxy"]
         est = get_full_params(tile_est, slen)
-        est2 = get_full_params_from_tiles(tile_params, self.tile_slen)
+        est2 = get_full_params_from_tiles(tile_est, self.tile_slen)
         for k in est:
             assert k in est2
             assert torch.allclose(est[k], est2[k])

@@ -186,7 +186,7 @@ class GalaxyEncoder(pl.LightningModule):
             k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
         }
         est = get_full_params(tile_est, slen)
-        est2 = get_full_params_from_tiles(tile_params, self.tile_slen)
+        est2 = get_full_params_from_tiles(tile_est, self.tile_slen)
         for k in est:
             assert k in est2
             assert torch.allclose(est[k], est2[k])
