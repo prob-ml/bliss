@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 import torch
@@ -67,7 +67,32 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_full_params_from_tiles(tile_params, tile_slen):
+def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -> Dict[str, Tensor]:
+    """Converts image parameters in tiles to parameters of full image.
+
+    By parameters, we mean samples from the variational distribution, not the variational
+    parameters.
+
+    Args:
+        tile_params: A dictionary consisting of tile latent variables. These could be
+            samples from the variational distribution or the maximum a posteriori (such as from
+            ImageEncoder.max_a_post or SleepPhase.tile_map_estimate).
+            The first three dimensions of each tensor in this dictionary
+            should be of shape `n_samples x n_tiles_per_image x max_detections`.ge.
+        tile_slen:
+            Side-length of each tile.
+
+    Returns:
+        A dictionary of tensors with the same members as those in `tile_params`.
+        The first two dimensions of each tensor is `n_samples x max(n_sources)`,
+        where `max(n_sources)` is the maximum number of sources detected across samples.
+        In samples where the number of sources detected is less than max(n_sources),
+        these values will be zeroed out. Thus, it is imperative to use the "n_sources"
+        element to verify which locations/fluxes/parameters are zeroed out.
+
+        Note: The locations (`"locs"`) are between 0 and 1. The output also contains
+        pixel locations ("plocs") that are between 0 and slen.
+    """
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
 
@@ -106,7 +131,26 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     return params
 
 
-def get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=None):
+def get_full_locs_from_tiles(
+    tile_locs: Tensor, tile_slen: int, n_tiles_w: Optional[int] = None
+) -> Tuple[Tensor, Tensor]:
+    """Get the full image locations from tile locations.
+
+    Args:
+        tile_locs:
+            A tensor of shape `n_samples x n_tiles_per_image x max_detections x 2`,
+            representing the locations in each tile.
+        tile_slen ([type]):
+            The side-length of each tile.
+        n_tiles_w :
+            Defaults to None. Can directly specify the number of tiles in width.
+            This is necessary when the original image was not square.
+
+    Returns:
+        A tuple of two elements, "plocs" and "locs".
+        "plocs" are the pixel coordinates of each source (between 0 and slen).
+        "locs" are the scaled locations of each source (between 0 and 1).
+    """
     n_samples, n_tiles_per_image, _, _ = tile_locs.shape
 
     n_tiles_h = int(np.sqrt(n_tiles_per_image))
@@ -133,7 +177,25 @@ def get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=None):
     return plocs, locs
 
 
-def get_indices_of_on_sources(tile_n_sources, max_detections):
+def get_indices_of_on_sources(tile_n_sources: Tensor, max_detections: int) -> Tensor:
+    """Get the indices of detected sources from each tile.
+
+    Args:
+        tile_n_sources: A Tensor of shape `n_samples x n_tiles_per_image`, containing the
+            number of detected sources in a given tile.
+        max_detections: The maximum number of detections allowed in a given tile.
+
+    Returns:
+        A 2-D tensor of integers with shape `n_samples x max(n_sources)`, where `max(n_sources)` is the
+        maximum number of sources detected across all samples.
+
+        Each element of this tensor is an index of a particular source within a particular tile.
+        For a particular sample i that had N detections,
+        the first N indices of indices_sorted[i. :] will be the detected sources.
+        This is accomplishied by flattening the n_tiles_per_image and max_detections.
+        For example, if we had 3 tiles with a maximum of two sources each, the elements of this tensor
+        would take values from 0 up to and including 5.
+    """
     tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
     max_sources = n_sources.max().int().item()
