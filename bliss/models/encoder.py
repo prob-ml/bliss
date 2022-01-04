@@ -136,6 +136,7 @@ def get_full_params_from_tiles(tile_params, tile_slen, optional):
     n_samples = tile_locs.shape[0]
     max_detections = tile_locs.shape[2]
 
+    indx_sort = get_indx_sort(tile_n_sources, max_detections)
     locs, slen, wlen = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
 
     # get is_on_array
@@ -145,11 +146,9 @@ def get_full_params_from_tiles(tile_params, tile_slen, optional):
     tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
     locs *= tile_is_on_array.unsqueeze(2)
 
-    # sort locs and clip
-    locs = locs.view(n_samples, -1, 2)
-    indx_sort = _argfront(locs[..., 0], dim=1)
-    locs = torch.gather(locs, 1, repeat(indx_sort, "b n -> b n r", r=2))
-    locs = locs[:, 0:max_sources]
+    locs = rearrange(locs, "(b n) d xy -> b (n d) xy", b=n_samples)
+    locs = torch.gather(locs, dim=1, index=repeat(indx_sort, "b n -> b n r", r=2))
+
     params = {"n_sources": n_sources, "locs": locs}
 
     # now do the same for the rest of the parameters (without scaling or biasing)
@@ -201,6 +200,31 @@ def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen):
     locs[..., 1] /= wlen
 
     return locs, slen, wlen
+
+
+def get_indx_sort(tile_n_sources, max_detections):
+    # get is_on_array
+    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
+    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
+    max_sources = n_sources.max().int().item()
+    # tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
+    tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> b (n d)")
+    # locs *= tile_is_on_array.unsqueeze(2)
+
+    # # sort locs and clip
+    # locs = locs.view(n_samples, -1, 2)
+    indx_sort = _argfront(tile_is_on_array, dim=1)
+    # locs = torch.gather(locs, 1, repeat(indx_sort, "b n -> b n r", r=2))
+    # locs = locs[:, 0:max_sources]
+    # params = {"n_sources": n_sources, "locs": locs}
+    return indx_sort[:, :max_sources]
+
+
+def _argfront(is_on_array, dim):
+    # return indices that sort pushing all zeroes of tensor to the back.
+    # dim is dimension along which do the ordering.
+    assert len(is_on_array.shape) == 2
+    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
 
 
 class ImageEncoder(nn.Module):
@@ -647,13 +671,6 @@ class ConvBlock(nn.Module):
 
         out = x + identity
         return F.relu(out)
-
-
-def _argfront(is_on_array, dim):
-    # return indices that sort pushing all zeroes of tensor to the back.
-    # dim is dimension along which do the ordering.
-    assert len(is_on_array.shape) == 2
-    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
 
 
 def _sample_class_weights(class_weights, n_samples=1):
