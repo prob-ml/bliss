@@ -12,6 +12,7 @@ from bliss.models.encoder import (
     get_is_on_from_n_sources,
     get_images_in_tiles,
     get_params_in_batches,
+    get_full_params_from_tiles,
 )
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
@@ -97,6 +98,10 @@ def predict_on_image(
 
     # full parameters on chunk
     full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
+    full_map2 = get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
+    for k in full_map:
+        assert k in full_map2
+        assert torch.allclose(full_map[k], full_map2[k])
 
     return tile_map, full_map, var_params_n_sources
 

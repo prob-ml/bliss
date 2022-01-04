@@ -24,6 +24,7 @@ from bliss.models.encoder import (
     get_is_on_from_n_sources,
     get_images_in_tiles,
     get_params_in_batches,
+    get_full_params_from_tiles,
 )
 from bliss.optimizer import load_optimizer
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
@@ -347,10 +348,18 @@ class SleepPhase(pl.LightningModule):
         slen = int(batch["slen"].unique().item())
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params(true_tile_params, slen)
+        true_params2 = get_full_params_from_tiles(true_tile_params, self.tile_slen)
+        for k in true_params:
+            assert k in true_params2
+            assert torch.allclose(true_params[k], true_params2[k])
 
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
         est_params = get_full_params(tile_estimate, slen)
+        est_params2 = get_full_params_from_tiles(true_tile_params, self.tile_slen)
+        for k in est_params:
+            assert k in est_params2
+            assert torch.allclose(est_params[k], est_params2)
 
         return true_params, est_params, slen
 
