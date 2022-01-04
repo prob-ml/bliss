@@ -96,26 +96,29 @@ def get_full_params(
     # NOTE: off sources should have tile_locs == 0.
     # NOTE: assume that each param in each tile is already pushed to the front.
 
-    # check slen, wlen
-    wlen = slen if wlen is None else wlen
-    assert isinstance(slen, int) and isinstance(wlen, int)
-
     # check dictionary of tile_params is consistent and has no extraneous keys.
     required = {"n_sources", "locs"}
     assert required.issubset(tile_params.keys())
 
+    tile_slen = get_tile_slen(tile_params, slen, wlen)
+    return get_full_params_from_tiles(tile_params, tile_slen)
+
+
+def get_tile_slen(tile_params, slen, wlen=None):
+    # check slen, wlen
+    wlen = slen if wlen is None else wlen
+    assert isinstance(slen, int) and isinstance(wlen, int)
     # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
     tile_locs = tile_params["locs"]
     assert len(tile_locs.shape) == 4
     n_tiles_per_image = tile_locs.shape[1]
-
     # calculate tile_slen
     tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
     assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
     assert slen % tile_slen == 0 and wlen % tile_slen == 0, "incompatible side lengths."
     tile_slen = int(tile_slen)
 
-    return get_full_params_from_tiles(tile_params, tile_slen)
+    return tile_slen
 
 
 def get_full_params_from_tiles(tile_params, tile_slen):
