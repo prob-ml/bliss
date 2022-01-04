@@ -121,16 +121,14 @@ def get_full_params(
 def get_full_params_from_tiles(tile_params, tile_slen):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
-
     max_detections = tile_locs.shape[2]
-    indx_sort = get_indx_sort(tile_n_sources, max_detections)
+
     plocs, locs = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
+    tile_params_to_gather = {
+        "locs": locs,
+        "plocs": plocs,
+    }
 
-    n_sources = reduce(tile_params["n_sources"], "b n -> b", "sum")
-    params = {"n_sources": n_sources}
-
-    # now do the same for the rest of the parameters (without scaling or biasing)
-    # for same reason no need to multiply times is_on_array
     param_names_to_gather = {
         "galaxy_bool",
         "star_bool",
@@ -141,15 +139,19 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     }
     if max_detections == 1:
         param_names_to_gather.add("prob_n_sources")
+    tile_params_to_gather.update(
+        {k: tile_params[k] for k in param_names_to_gather if k in tile_params}
+    )
 
-    tile_params_to_gather = {k: tile_params[k] for k in param_names_to_gather if k in tile_params}
-    tile_params_to_gather.update({"locs": locs, "plocs": plocs})
+    params = {}
+    indx_sort = get_indx_sort(tile_n_sources, max_detections)
     for param_name, tile_param in tile_params_to_gather.items():
         assert len(tile_param.shape) == 4
         param = rearrange(tile_param, "b t d k -> b (t d) k")
         param = torch.gather(param, 1, repeat(indx_sort, "b n -> b n r", r=tile_param.shape[-1]))
         params[param_name] = param
 
+    params["n_sources"] = reduce(tile_params["n_sources"], "b n -> b", "sum")
     assert len(params["locs"].shape) == 3
     assert params["locs"].shape[1] == params["n_sources"].max().int().item()
     return params
