@@ -192,28 +192,12 @@ def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen):
 
 
 def get_indices_of_on_sources(tile_n_sources, max_detections):
-    # get is_on_array
     tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
     max_sources = n_sources.max().int().item()
-    # tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
     tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> b (n d)")
-    # locs *= tile_is_on_array.unsqueeze(2)
-
-    # # sort locs and clip
-    # locs = locs.view(n_samples, -1, 2)
-    indx_sort = _argfront(tile_is_on_array, dim=1)
-    # locs = torch.gather(locs, 1, repeat(indx_sort, "b n -> b n r", r=2))
-    # locs = locs[:, 0:max_sources]
-    # params = {"n_sources": n_sources, "locs": locs}
-    return indx_sort[:, :max_sources]
-
-
-def _argfront(is_on_array, dim):
-    # return indices that sort pushing all zeroes of tensor to the back.
-    # dim is dimension along which do the ordering.
-    assert len(is_on_array.shape) == 2
-    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
+    indices_sorted = tile_is_on_array.long().argsort(dim=1, descending=True)
+    return indices_sorted[:, :max_sources]
 
 
 class ImageEncoder(nn.Module):
