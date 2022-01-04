@@ -70,11 +70,6 @@ def get_is_on_from_n_sources(n_sources, max_sources):
 def get_full_params_from_tiles(tile_params, tile_slen):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
-    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_n_sources, tile_slen)
-    tile_params_to_gather = {
-        "locs": locs,
-        "plocs": plocs,
-    }
 
     param_names_to_gather = {
         "galaxy_bool",
@@ -87,6 +82,12 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     max_detections = tile_locs.shape[2]
     if max_detections == 1:
         param_names_to_gather.add("prob_n_sources")
+
+    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_n_sources, tile_slen)
+    tile_params_to_gather = {
+        "locs": locs,
+        "plocs": plocs,
+    }
     tile_params_to_gather.update(
         {k: tile_params[k] for k in param_names_to_gather if k in tile_params}
     )
