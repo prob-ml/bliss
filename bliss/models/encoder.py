@@ -149,9 +149,8 @@ def get_full_params_from_tiles(tile_params, tile_slen, optional):
 
     # now do the same for the rest of the parameters (without scaling or biasing)
     # for same reason no need to multiply times is_on_array
-    for param_name, val in tile_params.items():
+    for param_name, tile_param in tile_params.items():
         if param_name in optional:
-            tile_param = val
             assert len(tile_param.shape) == 4
             param = rearrange(tile_param, "b t d k -> b (t d) k")
             param = torch.gather(
