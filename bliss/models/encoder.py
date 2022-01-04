@@ -133,14 +133,9 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
 
-    n_samples = tile_locs.shape[0]
     max_detections = tile_locs.shape[2]
-
     indx_sort = get_indx_sort(tile_n_sources, max_detections)
-    plocs, locs, slen, wlen = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
-
-    # get is_on_array
-
+    plocs, locs = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
 
     n_sources = reduce(tile_params["n_sources"], "b n -> b", "sum")
     params = {"n_sources": n_sources}
