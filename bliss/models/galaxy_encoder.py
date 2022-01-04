@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
-from bliss.models.encoder import get_full_params, get_images_in_tiles, get_full_params_from_tiles
+from bliss.models.encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image, plot_image_and_locs
@@ -185,11 +185,7 @@ class GalaxyEncoder(pl.LightningModule):
         tile_est = {
             k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
         }
-        est = get_full_params(tile_est, slen)
-        est2 = get_full_params_from_tiles(tile_est, self.tile_slen)
-        for k in est:
-            assert k in est2
-            assert torch.allclose(est[k], est2[k])
+        est = get_full_params_from_tiles(tile_est, self.tile_slen)
 
         # draw all reconstruction images.
         # render_images automatically accounts for tiles with no galaxies.

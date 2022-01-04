@@ -67,59 +67,6 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_full_params(
-    tile_params: Dict[str, Tensor], slen: int, wlen: int = None
-) -> Dict[str, Tensor]:
-    """Converts image parameters in tiles to parameters of full image.
-
-    By parameters, we mean samples from the variational distribution, not the variational
-    parameters.
-
-    Args:
-        tile_params: A dictionary consisting of tile latent variables. These could be
-            samples from the variational distribution or the maximum a posteriori (such as from
-            ImageEncoder.max_a_post or SleepPhase.tile_map_estimate).
-            The first three dimensions of each tensor in this dictionary
-            should be of shape `n_samples x n_tiles_per_image x max_detections`.
-        slen:
-            The side length in pixels of the whole image.
-        wlen: Defaults to None.
-            If not None, the width of the image in pixels.
-
-    Returns:
-        A dictionary of tensors with the same members as those in `tile_params`.
-        The first two dimensions of each tensor is `n_samples x max(n_sources)`,
-        where `max(n_sources)` is the maximum number of sources detected across samples.
-        Note: The locations (`"locs"`) are between 0 and 1. For convienvence, the additional
-        element `"plocs"` is added which defines the locations between 0 and slen (pixel locations).
-    """
-    # NOTE: off sources should have tile_locs == 0.
-    # NOTE: assume that each param in each tile is already pushed to the front.
-
-    # check dictionary of tile_params is consistent and has no extraneous keys.
-    required = {"n_sources", "locs"}
-    assert required.issubset(tile_params.keys())
-
-    tile_slen = get_tile_slen(tile_params["locs"], slen, wlen)
-    return get_full_params_from_tiles(tile_params, tile_slen)
-
-
-def get_tile_slen(tile_locs, slen, wlen=None):
-    # check slen, wlen
-    wlen = slen if wlen is None else wlen
-    assert isinstance(slen, int) and isinstance(wlen, int)
-    # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
-    assert len(tile_locs.shape) == 4
-    n_tiles_per_image = tile_locs.shape[1]
-    # calculate tile_slen
-    tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
-    assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
-    assert slen % tile_slen == 0 and wlen % tile_slen == 0, "incompatible side lengths."
-    tile_slen = int(tile_slen)
-
-    return tile_slen
-
-
 def get_full_params_from_tiles(tile_params, tile_slen):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
@@ -147,7 +94,6 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     params = {}
     indices_to_retrieve = get_indices_of_on_sources(tile_n_sources, max_detections)
     for param_name, tile_param in tile_params_to_gather.items():
-        assert len(tile_param.shape) == 4
         k = tile_param.shape[-1]
         param = rearrange(tile_param, "b t d k -> b (t d) k", k=k)
         indices_for_param = repeat(indices_to_retrieve, "b n -> b n k", k=k)
@@ -155,7 +101,6 @@ def get_full_params_from_tiles(tile_params, tile_slen):
         params[param_name] = param
 
     params["n_sources"] = reduce(tile_params["n_sources"], "b n -> b", "sum")
-    assert len(params["locs"].shape) == 3
     assert params["locs"].shape[1] == params["n_sources"].max().int().item()
     return params
 

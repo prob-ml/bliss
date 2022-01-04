@@ -8,7 +8,6 @@ from bliss.datasets import sdss
 from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
 from bliss.models.encoder import (
-    get_full_params,
     get_is_on_from_n_sources,
     get_images_in_tiles,
     get_params_in_batches,
@@ -97,11 +96,7 @@ def predict_on_image(
     tile_map["galaxy_params"] = galaxy_param_mean
 
     # full parameters on chunk
-    full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
-    full_map2 = get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
-    for k in full_map:
-        assert k in full_map2
-        assert torch.allclose(full_map[k], full_map2[k])
+    full_map = get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
 
     return tile_map, full_map, var_params_n_sources
 
