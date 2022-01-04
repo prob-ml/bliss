@@ -141,15 +141,13 @@ def get_full_params_from_tiles(tile_params, tile_slen):
 
     # get is_on_array
 
-    locs = rearrange(locs, "(b n) d xy -> b (n d) xy", b=n_samples)
-    locs = torch.gather(locs, dim=1, index=repeat(indx_sort, "b n -> b n r", r=2))
 
     n_sources = reduce(tile_params["n_sources"], "b n -> b", "sum")
-    params = {"n_sources": n_sources, "locs": locs}
+    params = {"n_sources": n_sources}
 
     # now do the same for the rest of the parameters (without scaling or biasing)
     # for same reason no need to multiply times is_on_array
-    params_to_gather = {
+    param_names_to_gather = {
         "galaxy_bool",
         "star_bool",
         "galaxy_params",
@@ -158,16 +156,15 @@ def get_full_params_from_tiles(tile_params, tile_slen):
         "prob_galaxy",
     }
     if max_detections == 1:
-        params_to_gather.add("prob_n_sources")
+        param_names_to_gather.add("prob_n_sources")
 
-    for param_name, tile_param in tile_params.items():
-        if param_name in params_to_gather:
-            assert len(tile_param.shape) == 4
-            param = rearrange(tile_param, "b t d k -> b (t d) k")
-            param = torch.gather(
-                param, 1, repeat(indx_sort, "b n -> b n r", r=tile_param.shape[-1])
-            )
-            params[param_name] = param
+    tile_params_to_gather = {k: tile_params[k] for k in param_names_to_gather if k in tile_params}
+    tile_params_to_gather.update({"locs": locs})
+    for param_name, tile_param in tile_params_to_gather.items():
+        assert len(tile_param.shape) == 4
+        param = rearrange(tile_param, "b t d k -> b (t d) k")
+        param = torch.gather(param, 1, repeat(indx_sort, "b n -> b n r", r=tile_param.shape[-1]))
+        params[param_name] = param
 
     assert len(params["locs"].shape) == 3
     assert params["locs"].shape[1] == params["n_sources"].max().int().item()
@@ -203,6 +200,8 @@ def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen):
     locs = tile_locs * tile_slen + bias
     locs[..., 0] /= slen
     locs[..., 1] /= wlen
+
+    locs = rearrange(locs, "(b n) d xy -> b n d xy", b=n_samples)
 
     return locs, slen, wlen
 
