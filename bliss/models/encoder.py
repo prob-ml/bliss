@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -140,9 +140,9 @@ def get_full_locs_from_tiles(
         tile_locs:
             A tensor of shape `n_samples x n_tiles_per_image x max_detections x 2`,
             representing the locations in each tile.
-        tile_slen ([type]):
+        tile_slen:
             The side-length of each tile.
-        n_tiles_w :
+        n_tiles_w:
             Defaults to None. Can directly specify the number of tiles in width.
             This is necessary when the original image was not square.
 
@@ -181,20 +181,22 @@ def get_indices_of_on_sources(tile_n_sources: Tensor, max_detections: int) -> Te
     """Get the indices of detected sources from each tile.
 
     Args:
-        tile_n_sources: A Tensor of shape `n_samples x n_tiles_per_image`, containing the
+        tile_n_sources:
+            A Tensor of shape `n_samples x n_tiles_per_image`, containing the
             number of detected sources in a given tile.
-        max_detections: The maximum number of detections allowed in a given tile.
+        max_detections:
+            The maximum number of detections allowed in a given tile.
 
     Returns:
-        A 2-D tensor of integers with shape `n_samples x max(n_sources)`, where `max(n_sources)` is the
-        maximum number of sources detected across all samples.
+        A 2-D tensor of integers with shape `n_samples x max(n_sources)`,
+        where `max(n_sources)` is the maximum number of sources detected across all samples.
 
         Each element of this tensor is an index of a particular source within a particular tile.
         For a particular sample i that had N detections,
         the first N indices of indices_sorted[i. :] will be the detected sources.
         This is accomplishied by flattening the n_tiles_per_image and max_detections.
-        For example, if we had 3 tiles with a maximum of two sources each, the elements of this tensor
-        would take values from 0 up to and including 5.
+        For example, if we had 3 tiles with a maximum of two sources each,
+        the elements of this tensor would take values from 0 up to and including 5.
     """
     tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
@@ -346,7 +348,6 @@ class ImageEncoder(nn.Module):
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
-            "n_sources": tile_n_sources,
         }
 
     def max_a_post(self, var_params: Tensor) -> Dict[str, Tensor]:

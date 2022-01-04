@@ -63,8 +63,7 @@ def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
     tile_map = get_params_in_batches(tile_map, images.shape[0])
     tile_map["prob_n_sources"] = tile_map["prob_n_sources"].unsqueeze(-2)
 
-    est = get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
-    return est
+    return get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
 
 
 class TestStarSleepEncoderM2:

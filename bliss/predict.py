@@ -50,10 +50,6 @@ def predict_on_image(
     assert image.shape[1] == image_encoder.n_bands == 1
     assert image_encoder.max_detections == 1
 
-    # prepare dimensions
-    h, w = image.shape[-2], image.shape[-1]
-    bp = image_encoder.border_padding
-
     # get padded tiles.
     ptiles = get_images_in_tiles(image, image_encoder.tile_slen, image_encoder.ptile_slen)
 
