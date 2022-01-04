@@ -100,16 +100,15 @@ def get_full_params(
     required = {"n_sources", "locs"}
     assert required.issubset(tile_params.keys())
 
-    tile_slen = get_tile_slen(tile_params, slen, wlen)
+    tile_slen = get_tile_slen(tile_params["locs"], slen, wlen)
     return get_full_params_from_tiles(tile_params, tile_slen)
 
 
-def get_tile_slen(tile_params, slen, wlen=None):
+def get_tile_slen(tile_locs, slen, wlen=None):
     # check slen, wlen
     wlen = slen if wlen is None else wlen
     assert isinstance(slen, int) and isinstance(wlen, int)
     # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
-    tile_locs = tile_params["locs"]
     assert len(tile_locs.shape) == 4
     n_tiles_per_image = tile_locs.shape[1]
     # calculate tile_slen
