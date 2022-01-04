@@ -181,7 +181,7 @@ def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen):
     locs[..., 0] /= slen
     locs[..., 1] /= wlen
 
-    return plocs, locs, slen, wlen
+    return plocs, locs
 
 
 def get_indx_sort(tile_n_sources, max_detections):
