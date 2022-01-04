@@ -143,8 +143,6 @@ def get_full_params_from_tiles(tile_params, tile_slen, optional):
     tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
     max_sources = n_sources.max().int().item()
-    tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
-    locs *= tile_is_on_array.unsqueeze(2)
 
     locs = rearrange(locs, "(b n) d xy -> b (n d) xy", b=n_samples)
     locs = torch.gather(locs, dim=1, index=repeat(indx_sort, "b n -> b n r", r=2))
