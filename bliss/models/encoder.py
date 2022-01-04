@@ -83,7 +83,7 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     if max_detections == 1:
         param_names_to_gather.add("prob_n_sources")
 
-    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_n_sources, tile_slen)
+    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen)
     tile_params_to_gather = {
         "locs": locs,
         "plocs": plocs,
@@ -106,7 +106,7 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     return params
 
 
-def get_full_locs_from_tiles(tile_locs, tile_n_sources, tile_slen, n_tiles_w=None):
+def get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=None):
     n_samples, n_tiles_per_image, _, _ = tile_locs.shape
 
     n_tiles_h = int(np.sqrt(n_tiles_per_image))
@@ -116,8 +116,8 @@ def get_full_locs_from_tiles(tile_locs, tile_n_sources, tile_slen, n_tiles_w=Non
     slen = n_tiles_h * tile_slen
     wlen = n_tiles_w * tile_slen
     # coordinates on tiles.
-    x_coords = torch.arange(0, slen, tile_slen, device=tile_n_sources.device).long()
-    y_coords = torch.arange(0, wlen, tile_slen, device=tile_n_sources.device).long()
+    x_coords = torch.arange(0, slen, tile_slen, device=tile_locs.device).long()
+    y_coords = torch.arange(0, wlen, tile_slen, device=tile_locs.device).long()
     tile_coords = torch.cartesian_prod(x_coords, y_coords)
 
     # recenter and renormalize locations.
