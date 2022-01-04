@@ -70,7 +70,7 @@ def get_is_on_from_n_sources(n_sources, max_sources):
 def get_full_params_from_tiles(tile_params, tile_slen):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
-    plocs, locs = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
+    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_n_sources, tile_slen)
     tile_params_to_gather = {
         "locs": locs,
         "plocs": plocs,
@@ -105,7 +105,7 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     return params
 
 
-def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen, n_tiles_w=None):
+def get_full_locs_from_tiles(tile_locs, tile_n_sources, tile_slen, n_tiles_w=None):
     n_samples, n_tiles_per_image, _, _ = tile_locs.shape
 
     n_tiles_h = int(np.sqrt(n_tiles_per_image))
