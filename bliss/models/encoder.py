@@ -124,8 +124,6 @@ def get_tile_slen(tile_params, slen, wlen=None):
 def get_full_params_from_tiles(tile_params, tile_slen):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
-    max_detections = tile_locs.shape[2]
-
     plocs, locs = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
     tile_params_to_gather = {
         "locs": locs,
@@ -140,6 +138,7 @@ def get_full_params_from_tiles(tile_params, tile_slen):
         "log_fluxes",
         "prob_galaxy",
     }
+    max_detections = tile_locs.shape[2]
     if max_detections == 1:
         param_names_to_gather.add("prob_n_sources")
     tile_params_to_gather.update(
@@ -162,21 +161,19 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     return params
 
 
-def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen):
-    # tile_n_sources = tile_params["n_sources"]
-    # tile_locs = tile_params["locs"]
+def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen, n_tiles_w=None):
+    n_samples, n_tiles_per_image, _, _ = tile_locs.shape
 
-    n_samples = tile_locs.shape[0]
-    n_tiles_per_image = tile_locs.shape[1]
+    n_tiles_h = int(np.sqrt(n_tiles_per_image))
+    n_tiles_w = n_tiles_h if n_tiles_w is None else n_tiles_w
+    assert n_tiles_h * n_tiles_w == n_tiles_per_image
 
-    n_tiles_h = n_tiles_w = int(np.sqrt(n_tiles_per_image))
     slen = n_tiles_h * tile_slen
     wlen = n_tiles_w * tile_slen
     # coordinates on tiles.
     x_coords = torch.arange(0, slen, tile_slen, device=tile_n_sources.device).long()
     y_coords = torch.arange(0, wlen, tile_slen, device=tile_n_sources.device).long()
     tile_coords = torch.cartesian_prod(x_coords, y_coords)
-    assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
 
     # recenter and renormalize locations.
     tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
