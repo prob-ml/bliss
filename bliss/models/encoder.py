@@ -2,7 +2,7 @@ from typing import Dict
 
 import numpy as np
 import torch
-from einops import rearrange, repeat
+from einops import rearrange, repeat, reduce
 from torch import nn
 from torch.distributions import categorical
 from torch.nn import functional as F
@@ -140,13 +140,11 @@ def get_full_params_from_tiles(tile_params, tile_slen, optional):
     locs, slen, wlen = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
 
     # get is_on_array
-    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
-    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
-    max_sources = n_sources.max().int().item()
 
     locs = rearrange(locs, "(b n) d xy -> b (n d) xy", b=n_samples)
     locs = torch.gather(locs, dim=1, index=repeat(indx_sort, "b n -> b n r", r=2))
 
+    n_sources = reduce(tile_params["n_sources"], "b n -> b", "sum")
     params = {"n_sources": n_sources, "locs": locs}
 
     # now do the same for the rest of the parameters (without scaling or biasing)
@@ -159,7 +157,6 @@ def get_full_params_from_tiles(tile_params, tile_slen, optional):
             param = torch.gather(
                 param, 1, repeat(indx_sort, "b n -> b n r", r=tile_param.shape[-1])
             )
-            param = param[:, 0:max_sources]
             params[param_name] = param
 
     assert len(params["locs"].shape) == 3
@@ -367,6 +364,7 @@ class ImageEncoder(nn.Module):
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
+            "n_sources": tile_n_sources,
         }
 
     def max_a_post(self, var_params: Tensor) -> Dict[str, Tensor]:
