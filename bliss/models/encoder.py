@@ -137,7 +137,7 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     max_detections = tile_locs.shape[2]
 
     indx_sort = get_indx_sort(tile_n_sources, max_detections)
-    locs, slen, wlen = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
+    plocs, locs, slen, wlen = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
 
     # get is_on_array
 
@@ -159,7 +159,7 @@ def get_full_params_from_tiles(tile_params, tile_slen):
         param_names_to_gather.add("prob_n_sources")
 
     tile_params_to_gather = {k: tile_params[k] for k in param_names_to_gather if k in tile_params}
-    tile_params_to_gather.update({"locs": locs})
+    tile_params_to_gather.update({"locs": locs, "plocs": plocs})
     for param_name, tile_param in tile_params_to_gather.items():
         assert len(tile_param.shape) == 4
         param = rearrange(tile_param, "b t d k -> b (t d) k")
@@ -168,12 +168,6 @@ def get_full_params_from_tiles(tile_params, tile_slen):
 
     assert len(params["locs"].shape) == 3
     assert params["locs"].shape[1] == params["n_sources"].max().int().item()
-
-    # add plocs = pixel locs.
-    params["plocs"] = params["locs"].clone()
-    params["plocs"][:, :, 0] = params["locs"][:, :, 0] * slen
-    params["plocs"][:, :, 1] = params["locs"][:, :, 1] * wlen
-
     return params
 
 
@@ -197,13 +191,13 @@ def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen):
     tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
     bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
 
-    locs = tile_locs * tile_slen + bias
+    plocs = tile_locs * tile_slen + bias
+    plocs = rearrange(plocs, "(b n) d xy -> b n d xy", b=n_samples)
+    locs = plocs.clone()
     locs[..., 0] /= slen
     locs[..., 1] /= wlen
 
-    locs = rearrange(locs, "(b n) d xy -> b n d xy", b=n_samples)
-
-    return locs, slen, wlen
+    return plocs, locs, slen, wlen
 
 
 def get_indx_sort(tile_n_sources, max_detections):
