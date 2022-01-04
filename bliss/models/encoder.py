@@ -126,10 +126,10 @@ def get_full_params(
     assert slen % tile_slen == 0 and wlen % tile_slen == 0, "incompatible side lengths."
     tile_slen = int(tile_slen)
 
-    return get_full_params_from_tiles(tile_params, tile_slen, optional)
+    return get_full_params_from_tiles(tile_params, tile_slen)
 
 
-def get_full_params_from_tiles(tile_params, tile_slen, optional):
+def get_full_params_from_tiles(tile_params, tile_slen):
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
 
@@ -149,8 +149,19 @@ def get_full_params_from_tiles(tile_params, tile_slen, optional):
 
     # now do the same for the rest of the parameters (without scaling or biasing)
     # for same reason no need to multiply times is_on_array
+    params_to_gather = {
+        "galaxy_bool",
+        "star_bool",
+        "galaxy_params",
+        "fluxes",
+        "log_fluxes",
+        "prob_galaxy",
+    }
+    if max_detections == 1:
+        params_to_gather.add("prob_n_sources")
+
     for param_name, tile_param in tile_params.items():
-        if param_name in optional:
+        if param_name in params_to_gather:
             assert len(tile_param.shape) == 4
             param = rearrange(tile_param, "b t d k -> b (t d) k")
             param = torch.gather(
