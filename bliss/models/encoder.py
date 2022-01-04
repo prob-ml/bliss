@@ -97,7 +97,7 @@ def get_full_params_from_tiles(tile_params, tile_slen):
         k = tile_param.shape[-1]
         param = rearrange(tile_param, "b t d k -> b (t d) k", k=k)
         indices_for_param = repeat(indices_to_retrieve, "b n -> b n k", k=k)
-        param = torch.gather(param, 1, indices_for_param)
+        param = torch.gather(param, dim=1, index=indices_for_param)
         params[param_name] = param
 
     params["n_sources"] = reduce(tile_params["n_sources"], "b n -> b", "sum")
