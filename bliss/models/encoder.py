@@ -147,11 +147,13 @@ def get_full_params_from_tiles(tile_params, tile_slen):
     )
 
     params = {}
-    indx_sort = get_indx_sort(tile_n_sources, max_detections)
+    indices_to_retrieve = get_indices_of_on_sources(tile_n_sources, max_detections)
     for param_name, tile_param in tile_params_to_gather.items():
         assert len(tile_param.shape) == 4
-        param = rearrange(tile_param, "b t d k -> b (t d) k")
-        param = torch.gather(param, 1, repeat(indx_sort, "b n -> b n r", r=tile_param.shape[-1]))
+        k = tile_param.shape[-1]
+        param = rearrange(tile_param, "b t d k -> b (t d) k", k=k)
+        indices_for_param = repeat(indices_to_retrieve, "b n -> b n k", k=k)
+        param = torch.gather(param, 1, indices_for_param)
         params[param_name] = param
 
     params["n_sources"] = reduce(tile_params["n_sources"], "b n -> b", "sum")
@@ -189,7 +191,7 @@ def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen):
     return plocs, locs
 
 
-def get_indx_sort(tile_n_sources, max_detections):
+def get_indices_of_on_sources(tile_n_sources, max_detections):
     # get is_on_array
     tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
