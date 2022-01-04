@@ -126,25 +126,23 @@ def get_full_params(
     assert slen % tile_slen == 0 and wlen % tile_slen == 0, "incompatible side lengths."
     tile_slen = int(tile_slen)
 
-    # coordinates on tiles.
-    x_coords = torch.arange(0, slen, tile_slen, device=tile_n_sources.device).long()
-    y_coords = torch.arange(0, wlen, tile_slen, device=tile_n_sources.device).long()
-    tile_coords = torch.cartesian_prod(x_coords, y_coords)
-    assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
+    return get_full_params_from_tiles(tile_params, tile_slen, optional)
+
+
+def get_full_params_from_tiles(tile_params, tile_slen, optional):
+    tile_n_sources = tile_params["n_sources"]
+    tile_locs = tile_params["locs"]
+
+    n_samples = tile_locs.shape[0]
+    max_detections = tile_locs.shape[2]
+
+    locs, slen, wlen = full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen)
 
     # get is_on_array
     tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
     n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
     max_sources = n_sources.max().int().item()
-
-    # recenter and renormalize locations.
     tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
-    tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
-    bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
-
-    locs = tile_locs * tile_slen + bias
-    locs[..., 0] /= slen
-    locs[..., 1] /= wlen
     locs *= tile_is_on_array.unsqueeze(2)
 
     # sort locs and clip
@@ -176,6 +174,33 @@ def get_full_params(
     params["plocs"][:, :, 1] = params["locs"][:, :, 1] * wlen
 
     return params
+
+
+def full_locs_from_tile_locs(tile_locs, tile_n_sources, tile_slen):
+    # tile_n_sources = tile_params["n_sources"]
+    # tile_locs = tile_params["locs"]
+
+    n_samples = tile_locs.shape[0]
+    n_tiles_per_image = tile_locs.shape[1]
+
+    n_tiles_h = n_tiles_w = int(np.sqrt(n_tiles_per_image))
+    slen = n_tiles_h * tile_slen
+    wlen = n_tiles_w * tile_slen
+    # coordinates on tiles.
+    x_coords = torch.arange(0, slen, tile_slen, device=tile_n_sources.device).long()
+    y_coords = torch.arange(0, wlen, tile_slen, device=tile_n_sources.device).long()
+    tile_coords = torch.cartesian_prod(x_coords, y_coords)
+    assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
+
+    # recenter and renormalize locations.
+    tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
+    bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
+
+    locs = tile_locs * tile_slen + bias
+    locs[..., 0] /= slen
+    locs[..., 1] /= wlen
+
+    return locs, slen, wlen
 
 
 class ImageEncoder(nn.Module):
