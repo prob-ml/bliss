@@ -102,23 +102,12 @@ def get_full_params(
 
     # check dictionary of tile_params is consistent and has no extraneous keys.
     required = {"n_sources", "locs"}
-    optional = {"galaxy_bool", "star_bool", "galaxy_params", "fluxes", "log_fluxes", "prob_galaxy"}
     assert required.issubset(tile_params.keys())
 
-    for pname in tile_params:
-        assert pname in required or pname in optional or pname == "prob_n_sources"
-
     # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
-    tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
     assert len(tile_locs.shape) == 4
-    n_samples = tile_locs.shape[0]
     n_tiles_per_image = tile_locs.shape[1]
-    max_detections = tile_locs.shape[2]
-
-    # otherwise prob_n_sources makes no sense globally
-    if max_detections == 1:
-        optional.add("prob_n_sources")
 
     # calculate tile_slen
     tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
