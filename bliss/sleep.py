@@ -20,10 +20,10 @@ from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder
 from bliss.models.encoder import (
     ImageEncoder,
-    get_full_params,
     get_is_on_from_n_sources,
     get_images_in_tiles,
     get_params_in_batches,
+    get_full_params_from_tiles,
 )
 from bliss.optimizer import load_optimizer
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
@@ -346,12 +346,11 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(true_tile_params, slen)
+        true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
 
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        est_params = get_full_params(tile_estimate, slen)
-
+        est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
         return true_params, est_params, slen
 
     # pylint: disable=too-many-statements

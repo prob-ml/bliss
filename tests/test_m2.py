@@ -4,7 +4,11 @@ import numpy as np
 import pytest
 import torch
 
-from bliss.models.encoder import get_full_params, get_images_in_tiles, get_params_in_batches
+from bliss.models.encoder import (
+    get_images_in_tiles,
+    get_params_in_batches,
+    get_full_params_from_tiles,
+)
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
@@ -59,7 +63,7 @@ def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
     tile_map = get_params_in_batches(tile_map, images.shape[0])
     tile_map["prob_n_sources"] = tile_map["prob_n_sources"].unsqueeze(-2)
 
-    return get_full_params(tile_map, slen, wlen)
+    return get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
 
 
 class TestStarSleepEncoderM2:
