@@ -76,7 +76,7 @@ def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -
     Args:
         tile_params: A dictionary consisting of tile latent variables. These could be
             samples from the variational distribution or the maximum a posteriori (such as from
-            ImageEncoder.max_a_post or SleepPhase.tile_map_estimate).
+            LocationEncoder.max_a_post or SleepPhase.tile_map_estimate).
             The first three dimensions of each tensor in this dictionary
             should be of shape `n_samples x n_tiles_per_image x max_detections`.ge.
         tile_slen:
@@ -206,7 +206,7 @@ def get_indices_of_on_sources(tile_n_sources: Tensor, max_detections: int) -> Te
     return indices_sorted[:, :max_sources]
 
 
-class ImageEncoder(nn.Module):
+class LocationEncoder(nn.Module):
     """Encodes the distribution of a latent variable representing an astronomical image.
 
     This class implements the source encoder, which is supposed to take in
@@ -225,7 +225,7 @@ class ImageEncoder(nn.Module):
         dropout=0,
         hidden: int = 128,
     ):
-        """Initializes ImageEncoder.
+        """Initializes LocationEncoder.
 
         Args:
             max_detections: Number of maximum detections in a single tile.
@@ -284,9 +284,7 @@ class ImageEncoder(nn.Module):
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
     def forward(self, image_ptiles, tile_n_sources):
-        raise NotImplementedError(
-            "The forward method for ImageEncoder has changed to encode_for_n_sources()"
-        )
+        raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
 
     def encode(self, image_ptiles: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.

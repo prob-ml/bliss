@@ -11,7 +11,7 @@ from tqdm import tqdm
 from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
 from bliss.models.location_encoder import (
-    ImageEncoder,
+    LocationEncoder,
     get_full_params,
     get_images_in_tiles,
     get_is_on_from_n_sources,
@@ -25,7 +25,7 @@ from bliss.sleep import SleepPhase
 class Encoder(nn.Module):
     def __init__(
         self,
-        image_encoder: ImageEncoder,
+        image_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
         galaxy_decoder: Optional[OneCenteredGalaxyDecoder] = None,
