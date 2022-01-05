@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.binary import BinaryEncoder
-from bliss.predict import Encoder
+from bliss.encoder import Encoder
 from bliss.sleep import SleepPhase
 
 

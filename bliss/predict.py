@@ -1,20 +1,16 @@
 """Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
-from typing import Optional, Tuple, Dict
-
 import torch
-from torch import nn
-from torch.tensor import Tensor
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from bliss.datasets import sdss
+from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
 from bliss.models.encoder import (
-    ImageEncoder,
     get_full_params,
-    get_images_in_tiles,
     get_is_on_from_n_sources,
+    get_images_in_tiles,
     get_params_in_batches,
 )
 from bliss.models.galaxy_encoder import GalaxyEncoder
@@ -22,167 +18,214 @@ from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 from bliss.sleep import SleepPhase
 
 
-class Encoder(nn.Module):
-    def __init__(
-        self,
-        image_encoder: ImageEncoder,
-        binary_encoder: Optional[BinaryEncoder] = None,
-        galaxy_encoder: Optional[GalaxyEncoder] = None,
-        galaxy_decoder: Optional[OneCenteredGalaxyDecoder] = None,
-    ):
-        super().__init__()
-        self._dummy_param = nn.Parameter(torch.empty(0))
+def predict_on_image(
+    image: torch.Tensor,
+    image_encoder: encoder.ImageEncoder,
+    binary_encoder: BinaryEncoder,
+    galaxy_encoder: GalaxyEncoder,
+):
+    """This function takes in a single image and outputs the prediction from trained models.
 
-        self.image_encoder = image_encoder
-        self.binary_encoder = binary_encoder
-        self.galaxy_encoder = galaxy_encoder
-        self.galaxy_decoder = galaxy_decoder
+    Prediction requires counts/locations provided by a trained `image_encoder` so this is
+    a required argument. Note that prediction is done on a central square of the image
+    corresponding to a border of size `image_encoder.border_padding`.
 
-    def forward(self, x):
-        pass
+    Args:
+        image: Tensor of shape (1, n_bands, h, w) where slen-2*border_padding <= 300.
+        image_encoder: Trained ImageEncoder model. Assumed to be in correct device already.
+        galaxy_encoder: Trained GalaxyEncoder model. Assumed to be in correct device already.
+        binary_encoder: Trained BinaryEncoder model. Assumed to be in correct device already.
 
-    def sample(self, image_ptiles, n_samples):
-        pass
+    Returns:
+        tile_map: Dictionary containing MAP estimates for parameters of sources in each tile.
+        full_map: Dictionary containing MAP estimates for parameters of sources on full image.
+        var_params: Dictionary containing tensors of variational parameters corresponding
+            to each tile in `image`. The variational parameters include `prob_galaxy`,
+            `prob_n_sources`, `loc_mean`, `loc_logvar`, etc.
+    """
+    # prepare and check consistency
+    assert not image_encoder.training
+    assert len(image.shape) == 4
+    assert image.shape[0] == 1
+    assert image.shape[1] == image_encoder.n_bands == 1
+    assert image_encoder.max_detections == 1
 
-    def max_a_post(self, image_ptiles):
-        var_params = self.image_encoder.encode(image_ptiles)
-        tile_map = self.image_encoder.max_a_post(var_params)
+    # prepare dimensions
+    h, w = image.shape[-2], image.shape[-1]
+    bp = image_encoder.border_padding
 
-        if self.binary_encoder is not None:
-            assert not self.binary_encoder.training
-            prob_galaxy = self.binary_encoder(image_ptiles, tile_map["locs"])
-            # print(prob_galaxy.shape)
-            prob_galaxy = prob_galaxy.view(-1, 1, 1)
-            prob_galaxy *= tile_map["is_on_array"]
-            galaxy_bool = (prob_galaxy > 0.5).float() * tile_map["is_on_array"]
-            # print(tile_map["n_sources"].shape)
-            # print(galaxy_bool.shape)
-            star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)
-            tile_map.update(
-                {
-                    "galaxy_bool": galaxy_bool,
-                    "star_bool": star_bool,
-                    "prob_galaxy": prob_galaxy,
-                }
-            )
+    # get padded tiles.
+    ptiles = get_images_in_tiles(image, image_encoder.tile_slen, image_encoder.ptile_slen)
 
-        if self.galaxy_encoder is not None:
-            galaxy_param_mean = self.galaxy_encoder(image_ptiles, tile_map["locs"])
-            latent_dim = galaxy_param_mean.shape[-1]
-            galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-            galaxy_param_mean *= tile_map["is_on_array"] * tile_map["galaxy_bool"]
-            tile_map.update({"galaxy_param": galaxy_param_mean})
+    # get MAP estimates and variational parameters from image_encoder
+    var_params = image_encoder.encode(ptiles)
+    tile_n_sources = image_encoder.tile_map_n_sources(var_params)
+    tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
 
-        return tile_map
+    tile_map = image_encoder.max_a_post(var_params)
+    tile_map = get_params_in_batches(tile_map, image.shape[0])
+    tile_map["prob_n_sources"] = tile_map["prob_n_sources"].unsqueeze(-2)
 
-    def get_images_in_ptiles(self, images):
-        return get_images_in_tiles(
-            images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
-        )
+    var_params_n_sources = image_encoder.encode_for_n_sources(var_params, tile_n_sources)
 
-    def max_a_post_scene(
-        self,
-        scene: torch.Tensor,
-        clen: int,
-        device: torch.device = "cpu",
-        testing=False,
-    ):
-        """Perform predictions chunk-by-chunk when image is larger than 300x300 pixels.
+    # binary prediction
+    assert not binary_encoder.training
+    assert image.shape[1] == binary_encoder.n_bands
 
-        The scene will be divided up into chunks of side length `clen`. Prediction will be
-        done in every part of the scene except for a border of length
-        `image_encoder.border_padding`.
-        To be more specific, any sources with centroids (x0, y0) satisfying any of the following
-        conditions: ``0 < x0 < bp``, ``w - bp < x0 < w``, ``0 < y0 < bp``, ``h - bp < y0 < h``
-        will NOT be detected by our models.
+    prob_galaxy = binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
+    galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
+    star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)
+    var_params_n_sources["galaxy_bool"] = galaxy_bool
+    var_params_n_sources["star_bool"] = star_bool
+    var_params_n_sources["prob_galaxy"] = prob_galaxy
+    tile_map["galaxy_bool"] = galaxy_bool
+    tile_map["star_bool"] = star_bool
+    tile_map["prob_galaxy"] = prob_galaxy
 
-        Args:
-            clen: Dimensions of (unpadded) chunks we want to extract from scene.
-            scene: Tensor of shape (1, n_bands, h, w) containing image of scene we will make
-                predictions.
-            device: Device where each model is currently and where padded chunks will be moved.
-            testing: Whether we are unit testing and we only want to run 1 chunk.
+    # get galaxy measurement predictions
+    assert not galaxy_encoder.training
+    assert image.shape[1] == galaxy_encoder.n_bands
+    assert image_encoder.border_padding == galaxy_encoder.border_padding
+    assert image_encoder.tile_slen == galaxy_encoder.tile_slen
 
-        Returns:
-            results: List containing the results of prediction on each chunk, i.e. tuples of
-                `tile_map, full_map, var_params` as returned by `predict_on_image`.
-        """
-        assert len(scene.shape) == 4
-        assert scene.shape[0] == 1
-        assert scene.shape[1] == self.image_encoder.n_bands == 1, "Only 1 band supported"
-        h, w = scene.shape[-2], scene.shape[-1]
-        bp = self.image_encoder.border_padding
-        ihic = h // clen + 1 if not testing else 1  # height in chunks
-        iwic = w // clen + 1 if not testing else 1  # width in chunks
-        self.to(device)
+    galaxy_param_mean = galaxy_encoder(ptiles, tile_map["locs"])
+    latent_dim = galaxy_param_mean.shape[-1]
+    galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
+    galaxy_param_mean *= tile_is_on_array * galaxy_bool
+    var_params_n_sources["galaxy_param_mean"] = galaxy_param_mean
+    tile_map["galaxy_params"] = galaxy_param_mean
 
-        # tiles
-        tile_slen = self.image_encoder.tile_slen
+    # full parameters on chunk
+    full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
 
-        # where to collect results.
-        # var_params = []
-        full_map_scene = {
-            "locs": torch.tensor([]),
-            "galaxy_bool": torch.tensor([]),
-            "prob_galaxy": torch.tensor([]),
-            "fluxes": torch.tensor([]),
-            "mags": torch.tensor([]),
-        }
+    return tile_map, full_map, var_params_n_sources
 
-        with torch.no_grad():
-            with tqdm(total=ihic * iwic) as pbar:
-                for i in range(iwic):
-                    for j in range(ihic):
-                        x1, y1 = i * clen + bp, j * clen + bp
 
-                        # the following two statements ensure divisibility by tile_slen
-                        # of the resulting chunk near the edges.
-                        if clen + bp > w - x1:
-                            x1 = x1 + (w - x1 - bp) % tile_slen
-                        if clen + bp > h - y1:
-                            y1 = y1 + (h - y1 - bp) % tile_slen
-                        pchunk = scene[:, :, y1 - bp : y1 + clen + bp, x1 - bp : x1 + clen + bp]
-                        pchunk = pchunk.to(self.device)
-                        image_ptiles = self.get_images_in_ptiles(pchunk)
+def predict_on_scene(
+    clen: int,
+    scene: torch.Tensor,
+    image_encoder: encoder.ImageEncoder,
+    binary_encoder: BinaryEncoder,
+    galaxy_encoder: GalaxyEncoder,
+    galaxy_decoder: OneCenteredGalaxyDecoder,
+    device: torch.device = "cpu",
+    testing=False,
+):
+    """Perform predictions chunk-by-chunk when image is larger than 300x300 pixels.
 
-                        tile_map = self.max_a_post(image_ptiles)
-                        h_pchunk, w_pchunk = pchunk.shape[-2], pchunk.shape[-1]
-                        full_map = get_full_params(tile_map, h_pchunk - 2 * bp, w_pchunk - 2 * bp)
-                        full_map = {k: v.cpu() for k, v in full_map.items()}
-                        # delete parameters we stopped using so we have enough GPU space.
-                        if "cuda" in self.device.type:
-                            del pchunk
-                            torch.cuda.empty_cache()
+    The scene will be divided up into chunks of side length `clen`. Prediction will be
+    done in every part of the scene except for a border of length `image_encoder.border_padding`.
+    To be more specific, any sources with centroids (x0, y0) satisfying any of the following
+    conditions: ``0 < x0 < bp``, ``w - bp < x0 < w``, ``0 < y0 < bp``, ``h - bp < y0 < h``
+    will NOT be detected by our models.
 
-                        for k in full_map_scene:
-                            full_map_scene[k] = torch.cat(full_map_scene[k], full_map[k])
+    Args:
+        clen: Dimensions of (unpadded) chunks we want to extract from scene.
+        scene: Tensor of shape (1, n_bands, h, w) containing image of scene we will make
+            predictions.
+        device: Device where each model is currently and where padded chunks will be moved.
+        image_encoder: Trained ImageEncoder model.
+        galaxy_encoder: Trained GalaxyEncoder model.
+        galaxy_decoder: Trained OneCenteredGalaxyDecoder model.
+        binary_encoder: Trained BinaryEncoder model.
+        testing: Whether we are unit testing and we only want to run 1 chunk.
 
-                        # update progress bar
-                        pbar.update(1)
+    Returns:
+        results: List containing the results of prediction on each chunk, i.e. tuples of
+            `tile_map, full_map, var_params` as returned by `predict_on_image`.
+    """
+    assert len(scene.shape) == 4
+    assert scene.shape[0] == 1
+    assert scene.shape[1] == image_encoder.n_bands == 1, "Only 1 band supported"
+    h, w = scene.shape[-2], scene.shape[-1]
+    bp = image_encoder.border_padding
+    ihic = h // clen + 1 if not testing else 1  # height in chunks
+    iwic = w // clen + 1 if not testing else 1  # width in chunks
 
-        return full_map_scene
+    # tiles
+    tile_slen = image_encoder.tile_slen
 
-    @property
-    def device(self):
-        return self._dummy_param.device
+    # galaxies
+    latent_dim = galaxy_encoder.latent_dim
 
-    # def _validate_image(self, image):
-    #     # prepare and check consistency
-    #     assert not self.image_encoder.training
-    #     assert len(image.shape) == 4
-    #     assert image.shape[0] == 1
-    #     assert image.shape[1] == self.image_encoder.n_bands == 1
-    #     assert self.image_encoder.max_detections == 1
-    #     # binary prediction
-    #     if self.binary_encoder is not None:
-    #         assert not self.binary_encoder.training
-    #         assert image.shape[1] == self.binary_encoder.n_bands
-    #     # galaxy measurement predictions
-    #     if self.galaxy_decoder is not None:
-    #         assert not self.galaxy_encoder.training
-    #         assert image.shape[1] == self.galaxy_encoder.n_bands
-    #         assert self.image_encoder.border_padding == self.galaxy_encoder.border_padding
-    #         assert self.image_encoder.tile_slen == self.galaxy_encoder.tile_slen
+    # where to collect results.
+    var_params = []
+    locs = torch.tensor([])
+    galaxy_bool = torch.tensor([])
+    prob_galaxy = torch.tensor([])
+    fluxes = torch.tensor([])
+    mags = torch.tensor([])
+
+    with torch.no_grad():
+        with tqdm(total=ihic * iwic) as pbar:
+            for i in range(iwic):
+                for j in range(ihic):
+                    x1, y1 = i * clen + bp, j * clen + bp
+
+                    # the following two statements ensure divisibility by tile_slen
+                    # of the resulting chunk near the edges.
+                    if clen + bp > w - x1:
+                        x1 = x1 + (w - x1 - bp) % tile_slen
+
+                    if clen + bp > h - y1:
+                        y1 = y1 + (h - y1 - bp) % tile_slen
+
+                    pchunk = scene[:, :, y1 - bp : y1 + clen + bp, x1 - bp : x1 + clen + bp]
+                    pchunk = pchunk.to(device)
+
+                    _, est_params, vparams = predict_on_image(
+                        pchunk, image_encoder, binary_encoder, galaxy_encoder
+                    )
+
+                    est_locs = est_params["plocs"].cpu().reshape(-1, 2)
+                    est_gbool = est_params["galaxy_bool"].cpu().reshape(-1)
+                    est_pgalaxy = est_params["prob_galaxy"].cpu().reshape(-1)
+                    est_star_flux = est_params["fluxes"].cpu().reshape(-1)
+                    est_galaxy_params = est_params["galaxy_params"].cpu().reshape(-1, latent_dim)
+
+                    # delete parameters we stopped using so we have enough GPU space.
+                    if "cuda" in device.type:
+                        del est_params
+                        del pchunk
+                        torch.cuda.empty_cache()
+
+                    # get fluxes from galaxy parameters by passing them though galaxy_decoder.
+                    latents = est_galaxy_params.to(device).reshape(-1, latent_dim)
+                    est_galaxy_flux = galaxy_decoder(latents).sum((-1, -2, -3)).cpu().reshape(-1)
+
+                    # locations in pixels consistent with full scene.
+                    # 0.5 comes from pt/pr definition (plotting both -> off by half a pixel).
+                    x = est_locs[:, 1].reshape(-1, 1) + x1 - 0.5
+                    y = est_locs[:, 0].reshape(-1, 1) + y1 - 0.5
+                    est_locs = torch.hstack((x, y)).reshape(-1, 2)
+
+                    # collect flux and magnitude into a single tensor
+                    est_fluxes = est_star_flux * (1 - est_gbool) + est_galaxy_flux * est_gbool
+                    est_mags = sdss.convert_flux_to_mag(est_fluxes)
+
+                    # concatenate to obtain tensors on full image.
+                    locs = torch.cat((locs, est_locs))
+                    galaxy_bool = torch.cat((galaxy_bool, est_gbool))
+                    prob_galaxy = torch.cat((prob_galaxy, est_pgalaxy))
+                    fluxes = torch.cat((fluxes, est_fluxes))
+                    mags = torch.cat((mags, est_mags))
+
+                    # save variational parameters
+                    var_params.append({key: value.cpu() for key, value in vparams.items()})
+
+                    # update progress bar
+                    pbar.update(1)
+
+    full_map = {
+        "plocs": locs,
+        "galaxy_bool": galaxy_bool,
+        "prob_galaxy": prob_galaxy,
+        "flux": fluxes,
+        "mag": mags,
+        "n_sources": torch.tensor([len(locs)]),
+    }
+
+    return vparams, full_map
 
 
 def predict(cfg: DictConfig):
@@ -212,8 +255,9 @@ def predict(cfg: DictConfig):
     galaxy_encoder = galaxy_encoder.to(device).eval()
     galaxy_decoder = sleep_net.image_decoder.galaxy_tile_decoder.galaxy_decoder.eval().to(device)
 
-    predict_module = Predict(image_encoder, binary_encoder, galaxy_encoder, galaxy_decoder)
-    var_params, _ = predict_module.predict_on_scene(clen, image, device, testing)
+    var_params, _ = predict_on_scene(
+        clen, image, image_encoder, binary_encoder, galaxy_encoder, galaxy_decoder, device, testing
+    )
 
     if cfg.predict.output_file is not None:
         torch.save(var_params, cfg.predict.output_file)
