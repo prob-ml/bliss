@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
-from bliss.models.encoder import (
+from bliss.models.location_encoder import (
     ImageEncoder,
     get_full_params,
     get_images_in_tiles,

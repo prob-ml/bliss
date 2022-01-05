@@ -18,7 +18,7 @@ from torch.nn import CrossEntropyLoss
 
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder
-from bliss.models.encoder import (
+from bliss.models.location_encoder import (
     ImageEncoder,
     get_is_on_from_n_sources,
     get_images_in_tiles,

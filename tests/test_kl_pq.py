@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch.distributions import Normal
 
-from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.models.location_encoder import get_is_on_from_n_sources
 from bliss.sleep import get_min_perm_loss, get_params_logprob_all_combs
 
 

@@ -5,9 +5,9 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from bliss.datasets import sdss
-from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
-from bliss.models.encoder import (
+from bliss.models.location_encoder import (
+    ImageEncoder,
     get_is_on_from_n_sources,
     get_images_in_tiles,
     get_params_in_batches,
@@ -20,7 +20,7 @@ from bliss.sleep import SleepPhase
 
 def predict_on_image(
     image: torch.Tensor,
-    image_encoder: encoder.ImageEncoder,
+    image_encoder: ImageEncoder,
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
 ):
@@ -100,7 +100,7 @@ def predict_on_image(
 def predict_on_scene(
     clen: int,
     scene: torch.Tensor,
-    image_encoder: encoder.ImageEncoder,
+    image_encoder: ImageEncoder,
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
     galaxy_decoder: OneCenteredGalaxyDecoder,

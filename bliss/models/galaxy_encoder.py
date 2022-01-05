@@ -8,7 +8,7 @@ from torch.nn import functional as F
 
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
-from bliss.models.encoder import get_images_in_tiles, get_full_params_from_tiles
+from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image, plot_image_and_locs

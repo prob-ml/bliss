@@ -5,7 +5,7 @@ from torch import nn
 from torch.nn import BCELoss
 
 from bliss.models.decoder import get_mgrid
-from bliss.models.encoder import (
+from bliss.models.location_encoder import (
     EncoderCNN,
     get_full_params_from_tiles,
     get_images_in_tiles,
