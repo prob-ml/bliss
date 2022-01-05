@@ -1,8 +1,8 @@
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
-from einops import rearrange, repeat
+from einops import rearrange, repeat, reduce
 from torch import nn
 from torch.distributions import categorical
 from torch.nn import functional as F
@@ -67,9 +67,7 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_full_params(
-    tile_params: Dict[str, Tensor], slen: int, wlen: int = None
-) -> Dict[str, Tensor]:
+def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -> Dict[str, Tensor]:
     """Converts image parameters in tiles to parameters of full image.
 
     By parameters, we mean samples from the variational distribution, not the variational
@@ -80,102 +78,132 @@ def get_full_params(
             samples from the variational distribution or the maximum a posteriori (such as from
             ImageEncoder.max_a_post or SleepPhase.tile_map_estimate).
             The first three dimensions of each tensor in this dictionary
-            should be of shape `n_samples x n_tiles_per_image x max_detections`.
-        slen:
-            The side length in pixels of the whole image.
-        wlen: Defaults to None.
-            If not None, the width of the image in pixels.
+            should be of shape `n_samples x n_tiles_per_image x max_detections`.ge.
+        tile_slen:
+            Side-length of each tile.
 
     Returns:
         A dictionary of tensors with the same members as those in `tile_params`.
         The first two dimensions of each tensor is `n_samples x max(n_sources)`,
         where `max(n_sources)` is the maximum number of sources detected across samples.
-        Note: The locations (`"locs"`) are between 0 and 1. For convienvence, the additional
-        element `"plocs"` is added which defines the locations between 0 and slen (pixel locations).
+        In samples where the number of sources detected is less than max(n_sources),
+        these values will be zeroed out. Thus, it is imperative to use the "n_sources"
+        element to verify which locations/fluxes/parameters are zeroed out.
+
+        Note: The locations (`"locs"`) are between 0 and 1. The output also contains
+        pixel locations ("plocs") that are between 0 and slen.
     """
-    # NOTE: off sources should have tile_locs == 0.
-    # NOTE: assume that each param in each tile is already pushed to the front.
-
-    # check slen, wlen
-    wlen = slen if wlen is None else wlen
-    assert isinstance(slen, int) and isinstance(wlen, int)
-
-    # check dictionary of tile_params is consistent and has no extraneous keys.
-    required = {"n_sources", "locs"}
-    optional = {"galaxy_bool", "star_bool", "galaxy_params", "fluxes", "log_fluxes", "prob_galaxy"}
-    assert required.issubset(tile_params.keys())
-
-    for pname in tile_params:
-        assert pname in required or pname in optional or pname == "prob_n_sources"
-
-    # tile_locs shape = (n_samples x n_tiles_per_image x max_detections x 2)
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
-    assert len(tile_locs.shape) == 4
-    n_samples = tile_locs.shape[0]
-    n_tiles_per_image = tile_locs.shape[1]
+
+    param_names_to_gather = {
+        "galaxy_bool",
+        "star_bool",
+        "galaxy_params",
+        "fluxes",
+        "log_fluxes",
+        "prob_galaxy",
+    }
     max_detections = tile_locs.shape[2]
-
-    # otherwise prob_n_sources makes no sense globally
     if max_detections == 1:
-        optional.add("prob_n_sources")
+        param_names_to_gather.add("prob_n_sources")
 
-    # calculate tile_slen
-    tile_slen = np.sqrt(slen * wlen / n_tiles_per_image)
-    assert tile_slen % 1 == 0, "Image cannot be subdivided into tiles!"
-    assert slen % tile_slen == 0 and wlen % tile_slen == 0, "incompatible side lengths."
-    tile_slen = int(tile_slen)
+    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen)
+    tile_params_to_gather = {
+        "locs": locs,
+        "plocs": plocs,
+    }
+    tile_params_to_gather.update(
+        {k: tile_params[k] for k in param_names_to_gather if k in tile_params}
+    )
 
+    params = {}
+    indices_to_retrieve = get_indices_of_on_sources(tile_n_sources, max_detections)
+    for param_name, tile_param in tile_params_to_gather.items():
+        k = tile_param.shape[-1]
+        param = rearrange(tile_param, "b t d k -> b (t d) k", k=k)
+        indices_for_param = repeat(indices_to_retrieve, "b n -> b n k", k=k)
+        param = torch.gather(param, dim=1, index=indices_for_param)
+        params[param_name] = param
+
+    params["n_sources"] = reduce(tile_params["n_sources"], "b n -> b", "sum")
+    assert params["locs"].shape[1] == params["n_sources"].max().int().item()
+    return params
+
+
+def get_full_locs_from_tiles(
+    tile_locs: Tensor, tile_slen: int, n_tiles_w: Optional[int] = None
+) -> Tuple[Tensor, Tensor]:
+    """Get the full image locations from tile locations.
+
+    Args:
+        tile_locs:
+            A tensor of shape `n_samples x n_tiles_per_image x max_detections x 2`,
+            representing the locations in each tile.
+        tile_slen:
+            The side-length of each tile.
+        n_tiles_w:
+            Defaults to None. Can directly specify the number of tiles in width.
+            This is necessary when the original image was not square.
+
+    Returns:
+        A tuple of two elements, "plocs" and "locs".
+        "plocs" are the pixel coordinates of each source (between 0 and slen).
+        "locs" are the scaled locations of each source (between 0 and 1).
+    """
+    n_samples, n_tiles_per_image, _, _ = tile_locs.shape
+
+    n_tiles_h = int(np.sqrt(n_tiles_per_image))
+    n_tiles_w = n_tiles_h if n_tiles_w is None else n_tiles_w
+    assert n_tiles_h * n_tiles_w == n_tiles_per_image
+
+    slen = n_tiles_h * tile_slen
+    wlen = n_tiles_w * tile_slen
     # coordinates on tiles.
-    x_coords = torch.arange(0, slen, tile_slen, device=tile_n_sources.device).long()
-    y_coords = torch.arange(0, wlen, tile_slen, device=tile_n_sources.device).long()
+    x_coords = torch.arange(0, slen, tile_slen, device=tile_locs.device).long()
+    y_coords = torch.arange(0, wlen, tile_slen, device=tile_locs.device).long()
     tile_coords = torch.cartesian_prod(x_coords, y_coords)
-    assert tile_coords.shape[0] == n_tiles_per_image, "# tiles one image don't match"
-
-    # get is_on_array
-    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
-    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
-    max_sources = n_sources.max().int().item()
 
     # recenter and renormalize locations.
-    tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> (b n) d")
     tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
     bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
 
-    locs = tile_locs * tile_slen + bias
+    plocs = tile_locs * tile_slen + bias
+    plocs = rearrange(plocs, "(b n) d xy -> b n d xy", b=n_samples)
+    locs = plocs.clone()
     locs[..., 0] /= slen
     locs[..., 1] /= wlen
-    locs *= tile_is_on_array.unsqueeze(2)
 
-    # sort locs and clip
-    locs = locs.view(n_samples, -1, 2)
-    indx_sort = _argfront(locs[..., 0], dim=1)
-    locs = torch.gather(locs, 1, repeat(indx_sort, "b n -> b n r", r=2))
-    locs = locs[:, 0:max_sources]
-    params = {"n_sources": n_sources, "locs": locs}
+    return plocs, locs
 
-    # now do the same for the rest of the parameters (without scaling or biasing)
-    # for same reason no need to multiply times is_on_array
-    for param_name, val in tile_params.items():
-        if param_name in optional:
-            tile_param = val
-            assert len(tile_param.shape) == 4
-            param = rearrange(tile_param, "b t d k -> b (t d) k")
-            param = torch.gather(
-                param, 1, repeat(indx_sort, "b n -> b n r", r=tile_param.shape[-1])
-            )
-            param = param[:, 0:max_sources]
-            params[param_name] = param
 
-    assert len(params["locs"].shape) == 3
-    assert params["locs"].shape[1] == params["n_sources"].max().int().item()
+def get_indices_of_on_sources(tile_n_sources: Tensor, max_detections: int) -> Tensor:
+    """Get the indices of detected sources from each tile.
 
-    # add plocs = pixel locs.
-    params["plocs"] = params["locs"].clone()
-    params["plocs"][:, :, 0] = params["locs"][:, :, 0] * slen
-    params["plocs"][:, :, 1] = params["locs"][:, :, 1] * wlen
+    Args:
+        tile_n_sources:
+            A Tensor of shape `n_samples x n_tiles_per_image`, containing the
+            number of detected sources in a given tile.
+        max_detections:
+            The maximum number of detections allowed in a given tile.
 
-    return params
+    Returns:
+        A 2-D tensor of integers with shape `n_samples x max(n_sources)`,
+        where `max(n_sources)` is the maximum number of sources detected across all samples.
+
+        Each element of this tensor is an index of a particular source within a particular tile.
+        For a particular sample i that had N detections,
+        the first N indices of indices_sorted[i. :] will be the detected sources.
+        This is accomplishied by flattening the n_tiles_per_image and max_detections.
+        For example, if we had 3 tiles with a maximum of two sources each,
+        the elements of this tensor would take values from 0 up to and including 5.
+    """
+    tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
+    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
+    max_sources = n_sources.max().int().item()
+    tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> b (n d)")
+    indices_sorted = tile_is_on_array.long().argsort(dim=1, descending=True)
+    return indices_sorted[:, :max_sources]
 
 
 class ImageEncoder(nn.Module):
@@ -623,13 +651,6 @@ class ConvBlock(nn.Module):
 
         out = x + identity
         return F.relu(out)
-
-
-def _argfront(is_on_array, dim):
-    # return indices that sort pushing all zeroes of tensor to the back.
-    # dim is dimension along which do the ordering.
-    assert len(is_on_array.shape) == 2
-    return (is_on_array != 0).long().argsort(dim=dim, descending=True)
 
 
 def _sample_class_weights(class_weights, n_samples=1):
