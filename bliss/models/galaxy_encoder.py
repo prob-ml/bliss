@@ -200,7 +200,6 @@ class GalaxyEncoder(pl.LightningModule):
             "star_bool",
             "fluxes",
             "log_fluxes",
-            "galaxy_params",
             "n_sources",
         ]
         for k in keys:
