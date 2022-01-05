@@ -1,8 +1,6 @@
 import pytorch_lightning as pl
 import torch
-from torch import Tensor
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import IterableDataset
 from torch.nn import functional as F
 from einops.einops import rearrange
 from tqdm import tqdm

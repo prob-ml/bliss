@@ -1,25 +1,19 @@
 """Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
-from typing import Optional, Tuple, Dict
+from typing import Optional
 
 import torch
 from torch import nn
-from torch.tensor import Tensor
-from einops import rearrange
-from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
 from bliss.models.location_encoder import (
     LocationEncoder,
-    get_full_params,
+    get_full_params_from_tiles,
     get_images_in_tiles,
     get_is_on_from_n_sources,
-    get_params_in_batches,
 )
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
-from bliss.sleep import SleepPhase
 
 
 class Encoder(nn.Module):
@@ -51,12 +45,9 @@ class Encoder(nn.Module):
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             prob_galaxy = self.binary_encoder(image_ptiles, tile_map["locs"])
-            # print(prob_galaxy.shape)
             prob_galaxy = prob_galaxy.view(-1, 1, 1)
             prob_galaxy *= tile_map["is_on_array"]
             galaxy_bool = (prob_galaxy > 0.5).float() * tile_map["is_on_array"]
-            # print(tile_map["n_sources"].shape)
-            # print(galaxy_bool.shape)
             star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)
             tile_map.update(
                 {
@@ -120,7 +111,6 @@ class Encoder(nn.Module):
         tile_slen = self.image_encoder.tile_slen
 
         # where to collect results.
-        # var_params = []
         full_map_scene = {
             "locs": torch.tensor([]),
             "galaxy_bool": torch.tensor([]),
@@ -146,16 +136,17 @@ class Encoder(nn.Module):
                         image_ptiles = self.get_images_in_ptiles(pchunk)
 
                         tile_map = self.max_a_post(image_ptiles)
-                        h_pchunk, w_pchunk = pchunk.shape[-2], pchunk.shape[-1]
-                        full_map = get_full_params(tile_map, h_pchunk - 2 * bp, w_pchunk - 2 * bp)
+                        full_map = get_full_params_from_tiles(
+                            tile_map, self.image_encoder.tile_slen
+                        )
                         full_map = {k: v.cpu() for k, v in full_map.items()}
                         # delete parameters we stopped using so we have enough GPU space.
                         if "cuda" in self.device.type:
                             del pchunk
                             torch.cuda.empty_cache()
 
-                        for k in full_map_scene:
-                            full_map_scene[k] = torch.cat(full_map_scene[k], full_map[k])
+                        for k, param in full_map_scene.items():
+                            full_map_scene[k] = torch.cat(param, full_map[k])
 
                         # update progress bar
                         pbar.update(1)
@@ -165,59 +156,6 @@ class Encoder(nn.Module):
     @property
     def device(self):
         return self._dummy_param.device
-
-    # def _validate_image(self, image):
-    #     # prepare and check consistency
-    #     assert not self.image_encoder.training
-    #     assert len(image.shape) == 4
-    #     assert image.shape[0] == 1
-    #     assert image.shape[1] == self.image_encoder.n_bands == 1
-    #     assert self.image_encoder.max_detections == 1
-    #     # binary prediction
-    #     if self.binary_encoder is not None:
-    #         assert not self.binary_encoder.training
-    #         assert image.shape[1] == self.binary_encoder.n_bands
-    #     # galaxy measurement predictions
-    #     if self.galaxy_decoder is not None:
-    #         assert not self.galaxy_encoder.training
-    #         assert image.shape[1] == self.galaxy_encoder.n_bands
-    #         assert self.image_encoder.border_padding == self.galaxy_encoder.border_padding
-    #         assert self.image_encoder.tile_slen == self.galaxy_encoder.tile_slen
-
-
-def predict(cfg: DictConfig):
-    bands = list(cfg.predict.bands)
-    print("-" * 20 + " Predicting Configuration " + "-" * 20)
-    print(OmegaConf.to_yaml(cfg.predict))
-    assert isinstance(bands, list) and len(bands) == 1, "Only 1 band supported"
-
-    # setup params from config
-    clen = cfg.predict.clen
-    device = torch.device(cfg.predict.device)
-    testing = cfg.predict.testing
-
-    # load images from SDSS for prediction.
-    sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss_kwargs)
-    image = sdss_obj[0]["image"][0]
-    image = rearrange(torch.from_numpy(image), "h w -> 1 1 h w")
-
-    # load models.
-    sleep_net = SleepPhase.load_from_checkpoint(cfg.predict.sleep_checkpoint)
-    galaxy_encoder = GalaxyEncoder.load_from_checkpoint(cfg.predict.galaxy_checkpoint)
-    binary_encoder = BinaryEncoder.load_from_checkpoint(cfg.predict.binary_checkpoint)
-
-    # move everything to specified GPU
-    image_encoder = sleep_net.image_encoder.eval().to(device)
-    binary_encoder = binary_encoder.to(device).eval()
-    galaxy_encoder = galaxy_encoder.to(device).eval()
-    galaxy_decoder = sleep_net.image_decoder.galaxy_tile_decoder.galaxy_decoder.eval().to(device)
-
-    predict_module = Predict(image_encoder, binary_encoder, galaxy_encoder, galaxy_decoder)
-    var_params, _ = predict_module.predict_on_scene(clen, image, device, testing)
-
-    if cfg.predict.output_file is not None:
-        torch.save(var_params, cfg.predict.output_file)
-        print(f"Prediction saved to {cfg.predict.output_file}")
 
 
 def get_star_bool(n_sources, galaxy_bool):

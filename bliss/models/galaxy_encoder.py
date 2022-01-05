@@ -1,4 +1,5 @@
 from typing import Optional
+
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -158,7 +159,6 @@ class GalaxyEncoder(pl.LightningModule):
             bp = (recon_losses.shape[-1] - slen) // 2
             bp = bp * 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
-            # print(f"recon_losses shape: {recon_losses.shape}")
         return recon_losses.sum()
 
     def training_step(self, batch, batch_idx):
@@ -193,7 +193,7 @@ class GalaxyEncoder(pl.LightningModule):
         n_samples = min(len(batch["n_sources"]), n_samples)
         print(f"n_samples: {n_samples}")
         samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
-        for k in [
+        keys = [
             "images",
             "locs",
             "galaxy_bool",
@@ -202,7 +202,8 @@ class GalaxyEncoder(pl.LightningModule):
             "log_fluxes",
             "galaxy_params",
             "n_sources",
-        ]:
+        ]
+        for k in keys:
             batch[k] = batch[k][samples]
 
         # extract non-params entries so that 'get_full_params' to works.
