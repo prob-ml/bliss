@@ -8,10 +8,10 @@ from bliss.datasets import sdss
 from bliss.models import encoder
 from bliss.models.binary import BinaryEncoder
 from bliss.models.encoder import (
-    get_full_params,
     get_is_on_from_n_sources,
     get_images_in_tiles,
     get_params_in_batches,
+    get_full_params_from_tiles,
 )
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
@@ -49,10 +49,6 @@ def predict_on_image(
     assert image.shape[0] == 1
     assert image.shape[1] == image_encoder.n_bands == 1
     assert image_encoder.max_detections == 1
-
-    # prepare dimensions
-    h, w = image.shape[-2], image.shape[-1]
-    bp = image_encoder.border_padding
 
     # get padded tiles.
     ptiles = get_images_in_tiles(image, image_encoder.tile_slen, image_encoder.ptile_slen)
@@ -96,7 +92,7 @@ def predict_on_image(
     tile_map["galaxy_params"] = galaxy_param_mean
 
     # full parameters on chunk
-    full_map = get_full_params(tile_map, h - 2 * bp, w - 2 * bp)
+    full_map = get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
 
     return tile_map, full_map, var_params_n_sources
 
