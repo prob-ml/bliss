@@ -193,7 +193,16 @@ class GalaxyEncoder(pl.LightningModule):
         n_samples = min(len(batch["n_sources"]), n_samples)
         print(f"n_samples: {n_samples}")
         samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
-        for k in batch.keys():
+        for k in [
+            "images",
+            "locs",
+            "galaxy_bool",
+            "star_bool",
+            "fluxes",
+            "log_fluxes",
+            "galaxy_params",
+            "n_sources",
+        ]:
             batch[k] = batch[k][samples]
 
         # extract non-params entries so that 'get_full_params' to works.
