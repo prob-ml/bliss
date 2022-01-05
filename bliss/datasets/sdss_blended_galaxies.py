@@ -26,6 +26,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         h_start=200,
         w_start=1000,
         scene_size=1000,
+        stride_factor = 0.5,
     ) -> None:
         super().__init__()
         sdss_data = SloanDigitalSkySurvey(
@@ -41,6 +42,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         image = rearrange(image, "h w -> 1 1 h w")
         self.bp = bp
         self.slen = 80 + 2 * bp
+        self.kernel_size = self.slen + 2 * self.bp
+        self.stride = int(self.slen * stride_factor)
+        assert self.stride > 0
         self.n_batches = n_batches
         image = image[
             :,
@@ -69,14 +73,13 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         }
 
     def prerender_chunks(self, image):
-        kernel_size = self.slen + 2 * self.bp
-        chunks = F.unfold(image, kernel_size=kernel_size, stride=self.slen)
+        chunks = F.unfold(image, kernel_size=self.kernel_size, stride=self.stride)
         chunks = rearrange(
             chunks,
             "b (c h w) n -> (b n) c h w",
             c=image.shape[1],
-            h=kernel_size,
-            w=kernel_size,
+            h=self.kernel_size,
+            w=self.kernel_size,
         )
         catalogs = []
         chunks_with_galaxies = []
