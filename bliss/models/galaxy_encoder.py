@@ -1,4 +1,5 @@
 from typing import Optional
+from pathlib import Path
 
 import numpy as np
 import pytorch_lightning as pl
@@ -95,8 +96,9 @@ class GalaxyEncoder(pl.LightningModule):
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
 
         if checkpoint_path is not None:
-            ge = GalaxyEncoder.load_from_checkpoint(checkpoint_path)
+            ge = GalaxyEncoder.load_from_checkpoint(Path(checkpoint_path))
             self.load_state_dict(ge.state_dict())
+            print(f"INFO: Loaded model weights from checkout at {checkpoint_path}")
 
     def center_ptiles(self, image_ptiles, tile_locs):
         return center_ptiles(
