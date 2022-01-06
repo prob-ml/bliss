@@ -155,7 +155,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
         if self.crop_loss_at_border:
-            slen = batch["slen"].item()
+            slen = batch["slen"].unique().item()
             bp = (recon_losses.shape[-1] - slen) // 2
             bp = bp * 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]

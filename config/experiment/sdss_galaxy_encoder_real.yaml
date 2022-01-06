@@ -6,10 +6,10 @@ defaults:
 mode: train
 
 training:
-  n_epochs: 4001
+  n_epochs: 160
   trainer:
     checkpoint_callback: true
-    check_val_every_n_epoch: 25
+    check_val_every_n_epoch: 1
 
 model:
   prior:

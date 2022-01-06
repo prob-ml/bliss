@@ -125,10 +125,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         return chunks_with_galaxies, catalogs
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=1, num_workers=0)
+        return DataLoader(self, batch_size=2, num_workers=0, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=1, num_workers=0)
+        return DataLoader(self, batch_size=10, num_workers=0)
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=1, num_workers=0)
