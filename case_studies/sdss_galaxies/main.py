@@ -397,7 +397,7 @@ class AEReconstructionFigures(BlissFigures):
             "measure_scatter_bins": "single_galaxy_scatter_bins.pdf",
         }
 
-    def compute_data(self, autoencoder, images_file, psf_file):
+    def compute_data(self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file):
         # NOTE: For very dim objects (max_pixel < 6, flux ~ 1000), autoencoder can return
         # 0.1% objects with negative flux. This objects are discarded.
         device = autoencoder.device  # GPU is better otherwise slow.
@@ -652,7 +652,7 @@ def main(fig, outdir, overwrite=False):
 
     if not Path(outdir).exists():
         warnings.warn("Specified output directory does not exist, will attempt to create it.")
-        outdir.mkdir(exist_ok=True, parents=True)
+        Path(outdir).mkdir(exist_ok=True, parents=True)
 
     # load models necessary for SDSS reconstructions.
     if fig in {"2", "3", "all"}:
