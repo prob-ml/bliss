@@ -10,6 +10,7 @@ from bliss.models.location_encoder import (
     LocationEncoder,
     get_is_on_from_n_sources,
     get_images_in_tiles,
+    get_n_tiles_hw,
     get_params_in_batches,
     get_full_params_from_tiles,
 )
@@ -92,7 +93,10 @@ def predict_on_image(
     tile_map["galaxy_params"] = galaxy_param_mean
 
     # full parameters on chunk
-    full_map = get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
+    _, nw = get_n_tiles_hw(
+        image.shape[2], image.shape[3], image_encoder.ptile_slen, image_encoder.tile_slen
+    )
+    full_map = get_full_params_from_tiles(tile_map, image_encoder.tile_slen, n_tiles_w=nw)
 
     return tile_map, full_map, var_params_n_sources
 
