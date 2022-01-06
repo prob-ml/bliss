@@ -1,3 +1,4 @@
+from pathlib import Path
 import pytorch_lightning as pl
 import torch
 from torch.utils.data.dataloader import DataLoader
@@ -27,6 +28,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         w_start=1000,
         scene_size=1000,
         stride_factor=0.5,
+        cache_path=None,
     ) -> None:
         super().__init__()
         sdss_data = SloanDigitalSkySurvey(
@@ -58,7 +60,16 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
         binary_encoder = BinaryEncoder.load_from_checkpoint(binary_ckpt)
         self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
-        self.chunks, self.catalogs = self.prerender_chunks(image)
+        cache_file = Path(cache_path) if cache_path is not None else None
+        if (cache_file is not None) and cache_file.exists():
+            print(f"INFO: Loading cached chunks and catalog from {cache_file}")
+            self.chunks, self.catalogs = torch.load(cache_file)
+        else:
+            self.chunks, self.catalogs = self.prerender_chunks(image)
+            if (cache_file is not None):
+                print(f"INFO: Saving cached chunks and catalog to {cache_file}")
+                torch.save((self.chunks, self.catalogs), cache_file)
+
 
     def __len__(self):
         return len(self.catalogs)
