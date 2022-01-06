@@ -30,6 +30,12 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
 
 
+def get_n_tiles_hw(h, w, window, tile_slen):
+    nh = ((h - window) // tile_slen) + 1
+    nw = ((w - window) // tile_slen) + 1
+    return nh, nw
+
+
 def get_params_in_batches(params: Dict["str", torch.Tensor], batch_size):
     out = {}
     for k, v in params.items():
@@ -67,7 +73,9 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -> Dict[str, Tensor]:
+def get_full_params_from_tiles(
+    tile_params: Dict[str, Tensor], tile_slen: int, n_tiles_w: Optional[int] = None
+) -> Dict[str, Tensor]:
     """Converts image parameters in tiles to parameters of full image.
 
     By parameters, we mean samples from the variational distribution, not the variational
@@ -81,6 +89,10 @@ def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -
             should be of shape `n_samples x n_tiles_per_image x max_detections`.ge.
         tile_slen:
             Side-length of each tile.
+        n_tiles_w:
+            Defaults to None. Number of tiles in the width direction. If not specified,
+            assume that the image is square (i.e. the same number of tiles both height-wise
+            and width-wise).
 
     Returns:
         A dictionary of tensors with the same members as those in `tile_params`.
@@ -108,7 +120,7 @@ def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -
     if max_detections == 1:
         param_names_to_gather.add("prob_n_sources")
 
-    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen)
+    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=n_tiles_w)
     tile_params_to_gather = {
         "locs": locs,
         "plocs": plocs,
@@ -152,9 +164,11 @@ def get_full_locs_from_tiles(
         "locs" are the scaled locations of each source (between 0 and 1).
     """
     n_samples, n_tiles_per_image, _, _ = tile_locs.shape
-
-    n_tiles_h = int(np.sqrt(n_tiles_per_image))
-    n_tiles_w = n_tiles_h if n_tiles_w is None else n_tiles_w
+    if n_tiles_w is None:
+        n_tiles_h = int(np.sqrt(n_tiles_per_image))
+        n_tiles_w = n_tiles_h
+    else:
+        n_tiles_h = n_tiles_per_image // n_tiles_w
     assert n_tiles_h * n_tiles_w == n_tiles_per_image
 
     slen = n_tiles_h * tile_slen
