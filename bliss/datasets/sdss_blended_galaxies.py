@@ -121,7 +121,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                     catalogs.append(cpu(tile_map))
                     chunks_with_galaxies.append(chunk.cpu())
         chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
-        print(f"n_galaxies: {chunks_with_galaxies.shape[0]}")
+        print(
+            f"INFO: Number of chunks with galaxies: {chunks_with_galaxies.shape[0]}/{chunks.shape[0]}"
+        )
         return chunks_with_galaxies, catalogs
 
     def train_dataloader(self):

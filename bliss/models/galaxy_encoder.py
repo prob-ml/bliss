@@ -189,11 +189,7 @@ class GalaxyEncoder(pl.LightningModule):
     # pylint: disable=too-many-statements
     def make_plots(self, batch, n_samples=5):
         # validate worst reconstruction images.
-        for k in batch.keys():
-            print(f"{k}: {batch[k].shape}")
-        print(f"n_samples: {n_samples}")
         n_samples = min(len(batch["n_sources"]), n_samples)
-        print(f"n_samples: {n_samples}")
         samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
         keys = [
             "images",
