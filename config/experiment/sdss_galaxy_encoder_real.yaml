@@ -14,11 +14,17 @@ training:
 model:
   prior:
     mean_sources: 0.04
+  crop_loss_at_border: True
+  checkpoint_path: "models/sdss_galaxy_encoder.ckpt"
 
 optimizer:
   kwargs:
     lr: 1e-4
 
+dataset:
+  cache_path: "models/sdss_galaxy_encoder_real_chunks"
+  prerender_device: "cuda"
+
+
 # dataset:
 #   batch_size: 8
-  
