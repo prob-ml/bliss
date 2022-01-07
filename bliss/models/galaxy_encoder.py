@@ -245,7 +245,7 @@ class GalaxyEncoder(pl.LightningModule):
             residuals[:, :, :, -bp:] = 0.0
 
         figsize = (12, 4 * n_samples)
-        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
+        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize, squeeze=False)
 
         for i, idx in enumerate(worst_indices):
 

@@ -25,6 +25,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         field=12,
         bands=(2,),
         bp=24,
+        slen=80,
         n_batches=10,
         h_start=None,
         w_start=None,
@@ -46,7 +47,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         image = torch.from_numpy(sdss_data[0]["image"][0])
         image = rearrange(image, "h w -> 1 1 h w")
         self.bp = bp
-        self.slen = 80 + 2 * bp
+        self.slen = slen + 2 * bp
         self.kernel_size = self.slen + 2 * self.bp
         self.stride = int(self.slen * stride_factor)
         assert self.stride > 0
