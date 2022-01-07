@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from bliss.models.encoder import (
+from bliss.models.location_encoder import (
     get_images_in_tiles,
     get_params_in_batches,
     get_full_params_from_tiles,

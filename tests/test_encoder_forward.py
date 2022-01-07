@@ -1,7 +1,11 @@
 import numpy as np
 import torch
 
-from bliss.models import encoder
+from bliss.models.location_encoder import (
+    LocationEncoder,
+    get_is_on_from_n_sources,
+    get_images_in_tiles,
+)
 
 
 class TestSourceEncoder:
@@ -24,7 +28,7 @@ class TestSourceEncoder:
         tile_slen = 2
 
         # get encoder
-        star_encoder = encoder.ImageEncoder(
+        star_encoder = LocationEncoder(
             channel=8,
             dropout=0,
             hidden=64,
@@ -68,9 +72,7 @@ class TestSourceEncoder:
                 assert ((pred["log_flux_mean"][:, :, b] != 0).sum(1) == n_star_per_tile).all()
 
             # check pattern of zeros
-            is_on_array = encoder.get_is_on_from_n_sources(
-                n_star_per_tile, star_encoder.max_detections
-            )
+            is_on_array = get_is_on_from_n_sources(n_star_per_tile, star_encoder.max_detections)
             loc_mean = pred["loc_mean"] * is_on_array.unsqueeze(2).float()
             log_flux_mean = pred["log_flux_mean"] * is_on_array.unsqueeze(2).float()
             assert torch.all(loc_mean == pred["loc_mean"])
@@ -144,7 +146,7 @@ class TestSourceEncoder:
 
         images = torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(device)
 
-        star_encoder = encoder.ImageEncoder(
+        star_encoder = LocationEncoder(
             channel=8,
             dropout=0,
             hidden=64,
@@ -153,6 +155,6 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
         ).to(device)
-        image_ptiles = encoder.get_images_in_tiles(images, tile_slen, ptile_slen)
+        image_ptiles = get_images_in_tiles(images, tile_slen, ptile_slen)
         var_params = star_encoder.encode(image_ptiles)
         star_encoder.sample(var_params, n_samples)

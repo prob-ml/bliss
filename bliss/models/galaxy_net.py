@@ -360,7 +360,7 @@ class OneCenteredGalaxyEncoder(nn.Module):
                 d = self.slen - image.shape[-1]
                 lpad = d // 2
                 upad = d - lpad
-                min_val = image.min()
+                min_val = image.min().item()
                 image = F.pad(image, (lpad, upad, lpad, upad), value=min_val)
                 if isinstance(background, torch.Tensor):
                     background = F.pad(background, (lpad, upad, lpad, upad))
