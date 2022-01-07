@@ -60,12 +60,14 @@ class GalaxyEncoder(pl.LightningModule):
         optimizer_params: dict = None,
         crop_loss_at_border=False,
         checkpoint_path: Optional[str] = None,
+        max_flux_valid_plots: Optional[int] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
 
         self.max_sources = 1  # by construction.
         self.crop_loss_at_border = crop_loss_at_border
+        self.max_flux_valid_plots = max_flux_valid_plots
 
         # to produce images to train on.
         self.image_prior = ImagePrior(**prior)
@@ -260,7 +262,10 @@ class GalaxyEncoder(pl.LightningModule):
                 res_ax.set_title("Residual", size=18)
 
             # vmin, vmax should be shared between reconstruction and true images.
-            vmax = np.ceil(max(images[idx].max().item(), recon_images[idx].max().item()))
+            if self.max_flux_valid_plots is None:
+                vmax = np.ceil(max(images[idx].max().item(), recon_images[idx].max().item()))
+            else:
+                vmax = self.max_flux_valid_plots
             vmin = np.floor(min(images[idx].min().item(), recon_images[idx].min().item()))
             vrange = (vmin, vmax)
 

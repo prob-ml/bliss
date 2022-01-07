@@ -16,6 +16,7 @@ model:
     mean_sources: 0.04
   crop_loss_at_border: True
   checkpoint_path: "models/sdss_galaxy_encoder.ckpt"
+  max_flux_valid_plots: 1200
 
 optimizer:
   kwargs:
