@@ -13,7 +13,6 @@ from bliss.models.location_encoder import (
     get_is_on_from_n_sources,
 )
 from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 
 
 class Encoder(nn.Module):
@@ -49,8 +48,8 @@ class Encoder(nn.Module):
         Args:
             location_encoder: Module that takes padded tiles and returns the number
                 of sources and locations per-tile.
-            binary_encoder: Module that takes padded tiles and locations and returns a classification
-                between stars and galaxies. Defaults to None.
+            binary_encoder: Module that takes padded tiles and locations and
+                returns a classification between stars and galaxies. Defaults to None.
             galaxy_encoder: Module that takes padded tiles and locations and returns the variational
                 distribution of the latent variable determining the galaxy shape. Defaults to None.
         """

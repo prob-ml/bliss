@@ -148,6 +148,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                     catalogs.append(cpu(tile_map))
                     chunks_with_galaxies.append(chunk.cpu())
         chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
+        #pylint: disable=consider-using-f-string
         print(
             "INFO: Number of chunks with galaxies: {ng}/{g}".format(
                 ng=chunks_with_galaxies.shape[0], g=chunks.shape[0]
