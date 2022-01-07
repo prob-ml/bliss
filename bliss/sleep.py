@@ -18,8 +18,8 @@ from torch.nn import CrossEntropyLoss
 
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder
-from bliss.models.encoder import (
-    ImageEncoder,
+from bliss.models.location_encoder import (
+    LocationEncoder,
     get_is_on_from_n_sources,
     get_images_in_tiles,
     get_params_in_batches,
@@ -143,7 +143,7 @@ class SleepPhase(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.image_encoder = ImageEncoder(**encoder)
+        self.image_encoder = LocationEncoder(**encoder)
         self.image_prior = ImagePrior(**prior)
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
