@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -16,25 +16,51 @@ from bliss.sleep import SleepPhase
 
 
 class SdssBlendedGalaxies(pl.LightningDataModule):
+    """Find and catalog chunks of SDSS images with galaxies in them.
+
+    This dataset takes an SDSS image, splits it into chunks, finds the locations,
+    classifies each object as a star or galaxy, and only keeps chunks with at least one galaxy.
+    The intended purpose is for learning a distribution of galaxies from real images.
+
+    """
+
     def __init__(
         self,
         sleep_ckpt: str,
         binary_ckpt: str,
-        sdss_dir="data/sdss",
-        run=94,
-        camcol=1,
-        field=12,
-        bands=(2,),
-        bp=24,
-        slen=80,
-        n_batches=10,
-        h_start=None,
-        w_start=None,
-        scene_size=None,
-        stride_factor=0.5,
-        cache_path=None,
-        prerender_device="cpu",
+        sdss_dir: str = "data/sdss",
+        run: int = 94,
+        camcol: int = 1,
+        field: int = 12,
+        bands: Tuple[int, ...] = (2,),
+        bp: int = 24,
+        slen: int = 80,
+        h_start: Optional[int] = None,
+        w_start: Optional[int] = None,
+        scene_size: Optional[int] = None,
+        stride_factor: float = 0.5,
+        cache_path: Optional[str] = None,
+        prerender_device: str = "cpu",
     ) -> None:
+        """Initializes SDSSBlendedGalaxies.
+
+        Args:
+            sleep_ckpt: Checkpoint file for sleep-phase-trained encoder.
+            binary_ckpt: Checkpoint file for binary encoder.
+            sdss_dir: Location of data storage for SDSS. Defaults to "data/sdss".
+            run: SDSS run.
+            camcol: SDSS camcol.
+            field: SDSS field.
+            bands: SDSS bands of image to use.
+            bp: How much border padding around each chunk.
+            slen: Side-length of each chunk.
+            h_start: Starting height-point of image. If None, start at `bp`.
+            w_start: Starting width-point of image. If None, start at `bp`.
+            scene_size: Total size of the scene to use. If None, use maximum possible size.
+            stride_factor: How much should chunks overlap? If 1.0, no overlap.
+            cache_path: If not None, path where cached chunks and catalogs are saved.
+            prerender_device: Device to use to prerender chunks.
+        """
         super().__init__()
         sdss_data = SloanDigitalSkySurvey(
             sdss_dir=sdss_dir,
@@ -52,7 +78,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         self.kernel_size = self.slen + 2 * self.bp
         self.stride = int(self.slen * stride_factor)
         assert self.stride > 0
-        self.n_batches = n_batches
         self.prerender_device = prerender_device
 
         if h_start is None:
@@ -85,7 +110,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             print(f"INFO: Loading cached chunks and catalog from {cache_file}")
             self.chunks, self.catalogs = torch.load(cache_file)
         else:
-            self.chunks, self.catalogs = self.prerender_chunks(image)
+            self.chunks, self.catalogs = self._prerender_chunks(image)
             if cache_file is not None:
                 print(f"INFO: Saving cached chunks and catalog to {cache_file}")
                 torch.save((self.chunks, self.catalogs), cache_file)
@@ -102,7 +127,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             "slen": torch.tensor([self.slen]),
         }
 
-    def prerender_chunks(self, image):
+    def _prerender_chunks(self, image):
         chunks = F.unfold(image, kernel_size=self.kernel_size, stride=self.stride)
         chunks = rearrange(
             chunks,
