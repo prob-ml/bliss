@@ -1,8 +1,8 @@
 """Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
-from typing import Optional
+from typing import Dict, Optional
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 from tqdm import tqdm
 
 from bliss.models.binary import BinaryEncoder
@@ -17,30 +17,81 @@ from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
 
 
 class Encoder(nn.Module):
+    """Encodes astronomical image into variational parameters.
+
+    This module takes an astronomical image, or specifically padded tiles
+    of an astronomical image, and returns either samples from the variational
+    distribution of the latent catalog of objects represented by that image.
+
+    Alternatively, this module can also return a sequential 'maximum-a-posteriori'
+    (though this is not the true MAP since estimation is done sequentially rather than
+    for the joint distribution or parameters).
+
+    Attributes:
+        See the __init__ function for a description of the attributes, which are
+        the submodules for specific components of the catalog.
+
+    """
+
     def __init__(
         self,
-        image_encoder: LocationEncoder,
+        location_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
-        galaxy_decoder: Optional[OneCenteredGalaxyDecoder] = None,
     ):
+        """Initializes Encoder.
+
+        This module requires at least the `location_encoder`. Other
+        modules can be incorporated to add more information about the catalog,
+        specifically whether an object is a galaxy or star (`binary_encoder`), or
+        the latent parameter describing the shape of the galaxy `galaxy_encoder`.
+
+        Args:
+            location_encoder: Module that takes padded tiles and returns the number
+                of sources and locations per-tile.
+            binary_encoder: Module that takes padded tiles and locations and returns a classification
+                between stars and galaxies. Defaults to None.
+            galaxy_encoder: Module that takes padded tiles and locations and returns the variational
+                distribution of the latent variable determining the galaxy shape. Defaults to None.
+        """
         super().__init__()
         self._dummy_param = nn.Parameter(torch.empty(0))
 
-        self.image_encoder = image_encoder
+        self.location_encoder = location_encoder
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
-        self.galaxy_decoder = galaxy_decoder
 
     def forward(self, x):
-        pass
+        raise NotImplementedError(
+            ".forward() method for Encoder not available. Use .max_a_post() or .sample()."
+        )
 
     def sample(self, image_ptiles, n_samples):
-        pass
+        raise NotImplementedError("Sampling from Encoder not yet available.")
 
-    def max_a_post(self, image_ptiles):
-        var_params = self.image_encoder.encode(image_ptiles)
-        tile_map = self.image_encoder.max_a_post(var_params)
+    def max_a_post(self, image_ptiles: Tensor) -> Dict[str, Tensor]:
+        """Get maximum a posteriori of catalog from image padded tiles.
+
+        Note that, strictly speaking, this is not the true MAP of the variational
+        distribution of the catalog.
+        Rather, we use sequential estimation; the MAP of the locations is first estimated,
+        then plugged-in to the binary and galaxy encoders. Thus, the binary and galaxy
+        encoders are conditioned on the location MAP. The true MAP would require optimizing
+        over the entire catalog jointly, but this is not tractable.
+
+        Args:
+            image_ptiles: A tensor of padded image tiles,
+                with shape `n_ptiles * n_bands * h * w`.
+
+        Returns:
+            A dictionary of the maximum a posteriori
+            of the catalog. Specifically, this dictionary comprises:
+            - The output of LocationEncoder.max_a_post()
+            - 'galaxy_bool', 'star_bool', and 'prob_galaxy' from BinaryEncoder.
+            - 'galaxy_param' from GalaxyEncoder.
+        """
+        var_params = self.location_encoder.encode(image_ptiles)
+        tile_map = self.location_encoder.max_a_post(var_params)
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
@@ -67,8 +118,9 @@ class Encoder(nn.Module):
         return tile_map
 
     def get_images_in_ptiles(self, images):
+        """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
         return get_images_in_tiles(
-            images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
+            images, self.location_encoder.tile_slen, self.location_encoder.ptile_slen
         )
 
     def max_a_post_scene(
@@ -100,15 +152,15 @@ class Encoder(nn.Module):
         """
         assert len(scene.shape) == 4
         assert scene.shape[0] == 1
-        assert scene.shape[1] == self.image_encoder.n_bands == 1, "Only 1 band supported"
+        assert scene.shape[1] == self.location_encoder.n_bands == 1, "Only 1 band supported"
         h, w = scene.shape[-2], scene.shape[-1]
-        bp = self.image_encoder.border_padding
+        bp = self.location_encoder.border_padding
         ihic = h // clen + 1 if not testing else 1  # height in chunks
         iwic = w // clen + 1 if not testing else 1  # width in chunks
         self.to(device)
 
         # tiles
-        tile_slen = self.image_encoder.tile_slen
+        tile_slen = self.location_encoder.tile_slen
 
         # where to collect results.
         full_map_scene = {
@@ -137,7 +189,7 @@ class Encoder(nn.Module):
 
                         tile_map = self.max_a_post(image_ptiles)
                         full_map = get_full_params_from_tiles(
-                            tile_map, self.image_encoder.tile_slen
+                            tile_map, self.location_encoder.tile_slen
                         )
                         full_map = {k: v.cpu() for k, v in full_map.items()}
                         # delete parameters we stopped using so we have enough GPU space.
