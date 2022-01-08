@@ -67,7 +67,7 @@ cfg.model.decoder.kwargs.update({'n_bands': 1,
                                  'tile_slen': 10, 
                                  'ptile_slen': 30, 
                                  'border_padding': 5, 
-                                 'background_values': [680], 
+                                 'background_values': [664.], 
                                  'psf_params_file': './psf/zband_psf_fitted.npy'})
 
 cfg.model.encoder.kwargs.update({'ptile_slen': 20})
@@ -81,11 +81,12 @@ print(cfg)
 ###################
 # initialize data set and model
 ###################
-# dataset = simulated.SimulatedDataset(**cfg.dataset.kwargs)
+dataset = simulated.SimulatedDataset(**cfg.dataset.kwargs)
 
-dataset = SimulatedStarnetDataset(mean_background_vals = [680.], 
-                                  background_sd = 15, 
-                                  **cfg.dataset.kwargs)
+# dataset = SimulatedStarnetDataset(mean_background_vals = [670.], 
+#                                   background_sd = 15, 
+#                                   **cfg.dataset.kwargs)
+
 sleep_net = sleep.SleepPhase(**cfg.model.kwargs)
 trainer = pl.Trainer(**cfg.training.trainer)
 
