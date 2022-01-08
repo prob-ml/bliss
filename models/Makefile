@@ -20,3 +20,6 @@ sdss_galaxy_encoder.ckpt: sdss_autoencoder.ckpt sdss_autoencoder_flow.ckpt
 
 sdss_sleep.ckpt: sdss_autoencoder.ckpt sdss_autoencoder_flow.ckpt
 	./run_experiment.sh $(OUTPUT_DIR) sdss_sleep $(GPU_SLEEP)
+
+sdss_galaxy_encoder_real.ckpt: sdss_sleep.ckpt sdss_autoencoder.ckpt
+	./run_experiment.sh $(OUTPUT_DIR) sdss_galaxy_encoder_real $(GPU_SLEEP)

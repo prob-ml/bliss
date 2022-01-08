@@ -4,7 +4,7 @@ from einops import rearrange
 from torch.distributions import Poisson
 
 from bliss.models import galaxy_net
-from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.models.location_encoder import get_is_on_from_n_sources
 from bliss.models.galaxy_flow import CenteredGalaxyLatentFlow
 
 

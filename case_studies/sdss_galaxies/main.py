@@ -32,6 +32,7 @@ pl.seed_everything(0)
 files_dict = {
     "sleep_ckpt": "models/sdss_sleep.ckpt",
     "galaxy_encoder_ckpt": "models/sdss_galaxy_encoder.ckpt",
+    "galaxy_encoder_real_ckpt": "models/sdss_galaxy_encoder_real.ckpt",
     "binary_ckpt": "models/sdss_binary.ckpt",
     "ae_ckpt": "models/sdss_autoencoder.ckpt",
     "coadd_cat": "data/coadd_catalog_94_1_12.fits",
@@ -648,7 +649,7 @@ class AEReconstructionFigures(BlissFigures):
         }
 
 
-def main(fig, outdir, overwrite=False):
+def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
     os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
 
     if not Path(outdir).exists():
@@ -660,7 +661,12 @@ def main(fig, outdir, overwrite=False):
         sleep_net = SleepPhase.load_from_checkpoint(files_dict["sleep_ckpt"]).to(device)
         binary_encoder = BinaryEncoder.load_from_checkpoint(files_dict["binary_ckpt"])
         binary_encoder = binary_encoder.to(device).eval()
-        galaxy_encoder = GalaxyEncoder.load_from_checkpoint(files_dict["galaxy_encoder_ckpt"])
+        if use_galaxy_encoder_real:
+            galaxy_encoder = GalaxyEncoder.load_from_checkpoint(
+                files_dict["galaxy_encoder_real_ckpt"]
+            )
+        else:
+            galaxy_encoder = GalaxyEncoder.load_from_checkpoint(files_dict["galaxy_encoder_ckpt"])
         galaxy_encoder = galaxy_encoder.to(device).eval()
 
     if fig in {"1", "all"}:
@@ -714,5 +720,11 @@ if __name__ == "__main__":
         type=str,
         help="Where to save figures and caches relative to $BLISS_HOME.",
     )
+    parser.add_argument(
+        "--use_galaxy_encoder_real",
+        action="store_true",
+        default=False,
+        help="Use galaxy encoder trained on real SDSS images?",
+    )
     args = vars(parser.parse_args())
-    main(args["fig"], args["output"], args["overwrite"])
+    main(args["fig"], args["output"], args["overwrite"], args["use_galaxy_encoder_real"])

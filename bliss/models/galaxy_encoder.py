@@ -1,3 +1,6 @@
+from typing import Optional
+from pathlib import Path
+
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -7,7 +10,7 @@ from torch.nn import functional as F
 
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
-from bliss.models.encoder import get_full_params, get_images_in_tiles
+from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image, plot_image_and_locs
@@ -56,11 +59,16 @@ class GalaxyEncoder(pl.LightningModule):
         hidden: int = 256,
         optimizer_params: dict = None,
         from_scratch: bool = True,
+        crop_loss_at_border=False,
+        checkpoint_path: Optional[str] = None,
+        max_flux_valid_plots: Optional[int] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
 
         self.max_sources = 1  # by construction.
+        self.crop_loss_at_border = crop_loss_at_border
+        self.max_flux_valid_plots = max_flux_valid_plots
 
         # to produce images to train on.
         self.image_prior = ImagePrior(**prior)
@@ -70,6 +78,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # extract useful info from image_decoder
         self.n_bands = self.image_decoder.n_bands
+        self.decoder_slen = self.image_decoder.slen
 
         # put image dimensions together
         self.tile_slen = self.image_decoder.tile_slen
@@ -93,6 +102,11 @@ class GalaxyEncoder(pl.LightningModule):
 
         # consistency
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
+
+        if checkpoint_path is not None:
+            ge = GalaxyEncoder.load_from_checkpoint(Path(checkpoint_path))
+            self.load_state_dict(ge.state_dict())
+            print(f"INFO: Loaded model weights from checkout at {checkpoint_path}")
 
     def center_ptiles(self, image_ptiles, tile_locs):
         return center_ptiles(
@@ -151,6 +165,11 @@ class GalaxyEncoder(pl.LightningModule):
         )
 
         recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
+        if self.crop_loss_at_border:
+            slen = batch["slen"].unique().item()
+            bp = (recon_losses.shape[-1] - slen) // 2
+            bp = bp * 2
+            recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
         divergence_losses = -pq_z.sum()
         return recon_losses.sum() + divergence_losses
 
@@ -178,22 +197,38 @@ class GalaxyEncoder(pl.LightningModule):
             self.make_plots(batch)
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, n_samples=25):
+    def make_plots(self, batch, n_samples=5):
         # validate worst reconstruction images.
         n_samples = min(len(batch["n_sources"]), n_samples)
+        samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
+        keys = [
+            "images",
+            "locs",
+            "galaxy_bool",
+            "star_bool",
+            "fluxes",
+            "log_fluxes",
+            "n_sources",
+        ]
+        for k in keys:
+            batch[k] = batch[k][samples]
 
         # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "slen", "background"}
         images = batch["images"]
         slen = int(batch["slen"].unique().item())
-        tile_params = {k: v for k, v in batch.items() if k not in exclude}
-
         # obtain map estimates
         tile_galaxy_params, _ = self.forward_image(images, batch["locs"])
+
         tile_est = {
-            k: (v if k != "galaxy_params" else tile_galaxy_params) for k, v in tile_params.items()
+            "n_sources": batch["n_sources"],
+            "locs": batch["locs"],
+            "galaxy_bool": batch["galaxy_bool"],
+            "star_bool": batch["star_bool"],
+            "fluxes": batch["fluxes"],
+            "log_fluxes": batch["log_fluxes"],
+            "galaxy_params": tile_galaxy_params,
         }
-        est = get_full_params(tile_est, slen)
+        est = get_full_params_from_tiles(tile_est, self.tile_slen)
 
         # draw all reconstruction images.
         # render_images automatically accounts for tiles with no galaxies.
@@ -211,11 +246,16 @@ class GalaxyEncoder(pl.LightningModule):
         worst_indices = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
 
         # use same vmin, vmax throughout for residuals
-        res_vmax = torch.ceil(residuals[worst_indices].max().cpu()).item()
-        res_vmin = torch.floor(residuals[worst_indices].min().cpu()).item()
+        if self.crop_loss_at_border:
+            bp = (recon_images.shape[-1] - slen) // 2
+            bp = bp * 2
+            residuals[:, :, :bp, :] = 0.0
+            residuals[:, :, -bp:, :] = 0.0
+            residuals[:, :, :, :bp] = 0.0
+            residuals[:, :, :, -bp:] = 0.0
 
         figsize = (12, 4 * n_samples)
-        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize)
+        fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize, squeeze=False)
 
         for i, idx in enumerate(worst_indices):
 
@@ -230,7 +270,10 @@ class GalaxyEncoder(pl.LightningModule):
                 res_ax.set_title("Residual", size=18)
 
             # vmin, vmax should be shared between reconstruction and true images.
-            vmax = np.ceil(max(images[idx].max().item(), recon_images[idx].max().item()))
+            if self.max_flux_valid_plots is None:
+                vmax = np.ceil(max(images[idx].max().item(), recon_images[idx].max().item()))
+            else:
+                vmax = self.max_flux_valid_plots
             vmin = np.floor(min(images[idx].min().item(), recon_images[idx].min().item()))
             vrange = (vmin, vmax)
 
@@ -240,7 +283,24 @@ class GalaxyEncoder(pl.LightningModule):
             plot_image_and_locs(
                 idx, fig, recon_ax, recon_images, slen, est, labels=labels, vrange=vrange
             )
-            plot_image(fig, res_ax, residuals[idx, 0].cpu().numpy(), vrange=(res_vmin, res_vmax))
+            residuals_idx = residuals[idx, 0].cpu().numpy()
+            res_vmax = np.ceil(residuals_idx.max())
+            res_vmin = np.floor(residuals_idx.min())
+            if self.crop_loss_at_border:
+                bp = (recon_images.shape[-1] - slen) // 2
+                eff_slen = slen - bp
+                for b in (bp, bp * 2):
+                    recon_ax.axvline(b, color="w")
+                    recon_ax.axvline(b + eff_slen, color="w")
+                    recon_ax.axhline(b, color="w")
+                    recon_ax.axhline(b + eff_slen, color="w")
+            plot_image(fig, res_ax, residuals_idx, vrange=(res_vmin, res_vmax))
+            if self.crop_loss_at_border:
+                for b in (bp, bp * 2):
+                    res_ax.axvline(b, color="w")
+                    res_ax.axvline(b + eff_slen, color="w")
+                    res_ax.axhline(b, color="w")
+                    res_ax.axhline(b + eff_slen, color="w")
 
         fig.tight_layout()
         if self.logger:
