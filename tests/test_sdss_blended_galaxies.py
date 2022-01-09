@@ -12,7 +12,7 @@ class TestSdssBlendedGalaxies:
             "+dataset.slen": 40,
             "+dataset.h_start": 200,
             "+dataset.w_start": 1800,
-            "+dataset.scene_size": 100,
+            "+dataset.scene_size": 200,
             "training.n_epochs": 1,
         }
 
