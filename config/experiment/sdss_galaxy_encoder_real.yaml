@@ -23,7 +23,7 @@ optimizer:
     lr: 1e-4
 
 dataset:
-  cache_path: "models/sdss_galaxy_encoder_real_chunks"
+  # cache_path: "models/sdss_galaxy_encoder_real_chunks"
   prerender_device: "cuda"
 
 
