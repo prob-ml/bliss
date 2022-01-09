@@ -7,7 +7,6 @@ from abc import abstractmethod
 from pathlib import Path
 
 import matplotlib as mpl
-import numpy as np
 import pytorch_lightning as pl
 import torch
 from astropy.table import Table
@@ -16,7 +15,6 @@ from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.sleep import SleepPhase
-
 from bliss.case_studies.sdss_galaxies import reconstruction
 
 device = torch.device("cuda:0")

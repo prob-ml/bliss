@@ -235,11 +235,13 @@ class ImagePrior(pl.LightningModule):
         )
         return galaxy_params * galaxy_bool
 
+
 def draw_pareto_maxed(shape, device, f_min, f_max, alpha):
     # draw pareto conditioned on being less than f_max
     u_max = pareto_cdf(f_max, f_min, alpha)
     uniform_samples = torch.rand(*shape, device=device) * u_max
     return f_min / (1.0 - uniform_samples) ** (1 / alpha)
+
 
 def pareto_cdf(x, f_min, alpha):
     return 1 - (f_min / x) ** alpha

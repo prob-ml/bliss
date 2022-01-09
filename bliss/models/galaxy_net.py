@@ -9,7 +9,6 @@ from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
 from torch.nn.utils import weight_norm as wn
-
 from nflows.distributions import StandardNormal
 from nflows.flows import Flow
 

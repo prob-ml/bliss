@@ -1,22 +1,20 @@
 import os
 from typing import Tuple
+
 from einops.einops import rearrange
 import torch
 import numpy as np
 from matplotlib import pyplot as plt
-import plotly.express as px
-import plotly.graph_objects as go
+from plotly import express as px
+from plotly import graph_objects as go
 from astropy.table import Table
 
-from bliss.datasets import sdss
 from bliss import reporting
+from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.sleep import SleepPhase
 from bliss.predict import predict_on_image
-
-
-# class SDSSReconstructionFigures:
 
 
 def compute_data(
@@ -28,7 +26,6 @@ def compute_data(
     galaxy_encoder: GalaxyEncoder,
 ):
     scene = sdss_data["image"]
-    # coadd_params = reporting.get_params_from_coadd(coadd_cat, h, w, bp)
     assert isinstance(scene, (torch.Tensor, np.ndarray))
     assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
     device = sleep_net.device
@@ -73,28 +70,22 @@ def compute_data(
     recon_image = recon_image[bp : hb - bp, bp : wb - bp]
     residual = (true_image - recon_image) / np.sqrt(recon_image)
 
-    locs_true = torch.stack(
-        (
-            torch.from_numpy(np.array(coadd_cat["x"]).astype(float)),
-            torch.from_numpy(np.array(coadd_cat["y"]).astype(float)),
-        ),
-        dim=1,
-    )
+    locs_true_x = torch.from_numpy(np.array(coadd_cat["x"]).astype(float))
+    locs_true_y = torch.from_numpy(np.array(coadd_cat["y"]).astype(float))
+    locs_true = torch.stack((locs_true_x, locs_true_y), dim=1)
     locs_true = locs_true[xlim[0] < locs_true[:, 0]]
     locs_true = locs_true[ylim[0] < locs_true[:, 1]]
 
     locs_true = locs_true[locs_true[:, 0] < xlim[1]]
     locs_true = locs_true[locs_true[:, 1] < ylim[1]]
 
-    ## Shift locs by lower limit
+    # Shift locs by lower limit
     locs_true[:, 0] = locs_true[:, 0] - xlim[0]
     locs_true[:, 1] = locs_true[:, 1] - ylim[0]
 
     locs_pred = rearrange(full_map["plocs"], "a b c -> (a b) c").cpu().numpy()
 
-    data = (true_image, recon_image, residual, locs_true, locs_pred)
-
-    return data
+    return (true_image, recon_image, residual, locs_true, locs_pred)
 
 
 def create_figure(data):
@@ -123,7 +114,6 @@ def create_figure(data):
     reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
     reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
-    # reporting.plot_locs(ax_true, slen=53, bpad=24, locs=locs)
     ax_true.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
     ax_recon.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
     ax_res.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
@@ -216,8 +206,6 @@ def create_plotly_figure(data):
     true_locs_scatter = go.Scatter(x=true_locs[:, 0], y=true_locs[:, 1], mode="markers")
     pred_locs_scatter = go.Scatter(x=pred_locs[:, 1], y=pred_locs[:, 0], mode="markers")
 
-    # fig.add_trace(true_locs_scatter, row='all', col='all')
-    # fig.add_trace(pred_locs_scatter, row='all', col='all')
     fig.add_trace(true_locs_scatter)
     fig.add_trace(pred_locs_scatter)
 
