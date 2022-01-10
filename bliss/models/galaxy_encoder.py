@@ -197,10 +197,9 @@ class GalaxyEncoder(pl.LightningModule):
             self.make_plots(batch)
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, n_samples=5):
+    def make_plots(self, batch, n_samples=10):
         # validate worst reconstruction images.
         n_samples = min(len(batch["n_sources"]), n_samples)
-        samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
         keys = [
             "images",
             "locs",
@@ -211,7 +210,7 @@ class GalaxyEncoder(pl.LightningModule):
             "n_sources",
         ]
         for k in keys:
-            batch[k] = batch[k][samples]
+            batch[k] = batch[k][:n_samples]
 
         # extract non-params entries so that 'get_full_params' to works.
         images = batch["images"]
