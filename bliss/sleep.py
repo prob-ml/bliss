@@ -346,24 +346,10 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params2 = get_full_params(true_tile_params, slen)
         true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
-        for k, v in true_params2.items():
-            print(k)
-            if k == "n_sources":
-                v = v.long()
-            assert torch.allclose(v, true_params[k])
-
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        est_params2 = get_full_params(tile_estimate, slen)
         est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
-        for k, v in est_params2.items():
-            print(k)
-            if k == "n_sources":
-                v = v.long()
-            if k != "galaxy_params":
-                assert torch.allclose(v, est_params[k])
         return true_params, est_params, slen
 
     # pylint: disable=too-many-statements
