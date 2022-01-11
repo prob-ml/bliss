@@ -116,6 +116,7 @@ def get_full_params_from_tiles(
         "log_fluxes",
         "prob_galaxy",
     }
+    param_names_to_mask = {"locs", "plocs"}.union(param_names_to_gather)
     max_detections = tile_locs.shape[2]
     if max_detections == 1:
         param_names_to_gather.add("prob_n_sources")
@@ -130,12 +131,14 @@ def get_full_params_from_tiles(
     )
 
     params = {}
-    indices_to_retrieve = get_indices_of_on_sources(tile_n_sources, max_detections)
+    indices_to_retrieve, is_on_array = get_indices_of_on_sources(tile_n_sources, max_detections)
     for param_name, tile_param in tile_params_to_gather.items():
         k = tile_param.shape[-1]
         param = rearrange(tile_param, "b t d k -> b (t d) k", k=k)
         indices_for_param = repeat(indices_to_retrieve, "b n -> b n k", k=k)
         param = torch.gather(param, dim=1, index=indices_for_param)
+        if param_name in param_names_to_mask:
+            param *= is_on_array.unsqueeze(-1)
         params[param_name] = param
 
     params["n_sources"] = reduce(tile_params["n_sources"], "b n -> b", "sum")
@@ -217,7 +220,10 @@ def get_indices_of_on_sources(tile_n_sources: Tensor, max_detections: int) -> Te
     max_sources = n_sources.max().int().item()
     tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> b (n d)")
     indices_sorted = tile_is_on_array.long().argsort(dim=1, descending=True)
-    return indices_sorted[:, :max_sources]
+    indices_sorted = indices_sorted[:, :max_sources]
+
+    is_on_array = torch.gather(tile_is_on_array, dim=1, index=indices_sorted)
+    return indices_sorted, is_on_array
 
 
 class LocationEncoder(nn.Module):
