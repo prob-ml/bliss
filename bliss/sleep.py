@@ -26,7 +26,7 @@ from bliss.models.location_encoder import (
     get_full_params_from_tiles,
 )
 from bliss.optimizer import load_optimizer
-from bliss.reporting import DetectionMetrics, plot_image_and_locs
+from bliss.reporting import DetectionMetrics, plot_image_and_locs, get_full_params
 
 plt.switch_backend("Agg")
 
@@ -346,11 +346,11 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
+        true_params = get_full_params(true_tile_params, slen)
 
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
+        est_params = get_full_params(tile_estimate, slen)
         return true_params, est_params, slen
 
     # pylint: disable=too-many-statements
