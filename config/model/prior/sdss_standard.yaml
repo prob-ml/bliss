@@ -10,3 +10,5 @@ alpha: 0.5
 prob_galaxy: 0.7
 autoencoder_ckpt: models/sdss_autoencoder.ckpt
 autoencoder_flow_ckpt: models/sdss_autoencoder_flow.ckpt
+latents_file: data/latents_simulated_sdss_galaxies.pt
+n_latent_batches: 160
