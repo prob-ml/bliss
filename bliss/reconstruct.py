@@ -9,6 +9,42 @@ from bliss.models.decoder import ImageDecoder
 from bliss.models.location_encoder import get_params_in_batches
 
 
+def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, slen=80, bp=24):
+    # Adjust bp so that we get an even number of chunks in scene
+    # kernel_size = slen + bp * 2
+    extra = (scene_length - bp * 2) % slen
+    while extra < (2 * bp):
+        extra += slen
+    adj_scene_length = scene_length + extra
+    if h + adj_scene_length - bp > img.shape[2]:
+        h_padded = img.shape[2] - adj_scene_length
+    else:
+        h_padded = h - bp
+    if w + adj_scene_length - bp > img.shape[3]:
+        w_padded = img.shape[3] - adj_scene_length
+    else:
+        w_padded = w - bp
+
+    # First get the mininum coordinates to ensure everything is detected
+    # h_padded = h - bp
+    # w_padded = w - bp
+    scene = img[
+        :, :, h_padded : (h_padded + adj_scene_length), w_padded : (w_padded + adj_scene_length)
+    ]
+    assert scene.shape[2] == scene.shape[3] == adj_scene_length
+
+    recon = reconstruct_scene(encoder, decoder, scene, slen, bp)
+
+    ## Get reconstruction at coordinates
+    return recon[
+        :,
+        :,
+        (h - h_padded) : (h - h_padded + scene_length),
+        (w - w_padded) : (w - w_padded + scene_length),
+    ]
+    # Add more
+
+
 def reconstruct_scene(encoder, decoder, img_of_interest, slen=80, bp=24):
     chunks = split_scene_into_chunks(img_of_interest, slen, bp)
     reconstructions = []
