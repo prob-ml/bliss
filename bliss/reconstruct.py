@@ -49,11 +49,12 @@ def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, 
     ## Adjust locations based on padding
     h_adj = h_padded - (h - bp)
     w_adj = w_padded - (w - bp)
-    plocs = map_recon["plocs"][0]
+    plocs = map_recon["plocs"]
     plocs[..., 0] += h_adj
     plocs[..., 1] += w_adj
+    map_recon["plocs"] = plocs
 
-    return recon_at_coords, plocs
+    return recon_at_coords, map_recon
     # Add more
 
 

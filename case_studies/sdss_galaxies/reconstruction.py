@@ -47,7 +47,7 @@ scenes = {
 SCENE_SIZE = 300
 
 
-def create_figure(true, recon, res, locs=None, locs_pred=None):
+def create_figure(true, recon, res, locs=None, map_recon=None):
     """Make figures related to detection and classification in SDSS."""
     plt.style.use("seaborn-colorblind")
     pad = 6.0
@@ -78,10 +78,20 @@ def create_figure(true, recon, res, locs=None, locs_pred=None):
         ax_recon.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
         ax_res.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
 
-    if locs_pred is not None:
-        ax_true.scatter(locs_pred[:, 1], locs_pred[:, 0], color="b", marker="x", s=20)
-        ax_recon.scatter(locs_pred[:, 1], locs_pred[:, 0], color="b", marker="x", s=20)
-        ax_res.scatter(locs_pred[:, 1], locs_pred[:, 0], color="b", marker="x", s=20)
+    if map_recon is not None:
+        locs_pred = map_recon["plocs"][0]
+        star_bool = map_recon["star_bool"][0]
+        galaxy_bool = map_recon["galaxy_bool"][0]
+        locs_galaxies = locs_pred[galaxy_bool[:, 0] > 0.5, :]
+        locs_stars = locs_pred[star_bool[:, 0] > 0.5, :]
+        if locs_galaxies.shape[0] > 0:
+            ax_true.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="b", marker="x", s=20)
+            ax_recon.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="b", marker="x", s=20)
+            ax_res.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="b", marker="x", s=20)
+        if locs_stars.shape[0] > 0:
+            ax_true.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
+            ax_recon.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
+            ax_res.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
 
     plt.subplots_adjust(hspace=-0.4)
     plt.tight_layout()
@@ -115,7 +125,9 @@ if __name__ == "__main__":
     for scene_name, scene_coords in scenes.items():
         h, w = scene_coords
         true = my_image[:, :, h : (h + SCENE_SIZE), w : (w + SCENE_SIZE)]
-        recon, plocs = reconstruct_scene_at_coordinates(encoder, dec, my_image, h, w, SCENE_SIZE)
+        recon, map_recon = reconstruct_scene_at_coordinates(
+            encoder, dec, my_image, h, w, SCENE_SIZE
+        )
         resid = (true - recon) / recon.sqrt()
-        fig = create_figure(true[0, 0], recon[0, 0], resid[0, 0], locs_pred=plocs)
+        fig = create_figure(true[0, 0], recon[0, 0], resid[0, 0], map_recon=map_recon)
         fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
