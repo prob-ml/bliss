@@ -129,10 +129,11 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
                 marker="x",
                 s=20,
                 label="Predicted Galaxy",
+                alpha=0.6,
             )
             ax_res.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20)
         if locs_stars.shape[0] > 0:
-            ax_true.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
+            ax_true.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20, alpha=0.6)
             ax_recon.scatter(
                 locs_stars[:, 1],
                 locs_stars[:, 0],
@@ -140,6 +141,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
                 marker="x",
                 s=20,
                 label="Predicted Star",
+                alpha=0.6,
             )
             ax_res.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
         ax_recon.legend(
