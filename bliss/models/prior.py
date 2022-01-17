@@ -1,15 +1,11 @@
-from pathlib import Path
-
 import torch
 import pytorch_lightning as pl
 from einops import rearrange
 from torch.distributions import Poisson
-from tqdm import tqdm
 
 from bliss.models import galaxy_net
 from bliss.models.location_encoder import get_is_on_from_n_sources
 from bliss.models.galaxy_flow import CenteredGalaxyLatentFlow
-from bliss.datasets.galsim_galaxies import get_galaxy_latents, draw_pareto_maxed
 
 
 class ImagePrior(pl.LightningModule):
@@ -32,7 +28,6 @@ class ImagePrior(pl.LightningModule):
         alpha: Prior parameter on fluxes
         prob_galaxy: Prior probability a source is a galaxy
         vae: Trained VAE modeling single, centered galaxies
-        latents: Stored latent representations of galaxies (could be None).
     """
 
     def __init__(
@@ -51,8 +46,6 @@ class ImagePrior(pl.LightningModule):
         prob_galaxy: float = 0.0,
         autoencoder_ckpt: str = None,
         autoencoder_flow_ckpt: str = None,
-        latents_file: str = None,
-        n_latent_batches: int = 160,
     ):
         """Initializes ImagePrior.
 
@@ -97,12 +90,6 @@ class ImagePrior(pl.LightningModule):
                 flow = CenteredGalaxyLatentFlow.load_from_checkpoint(autoencoder_flow_ckpt)
                 self.vae.dist_main = flow.flow_main
                 self.vae.dist_residual = flow.flow_residual
-            if latents_file is not None:
-                self.latents = get_galaxy_latents(
-                    latents_file, n_latent_batches, autoencoder_ckpt
-                ).cpu()
-            else:
-                self.latents = None
         else:
             self.vae = None
 
@@ -234,15 +221,8 @@ class ImagePrior(pl.LightningModule):
         batch_size = galaxy_bool.size(0)
         n_latent_samples = batch_size * self.n_tiles_per_image * self.max_sources
         if self.vae is not None:
-            if self.latents is None:
-                self.vae = self.vae.to(device=galaxy_bool.device)
-                latents = self.vae.sample_latent(n_latent_samples)
-            else:
-                self.latents = self.latents.to(device=galaxy_bool.device)
-                idxs = torch.randint(
-                    0, self.latents.shape[0], (n_latent_samples,), device=self.latents.device
-                )
-                latents = self.latents[idxs]
+            self.vae = self.vae.to(device=galaxy_bool.device)
+            latents = self.vae.sample_latent(n_latent_samples)
         else:
             latents = torch.zeros((n_latent_samples, 1), device=galaxy_bool.device)
 
@@ -254,3 +234,14 @@ class ImagePrior(pl.LightningModule):
             s=self.max_sources,
         )
         return galaxy_params * galaxy_bool
+
+
+def draw_pareto_maxed(shape, device, f_min, f_max, alpha):
+    # draw pareto conditioned on being less than f_max
+    u_max = pareto_cdf(f_max, f_min, alpha)
+    uniform_samples = torch.rand(*shape, device=device) * u_max
+    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
+
+
+def pareto_cdf(x, f_min, alpha):
+    return 1 - (f_min / x) ** alpha

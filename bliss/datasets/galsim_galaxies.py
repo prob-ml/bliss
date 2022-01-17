@@ -5,9 +5,8 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
 
-from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.prior import draw_pareto_maxed
 
 
 def load_psf_from_file(psf_image_file: str, pixel_scale: float):
@@ -160,8 +159,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         return unif.item()
 
     def _draw_pareto_flux(self):
-        # return draw_pareto_maxed((1,), self.device, self.min_flux, self.max_flux, self.alpha)
-        return draw_pareto_maxed((1,), "cpu", self.min_flux, self.max_flux, self.alpha)
+        return draw_pareto_maxed((1,), self.device, self.min_flux, self.max_flux, self.alpha)
 
     def __getitem__(self, idx):
 
@@ -231,45 +229,3 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-
-def draw_pareto_maxed(shape, device, f_min, f_max, alpha):
-    # draw pareto conditioned on being less than f_max
-    u_max = pareto_cdf(f_max, f_min, alpha)
-    uniform_samples = torch.rand(*shape, device=device) * u_max
-    return f_min / (1.0 - uniform_samples) ** (1 / alpha)
-
-
-def pareto_cdf(x, f_min, alpha):
-    return 1 - (f_min / x) ** alpha
-
-
-def get_galaxy_latents(latents_file: str, n_latent_batches: int, autoencoder_ckpt: str = None):
-    assert latents_file is not None
-    latents_file = Path(latents_file)
-    if latents_file.exists():
-        latents = torch.load(latents_file, "cpu")
-    else:
-        vae = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
-        psf_image_file = latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
-        dataset = SDSSGalaxies(psf_image_file=psf_image_file)
-        dataloader = dataset.train_dataloader()
-        vae = vae.cuda()
-        print("INFO: Creating latents from Galsim galaxies...")
-        latents = generate_latents(vae, dataloader, n_latent_batches)
-        torch.save(latents, latents_file)
-        print(f"INFO: Saved latents to {latents_file}")
-    return latents
-
-
-def generate_latents(vae, dataloader, n_batches):
-    """Induces a latent distribution for a non-probabilistic autoencoder."""
-    latent_list = []
-    enc = vae.get_encoder()
-    with torch.no_grad():
-        for _ in tqdm(range(n_batches)):
-            galaxy = next(iter(dataloader))
-            noiseless = galaxy["noiseless"].to(vae.device)
-            latent_batch, _ = enc(noiseless, 0.0)
-            latent_list.append(latent_batch)
-    return torch.cat(latent_list, dim=0)
