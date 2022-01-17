@@ -117,9 +117,6 @@ def get_full_params_from_tiles(
         "prob_galaxy",
     }
     param_names_to_mask = {"locs", "plocs"}.union(param_names_to_gather)
-    max_detections = tile_locs.shape[2]
-    if max_detections == 1:
-        param_names_to_gather.add("prob_n_sources")
 
     plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=n_tiles_w)
     tile_params_to_gather = {
@@ -131,6 +128,7 @@ def get_full_params_from_tiles(
     )
 
     params = {}
+    max_detections = tile_locs.shape[2]
     indices_to_retrieve, is_on_array = get_indices_of_on_sources(tile_n_sources, max_detections)
     for param_name, tile_param in tile_params_to_gather.items():
         k = tile_param.shape[-1]
