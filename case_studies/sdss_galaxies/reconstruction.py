@@ -85,13 +85,34 @@ def create_figure(true, recon, res, locs=None, map_recon=None):
         locs_galaxies = locs_pred[galaxy_bool[:, 0] > 0.5, :]
         locs_stars = locs_pred[star_bool[:, 0] > 0.5, :]
         if locs_galaxies.shape[0] > 0:
-            ax_true.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="b", marker="x", s=20)
-            ax_recon.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="b", marker="x", s=20)
-            ax_res.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="b", marker="x", s=20)
+            ax_true.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20)
+            ax_recon.scatter(
+                locs_galaxies[:, 1],
+                locs_galaxies[:, 0],
+                color="c",
+                marker="x",
+                s=20,
+                label="Predicted Galaxy",
+            )
+            ax_res.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20)
         if locs_stars.shape[0] > 0:
             ax_true.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
-            ax_recon.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
+            ax_recon.scatter(
+                locs_stars[:, 1],
+                locs_stars[:, 0],
+                color="r",
+                marker="x",
+                s=20,
+                label="Predicted Star",
+            )
             ax_res.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
+        ax_recon.legend(
+            bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+            loc="lower left",
+            ncol=2,
+            mode="expand",
+            borderaxespad=0.0,
+        )
 
     plt.subplots_adjust(hspace=-0.4)
     plt.tight_layout()
