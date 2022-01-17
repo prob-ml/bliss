@@ -1,12 +1,15 @@
+from typing import List, Dict
 import torch
+from torch import Tensor
 import math
 from torch.nn import functional as F
-from einops import rearrange
+from einops import rearrange, repeat
 from tqdm import tqdm
 
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import get_params_in_batches
+from bliss.models.location_encoder import get_full_params_from_tiles, get_params_in_batches
+from bliss.datasets.sdss_blended_galaxies import cpu
 
 
 def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, slen=80, bp=24):
@@ -33,15 +36,24 @@ def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, 
     ]
     assert scene.shape[2] == scene.shape[3] == adj_scene_length
 
-    recon = reconstruct_scene(encoder, decoder, scene, slen, bp)
+    recon, map_recon = reconstruct_scene(encoder, decoder, scene, slen, bp)
 
     ## Get reconstruction at coordinates
-    return recon[
+    recon_at_coords = recon[
         :,
         :,
         (h - h_padded) : (h - h_padded + scene_length),
         (w - w_padded) : (w - w_padded + scene_length),
     ]
+
+    ## Adjust locations based on padding
+    h_adj = h_padded - (h - bp)
+    w_adj = w_padded - (w - bp)
+    plocs = map_recon["plocs"][0]
+    plocs[..., 0] += h_adj
+    plocs[..., 1] += w_adj
+
+    return recon_at_coords, plocs
     # Add more
 
 
@@ -49,13 +61,17 @@ def reconstruct_scene(encoder, decoder, img_of_interest, slen=80, bp=24):
     chunks = split_scene_into_chunks(img_of_interest, slen, bp)
     reconstructions = []
     bgs = []
+    full_maps = []
     for chunk in tqdm(chunks):
-        recon, bg = reconstruct_img(encoder, decoder, chunk.unsqueeze(0).cuda())
+        recon, bg, full_map = reconstruct_img(encoder, decoder, chunk.unsqueeze(0).cuda())
         reconstructions.append(recon.cpu())
         bgs.append(bg.cpu())
+        full_maps.append(cpu(full_map))
     reconstructions = torch.cat(reconstructions, dim=0)
     bgs = torch.cat(bgs, dim=0)
-    return combine_chunks_into_scene(reconstructions, bgs, slen)
+    scene_recon = combine_chunks_into_scene(reconstructions, bgs, slen)
+    map_recon = combine_full_maps(full_maps, slen)
+    return scene_recon, map_recon
 
 
 def split_scene_into_chunks(scene, slen, bp):
@@ -86,7 +102,9 @@ def reconstruct_img(encoder: Encoder, decoder: ImageDecoder, img):
             add_noise=False,
         )
         background = decoder.get_background(recon_image.shape[-1]).unsqueeze(0)
-    return recon_image, background
+        print(tile_map["locs"].shape)
+        full_map = get_full_params_from_tiles(tile_map, decoder.tile_slen)
+    return recon_image, background, full_map
 
 
 def combine_chunks_into_scene(recon_chunks, bgs, slen):
@@ -109,3 +127,49 @@ def combine_chunks_into_scene(recon_chunks, bgs, slen):
     bgrrr = F.fold(bgr, output_size=output_size, kernel_size=kernel_size, stride=slen)
     # rfinal = rrr
     return rrr + bgrrr
+
+
+def combine_full_maps(full_maps: List[Dict[str, Tensor]], slen):
+    """Combine full maps of chunks into one dictionary for whole scene
+
+    Args:
+        full_maps ([type]): A list of dictionaries where each element is the output
+            of get_full_params_from_tiles().
+        slen ([type]): [description]
+    """
+
+    params = {}
+    for k in full_maps[0].keys():
+        tensors = [full_map[k] for full_map in full_maps]
+        if k != "n_sources":
+            params[k] = torch.cat(tensors, dim=1)
+        else:
+            n_sources = torch.stack(tensors, dim=0)
+
+    n_chunks_h = int(math.sqrt(len(full_maps)))
+    n_chunks_w = n_chunks_h
+    assert n_chunks_h * n_chunks_w == len(full_maps)
+
+    offsets_h = torch.tensor(range(n_chunks_h), device=params["locs"].device)
+    offsets_w = torch.tensor(range(n_chunks_w), device=params["locs"].device)
+    offsets = torch.cartesian_prod(offsets_h, offsets_w)
+    pbias = []
+
+    for i, offset in enumerate(offsets):
+        max_sources = full_maps[i]["locs"].shape[1]
+        pbias_i = repeat(offset * slen, "xy -> 1 max_sources xy", max_sources=max_sources)
+        n_sources_i = n_sources[i].unsqueeze(-1)
+
+        mask_i = torch.tensor(range(max_sources))
+        mask_i = repeat(mask_i, "max_sources -> n max_sources", n=n_sources_i.shape[0])
+        mask_i = mask_i < n_sources_i
+        pbias_i *= mask_i.unsqueeze(-1)
+
+        pbias.append(pbias_i)
+
+    pbias = torch.cat(pbias, dim=1)
+    params["plocs"] = params["plocs"] + pbias
+    params["locs"][..., 0] = params["locs"][..., 0] / (slen * n_chunks_h)
+    params["locs"][..., 1] = params["locs"][..., 1] / (slen * n_chunks_w)
+
+    return params

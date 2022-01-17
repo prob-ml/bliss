@@ -115,7 +115,7 @@ if __name__ == "__main__":
     for scene_name, scene_coords in scenes.items():
         h, w = scene_coords
         true = my_image[:, :, h : (h + SCENE_SIZE), w : (w + SCENE_SIZE)]
-        recon = reconstruct_scene_at_coordinates(encoder, dec, my_image, h, w, SCENE_SIZE)
+        recon, plocs = reconstruct_scene_at_coordinates(encoder, dec, my_image, h, w, SCENE_SIZE)
         resid = (true - recon) / recon.sqrt()
-        fig = create_figure(true[0, 0], recon[0, 0], resid[0, 0])
+        fig = create_figure(true[0, 0], recon[0, 0], resid[0, 0], locs_pred=plocs)
         fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
