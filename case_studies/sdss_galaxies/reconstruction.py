@@ -49,7 +49,7 @@ scenes = {
 SCENE_SIZE = 300
 
 
-def create_figure(true, recon, res, locs_true=None, map_recon=None):
+def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     """Make figures related to detection and classification in SDSS."""
     plt.style.use("seaborn-colorblind")
     pad = 6.0
@@ -75,12 +75,44 @@ def create_figure(true, recon, res, locs_true=None, map_recon=None):
     reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
     reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
-    if locs_true is not None:
-        ax_true.scatter(locs_true[:, 1], locs_true[:, 0], color="g", marker="+", s=20)
-        ax_recon.scatter(
-            locs_true[:, 1], locs_true[:, 0], color="g", marker="+", s=20, label="SDSS Object"
-        )
-        ax_res.scatter(locs_true[:, 1], locs_true[:, 0], color="g", marker="+", s=20)
+    if coadd_objects is not None:
+        locs_true = coadd_objects["locs"]
+        galaxy_bool_true = coadd_objects["galaxy_bool"]
+        locs_galaxies_true = locs_true[galaxy_bool_true > 0.5]
+        locs_stars_true = locs_true[galaxy_bool_true < 0.5]
+        if locs_stars_true.shape[0] > 0:
+            ax_true.scatter(
+                locs_stars_true[:, 1], locs_stars_true[:, 0], color="b", marker="+", s=20
+            )
+            ax_recon.scatter(
+                locs_stars_true[:, 1],
+                locs_stars_true[:, 0],
+                color="b",
+                marker="+",
+                s=20,
+                label="SDSS Stars",
+            )
+            ax_res.scatter(
+                locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="b", marker="+", s=20
+            )
+        if locs_galaxies_true.shape[0] > 0:
+            ax_true.scatter(
+                locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="m", marker="+", s=20
+            )
+            ax_recon.scatter(
+                locs_galaxies_true[:, 1],
+                locs_galaxies_true[:, 0],
+                color="m",
+                marker="+",
+                s=20,
+                label="SDSS Galaxies",
+            )
+            ax_res.scatter(
+                locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="m", marker="+", s=20
+            )
+    else:
+        locs_galaxies_true = None
+        locs_stars_true = None
 
     if map_recon is not None:
         locs_pred = map_recon["plocs"][0]
@@ -117,6 +149,9 @@ def create_figure(true, recon, res, locs_true=None, map_recon=None):
             mode="expand",
             borderaxespad=0.0,
         )
+    else:
+        locs_galaxies = None
+        locs_stars = None
 
     plt.subplots_adjust(hspace=-0.4)
     plt.tight_layout()
@@ -124,21 +159,35 @@ def create_figure(true, recon, res, locs_true=None, map_recon=None):
     return fig
 
 
-def get_true_locs_from_coadd(coadd_cat, h, w, scene_size):
+def get_objects_from_coadd(coadd_cat, h, w, scene_size):
     locs_true_w = torch.from_numpy(np.array(coadd_cat["x"]).astype(float))
     locs_true_h = torch.from_numpy(np.array(coadd_cat["y"]).astype(float))
     locs_true = torch.stack((locs_true_h, locs_true_w), dim=1)
-    locs_true = locs_true[h < locs_true[:, 0]]
-    locs_true = locs_true[w < locs_true[:, 1]]
 
-    locs_true = locs_true[locs_true[:, 0] < h + scene_size]
-    locs_true = locs_true[locs_true[:, 1] < w + scene_size]
+    ## Get relevant objects
+    objects_in_scene = (
+        (h < locs_true[:, 0])
+        & (w < locs_true[:, 1])
+        & (h + scene_size > locs_true[:, 0])
+        & (w + scene_size > locs_true[:, 1])
+    )
+    locs_true = locs_true[objects_in_scene]
+    galaxy_bool = torch.from_numpy(np.array(coadd_cat["galaxy_bool"]).astype(float))
+    galaxy_bool = galaxy_bool[objects_in_scene]
+    # locs_true = locs_true[h < locs_true[:, 0]]
+    # locs_true = locs_true[w < locs_true[:, 1]]
+
+    # locs_true = locs_true[locs_true[:, 0] < h + scene_size]
+    # locs_true = locs_true[locs_true[:, 1] < w + scene_size]
 
     # Shift locs by lower limit
     locs_true[:, 0] = locs_true[:, 0] - h
     locs_true[:, 1] = locs_true[:, 1] - w
 
-    return locs_true
+    return {
+        "locs": locs_true,
+        "galaxy_bool": galaxy_bool,
+    }
 
 
 if __name__ == "__main__":
@@ -168,12 +217,12 @@ if __name__ == "__main__":
     for scene_name, scene_coords in scenes.items():
         h, w = scene_coords
         true = my_image[:, :, h : (h + SCENE_SIZE), w : (w + SCENE_SIZE)]
-        locs_true = get_true_locs_from_coadd(coadd_cat, h, w, SCENE_SIZE)
+        coadd_objects = get_objects_from_coadd(coadd_cat, h, w, SCENE_SIZE)
         recon, map_recon = reconstruct_scene_at_coordinates(
             encoder, dec, my_image, h, w, SCENE_SIZE
         )
         resid = (true - recon) / recon.sqrt()
         fig = create_figure(
-            true[0, 0], recon[0, 0], resid[0, 0], locs_true=locs_true, map_recon=map_recon
+            true[0, 0], recon[0, 0], resid[0, 0], coadd_objects=coadd_objects, map_recon=map_recon
         )
         fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
