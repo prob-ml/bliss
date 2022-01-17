@@ -202,6 +202,12 @@ if __name__ == "__main__":
         type=str,
         help="Where to save figures and caches relative to $BLISS_HOME.",
     )
+    parser.add_argument(
+        "-r",
+        "--real",
+        action="store_true",
+        help="Use galaxy encoder trained on real images",
+    )
     args = vars(parser.parse_args())
     sdss_data = get_sdss_data()
     my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
@@ -209,7 +215,10 @@ if __name__ == "__main__":
 
     sleep = SleepPhase.load_from_checkpoint("models/sdss_sleep.ckpt").to("cuda").eval()
     binary = BinaryEncoder.load_from_checkpoint("models/sdss_binary.ckpt").to("cuda").eval()
-    galaxy = GalaxyEncoder.load_from_checkpoint("models/sdss_galaxy_encoder.ckpt").to("cuda").eval()
+    if args["real"]:
+        galaxy = GalaxyEncoder.load_from_checkpoint("models/sdss_galaxy_encoder_real.ckpt").to("cuda").eval()
+    else:
+        galaxy = GalaxyEncoder.load_from_checkpoint("models/sdss_galaxy_encoder.ckpt").to("cuda").eval()
     location = sleep.image_encoder.to("cuda").eval()
     dec = sleep.image_decoder.to("cuda").eval()
     encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to("cuda")
