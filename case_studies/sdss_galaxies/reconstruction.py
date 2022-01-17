@@ -2,7 +2,9 @@ import argparse
 from pathlib import Path
 
 import torch
+import numpy as np
 from matplotlib import pyplot as plt
+from astropy.table import Table
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.binary import BinaryEncoder
@@ -47,7 +49,7 @@ scenes = {
 SCENE_SIZE = 300
 
 
-def create_figure(true, recon, res, locs=None, map_recon=None):
+def create_figure(true, recon, res, locs_true=None, map_recon=None):
     """Make figures related to detection and classification in SDSS."""
     plt.style.use("seaborn-colorblind")
     pad = 6.0
@@ -73,10 +75,12 @@ def create_figure(true, recon, res, locs=None, map_recon=None):
     reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
     reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
-    if locs is not None:
-        ax_true.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
-        ax_recon.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
-        ax_res.scatter(locs[:, 0], locs[:, 1], color="r", marker="x", s=20)
+    if locs_true is not None:
+        ax_true.scatter(locs_true[:, 1], locs_true[:, 0], color="g", marker="+", s=20)
+        ax_recon.scatter(
+            locs_true[:, 1], locs_true[:, 0], color="g", marker="+", s=20, label="SDSS Object"
+        )
+        ax_res.scatter(locs_true[:, 1], locs_true[:, 0], color="g", marker="+", s=20)
 
     if map_recon is not None:
         locs_pred = map_recon["plocs"][0]
@@ -120,6 +124,23 @@ def create_figure(true, recon, res, locs=None, map_recon=None):
     return fig
 
 
+def get_true_locs_from_coadd(coadd_cat, h, w, scene_size):
+    locs_true_w = torch.from_numpy(np.array(coadd_cat["x"]).astype(float))
+    locs_true_h = torch.from_numpy(np.array(coadd_cat["y"]).astype(float))
+    locs_true = torch.stack((locs_true_h, locs_true_w), dim=1)
+    locs_true = locs_true[h < locs_true[:, 0]]
+    locs_true = locs_true[w < locs_true[:, 1]]
+
+    locs_true = locs_true[locs_true[:, 0] < h + scene_size]
+    locs_true = locs_true[locs_true[:, 1] < w + scene_size]
+
+    # Shift locs by lower limit
+    locs_true[:, 0] = locs_true[:, 0] - h
+    locs_true[:, 1] = locs_true[:, 1] - w
+
+    return locs_true
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create figures related to SDSS galaxies.")
     parser.add_argument(
@@ -132,6 +153,7 @@ if __name__ == "__main__":
     args = vars(parser.parse_args())
     sdss_data = get_sdss_data()
     my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
+    coadd_cat = Table.read("data/coadd_catalog_94_1_12.fits", format="fits")
 
     sleep = SleepPhase.load_from_checkpoint("models/sdss_sleep.ckpt").to("cuda").eval()
     binary = BinaryEncoder.load_from_checkpoint("models/sdss_binary.ckpt").to("cuda").eval()
@@ -146,9 +168,12 @@ if __name__ == "__main__":
     for scene_name, scene_coords in scenes.items():
         h, w = scene_coords
         true = my_image[:, :, h : (h + SCENE_SIZE), w : (w + SCENE_SIZE)]
+        locs_true = get_true_locs_from_coadd(coadd_cat, h, w, SCENE_SIZE)
         recon, map_recon = reconstruct_scene_at_coordinates(
             encoder, dec, my_image, h, w, SCENE_SIZE
         )
         resid = (true - recon) / recon.sqrt()
-        fig = create_figure(true[0, 0], recon[0, 0], resid[0, 0], map_recon=map_recon)
+        fig = create_figure(
+            true[0, 0], recon[0, 0], resid[0, 0], locs_true=locs_true, map_recon=map_recon
+        )
         fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
