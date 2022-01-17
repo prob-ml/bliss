@@ -60,6 +60,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
     # pick standard ranges for residuals
+    scene_size = true.shape[-1]
     vmin_res, vmax_res = res.min().item(), res.max().item()
 
     ax_true = axes[0]
@@ -110,9 +111,6 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
             ax_res.scatter(
                 locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="m", marker="+", s=20
             )
-    else:
-        locs_galaxies_true = None
-        locs_stars_true = None
 
     if map_recon is not None:
         locs_pred = map_recon["plocs"][0]
@@ -121,6 +119,8 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
         locs_galaxies = locs_pred[galaxy_bool[:, 0] > 0.5, :]
         locs_stars = locs_pred[star_bool[:, 0] > 0.5, :]
         if locs_galaxies.shape[0] > 0:
+            in_bounds = torch.all((locs_galaxies > 0) & (locs_galaxies < scene_size), dim=-1)
+            locs_galaxies = locs_galaxies[in_bounds]
             ax_true.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20)
             ax_recon.scatter(
                 locs_galaxies[:, 1],
@@ -133,7 +133,11 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
             )
             ax_res.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20)
         if locs_stars.shape[0] > 0:
-            ax_true.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20, alpha=0.6)
+            in_bounds = torch.all((locs_stars > 0) & (locs_stars < scene_size), dim=-1)
+            locs_stars = locs_stars[in_bounds]
+            ax_true.scatter(
+                locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20, alpha=0.6
+            )
             ax_recon.scatter(
                 locs_stars[:, 1],
                 locs_stars[:, 0],
@@ -151,9 +155,6 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
             mode="expand",
             borderaxespad=0.0,
         )
-    else:
-        locs_galaxies = None
-        locs_stars = None
 
     plt.subplots_adjust(hspace=-0.4)
     plt.tight_layout()
