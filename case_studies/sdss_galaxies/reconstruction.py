@@ -10,7 +10,7 @@ from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.encoder import Encoder
-from bliss.reconstruct import reconstruct_scene_at_coordinates
+from bliss.inference import reconstruct_scene_at_coordinates
 from bliss.sleep import SleepPhase
 from bliss import reporting
 
