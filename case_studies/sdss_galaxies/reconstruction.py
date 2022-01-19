@@ -216,9 +216,15 @@ if __name__ == "__main__":
     sleep = SleepPhase.load_from_checkpoint("models/sdss_sleep.ckpt").to("cuda").eval()
     binary = BinaryEncoder.load_from_checkpoint("models/sdss_binary.ckpt").to("cuda").eval()
     if args["real"]:
-        galaxy = GalaxyEncoder.load_from_checkpoint("models/sdss_galaxy_encoder_real.ckpt").to("cuda").eval()
+        galaxy = (
+            GalaxyEncoder.load_from_checkpoint("models/sdss_galaxy_encoder_real.ckpt")
+            .to("cuda")
+            .eval()
+        )
     else:
-        galaxy = GalaxyEncoder.load_from_checkpoint("models/sdss_galaxy_encoder.ckpt").to("cuda").eval()
+        galaxy = (
+            GalaxyEncoder.load_from_checkpoint("models/sdss_galaxy_encoder.ckpt").to("cuda").eval()
+        )
     location = sleep.image_encoder.to("cuda").eval()
     dec = sleep.image_decoder.to("cuda").eval()
     encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to("cuda")
