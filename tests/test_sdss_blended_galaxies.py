@@ -9,9 +9,9 @@ class TestSdssBlendedGalaxies:
             "+experiment": "sdss_galaxy_encoder_real",
             "dataset.prerender_device": "cuda" if devices.use_cuda else "cpu",
             "+dataset.slen": 40,
-            "+dataset.h_start": 200,
-            "+dataset.w_start": 1800,
-            "+dataset.scene_size": 200,
+            "+dataset.h_start": 200 + 0 + 100,
+            "+dataset.w_start": 1700 + 100 + 100,
+            "+dataset.scene_size": 100,
             "training.n_epochs": 1,
         }
 
