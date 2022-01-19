@@ -1,7 +1,7 @@
+import math
 from typing import List, Dict
 import torch
 from torch import Tensor
-import math
 from torch.nn import functional as F
 from einops import rearrange, repeat
 from tqdm import tqdm

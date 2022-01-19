@@ -1,7 +1,5 @@
 from pathlib import Path
 from typing import Dict, Optional, Tuple
-from matplotlib import pyplot
-import numpy as np
 
 import pytorch_lightning as pl
 import torch
