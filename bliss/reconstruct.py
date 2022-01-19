@@ -1,5 +1,5 @@
 import math
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import torch
 from torch import Tensor
 from torch.nn import functional as F
@@ -12,7 +12,49 @@ from bliss.models.location_encoder import get_full_params_from_tiles, get_params
 from bliss.datasets.sdss_blended_galaxies import cpu
 
 
-def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, slen=80, bp=24):
+def reconstruct_scene_at_coordinates(
+    encoder: Encoder,
+    decoder: ImageDecoder,
+    img: Tensor,
+    h: int,
+    w: int,
+    scene_length: int,
+    slen: int = 80,
+    bp: int = 24,
+) -> Tuple[Tensor, Dict[str, Tensor]]:
+    """Reconstruct all objects contained within a scene, padding as needed.
+
+    This function will run the encoder and decoder on a padded image containing the image specified
+    via h, w, and scene_length, to ensure that all objects can be detected and reconstructed.
+
+    Args:
+        encoder:
+            Trained Encoder module.
+        decoder:
+            Trained ImageDecoder module.
+        img:
+            A NxCxHxW tensor of N HxW images (with C bands).
+        h:
+            Starting height coordinate (top-left)
+        w:
+            Starting width coordinate (top-left)
+        scene_length:
+            Size of (square) image to reconstruct.
+        slen (optional):
+            The side-lengths of smaller chunks to create. Defaults to 80.
+        bp (optional):
+            Border padding needed by encoder. Defaults to 24.
+
+    Returns:
+        A tuple of two items:
+        -  recon_at_coords: A NxCxHxW Tensor of the reconstructed images
+            at the coordinates specified hy h, w, and scene_length.
+        -  map_scene: The maximum-a-posteriori catalog estimated from the image (and surrounding border padding).
+            Note that this may contain objects detected outside the bounds of the image given, but their coordinates
+            will be relative to (h, w). In other words, the locations of these out-of-bounds objects will either be negative if
+            they are to the left/above (h, w) or greater than scene_length.
+
+    """
     # Adjust bp so that we get an even number of chunks in scene
     extra = (scene_length - bp * 2) % slen
     while extra < (2 * bp):
@@ -33,7 +75,7 @@ def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, 
     ]
     assert scene.shape[2] == scene.shape[3] == adj_scene_length
 
-    recon, map_recon = reconstruct_scene(encoder, decoder, scene, slen, bp)
+    recon, map_scene = reconstruct_scene(encoder, decoder, scene, slen, bp)
 
     # Get reconstruction at coordinates
     recon_at_coords = recon[
@@ -46,17 +88,18 @@ def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, 
     # Adjust locations based on padding
     h_adj = h_padded - (h - bp)
     w_adj = w_padded - (w - bp)
-    plocs = map_recon["plocs"]
+    plocs = map_scene["plocs"]
     plocs[..., 0] += h_adj
     plocs[..., 1] += w_adj
-    map_recon["plocs"] = plocs
+    map_scene["plocs"] = plocs
 
-    return recon_at_coords, map_recon
-    # Add more
+    return recon_at_coords, map_scene
 
 
-def reconstruct_scene(encoder, decoder, img_of_interest, slen=80, bp=24):
-    chunks = split_scene_into_chunks(img_of_interest, slen, bp)
+def reconstruct_scene(
+    encoder: Encoder, decoder: ImageDecoder, scene: Tensor, slen: int = 80, bp: int = 24
+) -> Tuple[Tensor, Dict[str, Tensor]]:
+    chunks = split_scene_into_chunks(scene, slen, bp)
     reconstructions = []
     bgs = []
     full_maps = []
@@ -72,7 +115,7 @@ def reconstruct_scene(encoder, decoder, img_of_interest, slen=80, bp=24):
     return scene_recon, map_recon
 
 
-def split_scene_into_chunks(scene, slen, bp):
+def split_scene_into_chunks(scene: Tensor, slen: int, bp: int) -> Tensor:
     kernel_size = slen + bp * 2
     chunks = F.unfold(scene, kernel_size=kernel_size, stride=slen)
     return rearrange(
@@ -84,7 +127,9 @@ def split_scene_into_chunks(scene, slen, bp):
     )
 
 
-def reconstruct_img(encoder: Encoder, decoder: ImageDecoder, img):
+def reconstruct_img(
+    encoder: Encoder, decoder: ImageDecoder, img: Tensor
+) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
     img_ptiles = encoder.get_images_in_ptiles(img)
 
     with torch.no_grad():
@@ -104,7 +149,7 @@ def reconstruct_img(encoder: Encoder, decoder: ImageDecoder, img):
     return recon_image, background, full_map
 
 
-def combine_chunks_into_scene(recon_chunks, bgs, slen):
+def combine_chunks_into_scene(recon_chunks: Tensor, bgs: Tensor, slen: int):
     kernel_size = recon_chunks.shape[-1]
     bp = kernel_size - slen
     rr = rearrange(recon_chunks - bgs, "(b n) c h w -> b (c h w) n", b=1, c=1)
