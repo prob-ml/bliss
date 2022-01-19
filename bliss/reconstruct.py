@@ -14,7 +14,6 @@ from bliss.datasets.sdss_blended_galaxies import cpu
 
 def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, slen=80, bp=24):
     # Adjust bp so that we get an even number of chunks in scene
-    # kernel_size = slen + bp * 2
     extra = (scene_length - bp * 2) % slen
     while extra < (2 * bp):
         extra += slen
@@ -29,8 +28,6 @@ def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, 
         w_padded = w - bp
 
     # First get the mininum coordinates to ensure everything is detected
-    # h_padded = h - bp
-    # w_padded = w - bp
     scene = img[
         :, :, h_padded : (h_padded + adj_scene_length), w_padded : (w_padded + adj_scene_length)
     ]
@@ -38,7 +35,7 @@ def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, 
 
     recon, map_recon = reconstruct_scene(encoder, decoder, scene, slen, bp)
 
-    ## Get reconstruction at coordinates
+    # Get reconstruction at coordinates
     recon_at_coords = recon[
         :,
         :,
@@ -46,7 +43,7 @@ def reconstruct_scene_at_coordinates(encoder, decoder, img, h, w, scene_length, 
         (w - w_padded) : (w - w_padded + scene_length),
     ]
 
-    ## Adjust locations based on padding
+    # Adjust locations based on padding
     h_adj = h_padded - (h - bp)
     w_adj = w_padded - (w - bp)
     plocs = map_recon["plocs"]
@@ -78,14 +75,13 @@ def reconstruct_scene(encoder, decoder, img_of_interest, slen=80, bp=24):
 def split_scene_into_chunks(scene, slen, bp):
     kernel_size = slen + bp * 2
     chunks = F.unfold(scene, kernel_size=kernel_size, stride=slen)
-    chunks = rearrange(
+    return rearrange(
         chunks,
         "b (c h w) n -> (b n) c h w",
         c=scene.shape[1],
         h=kernel_size,
         w=kernel_size,
     )
-    return chunks
 
 
 def reconstruct_img(encoder: Encoder, decoder: ImageDecoder, img):
@@ -112,11 +108,9 @@ def combine_chunks_into_scene(recon_chunks, bgs, slen):
     kernel_size = recon_chunks.shape[-1]
     bp = kernel_size - slen
     rr = rearrange(recon_chunks - bgs, "(b n) c h w -> b (c h w) n", b=1, c=1)
-    # rr = rearrange(recon_chunks, "(b n) c h w -> b (c h w) n", b=1, c=1)
     n_tiles_h = int(math.sqrt(recon_chunks.shape[0]))
     output_size = kernel_size + (n_tiles_h - 1) * slen
     rrr = F.fold(rr, output_size=output_size, kernel_size=kernel_size, stride=slen)
-    # rfinal = rrr + 865
     # We now need to add back in the background; we zero out the right and bottom borders
     # to avoid double-counting
     bgs = rearrange(bgs, "(b nh nw) c h w -> b nh nw c h w", b=1, nh=n_tiles_h)
@@ -126,17 +120,25 @@ def combine_chunks_into_scene(recon_chunks, bgs, slen):
     print(bgr.shape)
     print(rr.shape)
     bgrrr = F.fold(bgr, output_size=output_size, kernel_size=kernel_size, stride=slen)
-    # rfinal = rrr
     return rrr + bgrrr
 
 
-def combine_full_maps(full_maps: List[Dict[str, Tensor]], slen):
-    """Combine full maps of chunks into one dictionary for whole scene
+def combine_full_maps(full_maps: List[Dict[str, Tensor]], chunk_slen: int) -> Dict[str, Tensor]:
+    """Combine full maps of chunks into one dictionary for whole scene.
 
     Args:
-        full_maps ([type]): A list of dictionaries where each element is the output
-            of get_full_params_from_tiles().
-        slen ([type]): [description]
+        full_maps: A list of dictionaries where each element is the output
+            of get_full_params_from_tiles() on a particular chunk.
+        chunk_slen: The side-length of each chunk (assumed to be square chunks).
+
+
+    Returns:
+        A dictionary of tensors of size n_samples x sum(max_sources) x ..., where
+        sum(max_sources) is the sum of the maximum sources found on each chunk.
+        The members of the dictionary are equivalent to those in get_full_params_from_tiles().
+
+        Note that the output of this function is not sorted; you must rely on galaxy_bool and
+        star_bool to determine if a particular source is actually on or not.
     """
 
     params = {}
@@ -158,7 +160,7 @@ def combine_full_maps(full_maps: List[Dict[str, Tensor]], slen):
 
     for i, offset in enumerate(offsets):
         max_sources = full_maps[i]["locs"].shape[1]
-        pbias_i = repeat(offset * slen, "xy -> 1 max_sources xy", max_sources=max_sources)
+        pbias_i = repeat(offset * chunk_slen, "xy -> 1 max_sources xy", max_sources=max_sources)
         n_sources_i = n_sources[i].unsqueeze(-1)
 
         mask_i = torch.tensor(range(max_sources))
@@ -170,7 +172,7 @@ def combine_full_maps(full_maps: List[Dict[str, Tensor]], slen):
 
     pbias = torch.cat(pbias, dim=1)
     params["plocs"] = params["plocs"] + pbias
-    params["locs"][..., 0] = params["locs"][..., 0] / (slen * n_chunks_h)
-    params["locs"][..., 1] = params["locs"][..., 1] / (slen * n_chunks_w)
+    params["locs"][..., 0] = params["locs"][..., 0] / (chunk_slen * n_chunks_h)
+    params["locs"][..., 1] = params["locs"][..., 1] / (chunk_slen * n_chunks_w)
 
     return params
