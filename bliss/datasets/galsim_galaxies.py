@@ -158,8 +158,8 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         unif = (a - b) * torch.rand(1) + b
         return unif.item()
 
-    def _draw_pareto_flux(self):
-        return draw_pareto_maxed((1,), self.device, self.min_flux, self.max_flux, self.alpha)
+    def _draw_pareto_flux(self, device="cpu"):
+        return draw_pareto_maxed((1,), device, self.min_flux, self.max_flux, self.alpha)
 
     def __getitem__(self, idx):
 
