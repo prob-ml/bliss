@@ -650,6 +650,7 @@ class AEReconstructionFigures(BlissFigures):
 
 
 def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
+    raise NotImplementedError("This code hasn't been adapted to use with the VAE yet. Use reconstruction.py instead.")
     os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
 
     if not Path(outdir).exists():
