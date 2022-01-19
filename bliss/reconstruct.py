@@ -1,5 +1,6 @@
 import math
 from typing import List, Dict, Tuple
+
 import torch
 from torch import Tensor
 from torch.nn import functional as F
@@ -40,18 +41,19 @@ def reconstruct_scene_at_coordinates(
             Starting width coordinate (top-left)
         scene_length:
             Size of (square) image to reconstruct.
-        slen (optional):
+        slen:
             The side-lengths of smaller chunks to create. Defaults to 80.
-        bp (optional):
+        bp:
             Border padding needed by encoder. Defaults to 24.
 
     Returns:
         A tuple of two items:
         -  recon_at_coords: A NxCxHxW Tensor of the reconstructed images
             at the coordinates specified hy h, w, and scene_length.
-        -  map_scene: The maximum-a-posteriori catalog estimated from the image (and surrounding border padding).
-            Note that this may contain objects detected outside the bounds of the image given, but their coordinates
-            will be relative to (h, w). In other words, the locations of these out-of-bounds objects will either be negative if
+        -  map_scene: The maximum-a-posteriori catalog estimated from the image
+            (and surrounding border padding). Note that this may contain objects detected
+            outside the bounds of the image given, but their coordinates will be relative to (h, w).
+            In other words, the locations of these out-of-bounds objects will either be negative if
             they are to the left/above (h, w) or greater than scene_length.
 
     """
@@ -174,7 +176,8 @@ def combine_full_maps(full_maps: List[Dict[str, Tensor]], chunk_slen: int) -> Di
     Args:
         full_maps: A list of dictionaries where each element is the output
             of get_full_params_from_tiles() on a particular chunk.
-        chunk_slen: The side-length of each chunk (assumed to be square chunks).
+        chunk_slen:
+            The side-length of each chunk (assumed to be square chunks).
 
 
     Returns:
