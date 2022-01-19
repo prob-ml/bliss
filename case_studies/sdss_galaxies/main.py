@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Produce all figures. Save to nice PDF format."""
+"""Produce all figures. Save to a nice PNG format."""
 import argparse
 import os
 import warnings
@@ -27,6 +27,7 @@ from bliss.predict import predict_on_image, predict_on_scene
 from bliss.sleep import SleepPhase
 
 device = torch.device("cuda:0")
+plt.style.use("seaborn-colorblind")
 pl.seed_everything(0)
 
 files_dict = {
@@ -140,7 +141,7 @@ class BlissFigures:
         data = self.get_data(*args, **kwargs)
         figs = self.create_figures(data)
         for k, fname in self.fignames.items():
-            figs[k].savefig(self.outdir / fname, format="pdf")
+            figs[k].savefig(self.outdir / fname, format="png")
 
     @abstractmethod
     def create_figures(self, data):
@@ -155,8 +156,8 @@ class DetectionClassificationFigures(BlissFigures):
     @property
     def fignames(self):
         return {
-            "detection": "sdss-precision-recall.pdf",
-            "classification": "sdss-classification-acc.pdf",
+            "detection": "sdss-precision-recall.png",
+            "classification": "sdss-classification-acc.png",
         }
 
     def compute_data(self, scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
@@ -280,7 +281,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
     @property
     def fignames(self):
-        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.pdf" for i in range(4)}}
+        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(4)}}
 
     @property
     def lims(self):
@@ -352,7 +353,6 @@ class SDSSReconstructionFigures(BlissFigures):
         """Make figures related to detection and classification in SDSS."""
         out_figures = {}
 
-        plt.style.use("seaborn-colorblind")
         pad = 6.0
         reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname in self.fignames:
@@ -392,10 +392,10 @@ class AEReconstructionFigures(BlissFigures):
     @property
     def fignames(self):
         return {
-            "random_recon": "random_reconstructions.pdf",
-            "worst_recon": "worst_reconstructions.pdf",
-            "measure_contours": "single_galaxy_measurements_contours.pdf",
-            "measure_scatter_bins": "single_galaxy_scatter_bins.pdf",
+            "random_recon": "random_reconstructions.png",
+            "worst_recon": "worst_reconstructions.png",
+            "measure_contours": "single_galaxy_measurements_contours.png",
+            "measure_scatter_bins": "single_galaxy_scatter_bins.png",
         }
 
     def compute_data(self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file):
@@ -686,19 +686,19 @@ def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
         ae_figures.save_figures(autoencoder, galaxies_file, files_dict["psf_file"])
 
     # FIGURE 2: Classification and Detection metrics
-    elif fig in {"2", "all"}:
+    if fig in {"2", "all"}:
         scene = get_sdss_data()["image"]
         coadd_cat = Table.read(files_dict["coadd_cat"], format="fits")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
         dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
 
     # FIGURE 3: Reconstructions on SDSS
-    elif fig in {"3", "all"}:
+    if fig in {"3", "all"}:
         scene = get_sdss_data()["image"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
         sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
 
-    else:
+    if fig not in {"1", "2", "3", "all"}:
         raise NotImplementedError("The figure specified has not been created.")
 
 
