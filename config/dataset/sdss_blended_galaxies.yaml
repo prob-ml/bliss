@@ -1,5 +1,3 @@
 _target_: bliss.datasets.sdss_blended_galaxies.SdssBlendedGalaxies
 sleep_ckpt: models/sdss_sleep.ckpt
 binary_ckpt: models/sdss_binary.ckpt
-# generate_device: "cuda:0"
-# testing_file: null
