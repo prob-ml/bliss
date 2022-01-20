@@ -78,6 +78,9 @@ models:
           - 2
     galaxy_encoder:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
+        prior: ${models.prior}
+        decoder: ${models.decoder}
+        hidden: 256
     galaxy_net:
         _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
         slen: 53
