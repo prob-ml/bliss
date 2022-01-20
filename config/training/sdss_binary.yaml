@@ -1,5 +1,5 @@
 model: ${models.binary}
-dataset: ${datasets.binary}
+dataset: ${datasets.simulated}
 optimizer:
     name: Adam
     kwargs:

@@ -28,14 +28,6 @@ paths:
   data: ${paths.root}/data
 
 datasets:
-    binary:
-        _target_: bliss.datasets.simulated.SimulatedDataset
-        decoder: ${models.decoder}
-        prior: ${models.prior}
-        n_batches: 10
-        batch_size: 32
-        generate_device: "cuda:0"
-        testing_file: null
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
         num_workers: 0
@@ -52,6 +44,14 @@ datasets:
         max_a_b: 3.6 # from catalog with mag < 22.2 cut.
         flux_sample: "uniform"
         psf_image_file: data/psField-000094-1-0012-PSF-image.npy
+    simulated:
+        _target_: bliss.datasets.simulated.SimulatedDataset
+        decoder: ${models.decoder}
+        prior: ${models.prior}
+        n_batches: 10
+        batch_size: 32
+        generate_device: "cuda:0"
+        testing_file: null
 
 models:
     binary:
