@@ -66,10 +66,10 @@ def train(cfg: DictConfig):
     setup_seed(cfg)
 
     # setup dataset.
-    dataset = instantiate(cfg.dataset)
+    dataset = instantiate(cfg.training.dataset)
 
     # setup model
-    model = instantiate(cfg.model)
+    model = instantiate(cfg.training.model, optimizer_params=cfg.training.optimizer)
 
     # setup trainer
     logger = setup_logger(cfg, paths)

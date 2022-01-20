@@ -1,11 +1,14 @@
-n_epochs: 121
+model: ${models.galaxy_net}
+dataset: ${datasets.sdss_galaxies}
+optimizer: ${optimizers.adam}
+n_epochs: 8001
 experiment: default
 version: null
 save_top_k: 1
 trainer:
   _target_: pytorch_lightning.Trainer
   logger: True
-  checkpoint_callback: False
+  checkpoint_callback: true
   profiler: null
   reload_dataloaders_every_epoch: False
   max_epochs: ${training.n_epochs}
