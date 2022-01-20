@@ -1,6 +1,10 @@
 model: ${models.galaxy_net}
 dataset: ${datasets.sdss_galaxies}
-optimizer: ${optimizers.adam}
+optimizer:
+  name: Adam
+  kwargs:
+    lr: 1e-3
+    weight_decay: 0
 n_epochs: 8001
 experiment: default
 version: null

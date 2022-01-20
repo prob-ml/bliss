@@ -100,10 +100,4 @@ models:
     sleep:
         _target_: bliss.models.SleepPhase
 
-optimizers:
-    adam:
-        name: Adam
-        kwargs:
-          lr: 1e-3
-          weight_decay: 0
 
