@@ -39,15 +39,28 @@ def test_galaxy_autoencoder_toy_gaussian(model_setup, devices):
 def test_galaxy_autoencoder_bulge_disk(model_setup, devices):
     use_cuda = devices.use_cuda
     overrides = {
-        "model": "galaxy_net",
-        "dataset": "sdss_galaxies",
-        "dataset.batch_size": 128 if use_cuda else 10,
-        "dataset.n_batches": 5 if use_cuda else 1,
-        "dataset.num_workers": 10 if use_cuda else 0,
-        "training": "unittest",
-        "training.n_epochs": 101 if use_cuda else 2,
-        "optimizer": "adam",
+        "mode": "train",
+        "training": "sdss_autoencoder",
     }
+
+    if use_cuda:
+        overrides.update(
+            {
+                "datasets.sdss_galaxies.batch_size": 128,
+                "datasets.sdss_galaxies.n_batches": 5,
+                "datasets.sdss_galaxies.num_workers": 10,
+                "training.n_epochs": 101,
+            }
+        )
+    else:
+        overrides.update(
+            {
+                "datasets.sdss_galaxies.batch_size": 10,
+                "datasets.sdss_galaxies.n_batches": 1,
+                "datasets.sdss_galaxies.num_workers": 0,
+                "training.n_epochs": 2,
+            }
+        )
 
     # train galaxy_vae
     galaxy_ae = model_setup.get_trained_model(overrides)
