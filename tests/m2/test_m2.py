@@ -3,12 +3,32 @@ import os
 import numpy as np
 import pytest
 import torch
+from hydra import compose, initialize
 
 from bliss.models.location_encoder import (
     get_images_in_tiles,
     get_params_in_batches,
     get_full_params_from_tiles,
 )
+from tests.conftest import ModelSetup
+
+
+def get_m2_cfg(overrides, devices):
+    overrides.update({"gpus": devices.gpus})
+    overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
+    with initialize(config_path="."):
+        cfg = compose("m2", overrides=overrides)
+    return cfg
+
+
+class M2ModelSetup(ModelSetup):
+    def get_cfg(self, overrides):
+        return get_m2_cfg(overrides, self.devices)
+
+
+@pytest.fixture(scope="session")
+def m2_model_setup(devices):
+    return M2ModelSetup(devices)
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
@@ -27,17 +47,30 @@ def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
 
 
 @pytest.fixture(scope="module")
-def trained_star_encoder_m2(model_setup, devices):
+def trained_star_encoder_m2(m2_model_setup, devices):
     overrides = {
-        "model": "sleep_m2",
-        "dataset": "m2" if devices.use_cuda else "cpu",
-        "training": "m2" if devices.use_cuda else "cpu",
         "training.trainer.check_val_every_n_epoch": 9999,
         "training.n_epochs": 50 if devices.use_cuda else 1,
-        "optimizer": "m2",
     }
 
-    sleep_net = model_setup.get_trained_model(overrides)
+    if devices.use_cuda:
+        overrides.update(
+            {
+                "training.n_epochs": 50,
+            }
+        )
+    else:
+        overrides.update(
+            {
+                "training.n_epochs": 1,
+                "datasets.simulated_m2.n_batches": 1,
+                "datasets.simulated_m2.batch_size": 2,
+                "datasets.simulated_m2.generate_device": "cpu",
+                "datasets.simulated_m2.testing_file": None,
+            }
+        )
+
+    sleep_net = m2_model_setup.get_trained_model(overrides)
     return sleep_net.image_encoder.to(devices.device)
 
 
