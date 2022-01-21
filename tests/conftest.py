@@ -51,13 +51,15 @@ class ModelSetup:
         return get_cfg(overrides, self.devices)
 
     def get_trainer(self, overrides):
-        overrides.update({
-            ## Testing-specific overrides
-            "+training.seed": 42,
-            "training.trainer.logger": False,
-            "training.trainer.check_val_every_n_epoch": 1001,
-            "training.trainer.deterministic": True,
-        })
+        overrides.update(
+            {
+                ## Testing-specific overrides
+                "+training.seed": 42,
+                "training.trainer.logger": False,
+                "training.trainer.check_val_every_n_epoch": 1001,
+                "training.trainer.deterministic": True,
+            }
+        )
         cfg = self.get_cfg(overrides)
         if cfg.training.trainer.deterministic:
             pl.seed_everything(cfg.training.seed)
