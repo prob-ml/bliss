@@ -1,7 +1,0 @@
-_target_: bliss.datasets.simulated.SimulatedDataset
-prior: ${model.prior}
-decoder: ${model.decoder}
-n_batches: 1
-batch_size: 2
-generate_device: "cpu"
-testing_file: null
