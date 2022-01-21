@@ -4,7 +4,6 @@ defaults:
   - training: sdss_autoencoder
   - generate: sdss_individual_galaxies
   - testing: default
-  - optional tuning: ${model}
   - predict: sdss
   - override hydra/job_logging: stdout
 
