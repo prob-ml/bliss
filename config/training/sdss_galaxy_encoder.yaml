@@ -16,20 +16,6 @@ training:
             weight_decay: 0
 
     n_epochs: 4001
-    experiment: default
-    version: null
-    save_top_k: 1
     trainer:
-        _target_: pytorch_lightning.Trainer
         checkpoint_callback: True
         check_val_every_n_epoch: 25
-        logger: True
-        profiler: null
-        reload_dataloaders_every_epoch: False
-        max_epochs: ${training.n_epochs}
-        min_epochs: ${training.n_epochs}
-        gpus: ${gpus}
-        limit_train_batches: 1.0
-        limit_val_batches: 1.0
-        log_every_n_steps: 10 # correspond to n_batches
-        deterministic: False
