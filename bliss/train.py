@@ -87,5 +87,5 @@ def train(cfg: DictConfig):
     trainer.fit(model, datamodule=dataset)
 
     # test!
-    if cfg.testing.file is not None:
+    if cfg.training.testing.file is not None:
         _ = trainer.test(model, datamodule=dataset)

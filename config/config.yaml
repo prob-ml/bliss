@@ -3,7 +3,6 @@ defaults:
   - model: sleep_star_basic
   - training: sdss_autoencoder
   - generate: sdss_individual_galaxies
-  - testing: default
   - predict: sdss
   - override hydra/job_logging: stdout
 
@@ -157,3 +156,7 @@ training:
       check_val_every_n_epoch: 10
       log_every_n_steps: 10 # correspond to n_batches
       deterministic: False
+    testing:
+      file: null
+      batch_size: 32
+      num_workers: 0
