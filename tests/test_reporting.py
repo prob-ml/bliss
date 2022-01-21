@@ -23,8 +23,8 @@ def test_coadd(paths):
 
     # get psf
     with initialize(config_path="../config"):
-        cfg = compose("config", overrides=["dataset=sdss_galaxies"])
-    ds = instantiate(cfg.dataset)
+        cfg = compose("config")
+    ds = instantiate(cfg.datasets.sdss_galaxies)
     psf = ds.psf
 
     # read file and get flux / hlr
