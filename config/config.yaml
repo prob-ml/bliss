@@ -76,6 +76,15 @@ models:
           - 865.0
         sdss_bands:
           - 2
+    encoder:
+        n_bands: ${models.decoder.n_bands}
+        tile_slen: ${models.decoder.tile_slen}
+        ptile_slen: 52
+        max_detections: ${models.prior.max_sources}
+        channel: 8
+        spatial_dropout: 0.0
+        dropout: 0.0
+        hidden: 128
     galaxy_encoder:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         prior: ${models.prior}
@@ -101,6 +110,28 @@ models:
         autoencoder_ckpt: models/sdss_autoencoder.ckpt
         latents_file: data/latents_simulated_sdss_galaxies.pt
     sleep:
-        _target_: bliss.models.SleepPhase
+        _target_: bliss.sleep.SleepPhase
+        encoder: ${models.encoder}
+        prior: ${models.prior}
+        decoder: ${models.decoder}
+        annotate_probs: True
 
-
+training:
+    n_epochs: 121
+    experiment: default
+    version: null
+    save_top_k: 1
+    trainer:
+      _target_: pytorch_lightning.Trainer
+      logger: True
+      checkpoint_callback: False
+      profiler: null
+      reload_dataloaders_every_epoch: False
+      max_epochs: ${training.n_epochs}
+      min_epochs: ${training.n_epochs}
+      gpus: ${gpus}
+      limit_train_batches: 1.0
+      limit_val_batches: 1.0
+      check_val_every_n_epoch: 10
+      log_every_n_steps: 10 # correspond to n_batches
+      deterministic: False
