@@ -8,9 +8,9 @@ def test_binary(model_setup, devices):
     else:
         overrides.update(
             {
-                "dataset.n_batches": 1,
-                "dataset.batch_size": 2,
-                "dataset.generate_device": "cpu",
+                "datasets.simulated.n_batches": 1,
+                "datasets.simulated.batch_size": 2,
+                "datasets.simulated.generate_device": "cpu",
                 "training.n_epochs": 2,
             }
         )

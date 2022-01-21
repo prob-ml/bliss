@@ -1,16 +1,29 @@
 def test_galaxy_autoencoder_toy_gaussian(model_setup, devices):
     use_cuda = devices.use_cuda
     overrides = {
-        "model": "galaxy_net",
-        "model.residual_delay_n_steps": 50 if use_cuda else 0,
-        "dataset": "toy_gaussian",
-        "dataset.batch_size": 64 if use_cuda else 10,
-        "dataset.n_batches": 10 if use_cuda else 1,
-        "training": "unittest",
-        "training.n_epochs": 101 if use_cuda else 2,
-        "training.trainer.check_val_every_n_epoch": 50 if use_cuda else 1,
-        "optimizer": "adam",
+        "mode": "train",
+        "training": "sdss_autoencoder",
+        "training.dataset": "${datasets.toy_gaussian}",
     }
+
+    if use_cuda:
+        overrides.update(
+            {
+                "models.galaxy_net.residual_delay_n_steps": 500,
+                "training.n_epochs": 101,
+                "training.trainer.check_val_every_n_epoch": 50,
+            }
+        )
+    else:
+        overrides.update(
+            {
+                "models.galaxy_net.residual_delay_n_steps": 0,
+                "datasets.toy_gaussian.batch_size": 10,
+                "datasets.toy_gaussian.n_batches": 1,
+                "training.n_epochs": 2,
+                "training.trainer.check_val_every_n_epoch": 1,
+            }
+        )
 
     # train galaxy_vae
     galaxy_ae = model_setup.get_trained_model(overrides)
