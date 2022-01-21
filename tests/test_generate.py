@@ -7,8 +7,10 @@ from bliss import generate
 
 def test_generate_run(devices, paths):
     overrides = {
-        "dataset.generate_device": "cuda:0" if devices.use_cuda else "cpu",
+        "generate.dataset" : "${datasets.simulated}",
+        "datasets.simulated.generate_device": "cuda:0" if devices.use_cuda else "cpu",
         "generate.file": f"{paths['root']}/example.pt",
+        "generate.common": ["background", "slen"],
     }
     overrides = [f"{k}={v}" for k, v in overrides.items()]
     with initialize(config_path="../config"):

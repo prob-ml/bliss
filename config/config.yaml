@@ -4,6 +4,7 @@ defaults:
   - model: sleep_star_basic
   - dataset: default
   - training: sdss_autoencoder
+  - generate: sdss_individual_galaxies
   - testing: default
   - optional tuning: ${model}
   - predict: sdss
