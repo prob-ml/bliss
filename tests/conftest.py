@@ -53,7 +53,7 @@ class ModelSetup:
     def get_trainer(self, overrides):
         overrides.update(
             {
-                ## Testing-specific overrides
+                # Testing-specific overrides
                 "+training.seed": 42,
                 "training.trainer.logger": False,
                 "training.trainer.check_val_every_n_epoch": 1001,
