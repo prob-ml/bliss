@@ -1,5 +1,5 @@
 import pytest
-from hydra.utils import instantiate
+
 from bliss.train import train
 
 
