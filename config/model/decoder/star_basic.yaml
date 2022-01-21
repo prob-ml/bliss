@@ -1,8 +1,0 @@
-n_bands: 1
-slen: 30
-tile_slen: 2
-ptile_slen: 6
-prob_galaxy: 0.0
-psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
-background_values:
-  - 865.0

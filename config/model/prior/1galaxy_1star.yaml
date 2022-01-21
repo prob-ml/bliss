@@ -1,9 +1,0 @@
-n_bands: 1
-slen: 40
-tile_slen: 4
-prob_galaxy: 0.5
-max_sources: 1
-mean_sources: 0.035
-min_sources: 0
-autoencoder_ckpt: models/sdss_autoencoder.ckpt
-latents_file: data/latents_simulated_sdss_galaxies.pt
