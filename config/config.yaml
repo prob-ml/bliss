@@ -2,7 +2,6 @@ defaults:
   - _self_
   - optimizer: adam
   - model: sleep_star_basic
-  - dataset: default
   - training: sdss_autoencoder
   - generate: sdss_individual_galaxies
   - testing: default

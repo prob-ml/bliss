@@ -1,5 +1,6 @@
 import pytest
 from hydra.utils import instantiate
+from bliss.train import train
 
 
 class TestBasicGalaxyMeasure:
@@ -24,7 +25,4 @@ class TestBasicGalaxyMeasure:
 
     def test_simulated(self, devices, overrides, get_config):
         cfg = get_config(overrides, devices)
-        galaxy_encoder = instantiate(cfg.model)
-        dataset = instantiate(cfg.dataset)
-        trainer = instantiate(cfg.training.trainer)
-        trainer.fit(galaxy_encoder, datamodule=dataset)
+        train(cfg)

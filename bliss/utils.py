@@ -31,9 +31,9 @@ def log_hyperparameters(config, model, trainer) -> None:
     hparams["mode"] = config["mode"]
     hparams["gpus"] = config["gpus"]
     hparams["training"] = config["training"]
-    hparams["model"] = config["model"]
-    hparams["dataset"] = config["dataset"]
-    hparams["optimizer"] = config["optimizer"]
+    hparams["model"] = config["training"]["model"]
+    hparams["dataset"] = config["training"]["dataset"]
+    hparams["optimizer"] = config["training"]["optimizer"]
 
     # save number of model parameters
     hparams["model/params_total"] = sum(p.numel() for p in model.parameters())
