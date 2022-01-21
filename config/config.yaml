@@ -5,7 +5,6 @@ defaults:
   - dataset: default
   - training: sdss_autoencoder
   - testing: default
-  - generate: default
   - optional tuning: ${model}
   - predict: sdss
   - override hydra/job_logging: stdout
