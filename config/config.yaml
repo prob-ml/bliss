@@ -2,7 +2,6 @@ defaults:
   - _self_
   - training: sdss_autoencoder
   - generate: sdss_individual_galaxies
-  - predict: sdss
   - override hydra/job_logging: stdout
 
 # completely disable hydra logging
@@ -136,6 +135,34 @@ generate:
     file:
     common: # What attributes of dataset items are in common and should not be stacked?
     n_plots: 25
+predict:
+    sdss_kwargs:
+        sdss_dir: data/sdss
+        run: 94
+        camcol: 1
+        fields:
+            - 12
+        stampsize: 5
+        overwrite_fits_cache: False
+        overwrite_cache: False
+        center_subpixel: True
+    bands:
+    - 2
+
+    # chunk properties
+    clen: 300
+
+    # i/o parameters
+    sleep_checkpoint: models/sdss_sleep.ckpt
+    galaxy_checkpoint: models/sdss_galaxy_encoder.ckpt
+    binary_checkpoint: models/sdss_binary.ckpt
+    device: "cuda:0"
+    output_file: null
+
+    # coverage for tests
+    testing: False
+
+
 training:
     n_epochs: 121
     experiment: default
