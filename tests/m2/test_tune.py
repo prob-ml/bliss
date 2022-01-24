@@ -2,7 +2,6 @@ import shutil
 
 import pytest
 import torch
-from hydra import compose, initialize
 
 from bliss import tune
 
@@ -20,11 +19,7 @@ class TestTune:
                 allocated_gpus = 1
 
         overrides = {
-            "model": "sleep_m2",
-            "dataset": "m2" if devices.use_cuda else "cpu",
-            "dataset.n_batches": 10 if devices.use_cuda else 2,
-            "training": "m2" if devices.use_cuda else "cpu",
-            "optimizer": "m2",
+            "tuning.model": "${models.sleep}",
             "tuning.n_epochs": 2 if devices.use_cuda else 1,
             "tuning.allocated_gpus": allocated_gpus,
             "tuning.gpus_per_trial": gpus_per_trial,
@@ -34,11 +29,20 @@ class TestTune:
             "tuning.n_samples": 2 if devices.use_cuda else 1,
             "tuning.log_path": f"{paths['root']}/tuning",
         }
-        return [f"{k}={v}" for k, v in overrides.items()]
+
+        if not devices.use_cuda:
+            overrides.update(
+                {
+                    "datasets.simulated_m2.n_batches": 1,
+                    "datasets.simulated_m2.batch_size": 2,
+                    "datasets.simulated_m2.generate_device": "cpu",
+                    "datasets.simulated_m2.testing_file": None,
+                }
+            )
+        return overrides
 
     @pytest.mark.filterwarnings("ignore:.*Relying on `self.log.*:DeprecationWarning")
-    def test_tune_run(self, paths, overrides):
-        with initialize(config_path="../config"):
-            cfg = compose("config", overrides=overrides)
-            tune.tune(cfg)
+    def test_tune_run(self, paths, overrides, m2_model_setup):
+        cfg = m2_model_setup.get_cfg(overrides)
+        tune.tune(cfg)
         shutil.rmtree(f"{paths['root']}/tuning")

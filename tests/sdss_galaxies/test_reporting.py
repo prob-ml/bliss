@@ -3,7 +3,6 @@ from pathlib import Path
 import galsim
 import torch
 from astropy.table import Table
-from hydra import compose, initialize
 from hydra.utils import instantiate
 
 from bliss import reporting
