@@ -19,11 +19,10 @@ def test_scene_metrics():
     reporting.scene_metrics(true_params, true_params, mag_cut=25, slack=1.0, mag_slack=0.25)
 
 
-def test_coadd(paths):
+def test_coadd(paths, devices, get_config):
 
     # get psf
-    with initialize(config_path="../config"):
-        cfg = compose("config")
+    cfg = get_config({}, devices)
     ds = instantiate(cfg.datasets.sdss_galaxies)
     psf = ds.psf
 
