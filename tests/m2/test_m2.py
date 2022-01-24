@@ -3,32 +3,12 @@ import os
 import numpy as np
 import pytest
 import torch
-from hydra import compose, initialize
 
 from bliss.models.location_encoder import (
     get_images_in_tiles,
     get_params_in_batches,
     get_full_params_from_tiles,
 )
-from tests.conftest import ModelSetup
-
-
-def get_m2_cfg(overrides, devices):
-    overrides.update({"gpus": devices.gpus})
-    overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
-    with initialize(config_path="."):
-        cfg = compose("m2", overrides=overrides)
-    return cfg
-
-
-class M2ModelSetup(ModelSetup):
-    def get_cfg(self, overrides):
-        return get_m2_cfg(overrides, self.devices)
-
-
-@pytest.fixture(scope="session")
-def m2_model_setup(devices):
-    return M2ModelSetup(devices)
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
