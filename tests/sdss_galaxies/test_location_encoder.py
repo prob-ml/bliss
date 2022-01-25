@@ -1,11 +1,13 @@
 import pytest
 
+from bliss.train import train
+
 
 @pytest.fixture(scope="module")
 def overrides(devices):
     overrides = {
         "mode": "train",
-        "training": "sdss_binary",
+        "training": "sdss_sleep",
     }
     if devices.use_cuda:
         overrides.update({"training.n_epochs": 50})
@@ -21,18 +23,17 @@ def overrides(devices):
     return overrides
 
 
-def test_binary(model_setup, devices, overrides):
-    trained_binary = model_setup.get_trained_model(overrides)
-    results = model_setup.test_model(overrides, trained_binary)
-
-    if devices.use_cuda:
-        assert results["acc"] > 0.85
+def test_location_encoder(overrides, devices, get_config):
+    cfg = get_config(overrides, devices)
+    train(cfg)
 
 
-def test_binary_plotting(model_setup, overrides):
+def test_location_encoder_plotting(overrides, model_setup):
+    # just to test `make_validation_plots` works.
     overrides.update(
         {
             "datasets.simulated.batch_size": 16,
+            "models.sleep.annotate_probs": True,
             "training.trainer.log_every_n_steps": 1,
         }
     )
