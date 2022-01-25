@@ -1,25 +1,25 @@
 defaults:
-  - _self_
-  - training: sdss_autoencoder
-  - generate: sdss_individual_galaxies
-  - override hydra/job_logging: stdout
+    - _self_
+    - training: sdss_autoencoder
+    - generate: sdss_individual_galaxies
+    - override hydra/job_logging: stdout
 
 # completely disable hydra logging
 # https://github.com/facebookresearch/hydra/issues/910
 hydra:
-  output_subdir: null
-  run:
-    dir: .
+    output_subdir: null
+    run:
+        dir: .
 
 mode: train
 
 gpus: 1 # use a single gpu by default.
 
 paths:
-  root: ${oc.env:BLISS_HOME}
-  output: ${paths.root}/output
-  sdss: ${paths.root}/data/sdss
-  data: ${paths.root}/data
+    root: ${oc.env:BLISS_HOME}
+    output: ${paths.root}/output
+    sdss: ${paths.root}/data/sdss
+    data: ${paths.root}/data
 
 datasets:
     sdss_blended_galaxies:
@@ -87,9 +87,9 @@ models:
         prob_galaxy: 0.7
         autoencoder_ckpt: models/sdss_autoencoder.ckpt
         background_values:
-          - 865.0
+            - 865.0
         sdss_bands:
-          - 2
+            - 2
     encoder:
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
@@ -169,20 +169,20 @@ training:
     version: null
     save_top_k: 1
     trainer:
-      _target_: pytorch_lightning.Trainer
-      logger: True
-      checkpoint_callback: False
-      profiler: null
-      reload_dataloaders_every_epoch: False
-      max_epochs: ${training.n_epochs}
-      min_epochs: ${training.n_epochs}
-      gpus: ${gpus}
-      limit_train_batches: 1.0
-      limit_val_batches: 1.0
-      check_val_every_n_epoch: 10
-      log_every_n_steps: 10 # correspond to n_batches
-      deterministic: False
+        _target_: pytorch_lightning.Trainer
+        logger: True
+        checkpoint_callback: False
+        profiler: null
+        reload_dataloaders_every_epoch: False
+        max_epochs: ${training.n_epochs}
+        min_epochs: ${training.n_epochs}
+        gpus: ${gpus}
+        limit_train_batches: 1.0
+        limit_val_batches: 1.0
+        check_val_every_n_epoch: 10
+        log_every_n_steps: 10 # correspond to n_batches
+        deterministic: False
     testing:
-      file: null
-      batch_size: 32
-      num_workers: 0
+        file: null
+        batch_size: 32
+        num_workers: 0
