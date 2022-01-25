@@ -54,7 +54,7 @@ def center_ptiles(
 class GalaxyEncoder(pl.LightningModule):
     def __init__(
         self,
-        prior,
+        prior: ImagePrior,
         decoder,
         hidden: int = 256,
         optimizer_params: dict = None,
@@ -70,7 +70,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.max_flux_valid_plots = max_flux_valid_plots
 
         # to produce images to train on.
-        self.image_prior = ImagePrior(**prior)
+        self.image_prior = prior
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 

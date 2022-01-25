@@ -124,7 +124,7 @@ class SleepPhase(pl.LightningModule):
     def __init__(
         self,
         encoder: dict,
-        prior: dict,
+        prior: ImagePrior,
         decoder: dict,
         annotate_probs: bool = False,
         slack=1.0,
@@ -134,7 +134,7 @@ class SleepPhase(pl.LightningModule):
 
         Args:
             encoder: keyword arguments to instantiate ImageEncoder
-            prior: keyword arguments to instantiate ImagePrior
+            prior: ImagePrior module
             decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
             slack: Threshold distance in pixels for matching objects.
@@ -144,7 +144,7 @@ class SleepPhase(pl.LightningModule):
         self.save_hyperparameters()
 
         self.image_encoder = LocationEncoder(**encoder)
-        self.image_prior = ImagePrior(**prior)
+        self.image_prior = prior
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
 

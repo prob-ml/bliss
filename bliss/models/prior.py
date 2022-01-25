@@ -1,13 +1,14 @@
 from pathlib import Path
+from typing import Optional
 
 import torch
 import pytorch_lightning as pl
 from einops import rearrange
 from torch.distributions import Poisson
 
-from bliss.models import galaxy_net
 from bliss.models.location_encoder import get_is_on_from_n_sources
 from bliss.datasets.galsim_galaxies import SDSSGalaxies
+from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
 
 class ImagePrior(pl.LightningModule):
@@ -45,6 +46,7 @@ class ImagePrior(pl.LightningModule):
         f_max: float = 1e6,
         alpha: float = 0.5,
         prob_galaxy: float = 0.0,
+        autoencoder: Optional[OneCenteredGalaxyAE] = None,
         autoencoder_ckpt: str = None,
         latents_file: str = None,
         n_latent_batches: int = 160,
@@ -64,7 +66,8 @@ class ImagePrior(pl.LightningModule):
             f_max: Prior parameter on fluxes
             alpha: Prior parameter on fluxes (pareto parameter)
             prob_galaxy: Prior probability a source is a galaxy
-            autoencoder_ckpt: Location of checkpoint of galaxy encoder.
+            autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
+            autoencoder_ckpt: Location of state_dict for autoencoder (optional).
             latents_file: Location of previously sampled galaxy latent variables.
             n_latent_batches: Number of batches for galaxy latent samples.
         """
@@ -87,7 +90,8 @@ class ImagePrior(pl.LightningModule):
 
         self.prob_galaxy = float(prob_galaxy)
         if prob_galaxy > 0.0:
-            latents = get_galaxy_latents(latents_file, n_latent_batches, autoencoder_ckpt)
+            autoencoder.load_state_dict(torch.load(autoencoder_ckpt))
+            latents = get_galaxy_latents(latents_file, n_latent_batches, autoencoder)
         else:
             latents = torch.zeros(1, 1)
         self.register_buffer("latents", latents)
@@ -246,13 +250,12 @@ class ImagePrior(pl.LightningModule):
         return galaxy_params * galaxy_bool
 
 
-def get_galaxy_latents(latents_file: str, n_latent_batches: int, autoencoder_ckpt: str = None):
+def get_galaxy_latents(latents_file: str, n_latent_batches: int, autoencoder: OneCenteredGalaxyAE):
     assert latents_file is not None
     latents_file = Path(latents_file)
     if latents_file.exists():
         latents = torch.load(latents_file, "cpu")
     else:
-        autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
         psf_image_file = latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
         dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
         dataloader = dataset.train_dataloader()

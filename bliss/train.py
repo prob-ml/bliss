@@ -1,7 +1,6 @@
 from typing import Optional
 from pathlib import Path
 
-
 import torch
 import pytorch_lightning as pl
 from hydra.utils import instantiate
@@ -94,7 +93,7 @@ def train(cfg: DictConfig):
     if cfg.training.testing.file is not None:
         _ = trainer.test(model, datamodule=dataset)
 
-    ## Load best weights from checkpoint
+    # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None:
         model_to_save = type(model).load_from_checkpoint(checkpoint_callback.best_model_path)
         model_to_save.state_dict()

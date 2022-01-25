@@ -27,6 +27,11 @@ def pytest_collection_modifyitems(config, items):
 
 def get_cfg(overrides, devices):
     overrides.update({"gpus": devices.gpus})
+    overrides.update(
+        {
+            "training.weight_save_path": None,
+        }
+    )
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
@@ -58,7 +63,6 @@ class ModelSetup:
                 "training.trainer.logger": False,
                 "training.trainer.check_val_every_n_epoch": 1001,
                 "training.trainer.deterministic": True,
-                "training.weight_save_path": None,
             }
         )
         cfg = self.get_cfg(overrides)
