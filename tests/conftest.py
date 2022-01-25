@@ -58,6 +58,7 @@ class ModelSetup:
                 "training.trainer.logger": False,
                 "training.trainer.check_val_every_n_epoch": 1001,
                 "training.trainer.deterministic": True,
+                "training.weight_save_path": None,
             }
         )
         cfg = self.get_cfg(overrides)
