@@ -1,9 +1,0 @@
-defaults:
-  - decoder: star_basic
-  - prior: star_basic
-  - encoder: star_basic
-
-_target_: bliss.sleep.SleepPhase
-
-optimizer_params: ${optimizer}
-annotate_probs: false

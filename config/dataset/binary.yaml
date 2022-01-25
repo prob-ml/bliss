@@ -1,9 +1,0 @@
-defaults:
-  - /model/decoder/sdss_standard@decoder
-  - /model/prior/sdss_standard@prior
-
-_target_: bliss.datasets.simulated.SimulatedDataset
-n_batches: 10
-batch_size: 32
-generate_device: "cuda:0"
-testing_file: null

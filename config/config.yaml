@@ -1,28 +1,188 @@
 defaults:
-  - _self_
-  - optimizer: adam
-  - model: sleep_star_basic
-  - training: default
-  - dataset: default
-  - testing: default
-  - generate: default
-  - optional tuning: ${model}
-  - predict: sdss
-  - override hydra/job_logging: stdout
+    - _self_
+    - training: sdss_autoencoder
+    - generate: sdss_individual_galaxies
+    - override hydra/job_logging: stdout
 
 # completely disable hydra logging
 # https://github.com/facebookresearch/hydra/issues/910
 hydra:
-  output_subdir: null
-  run:
-    dir: .
+    output_subdir: null
+    run:
+        dir: .
 
 mode: train
 
 gpus: 1 # use a single gpu by default.
 
 paths:
-  root: ${oc.env:BLISS_HOME}
-  output: ${paths.root}/output
-  sdss: ${paths.root}/data/sdss
-  data: ${paths.root}/data
+    root: ${oc.env:BLISS_HOME}
+    output: ${paths.root}/output
+    sdss: ${paths.root}/data/sdss
+    data: ${paths.root}/data
+
+datasets:
+    sdss_blended_galaxies:
+        _target_: bliss.datasets.sdss_blended_galaxies.SdssBlendedGalaxies
+        sleep_ckpt: models/sdss_sleep.ckpt
+        binary_ckpt: models/sdss_binary.ckpt
+        prerender_device: "cuda"
+    sdss_galaxies:
+        _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
+        num_workers: 0
+        batch_size: 64
+        n_batches: 10
+        background: 865
+        noise_factor: 0.01
+        slen: 53
+        min_flux: 1e3
+        max_flux: 3.5e5
+        min_a_d: 0.8
+        max_a_d: 6.5
+        min_a_b: 0.8
+        max_a_b: 3.6 # from catalog with mag < 22.2 cut.
+        flux_sample: "uniform"
+        psf_image_file: data/psField-000094-1-0012-PSF-image.npy
+    simulated:
+        _target_: bliss.datasets.simulated.SimulatedDataset
+        decoder: ${models.decoder}
+        prior: ${models.prior}
+        n_batches: 10
+        batch_size: 32
+        generate_device: "cuda:0"
+        testing_file: null
+    toy_gaussian:
+        _target_: bliss.datasets.galsim_galaxies.ToyGaussian
+        num_workers: 0
+        n_batches: 10
+        batch_size: 64
+        slen: 53
+        background: 865.
+        psf_fwhm: 0.8
+        noise_factor: 0.1
+        pixel_scale: 0.4
+        min_flux: 300 # to be observable it cannot be too below background.
+        max_flux: 10000
+        min_hlr: 0.8
+        max_hlr: 3.0
+        max_e: 0.6
+
+models:
+    binary:
+        _target_: bliss.models.binary.BinaryEncoder
+        n_bands: 1
+        tile_slen: 4
+        ptile_slen: 52
+        channel: 8
+        hidden: 128
+        spatial_dropout: 0.0
+        dropout: 0.0
+    decoder:
+        n_bands: 1
+        slen: 40
+        tile_slen: 4
+        ptile_slen: 52
+        border_padding: 24
+        psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
+        prob_galaxy: 0.7
+        autoencoder_ckpt: models/sdss_autoencoder.ckpt
+        background_values:
+            - 865.0
+        sdss_bands:
+            - 2
+    encoder:
+        n_bands: ${models.decoder.n_bands}
+        tile_slen: ${models.decoder.tile_slen}
+        ptile_slen: 52
+        max_detections: ${models.prior.max_sources}
+        channel: 8
+        spatial_dropout: 0.0
+        dropout: 0.0
+        hidden: 128
+    galaxy_encoder:
+        _target_: bliss.models.galaxy_encoder.GalaxyEncoder
+        prior: ${models.prior}
+        decoder: ${models.decoder}
+        hidden: 256
+    galaxy_net:
+        _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
+        slen: 53
+        latent_dim: 64
+        n_bands: 1
+        residual_delay_n_steps: 500
+    prior: 
+        n_bands: 1
+        slen: 40
+        tile_slen: 4
+        max_sources: 1
+        mean_sources: 0.03
+        min_sources: 0
+        f_min: 1e3
+        f_max: 1e6
+        alpha: 0.5
+        prob_galaxy: 0.7
+        autoencoder_ckpt: models/sdss_autoencoder.ckpt
+        latents_file: data/latents_simulated_sdss_galaxies.pt
+    sleep:
+        _target_: bliss.sleep.SleepPhase
+        encoder: ${models.encoder}
+        prior: ${models.prior}
+        decoder: ${models.decoder}
+        annotate_probs: True
+
+generate:
+    dataset:
+    file:
+    common: # What attributes of dataset items are in common and should not be stacked?
+    n_plots: 25
+predict:
+    sdss_kwargs:
+        sdss_dir: data/sdss
+        run: 94
+        camcol: 1
+        fields:
+            - 12
+        stampsize: 5
+        overwrite_fits_cache: False
+        overwrite_cache: False
+        center_subpixel: True
+    bands:
+    - 2
+
+    # chunk properties
+    clen: 300
+
+    # i/o parameters
+    sleep_checkpoint: models/sdss_sleep.ckpt
+    galaxy_checkpoint: models/sdss_galaxy_encoder.ckpt
+    binary_checkpoint: models/sdss_binary.ckpt
+    device: "cuda:0"
+    output_file: null
+
+    # coverage for tests
+    testing: False
+
+
+training:
+    n_epochs: 121
+    experiment: default
+    version: null
+    save_top_k: 1
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        logger: True
+        checkpoint_callback: False
+        profiler: null
+        reload_dataloaders_every_epoch: False
+        max_epochs: ${training.n_epochs}
+        min_epochs: ${training.n_epochs}
+        gpus: ${gpus}
+        limit_train_batches: 1.0
+        limit_val_batches: 1.0
+        check_val_every_n_epoch: 10
+        log_every_n_steps: 10 # correspond to n_batches
+        deterministic: False
+    testing:
+        file: null
+        batch_size: 32
+        num_workers: 0
