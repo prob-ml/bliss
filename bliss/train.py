@@ -1,5 +1,8 @@
+from typing import Optional
 from pathlib import Path
 
+
+import torch
 import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
@@ -28,8 +31,7 @@ def setup_logger(cfg, paths):
     return logger
 
 
-def setup_callbacks(cfg):
-    callbacks = []
+def setup_callbacks(cfg) -> Optional[ModelCheckpoint]:
     if cfg.training.trainer.checkpoint_callback:
         checkpoint_callback = ModelCheckpoint(
             filename="epoch={epoch}-val_loss={val/loss:.3f}",
@@ -40,9 +42,9 @@ def setup_callbacks(cfg):
             save_on_train_epoch_end=False,
             auto_insert_metric_name=False,
         )
-        callbacks.append(checkpoint_callback)
-
-    return callbacks
+    else:
+        checkpoint_callback = None
+    return checkpoint_callback
 
 
 def setup_profiler(cfg):
@@ -73,8 +75,10 @@ def train(cfg: DictConfig):
 
     # setup trainer
     logger = setup_logger(cfg, paths)
-    callbacks = setup_callbacks(cfg)
+    checkpoint_callback = setup_callbacks(cfg)
     profiler = setup_profiler(cfg)
+
+    callbacks = [] if checkpoint_callback is None else [checkpoint_callback]
 
     trainer = instantiate(
         cfg.training.trainer, logger=logger, profiler=profiler, callbacks=callbacks
@@ -89,3 +93,9 @@ def train(cfg: DictConfig):
     # test!
     if cfg.training.testing.file is not None:
         _ = trainer.test(model, datamodule=dataset)
+
+    ## Load best weights from checkpoint
+    if cfg.training.weight_save_path is not None:
+        model_to_save = type(model).load_from_checkpoint(checkpoint_callback.best_model_path)
+        model_to_save.state_dict()
+        torch.save(model_to_save, cfg.training.weight_save_path)

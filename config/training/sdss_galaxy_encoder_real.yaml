@@ -11,6 +11,7 @@ models:
     mean_sources: 0.04
 
 training:
+  name: "sdss_galaxy_encoder_real"
   model: ${models.galaxy_encoder}
   dataset: ${datasets.sdss_blended_galaxies}
   optimizer:
