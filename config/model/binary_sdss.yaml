@@ -1,9 +1,0 @@
-_target_: bliss.models.binary.BinaryEncoder
-n_bands: 1
-tile_slen: 4
-ptile_slen: 52
-channel: 8
-hidden: 128
-spatial_dropout: 0.0
-dropout: 0.0
-optimizer_params: ${optimizer}

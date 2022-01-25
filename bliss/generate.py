@@ -38,7 +38,7 @@ def generate(cfg: DictConfig):
 
     filepath = Path(cfg.generate.file)
     imagepath = Path(filepath.parent).joinpath(filepath.stem + "_images.pdf")
-    dataset = instantiate(cfg.dataset)
+    dataset = instantiate(cfg.generate.dataset)
 
     # params common to all batches (do not stack).
     global_params = set(cfg.generate.common)

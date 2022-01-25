@@ -1,5 +1,0 @@
-file: ${paths.root}/output/example.pt
-n_plots: 25
-common:
-  - background
-  - slen

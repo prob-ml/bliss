@@ -51,29 +51,38 @@ class ModelSetup:
         return get_cfg(overrides, self.devices)
 
     def get_trainer(self, overrides):
+        overrides.update(
+            {
+                # Testing-specific overrides
+                "+training.seed": 42,
+                "training.trainer.logger": False,
+                "training.trainer.check_val_every_n_epoch": 1001,
+                "training.trainer.deterministic": True,
+            }
+        )
         cfg = self.get_cfg(overrides)
         if cfg.training.trainer.deterministic:
             pl.seed_everything(cfg.training.seed)
         return instantiate(cfg.training.trainer)
 
-    def get_dataset(self, overrides):
+    def get_dataset_for_training(self, overrides):
         cfg = self.get_cfg(overrides)
-        return instantiate(cfg.dataset)
+        return instantiate(cfg.training.dataset)
 
-    def get_model(self, overrides):
+    def get_model_for_training(self, overrides):
         cfg = self.get_cfg(overrides)
-        model = instantiate(cfg.model)
+        model = instantiate(cfg.training.model, optimizer_params=cfg.training.optimizer)
         return model.to(self.devices.device)
 
     def get_trained_model(self, overrides):
-        dataset = self.get_dataset(overrides)
+        dataset = self.get_dataset_for_training(overrides)
         trainer = self.get_trainer(overrides)
-        model = self.get_model(overrides)
+        model = self.get_model_for_training(overrides)
         trainer.fit(model, datamodule=dataset)
         return model.to(self.devices.device)
 
     def test_model(self, overrides, model):
-        test_module = self.get_dataset(overrides)
+        test_module = self.get_dataset_for_training(overrides)
         trainer = self.get_trainer(overrides)
         return trainer.test(model, datamodule=test_module)[0]
 

@@ -1,7 +1,0 @@
-defaults:
-  - prior: sdss_standard
-  - decoder: sdss_standard
-
-_target_: bliss.models.galaxy_encoder.GalaxyEncoder
-hidden: 256
-optimizer_params: ${optimizer}

@@ -1,0 +1,127 @@
+defaults:
+  - _self_
+  - override hydra/job_logging: stdout
+
+# completely disable hydra logging
+# https://github.com/facebookresearch/hydra/issues/910
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
+mode: train
+
+gpus: 1 # use a single gpu by default.
+
+paths:
+  root: ${oc.env:BLISS_HOME}
+  output: ${paths.root}/output
+  sdss: ${paths.root}/data/sdss
+  data: ${paths.root}/data
+
+datasets:
+    simulated_single_tile:
+        _target_: bliss.datasets.simulated.SimulatedDataset
+        prior: ${model.prior}
+        decoder: ${model.decoder}
+        n_batches: 10
+        batch_size: 6400
+        generate_device: "cuda:0"
+    simulated:
+        _target_: bliss.datasets.simulated.SimulatedDataset
+        prior: ${model.prior}
+        decoder: ${model.decoder}
+        n_batches: 10
+        batch_size: 32
+        generate_device: "cuda:0"
+        testing_file: null
+
+decoders:
+    single_tile:
+        n_bands: 1
+        slen: 10
+        tile_slen: 10
+        ptile_slen: 10
+        prob_galaxy: 0.0
+        psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
+        background_values:
+          - 633.0
+
+    star_basic:
+        n_bands: 1
+        slen: 30
+        tile_slen: 2
+        ptile_slen: 6
+        prob_galaxy: 0.0
+        psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
+        background_values:
+          - 865.0
+
+priors:
+    single_tile:
+        n_bands: 1
+        slen: 10
+        tile_slen: 10
+        prob_galaxy: 0.0
+        max_sources: 2
+        mean_sources: 1.2
+        min_sources: 0
+        f_min: 1e5
+        f_max: 1e6
+        loc_min: 0.
+        loc_max: 1.0
+
+    star_basic:
+        n_bands: 1
+        slen: 30
+        tile_slen: 2
+        prob_galaxy: 0.0
+        max_sources: 1
+        mean_sources: 0.015
+        min_sources: 0
+        f_min: 1e5
+        f_max: 1e6
+
+models:
+    decoder: ${decoders.star_basic}
+    encoder:
+        n_bands: ${models.decoder.n_bands}
+        tile_slen: ${models.decoder.tile_slen}
+        ptile_slen: ${models.decoder.ptile_slen}
+        max_detections: ${models.prior.max_sources}
+        channel: 17
+        spatial_dropout: 0.11399
+        dropout: 0.013123
+        hidden: 185
+    prior: ${priors.star_basic}
+    sleep:
+        _target_: bliss.sleep.SleepPhase
+        encoder: ${models.encoder}
+        prior: ${models.prior}
+        decoder: ${models.decoder}
+        annotate_probs: false
+
+training:
+    model: "${models.sleep}"
+    dataset: "${datasets.simulated_m2}"
+    optimizer:
+        name: Adam
+        kwargs:
+            lr: 0.00098352
+            weight_decay: 0.000080410
+    n_epochs: 400
+    experiment: default
+    version: null
+    save_top_k: 1
+    trainer:
+      _target_: pytorch_lightning.Trainer
+      logger: False
+      checkpoint_callback: False
+      profiler: null
+      reload_dataloaders_every_epoch: False
+      check_val_every_n_epoch: 50
+      max_epochs: ${training.n_epochs}
+      min_epochs: ${training.n_epochs}
+      gpus: ${gpus}
+      log_every_n_steps: 10
+      deterministic: False

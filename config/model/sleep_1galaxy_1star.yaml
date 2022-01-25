@@ -1,8 +1,0 @@
-defaults:
-  - encoder: 1galaxy_1star
-  - prior: 1galaxy_1star
-  - decoder: 1galaxy_1star
-
-_target_: bliss.sleep.SleepPhase
-optimizer_params: ${optimizer}
-annotate_probs: True

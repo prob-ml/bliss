@@ -1,4 +1,0 @@
-file: data/sdss_galaxy_images.pt
-n_plots: 25
-common:
-  - background

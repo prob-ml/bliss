@@ -1,4 +1,0 @@
-n_bands: ${model.decoder.n_bands}
-max_detections: ${model.prior.max_sources}
-tile_slen: ${model.decoder.tile_slen}
-ptile_slen: 12

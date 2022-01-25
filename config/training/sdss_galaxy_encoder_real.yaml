@@ -1,0 +1,24 @@
+# @package _global_
+dataset:
+  prerender_device: "cuda"
+
+models:
+  galaxy_encoder:
+    crop_loss_at_border: True
+    checkpoint_path: "models/sdss_galaxy_encoder.ckpt"
+    max_flux_valid_plots: 1200
+  prior:
+    mean_sources: 0.04
+
+training:
+  model: ${models.galaxy_encoder}
+  dataset: ${datasets.sdss_blended_galaxies}
+  optimizer:
+    name: Adam
+    kwargs:
+      lr: 1e-4
+      weight_decay: 0
+  n_epochs: 160
+  trainer:
+    checkpoint_callback: True
+    check_val_every_n_epoch: 1

@@ -18,18 +18,18 @@ def sleep_trainable(search_space, cfg: DictConfig):
     # ugly work-around for using relative path
     os.chdir("../../..")
     # set up the config for SleepPhase
-    cfg.model.encoder.channel = search_space["channel"]
-    cfg.model.encoder.hidden = search_space["hidden"]
-    cfg.model.encoder.spatial_dropout = search_space["spatial_dropout"]
-    cfg.model.encoder.dropout = search_space["dropout"]
-    cfg.optimizer.kwargs.lr = search_space["lr"]
-    cfg.optimizer.kwargs.weight_decay = search_space["weight_decay"]
+    cfg.tuning.model.encoder.channel = search_space["channel"]
+    cfg.tuning.model.encoder.hidden = search_space["hidden"]
+    cfg.tuning.model.encoder.spatial_dropout = search_space["spatial_dropout"]
+    cfg.tuning.model.encoder.dropout = search_space["dropout"]
+    cfg.tuning.optimizer.kwargs.lr = search_space["lr"]
+    cfg.tuning.optimizer.kwargs.weight_decay = search_space["weight_decay"]
 
     # model
-    model = instantiate(cfg.model)
+    model = instantiate(cfg.tuning.model, optimizer_params=cfg.tuning.optimizer)
 
     # data module
-    dataset = instantiate(cfg.dataset)
+    dataset = instantiate(cfg.tuning.dataset)
 
     # set up trainer
     logging.getLogger("lightning").setLevel(0)
