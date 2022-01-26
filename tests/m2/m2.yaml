@@ -31,6 +31,7 @@ datasets:
 
 models:
     decoder:
+        _target_: bliss.models.decoder.ImageDecoder
         n_bands: 2
         slen: 100
         tile_slen: 2

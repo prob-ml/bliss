@@ -125,7 +125,7 @@ class SleepPhase(pl.LightningModule):
         self,
         encoder: LocationEncoder,
         prior: ImagePrior,
-        decoder: dict,
+        decoder: ImageDecoder,
         annotate_probs: bool = False,
         slack=1.0,
         optimizer_params: dict = None,  # pylint: disable=unused-argument
@@ -145,7 +145,7 @@ class SleepPhase(pl.LightningModule):
 
         self.image_encoder = encoder
         self.image_prior = prior
-        self.image_decoder = ImageDecoder(**decoder)
+        self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
 
         # consistency

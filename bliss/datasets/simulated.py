@@ -17,7 +17,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
         prior: ImagePrior,
-        decoder,
+        decoder: ImageDecoder,
         n_batches=10,
         batch_size=32,
         generate_device="cpu",
@@ -29,7 +29,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.batch_size = batch_size
         self.image_prior = prior.to(generate_device)
         self.image_prior.requires_grad_(False)  # freeze decoder weights.
-        self.image_decoder = ImageDecoder(**decoder).to(generate_device)
+        self.image_decoder = decoder.to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
 

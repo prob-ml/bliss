@@ -80,6 +80,7 @@ models:
         spatial_dropout: 0.0
         dropout: 0.0
     decoder:
+        _target_: bliss.models.decoder.ImageDecoder
         n_bands: 1
         slen: 40
         tile_slen: 4
