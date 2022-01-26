@@ -96,5 +96,5 @@ def train(cfg: DictConfig):
     # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None:
         model_to_save = type(model).load_from_checkpoint(checkpoint_callback.best_model_path)
-        model_to_save.state_dict()
-        torch.save(model_to_save, cfg.training.weight_save_path)
+        model_state_dict = model_to_save.state_dict()
+        torch.save(model_state_dict, cfg.training.weight_save_path)
