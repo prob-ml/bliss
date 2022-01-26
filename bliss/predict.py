@@ -3,6 +3,7 @@ import torch
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
+from hydra.utils import instantiate
 
 from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
@@ -16,7 +17,6 @@ from bliss.models.location_encoder import (
 )
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
-from bliss.sleep import SleepPhase
 
 
 def predict_on_image(
@@ -245,9 +245,14 @@ def predict(cfg: DictConfig):
     image = rearrange(torch.from_numpy(image), "h w -> 1 1 h w")
 
     # load models.
-    sleep_net = SleepPhase.load_from_checkpoint(cfg.predict.sleep_checkpoint)
-    galaxy_encoder = GalaxyEncoder.load_from_checkpoint(cfg.predict.galaxy_checkpoint)
-    binary_encoder = BinaryEncoder.load_from_checkpoint(cfg.predict.binary_checkpoint)
+    sleep_net = instantiate(cfg.models.sleep)
+    galaxy_encoder = instantiate(cfg.models.galaxy_encoder)
+    binary_encoder = instantiate(cfg.models.binary)
+
+    # Load weights
+    sleep_net.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
+    galaxy_encoder.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
+    binary_encoder.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
 
     # move everything to specified GPU
     image_encoder = sleep_net.image_encoder.eval().to(device)

@@ -56,6 +56,8 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         prior: ImagePrior,
         decoder,
+        autoencoder: OneCenteredGalaxyAE,
+        autoencoder_ckpt: str = None,
         hidden: int = 256,
         optimizer_params: dict = None,
         crop_loss_at_border=False,
@@ -85,8 +87,8 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        autoencoder_ckpt = decoder["autoencoder_ckpt"]
-        autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        if autoencoder_ckpt is not None:
+            autoencoder.load_state_dict(torch.load(autoencoder_ckpt))
         self.enc = autoencoder.get_encoder(allow_pad=True)
         self.latent_dim = autoencoder.latent_dim
 
@@ -98,9 +100,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
 
         if checkpoint_path is not None:
-            ge = GalaxyEncoder.load_from_checkpoint(Path(checkpoint_path))
-            self.load_state_dict(ge.state_dict())
-            print(f"INFO: Loaded model weights from checkout at {checkpoint_path}")
+            self.load_state_dict(torch.load(Path(checkpoint_path)))
 
     def center_ptiles(self, image_ptiles, tile_locs):
         return center_ptiles(

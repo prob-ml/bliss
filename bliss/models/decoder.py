@@ -1,6 +1,6 @@
 import warnings
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 import torch
@@ -37,6 +37,7 @@ class ImageDecoder(pl.LightningModule):
         ptile_slen: int = 10,
         border_padding: int = None,
         prob_galaxy: float = 0.0,
+        autoencoder: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
         autoencoder_ckpt: str = None,
         psf_params_file: str = None,
         psf_slen: int = 25,
@@ -52,7 +53,8 @@ class ImageDecoder(pl.LightningModule):
             ptile_slen: Padded side-length of each tile (for reconstructing image).
             border_padding: Size of border around the final image where sources will not be present.
             prob_galaxy: Prior probability a source is a galaxy
-            autoencoder_ckpt: Path where trained galaxy autoencoder is located.
+            autoencoder: An autoencoder object for images of single galaxies.
+            autoencoder_ckpt: Path where state_dict of trained galaxy autoencoder is located.
             psf_params_file: Path where point-spread-function (PSF) data is located.
             psf_slen: Side-length of reconstruced star image from PSF.
             background_values: Magnitude of the background (per-band)
@@ -82,11 +84,14 @@ class ImageDecoder(pl.LightningModule):
 
         if prob_galaxy > 0.0:
             assert autoencoder_ckpt is not None
+            autoencoder.load_state_dict(torch.load(autoencoder_ckpt))
+            autoencoder.eval().requires_grad_(False)
+            galaxy_decoder = autoencoder.get_decoder()
             self.galaxy_tile_decoder = GalaxyTileDecoder(
                 tile_slen,
                 ptile_slen,
                 self.n_bands,
-                autoencoder_ckpt,
+                galaxy_decoder,
             )
         else:
             self.galaxy_tile_decoder = None
@@ -554,21 +559,13 @@ class StarTileDecoder(nn.Module):
 
 class GalaxyTileDecoder(nn.Module):
     def __init__(
-        self,
-        tile_slen,
-        ptile_slen,
-        n_bands,
-        autoencoder_ckpt,
+        self, tile_slen, ptile_slen, n_bands, galaxy_decoder: galaxy_net.OneCenteredGalaxyDecoder
     ):
         super().__init__()
         self.n_bands = n_bands
         self.tiler = Tiler(tile_slen, ptile_slen)
         self.ptile_slen = ptile_slen
-
-        # load decoder after loading autoencoder from checkpoint.
-        autoencoder = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
-        autoencoder.eval().requires_grad_(False)
-        self.galaxy_decoder = autoencoder.get_decoder()
+        self.galaxy_decoder = galaxy_decoder
 
     def forward(self, locs, galaxy_params, galaxy_bool):
         """Renders galaxy tile from locations and galaxy parameters."""

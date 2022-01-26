@@ -5,7 +5,7 @@ dataset:
 models:
   galaxy_encoder:
     crop_loss_at_border: True
-    checkpoint_path: "models/sdss_galaxy_encoder.ckpt"
+    checkpoint_path: "models/sdss_galaxy_encoder.pt"
     max_flux_valid_plots: 1200
   prior:
     mean_sources: 0.04

@@ -26,6 +26,8 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
     def __init__(
         self,
+        sleep: SleepPhase,
+        binary_encoder: BinaryEncoder,
         sleep_ckpt: str,
         binary_ckpt: str,
         sdss_dir: str = "data/sdss",
@@ -45,8 +47,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         """Initializes SDSSBlendedGalaxies.
 
         Args:
-            sleep_ckpt: Checkpoint file for sleep-phase-trained encoder.
-            binary_ckpt: Checkpoint file for binary encoder.
+            sleep: A SleepPhase model for getting the locations of sources.
+            binary_encoder: A BinaryEncoder model.
+            sleep_ckpt: Path of saved state_dict for sleep-phase-trained encoder.
+            binary_ckpt: Path of saved state_dict for binary encoder.
             sdss_dir: Location of data storage for SDSS. Defaults to "data/sdss".
             run: SDSS run.
             camcol: SDSS camcol.
@@ -96,10 +100,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             (w_start - self.bp) : (w_start + scene_size + self.bp),
         ]
 
-        sleep = SleepPhase.load_from_checkpoint(sleep_ckpt)
+        sleep.load_state_dict(torch.load(sleep_ckpt))
         image_encoder = sleep.image_encoder
 
-        binary_encoder = BinaryEncoder.load_from_checkpoint(binary_ckpt)
+        binary_encoder.load_state_dict(torch.load(binary_ckpt))
         self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
         cache_file = (
             Path(cache_path + f"_h{h_start}w{w_start}s{scene_size}.pt")
