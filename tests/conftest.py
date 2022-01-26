@@ -92,8 +92,6 @@ class ModelSetup:
         return trainer.test(model, datamodule=test_module)[0]
 
 
-
-
 @pytest.fixture(scope="session")
 def devices(pytestconfig):
     use_gpu = pytestconfig.getoption("gpu")

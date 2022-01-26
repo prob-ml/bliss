@@ -264,7 +264,6 @@ def get_galaxy_latents(
     if latents_file.exists():
         latents = torch.load(latents_file, "cpu")
     else:
-        # psf_image_file = latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
         dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
         dataloader = dataset.train_dataloader()
         autoencoder = autoencoder.cuda()
