@@ -131,7 +131,7 @@ models:
         prob_galaxy: 0.7
         autoencoder: ${models.galaxy_net}
         autoencoder_ckpt: models/sdss_autoencoder.pt
-        latents_file: data/latents_simulated_sdss_galaxies.pt
+        latents_file: ${paths.data}/latents_simulated_sdss_galaxies.pt
         psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     sleep:
         _target_: bliss.sleep.SleepPhase
@@ -146,8 +146,9 @@ generate:
     common: # What attributes of dataset items are in common and should not be stacked?
     n_plots: 25
 predict:
-    sdss_kwargs:
-        sdss_dir: data/sdss
+    sdss:
+        _target_: bliss.datasets.sdss.SloanDigitalSkySurvey
+        sdss_dir: ${paths.sdss}
         run: 94
         camcol: 1
         fields:
