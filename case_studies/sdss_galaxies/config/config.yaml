@@ -17,10 +17,10 @@ gpus: 1 # use a single gpu by default.
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    output: ${paths.root}/output
     sdss: ${paths.root}/data/sdss
     data: ${paths.root}/data
     project: ${paths.root}/case_studies/sdss_galaxies
+    output: ${paths.project}/output
 
 datasets:
     sdss_blended_galaxies:
