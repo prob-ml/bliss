@@ -6,23 +6,6 @@ from hydra.utils import instantiate
 
 
 # command line arguments for tests
-def pytest_addoption(parser):
-    parser.addoption(
-        "--gpu",
-        action="store_true",
-        default=False,
-        help="Run tests using gpu.",
-    )
-
-
-def pytest_collection_modifyitems(config, items):
-    # skip `multi_gpu` required tests when running on cpu or only single gpu is avaiable
-    if config.getoption("--gpu") and torch.cuda.device_count() >= 2:
-        return
-    skip = pytest.mark.skip(reason="need --gpu option and more than 2 available gpus to run")
-    for item in items:
-        if "multi_gpu" in item.keywords:
-            item.add_marker(skip)
 
 
 def get_cfg(overrides, devices):
