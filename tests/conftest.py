@@ -92,11 +92,6 @@ class ModelSetup:
         return trainer.test(model, datamodule=test_module)[0]
 
 
-@pytest.fixture(scope="session")
-def paths():
-    with initialize(config_path="../config"):
-        cfg = compose("config")
-    return cfg.paths
 
 
 @pytest.fixture(scope="session")
