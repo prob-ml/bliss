@@ -55,7 +55,7 @@ class GalaxyEncoder(pl.LightningModule):
     def __init__(
         self,
         prior: ImagePrior,
-        decoder,
+        decoder: ImageDecoder,
         autoencoder: OneCenteredGalaxyAE,
         autoencoder_ckpt: str = None,
         hidden: int = 256,
@@ -73,7 +73,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # to produce images to train on.
         self.image_prior = prior
-        self.image_decoder = ImageDecoder(**decoder)
+        self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
 
         # extract useful info from image_decoder
