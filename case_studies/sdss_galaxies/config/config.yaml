@@ -44,7 +44,7 @@ datasets:
         min_a_b: 0.8
         max_a_b: 3.6 # from catalog with mag < 22.2 cut.
         flux_sample: "uniform"
-        psf_image_file: data/psField-000094-1-0012-PSF-image.npy
+        psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
@@ -86,7 +86,7 @@ models:
         tile_slen: 4
         ptile_slen: 52
         border_padding: 24
-        psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
+        psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         prob_galaxy: 0.7
         autoencoder: ${models.galaxy_net}
         autoencoder_ckpt: models/sdss_autoencoder.pt
@@ -132,6 +132,7 @@ models:
         autoencoder: ${models.galaxy_net}
         autoencoder_ckpt: models/sdss_autoencoder.pt
         latents_file: data/latents_simulated_sdss_galaxies.pt
+        psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}

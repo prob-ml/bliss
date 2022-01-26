@@ -23,3 +23,8 @@ models/sdss_binary.pt filter=lfs diff=lfs merge=lfs -text
 models/sdss_galaxy_encoder.pt filter=lfs diff=lfs merge=lfs -text
 models/sdss_galaxy_encoder_real.pt filter=lfs diff=lfs merge=lfs -text
 models/sdss_sleep.pt filter=lfs diff=lfs merge=lfs -text
+case_studies/sdss_galaxies/models/sdss_sleep.pt filter=lfs diff=lfs merge=lfs -text
+case_studies/sdss_galaxies/models/sdss_autoencoder.pt filter=lfs diff=lfs merge=lfs -text
+case_studies/sdss_galaxies/models/sdss_binary.pt filter=lfs diff=lfs merge=lfs -text
+case_studies/sdss_galaxies/models/sdss_galaxy_encoder.pt filter=lfs diff=lfs merge=lfs -text
+case_studies/sdss_galaxies/models/sdss_galaxy_encoder_real.pt filter=lfs diff=lfs merge=lfs -text
