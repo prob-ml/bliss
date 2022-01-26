@@ -1,5 +1,6 @@
 # @package _global_
 training:
+  name: "sdss_sleep"
   model: ${models.sleep}
   dataset: ${datasets.simulated}
   optimizer:

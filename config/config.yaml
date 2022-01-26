@@ -24,8 +24,10 @@ paths:
 datasets:
     sdss_blended_galaxies:
         _target_: bliss.datasets.sdss_blended_galaxies.SdssBlendedGalaxies
-        sleep_ckpt: models/sdss_sleep.ckpt
-        binary_ckpt: models/sdss_binary.ckpt
+        sleep: ${models.sleep}
+        binary_encoder: ${models.binary}
+        sleep_ckpt: models/sdss_sleep.pt
+        binary_ckpt: models/sdss_binary.pt
         prerender_device: "cuda"
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
@@ -78,6 +80,7 @@ models:
         spatial_dropout: 0.0
         dropout: 0.0
     decoder:
+        _target_: bliss.models.decoder.ImageDecoder
         n_bands: 1
         slen: 40
         tile_slen: 4
@@ -85,12 +88,14 @@ models:
         border_padding: 24
         psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
         prob_galaxy: 0.7
-        autoencoder_ckpt: models/sdss_autoencoder.ckpt
+        autoencoder: ${models.galaxy_net}
+        autoencoder_ckpt: models/sdss_autoencoder.pt
         background_values:
             - 865.0
         sdss_bands:
             - 2
     encoder:
+        _target_: bliss.models.location_encoder.LocationEncoder
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
         ptile_slen: 52
@@ -103,6 +108,8 @@ models:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         prior: ${models.prior}
         decoder: ${models.decoder}
+        autoencoder: ${models.galaxy_net}
+        autoencoder_ckpt: models/sdss_autoencoder.pt
         hidden: 256
     galaxy_net:
         _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
@@ -110,7 +117,8 @@ models:
         latent_dim: 64
         n_bands: 1
         residual_delay_n_steps: 500
-    prior: 
+    prior:
+        _target_: bliss.models.prior.ImagePrior
         n_bands: 1
         slen: 40
         tile_slen: 4
@@ -121,7 +129,8 @@ models:
         f_max: 1e6
         alpha: 0.5
         prob_galaxy: 0.7
-        autoencoder_ckpt: models/sdss_autoencoder.ckpt
+        autoencoder: ${models.galaxy_net}
+        autoencoder_ckpt: models/sdss_autoencoder.pt
         latents_file: data/latents_simulated_sdss_galaxies.pt
     sleep:
         _target_: bliss.sleep.SleepPhase
@@ -153,9 +162,9 @@ predict:
     clen: 300
 
     # i/o parameters
-    sleep_checkpoint: models/sdss_sleep.ckpt
-    galaxy_checkpoint: models/sdss_galaxy_encoder.ckpt
-    binary_checkpoint: models/sdss_binary.ckpt
+    sleep_checkpoint: models/sdss_sleep.pt
+    galaxy_checkpoint: models/sdss_galaxy_encoder.pt
+    binary_checkpoint: models/sdss_binary.pt
     device: "cuda:0"
     output_file: null
 
@@ -186,3 +195,4 @@ training:
         file: null
         batch_size: 32
         num_workers: 0
+    weight_save_path: "${paths.root}/models/${training.name}.pt"

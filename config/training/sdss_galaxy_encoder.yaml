@@ -7,6 +7,7 @@ datasets:
         batch_size: 8
 
 training:
+    name: "sdss_galaxy_encoder"
     model: ${models.galaxy_encoder}
     dataset: ${datasets.simulated}
     optimizer:
