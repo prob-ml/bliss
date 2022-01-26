@@ -95,7 +95,9 @@ class ImagePrior(pl.LightningModule):
             autoencoder.load_state_dict(
                 torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
             )
-            latents = get_galaxy_latents(latents_file, n_latent_batches, autoencoder, psf_image_file)
+            latents = get_galaxy_latents(
+                latents_file, n_latent_batches, autoencoder, psf_image_file
+            )
         else:
             latents = torch.zeros(1, 1)
         self.register_buffer("latents", latents)
@@ -254,7 +256,9 @@ class ImagePrior(pl.LightningModule):
         return galaxy_params * galaxy_bool
 
 
-def get_galaxy_latents(latents_file: str, n_latent_batches: int, autoencoder: OneCenteredGalaxyAE, psf_image_file: Path):
+def get_galaxy_latents(
+    latents_file: str, n_latent_batches: int, autoencoder: OneCenteredGalaxyAE, psf_image_file: Path
+):
     assert latents_file is not None
     latents_file = Path(latents_file)
     if latents_file.exists():
