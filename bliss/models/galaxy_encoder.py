@@ -88,7 +88,9 @@ class GalaxyEncoder(pl.LightningModule):
 
         # will be trained.
         if autoencoder_ckpt is not None:
-            autoencoder.load_state_dict(torch.load(autoencoder_ckpt))
+            autoencoder.load_state_dict(
+                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
+            )
         self.enc = autoencoder.get_encoder(allow_pad=True)
         self.latent_dim = autoencoder.latent_dim
 
@@ -100,7 +102,9 @@ class GalaxyEncoder(pl.LightningModule):
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
 
         if checkpoint_path is not None:
-            self.load_state_dict(torch.load(Path(checkpoint_path)))
+            self.load_state_dict(
+                torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
+            )
 
     def center_ptiles(self, image_ptiles, tile_locs):
         return center_ptiles(

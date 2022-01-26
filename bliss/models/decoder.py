@@ -84,7 +84,9 @@ class ImageDecoder(pl.LightningModule):
 
         if prob_galaxy > 0.0:
             assert autoencoder_ckpt is not None
-            autoencoder.load_state_dict(torch.load(autoencoder_ckpt))
+            autoencoder.load_state_dict(
+                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
+            )
             autoencoder.eval().requires_grad_(False)
             galaxy_decoder = autoencoder.get_decoder()
             self.galaxy_tile_decoder = GalaxyTileDecoder(

@@ -90,7 +90,9 @@ class ImagePrior(pl.LightningModule):
 
         self.prob_galaxy = float(prob_galaxy)
         if prob_galaxy > 0.0:
-            autoencoder.load_state_dict(torch.load(autoencoder_ckpt))
+            autoencoder.load_state_dict(
+                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
+            )
             latents = get_galaxy_latents(latents_file, n_latent_batches, autoencoder)
         else:
             latents = torch.zeros(1, 1)

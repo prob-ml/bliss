@@ -250,9 +250,15 @@ def predict(cfg: DictConfig):
     binary_encoder = instantiate(cfg.models.binary)
 
     # Load weights
-    sleep_net.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
-    galaxy_encoder.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
-    binary_encoder.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
+    sleep_net.load_state_dict(
+        torch.load(cfg.predict.sleep_checkpoint, map_location=torch.device("cpu"))
+    )
+    galaxy_encoder.load_state_dict(
+        torch.load(cfg.predict.galaxy_checkpoint, map_location=torch.device("cpu"))
+    )
+    binary_encoder.load_state_dict(
+        torch.load(cfg.predict.binary_checkpoint, map_location=torch.device("cpu"))
+    )
 
     # move everything to specified GPU
     image_encoder = sleep_net.image_encoder.eval().to(device)

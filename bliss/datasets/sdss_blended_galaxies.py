@@ -100,10 +100,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             (w_start - self.bp) : (w_start + scene_size + self.bp),
         ]
 
-        sleep.load_state_dict(torch.load(sleep_ckpt))
+        sleep.load_state_dict(torch.load(sleep_ckpt, map_location=torch.device("cpu")))
         image_encoder = sleep.image_encoder
 
-        binary_encoder.load_state_dict(torch.load(binary_ckpt))
+        binary_encoder.load_state_dict(torch.load(binary_ckpt, map_location=torch.device("cpu")))
         self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
         cache_file = (
             Path(cache_path + f"_h{h_start}w{w_start}s{scene_size}.pt")
