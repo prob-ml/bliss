@@ -123,7 +123,7 @@ class SleepPhase(pl.LightningModule):
 
     def __init__(
         self,
-        encoder: dict,
+        encoder: LocationEncoder,
         prior: ImagePrior,
         decoder: dict,
         annotate_probs: bool = False,
@@ -143,7 +143,7 @@ class SleepPhase(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.image_encoder = LocationEncoder(**encoder)
+        self.image_encoder = encoder
         self.image_prior = prior
         self.image_decoder = ImageDecoder(**decoder)
         self.image_decoder.requires_grad_(False)
