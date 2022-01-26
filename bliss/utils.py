@@ -8,14 +8,6 @@ from torch.distributions import Normal
 from torch.nn import functional as F
 
 
-def fixed_workdir(fn):
-    def wrapper(cfg):
-        os.chdir(cfg.paths.root)
-        return fn(cfg)
-
-    return wrapper
-
-
 def empty(*args, **kwargs):
     pass
 

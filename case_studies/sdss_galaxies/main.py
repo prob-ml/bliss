@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import hydra
-from bliss.utils import fixed_workdir
 
 
 @hydra.main(config_path="./config", config_name="config")
