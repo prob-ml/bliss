@@ -29,6 +29,7 @@ datasets:
         binary_encoder: ${models.binary}
         sleep_ckpt: ${paths.project}/models/sdss_sleep.pt
         binary_ckpt: ${paths.project}/models/sdss_binary.pt
+        sdss_dir: ${paths.sdss}
         prerender_device: "cuda"
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
