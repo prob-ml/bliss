@@ -1,3 +1,4 @@
+name: "sdss_autoencoder"
 model: ${models.galaxy_net}
 dataset: ${datasets.sdss_galaxies}
 optimizer:

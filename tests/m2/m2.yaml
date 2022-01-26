@@ -31,6 +31,7 @@ datasets:
 
 models:
     decoder:
+        _target_: bliss.models.decoder.ImageDecoder
         n_bands: 2
         slen: 100
         tile_slen: 2
@@ -45,6 +46,7 @@ models:
           - 2
           - 3
     encoder:
+        _target_: bliss.models.location_encoder.LocationEncoder
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
         ptile_slen: 8
@@ -54,6 +56,7 @@ models:
         dropout: 0.013123
         hidden: 185
     prior: 
+        _target_: bliss.models.prior.ImagePrior
         n_bands: 2
         slen: 100
         tile_slen: 2
@@ -94,6 +97,7 @@ training:
       gpus: ${gpus}
       log_every_n_steps: 10
       deterministic: False
+    weight_save_path:
 
 tuning:
     model: "{models.sleep}"

@@ -1,3 +1,4 @@
+name: "sdss_binary"
 model: ${models.binary}
 dataset: ${datasets.simulated}
 optimizer:
