@@ -473,7 +473,7 @@ def plot_image(fig, ax, image, vrange=None):
 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(image, vmin=vmin, vmax=vmax)
+    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
     fig.colorbar(im, cax=cax, orientation="vertical")
 
 
@@ -596,7 +596,7 @@ def set_rc_params(
     # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
     rc_params = {
         # font.
-        "font.family": "STIXGeneral",
+        "font.family": "serif",
         "font.sans-serif": "Helvetica",
         "text.usetex": True,
         "mathtext.fontset": "cm",

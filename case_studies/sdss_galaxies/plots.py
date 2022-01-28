@@ -386,7 +386,9 @@ class AEReconstructionFigures(BlissFigures):
             "measure_scatter_bins": "single_galaxy_scatter_bins.pdf",
         }
 
-    def compute_data(self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file, sdss_pixel_scale):
+    def compute_data(
+        self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file, sdss_pixel_scale
+    ):
         # NOTE: For very dim objects (max_pixel < 6, flux ~ 1000), autoencoder can return
         # 0.1% objects with negative flux. This objects are discarded.
         device = autoencoder.device  # GPU is better otherwise slow.
@@ -635,9 +637,10 @@ class AEReconstructionFigures(BlissFigures):
             "measure_scatter_bins": self.make_scatter_bin_plots(data["measurements"]),
         }
 
+
 @hydra.main(config_path="./config", config_name="config")
 def plots(cfg):
-# def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
+    # def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
     # os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
 
     fig = set(cfg.plots.fig)
@@ -650,7 +653,7 @@ def plots(cfg):
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
     # load models necessary for SDSS reconstructions.
-    if fig.issuperset({2, 3}):
+    if len(fig.intersection({2, 3})) > 0:
         sleep_net = instantiate(cfg.models.sleep)
         sleep_net.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
         sleep_net = sleep_net.to(device).eval()
@@ -678,7 +681,9 @@ def plots(cfg):
 
         # create figure classes and plot.
         ae_figures = AEReconstructionFigures(outdir, overwrite=overwrite, n_examples=5)
-        ae_figures.save_figures(autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale)
+        ae_figures.save_figures(
+            autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale
+        )
 
     # FIGURE 2: Classification and Detection metrics
     if 2 in fig:
