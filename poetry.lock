@@ -1587,6 +1587,21 @@ extra = ["lxml (>=4.5)", "pygraphviz (>=1.7)", "pydot (>=1.4.1)"]
 test = ["pytest (>=6.2)", "pytest-cov (>=2.12)", "codecov (>=2.1)"]
 
 [[package]]
+name = "nflows"
+version = "0.14"
+description = "Normalizing flows in PyTorch."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+matplotlib = "*"
+numpy = "*"
+tensorboard = "*"
+torch = "*"
+tqdm = "*"
+
+[[package]]
 name = "nodeenv"
 version = "1.6.0"
 description = "Node.js virtual environment builder"
@@ -3059,7 +3074,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "40692f24e8cd8ce0bef7793f4c04b6f8c7f1b47579a0638cebe63274a0581c75"
+content-hash = "e7928266049894b66708d77f5424cf699e95517c2b9820c48cb75162938c1938"
 
 [metadata.files]
 absl-py = [
@@ -3256,6 +3271,7 @@ black = [
     {file = "black-20.8b1.tar.gz", hash = "sha256:1c02557aa099101b9d21496f8a914e9ed2222ef70336404eeeac8edba836fbea"},
 ]
 bleach = [
+    {file = "bleach-4.1.0-py2.py3-none-any.whl", hash = "sha256:4d2651ab93271d1129ac9cbc679f524565cc8a1b791909c4a51eac4446a15994"},
     {file = "bleach-4.1.0.tar.gz", hash = "sha256:0900d8b37eba61a802ee40ac0061f8c2b5dee29c1927dd1d233e075ebf5a71da"},
 ]
 blessed = [
@@ -4250,6 +4266,9 @@ nest-asyncio = [
 networkx = [
     {file = "networkx-2.6.3-py3-none-any.whl", hash = "sha256:80b6b89c77d1dfb64a4c7854981b60aeea6360ac02c6d4e4913319e0a313abef"},
     {file = "networkx-2.6.3.tar.gz", hash = "sha256:c0946ed31d71f1b732b5aaa6da5a0388a345019af232ce2f49c766e2d6795c51"},
+]
+nflows = [
+    {file = "nflows-0.14.tar.gz", hash = "sha256:6299844a62f9999fcdf2d95cb2d01c091a50136bd17826e303aba646b2d11b55"},
 ]
 nodeenv = [
     {file = "nodeenv-1.6.0-py2.py3-none-any.whl", hash = "sha256:621e6b7076565ddcacd2db0294c0381e01fd28945ab36bcf00f41c5daf63bef7"},
