@@ -1,5 +1,4 @@
 import math
-import os
 
 import torch
 from pytorch_lightning.utilities import rank_zero_only
