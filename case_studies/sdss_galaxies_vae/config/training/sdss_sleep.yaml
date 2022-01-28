@@ -1,0 +1,15 @@
+# @package _global_
+training:
+  name: "sdss_sleep"
+  model: ${models.sleep}
+  dataset: ${datasets.simulated}
+  optimizer:
+    name: Adam
+    kwargs: 
+      lr: 1e-4
+      weight_decay: 0
+  n_epochs: 1501
+  save_top_k: 10
+  trainer:
+    checkpoint_callback: true
+

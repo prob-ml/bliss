@@ -11,7 +11,7 @@ from torch.nn import functional as F
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
-from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image, plot_image_and_locs
 
@@ -88,9 +88,9 @@ class GalaxyEncoder(pl.LightningModule):
 
         # will be trained.
         autoencoder_ckpt = decoder["autoencoder_ckpt"]
-        autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        autoencoder = OneCenteredGalaxyVAE.load_from_checkpoint(autoencoder_ckpt)
         if from_scratch:
-            autoencoder = OneCenteredGalaxyAE(
+            autoencoder = OneCenteredGalaxyVAE(
                 slen=autoencoder.slen, latent_dim=autoencoder.latent_dim
             )
         self.enc = autoencoder.get_encoder(allow_pad=True)

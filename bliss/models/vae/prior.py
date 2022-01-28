@@ -5,7 +5,7 @@ from torch.distributions import Poisson
 
 from bliss.models import galaxy_net
 from bliss.models.location_encoder import get_is_on_from_n_sources
-from bliss.models.galaxy_flow import CenteredGalaxyLatentFlow
+from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 
 
 class ImagePrior(pl.LightningModule):

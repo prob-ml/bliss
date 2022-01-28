@@ -1,0 +1,22 @@
+# @package _global_
+models:
+    prior:
+        mean_sources: 0.04
+datasets:
+    simulated:
+        batch_size: 8
+
+training:
+    name: "sdss_galaxy_encoder"
+    model: ${models.galaxy_encoder}
+    dataset: ${datasets.simulated}
+    optimizer:
+        name: Adam
+        kwargs:
+            lr: 1e-4
+            weight_decay: 0
+
+    n_epochs: 4001
+    trainer:
+        checkpoint_callback: True
+        check_val_every_n_epoch: 25

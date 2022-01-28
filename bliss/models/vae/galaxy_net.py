@@ -20,7 +20,7 @@ plt.switch_backend("Agg")
 plt.ioff()
 
 
-class OneCenteredGalaxyAE(pl.LightningModule):
+class OneCenteredGalaxyVAE(pl.LightningModule):
     """Autoencoder for single, centered galaxy images.
 
     This module implements an autoencoder(AE) + training procedure on images of centered

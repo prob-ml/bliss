@@ -1,0 +1,13 @@
+name: "sdss_binary"
+model: ${models.binary}
+dataset: ${datasets.simulated}
+optimizer:
+    name: Adam
+    kwargs:
+        lr: 1e-4
+        weight_decay: 0
+
+n_epochs: 501
+save_top_k: 5
+trainer:
+  checkpoint_callback: true

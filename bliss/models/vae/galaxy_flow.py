@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from nflows import transforms, distributions, flows
 from nflows.transforms.base import Transform
 
-from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
 from bliss.optimizer import get_optimizer
 
 
@@ -20,7 +20,7 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
 
         # Embed the autoencoder
         assert autoencoder_ckpt is not None
-        autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(autoencoder_ckpt)
+        autoencoder = OneCenteredGalaxyVAE.load_from_checkpoint(autoencoder_ckpt)
         self.encoder = autoencoder.get_encoder()
         self.encoder.requires_grad_(False)
 
