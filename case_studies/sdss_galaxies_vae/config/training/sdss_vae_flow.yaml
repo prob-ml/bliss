@@ -1,5 +1,5 @@
 name: "sdss_vae_flow"
-model: ${models.vae_flow}
+model: ${models.galaxy_flow}
 dataset: ${datasets.sdss_galaxies}
 optimizer:
   name: Adam

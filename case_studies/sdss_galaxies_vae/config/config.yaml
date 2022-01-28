@@ -33,7 +33,7 @@ datasets:
         prerender_device: "cuda"
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
-        num_workers: 0
+        num_workers: 5
         batch_size: 64
         n_batches: 10
         background: 865
