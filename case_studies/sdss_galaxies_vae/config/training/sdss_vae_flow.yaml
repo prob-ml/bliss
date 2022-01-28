@@ -1,12 +1,12 @@
-name: "sdss_autoencoder"
-model: ${models.galaxy_net}
+name: "sdss_vae_flow"
+model: ${models.vae_flow}
 dataset: ${datasets.sdss_galaxies}
 optimizer:
   name: Adam
-  kwargs:
+  kwargs: 
     lr: 1e-3
     weight_decay: 0
-n_epochs: 8001
+n_epochs: 1001
 trainer:
   check_val_every_n_epoch: 10
   checkpoint_callback: true

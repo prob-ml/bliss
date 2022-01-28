@@ -1,0 +1,12 @@
+name: "sdss_vae"
+model: ${models.galaxy_vae}
+dataset: ${datasets.sdss_galaxies}
+optimizer:
+  name: Adam
+  kwargs:
+    lr: 1e-3
+    weight_decay: 0
+n_epochs: 8001
+trainer:
+  check_val_every_n_epoch: 10
+  checkpoint_callback: true

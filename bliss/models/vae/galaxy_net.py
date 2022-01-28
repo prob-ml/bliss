@@ -45,9 +45,9 @@ class OneCenteredGalaxyVAE(pl.LightningModule):
 
     def __init__(
         self,
+        latent_dim: int,
+        n_bands: int,
         slen: int = 53,
-        latent_dim: int = 16,
-        n_bands: int = 1,
         residual_delay_n_steps: int = 500,
         optimizer_params: dict = None,
         min_sd=1e-3,
