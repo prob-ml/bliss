@@ -15,7 +15,9 @@ import torch
 from astropy.table import Table
 from astropy.wcs.wcs import WCS
 from hydra import compose, initialize
+from hydra.utils import instantiate
 from matplotlib import pyplot as plt
+import hydra
 
 from bliss import generate, reporting
 from bliss.datasets import sdss
@@ -26,21 +28,7 @@ from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.predict import predict_on_image, predict_on_scene
 from bliss.sleep import SleepPhase
 
-device = torch.device("cuda:0")
 pl.seed_everything(0)
-
-files_dict = {
-    "sleep_ckpt": "models/sdss_sleep.ckpt",
-    "galaxy_encoder_ckpt": "models/sdss_galaxy_encoder.ckpt",
-    "galaxy_encoder_real_ckpt": "models/sdss_galaxy_encoder_real.ckpt",
-    "binary_ckpt": "models/sdss_binary.ckpt",
-    "ae_ckpt": "models/sdss_autoencoder.ckpt",
-    "coadd_cat": "data/coadd_catalog_94_1_12.fits",
-    "sdss_dir": "data/sdss",
-    "psf_file": "data/psField-000094-1-0012-PSF-image.npy",
-}
-
-SDSS_PIXEL_SCALE = 0.396
 
 
 def remove_outliers(*args, level=0.99):
@@ -58,13 +46,13 @@ def remove_outliers(*args, level=0.99):
     return (arg[keep] for arg in args)
 
 
-def get_sdss_data():
+def get_sdss_data(cfg):
     run = 94
     camcol = 1
     field = 12
     bands = (2,)
     sdss_data = sdss.SloanDigitalSkySurvey(
-        sdss_dir=files_dict["sdss_dir"],
+        sdss_dir=cfg.paths.sdss,
         run=run,
         camcol=camcol,
         fields=(field,),
@@ -76,7 +64,7 @@ def get_sdss_data():
     return {
         "image": sdss_data[0]["image"][0],
         "wcs": sdss_data[0]["wcs"][0],
-        "pixel_scale": SDSS_PIXEL_SCALE,
+        "pixel_scale": cfg.plots.sdss_pixel_scale,
     }
 
 
@@ -398,7 +386,7 @@ class AEReconstructionFigures(BlissFigures):
             "measure_scatter_bins": "single_galaxy_scatter_bins.pdf",
         }
 
-    def compute_data(self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file):
+    def compute_data(self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file, sdss_pixel_scale):
         # NOTE: For very dim objects (max_pixel < 6, flux ~ 1000), autoencoder can return
         # 0.1% objects with negative flux. This objects are discarded.
         device = autoencoder.device  # GPU is better otherwise slow.
@@ -429,9 +417,9 @@ class AEReconstructionFigures(BlissFigures):
 
         # measurements
         psf_array = np.load(psf_file)
-        galsim_psf_image = galsim.Image(psf_array[0], scale=SDSS_PIXEL_SCALE)  # sdss scale
+        galsim_psf_image = galsim.Image(psf_array[0], scale=sdss_pixel_scale)  # sdss scale
         psf = galsim.InterpolatedImage(galsim_psf_image).withFlux(1.0)
-        psf_image = psf.drawImage(nx=53, ny=53, scale=SDSS_PIXEL_SCALE).array
+        psf_image = psf.drawImage(nx=53, ny=53, scale=sdss_pixel_scale).array
 
         recon_no_background = recon_means.numpy() - background.cpu().numpy()
         # a small percentage of low magnitude objects end up predicted with negative flux.
@@ -441,7 +429,7 @@ class AEReconstructionFigures(BlissFigures):
             true_images=noiseless_images[good_bool],
             recon_images=recon_no_background[good_bool],
             psf_image=psf_image.reshape(-1, 53, 53),
-            pixel_scale=SDSS_PIXEL_SCALE,
+            pixel_scale=sdss_pixel_scale,
         )
 
         return {
@@ -647,33 +635,40 @@ class AEReconstructionFigures(BlissFigures):
             "measure_scatter_bins": self.make_scatter_bin_plots(data["measurements"]),
         }
 
+@hydra.main(config_path="./config", config_name="config")
+def plots(cfg):
+# def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
+    # os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
 
-def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
-    os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
+    fig = set(cfg.plots.fig)
+    outdir = cfg.plots.outdir
+    overwrite = cfg.plots.overwrite
+    device = torch.device(cfg.plots.device)
 
     if not Path(outdir).exists():
         warnings.warn("Specified output directory does not exist, will attempt to create it.")
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
     # load models necessary for SDSS reconstructions.
-    if fig in {"2", "3", "all"}:
-        sleep_net = SleepPhase.load_from_checkpoint(files_dict["sleep_ckpt"]).to(device)
-        binary_encoder = BinaryEncoder.load_from_checkpoint(files_dict["binary_ckpt"])
+    if fig.issuperset({2, 3}):
+        sleep_net = instantiate(cfg.models.sleep)
+        sleep_net.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
+        sleep_net = sleep_net.to(device).eval()
+
+        binary_encoder = instantiate(cfg.models.binary)
+        binary_encoder.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
         binary_encoder = binary_encoder.to(device).eval()
-        if use_galaxy_encoder_real:
-            galaxy_encoder = GalaxyEncoder.load_from_checkpoint(
-                files_dict["galaxy_encoder_real_ckpt"]
-            )
-        else:
-            galaxy_encoder = GalaxyEncoder.load_from_checkpoint(files_dict["galaxy_encoder_ckpt"])
+
+        galaxy_encoder = instantiate(cfg.models.galaxy_encoder)
+        galaxy_encoder.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
         galaxy_encoder = galaxy_encoder.to(device).eval()
 
-    if fig in {"1", "all"}:
-        # FIGURE 1: Autoencoder performance.
-        # first, create images of individually simulated galaxies if they do not exist.
-        autoencoder = OneCenteredGalaxyAE.load_from_checkpoint(files_dict["ae_ckpt"]).eval()
-        autoencoder = autoencoder.eval().to(device)
-        galaxies_file = Path("data/simulated_sdss_individual_galaxies.pt")
+    if 1 in fig:
+        autoencoder = instantiate(cfg.models.galaxy_net)
+        autoencoder.load_state_dict(torch.load(cfg.models.decoder.autoencoder_ckpt))
+        autoencoder = autoencoder.to(device).eval()
+
+        galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
         if not galaxies_file.exists():
             print(f"Generating individual galaxy images and saving to: {galaxies_file}")
             overrides = ["experiment=sdss_individual_galaxies"]
@@ -683,18 +678,18 @@ def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
 
         # create figure classes and plot.
         ae_figures = AEReconstructionFigures(outdir, overwrite=overwrite, n_examples=5)
-        ae_figures.save_figures(autoencoder, galaxies_file, files_dict["psf_file"])
+        ae_figures.save_figures(autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale)
 
     # FIGURE 2: Classification and Detection metrics
-    elif fig in {"2", "all"}:
-        scene = get_sdss_data()["image"]
-        coadd_cat = Table.read(files_dict["coadd_cat"], format="fits")
+    if 2 in fig:
+        scene = get_sdss_data(cfg)["image"]
+        coadd_cat = Table.read(cfg.plots.coadd_cat, format="fits")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
         dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
 
     # FIGURE 3: Reconstructions on SDSS
-    elif fig in {"3", "all"}:
-        scene = get_sdss_data()["image"]
+    if 3 in fig:
+        scene = get_sdss_data(cfg)["image"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
         sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
 
@@ -703,27 +698,4 @@ def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Create figures related to SDSS galaxies.")
-    parser.add_argument(
-        "-f",
-        "--fig",
-        help="Which figures do you want to create?",
-        required=True,
-        choices=["1", "2", "3", "all"],
-    )
-    parser.add_argument("--overwrite", action="store_true", default=False, help="Recreate cache?")
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="output/sdss_figures",
-        type=str,
-        help="Where to save figures and caches relative to $BLISS_HOME.",
-    )
-    parser.add_argument(
-        "--use_galaxy_encoder_real",
-        action="store_true",
-        default=False,
-        help="Use galaxy encoder trained on real SDSS images?",
-    )
-    args = vars(parser.parse_args())
-    main(args["fig"], args["output"], args["overwrite"], args["use_galaxy_encoder_real"])
+    plots()

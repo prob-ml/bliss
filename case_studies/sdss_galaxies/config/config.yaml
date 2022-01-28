@@ -200,3 +200,16 @@ training:
         batch_size: 32
         num_workers: 0
     weight_save_path: ${paths.project}/models/${training.name}.pt
+
+plots:
+    fig:
+        - 1
+        - 2
+        - 3
+    outdir: ${paths.project}/output/sdss_figures
+    overwrite: false
+    simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
+    sdss_pixel_scale: 0.396
+    device: "cuda:0"
+    coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
+    psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
