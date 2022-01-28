@@ -101,7 +101,7 @@ models:
     galaxy_flow:
         vae_ckpt: ${paths.project}/models/sdss_vae.ckpt
     galaxy_vae:
-        _target_: bliss.models.galaxy_net.vae.OneCenteredGalaxyVAE
+        _target_: bliss.models.vae.galaxy_net.OneCenteredGalaxyVAE
         latent_dim: 16
         n_bands: 1
         slen: 53
