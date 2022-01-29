@@ -11,26 +11,30 @@ from bliss.optimizer import get_optimizer
 class CenteredGalaxyLatentFlow(pl.LightningModule):
     def __init__(
         self,
+        vae: OneCenteredGalaxyVAE,
+        vae_ckpt: str,
         optimizer_params: dict = None,
-        autoencoder_ckpt=None,
         n_layers=10,
     ):
         super().__init__()
-        self.save_hyperparameters()
+        # self.save_hyperparameters()
 
+        self.optimizer_params = optimizer_params
         # Embed the autoencoder
-        assert autoencoder_ckpt is not None
-        autoencoder = OneCenteredGalaxyVAE.load_from_checkpoint(autoencoder_ckpt)
-        self.encoder = autoencoder.get_encoder()
+        # assert vae_ckpt is not None
+        vae.load_state_dict(torch.load(vae_ckpt, map_location = vae.device))
+        # autoencoder = OneCenteredGalaxyVAE.load_from_checkpoint(vae_ckpt)
+        self.encoder = vae.get_encoder()
         self.encoder.requires_grad_(False)
 
-        self.decoder = autoencoder.get_decoder()
+        self.decoder = vae.get_decoder()
         self.decoder.requires_grad_(False)
 
-        self.latent_dim = autoencoder.latent_dim
+        self.latent_dim = vae.latent_dim
 
         self.flow_main = make_flow(self.latent_dim // 2, n_layers)
         self.flow_residual = make_flow(self.latent_dim // 2, n_layers)
+
 
     def forward(self, image, background):
         latent, _ = self.encoder(image, background)
@@ -92,10 +96,8 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
             )
 
     def configure_optimizers(self):
-        assert self.hparams["optimizer_params"] is not None, "Need to specify `optimizer_params`."
-        name = self.hparams["optimizer_params"]["name"]
-        kwargs = self.hparams["optimizer_params"]["kwargs"]
-        return get_optimizer(name, self.parameters(), kwargs)
+        assert self.optimizer_params is not None
+        return get_optimizer(self.optimizer_params["name"], self.parameters(), self.optimizer_params["kwargs"])
 
 
 def make_flow(latent_dim, n_layers):

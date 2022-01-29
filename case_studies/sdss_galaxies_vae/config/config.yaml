@@ -98,7 +98,9 @@ models:
         autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
         hidden: 256
     galaxy_flow:
-        vae_ckpt: ${paths.project}/models/sdss_vae.ckpt
+        _target_: bliss.models.vae.galaxy_flow.CenteredGalaxyLatentFlow
+        vae: ${models.galaxy_vae}
+        vae_ckpt: ${paths.project}/models/sdss_vae.pt
     galaxy_vae:
         _target_: bliss.models.vae.galaxy_net.OneCenteredGalaxyVAE
         latent_dim: 16
@@ -121,7 +123,7 @@ models:
         vae: ${models.galaxy_vae}
         vae_ckpt: ${paths.project}/models/sdss_vae.pt
         vae_flow: ${models.galaxy_flow}
-        vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.ckpt
+        vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
