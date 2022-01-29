@@ -1,7 +1,6 @@
 defaults:
     - _self_
     - training: sdss_autoencoder
-    - generate: sdss_individual_galaxies
     - override hydra/job_logging: stdout
 
 # completely disable hydra logging
