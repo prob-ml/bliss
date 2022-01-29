@@ -87,12 +87,15 @@ class ImagePrior(pl.LightningModule):
 
         self.prob_galaxy = float(prob_galaxy)
         if prob_galaxy > 0.0:
-            self.vae = galaxy_net.OneCenteredGalaxyAE.load_from_checkpoint(vae_ckpt)
+            assert vae is not None
+            assert vae_ckpt is not None
+            vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))
+            self.vae = vae
             if vae_flow_ckpt is not None:
                 print("INFO: Loading trained normalizing flow for galaxy latents")
-                flow = CenteredGalaxyLatentFlow.load_from_checkpoint(vae_flow_ckpt)
-                self.vae.dist_main = flow.flow_main
-                self.vae.dist_residual = flow.flow_residual
+                vae_flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
+                self.vae.dist_main = vae_flow.flow_main
+                self.vae.dist_residual = vae_flow.flow_residual
         else:
             self.vae = None
 

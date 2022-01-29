@@ -1,0 +1,2 @@
+outdir: ${paths.project}/output/sdss_figures
+real: false

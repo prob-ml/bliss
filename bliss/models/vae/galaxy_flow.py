@@ -22,7 +22,7 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         self.optimizer_params = optimizer_params
         # Embed the autoencoder
         # assert vae_ckpt is not None
-        vae.load_state_dict(torch.load(vae_ckpt, map_location = vae.device))
+        vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))
         # autoencoder = OneCenteredGalaxyVAE.load_from_checkpoint(vae_ckpt)
         self.encoder = vae.get_encoder()
         self.encoder.requires_grad_(False)
@@ -34,7 +34,6 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
 
         self.flow_main = make_flow(self.latent_dim // 2, n_layers)
         self.flow_residual = make_flow(self.latent_dim // 2, n_layers)
-
 
     def forward(self, image, background):
         latent, _ = self.encoder(image, background)
@@ -97,7 +96,9 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
 
     def configure_optimizers(self):
         assert self.optimizer_params is not None
-        return get_optimizer(self.optimizer_params["name"], self.parameters(), self.optimizer_params["kwargs"])
+        return get_optimizer(
+            self.optimizer_params["name"], self.parameters(), self.optimizer_params["kwargs"]
+        )
 
 
 def make_flow(latent_dim, n_layers):

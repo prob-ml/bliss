@@ -65,7 +65,6 @@ class GalaxyEncoder(pl.LightningModule):
         max_flux_valid_plots: Optional[int] = None,
     ):
         super().__init__()
-        self.save_hyperparameters()
 
         self.max_sources = 1  # by construction.
         self.crop_loss_at_border = crop_loss_at_border
@@ -146,6 +145,9 @@ class GalaxyEncoder(pl.LightningModule):
         z = self.enc(centered_ptiles)
         assert z.shape[0] == n_ptiles
         return z
+
+    def sample(self, image_ptiles, tile_locs):
+        return self.forward(image_ptiles, tile_locs)
 
     def get_loss(self, batch):
         images = batch["images"]

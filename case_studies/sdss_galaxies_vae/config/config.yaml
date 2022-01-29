@@ -1,6 +1,6 @@
 defaults:
     - _self_
-    - training: sdss_autoencoder
+    - training: sdss_vae
     - override hydra/job_logging: stdout
 
 # completely disable hydra logging
@@ -91,11 +91,10 @@ models:
         dropout: 0.0
         hidden: 128
     galaxy_encoder:
-        _target_: bliss.models.galaxy_encoder.GalaxyEncoder
+        _target_: bliss.models.vae.galaxy_encoder.GalaxyEncoder
         prior: ${models.prior}
         decoder: ${models.decoder}
-        autoencoder: ${models.galaxy_net}
-        autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+        vae: ${models.galaxy_vae}
         hidden: 256
     galaxy_flow:
         _target_: bliss.models.vae.galaxy_flow.CenteredGalaxyLatentFlow
@@ -157,6 +156,7 @@ predict:
     # i/o parameters
     sleep_checkpoint: ${paths.project}/models/sdss_sleep.pt
     galaxy_checkpoint: ${paths.project}/models/sdss_galaxy_encoder.pt
+    galaxy_checkpoint_real: ${paths.project}/models/sdss_galaxy_encoder_real.pt
     binary_checkpoint: ${paths.project}/models/sdss_binary.pt
     device: "cuda:0"
     output_file: null
@@ -190,14 +190,7 @@ training:
         num_workers: 0
     weight_save_path: ${paths.project}/models/${training.name}.pt
 
-plots:
-    fig:
-        - 1
-        - 2
-        - 3
-    outdir: ${paths.project}/output/sdss_figures
-    overwrite: false
-    simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
+reconstruct:
     sdss_pixel_scale: 0.396
     device: "cuda:0"
     coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits

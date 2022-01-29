@@ -12,7 +12,7 @@ from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
-from bliss.optimizer import load_optimizer
+from bliss.optimizer import get_optimizer, load_optimizer
 from bliss.reporting import plot_image, plot_image_and_locs
 
 
@@ -56,23 +56,24 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         prior,
         decoder,
+        vae: OneCenteredGalaxyVAE,
         hidden: int = 256,
         optimizer_params: dict = None,
         from_scratch: bool = True,
+        vae_ckpt: str = None,
         crop_loss_at_border=False,
         checkpoint_path: Optional[str] = None,
         max_flux_valid_plots: Optional[int] = None,
     ):
         super().__init__()
-        self.save_hyperparameters()
-
         self.max_sources = 1  # by construction.
         self.crop_loss_at_border = crop_loss_at_border
         self.max_flux_valid_plots = max_flux_valid_plots
+        self.optimizer_params = optimizer_params
 
         # to produce images to train on.
-        self.image_prior = ImagePrior(**prior)
-        self.image_decoder = ImageDecoder(**decoder)
+        self.image_prior = prior
+        self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
         self.image_decoder.eval()
 
@@ -87,14 +88,10 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        autoencoder_ckpt = decoder["autoencoder_ckpt"]
-        autoencoder = OneCenteredGalaxyVAE.load_from_checkpoint(autoencoder_ckpt)
-        if from_scratch:
-            autoencoder = OneCenteredGalaxyVAE(
-                slen=autoencoder.slen, latent_dim=autoencoder.latent_dim
-            )
-        self.enc = autoencoder.get_encoder(allow_pad=True)
-        self.latent_dim = autoencoder.latent_dim
+        if not from_scratch:
+            vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))
+        self.enc = vae.get_encoder(allow_pad=True)
+        self.latent_dim = vae.latent_dim
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
@@ -121,7 +118,7 @@ class GalaxyEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Set up optimizers (pytorch-lightning method)."""
-        return load_optimizer(self.enc.parameters(), self.hparams)
+        return get_optimizer(self.optimizer_params["name"], self.enc.parameters(), self.hparams)
 
     def forward_image(self, images, tile_locs):
         batch_size = images.shape[0]
@@ -147,6 +144,10 @@ class GalaxyEncoder(pl.LightningModule):
         z, pq_z = self.enc(centered_ptiles)
         assert z.shape[0] == n_ptiles
         return z, pq_z
+
+    def sample(self, image_ptiles, tile_locs):
+        z, _ = self.forward(image_ptiles, tile_locs)
+        return z
 
     def get_loss(self, batch):
         images = batch["images"]
