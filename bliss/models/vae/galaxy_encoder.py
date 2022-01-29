@@ -8,11 +8,10 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 
-from bliss.models.prior import ImagePrior
-from bliss.models.decoder import ImageDecoder, get_mgrid
+from bliss.models.decoder import get_mgrid
 from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
-from bliss.optimizer import get_optimizer, load_optimizer
+from bliss.optimizer import get_optimizer
 from bliss.reporting import plot_image, plot_image_and_locs
 
 

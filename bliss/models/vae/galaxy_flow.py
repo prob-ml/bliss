@@ -17,13 +17,11 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         n_layers=10,
     ):
         super().__init__()
-        # self.save_hyperparameters()
 
         self.optimizer_params = optimizer_params
         # Embed the autoencoder
         # assert vae_ckpt is not None
         vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))
-        # autoencoder = OneCenteredGalaxyVAE.load_from_checkpoint(vae_ckpt)
         self.encoder = vae.get_encoder()
         self.encoder.requires_grad_(False)
 

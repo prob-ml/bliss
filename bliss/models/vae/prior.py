@@ -3,7 +3,6 @@ import pytorch_lightning as pl
 from einops import rearrange
 from torch.distributions import Poisson
 
-from bliss.models import galaxy_net
 from bliss.models.location_encoder import get_is_on_from_n_sources
 from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
@@ -65,8 +64,10 @@ class ImagePrior(pl.LightningModule):
             f_max: Prior parameter on fluxes
             alpha: Prior parameter on fluxes (pareto parameter)
             prob_galaxy: Prior probability a source is a galaxy
-            autoencoder_ckpt: Location of checkpoint of galaxy encoder.
-            autoencoder_flow_ckpt: Location of checkpoint of flow for latent distribution
+            vae: Variational autoencoder object with prior
+            vae_ckpt: State dict for loading variational autoencoder weights
+            vae_flow: Normalizing flow for sampling prior
+            vae_flow_ckpt: State dict for learned normalizing flow
         """
         super().__init__()
         self.n_bands = n_bands
