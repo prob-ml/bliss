@@ -27,7 +27,6 @@ from bliss.predict import predict_on_image, predict_on_scene
 from bliss.sleep import SleepPhase
 
 device = torch.device("cuda:0")
-plt.style.use("seaborn-colorblind")
 pl.seed_everything(0)
 
 files_dict = {
@@ -355,6 +354,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
         pad = 6.0
         reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
+        plt.style.use("seaborn-colorblind")
         for figname in self.fignames:
             true, recon, res = data[figname]
             fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
@@ -451,9 +451,9 @@ class AEReconstructionFigures(BlissFigures):
         }
 
     def reconstruction_figure(self, images, recons, residuals):
-        plt.style.use("seaborn-colorblind")
         pad = 6.0
         reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
+        plt.style.use("seaborn-colorblind")
         fig, axes = plt.subplots(nrows=self.n_examples, ncols=3, figsize=(12, 20))
 
         assert images.shape[0] == recons.shape[0] == residuals.shape[0] == self.n_examples
