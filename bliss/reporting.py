@@ -468,6 +468,7 @@ def get_single_galaxy_measurements(
 
 
 def plot_image(fig, ax, image, vrange=None):
+
     vmin = image.min().item() if vrange is None else vrange[0]
     vmax = image.max().item() if vrange is None else vrange[1]
 
