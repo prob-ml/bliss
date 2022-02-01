@@ -1,7 +1,6 @@
 defaults:
     - _self_
     - training: sdss_autoencoder
-    - generate: sdss_individual_galaxies
     - override hydra/job_logging: stdout
 
 # completely disable hydra logging
@@ -17,17 +16,19 @@ gpus: 1 # use a single gpu by default.
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    output: ${paths.root}/output
     sdss: ${paths.root}/data/sdss
     data: ${paths.root}/data
+    project: ${paths.root}/case_studies/sdss_galaxies
+    output: ${paths.project}/output
 
 datasets:
     sdss_blended_galaxies:
         _target_: bliss.datasets.sdss_blended_galaxies.SdssBlendedGalaxies
         sleep: ${models.sleep}
         binary_encoder: ${models.binary}
-        sleep_ckpt: models/sdss_sleep.pt
-        binary_ckpt: models/sdss_binary.pt
+        sleep_ckpt: ${paths.project}/models/sdss_sleep.pt
+        binary_ckpt: ${paths.project}/models/sdss_binary.pt
+        sdss_dir: ${paths.sdss}
         prerender_device: "cuda"
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
@@ -44,7 +45,7 @@ datasets:
         min_a_b: 0.8
         max_a_b: 3.6 # from catalog with mag < 22.2 cut.
         flux_sample: "uniform"
-        psf_image_file: data/psField-000094-1-0012-PSF-image.npy
+        psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
@@ -86,10 +87,10 @@ models:
         tile_slen: 4
         ptile_slen: 52
         border_padding: 24
-        psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
+        psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         prob_galaxy: 0.7
         autoencoder: ${models.galaxy_net}
-        autoencoder_ckpt: models/sdss_autoencoder.pt
+        autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
         background_values:
             - 865.0
         sdss_bands:
@@ -109,7 +110,7 @@ models:
         prior: ${models.prior}
         decoder: ${models.decoder}
         autoencoder: ${models.galaxy_net}
-        autoencoder_ckpt: models/sdss_autoencoder.pt
+        autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
         hidden: 256
     galaxy_net:
         _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
@@ -130,8 +131,9 @@ models:
         alpha: 0.5
         prob_galaxy: 0.7
         autoencoder: ${models.galaxy_net}
-        autoencoder_ckpt: models/sdss_autoencoder.pt
-        latents_file: data/latents_simulated_sdss_galaxies.pt
+        autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+        latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
+        psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
@@ -145,8 +147,9 @@ generate:
     common: # What attributes of dataset items are in common and should not be stacked?
     n_plots: 25
 predict:
-    sdss_kwargs:
-        sdss_dir: data/sdss
+    sdss:
+        _target_: bliss.datasets.sdss.SloanDigitalSkySurvey
+        sdss_dir: ${paths.sdss}
         run: 94
         camcol: 1
         fields:
@@ -162,9 +165,9 @@ predict:
     clen: 300
 
     # i/o parameters
-    sleep_checkpoint: models/sdss_sleep.pt
-    galaxy_checkpoint: models/sdss_galaxy_encoder.pt
-    binary_checkpoint: models/sdss_binary.pt
+    sleep_checkpoint: ${paths.project}/models/sdss_sleep.pt
+    galaxy_checkpoint: ${paths.project}/models/sdss_galaxy_encoder.pt
+    binary_checkpoint: ${paths.project}/models/sdss_binary.pt
     device: "cuda:0"
     output_file: null
 
@@ -195,4 +198,18 @@ training:
         file: null
         batch_size: 32
         num_workers: 0
-    weight_save_path: "${paths.root}/models/${training.name}.pt"
+    weight_save_path: ${paths.project}/models/${training.name}.pt
+
+plots:
+    fig:
+        - 1
+        - 2
+        - 3
+    outdir: ${paths.project}/output/sdss_figures
+    overwrite: false
+    simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
+    sdss_pixel_scale: 0.396
+    device: "cuda:0"
+    coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
+    psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+    

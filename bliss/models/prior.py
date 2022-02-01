@@ -50,6 +50,7 @@ class ImagePrior(pl.LightningModule):
         autoencoder_ckpt: str = None,
         latents_file: str = None,
         n_latent_batches: int = 160,
+        psf_image_file: Optional[str] = None,
     ):
         """Initializes ImagePrior.
 
@@ -70,6 +71,7 @@ class ImagePrior(pl.LightningModule):
             autoencoder_ckpt: Location of state_dict for autoencoder (optional).
             latents_file: Location of previously sampled galaxy latent variables.
             n_latent_batches: Number of batches for galaxy latent samples.
+            psf_image_file: Path to psf image file for galaxy latent samples
         """
         super().__init__()
         self.n_bands = n_bands
@@ -93,7 +95,9 @@ class ImagePrior(pl.LightningModule):
             autoencoder.load_state_dict(
                 torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
             )
-            latents = get_galaxy_latents(latents_file, n_latent_batches, autoencoder)
+            latents = get_galaxy_latents(
+                latents_file, n_latent_batches, autoencoder, psf_image_file
+            )
         else:
             latents = torch.zeros(1, 1)
         self.register_buffer("latents", latents)
@@ -252,13 +256,14 @@ class ImagePrior(pl.LightningModule):
         return galaxy_params * galaxy_bool
 
 
-def get_galaxy_latents(latents_file: str, n_latent_batches: int, autoencoder: OneCenteredGalaxyAE):
+def get_galaxy_latents(
+    latents_file: str, n_latent_batches: int, autoencoder: OneCenteredGalaxyAE, psf_image_file: Path
+):
     assert latents_file is not None
     latents_file = Path(latents_file)
     if latents_file.exists():
         latents = torch.load(latents_file, "cpu")
     else:
-        psf_image_file = latents_file.parent / "psField-000094-1-0012-PSF-image.npy"
         dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
         dataloader = dataset.train_dataloader()
         autoencoder = autoencoder.cuda()

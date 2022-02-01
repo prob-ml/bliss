@@ -6,32 +6,11 @@ from hydra.utils import instantiate
 
 
 # command line arguments for tests
-def pytest_addoption(parser):
-    parser.addoption(
-        "--gpu",
-        action="store_true",
-        default=False,
-        help="Run tests using gpu.",
-    )
-
-
-def pytest_collection_modifyitems(config, items):
-    # skip `multi_gpu` required tests when running on cpu or only single gpu is avaiable
-    if config.getoption("--gpu") and torch.cuda.device_count() >= 2:
-        return
-    skip = pytest.mark.skip(reason="need --gpu option and more than 2 available gpus to run")
-    for item in items:
-        if "multi_gpu" in item.keywords:
-            item.add_marker(skip)
 
 
 def get_cfg(overrides, devices):
     overrides.update({"gpus": devices.gpus})
-    overrides.update(
-        {
-            "training.weight_save_path": None,
-        }
-    )
+    overrides.update({"training.weight_save_path": None})
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
@@ -90,6 +69,13 @@ class ModelSetup:
         test_module = self.get_dataset_for_training(overrides)
         trainer = self.get_trainer(overrides)
         return trainer.test(model, datamodule=test_module)[0]
+
+
+@pytest.fixture(scope="session")
+def paths():
+    with initialize(config_path="../config"):
+        cfg = compose("config")
+    return cfg.paths
 
 
 @pytest.fixture(scope="session")
