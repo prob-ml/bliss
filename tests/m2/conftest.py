@@ -20,3 +20,8 @@ class M2ModelSetup(ModelSetup):
 @pytest.fixture(scope="session")
 def m2_model_setup(devices):
     return M2ModelSetup(devices)
+
+
+@pytest.fixture(scope="session")
+def paths(devices):
+    return get_m2_cfg({}, devices).paths

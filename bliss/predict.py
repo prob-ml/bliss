@@ -240,7 +240,7 @@ def predict(cfg: DictConfig):
     testing = cfg.predict.testing
 
     # load images from SDSS for prediction.
-    sdss_obj = sdss.SloanDigitalSkySurvey(**cfg.predict.sdss_kwargs)
+    sdss_obj = instantiate(cfg.predict.sdss)
     image = sdss_obj[0]["image"][0]
     image = rearrange(torch.from_numpy(image), "h w -> 1 1 h w")
 

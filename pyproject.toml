@@ -47,9 +47,6 @@ tox = "^3.20.1"
 tqdm = "^4.62.3"
 wemake-python-styleguide = "^0.15.3"
 
-[tool.poetry.scripts]
-bliss = "bliss.main:main"
-
 [build-system]
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]

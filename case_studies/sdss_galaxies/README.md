@@ -1,3 +1,5 @@
 sdss_galaxies
 ========
-Jupyter notebooks to reproduces results of running the BLISS galaxy deblender on SDSS images.
+Contains scripts to re-run the SDSS galaxies experiment with the autoencoder.
+
+- `plots.py` contains code for reproducing figures for the paper. 
