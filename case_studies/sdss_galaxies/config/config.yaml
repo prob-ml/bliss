@@ -129,10 +129,13 @@ models:
         f_max: 1e6
         alpha: 0.5
         prob_galaxy: 0.7
-        autoencoder: ${models.galaxy_net}
-        autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
-        latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
-        psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+        galaxy_prior:
+            _target_: bliss.models.prior.GalaxyPrior
+            autoencoder: ${models.galaxy_net}
+            autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+            latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
+            n_latent_batches: 160
+            psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
