@@ -76,6 +76,6 @@ markers = [
 ]
 minversion = "6.0"
 testpaths = [
+  "case_studies",
   "tests",
-  "case_studies/sdss_galaxies/tests",
 ]
