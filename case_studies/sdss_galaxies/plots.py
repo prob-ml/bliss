@@ -262,10 +262,6 @@ class SDSSReconstructionFigures(BlissFigures):
         super().__init__(outdir=outdir, cache=cache, overwrite=overwrite)
 
     @property
-    def fignames(self):
-        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(4)}}
-
-    @property
     def lims(self):
         """Specificy spatial limits on frame to obtain chunks to reconstruct."""
 
@@ -273,10 +269,13 @@ class SDSSReconstructionFigures(BlissFigures):
         return {
             "sdss_recon0": ((1700, 2000), (200, 500)),  # scene
             "sdss_recon1": ((1000, 1300), (1150, 1450)),  # scene
-            "sdss_recon2": ((742, 790), (460, 508)),  # individual blend
-            "sdss_recon3": ((1128, 1160), (25, 57)),  # individual blend
-            "sdss_recon4": ((500, 552), (170, 202)),  # individual blend
+            "sdss_recon2": ((742, 790), (460, 508)),  # individual blend (both galaxies)
+            "sdss_recon3": ((1710, 1758), (1400, 1448)),  # individual blend (both galaxies)
         }
+
+    @property
+    def fignames(self):
+        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(len(self.lims))}}
 
     def compute_data(self, scene, sleep_net, binary_encoder, galaxy_encoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
@@ -332,7 +331,7 @@ class SDSSReconstructionFigures(BlissFigures):
         return data
 
     def create_figures(self, data):
-        """Make figures related to detection and classification in SDSS."""
+        """Make figures related to reconstruction in SDSS."""
         out_figures = {}
 
         plt.style.use("seaborn-colorblind")
@@ -659,6 +658,7 @@ def plots(cfg):
         galaxy_encoder.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
         galaxy_encoder = galaxy_encoder.to(device).eval()
 
+    # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in fig:
         autoencoder = instantiate(cfg.models.galaxy_net)
         autoencoder.load_state_dict(torch.load(cfg.models.decoder.autoencoder_ckpt))
