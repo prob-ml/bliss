@@ -47,6 +47,7 @@ class GalaxyPrior:
         self.latents = latents
 
     def sample(self, total_latent, device):
+        self.latents = self.latents.to(device)
         indices = torch.randint(0, len(self.latents), (total_latent,), device=device)
         return self.latents[indices]
 
@@ -270,7 +271,10 @@ class ImagePrior(pl.LightningModule):
         total_latent = batch_size * self.n_tiles_per_image * self.max_sources
 
         # first get random subset of indices to extract from self.latents
-        samples = self.galaxy_prior.sample(total_latent, galaxy_bool.device)
+        if self.prob_galaxy > 0.0:
+            samples = self.galaxy_prior.sample(total_latent, galaxy_bool.device)
+        else:
+            samples = torch.zeros((total_latent, 1), device=galaxy_bool.device)
         # indices = torch.randint(0, len(self.latents), (total_latent,), device=galaxy_bool.device)
         galaxy_params = rearrange(
             # self.latents[indices],

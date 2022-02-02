@@ -108,7 +108,7 @@ models:
         residual_delay_n_steps: 500
         min_sd: 1e-3
     prior:
-        _target_: bliss.models.vae.prior.ImagePrior
+        _target_: bliss.models.prior.ImagePrior
         n_bands: 1
         slen: 40
         tile_slen: 4
@@ -119,10 +119,12 @@ models:
         f_max: 1e6
         alpha: 0.5
         prob_galaxy: 0.7
-        vae: ${models.galaxy_vae}
-        vae_ckpt: ${paths.project}/models/sdss_vae.pt
-        vae_flow: ${models.galaxy_flow}
-        vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
+        galaxy_prior:
+            _target_: bliss.models.vae.prior.GalaxyVAEPrior
+            vae: ${models.galaxy_vae}
+            vae_ckpt: ${paths.project}/models/sdss_vae.pt
+            vae_flow: ${models.galaxy_flow}
+            vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
