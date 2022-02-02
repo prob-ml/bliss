@@ -275,9 +275,7 @@ class ImagePrior(pl.LightningModule):
             samples = self.galaxy_prior.sample(total_latent, galaxy_bool.device)
         else:
             samples = torch.zeros((total_latent, 1), device=galaxy_bool.device)
-        # indices = torch.randint(0, len(self.latents), (total_latent,), device=galaxy_bool.device)
         galaxy_params = rearrange(
-            # self.latents[indices],
             samples,
             "(b n s) g -> b n s g",
             b=batch_size,

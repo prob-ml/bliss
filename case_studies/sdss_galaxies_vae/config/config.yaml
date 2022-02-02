@@ -91,7 +91,7 @@ models:
         dropout: 0.0
         hidden: 128
     galaxy_encoder:
-        _target_: bliss.models.vae.galaxy_encoder.GalaxyEncoder
+        _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         prior: ${models.prior}
         decoder: ${models.decoder}
         vae: ${models.galaxy_vae}

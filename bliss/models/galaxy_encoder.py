@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from einops import rearrange
 from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
@@ -93,7 +94,6 @@ class GalaxyEncoder(pl.LightningModule):
         return z, pz_z
 
     def sample(self, image_ptiles, tile_locs):
-        # return self.forward(image_ptiles, tile_locs)
         z, _ = self.encode(image_ptiles, tile_locs)
         return z
 
