@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Produce all figures. Save to nice PDF format."""
-import argparse
-import os
+"""Produce all figures. Save to nice PNG format."""
 import warnings
 from abc import abstractmethod
 from pathlib import Path
 
 import galsim
+import hydra
 import matplotlib as mpl
 import numpy as np
 import pytorch_lightning as pl
@@ -17,16 +16,12 @@ from astropy.wcs.wcs import WCS
 from hydra import compose, initialize
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
-import hydra
 
 from bliss import generate, reporting
 from bliss.datasets import sdss
 from bliss.datasets.galsim_galaxies import load_psf_from_file
-from bliss.models.binary import BinaryEncoder
-from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.predict import predict_on_image, predict_on_scene
-from bliss.sleep import SleepPhase
 
 pl.seed_everything(0)
 
@@ -128,7 +123,7 @@ class BlissFigures:
         data = self.get_data(*args, **kwargs)
         figs = self.create_figures(data)
         for k, fname in self.fignames.items():
-            figs[k].savefig(self.outdir / fname, format="pdf")
+            figs[k].savefig(self.outdir / fname, format="png")
 
     @abstractmethod
     def create_figures(self, data):
@@ -143,8 +138,8 @@ class DetectionClassificationFigures(BlissFigures):
     @property
     def fignames(self):
         return {
-            "detection": "sdss-precision-recall.pdf",
-            "classification": "sdss-classification-acc.pdf",
+            "detection": "sdss-precision-recall.png",
+            "classification": "sdss-classification-acc.png",
         }
 
     def compute_data(self, scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
@@ -268,7 +263,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
     @property
     def fignames(self):
-        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.pdf" for i in range(4)}}
+        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(4)}}
 
     @property
     def lims(self):
@@ -380,10 +375,10 @@ class AEReconstructionFigures(BlissFigures):
     @property
     def fignames(self):
         return {
-            "random_recon": "random_reconstructions.pdf",
-            "worst_recon": "worst_reconstructions.pdf",
-            "measure_contours": "single_galaxy_measurements_contours.pdf",
-            "measure_scatter_bins": "single_galaxy_scatter_bins.pdf",
+            "random_recon": "random_reconstructions.png",
+            "worst_recon": "worst_reconstructions.png",
+            "measure_contours": "single_galaxy_measurements_contours.png",
+            "measure_scatter_bins": "single_galaxy_scatter_bins.png",
         }
 
     def compute_data(
@@ -640,8 +635,6 @@ class AEReconstructionFigures(BlissFigures):
 
 @hydra.main(config_path="./config", config_name="config")
 def plots(cfg):
-    # def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
-    # os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
 
     fig = set(cfg.plots.fig)
     outdir = cfg.plots.outdir
@@ -653,7 +646,7 @@ def plots(cfg):
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
     # load models necessary for SDSS reconstructions.
-    if len(fig.intersection({2, 3})) > 0:
+    if fig.intersection({2, 3}):
         sleep_net = instantiate(cfg.models.sleep)
         sleep_net.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
         sleep_net = sleep_net.to(device).eval()
@@ -703,4 +696,4 @@ def plots(cfg):
 
 
 if __name__ == "__main__":
-    plots()
+    plots()  # pylint: disable=no-value-for-parameter
