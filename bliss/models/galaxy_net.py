@@ -370,7 +370,7 @@ class OneCenteredGalaxyEncoder(nn.Module):
         latent_main = self.main_encoder(image - background)
         recon_mean_main = F.relu(self.main_decoder(latent_main)) + background
         latent_residual = self.residual_encoder(image - recon_mean_main)
-        return torch.cat((latent_main, latent_residual), dim=-1)
+        return torch.cat((latent_main, latent_residual), dim=-1), torch.tensor(0.0, device=None)
 
 
 class OneCenteredGalaxyDecoder(nn.Module):

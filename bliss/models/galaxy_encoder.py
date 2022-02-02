@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 from pathlib import Path
 
 import numpy as np
@@ -8,47 +8,14 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.optim import Adam
+from einops import rearrange
 
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
 from bliss.reporting import plot_image, plot_image_and_locs
-
-
-def center_ptiles(
-    image_ptiles, tile_locs, tile_slen, ptile_slen, border_padding, swap, cached_grid
-):
-    # assume there is at most one source per tile
-    # return a centered version of sources in tiles using their true locations in tiles.
-    # also we crop them to avoid sharp borders with no bacgkround/noise.
-
-    # round up necessary variables and paramters
-    assert len(image_ptiles.shape) == 4
-    assert len(tile_locs.shape) == 3
-    assert tile_locs.shape[1] == 1
-    assert image_ptiles.shape[-1] == ptile_slen
-    n_ptiles = image_ptiles.shape[0]
-    assert tile_locs.shape[0] == n_ptiles
-
-    # get new locs to do the shift
-    ptile_locs = tile_locs * tile_slen + border_padding
-    ptile_locs /= ptile_slen
-    locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
-    locs0 /= ptile_slen - 1
-    locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
-    locs = 2 * locs0 - ptile_locs
-
-    # center tiles on the corresponding source given by locs.
-    locs = (locs - 0.5) * 2
-    locs = locs.index_select(2, swap)  # transpose (x,y) coords
-    grid_loc = cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
-    shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
-
-    # now that everything is center we can crop easily
-    return shifted_tiles[
-        :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
-    ]
 
 
 class GalaxyEncoder(pl.LightningModule):
@@ -56,7 +23,7 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         prior: ImagePrior,
         decoder: ImageDecoder,
-        autoencoder: OneCenteredGalaxyAE,
+        autoencoder: Union[OneCenteredGalaxyAE, OneCenteredGalaxyVAE],
         autoencoder_ckpt: str = None,
         hidden: int = 256,
         optimizer_params: dict = None,
@@ -106,28 +73,7 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
-    def center_ptiles(self, image_ptiles, tile_locs):
-        return center_ptiles(
-            image_ptiles,
-            tile_locs,
-            self.tile_slen,
-            self.ptile_slen,
-            self.border_padding,
-            self.swap,
-            self.cached_grid,
-        )
-
-    def configure_optimizers(self):
-        """Set up optimizers (pytorch-lightning method)."""
-        return Adam(self.enc.parameters(), **self.optimizer_params)
-
-    def forward_image(self, images, tile_locs):
-        batch_size = images.shape[0]
-        ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        galaxy_params = self(ptiles, tile_locs)
-        return galaxy_params.view(batch_size, -1, 1, self.latent_dim)
-
-    def forward(self, image_ptiles, tile_locs):
+    def encode(self, image_ptiles, tile_locs):
         """Runs galaxy encoder on input image ptiles."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         n_ptiles = image_ptiles.shape[0]
@@ -142,17 +88,39 @@ class GalaxyEncoder(pl.LightningModule):
         centered_ptiles -= ptile_background.unsqueeze(0)
 
         # We can assume there is one galaxy per_tile and encode each tile independently.
-        z = self.enc(centered_ptiles)
+        z, pz_z = self.enc(centered_ptiles)
         assert z.shape[0] == n_ptiles
-        return z
+        return z, pz_z
 
     def sample(self, image_ptiles, tile_locs):
-        return self.forward(image_ptiles, tile_locs)
+        # return self.forward(image_ptiles, tile_locs)
+        z, _ = self.encode(image_ptiles, tile_locs)
+        return z
 
-    def get_loss(self, batch):
+    def training_step(self, batch, batch_idx):
+        """Pytorch lightning training step."""
+        loss = self._get_loss(batch)
+        self.log("train/loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        """Pytorch lightning validation step."""
+        loss = self._get_loss(batch)
+        self.log("val/loss", loss)
+        return batch
+
+    def _get_loss(self, batch):
         images = batch["images"]
-        tile_galaxy_params = self.forward_image(images, batch["locs"])
-
+        tile_locs = batch["locs"]
+        ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        z, pq_z = self.encode(ptiles, tile_locs)
+        tile_galaxy_params = rearrange(
+            z,
+            "(b n_tiles max_sources) d -> b n_tiles max_sources d",
+            b=images.shape[0],
+            n_tiles=ptiles.shape[0] // images.shape[0],
+            max_sources=1,
+        )
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
         recon_mean, recon_var = self.image_decoder.render_images(
@@ -170,19 +138,7 @@ class GalaxyEncoder(pl.LightningModule):
             bp = (recon_losses.shape[-1] - slen) // 2
             bp = bp * 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
-        return recon_losses.sum()
-
-    def training_step(self, batch, batch_idx):
-        """Pytorch lightning training step."""
-        loss = self.get_loss(batch)
-        self.log("train/loss", loss)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        """Pytorch lightning validation step."""
-        loss = self.get_loss(batch)
-        self.log("val/loss", loss)
-        return batch
+        return recon_losses.sum() - pq_z.sum()
 
     def validation_epoch_end(self, outputs):
         """Pytorch lightning method run at end of validation epoch."""
@@ -193,10 +149,10 @@ class GalaxyEncoder(pl.LightningModule):
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
                 batch[k] = torch.cat([curr_val, v])
         if self.n_bands == 1:
-            self.make_plots(batch)
+            self._make_plots(batch)
 
     # pylint: disable=too-many-statements
-    def make_plots(self, batch, n_samples=5):
+    def _make_plots(self, batch, n_samples=5):
         # validate worst reconstruction images.
         n_samples = min(len(batch["n_sources"]), n_samples)
         samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
@@ -214,9 +170,18 @@ class GalaxyEncoder(pl.LightningModule):
 
         # extract non-params entries so that 'get_full_params' to works.
         images = batch["images"]
+        tile_locs = batch["locs"]
         slen = int(batch["slen"].unique().item())
         # obtain map estimates
-        tile_galaxy_params = self.forward_image(images, batch["locs"])
+        ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        z, _ = self.encode(ptiles, tile_locs)
+        tile_galaxy_params = rearrange(
+            z,
+            "(b n_tiles max_sources) d -> b n_tiles max_sources d",
+            b=images.shape[0],
+            n_tiles=ptiles.shape[0] // images.shape[0],
+            max_sources=1,
+        )
 
         tile_est = {
             "n_sources": batch["n_sources"],
@@ -305,3 +270,56 @@ class GalaxyEncoder(pl.LightningModule):
         if self.logger:
             self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Validation Images", fig)
         plt.close(fig)
+
+    def center_ptiles(self, image_ptiles, tile_locs):
+        return center_ptiles(
+            image_ptiles,
+            tile_locs,
+            self.tile_slen,
+            self.ptile_slen,
+            self.border_padding,
+            self.swap,
+            self.cached_grid,
+        )
+
+    def configure_optimizers(self):
+        """Set up optimizers (pytorch-lightning method)."""
+        return Adam(self.enc.parameters(), **self.optimizer_params)
+
+    def forward(self, image_ptiles, tile_locs):
+        raise NotImplementedError("Please use encode()")
+
+
+def center_ptiles(
+    image_ptiles, tile_locs, tile_slen, ptile_slen, border_padding, swap, cached_grid
+):
+    # assume there is at most one source per tile
+    # return a centered version of sources in tiles using their true locations in tiles.
+    # also we crop them to avoid sharp borders with no bacgkround/noise.
+
+    # round up necessary variables and paramters
+    assert len(image_ptiles.shape) == 4
+    assert len(tile_locs.shape) == 3
+    assert tile_locs.shape[1] == 1
+    assert image_ptiles.shape[-1] == ptile_slen
+    n_ptiles = image_ptiles.shape[0]
+    assert tile_locs.shape[0] == n_ptiles
+
+    # get new locs to do the shift
+    ptile_locs = tile_locs * tile_slen + border_padding
+    ptile_locs /= ptile_slen
+    locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
+    locs0 /= ptile_slen - 1
+    locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
+    locs = 2 * locs0 - ptile_locs
+
+    # center tiles on the corresponding source given by locs.
+    locs = (locs - 0.5) * 2
+    locs = locs.index_select(2, swap)  # transpose (x,y) coords
+    grid_loc = cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
+    shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
+
+    # now that everything is center we can crop easily
+    return shifted_tiles[
+        :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
+    ]
