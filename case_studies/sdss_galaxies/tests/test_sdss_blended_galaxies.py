@@ -17,6 +17,7 @@ class TestSdssBlendedGalaxies:
             "+datasets.sdss_blended_galaxies.w_start": 1800,
             "+datasets.sdss_blended_galaxies.scene_size": 100,
             "training.n_epochs": 1,
+            "training.trainer.log_every_n_steps": 1,
         }
 
     def test_sdss_blended_galaxies(self, devices, overrides, get_config):
