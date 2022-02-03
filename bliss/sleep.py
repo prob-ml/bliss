@@ -20,7 +20,6 @@ from torch.optim import Adam
 from bliss.models import location_encoder as loc_enc
 from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
-from bliss.optimizer import load_optimizer
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")

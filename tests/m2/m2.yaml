@@ -76,11 +76,9 @@ models:
 training:
   model: "${models.sleep}"
   dataset: "${datasets.simulated_m2}"
-  optimizer:
-    name: Adam
-    kwargs:
-      lr: 0.00098352
-      weight_decay: 0.000080410
+  optimizer_params:
+    lr: 0.00098352
+    weight_decay: 0.000080410
   n_epochs: 400
   experiment: default
   version: null
@@ -97,39 +95,4 @@ training:
     gpus: ${gpus}
     log_every_n_steps: 10
     deterministic: False
-  weight_save_path:
-
-tuning:
-  model: "{models.sleep}"
-  dataset: "${datasets.simulated_m2}"
-  optimizer: ${training.optimizer}
-  search_space:
-    channel:
-      - 8
-      - 19
-    hidden:
-      - 32
-      - 257
-    spatial_dropout:
-      - 0
-      - 0.5
-    dropout:
-      - 0
-      - 0.5
-    lr:
-      - 1e-7
-      - 1e-3
-    weight_decay:
-      - 1e-6
-      - 1e-2
-  n_epochs: 400
-  gpus_per_trial: 1
-  allocated_gpus: 4
-  grace_period: 10
-  n_samples: 500
-  verbose: 1
-  seed: 42
-  save: True
-  limit_val_batches: 1
-  best_config_save_path: ${paths.root}/config/tuning/m2_best_result.yaml
-  log_path: ${paths.root}/output/tuning
+  weight_save_path: Null
