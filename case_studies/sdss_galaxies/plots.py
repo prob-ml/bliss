@@ -678,6 +678,7 @@ def plots(cfg):
         ae_figures.save_figures(
             autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale
         )
+        mpl.rc_file_defaults()
 
     # FIGURE 2: Classification and Detection metrics
     if 2 in fig:
@@ -685,12 +686,14 @@ def plots(cfg):
         coadd_cat = Table.read(cfg.plots.coadd_cat, format="fits")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
         dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+        mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in fig:
         scene = get_sdss_data(cfg)["image"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
         sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
+        mpl.rc_file_defaults()
 
     else:
         raise NotImplementedError("The figure specified has not been created.")
