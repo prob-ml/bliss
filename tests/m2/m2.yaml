@@ -69,7 +69,6 @@ models:
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
-        prior: ${models.prior}
         decoder: ${models.decoder}
 
 training:
