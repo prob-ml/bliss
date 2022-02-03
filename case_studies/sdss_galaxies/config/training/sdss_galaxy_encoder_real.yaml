@@ -18,5 +18,5 @@ training:
     lr: 1e-4
   n_epochs: 160
   trainer:
-    checkpoint_callback: True
+    enable_checkpointing: False
     check_val_every_n_epoch: 1
