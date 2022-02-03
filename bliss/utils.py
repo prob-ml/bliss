@@ -2,9 +2,6 @@ import math
 
 import torch
 from pytorch_lightning.utilities import rank_zero_only
-from torch import nn
-from torch.distributions import Normal
-from torch.nn import functional as F
 
 
 def empty(*args, **kwargs):
