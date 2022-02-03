@@ -37,8 +37,6 @@ poetry install
 poetry shell
 ```
 
-4. Finally, set an environment variable called `BLISS_HOME` to the absolute path of the `bliss` directory.
-
 # Latest updates
 ### Galaxies
    - BLISS now includes a galaxy model based on a VAE that was trained on Galsim galaxies.

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 import pytorch_lightning as pl
 import torch
@@ -28,9 +30,7 @@ def pytest_collection_modifyitems(config, items):
 def get_cfg(overrides, devices):
     overrides.update({"gpus": devices.gpus})
     overrides.update(
-        {
-            "training.weight_save_path": None,
-        }
+        {"training.weight_save_path": None, "paths.root": Path(__file__).parents[1].as_posix()}
     )
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path="../config"):
