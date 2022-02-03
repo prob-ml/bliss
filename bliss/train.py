@@ -10,49 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.profiler import AdvancedProfiler
-
-from bliss.utils import log_hyperparameters
-
-
-def setup_seed(cfg):
-    if cfg.training.trainer.deterministic:
-        assert cfg.training.seed is not None
-        pl.seed_everything(cfg.training.seed)
-
-
-def setup_logger(cfg, paths):
-    logger = False
-    if cfg.training.trainer.logger:
-        logger = TensorBoardLogger(
-            save_dir=paths["output"],
-            name=cfg.training.experiment,
-            version=cfg.training.version,
-            default_hp_metric=False,
-        )
-    return logger
-
-
-def setup_callbacks(cfg) -> Optional[ModelCheckpoint]:
-    if cfg.training.trainer.checkpoint_callback:
-        checkpoint_callback = ModelCheckpoint(
-            filename="epoch={epoch}-val_loss={val/loss:.3f}",
-            save_top_k=cfg.training.save_top_k,
-            verbose=True,
-            monitor="val/loss",
-            mode="min",
-            save_on_train_epoch_end=False,
-            auto_insert_metric_name=False,
-        )
-    else:
-        checkpoint_callback = None
-    return checkpoint_callback
-
-
-def setup_profiler(cfg):
-    profiler = None
-    if cfg.training.trainer.profiler:
-        profiler = AdvancedProfiler(filename="profile.txt")
-    return profiler
+from pytorch_lightning.utilities import rank_zero_only
 
 
 def train(cfg: DictConfig):
@@ -111,3 +69,79 @@ def train(cfg: DictConfig):
                     else:
                         del cp_data[k]
             fp.write(json.dumps(cp_data))
+
+
+def setup_seed(cfg):
+    if cfg.training.trainer.deterministic:
+        assert cfg.training.seed is not None
+        pl.seed_everything(cfg.training.seed)
+
+
+def setup_logger(cfg, paths):
+    logger = False
+    if cfg.training.trainer.logger:
+        logger = TensorBoardLogger(
+            save_dir=paths["output"],
+            name=cfg.training.experiment,
+            version=cfg.training.version,
+            default_hp_metric=False,
+        )
+    return logger
+
+
+def setup_callbacks(cfg) -> Optional[ModelCheckpoint]:
+    if cfg.training.trainer.checkpoint_callback:
+        checkpoint_callback = ModelCheckpoint(
+            filename="epoch={epoch}-val_loss={val/loss:.3f}",
+            save_top_k=cfg.training.save_top_k,
+            verbose=True,
+            monitor="val/loss",
+            mode="min",
+            save_on_train_epoch_end=False,
+            auto_insert_metric_name=False,
+        )
+    else:
+        checkpoint_callback = None
+    return checkpoint_callback
+
+
+def setup_profiler(cfg):
+    profiler = None
+    if cfg.training.trainer.profiler:
+        profiler = AdvancedProfiler(filename="profile.txt")
+    return profiler
+
+
+# https://github.com/ashleve/lightning-hydra-template/blob/main/src/utils/utils.py
+@rank_zero_only
+def log_hyperparameters(config, model, trainer) -> None:
+    """Log config and num of model parameters to all Lightning loggers."""
+
+    hparams = {}
+
+    # choose which parts of hydra config will be saved to loggers
+    hparams["mode"] = config["mode"]
+    hparams["gpus"] = config["gpus"]
+    hparams["training"] = config["training"]
+    hparams["model"] = config["training"]["model"]
+    hparams["dataset"] = config["training"]["dataset"]
+    hparams["optimizer"] = config["training"]["optimizer_params"]
+
+    # save number of model parameters
+    hparams["model/params_total"] = sum(p.numel() for p in model.parameters())
+    hparams["model/params_trainable"] = sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
+    hparams["model/params_not_trainable"] = sum(
+        p.numel() for p in model.parameters() if not p.requires_grad
+    )
+
+    # send hparams to all loggers
+    trainer.logger.log_hyperparams(hparams)
+
+    # trick to disable logging any more hyperparameters for all loggers
+    trainer.logger.log_hyperparams = empty
+
+
+def empty(*args, **kwargs):
+    pass
