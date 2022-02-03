@@ -14,11 +14,8 @@ training:
   name: "sdss_galaxy_encoder_real"
   model: ${models.galaxy_encoder}
   dataset: ${datasets.sdss_blended_galaxies}
-  optimizer:
-    name: Adam
-    kwargs:
-      lr: 1e-4
-      weight_decay: 0
+  optimizer_params:
+    lr: 1e-4
   n_epochs: 160
   trainer:
     checkpoint_callback: True

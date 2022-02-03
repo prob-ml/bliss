@@ -10,12 +10,8 @@ training:
     name: "sdss_galaxy_encoder"
     model: ${models.galaxy_encoder}
     dataset: ${datasets.simulated}
-    optimizer:
-        name: Adam
-        kwargs:
-            lr: 1e-4
-            weight_decay: 0
-
+    optimizer_params:
+        lr: 1e-4
     n_epochs: 4001
     trainer:
         checkpoint_callback: True

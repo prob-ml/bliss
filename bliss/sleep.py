@@ -15,6 +15,7 @@ from einops import rearrange
 from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
+from torch.optim import Adam
 
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder
@@ -25,7 +26,6 @@ from bliss.models.location_encoder import (
     get_params_in_batches,
     get_full_params_from_tiles,
 )
-from bliss.optimizer import load_optimizer
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
@@ -128,7 +128,7 @@ class SleepPhase(pl.LightningModule):
         decoder: ImageDecoder,
         annotate_probs: bool = False,
         slack=1.0,
-        optimizer_params: dict = None,  # pylint: disable=unused-argument
+        optimizer_params: dict = None,
     ):
         """Initializes SleepPhase class.
 
@@ -147,6 +147,7 @@ class SleepPhase(pl.LightningModule):
         self.image_prior = prior
         self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
+        self.optimizer_params = optimizer_params
 
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
@@ -293,7 +294,7 @@ class SleepPhase(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
-        return load_optimizer(self.image_encoder.parameters(), self.hparams)
+        return Adam(self.image_encoder.parameters(), **self.optimizer_params)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
