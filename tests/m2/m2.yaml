@@ -75,11 +75,9 @@ models:
 training:
     model: "${models.sleep}"
     dataset: "${datasets.simulated_m2}"
-    optimizer:
-        name: Adam
-        kwargs:
-            lr: 0.00098352
-            weight_decay: 0.000080410
+    optimizer_params:
+        lr: 0.00098352
+        weight_decay: 0.000080410
     n_epochs: 400
     experiment: default
     version: null
@@ -101,7 +99,7 @@ training:
 tuning:
     model: "{models.sleep}"
     dataset: "${datasets.simulated_m2}"
-    optimizer: ${training.optimizer}
+    optimizer_params: ${training.optimizer_params}
     search_space:
       channel:
         - 8

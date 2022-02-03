@@ -3,6 +3,7 @@ import torch
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.nn import BCELoss
+from torch.optim import Adam
 
 from bliss.models.decoder import get_mgrid
 from bliss.models.location_encoder import (
@@ -12,7 +13,6 @@ from bliss.models.location_encoder import (
     get_is_on_from_n_sources,
 )
 from bliss.models.galaxy_encoder import center_ptiles
-from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image_and_locs
 
 
@@ -46,6 +46,7 @@ class BinaryEncoder(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
+        self.optimizer_params = optimizer_params
 
         self.max_sources = 1  # by construction.
 
@@ -151,7 +152,7 @@ class BinaryEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Pytorch lightning method."""
-        return load_optimizer(self.parameters(), self.hparams)
+        return Adam(self.parameters(), **self.optimizer_params)
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning method."""

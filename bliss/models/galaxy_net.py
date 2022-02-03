@@ -7,9 +7,9 @@ from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
+from torch.optim import Adam
 from tqdm import tqdm
 
-from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image
 from bliss.utils import make_grid
 
@@ -64,6 +64,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
+        self.optimizer_params = optimizer_params
 
         self.main_encoder = CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
         self.main_decoder = CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
@@ -182,8 +183,11 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configures optimizers for training (pytorch lightning)."""
-        opt_main = load_optimizer(self.main_autoencoder.parameters(), self.hparams)
-        opt_residual = load_optimizer(self.residual_autoencoder.parameters(), self.hparams)
+        opt_main = Adam(self.main_autoencoder.parameters(), **self.optimizer_params["main"])
+        opt_residual = Adam(
+            self.residual_autoencoder.parameters(),
+            **self.optimizer_params["residual"],
+        )
         return opt_main, opt_residual
 
     def optimizer_step(

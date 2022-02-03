@@ -1,11 +1,11 @@
 name: "sdss_autoencoder"
 model: ${models.galaxy_net}
 dataset: ${datasets.sdss_galaxies}
-optimizer:
-  name: Adam
-  kwargs:
+optimizer_params:
+  main:
     lr: 1e-3
-    weight_decay: 0
+  residual:
+    lr: 1e-3
 n_epochs: 8001
 trainer:
   check_val_every_n_epoch: 10

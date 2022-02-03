@@ -72,7 +72,7 @@ def train(cfg: DictConfig):
     dataset = instantiate(cfg.training.dataset)
 
     # setup model
-    model = instantiate(cfg.training.model, optimizer_params=cfg.training.optimizer)
+    model = instantiate(cfg.training.model, optimizer_params=cfg.training.optimizer_params)
 
     # setup trainer
     logger = setup_logger(cfg, paths)
