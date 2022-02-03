@@ -36,9 +36,8 @@ class ImageDecoder(pl.LightningModule):
         tile_slen: int = 2,
         ptile_slen: int = 10,
         border_padding: int = None,
-        prob_galaxy: float = 0.0,
-        autoencoder: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
-        autoencoder_ckpt: str = None,
+        galaxy_ae: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
+        galaxy_ae_ckpt: str = None,
         psf_params_file: str = None,
         psf_slen: int = 25,
         background_values: Tuple[float, ...] = (686.0,),
@@ -52,9 +51,8 @@ class ImageDecoder(pl.LightningModule):
             tile_slen: Side-length of each tile.
             ptile_slen: Padded side-length of each tile (for reconstructing image).
             border_padding: Size of border around the final image where sources will not be present.
-            prob_galaxy: Prior probability a source is a galaxy
-            autoencoder: An autoencoder object for images of single galaxies.
-            autoencoder_ckpt: Path where state_dict of trained galaxy autoencoder is located.
+            galaxy_ae: An autoencoder object for images of single galaxies.
+            galaxy_ae_ckpt: Path where state_dict of trained galaxy autoencoder is located.
             psf_params_file: Path where point-spread-function (PSF) data is located.
             psf_slen: Side-length of reconstruced star image from PSF.
             background_values: Magnitude of the background (per-band)
@@ -82,13 +80,11 @@ class ImageDecoder(pl.LightningModule):
             psf_params_file=psf_params_file,
         )
 
-        if prob_galaxy > 0.0:
-            assert autoencoder_ckpt is not None
-            autoencoder.load_state_dict(
-                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
-            )
-            autoencoder.eval().requires_grad_(False)
-            galaxy_decoder = autoencoder.get_decoder()
+        if galaxy_ae is not None:
+            assert galaxy_ae_ckpt is not None
+            galaxy_ae.load_state_dict(torch.load(galaxy_ae_ckpt, map_location=torch.device("cpu")))
+            galaxy_ae.eval().requires_grad_(False)
+            galaxy_decoder = galaxy_ae.get_decoder()
             self.galaxy_tile_decoder = GalaxyTileDecoder(
                 tile_slen,
                 ptile_slen,
