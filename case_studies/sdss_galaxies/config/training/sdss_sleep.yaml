@@ -11,4 +11,4 @@ training:
   n_epochs: 1501
   save_top_k: 10
   trainer:
-    enable_checkpointing: False
+    enable_checkpointing: True

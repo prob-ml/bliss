@@ -10,4 +10,4 @@ optimizer:
 n_epochs: 501
 save_top_k: 5
 trainer:
-  enable_checkpointing: False
+  enable_checkpointing: True
