@@ -107,7 +107,6 @@ models:
         hidden: 128
     galaxy_encoder:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
-        prior: ${models.prior}
         decoder: ${models.decoder}
         autoencoder: ${models.galaxy_vae}
         autoencoder_ckpt: ${paths.project}/models/sdss_vae.pt
@@ -144,7 +143,6 @@ models:
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
-        prior: ${models.prior}
         decoder: ${models.decoder}
         annotate_probs: True
 

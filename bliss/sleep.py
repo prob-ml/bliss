@@ -17,7 +17,6 @@ from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 
-from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder
 from bliss.models.location_encoder import (
     LocationEncoder,
@@ -124,7 +123,6 @@ class SleepPhase(pl.LightningModule):
     def __init__(
         self,
         encoder: LocationEncoder,
-        prior: ImagePrior,
         decoder: ImageDecoder,
         annotate_probs: bool = False,
         slack=1.0,
@@ -142,7 +140,6 @@ class SleepPhase(pl.LightningModule):
         """
         super().__init__()
         self.image_encoder = encoder
-        self.image_prior = prior
         self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
         self.optimizer_params = optimizer_params

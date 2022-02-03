@@ -11,7 +11,6 @@ from torch.nn import functional as F
 from torch.optim import Adam
 from einops import rearrange
 
-from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
@@ -22,7 +21,6 @@ from bliss.reporting import plot_image, plot_image_and_locs
 class GalaxyEncoder(pl.LightningModule):
     def __init__(
         self,
-        prior: ImagePrior,
         decoder: ImageDecoder,
         autoencoder: Union[OneCenteredGalaxyAE, OneCenteredGalaxyVAE],
         autoencoder_ckpt: str = None,
@@ -40,7 +38,6 @@ class GalaxyEncoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
 
         # to produce images to train on.
-        self.image_prior = prior
         self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
 
