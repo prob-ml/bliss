@@ -1,25 +1,21 @@
 import math
 
-import pytorch_lightning as pl
 import torch
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm1d
+
 from nflows.distributions import StandardNormal
 from nflows.flows import Flow
-
-from bliss.optimizer import load_optimizer
-from bliss.reporting import plot_image
-from bliss.utils import make_grid
-from bliss.models.galaxy_net import CenteredGalaxyDecoder, ResidualConvBlock
+from bliss.models.galaxy_net import CenteredGalaxyDecoder, ResidualConvBlock, OneCenteredGalaxyAE
 
 plt.switch_backend("Agg")
 plt.ioff()
 
 
-class OneCenteredGalaxyVAE(pl.LightningModule):
+class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
     """Autoencoder for single, centered galaxy images.
 
     This module implements an autoencoder(AE) + training procedure on images of centered
@@ -72,7 +68,7 @@ class OneCenteredGalaxyVAE(pl.LightningModule):
             latent_dim=(latent_dim // 2) * 2,
             n_bands=n_bands,
         )
-        self.main_decoder = CenteredGalaxyDecoder(
+        self.main_decoder = CenteredGalaxyVAEDecoder(
             slen=slen, latent_dim=latent_dim // 2, n_bands=n_bands
         )
         self.main_autoencoder = nn.Sequential(self.main_encoder, self.main_decoder)
@@ -82,7 +78,7 @@ class OneCenteredGalaxyVAE(pl.LightningModule):
             latent_dim=(latent_dim // 2) * 2,
             n_bands=n_bands,
         )
-        self.residual_decoder = CenteredGalaxyDecoder(
+        self.residual_decoder = CenteredGalaxyVAEDecoder(
             slen=slen, latent_dim=latent_dim // 2, n_bands=n_bands
         )
         self.residual_autoencoder = nn.Sequential(self.residual_encoder, self.residual_decoder)
@@ -223,32 +219,6 @@ class OneCenteredGalaxyVAE(pl.LightningModule):
         residuals = (images - recon_mean) / torch.sqrt(recon_mean)
         self.log("max_residual", residuals.abs().max())
 
-    def configure_optimizers(self):
-        """Configures optimizers for training (pytorch lightning)."""
-        opt_main = load_optimizer(self.main_autoencoder.parameters(), self.hparams)
-        opt_residual = load_optimizer(self.residual_autoencoder.parameters(), self.hparams)
-        return opt_main, opt_residual
-
-    def optimizer_step(
-        self,
-        epoch: int = None,
-        batch_idx: int = None,
-        optimizer=None,
-        optimizer_idx: int = None,
-        optimizer_closure=None,
-        on_tpu: bool = None,
-        using_native_amp: bool = None,
-        using_lbfgs: bool = None,
-    ) -> None:
-
-        # update generator every step
-        if optimizer_idx == 0:
-            optimizer.step(closure=optimizer_closure)
-
-        if optimizer_idx == 1:
-            if self.trainer.global_step > self.residual_delay_n_steps:
-                optimizer.step(closure=optimizer_closure)
-
     def _main_forward(self, image, background):
         latent_main_mean, latent_main_sd = torch.split(
             self.main_encoder(image - background), (self.latent_dim // 2, self.latent_dim // 2), -1
@@ -270,107 +240,6 @@ class OneCenteredGalaxyVAE(pl.LightningModule):
         q_latent_residual = latent_dist.log_prob(latent_residual).sum(-1)
         recon_mean_residual = self.residual_decoder(latent_residual)
         return recon_mean_residual, p_latent_residual - q_latent_residual
-
-    def _get_likelihood_loss(self, image, recon_mean):
-        # this is nan whenever recon_mean is not strictly positive
-        return -Normal(recon_mean, recon_mean.sqrt().clamp(min=self.min_sd)).log_prob(image).sum()
-
-    def _plot_reconstruction(self, outputs, n_examples=10, mode="random", width=20, pad=6.0):
-        # combine all images and recon_mean's into a single tensor
-        images = outputs["images"]
-        recon_mean = outputs["recon_mean"]
-        residuals = outputs["residuals"]
-        recon_mean_main = outputs["recon_mean_main"]
-        residuals_main = outputs["residuals_main"]
-        recon_mean_residual = outputs["recon_mean_residual"]
-
-        # only plot i band if available, otherwise the highest band given.
-        assert images.size(0) >= n_examples
-        assert images.shape[1] == recon_mean.shape[1] == residuals.shape[1] == 1, "1 band only."
-        figsize = (width, width * n_examples / 6)
-        fig, axes = plt.subplots(nrows=n_examples, ncols=6, figsize=figsize)
-
-        if mode == "random":
-            indices = torch.randint(0, len(images), size=(n_examples,))
-        elif mode == "worst":
-            # get indices where absolute residual is the largest.
-            absolute_residual = residuals.abs().sum(axis=(1, 2, 3))
-            indices = absolute_residual.argsort()[-n_examples:]
-        else:
-            raise NotImplementedError(f"Specified mode '{mode}' has not been implemented.")
-
-        # pick standard ranges for residuals
-        vmin_res = residuals[indices].min().item()
-        vmax_res = residuals[indices].max().item()
-
-        for i in range(n_examples):
-            idx = indices[i]
-
-            ax_true = axes[i, 0]
-            ax_recon = axes[i, 1]
-            ax_res = axes[i, 2]
-            ax_recon_main = axes[i, 3]
-            ax_res_main = axes[i, 4]
-            ax_recon_res = axes[i, 5]
-
-            # only add titles to the first axes.
-            if i == 0:
-                ax_true.set_title("Images $x$", pad=pad)
-                ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
-                ax_res.set_title(
-                    r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad
-                )
-                ax_recon_main.set_title("Initial Reconstruction", pad=pad)
-                ax_res_main.set_title("Initial Residual", pad=pad)
-                ax_recon_res.set_title("Initial Residual Reconstruction", pad=pad)
-
-            # standarize ranges of true and reconstruction
-            image = images[idx, 0].detach().cpu().numpy()
-            recon = recon_mean[idx, 0].detach().cpu().numpy()
-            residual = residuals[idx, 0].detach().cpu().numpy()
-            recon_mean_main_i = recon_mean_main[idx, 0].detach().cpu().numpy()
-            residuals_main_i = residuals_main[idx, 0].detach().cpu().numpy()
-            recon_mean_residual_i = recon_mean_residual[idx, 0].detach().cpu().numpy()
-            vmin = min(image.min().item(), recon.min().item())
-            vmax = max(image.max().item(), recon.max().item())
-
-            # plot images
-            plot_image(fig, ax_true, image, vrange=(vmin, vmax))
-            plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
-            plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
-            plot_image(fig, ax_recon_main, recon_mean_main_i, vrange=(vmin, vmax))
-            plot_image(fig, ax_res_main, residuals_main_i, vrange=(vmin_res, vmax_res))
-            plot_image(fig, ax_recon_res, recon_mean_residual_i, vrange=(vmin_res, vmax_res))
-
-        plt.tight_layout()
-        return fig
-
-    def _plot_grid_examples(self, outputs):
-        images, recon_mean = outputs["images"], outputs["recon_mean"]
-        # 1.  plot a grid of all input images and recon_mean
-        # 2.  only plot the highest band
-
-        nrow = 16
-        residuals = (images - recon_mean) / torch.sqrt(images)
-
-        image_grid = make_grid(images, nrow=nrow)[0]
-        recon_grid = make_grid(recon_mean, nrow=nrow)[0]
-        residual_grid = make_grid(residuals, nrow=nrow)[0]
-        h, w = image_grid.size()
-        base_size = 8
-        fig = plt.figure(figsize=(3 * base_size, int(h / w * base_size)))
-        for i, grid in enumerate([image_grid, recon_grid, residual_grid]):
-            plt.subplot(1, 3, i + 1)
-            plt.imshow(grid.cpu().numpy(), interpolation=None)
-            if i == 0:
-                plt.title("images")
-            elif i == 1:
-                plt.title("recon_mean")
-            else:
-                plt.title("residuals")
-            plt.xticks([])
-            plt.yticks([])
-        return fig
 
     def _ensure_dist_on_device(self):
         self.dist_main = Normal(
