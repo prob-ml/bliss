@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Produce all figures. Save to nice PDF format."""
-import argparse
-import os
+"""Produce all figures. Save to nice PNG format."""
 import warnings
 from abc import abstractmethod
 from pathlib import Path
 
 import galsim
+import hydra
 import matplotlib as mpl
 import numpy as np
 import pytorch_lightning as pl
@@ -17,16 +16,12 @@ from astropy.wcs.wcs import WCS
 from hydra import compose, initialize
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
-import hydra
 
 from bliss import generate, reporting
 from bliss.datasets import sdss
 from bliss.datasets.galsim_galaxies import load_psf_from_file
-from bliss.models.binary import BinaryEncoder
-from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.predict import predict_on_image, predict_on_scene
-from bliss.sleep import SleepPhase
 
 pl.seed_everything(0)
 
@@ -128,7 +123,7 @@ class BlissFigures:
         data = self.get_data(*args, **kwargs)
         figs = self.create_figures(data)
         for k, fname in self.fignames.items():
-            figs[k].savefig(self.outdir / fname, format="pdf")
+            figs[k].savefig(self.outdir / fname, format="png")
 
     @abstractmethod
     def create_figures(self, data):
@@ -143,8 +138,8 @@ class DetectionClassificationFigures(BlissFigures):
     @property
     def fignames(self):
         return {
-            "detection": "sdss-precision-recall.pdf",
-            "classification": "sdss-classification-acc.pdf",
+            "detection": "sdss-precision-recall.png",
+            "classification": "sdss-classification-acc.png",
         }
 
     def compute_data(self, scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
@@ -267,10 +262,6 @@ class SDSSReconstructionFigures(BlissFigures):
         super().__init__(outdir=outdir, cache=cache, overwrite=overwrite)
 
     @property
-    def fignames(self):
-        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.pdf" for i in range(4)}}
-
-    @property
     def lims(self):
         """Specificy spatial limits on frame to obtain chunks to reconstruct."""
 
@@ -278,10 +269,13 @@ class SDSSReconstructionFigures(BlissFigures):
         return {
             "sdss_recon0": ((1700, 2000), (200, 500)),  # scene
             "sdss_recon1": ((1000, 1300), (1150, 1450)),  # scene
-            "sdss_recon2": ((742, 790), (460, 508)),  # individual blend
-            "sdss_recon3": ((1128, 1160), (25, 57)),  # individual blend
-            "sdss_recon4": ((500, 552), (170, 202)),  # individual blend
+            "sdss_recon2": ((742, 790), (460, 508)),  # individual blend (both galaxies)
+            "sdss_recon3": ((1710, 1758), (1400, 1448)),  # individual blend (both galaxies)
         }
+
+    @property
+    def fignames(self):
+        return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(len(self.lims))}}
 
     def compute_data(self, scene, sleep_net, binary_encoder, galaxy_encoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
@@ -337,7 +331,7 @@ class SDSSReconstructionFigures(BlissFigures):
         return data
 
     def create_figures(self, data):
-        """Make figures related to detection and classification in SDSS."""
+        """Make figures related to reconstruction in SDSS."""
         out_figures = {}
 
         plt.style.use("seaborn-colorblind")
@@ -380,10 +374,10 @@ class AEReconstructionFigures(BlissFigures):
     @property
     def fignames(self):
         return {
-            "random_recon": "random_reconstructions.pdf",
-            "worst_recon": "worst_reconstructions.pdf",
-            "measure_contours": "single_galaxy_measurements_contours.pdf",
-            "measure_scatter_bins": "single_galaxy_scatter_bins.pdf",
+            "random_recon": "random_reconstructions.png",
+            "worst_recon": "worst_reconstructions.png",
+            "measure_contours": "single_galaxy_measurements_contours.png",
+            "measure_scatter_bins": "single_galaxy_scatter_bins.png",
         }
 
     def compute_data(
@@ -640,8 +634,6 @@ class AEReconstructionFigures(BlissFigures):
 
 @hydra.main(config_path="./config", config_name="config")
 def plots(cfg):
-    # def main(fig, outdir, overwrite=False, use_galaxy_encoder_real=False):
-    # os.chdir(os.getenv("BLISS_HOME"))  # simplicity for I/O
 
     fig = set(cfg.plots.fig)
     outdir = cfg.plots.outdir
@@ -653,7 +645,7 @@ def plots(cfg):
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
     # load models necessary for SDSS reconstructions.
-    if len(fig.intersection({2, 3})) > 0:
+    if fig.intersection({2, 3}):
         sleep_net = instantiate(cfg.models.sleep)
         sleep_net.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
         sleep_net = sleep_net.to(device).eval()
@@ -666,11 +658,13 @@ def plots(cfg):
         galaxy_encoder.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
         galaxy_encoder = galaxy_encoder.to(device).eval()
 
+    # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in fig:
         autoencoder = instantiate(cfg.models.galaxy_net)
         autoencoder.load_state_dict(torch.load(cfg.models.decoder.autoencoder_ckpt))
         autoencoder = autoencoder.to(device).eval()
 
+        # generate galsim simulated galaxies images if file does not exist.
         galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
         if not galaxies_file.exists():
             print(f"Generating individual galaxy images and saving to: {galaxies_file}")
@@ -684,6 +678,7 @@ def plots(cfg):
         ae_figures.save_figures(
             autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale
         )
+        mpl.rc_file_defaults()
 
     # FIGURE 2: Classification and Detection metrics
     if 2 in fig:
@@ -691,16 +686,18 @@ def plots(cfg):
         coadd_cat = Table.read(cfg.plots.coadd_cat, format="fits")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
         dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+        mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in fig:
         scene = get_sdss_data(cfg)["image"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
         sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
+        mpl.rc_file_defaults()
 
     else:
         raise NotImplementedError("The figure specified has not been created.")
 
 
 if __name__ == "__main__":
-    plots()
+    plots()  # pylint: disable=no-value-for-parameter
