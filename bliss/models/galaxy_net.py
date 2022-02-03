@@ -117,11 +117,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def training_step(self, batch, batch_idx, optimizer_idx):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
+        loss = None
         if optimizer_idx == 0:
             recon_mean_main = self._main_forward(images, background)
             loss = self._get_likelihood_loss(images, recon_mean_main)
             self.log("train/loss_main", loss, prog_bar=True)
-        if optimizer_idx == 1:
+        if optimizer_idx == 1 and self.trainer.global_step > self.residual_delay_n_steps:
             with torch.no_grad():
                 recon_mean_main = self._main_forward(images, background)
             recon_mean_residual = self._residual_forward(images - recon_mean_main)
@@ -209,7 +210,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
             if self.trainer.global_step > self.residual_delay_n_steps:
                 optimizer.step(closure=optimizer_closure)
             else:
-                # call closure by itself to run `training_step` + `backward` without optimizer step
                 optimizer_closure()
 
     def _main_forward(self, image, background):

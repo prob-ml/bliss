@@ -63,6 +63,7 @@ filterwarnings = [
   "ignore:numpy.ufunc size changed, may indicate binary incompatibility. Expected 216 from C header, got 232 from PyObject:RuntimeWarning",
   "ignore:numpy.ndarray size changed:RuntimeWarning",
   "ignore:.*torch.meshgrid.*:UserWarning",
+  "ignore:`training_step` returned `None`:UserWarning",
 ]
 markers = [
   "multi_gpu: marks tests that requires multiple gpus to run",
