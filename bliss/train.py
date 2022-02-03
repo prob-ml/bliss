@@ -106,7 +106,7 @@ def train(cfg: DictConfig):
             cp_data["timestamp"] = str(dt.datetime.today())
             for k, v in cp_data.items():
                 if isinstance(v, torch.Tensor):
-                    if v.shape:
+                    if not v.shape:
                         cp_data[k] = v.item()
                     else:
                         del cp_data[k]
