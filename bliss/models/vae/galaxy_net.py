@@ -12,7 +12,6 @@ from nflows.flows import Flow
 from bliss.models.galaxy_net import (
     CenteredGalaxyDecoder,
     CenteredGalaxyEncoder,
-    ResidualConvBlock,
     OneCenteredGalaxyAE,
 )
 
@@ -68,7 +67,7 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
         super().__init__()
         self.save_hyperparameters()
 
-        self.main_encoder = CenteredGalaxyEncoder(
+        self.main_encoder = CenteredGalaxyVAEEncoder(
             slen=slen,
             latent_dim=(latent_dim // 2) * 2,
             n_bands=n_bands,
@@ -78,7 +77,7 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
         )
         self.main_autoencoder = nn.Sequential(self.main_encoder, self.main_decoder)
 
-        self.residual_encoder = CenteredGalaxyEncoder(
+        self.residual_encoder = CenteredGalaxyVAEEncoder(
             slen=slen,
             latent_dim=(latent_dim // 2) * 2,
             n_bands=n_bands,
@@ -308,9 +307,9 @@ class OneCenteredGalaxyEncoder(nn.Module):
 
     def __init__(
         self,
-        main_encoder: CenteredGalaxyEncoder,
-        main_decoder: CenteredGalaxyDecoder,
-        residual_encoder: CenteredGalaxyEncoder,
+        main_encoder: CenteredGalaxyVAEEncoder,
+        main_decoder: CenteredGalaxyVAEDecoder,
+        residual_encoder: CenteredGalaxyVAEEncoder,
         slen: int = None,
         allow_pad: bool = False,
         min_sd: float = 1e-3,
