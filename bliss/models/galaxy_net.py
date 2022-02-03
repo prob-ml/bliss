@@ -11,7 +11,6 @@ from torch.optim import Adam
 from tqdm import tqdm
 
 from bliss.reporting import plot_image
-from bliss.utils import make_grid
 
 plt.switch_backend("Agg")
 plt.ioff()
@@ -510,3 +509,42 @@ class ResConv2dBlock(Conv2d):
         y = super().forward(x)
         y = F.relu(y)
         return x + y
+
+
+# adapt from torchvision.utils.make_grid
+@torch.no_grad()
+def make_grid(
+    tensor,
+    nrow: int = 8,
+    padding: int = 2,
+    scale_each: bool = False,
+    pad_value: int = 0,
+) -> torch.Tensor:
+
+    assert tensor.dim() == 4
+
+    if tensor.size(0) == 1:
+        return tensor.squeeze(0)
+
+    # make the mini-batch of images into a grid
+    nmaps = tensor.size(0)
+    xmaps = min(nrow, nmaps)
+    ymaps = int(math.ceil(float(nmaps) / xmaps))
+    height, width = int(tensor.size(2) + padding), int(tensor.size(3) + padding)
+    num_channels = tensor.size(1)
+    size = num_channels, height * ymaps + padding, width * xmaps + padding
+    grid = tensor.new_full(size, pad_value)
+    k = 0
+    for y in range(ymaps):
+        for x in range(xmaps):
+            if k >= nmaps:
+                break
+            # Tensor.copy_() is a valid method but seems to be missing from the stubs
+            # https://pytorch.org/docs/stable/tensors.html#torch.Tensor.copy_
+            grid.narrow(1, y * height + padding, height - padding).narrow(
+                2,
+                x * width + padding,
+                width - padding,
+            ).copy_(tensor[k])
+            k = k + 1
+    return grid
