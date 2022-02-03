@@ -13,7 +13,7 @@ from nflows.flows import Flow
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image
 from bliss.utils import make_grid
-from bliss.models.galaxy_net import ResidualConvBlock
+from bliss.models.galaxy_net import CenteredGalaxyDecoder, ResidualConvBlock
 
 plt.switch_backend("Agg")
 plt.ioff()
@@ -408,41 +408,18 @@ class CenteredGalaxyEncoder(nn.Module):
         return self.features(image)
 
 
-class CenteredGalaxyDecoder(nn.Module):
+class CenteredGalaxyVAEDecoder(nn.Module):
     def __init__(self, slen=53, latent_dim=8, n_bands=1):
         super().__init__()
-
-        self.slen = slen
-
         kernels = [3, 3, 3, 3, 1]
         in_size = 2 ** len(kernels)
-        layers = []
-        slen_current = slen
-        for (i, kernel_size) in enumerate(kernels):
-            output_padding = (slen_current - kernel_size) % 2 if (slen_current != 2) else 0
-            layer = ResidualConvBlock(
-                n_bands * (2 ** (i + 1)),
-                8,
-                kernel_size,
-                4,
-                mode="upsample",
-                output_padding=output_padding,
-            )
-            layers.append(layer)
-            if i < len(kernels) - 1:
-                layers.append(nn.LeakyReLU())
-            slen_current = math.floor((slen_current - kernel_size) / 2 + 1)
-        layers.append(
-            nn.Unflatten(
-                -1, torch.Size((n_bands * (2 ** len(kernels)), slen_current, slen_current))
-            )
-        )
-        layers.append(ResidualDenseBlock(latent_dim, 3, in_size))
-        self.features = nn.Sequential(*layers[::-1])
+        self.conv_layer = CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
+        self.dense_layer = ResidualDenseBlock(latent_dim, 3, in_size)
 
     def forward(self, z):
         """Decodes image from latent representation."""
-        return self.features(z)
+        z1 = self.conv_layer(z)
+        return self.dense_layer(z1)
 
 
 class OneCenteredGalaxyEncoder(nn.Module):
