@@ -38,7 +38,6 @@ models:
         ptile_slen: 26
         border_padding: 3
         psf_params_file: data/sdss/2583/2/136/psField-002583-2-0136.fits
-        prob_galaxy: 0.0
         background_values:
           - 686.0
           - 1123.0
