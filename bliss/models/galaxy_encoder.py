@@ -1,5 +1,5 @@
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pytorch_lightning as pl
@@ -9,9 +9,7 @@ from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.optim import Adam
 
-from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
-from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.reporting import plot_image, plot_image_and_locs
 
@@ -172,14 +170,16 @@ class GalaxyEncoder(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
+        batch_size = len(batch["images"])
         loss = self.get_loss(batch)
-        self.log("train/loss", loss)
+        self.log("train/loss", loss, batch_size=batch_size)
         return loss
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning validation step."""
+        batch_size = len(batch["images"])
         loss = self.get_loss(batch)
-        self.log("val/loss", loss)
+        self.log("val/loss", loss, batch_size=batch_size)
         return batch
 
     def validation_epoch_end(self, outputs):
