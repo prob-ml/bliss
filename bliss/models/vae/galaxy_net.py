@@ -7,14 +7,13 @@ from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm1d
-from torch.nn.modules.conv import Conv2d, ConvTranspose2d
-from torch.nn.utils import weight_norm as wn
 from nflows.distributions import StandardNormal
 from nflows.flows import Flow
 
 from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image
 from bliss.utils import make_grid
+from bliss.models.galaxy_net import ResidualConvBlock
 
 plt.switch_backend("Agg")
 plt.ioff()
@@ -552,73 +551,6 @@ class OneCenteredGalaxyDecoder(nn.Module):
         recon_mean_main = F.relu(self.main_decoder(latent_main))
         recon_mean_residual = self.residual_decoder(latent_residual)
         return F.relu(recon_mean_main + recon_mean_residual)
-
-
-class ResidualConvBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        expand_factor,
-        kernel_size,
-        n_layers,
-        mode="downsample",
-        output_padding=None,
-    ):
-        super().__init__()
-        self.mode = mode
-        expand_channels = in_channels * expand_factor
-        padding = kernel_size // 2
-        conv_initial = wn(
-            Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding)
-        )
-        kernel_size_dim_change = max(kernel_size, 2)
-        if self.mode == "downsample":
-            conv = wn(Conv2d(expand_channels, expand_channels, kernel_size_dim_change, stride=2))
-            out_channels = in_channels * 2
-        elif self.mode == "upsample":
-            assert output_padding is not None
-            conv = wn(
-                ConvTranspose2d(
-                    expand_channels,
-                    expand_channels,
-                    kernel_size_dim_change,
-                    stride=2,
-                    output_padding=output_padding,
-                )
-            )
-            out_channels = in_channels // 2
-        layers = [conv_initial, nn.ReLU(), conv, nn.ReLU()]
-        for _ in range(n_layers - 1):
-            layers.append(
-                wn(
-                    ResConv2dBlock(
-                        expand_channels, expand_channels, kernel_size, stride=1, padding=padding
-                    )
-                )
-            )
-        layers.append(
-            wn(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding))
-        )
-        self.f = nn.Sequential(*layers)
-
-    def forward(self, x):
-        y = self.f(x)
-        if self.mode == "downsample":
-            x_downsampled = F.interpolate(x, size=y.shape[-2:], mode="bilinear", align_corners=True)
-            x_downsampled = x_downsampled.repeat(1, 2, 1, 1)
-            x_trans = x_downsampled
-        elif self.mode == "upsample":
-            x_upsampled = F.interpolate(x, size=y.shape[-2:], mode="nearest")
-            x_upsampled = x_upsampled[:, : y.shape[1], :, :]
-            x_trans = x_upsampled
-        return y + x_trans
-
-
-class ResConv2dBlock(Conv2d):
-    def forward(self, x):  # pylint: disable=arguments-renamed
-        y = super().forward(x)
-        y = F.relu(y)
-        return x + y
 
 
 class ResidualDenseBlock(nn.Sequential):
