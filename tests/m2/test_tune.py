@@ -27,7 +27,7 @@ class TestTune:
             "tuning.verbose": 0,
             "tuning.save": False,
             "tuning.n_samples": 2 if devices.use_cuda else 1,
-            "tuning.log_path": f"{paths['root']}/tuning",
+            "tuning.log_path": "${paths.root}/tuning",
         }
 
         if not devices.use_cuda:

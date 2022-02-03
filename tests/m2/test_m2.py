@@ -80,9 +80,9 @@ def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
 
 
 class TestStarSleepEncoderM2:
-    def test_star_sleep_m2(self, trained_star_encoder_m2, devices):
+    def test_star_sleep_m2(self, trained_star_encoder_m2, devices, m2_model_setup):
         device = devices.device
-
+        cfg = m2_model_setup.get_cfg({})
         # the trained star encoder
         trained_star_encoder_m2.eval()
 

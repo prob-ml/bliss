@@ -11,7 +11,7 @@ class TestGenerate:
         return {
             "generate.dataset": "${datasets.simulated}",
             "datasets.simulated.generate_device": "cuda:0" if devices.use_cuda else "cpu",
-            "generate.file": "{paths.root}/example.pt",
+            "generate.file": "${paths.root}/example.pt",
             "generate.common": ["background", "slen"],
         }
 
