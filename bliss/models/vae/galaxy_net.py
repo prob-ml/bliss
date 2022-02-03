@@ -66,6 +66,7 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
         """
         super().__init__()
         self.save_hyperparameters()
+        self.optimizer_params = optimizer_params
 
         self.main_encoder = CenteredGalaxyVAEEncoder(
             slen=slen,

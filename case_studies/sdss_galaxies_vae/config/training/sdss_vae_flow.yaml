@@ -1,11 +1,8 @@
 name: "sdss_vae_flow"
 model: ${models.galaxy_flow}
 dataset: ${datasets.sdss_galaxies}
-optimizer:
-  name: Adam
-  kwargs: 
-    lr: 1e-3
-    weight_decay: 0
+optimizer_params:
+  lr: 1e-3
 n_epochs: 1001
 trainer:
   check_val_every_n_epoch: 10
