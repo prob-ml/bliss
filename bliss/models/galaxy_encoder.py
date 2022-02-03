@@ -11,6 +11,8 @@ from torch.optim import Adam
 
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.location_encoder import get_full_params_from_tiles, get_images_in_tiles
+from bliss.models.prior import ImagePrior
 from bliss.reporting import plot_image, plot_image_and_locs
 
 
