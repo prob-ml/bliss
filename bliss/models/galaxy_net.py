@@ -208,6 +208,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         if optimizer_idx == 1:
             if self.trainer.global_step > self.residual_delay_n_steps:
                 optimizer.step(closure=optimizer_closure)
+            else:
+                # call closure by itself to run `training_step` + `backward` without optimizer step
+                optimizer_closure()
 
     def _main_forward(self, image, background):
         return F.relu(self.main_autoencoder(image - background)) + background
