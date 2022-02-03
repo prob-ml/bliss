@@ -7,12 +7,12 @@ import torch
 from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
+from torch.optim import Adam
 
 from bliss.models.prior import ImagePrior
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.optimizer import load_optimizer
 from bliss.reporting import plot_image, plot_image_and_locs
 
 
@@ -70,6 +70,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.max_sources = 1  # by construction.
         self.crop_loss_at_border = crop_loss_at_border
         self.max_flux_valid_plots = max_flux_valid_plots
+        self.optimizer_params = optimizer_params
 
         # to produce images to train on.
         self.image_prior = prior
@@ -119,7 +120,7 @@ class GalaxyEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Set up optimizers (pytorch-lightning method)."""
-        return load_optimizer(self.enc.parameters(), self.hparams)
+        return Adam(self.enc.parameters(), **self.optimizer_params)
 
     def forward_image(self, images, tile_locs):
         batch_size = images.shape[0]

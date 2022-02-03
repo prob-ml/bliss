@@ -22,11 +22,11 @@ def sleep_trainable(search_space, cfg: DictConfig):
     cfg.tuning.model.encoder.hidden = search_space["hidden"]
     cfg.tuning.model.encoder.spatial_dropout = search_space["spatial_dropout"]
     cfg.tuning.model.encoder.dropout = search_space["dropout"]
-    cfg.tuning.optimizer.kwargs.lr = search_space["lr"]
-    cfg.tuning.optimizer.kwargs.weight_decay = search_space["weight_decay"]
+    cfg.tuning.optimizer_params.lr = search_space["lr"]
+    cfg.tuning.optimizer_params.weight_decay = search_space["weight_decay"]
 
     # model
-    model = instantiate(cfg.tuning.model, optimizer_params=cfg.tuning.optimizer)
+    model = instantiate(cfg.tuning.model, optimizer_params=cfg.tuning.optimizer_params)
 
     # data module
     dataset = instantiate(cfg.tuning.dataset)
