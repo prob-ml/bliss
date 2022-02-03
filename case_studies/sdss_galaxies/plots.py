@@ -664,6 +664,7 @@ def plots(cfg):
         autoencoder.load_state_dict(torch.load(cfg.models.decoder.autoencoder_ckpt))
         autoencoder = autoencoder.to(device).eval()
 
+        # generate galsim simulated galaxies images if file does not exist.
         galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
         if not galaxies_file.exists():
             print(f"Generating individual galaxy images and saving to: {galaxies_file}")
