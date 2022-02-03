@@ -1,3 +1,4 @@
+import json
 from typing import Optional
 from pathlib import Path
 
@@ -98,3 +99,13 @@ def train(cfg: DictConfig):
         model_checkpoint = torch.load(checkpoint_callback.best_model_path, map_location="cpu")
         model_state_dict = model_checkpoint["state_dict"]
         torch.save(model_state_dict, cfg.training.weight_save_path)
+        result_path = cfg.training.weight_save_path + ".log.json"
+        with open(result_path, "w", encoding="utf-8") as fp:
+            cp_data = model_checkpoint["callbacks"][ModelCheckpoint]
+            for k, v in cp_data.items():
+                if isinstance(v, torch.Tensor):
+                    if len(v.shape) == 0:
+                        cp_data[k] = v.item()
+                    else:
+                        del cp_data[k]
+            fp.write(json.dumps(cp_data))
