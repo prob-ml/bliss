@@ -1,4 +1,5 @@
 import json
+import datetime as dt
 from typing import Optional
 from pathlib import Path
 
@@ -102,6 +103,7 @@ def train(cfg: DictConfig):
         result_path = cfg.training.weight_save_path + ".log.json"
         with open(result_path, "w", encoding="utf-8") as fp:
             cp_data = model_checkpoint["callbacks"][ModelCheckpoint]
+            cp_data['timestamp'] = str(dt.datetime.today())
             for k, v in cp_data.items():
                 if isinstance(v, torch.Tensor):
                     if len(v.shape) == 0:
