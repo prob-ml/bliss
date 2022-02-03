@@ -9,7 +9,12 @@ from torch.nn.modules.batchnorm import BatchNorm1d
 
 from nflows.distributions import StandardNormal
 from nflows.flows import Flow
-from bliss.models.galaxy_net import CenteredGalaxyDecoder, ResidualConvBlock, OneCenteredGalaxyAE
+from bliss.models.galaxy_net import (
+    CenteredGalaxyDecoder,
+    CenteredGalaxyEncoder,
+    ResidualConvBlock,
+    OneCenteredGalaxyAE,
+)
 
 plt.switch_backend("Agg")
 plt.ioff()
@@ -250,31 +255,27 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
         )
 
 
-class CenteredGalaxyEncoder(nn.Module):
+class CenteredGalaxyVAEEncoder(nn.Module):
     def __init__(self, slen=53, latent_dim=8, n_bands=1):
 
         super().__init__()
 
         self.slen = slen
         self.latent_dim = latent_dim
+        self.conv_layer = CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
 
         kernels = [3, 3, 3, 3, 1]
         in_size = 2 ** len(kernels)
         layers = []
-        for (i, kernel_size) in enumerate(kernels):
-            layer = ResidualConvBlock(n_bands * (2 ** i), 8, kernel_size, 4, mode="downsample")
-            layers.append(layer)
-            if i < len(kernels) - 1:
-                layers.append(nn.LeakyReLU())
-        layers.append(nn.Flatten())
         layers.append(nn.BatchNorm1d(in_size))
         layers.append(ResidualDenseBlock(in_size, 3, latent_dim))
         layers.append(nn.BatchNorm1d(latent_dim))
-        self.features = nn.Sequential(*layers)
+        self.dense_layer = nn.Sequential(*layers)
 
     def forward(self, image):
         """Encodes galaxy from image."""
-        return self.features(image)
+        z1 = self.conv_layer(image)
+        return self.dense_layer(z1)
 
 
 class CenteredGalaxyVAEDecoder(nn.Module):
@@ -287,8 +288,8 @@ class CenteredGalaxyVAEDecoder(nn.Module):
 
     def forward(self, z):
         """Decodes image from latent representation."""
-        z1 = self.conv_layer(z)
-        return self.dense_layer(z1)
+        z1 = self.dense_layer(z)
+        return self.conv_layer(z1)
 
 
 class OneCenteredGalaxyEncoder(nn.Module):
