@@ -1,3 +1,5 @@
+import json
+import datetime as dt
 from typing import Optional
 from pathlib import Path
 
@@ -95,6 +97,17 @@ def train(cfg: DictConfig):
 
     # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None:
-        model_to_save = type(model).load_from_checkpoint(checkpoint_callback.best_model_path)
-        model_state_dict = model_to_save.state_dict()
+        model_checkpoint = torch.load(checkpoint_callback.best_model_path, map_location="cpu")
+        model_state_dict = model_checkpoint["state_dict"]
         torch.save(model_state_dict, cfg.training.weight_save_path)
+        result_path = cfg.training.weight_save_path + ".log.json"
+        with open(result_path, "w", encoding="utf-8") as fp:
+            cp_data = model_checkpoint["callbacks"][ModelCheckpoint]
+            cp_data["timestamp"] = str(dt.datetime.today())
+            for k, v in cp_data.items():
+                if isinstance(v, torch.Tensor):
+                    if not v.shape:
+                        cp_data[k] = v.item()
+                    else:
+                        del cp_data[k]
+            fp.write(json.dumps(cp_data))
