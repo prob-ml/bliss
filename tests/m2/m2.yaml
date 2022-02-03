@@ -14,7 +14,7 @@ mode: train
 gpus: 1 # use a single gpu by default.
 
 paths:
-  root: ${oc.env:BLISS_HOME}
+  root:
   output: ${paths.root}/output
   sdss: ${paths.root}/data/sdss
   data: ${paths.root}/data

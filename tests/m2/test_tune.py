@@ -8,7 +8,7 @@ from bliss import tune
 
 class TestTune:
     @pytest.fixture(scope="class")
-    def overrides(self, devices, paths):
+    def overrides(self, devices):
         allocated_gpus = 0
         gpus_per_trial = 0
         if devices.use_cuda:
@@ -27,7 +27,7 @@ class TestTune:
             "tuning.verbose": 0,
             "tuning.save": False,
             "tuning.n_samples": 2 if devices.use_cuda else 1,
-            "tuning.log_path": f"{paths['root']}/tuning",
+            "tuning.log_path": "${paths.root}/tuning",
         }
 
         if not devices.use_cuda:
@@ -42,7 +42,7 @@ class TestTune:
         return overrides
 
     @pytest.mark.filterwarnings("ignore:.*Relying on `self.log.*:DeprecationWarning")
-    def test_tune_run(self, paths, overrides, m2_model_setup):
+    def test_tune_run(self, overrides, m2_model_setup):
         cfg = m2_model_setup.get_cfg(overrides)
         tune.tune(cfg)
-        shutil.rmtree(f"{paths['root']}/tuning")
+        shutil.rmtree(f"{cfg.paths.root}/tuning")

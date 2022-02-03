@@ -18,7 +18,7 @@ def test_scene_metrics():
     reporting.scene_metrics(true_params, true_params, mag_cut=25, slack=1.0, mag_slack=0.25)
 
 
-def test_coadd(paths, devices, get_config):
+def test_coadd(devices, get_config):
 
     # get psf
     cfg = get_config({}, devices)
@@ -26,7 +26,7 @@ def test_coadd(paths, devices, get_config):
     psf = ds.psf
 
     # read file and get flux / hlr
-    coadd_cat_file = Path(paths["data"]).joinpath("coadd_catalog_94_1_12.fits")
+    coadd_cat_file = Path(cfg.paths.data).joinpath("coadd_catalog_94_1_12.fits")
     coadd_cat = Table.read(coadd_cat_file)[:5]
     coadd_cat.remove_column("hlr")
     _ = reporting.get_flux_coadd(coadd_cat)
