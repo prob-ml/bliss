@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 import pytorch_lightning as pl
 import torch
@@ -9,8 +11,13 @@ from hydra.utils import instantiate
 
 
 def get_cfg(overrides, devices):
-    overrides.update({"gpus": devices.gpus})
-    overrides.update({"training.weight_save_path": None})
+    overrides.update(
+        {
+            "paths.root": Path(__file__).parents[3].as_posix(),
+            "gpus": devices.gpus,
+            "training.weight_save_path": None,
+        }
+    )
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
@@ -69,13 +76,6 @@ class ModelSetup:
         test_module = self.get_dataset_for_training(overrides)
         trainer = self.get_trainer(overrides)
         return trainer.test(model, datamodule=test_module)[0]
-
-
-@pytest.fixture(scope="session")
-def paths():
-    with initialize(config_path="../config"):
-        cfg = compose("config")
-    return cfg.paths
 
 
 @pytest.fixture(scope="session")

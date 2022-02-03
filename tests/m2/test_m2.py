@@ -80,14 +80,14 @@ def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
 
 
 class TestStarSleepEncoderM2:
-    def test_star_sleep_m2(self, trained_star_encoder_m2, devices, paths):
+    def test_star_sleep_m2(self, trained_star_encoder_m2, devices):
         device = devices.device
 
         # the trained star encoder
         trained_star_encoder_m2.eval()
 
         # load hubble parameters and SDSS image
-        hubble_data = np.load(os.path.join(paths["data"], "true_hubble_m2.npz"))
+        hubble_data = np.load(os.path.join(cfg.paths.data, "true_hubble_m2.npz"))
 
         # the SDSS image
         test_image = torch.from_numpy(hubble_data["sdss_image"]).unsqueeze(0).to(device)
