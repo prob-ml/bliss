@@ -65,9 +65,6 @@ filterwarnings = [
   "ignore:.*torch.meshgrid.*:UserWarning",
   "ignore:`training_step` returned `None`:UserWarning",
 ]
-markers = [
-  "multi_gpu: marks tests that requires multiple gpus to run",
-]
 minversion = "6.0"
 testpaths = [
   "case_studies",
