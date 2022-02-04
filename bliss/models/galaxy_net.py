@@ -512,6 +512,17 @@ class ResidualConvBlock(nn.Module):
             wn(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding))
         )
         self.f = nn.Sequential(*layers)
+    def forward(self, x):
+        y = self.f(x)
+        if self.mode == "downsample":
+            x_downsampled = F.interpolate(x, size=y.shape[-2:], mode="bilinear", align_corners=True)
+            x_downsampled = x_downsampled.repeat(1, 2, 1, 1)
+            x_trans = x_downsampled
+        elif self.mode == "upsample":
+            x_upsampled = F.interpolate(x, size=y.shape[-2:], mode="nearest")
+            x_upsampled = x_upsampled[:, : y.shape[1], :, :]
+            x_trans = x_upsampled
+        return y + x_trans
 
 
 class ResConv2dBlock(Conv2d):
