@@ -256,7 +256,7 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
 
 
 class CenteredGalaxyVAEEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, use_batch_norm=False):
 
         super().__init__()
 
@@ -269,9 +269,11 @@ class CenteredGalaxyVAEEncoder(nn.Module):
         kernels = [3, 3, 3, 3, 1]
         in_size = 2 ** len(kernels)
         layers = []
-        layers.append(nn.BatchNorm1d(in_size))
-        layers.append(ResidualDenseBlock(in_size, 3, latent_dim))
-        layers.append(nn.BatchNorm1d(latent_dim))
+        if use_batch_norm:
+            layers.append(nn.BatchNorm1d(in_size))
+        layers.append(ResidualDenseBlock(in_size, 3, latent_dim, use_batch_norm=use_batch_norm))
+        if use_batch_norm:
+            layers.append(nn.BatchNorm1d(latent_dim))
         self.dense_layer = nn.Sequential(*layers)
 
     def forward(self, image):
@@ -281,14 +283,14 @@ class CenteredGalaxyVAEEncoder(nn.Module):
 
 
 class CenteredGalaxyVAEDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, use_batch_norm=False):
         super().__init__()
         kernels = [3, 3, 3, 3, 1]
         in_size = 2 ** len(kernels)
         self.conv_layer = CenteredGalaxyDecoder(
             slen=slen, latent_dim=latent_dim, n_bands=n_bands, use_weight_norm=True
         )
-        self.dense_layer = ResidualDenseBlock(latent_dim, 3, in_size)
+        self.dense_layer = ResidualDenseBlock(latent_dim, 3, in_size, use_batch_norm=use_batch_norm)
 
     def forward(self, z):
         """Decodes image from latent representation."""
@@ -405,7 +407,7 @@ class OneCenteredGalaxyDecoder(nn.Module):
 
 
 class ResidualDenseBlock(nn.Sequential):
-    def __init__(self, in_size, n_layers, out_size):
+    def __init__(self, in_size, n_layers, out_size, use_batch_norm=False):
         layers = []
         if in_size >= out_size:
             size = in_size
@@ -413,10 +415,12 @@ class ResidualDenseBlock(nn.Sequential):
             layers.append(nn.Linear(in_size, out_size))
             layers.append(nn.ReLU())
             size = out_size
-            layers.append(BatchNorm1d(size))
+            if use_batch_norm:
+                layers.append(BatchNorm1d(size))
         for _ in range(n_layers):
             layers.append(ResidualLinear(size))
-            layers.append(BatchNorm1d(size))
+            if use_batch_norm:
+                layers.append(BatchNorm1d(size))
         layers.append(nn.Linear(size, out_size))
         super().__init__(*layers)
 
