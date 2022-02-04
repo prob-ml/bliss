@@ -1,10 +1,10 @@
-import json
 import datetime as dt
-from typing import Optional
+import json
 from pathlib import Path
+from typing import Optional
 
-import torch
 import pytorch_lightning as pl
+import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -90,7 +90,7 @@ def setup_logger(cfg, paths):
 
 
 def setup_callbacks(cfg) -> Optional[ModelCheckpoint]:
-    if cfg.training.trainer.checkpoint_callback:
+    if cfg.training.trainer.enable_checkpointing:
         checkpoint_callback = ModelCheckpoint(
             filename="epoch={epoch}-val_loss={val/loss:.3f}",
             save_top_k=cfg.training.save_top_k,

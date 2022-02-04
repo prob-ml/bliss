@@ -1,15 +1,14 @@
 import warnings
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 import numpy as np
-import torch
 import pytorch_lightning as pl
+import torch
 from astropy.io import fits
 from einops import rearrange, reduce
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as F
-from torch.tensor import Tensor
 
 from bliss.models import galaxy_net
 from bliss.models.location_encoder import get_is_on_from_n_sources

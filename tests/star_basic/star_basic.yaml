@@ -1,23 +1,23 @@
 defaults:
-  - _self_
-  - override hydra/job_logging: stdout
+    - _self_
+    - override hydra/job_logging: stdout
 
 # completely disable hydra logging
 # https://github.com/facebookresearch/hydra/issues/910
 hydra:
-  output_subdir: null
-  run:
-    dir: .
+    output_subdir: null
+    run:
+        dir: .
 
 mode: train
 
 gpus: 1 # use a single gpu by default.
 
 paths:
-  root: ${oc.env:BLISS_HOME}
-  output: ${paths.root}/output
-  sdss: ${paths.root}/data/sdss
-  data: ${paths.root}/data
+    root: ${oc.env:BLISS_HOME}
+    output: ${paths.root}/output
+    sdss: ${paths.root}/data/sdss
+    data: ${paths.root}/data
 
 datasets:
     simulated_single_tile:
@@ -45,7 +45,7 @@ decoders:
         prob_galaxy: 0.0
         psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
         background_values:
-          - 633.0
+            - 633.0
 
     star_basic:
         n_bands: 1
@@ -55,7 +55,7 @@ decoders:
         prob_galaxy: 0.0
         psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
         background_values:
-          - 865.0
+            - 865.0
 
 priors:
     single_tile:
@@ -114,14 +114,14 @@ training:
     version: null
     save_top_k: 1
     trainer:
-      _target_: pytorch_lightning.Trainer
-      logger: False
-      checkpoint_callback: False
-      profiler: null
-      reload_dataloaders_every_epoch: False
-      check_val_every_n_epoch: 50
-      max_epochs: ${training.n_epochs}
-      min_epochs: ${training.n_epochs}
-      gpus: ${gpus}
-      log_every_n_steps: 10
-      deterministic: False
+        _target_: pytorch_lightning.Trainer
+        logger: False
+        enable_checkpointing: False
+        profiler: null
+        reload_dataloaders_every_epoch: False
+        check_val_every_n_epoch: 50
+        max_epochs: ${training.n_epochs}
+        min_epochs: ${training.n_epochs}
+        gpus: ${gpus}
+        log_every_n_steps: 10
+        deterministic: False

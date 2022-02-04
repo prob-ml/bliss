@@ -8,5 +8,4 @@ training:
   n_epochs: 1501
   save_top_k: 10
   trainer:
-    checkpoint_callback: true
-
+    enable_checkpointing: True
