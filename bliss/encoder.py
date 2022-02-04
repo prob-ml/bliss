@@ -106,7 +106,7 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_param_mean = self.galaxy_encoder(image_ptiles, tile_map["locs"])
+            galaxy_param_mean = self.galaxy_encoder.sample(image_ptiles, tile_map["locs"])
             latent_dim = galaxy_param_mean.shape[-1]
             galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
             galaxy_param_mean *= tile_map["is_on_array"] * tile_map["galaxy_bool"]

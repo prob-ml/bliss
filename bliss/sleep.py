@@ -19,7 +19,6 @@ from torch.optim import Adam
 
 from bliss.models import location_encoder as loc_enc
 from bliss.models.decoder import ImageDecoder
-from bliss.models.prior import ImagePrior
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
@@ -118,7 +117,6 @@ class SleepPhase(pl.LightningModule):
     def __init__(
         self,
         encoder: loc_enc.LocationEncoder,
-        prior: ImagePrior,
         decoder: ImageDecoder,
         annotate_probs: bool = False,
         slack=1.0,
@@ -128,17 +126,13 @@ class SleepPhase(pl.LightningModule):
 
         Args:
             encoder: keyword arguments to instantiate ImageEncoder
-            prior: ImagePrior module
             decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
             slack: Threshold distance in pixels for matching objects.
             optimizer_params: Parameters passed to optimizer. Defaults to None.
         """
         super().__init__()
-        self.save_hyperparameters()
-
         self.image_encoder = encoder
-        self.image_prior = prior
         self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
         self.optimizer_params = optimizer_params
