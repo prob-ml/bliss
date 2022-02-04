@@ -17,14 +17,8 @@ from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 
+from bliss.models import location_encoder as loc_enc
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import (
-    LocationEncoder,
-    get_is_on_from_n_sources,
-    get_images_in_tiles,
-    get_params_in_batches,
-    get_full_params_from_tiles,
-)
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
@@ -122,7 +116,7 @@ class SleepPhase(pl.LightningModule):
 
     def __init__(
         self,
-        encoder: LocationEncoder,
+        encoder: loc_enc.LocationEncoder,
         decoder: ImageDecoder,
         annotate_probs: bool = False,
         slack=1.0,
@@ -138,6 +132,8 @@ class SleepPhase(pl.LightningModule):
             optimizer_params: Parameters passed to optimizer. Defaults to None.
         """
         super().__init__()
+        self.save_hyperparameters()
+
         self.image_encoder = encoder
         self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
@@ -162,12 +158,12 @@ class SleepPhase(pl.LightningModule):
         images = batch["images"]
 
         batch_size = images.shape[0]
-        image_ptiles = get_images_in_tiles(
+        image_ptiles = loc_enc.get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
         var_params = self.image_encoder.encode(image_ptiles)
         tile_map = self.image_encoder.max_a_post(var_params)
-        tile_est = get_params_in_batches(tile_map, batch_size)
+        tile_est = loc_enc.get_params_in_batches(tile_map, batch_size)
         tile_est["prob_n_sources"] = tile_est["prob_n_sources"].unsqueeze(-2)
         tile_est["galaxy_params"] = batch["galaxy_params"]
 
@@ -248,10 +244,10 @@ class SleepPhase(pl.LightningModule):
         true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
         true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
         true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
-        true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
+        true_tile_is_on_array = loc_enc.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
-        image_ptiles = get_images_in_tiles(
+        image_ptiles = loc_enc.get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
         var_params = self.image_encoder.encode(image_ptiles)
@@ -292,12 +288,14 @@ class SleepPhase(pl.LightningModule):
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
+        batch_size = len(batch["n_sources"])
         loss = self._get_loss(batch)[0]
-        self.log("train/loss", loss)
+        self.log("train/loss", loss, batch_size=batch_size)
         return loss
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
+        batch_size = len(batch["images"])
         (
             detection_loss,
             counter_loss,
@@ -306,18 +304,18 @@ class SleepPhase(pl.LightningModule):
         ) = self._get_loss(batch)
 
         # log all losses
-        self.log("val/loss", detection_loss)
-        self.log("val/counter_loss", counter_loss.mean())
-        self.log("val/locs_loss", locs_loss.mean())
-        self.log("val/star_params_loss", star_params_loss.mean())
+        self.log("val/loss", detection_loss, batch_size=batch_size)
+        self.log("val/counter_loss", counter_loss.mean(), batch_size=batch_size)
+        self.log("val/locs_loss", locs_loss.mean(), batch_size=batch_size)
+        self.log("val/star_params_loss", star_params_loss.mean(), batch_size=batch_size)
 
         # get metrics and log on full image parameters.
         true_params, est_params, _ = self._get_full_params(batch)
         metrics = self.val_detection_metrics(true_params, est_params)
-        self.log("val/precision", metrics["precision"])
-        self.log("val/recall", metrics["recall"])
-        self.log("val/f1", metrics["f1"])
-        self.log("val/avg_distance", metrics["avg_distance"])
+        self.log("val/precision", metrics["precision"], batch_size=batch_size)
+        self.log("val/recall", metrics["recall"], batch_size=batch_size)
+        self.log("val/f1", metrics["f1"], batch_size=batch_size)
+        self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -329,10 +327,11 @@ class SleepPhase(pl.LightningModule):
         """Pytorch lightning method."""
         true_params, est_params, _ = self._get_full_params(batch)
         metrics = self.test_detection_metrics(true_params, est_params)
-        self.log("precision", metrics["precision"])
-        self.log("recall", metrics["recall"])
-        self.log("f1", metrics["f1"])
-        self.log("avg_distance", metrics["avg_distance"])
+        batch_size = len(batch["images"])
+        self.log("precision", metrics["precision"], batch_size=batch_size)
+        self.log("recall", metrics["recall"], batch_size=batch_size)
+        self.log("f1", metrics["f1"], batch_size=batch_size)
+        self.log("avg_distance", metrics["avg_distance"], batch_size=batch_size)
 
         return batch
 
@@ -341,11 +340,13 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
+        true_params = loc_enc.get_full_params_from_tiles(
+            true_tile_params, self.image_encoder.tile_slen
+        )
 
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
+        est_params = loc_enc.get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
         return true_params, est_params, slen
 
     # pylint: disable=too-many-statements

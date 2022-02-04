@@ -2,11 +2,10 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
-from einops import rearrange, repeat, reduce
-from torch import nn
+from einops import rearrange, reduce, repeat
+from torch import Tensor, nn
 from torch.distributions import categorical
 from torch.nn import functional as F
-from torch.tensor import Tensor
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
