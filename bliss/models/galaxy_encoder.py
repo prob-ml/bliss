@@ -9,7 +9,6 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.optim import Adam
-from einops import rearrange
 
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.location_encoder import get_images_in_tiles, get_full_params_from_tiles

@@ -132,7 +132,6 @@ class SleepPhase(pl.LightningModule):
 
         Args:
             encoder: keyword arguments to instantiate ImageEncoder
-            prior: ImagePrior module
             decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
             slack: Threshold distance in pixels for matching objects.

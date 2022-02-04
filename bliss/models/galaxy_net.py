@@ -512,6 +512,7 @@ class ResidualConvBlock(nn.Module):
             wn(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding))
         )
         self.f = nn.Sequential(*layers)
+
     def forward(self, x):
         y = self.f(x)
         if self.mode == "downsample":
