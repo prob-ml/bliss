@@ -36,19 +36,19 @@ def reconstruct(cfg):
     else:
         galaxy_state_dict = torch.load(cfg.predict.galaxy_checkpoint, map_location=galaxy.device)
     galaxy.load_state_dict(galaxy_state_dict)
-    location = sleep.image_encoder.to("cuda").eval()
-    dec = sleep.image_decoder.to("cuda").eval()
-    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to("cuda")
+    location = sleep.image_encoder.to(device).eval()
+    dec = sleep.image_decoder.to(device).eval()
+    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
 
     outdir = Path(cfg.reconstruct.outdir)
     outdir.mkdir(exist_ok=True)
 
-    for scene_name, scene_coords in scenes.items():
-        h, w = scene_coords
-        true = my_image[:, :, h : (h + SCENE_SIZE), w : (w + SCENE_SIZE)]
-        coadd_objects = get_objects_from_coadd(coadd_cat, h, w, SCENE_SIZE)
+    for scene_name, scene_coords in cfg.reconstruct.scenes.items():
+        h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
+        true = my_image[:, :, h : (h + scene_size), w : (w + scene_size)]
+        coadd_objects = get_objects_from_coadd(coadd_cat, h, w, scene_size)
         recon, map_recon = reconstruct_scene_at_coordinates(
-            encoder, dec, my_image, h, w, SCENE_SIZE
+            encoder, dec, my_image, h, w, scene_size, device=device
         )
         resid = (true - recon) / recon.sqrt()
         fig = create_figure(
@@ -77,18 +77,6 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
         "wcs": sdss_data[0]["wcs"][0],
         "pixel_scale": sdss_pixel_scale,
     }
-
-
-scenes = {
-    # "sdss_recon0": ((1700, 2000), (200, 500)),  # scene
-    # "sdss_recon1": ((1000, 1300), (1150, 1450)),  # scene
-    # "sdss_recon2": ((742, 790), (460, 508)),  # individual blend
-    # "sdss_recon3": ((1128, 1160), (25, 57)),  # individual blend
-    # "sdss_recon4": ((500, 552), (170, 202)),  # individual blend
-    "sdss_recon0": (200, 1700),
-    "sdss_recon1": (1150, 1000),
-}
-SCENE_SIZE = 300
 
 
 def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
@@ -219,11 +207,6 @@ def get_objects_from_coadd(coadd_cat, h, w, scene_size):
     locs_true = locs_true[objects_in_scene]
     galaxy_bool = torch.from_numpy(np.array(coadd_cat["galaxy_bool"]).astype(float))
     galaxy_bool = galaxy_bool[objects_in_scene]
-    # locs_true = locs_true[h < locs_true[:, 0]]
-    # locs_true = locs_true[w < locs_true[:, 1]]
-
-    # locs_true = locs_true[locs_true[:, 0] < h + scene_size]
-    # locs_true = locs_true[locs_true[:, 1] < w + scene_size]
 
     # Shift locs by lower limit
     locs_true[:, 0] = locs_true[:, 0] - h

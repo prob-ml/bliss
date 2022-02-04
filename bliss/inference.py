@@ -22,6 +22,7 @@ def reconstruct_scene_at_coordinates(
     scene_length: int,
     slen: int = 80,
     bp: int = 24,
+    device=None,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     """Reconstruct all objects contained within a scene, padding as needed.
 
@@ -45,6 +46,10 @@ def reconstruct_scene_at_coordinates(
             The side-lengths of smaller chunks to create. Defaults to 80.
         bp:
             Border padding needed by encoder. Defaults to 24.
+        device:
+            Device used for rendering each chunk (i.e. a torch.device). Note
+            that chunks are moved onto and off the device to allow for rendering
+            larger images.
 
     Returns:
         A tuple of two items:
@@ -77,7 +82,7 @@ def reconstruct_scene_at_coordinates(
     ]
     assert scene.shape[2] == scene.shape[3] == adj_scene_length
 
-    recon, map_scene = reconstruct_scene(encoder, decoder, scene, slen, bp)
+    recon, map_scene = reconstruct_scene(encoder, decoder, scene, slen, bp, device=device)
 
     # Get reconstruction at coordinates
     recon_at_coords = recon[
@@ -99,14 +104,21 @@ def reconstruct_scene_at_coordinates(
 
 
 def reconstruct_scene(
-    encoder: Encoder, decoder: ImageDecoder, scene: Tensor, slen: int = 80, bp: int = 24
+    encoder: Encoder,
+    decoder: ImageDecoder,
+    scene: Tensor,
+    slen: int = 80,
+    bp: int = 24,
+    device=None,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    if device is None:
+        device = torch.device("cpu")
     chunks = split_scene_into_chunks(scene, slen, bp)
     reconstructions = []
     bgs = []
     full_maps = []
     for chunk in tqdm(chunks):
-        recon, bg, full_map = reconstruct_img(encoder, decoder, chunk.unsqueeze(0).cuda())
+        recon, bg, full_map = reconstruct_img(encoder, decoder, chunk.unsqueeze(0).to(device))
         reconstructions.append(recon.cpu())
         bgs.append(bg.cpu())
         full_maps.append(cpu(full_map))
@@ -146,7 +158,6 @@ def reconstruct_img(
             add_noise=False,
         )
         background = decoder.get_background(recon_image.shape[-1]).unsqueeze(0)
-        print(tile_map["locs"].shape)
         full_map = get_full_params_from_tiles(tile_map, decoder.tile_slen)
     return recon_image, background, full_map
 
@@ -164,8 +175,6 @@ def combine_chunks_into_scene(recon_chunks: Tensor, bgs: Tensor, slen: int):
     bgs[:, :-1, :, :, -bp:, :] = 0.0
     bgs[:, :, :-1, :, :, -bp:] = 0.0
     bgr = rearrange(bgs, "b nh nw c h w -> b (c h w) (nh nw)", b=1, c=1)
-    print(bgr.shape)
-    print(rr.shape)
     bgrrr = F.fold(bgr, output_size=output_size, kernel_size=kernel_size, stride=slen)
     return rrr + bgrrr
 
