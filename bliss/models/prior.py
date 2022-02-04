@@ -11,6 +11,47 @@ from bliss.datasets.galsim_galaxies import SDSSGalaxies
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
 
+class GalaxyPrior:
+    def __init__(
+        self,
+        autoencoder: Optional[OneCenteredGalaxyAE] = None,
+        autoencoder_ckpt: str = None,
+        latents_file: str = None,
+        n_latent_batches: int = 160,
+        psf_image_file: Optional[str] = None,
+    ):
+        """Initializes GalaxyPrior.
+
+        Args:
+            autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
+            autoencoder_ckpt: Location of state_dict for autoencoder (optional).
+            latents_file: Location of previously sampled galaxy latent variables.
+            n_latent_batches: Number of batches for galaxy latent samples.
+            psf_image_file: Path to psf image file for galaxy latent samples
+        """
+
+        assert latents_file is not None
+        latents_file = Path(latents_file)
+        if latents_file.exists():
+            latents = torch.load(latents_file, "cpu")
+        else:
+            autoencoder.load_state_dict(
+                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
+            )
+            dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
+            dataloader = dataset.train_dataloader()
+            autoencoder = autoencoder.cuda()
+            print("INFO: Creating latents from Galsim galaxies...")
+            latents = autoencoder.generate_latents(dataloader, n_latent_batches)
+            torch.save(latents, latents_file)
+        self.latents = latents
+
+    def sample(self, total_latent, device):
+        self.latents = self.latents.to(device)
+        indices = torch.randint(0, len(self.latents), (total_latent,), device=device)
+        return self.latents[indices]
+
+
 class ImagePrior(pl.LightningModule):
     """Prior distribution of objects in an astronomical image.
 
@@ -46,11 +87,7 @@ class ImagePrior(pl.LightningModule):
         f_max: float = 1e6,
         alpha: float = 0.5,
         prob_galaxy: float = 0.0,
-        autoencoder: Optional[OneCenteredGalaxyAE] = None,
-        autoencoder_ckpt: str = None,
-        latents_file: str = None,
-        n_latent_batches: int = 160,
-        psf_image_file: Optional[str] = None,
+        galaxy_prior: GalaxyPrior = None,
     ):
         """Initializes ImagePrior.
 
@@ -67,11 +104,7 @@ class ImagePrior(pl.LightningModule):
             f_max: Prior parameter on fluxes
             alpha: Prior parameter on fluxes (pareto parameter)
             prob_galaxy: Prior probability a source is a galaxy
-            autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
-            autoencoder_ckpt: Location of state_dict for autoencoder (optional).
-            latents_file: Location of previously sampled galaxy latent variables.
-            n_latent_batches: Number of batches for galaxy latent samples.
-            psf_image_file: Path to psf image file for galaxy latent samples
+            galaxy_prior: Object from which galaxy latents are sampled
         """
         super().__init__()
         self.n_bands = n_bands
@@ -91,16 +124,9 @@ class ImagePrior(pl.LightningModule):
         self.alpha = alpha
 
         self.prob_galaxy = float(prob_galaxy)
-        if prob_galaxy > 0.0:
-            autoencoder.load_state_dict(
-                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
-            )
-            latents = get_galaxy_latents(
-                latents_file, n_latent_batches, autoencoder, psf_image_file
-            )
-        else:
-            latents = torch.zeros(1, 1)
-        self.register_buffer("latents", latents)
+        self.galaxy_prior = galaxy_prior
+        if self.prob_galaxy > 0.0:
+            assert self.galaxy_prior is not None
 
     def sample_prior(self, batch_size: int = 1) -> dict:
         """Samples latent variables from the prior of an astronomical image.
@@ -245,29 +271,15 @@ class ImagePrior(pl.LightningModule):
         total_latent = batch_size * self.n_tiles_per_image * self.max_sources
 
         # first get random subset of indices to extract from self.latents
-        indices = torch.randint(0, len(self.latents), (total_latent,), device=galaxy_bool.device)
+        if self.prob_galaxy > 0.0:
+            samples = self.galaxy_prior.sample(total_latent, galaxy_bool.device)
+        else:
+            samples = torch.zeros((total_latent, 1), device=galaxy_bool.device)
         galaxy_params = rearrange(
-            self.latents[indices],
+            samples,
             "(b n s) g -> b n s g",
             b=batch_size,
             n=self.n_tiles_per_image,
             s=self.max_sources,
         )
         return galaxy_params * galaxy_bool
-
-
-def get_galaxy_latents(
-    latents_file: str, n_latent_batches: int, autoencoder: OneCenteredGalaxyAE, psf_image_file: Path
-):
-    assert latents_file is not None
-    latents_file = Path(latents_file)
-    if latents_file.exists():
-        latents = torch.load(latents_file, "cpu")
-    else:
-        dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
-        dataloader = dataset.train_dataloader()
-        autoencoder = autoencoder.cuda()
-        print("INFO: Creating latents from Galsim galaxies...")
-        latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-        torch.save(latents, latents_file)
-    return latents

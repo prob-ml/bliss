@@ -1,6 +1,6 @@
 defaults:
     - _self_
-    - training: sdss_autoencoder
+    - training: sdss_vae
     - override hydra/job_logging: stdout
 
 # completely disable hydra logging
@@ -18,7 +18,7 @@ paths:
     root: ${oc.env:BLISS_HOME}
     sdss: ${paths.root}/data/sdss
     data: ${paths.root}/data
-    project: ${paths.root}/case_studies/sdss_galaxies
+    project: ${paths.root}/case_studies/sdss_galaxies_vae
     output: ${paths.project}/output
 
 datasets:
@@ -32,11 +32,11 @@ datasets:
         prerender_device: "cuda"
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
-        num_workers: 0
+        num_workers: 5
         batch_size: 64
         n_batches: 10
         background: 865
-        noise_factor: 0.01
+        noise_factor: 1.0
         slen: 53
         min_flux: 1e3
         max_flux: 3.5e5
@@ -88,8 +88,8 @@ models:
         ptile_slen: 52
         border_padding: 24
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
-        galaxy_ae: ${models.galaxy_net}
-        galaxy_ae_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+        galaxy_ae: ${models.galaxy_vae}
+        galaxy_ae_ckpt: ${paths.project}/models/sdss_vae.pt
         background_values:
             - 865.0
         sdss_bands:
@@ -107,15 +107,20 @@ models:
     galaxy_encoder:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         decoder: ${models.decoder}
-        autoencoder: ${models.galaxy_net}
-        autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+        autoencoder: ${models.galaxy_vae}
+        autoencoder_ckpt: ${paths.project}/models/sdss_vae.pt
         hidden: 256
-    galaxy_net:
-        _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
-        slen: 53
-        latent_dim: 64
+    galaxy_flow:
+        _target_: bliss.models.vae.galaxy_flow.CenteredGalaxyLatentFlow
+        vae: ${models.galaxy_vae}
+        vae_ckpt: ${paths.project}/models/sdss_vae.pt
+    galaxy_vae:
+        _target_: bliss.models.vae.galaxy_net.OneCenteredGalaxyVAE
+        latent_dim: 16
         n_bands: 1
+        slen: 53
         residual_delay_n_steps: 500
+        min_sd: 1e-3
     prior:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1
@@ -129,12 +134,11 @@ models:
         alpha: 0.5
         prob_galaxy: 0.7
         galaxy_prior:
-            _target_: bliss.models.prior.GalaxyPrior
-            autoencoder: ${models.galaxy_net}
-            autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
-            latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
-            n_latent_batches: 160
-            psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+            _target_: bliss.models.vae.prior.GalaxyVAEPrior
+            vae: ${models.galaxy_vae}
+            vae_ckpt: ${paths.project}/models/sdss_vae.pt
+            vae_flow: ${models.galaxy_flow}
+            vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
@@ -159,7 +163,7 @@ predict:
         overwrite_cache: False
         center_subpixel: True
     bands:
-        - 2
+    - 2
 
     # chunk properties
     clen: 300
@@ -167,12 +171,14 @@ predict:
     # i/o parameters
     sleep_checkpoint: ${paths.project}/models/sdss_sleep.pt
     galaxy_checkpoint: ${paths.project}/models/sdss_galaxy_encoder.pt
+    galaxy_checkpoint_real: ${paths.project}/models/sdss_galaxy_encoder_real.pt
     binary_checkpoint: ${paths.project}/models/sdss_binary.pt
     device: "cuda:0"
     output_file: null
 
     # coverage for tests
     testing: False
+
 
 training:
     n_epochs: 121
@@ -199,15 +205,19 @@ training:
         num_workers: 0
     weight_save_path: ${paths.project}/models/${training.name}.pt
 
-plots:
-    fig:
-        - 1
-        - 2
-        - 3
-    outdir: ${paths.project}/output/sdss_figures
-    overwrite: false
-    simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
+reconstruct:
     sdss_pixel_scale: 0.396
     device: "cuda:0"
     coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
     psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+    real: False
+    outdir:
+    scenes:
+        # sdss_recon0:
+        #     h: 200
+        #     w: 1700
+        #     size: 300
+        # sdss_recon1:
+        #     h: 1150
+        #     w: 1000
+        #     size: 300
