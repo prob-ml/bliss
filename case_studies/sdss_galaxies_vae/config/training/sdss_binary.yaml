@@ -6,4 +6,4 @@ optimizer_params:
 n_epochs: 501
 save_top_k: 5
 trainer:
-  checkpoint_callback: true
+  enable_checkpointing: true

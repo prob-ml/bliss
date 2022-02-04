@@ -6,4 +6,4 @@ optimizer_params:
 n_epochs: 1001
 trainer:
   check_val_every_n_epoch: 10
-  checkpoint_callback: true
+  enable_checkpointing: true
