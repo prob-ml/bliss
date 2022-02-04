@@ -1,11 +1,11 @@
 import pytorch_lightning as pl
 import torch
+from torch.optim import Adam
 from matplotlib import pyplot as plt
 from nflows import transforms, distributions, flows
 from nflows.transforms.base import Transform
 
 from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
-from bliss.optimizer import get_optimizer
 
 
 class CenteredGalaxyLatentFlow(pl.LightningModule):
@@ -94,9 +94,7 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
 
     def configure_optimizers(self):
         assert self.optimizer_params is not None
-        return get_optimizer(
-            self.optimizer_params["name"], self.parameters(), self.optimizer_params["kwargs"]
-        )
+        return Adam(self.parameters(), **self.optimizer_params)
 
 
 def make_flow(latent_dim, n_layers):

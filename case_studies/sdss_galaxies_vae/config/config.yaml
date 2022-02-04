@@ -88,9 +88,8 @@ models:
         ptile_slen: 52
         border_padding: 24
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
-        prob_galaxy: 0.7
-        autoencoder: ${models.galaxy_vae}
-        autoencoder_ckpt: ${paths.project}/models/sdss_vae.pt
+        galaxy_ae: ${models.galaxy_vae}
+        galaxy_ae_ckpt: ${paths.project}/models/sdss_vae.pt
         background_values:
             - 865.0
         sdss_bands:
