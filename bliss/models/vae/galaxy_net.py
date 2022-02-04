@@ -6,6 +6,7 @@ from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm1d
+from torch.nn.utils import weight_norm
 
 from nflows.distributions import StandardNormal
 from nflows.flows import Flow
@@ -256,7 +257,9 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
 
 
 class CenteredGalaxyVAEEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, use_batch_norm=False):
+    def __init__(
+        self, slen=53, latent_dim=8, n_bands=1, use_batch_norm=False, use_weight_norm=True
+    ):
 
         super().__init__()
 
@@ -271,7 +274,15 @@ class CenteredGalaxyVAEEncoder(nn.Module):
         layers = []
         if use_batch_norm:
             layers.append(nn.BatchNorm1d(in_size))
-        layers.append(ResidualDenseBlock(in_size, 3, latent_dim, use_batch_norm=use_batch_norm))
+        layers.append(
+            ResidualDenseBlock(
+                in_size,
+                3,
+                latent_dim,
+                use_batch_norm=use_batch_norm,
+                use_weight_norm=use_weight_norm,
+            )
+        )
         if use_batch_norm:
             layers.append(nn.BatchNorm1d(latent_dim))
         self.dense_layer = nn.Sequential(*layers)
@@ -283,14 +294,18 @@ class CenteredGalaxyVAEEncoder(nn.Module):
 
 
 class CenteredGalaxyVAEDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, use_batch_norm=False):
+    def __init__(
+        self, slen=53, latent_dim=8, n_bands=1, use_batch_norm=False, use_weight_norm=True
+    ):
         super().__init__()
         kernels = [3, 3, 3, 3, 1]
         in_size = 2 ** len(kernels)
         self.conv_layer = CenteredGalaxyDecoder(
             slen=slen, latent_dim=latent_dim, n_bands=n_bands, use_weight_norm=True
         )
-        self.dense_layer = ResidualDenseBlock(latent_dim, 3, in_size, use_batch_norm=use_batch_norm)
+        self.dense_layer = ResidualDenseBlock(
+            latent_dim, 3, in_size, use_batch_norm=use_batch_norm, use_weight_norm=use_weight_norm
+        )
 
     def forward(self, z):
         """Decodes image from latent representation."""
@@ -407,21 +422,25 @@ class OneCenteredGalaxyDecoder(nn.Module):
 
 
 class ResidualDenseBlock(nn.Sequential):
-    def __init__(self, in_size, n_layers, out_size, use_batch_norm=False):
+    def __init__(self, in_size, n_layers, out_size, use_batch_norm=False, use_weight_norm=True):
+        if use_weight_norm:
+            wn = weight_norm
+        else:
+            wn = lambda x: x
         layers = []
         if in_size >= out_size:
             size = in_size
         else:
-            layers.append(nn.Linear(in_size, out_size))
+            layers.append(wn(nn.Linear(in_size, out_size)))
             layers.append(nn.ReLU())
             size = out_size
             if use_batch_norm:
                 layers.append(BatchNorm1d(size))
         for _ in range(n_layers):
-            layers.append(ResidualLinear(size))
+            layers.append(wn(ResidualLinear(size)))
             if use_batch_norm:
                 layers.append(BatchNorm1d(size))
-        layers.append(nn.Linear(size, out_size))
+        layers.append(wn(nn.Linear(size, out_size)))
         super().__init__(*layers)
 
         self.in_size = in_size
