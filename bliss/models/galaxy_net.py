@@ -7,6 +7,7 @@ from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.conv import Conv2d, ConvTranspose2d
+from torch.nn.utils import weight_norm
 from torch.optim import Adam
 from tqdm import tqdm
 
@@ -395,7 +396,7 @@ class OneCenteredGalaxyDecoder(nn.Module):
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, use_weight_norm=False):
 
         super().__init__()
 
@@ -405,7 +406,14 @@ class CenteredGalaxyEncoder(nn.Module):
         kernels = [3, 3, 3, 3, 1]
         layers = []
         for (i, kernel_size) in enumerate(kernels):
-            layer = ResidualConvBlock(n_bands * (2 ** i), 8, kernel_size, 4, mode="downsample")
+            layer = ResidualConvBlock(
+                n_bands * (2 ** i),
+                8,
+                kernel_size,
+                4,
+                mode="downsample",
+                use_weight_norm=use_weight_norm,
+            )
             layers.append(layer)
             if i < len(kernels) - 1:
                 layers.append(nn.LeakyReLU())
@@ -418,7 +426,7 @@ class CenteredGalaxyEncoder(nn.Module):
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, use_weight_norm=False):
         super().__init__()
 
         self.slen = slen
@@ -435,6 +443,7 @@ class CenteredGalaxyDecoder(nn.Module):
                 4,
                 mode="upsample",
                 output_padding=output_padding,
+                use_weight_norm=use_weight_norm,
             )
             layers.append(layer)
             if i < len(kernels) - 1:
@@ -461,47 +470,48 @@ class ResidualConvBlock(nn.Module):
         n_layers,
         mode="downsample",
         output_padding=None,
+        use_weight_norm=False,
     ):
         super().__init__()
+        if use_weight_norm:
+            wn = weight_norm
+        else:
+            wn = lambda x: x
         self.mode = mode
         expand_channels = in_channels * expand_factor
         padding = kernel_size // 2
-        conv_initial = Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding)
+        conv_initial = wn(
+            Conv2d(in_channels, expand_channels, kernel_size, stride=1, padding=padding)
+        )
         kernel_size_dim_change = max(kernel_size, 2)
         if self.mode == "downsample":
-            conv = Conv2d(expand_channels, expand_channels, kernel_size_dim_change, stride=2)
+            conv = wn(Conv2d(expand_channels, expand_channels, kernel_size_dim_change, stride=2))
             out_channels = in_channels * 2
         elif self.mode == "upsample":
             assert output_padding is not None
-            conv = ConvTranspose2d(
-                expand_channels,
-                expand_channels,
-                kernel_size_dim_change,
-                stride=2,
-                output_padding=output_padding,
+            conv = wn(
+                ConvTranspose2d(
+                    expand_channels,
+                    expand_channels,
+                    kernel_size_dim_change,
+                    stride=2,
+                    output_padding=output_padding,
+                )
             )
             out_channels = in_channels // 2
         layers = [conv_initial, nn.ReLU(), conv, nn.ReLU()]
         for _ in range(n_layers - 1):
             layers.append(
-                ResConv2dBlock(
-                    expand_channels, expand_channels, kernel_size, stride=1, padding=padding
+                wn(
+                    ResConv2dBlock(
+                        expand_channels, expand_channels, kernel_size, stride=1, padding=padding
+                    )
                 )
             )
-        layers.append(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding))
+        layers.append(
+            wn(Conv2d(expand_channels, out_channels, kernel_size, stride=1, padding=padding))
+        )
         self.f = nn.Sequential(*layers)
-
-    def forward(self, x):
-        y = self.f(x)
-        if self.mode == "downsample":
-            x_downsampled = F.interpolate(x, size=y.shape[-2:], mode="bilinear", align_corners=True)
-            x_downsampled = x_downsampled.repeat(1, 2, 1, 1)
-            x_trans = x_downsampled
-        elif self.mode == "upsample":
-            x_upsampled = F.interpolate(x, size=y.shape[-2:], mode="nearest")
-            x_upsampled = x_upsampled[:, : y.shape[1], :, :]
-            x_trans = x_upsampled
-        return y + x_trans
 
 
 class ResConv2dBlock(Conv2d):

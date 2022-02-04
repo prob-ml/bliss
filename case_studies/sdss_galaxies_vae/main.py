@@ -12,6 +12,7 @@ if not getenv("BLISS_HOME"):
     bliss_home = project_path.parents[2]
     environ["BLISS_HOME"] = bliss_home.as_posix()
 
+
 @hydra.main(config_path="./config", config_name="config")
 def main(cfg):
     mode = cfg.mode

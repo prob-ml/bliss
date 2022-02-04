@@ -262,7 +262,9 @@ class CenteredGalaxyVAEEncoder(nn.Module):
 
         self.slen = slen
         self.latent_dim = latent_dim
-        self.conv_layer = CenteredGalaxyEncoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
+        self.conv_layer = CenteredGalaxyEncoder(
+            slen=slen, latent_dim=latent_dim, n_bands=n_bands, use_weight_norm=True
+        )
 
         kernels = [3, 3, 3, 3, 1]
         in_size = 2 ** len(kernels)
@@ -283,7 +285,9 @@ class CenteredGalaxyVAEDecoder(nn.Module):
         super().__init__()
         kernels = [3, 3, 3, 3, 1]
         in_size = 2 ** len(kernels)
-        self.conv_layer = CenteredGalaxyDecoder(slen=slen, latent_dim=latent_dim, n_bands=n_bands)
+        self.conv_layer = CenteredGalaxyDecoder(
+            slen=slen, latent_dim=latent_dim, n_bands=n_bands, use_weight_norm=True
+        )
         self.dense_layer = ResidualDenseBlock(latent_dim, 3, in_size)
 
     def forward(self, z):
