@@ -43,15 +43,18 @@ def reconstruct(cfg):
     if cfg.reconstruct.outdir is not None:
         outdir = Path(cfg.reconstruct.outdir)
         outdir.mkdir(exist_ok=True)
+    else:
+        outdir = None
 
-        for scene_name, scene_coords in cfg.reconstruct.scenes.items():
-            h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
-            true = my_image[:, :, h : (h + scene_size), w : (w + scene_size)]
-            coadd_objects = get_objects_from_coadd(coadd_cat, h, w, scene_size)
-            recon, map_recon = reconstruct_scene_at_coordinates(
-                encoder, dec, my_image, h, w, scene_size, device=device
-            )
-            resid = (true - recon) / recon.sqrt()
+    for scene_name, scene_coords in cfg.reconstruct.scenes.items():
+        h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
+        true = my_image[:, :, h : (h + scene_size), w : (w + scene_size)]
+        coadd_objects = get_objects_from_coadd(coadd_cat, h, w, scene_size)
+        recon, map_recon = reconstruct_scene_at_coordinates(
+            encoder, dec, my_image, h, w, scene_size, device=device
+        )
+        resid = (true - recon) / recon.sqrt()
+        if outdir is not None:
             fig = create_figure(
                 true[0, 0],
                 recon[0, 0],
