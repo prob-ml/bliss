@@ -40,21 +40,26 @@ def reconstruct(cfg):
     dec = sleep.image_decoder.to(device).eval()
     encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
 
-    outdir = Path(cfg.reconstruct.outdir)
-    outdir.mkdir(exist_ok=True)
+    if cfg.reconstruct.outdir is not None:
+        outdir = Path(cfg.reconstruct.outdir)
+        outdir.mkdir(exist_ok=True)
 
-    for scene_name, scene_coords in cfg.reconstruct.scenes.items():
-        h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
-        true = my_image[:, :, h : (h + scene_size), w : (w + scene_size)]
-        coadd_objects = get_objects_from_coadd(coadd_cat, h, w, scene_size)
-        recon, map_recon = reconstruct_scene_at_coordinates(
-            encoder, dec, my_image, h, w, scene_size, device=device
-        )
-        resid = (true - recon) / recon.sqrt()
-        fig = create_figure(
-            true[0, 0], recon[0, 0], resid[0, 0], coadd_objects=coadd_objects, map_recon=map_recon
-        )
-        fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
+        for scene_name, scene_coords in cfg.reconstruct.scenes.items():
+            h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
+            true = my_image[:, :, h : (h + scene_size), w : (w + scene_size)]
+            coadd_objects = get_objects_from_coadd(coadd_cat, h, w, scene_size)
+            recon, map_recon = reconstruct_scene_at_coordinates(
+                encoder, dec, my_image, h, w, scene_size, device=device
+            )
+            resid = (true - recon) / recon.sqrt()
+            fig = create_figure(
+                true[0, 0],
+                recon[0, 0],
+                resid[0, 0],
+                coadd_objects=coadd_objects,
+                map_recon=map_recon,
+            )
+            fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
 
 
 def get_sdss_data(sdss_dir, sdss_pixel_scale):
