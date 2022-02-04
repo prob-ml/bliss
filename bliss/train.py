@@ -60,15 +60,16 @@ def train(cfg: DictConfig):
         torch.save(model_state_dict, cfg.training.weight_save_path)
         result_path = cfg.training.weight_save_path + ".log.json"
         with open(result_path, "w", encoding="utf-8") as fp:
-            cp_data = model_checkpoint["callbacks"][ModelCheckpoint]
-            cp_data["timestamp"] = str(dt.datetime.today())
+            cp_data = model_checkpoint["callbacks"]
+            key = list(cp_data.keys())[0]
+            cp_data = cp_data[key]
+            data_to_write = {"timestamp": str(dt.datetime.today())}
             for k, v in cp_data.items():
-                if isinstance(v, torch.Tensor):
-                    if not v.shape:
-                        cp_data[k] = v.item()
-                    else:
-                        del cp_data[k]
-            fp.write(json.dumps(cp_data))
+                if isinstance(v, torch.Tensor) and not v.shape:
+                    data_to_write[k] = v.item()
+                elif is_json_serializable(v):
+                    data_to_write[k] = v
+            fp.write(json.dumps(data_to_write))
 
 
 def setup_seed(cfg):
@@ -145,3 +146,11 @@ def log_hyperparameters(config, model, trainer) -> None:
 
 def empty(*args, **kwargs):
     pass
+
+
+def is_json_serializable(x):
+    try:
+        json.dumps(x)
+        return True
+    except TypeError:
+        return False
