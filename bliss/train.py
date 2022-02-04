@@ -149,8 +149,9 @@ def empty(*args, **kwargs):
 
 
 def is_json_serializable(x):
+    ret = True
     try:
         json.dumps(x)
-        return True
     except TypeError:
-        return False
+        ret = False
+    return ret
