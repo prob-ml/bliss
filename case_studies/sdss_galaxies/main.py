@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from os import getenv, environ
+from os import environ, getenv
 from pathlib import Path
 
 import hydra
@@ -14,8 +14,6 @@ if not getenv("BLISS_HOME"):
 def main(cfg):
     if cfg.mode == "train":
         from bliss.train import train as task
-    elif cfg.mode == "tune":
-        from bliss.tune import tune as task
     elif cfg.mode == "generate":
         from bliss.generate import generate as task
     elif cfg.mode == "predict":
