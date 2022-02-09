@@ -26,7 +26,6 @@ repos:
         entry: isort
         language: system
         types: [python]
-        args: [--profile black, --line-length 100, --multi-line 3]
       - id: pylint
         name: pylint
         entry: pylint
