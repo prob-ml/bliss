@@ -1,22 +1,22 @@
 """Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
 import torch
 from einops import rearrange
+from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
-from hydra.utils import instantiate
 
 from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
-from bliss.models.location_encoder import (
-    LocationEncoder,
-    get_is_on_from_n_sources,
-    get_images_in_tiles,
-    get_n_tiles_hw,
-    get_params_in_batches,
-    get_full_params_from_tiles,
-)
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
+from bliss.models.location_encoder import (
+    LocationEncoder,
+    get_full_params_from_tiles,
+    get_images_in_tiles,
+    get_is_on_from_n_sources,
+    get_n_tiles_hw,
+    get_params_in_batches,
+)
 
 
 def predict_on_image(

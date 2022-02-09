@@ -1,16 +1,16 @@
 import math
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
 
 import torch
+from einops import rearrange, repeat
 from torch import Tensor
 from torch.nn import functional as F
-from einops import rearrange, repeat
 from tqdm import tqdm
 
+from bliss.datasets.sdss_blended_galaxies import cpu
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
 from bliss.models.location_encoder import get_full_params_from_tiles, get_params_in_batches
-from bliss.datasets.sdss_blended_galaxies import cpu
 
 
 def reconstruct_scene_at_coordinates(
