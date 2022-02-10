@@ -111,6 +111,32 @@ def reconstruct_scene(
     bp: int = 24,
     device=None,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    """Perform reconstruction and MAP estimation chunk-by-chunk on given scene.
+
+    Currently this function only works on square images and assumes they have been appropriately
+    padded (as in `reconstruct_scene_at_coordinates`) so that it can be divided evenly into chunks.
+
+    Args:
+        encoder:
+            Trained Encoder module.
+        decoder:
+            Trained ImageDecoder module.
+        scene:
+            A NxCxLxL tensor of N LxL images (with C bands).
+        slen:
+            The side-lengths of smaller chunks to create. Defaults to 80.
+        bp:
+            Border padding needed by encoder. Defaults to 24.
+        device:
+            Device used for rendering each chunk (i.e. a torch.device). Note
+            that chunks are moved onto and off the device to allow for rendering
+            larger images.
+
+    Returns:
+        A tuple of two items:
+            - The reconstruction of the given scene `scene_recon`.
+            - The map estimate of parameters of each detected source on the scene `map_recon`.
+    """
     if device is None:
         device = torch.device("cpu")
     chunks = split_scene_into_chunks(scene, slen, bp)
@@ -130,6 +156,7 @@ def reconstruct_scene(
 
 
 def split_scene_into_chunks(scene: Tensor, slen: int, bp: int) -> Tensor:
+    """Split scenes into square chunks of side length `slen+bp*2` using `F.unfold`."""
     kernel_size = slen + bp * 2
     chunks = F.unfold(scene, kernel_size=kernel_size, stride=slen)
     return rearrange(
