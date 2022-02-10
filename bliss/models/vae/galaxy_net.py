@@ -2,14 +2,14 @@ import math
 
 import torch
 from matplotlib import pyplot as plt
+from nflows.distributions import StandardNormal
+from nflows.flows import Flow
 from torch import nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.utils import weight_norm
 
-from nflows.distributions import StandardNormal
-from nflows.flows import Flow
 from bliss.models.galaxy_net import (
     CenteredGalaxyDecoder,
     CenteredGalaxyEncoder,
