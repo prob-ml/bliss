@@ -1,4 +1,4 @@
-outdir: ${paths.project}/output/sdss_figures_real
+outdir: ${paths.output}/sdss_figures_real
 real: true
 scenes:
     sdss_recon0:

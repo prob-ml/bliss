@@ -141,7 +141,7 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
             loss = loss_recon + loss_prior
             self.log("train/loss_main", loss, prog_bar=True)
             self.log("train/loss_main_recon", loss_recon)
-        if optimizer_idx == 1:
+        elif optimizer_idx == 1 and self.trainer.global_step > self.residual_delay_n_steps:
             with torch.no_grad():
                 recon_mean_main, pq_latent_main = self._main_forward(images, background)
             recon_mean_residual, pq_latent_residual = self._residual_forward(
@@ -153,6 +153,8 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
             loss = loss_recon + loss_prior
             self.log("train/loss", loss, prog_bar=True)
             self.log("train/loss_recon", loss_recon, prog_bar=True)
+        else:
+            loss = None
         return loss
 
     def validation_step(self, batch, batch_idx):
