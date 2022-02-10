@@ -2,15 +2,15 @@
 from typing import Dict, Optional
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 
 from bliss.models.binary import BinaryEncoder
+from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.location_encoder import (
     LocationEncoder,
     get_images_in_tiles,
     get_is_on_from_n_sources,
 )
-from bliss.models.galaxy_encoder import GalaxyEncoder
 
 
 class Encoder(nn.Module):
@@ -82,7 +82,7 @@ class Encoder(nn.Module):
 
         Returns:
             A dictionary of the maximum a posteriori
-            of the catalog. Specifically, this dictionary comprises:
+            of the catalog in tiles. Specifically, this dictionary comprises:
             - The output of LocationEncoder.max_a_post()
             - 'galaxy_bool', 'star_bool', and 'prob_galaxy' from BinaryEncoder.
             - 'galaxy_param' from GalaxyEncoder.
