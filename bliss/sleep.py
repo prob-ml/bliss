@@ -105,9 +105,7 @@ def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
 
 class SleepPhase(pl.LightningModule):
-    """Summary line.
-
-    Implementation of sleep-phase training using pytorch-lightning framework.
+    """Implementation of sleep-phase training using pytorch-lightning framework.
 
     Example:
         In python script, set up the sleep-phase model and pytorch-lightning trainer::
