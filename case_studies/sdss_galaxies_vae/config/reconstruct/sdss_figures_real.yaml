@@ -9,3 +9,7 @@ scenes:
         h: 1150
         w: 1000
         size: 300
+    sdss_recon2:
+        h: 200
+        w: 200
+        size: 1200
