@@ -61,7 +61,7 @@ jobs:
 
       - name: Run flake8
         run: |
-          poetry run flake8 bliss/ tests/
+          poetry run flake8 .
 
       - name: Run darglint
         run: |

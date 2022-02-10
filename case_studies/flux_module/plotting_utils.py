@@ -1,7 +1,11 @@
 from matplotlib import pyplot as plt
 
 
-def plot_residuals(image, recon_mean, resid_fun=lambda x, y: x - y):
+def subtract(x, y):
+    return x - y
+
+
+def plot_residuals(image, recon_mean, resid_fun=subtract):
 
     assert len(image.shape) == 2
     assert image.shape == recon_mean.shape
