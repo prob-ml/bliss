@@ -1,14 +1,14 @@
 from pathlib import Path
 from typing import Optional
 
-import torch
 import pytorch_lightning as pl
+import torch
 from einops import rearrange
 from torch.distributions import Poisson
 
-from bliss.models.location_encoder import get_is_on_from_n_sources
 from bliss.datasets.galsim_galaxies import SDSSGalaxies
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.location_encoder import get_is_on_from_n_sources
 
 
 class GalaxyPrior:

@@ -3,15 +3,15 @@ from typing import Dict, Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
-from torch.utils.data.dataloader import DataLoader
-from torch.nn import functional as F
-from torch import Tensor
 from einops.einops import rearrange
+from torch import Tensor
+from torch.nn import functional as F
+from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey
-from bliss.models.binary import BinaryEncoder
 from bliss.encoder import Encoder
+from bliss.models.binary import BinaryEncoder
 from bliss.sleep import SleepPhase
 
 

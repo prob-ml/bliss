@@ -1,9 +1,9 @@
 import pytorch_lightning as pl
 import torch
-from torch.optim import Adam
 from matplotlib import pyplot as plt
-from nflows import transforms, distributions, flows
+from nflows import distributions, flows, transforms
 from nflows.transforms.base import Transform
+from torch.optim import Adam
 
 from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
 
