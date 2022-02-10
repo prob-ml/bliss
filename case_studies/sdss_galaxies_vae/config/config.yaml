@@ -36,7 +36,6 @@ datasets:
         batch_size: 64
         n_batches: 10
         background: 865
-        noise_factor: 1.0
         slen: 53
         min_flux: 1e3
         max_flux: 3.5e5
@@ -62,7 +61,6 @@ datasets:
         slen: 53
         background: 865.
         psf_fwhm: 0.8
-        noise_factor: 0.1
         pixel_scale: 0.4
         min_flux: 300 # to be observable it cannot be too below background.
         max_flux: 10000
@@ -163,7 +161,7 @@ predict:
         overwrite_cache: False
         center_subpixel: True
     bands:
-    - 2
+        - 2
 
     # chunk properties
     clen: 300
@@ -178,7 +176,6 @@ predict:
 
     # coverage for tests
     testing: False
-
 
 training:
     n_epochs: 121

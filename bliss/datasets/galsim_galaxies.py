@@ -25,7 +25,6 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         slen=53,
         n_bands=1,
         pixel_scale=0.396,
-        noise_factor=0.05,
         background=845,
         psf_fwhm=1.4,
         min_flux=300,
@@ -43,7 +42,6 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         self.slen = slen
         self.n_bands = n_bands
         self.pixel_scale = pixel_scale
-        self.noise_factor = noise_factor
 
         # create background
         self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
@@ -85,7 +83,7 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
         # add noise and background.
         image += self.background
-        noise = torch.sqrt(image) * torch.randn(*image.shape) * self.noise_factor
+        noise = torch.sqrt(image) * torch.randn(*image.shape)
         image += noise
 
         return {"images": image, "background": self.background}
@@ -111,7 +109,6 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         n_batches=10,
         n_bands=1,
         slen=53,
-        noise_factor=0.05,
         min_flux=1e3,
         max_flux=3.5e5,
         min_a_d=0.8,
@@ -134,7 +131,6 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         self.slen = slen
         self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
         self.background[...] = background
-        self.noise_factor = noise_factor
         self.pixel_scale = pixel_scale
 
         self.min_flux = min_flux
@@ -214,8 +210,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
         # add noise and background.
         image += self.background.mean()
-        noise = image.sqrt() * torch.randn(*image.shape) * self.noise_factor
-        image += noise
+        image += image.sqrt() * torch.randn(*image.shape)
 
         return {"images": image, "background": self.background, "noiseless": noiseless}
 

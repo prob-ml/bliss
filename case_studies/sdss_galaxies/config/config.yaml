@@ -36,7 +36,6 @@ datasets:
         batch_size: 64
         n_batches: 10
         background: 865
-        noise_factor: 0.01
         slen: 53
         min_flux: 1e3
         max_flux: 3.5e5
@@ -62,7 +61,6 @@ datasets:
         slen: 53
         background: 865.
         psf_fwhm: 0.8
-        noise_factor: 0.1
         pixel_scale: 0.4
         min_flux: 300 # to be observable it cannot be too below background.
         max_flux: 10000

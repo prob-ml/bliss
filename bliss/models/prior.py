@@ -38,7 +38,7 @@ class GalaxyPrior:
             autoencoder.load_state_dict(
                 torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
             )
-            dataset = SDSSGalaxies(noise_factor=0.01, psf_image_file=psf_image_file)
+            dataset = SDSSGalaxies(psf_image_file=psf_image_file)
             dataloader = dataset.train_dataloader()
             autoencoder = autoencoder.cuda()
             print("INFO: Creating latents from Galsim galaxies...")
