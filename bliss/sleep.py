@@ -17,8 +17,14 @@ from torch.distributions import Normal
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 
-from bliss.models import location_encoder as loc_enc
 from bliss.models.decoder import ImageDecoder
+from bliss.models.location_encoder import (
+    LocationEncoder,
+    get_full_params_from_tiles,
+    get_images_in_tiles,
+    get_is_on_from_n_sources,
+    get_params_in_batches,
+)
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
@@ -116,7 +122,7 @@ class SleepPhase(pl.LightningModule):
 
     def __init__(
         self,
-        encoder: loc_enc.LocationEncoder,
+        encoder: LocationEncoder,
         decoder: ImageDecoder,
         annotate_probs: bool = False,
         slack=1.0,
@@ -156,12 +162,12 @@ class SleepPhase(pl.LightningModule):
         images = batch["images"]
 
         batch_size = images.shape[0]
-        image_ptiles = loc_enc.get_images_in_tiles(
+        image_ptiles = get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
         var_params = self.image_encoder.encode(image_ptiles)
         tile_map = self.image_encoder.max_a_post(var_params)
-        tile_est = loc_enc.get_params_in_batches(tile_map, batch_size)
+        tile_est = get_params_in_batches(tile_map, batch_size)
         tile_est["prob_n_sources"] = tile_est["prob_n_sources"].unsqueeze(-2)
         tile_est["galaxy_params"] = batch["galaxy_params"]
 
@@ -242,10 +248,10 @@ class SleepPhase(pl.LightningModule):
         true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
         true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
         true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
-        true_tile_is_on_array = loc_enc.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
+        true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
-        image_ptiles = loc_enc.get_images_in_tiles(
+        image_ptiles = get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
         var_params = self.image_encoder.encode(image_ptiles)
@@ -338,13 +344,11 @@ class SleepPhase(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = loc_enc.get_full_params_from_tiles(
-            true_tile_params, self.image_encoder.tile_slen
-        )
+        true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
 
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        est_params = loc_enc.get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
+        est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
         return true_params, est_params, slen
 
     # pylint: disable=too-many-statements

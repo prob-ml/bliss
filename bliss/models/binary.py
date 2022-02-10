@@ -5,9 +5,14 @@ from torch import nn
 from torch.nn import BCELoss
 from torch.optim import Adam
 
-from bliss.models import location_encoder as loc_enc
 from bliss.models.decoder import get_mgrid
 from bliss.models.galaxy_encoder import center_ptiles
+from bliss.models.location_encoder import (
+    EncoderCNN,
+    get_full_params_from_tiles,
+    get_images_in_tiles,
+    get_is_on_from_n_sources,
+)
 from bliss.reporting import plot_image_and_locs
 
 
@@ -58,7 +63,7 @@ class BinaryEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
-        self.enc_conv = loc_enc.EncoderCNN(self.n_bands, channel, spatial_dropout)
+        self.enc_conv = EncoderCNN(self.n_bands, channel, spatial_dropout)
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
@@ -78,7 +83,7 @@ class BinaryEncoder(pl.LightningModule):
 
     def get_images_in_tiles(self, images):
         """Divide a batch of full images into padded tiles similar to nn.conv2d."""
-        return loc_enc.get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
     def center_ptiles(self, image_ptiles, tile_locs):
         """Return padded tiles centered on each corresponding source."""
@@ -121,7 +126,7 @@ class BinaryEncoder(pl.LightningModule):
         images = batch["images"]
         galaxy_bool = batch["galaxy_bool"].reshape(-1)
         prob_galaxy = self.forward_image(images, batch["locs"]).reshape(-1)
-        tile_is_on_array = loc_enc.get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
+        tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 
         # we need to calculate cross entropy loss, only for "on" sources
@@ -195,14 +200,14 @@ class BinaryEncoder(pl.LightningModule):
         exclude = {"images", "slen", "background"}
         slen = int(batch["slen"].unique().item())
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = loc_enc.get_full_params_from_tiles(true_tile_params, self.tile_slen)
+        true_params = get_full_params_from_tiles(true_tile_params, self.tile_slen)
         # prediction
         pred = self.get_prediction(batch)
         tile_est = dict(true_tile_params.items())
         tile_est["galaxy_bool"] = pred["galaxy_bool"]
         tile_est["star_bool"] = pred["star_bool"]
         tile_est["prob_galaxy"] = pred["prob_galaxy"]
-        est = loc_enc.get_full_params_from_tiles(tile_est, self.tile_slen)
+        est = get_full_params_from_tiles(tile_est, self.tile_slen)
         # setup figure and axes
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
