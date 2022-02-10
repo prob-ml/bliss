@@ -3,8 +3,8 @@ import torch
 
 from bliss.models.location_encoder import (
     LocationEncoder,
-    get_is_on_from_n_sources,
     get_images_in_tiles,
+    get_is_on_from_n_sources,
 )
 
 
