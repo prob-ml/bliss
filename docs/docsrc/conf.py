@@ -38,13 +38,13 @@ extensions = [
     "sphinx_rtd_theme",
 ]
 
-intersphinx_mapping = dict(
-    matplotlib=("https://matplotlib.org/", None),
-    numpy=("https://docs.scipy.org/doc/numpy/", None),
-    python=("https://docs.python.org/3", None),
-    torch=("https://pytorch.org/docs/master/", None),
-    pytorch_lightning=("https://pytorch-lightning.readthedocs.io/en/stable/", None),
-)
+intersphinx_mapping = {
+    "matplotlib": ("https://matplotlib.org/", None),
+    "numpy": ("https://docs.scipy.org/doc/numpy/", None),
+    "python": ("https://docs.python.org/3", None),
+    "torch": ("https://pytorch.org/docs/master/", None),
+    "pytorch_lightning": ("https://pytorch-lightning.readthedocs.io/en/stable/", None),
+}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
