@@ -41,8 +41,8 @@ def predict_on_image(
         tile_map: Dictionary containing MAP estimates for parameters of sources in each tile.
         full_map: Dictionary containing MAP estimates for parameters of sources on full image.
         var_params: Dictionary containing tensors of variational parameters corresponding
-            to each tile in `image`. The variational parameters include `prob_galaxy`,
-            `prob_n_sources`, `loc_mean`, `loc_logvar`, etc.
+            to each tile in `image`. The variational parameters include `prob_galaxy`, `loc_mean`,
+            `loc_logvar`, etc.
     """
     # prepare and check consistency
     assert not image_encoder.training
@@ -61,7 +61,6 @@ def predict_on_image(
 
     tile_map = image_encoder.max_a_post(var_params)
     tile_map = get_params_in_batches(tile_map, image.shape[0])
-    tile_map["prob_n_sources"] = tile_map["prob_n_sources"].unsqueeze(-2)
 
     var_params_n_sources = image_encoder.encode_for_n_sources(var_params, tile_n_sources)
 

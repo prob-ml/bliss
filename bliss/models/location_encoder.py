@@ -376,7 +376,7 @@ class LocationEncoder(nn.Module):
             The maximum a posteriori for each padded tile.
             Has shape `n_ptiles * max_detections * ...`.
             The dictionary contains
-            `"locs", "log_fluxes", "fluxes", "prob_n_sources", and "n_sources".`.
+            `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
         tile_n_sources = self.tile_map_n_sources(var_params)
         pred = self.encode_for_n_sources(var_params, tile_n_sources)
@@ -397,14 +397,10 @@ class LocationEncoder(nn.Module):
         tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, tile_is_on_array)
         tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
 
-        # finally prob_n_sources
-        prob_n_sources = torch.exp(pred["n_source_log_probs"])
-
         return {
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
-            "prob_n_sources": prob_n_sources,
             "n_sources": tile_n_sources,
             "is_on_array": tile_is_on_array,
         }

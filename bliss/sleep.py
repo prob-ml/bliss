@@ -105,9 +105,7 @@ def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
 
 class SleepPhase(pl.LightningModule):
-    """Summary line.
-
-    Implementation of sleep-phase training using pytorch-lightning framework.
+    """Implementation of sleep-phase training using pytorch-lightning framework.
 
     Example:
         In python script, set up the sleep-phase model and pytorch-lightning trainer::
@@ -168,7 +166,6 @@ class SleepPhase(pl.LightningModule):
         var_params = self.image_encoder.encode(image_ptiles)
         tile_map = self.image_encoder.max_a_post(var_params)
         tile_est = get_params_in_batches(tile_map, batch_size)
-        tile_est["prob_n_sources"] = tile_est["prob_n_sources"].unsqueeze(-2)
         tile_est["galaxy_params"] = batch["galaxy_params"]
 
         # FIXME: True galaxy params are not necessarily consistent with other MAP estimates
