@@ -1,5 +1,3 @@
-from shutil import rmtree
-
 from case_studies.sdss_galaxies_vae.reconstruction import reconstruct
 
 
