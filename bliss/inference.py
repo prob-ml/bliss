@@ -152,6 +152,7 @@ def reconstruct_scene(
     bgs = torch.cat(bgs, dim=0)
     scene_recon = combine_chunks_into_scene(reconstructions, bgs, slen)
     map_recon = combine_full_maps(full_maps, slen)
+
     return scene_recon, map_recon
 
 
