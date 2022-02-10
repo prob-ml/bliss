@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from os import getenv, environ
+from os import environ, getenv
 from pathlib import Path
 
 import hydra
+from reconstruction import reconstruct
 
 from bliss.train import train
-from reconstruction import reconstruct
 
 if not getenv("BLISS_HOME"):
     project_path = Path(__file__).resolve()
@@ -23,4 +23,4 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    main()
+    main()  # pylint: disable=no-value-for-parameter

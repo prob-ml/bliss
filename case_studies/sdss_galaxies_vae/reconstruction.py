@@ -1,19 +1,21 @@
+# flake8: noqa
+# pylint: skip-file
 import argparse
 from pathlib import Path
 
-import torch
 import numpy as np
-from matplotlib import pyplot as plt
+import torch
 from astropy.table import Table
 from hydra.utils import instantiate
+from matplotlib import pyplot as plt
 
+from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey
-from bliss.models.binary import BinaryEncoder
-from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.encoder import Encoder
 from bliss.inference import reconstruct_scene_at_coordinates
+from bliss.models.binary import BinaryEncoder
+from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.sleep import SleepPhase
-from bliss import reporting
 
 
 def reconstruct(cfg):
