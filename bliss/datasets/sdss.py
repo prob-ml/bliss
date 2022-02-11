@@ -77,11 +77,7 @@ class SloanDigitalSkySurvey(Dataset):
                 ret[k] = np.stack(data_per_band)
             else:
                 ret[k] = data_per_band
-        ret.update(
-            {
-                "field": field,
-            }
-        )
+        ret.update({"field": field})
         return ret
 
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
