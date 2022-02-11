@@ -20,8 +20,9 @@ from matplotlib import pyplot as plt
 from bliss import generate, reporting
 from bliss.datasets import sdss
 from bliss.datasets.galsim_galaxies import load_psf_from_file
+from bliss.encoder import Encoder
+from bliss.inference import reconstruct_scene_at_coordinates
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.predict import predict_on_image, predict_on_scene
 
 pl.seed_everything(0)
 
@@ -142,13 +143,13 @@ class DetectionClassificationFigures(BlissFigures):
             "classification": "sdss-classification-acc.png",
         }
 
-    def compute_data(self, scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, scene, coadd_cat, encoder, decoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
-        assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
-        device = sleep_net.device
+        assert encoder.device == decoder.device
+        device = encoder.device
 
         bp = 24
-        clen = 300
+        slen = 300  # chunk side-length
         h, w = scene.shape[-2], scene.shape[-1]
 
         # load coadd catalog
@@ -160,20 +161,10 @@ class DetectionClassificationFigures(BlissFigures):
             idx = np.where(coadd_params["objid"] == my_id)[0].item()
             coadd_params["galaxy_bools"][idx] = 0
 
-        # load specific models that are needed.
-        image_encoder = sleep_net.image_encoder.to(device).eval()
-        galaxy_decoder = sleep_net.image_decoder.galaxy_tile_decoder.galaxy_decoder.eval()
-
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
-        _, est_params = predict_on_scene(
-            clen,
-            scene_torch,
-            image_encoder,
-            binary_encoder,
-            galaxy_encoder,
-            galaxy_decoder,
-            device,
+        _, est_params = reconstruct_scene_at_coordinates(
+            encoder, decoder, scene_torch, 0, 0, min(h, w), slen, bp, device=device
         )
 
         mag_bins = np.arange(18, 23, 0.25)  # skip 23
@@ -277,24 +268,18 @@ class SDSSReconstructionFigures(BlissFigures):
     def fignames(self):
         return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(len(self.lims))}}
 
-    def compute_data(self, scene, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, scene, encoder, decoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
-        assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
-        device = sleep_net.device
+        device = encoder.device
 
         bp = 24
-
-        image_encoder = sleep_net.image_encoder.to(device).eval()
-        image_decoder = sleep_net.image_decoder.to(device).eval()
-
-        bp = image_encoder.border_padding
-
         data = {}
 
         for figname in self.fignames:
             xlim, ylim = self.lims[figname]
             h, w = ylim[1] - ylim[0], xlim[1] - xlim[0]
             assert h >= bp and w >= bp
+            assert h == w
             hb = h + 2 * bp
             wb = w + 2 * bp
             chunk = scene[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
@@ -305,23 +290,14 @@ class SDSSReconstructionFigures(BlissFigures):
 
             with torch.no_grad():
 
-                tile_map, _, _ = predict_on_image(
-                    chunk, image_encoder, binary_encoder, galaxy_encoder
-                )
-
-                # plot image from tile est.
-                recon_image, _ = image_decoder.render_images(
-                    tile_map["n_sources"],
-                    tile_map["locs"],
-                    tile_map["galaxy_bools"],
-                    tile_map["galaxy_params"],
-                    tile_map["fluxes"],
-                    add_noise=False,
+                # FIXME: Think about how to fix this...
+                recon_image, _ = reconstruct_scene_at_coordinates(
+                    encoder, decoder, chunk, 0, 0, hb, hb, bp, device=device
                 )
 
             recon_image = recon_image.cpu().numpy().reshape(hb, wb)
 
-            # only keep section inside obrder padding
+            # only keep section inside border padding
             true_image = chunk_np[bp : hb - bp, bp : wb - bp]
             recon_image = recon_image[bp : hb - bp, bp : wb - bp]
             residual = (true_image - recon_image) / np.sqrt(recon_image)
@@ -644,19 +620,22 @@ def plots(cfg):
         warnings.warn("Specified output directory does not exist, will attempt to create it.")
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
-    # load models necessary for SDSS reconstructions.
+    # load models required for SDSS reconstructions.
     if fig.intersection({2, 3}):
-        sleep_net = instantiate(cfg.models.sleep)
-        sleep_net.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
-        sleep_net = sleep_net.to(device).eval()
+        sleep = instantiate(cfg.models.sleep)
+        sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
+        location = sleep.image_encoder.to(device).eval()
 
-        binary_encoder = instantiate(cfg.models.binary)
-        binary_encoder.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
-        binary_encoder = binary_encoder.to(device).eval()
+        binary = instantiate(cfg.models.binary)
+        binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
+        binary = binary.to(device).eval()
 
-        galaxy_encoder = instantiate(cfg.models.galaxy_encoder)
-        galaxy_encoder.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
-        galaxy_encoder = galaxy_encoder.to(device).eval()
+        galaxy = instantiate(cfg.models.galaxy_encoder)
+        galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
+        galaxy = galaxy.to(device).eval()
+
+        decoder = sleep.image_decoder.to(device).eval()
+        encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in fig:
@@ -685,14 +664,14 @@ def plots(cfg):
         scene = get_sdss_data(cfg)["image"]
         coadd_cat = Table.read(cfg.plots.coadd_cat, format="fits")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
-        dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+        dc_fig.save_figures(scene, coadd_cat, encoder, decoder)
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in fig:
         scene = get_sdss_data(cfg)["image"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
-        sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
+        sdss_rec_fig.save_figures(scene, encoder, decoder)
         mpl.rc_file_defaults()
 
     else:
