@@ -14,7 +14,6 @@ import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
 from torch.distributions import Normal
-from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 
 from bliss.models.decoder import ImageDecoder
@@ -256,8 +255,8 @@ class SleepPhase(pl.LightningModule):
 
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)
-        cross_entropy = CrossEntropyLoss(reduction="none").requires_grad_(False)
-        counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
+        nllloss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
+        counter_loss = nllloss(n_source_log_probs, true_tile_n_sources)
 
         # the following two functions computes the log-probability of parameters when
         # each estimated source i is matched with true source j.
