@@ -69,13 +69,13 @@ def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: 
 
     psf = load_psf_from_file(psf_image_file, pixel_scale)
     x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
-    galaxy_bool = ~coadd_cat["probpsf"].data.astype(bool)
+    galaxy_bools = ~coadd_cat["probpsf"].data.astype(bool)
     flux, mag = reporting.get_flux_coadd(coadd_cat)
     hlr = reporting.get_hlr_coadd(coadd_cat, psf)
 
     coadd_cat["x"] = x
     coadd_cat["y"] = y
-    coadd_cat["galaxy_bool"] = galaxy_bool
+    coadd_cat["galaxy_bools"] = galaxy_bools
     coadd_cat["flux"] = flux
     coadd_cat["mag"] = mag
     coadd_cat["hlr"] = hlr
@@ -158,7 +158,7 @@ class DetectionClassificationFigures(BlissFigures):
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
         for my_id in ids:
             idx = np.where(coadd_params["objid"] == my_id)[0].item()
-            coadd_params["galaxy_bool"][idx] = 0
+            coadd_params["galaxy_bools"][idx] = 0
 
         # load specific models that are needed.
         image_encoder = sleep_net.image_encoder.to(device).eval()
@@ -237,12 +237,12 @@ class DetectionClassificationFigures(BlissFigures):
 
         return {"detection": f1, "classification": f2}
 
-    def scatter_plot_misclass(self, ax, prob_galaxy, misclass, true_mags):
+    def scatter_plot_misclass(self, ax, galaxy_probs, misclass, true_mags):
         # TODO: Revive if useful later on.
 
         # scatter plot of miscclassification probs
-        probs_correct = prob_galaxy[~misclass]
-        probs_misclass = prob_galaxy[misclass]
+        probs_correct = galaxy_probs[~misclass]
+        probs_misclass = galaxy_probs[misclass]
 
         ax.scatter(true_mags[~misclass], probs_correct, marker="x", c="b")
         ax.scatter(true_mags[misclass], probs_misclass, marker="x", c="r")
@@ -250,8 +250,8 @@ class DetectionClassificationFigures(BlissFigures):
         ax.axhline(0.1, linestyle="--")
         ax.axhline(0.9, linestyle="--")
 
-        uncertain = (prob_galaxy[misclass] > 0.2) & (prob_galaxy[misclass] < 0.8)
-        r_uncertain = sum(uncertain) / len(prob_galaxy[misclass])
+        uncertain = (galaxy_probs[misclass] > 0.2) & (galaxy_probs[misclass] < 0.8)
+        r_uncertain = sum(uncertain) / len(galaxy_probs[misclass])
         print(
             f"ratio misclass with probability between 10%-90%: {r_uncertain:.3f}",
         )
@@ -313,7 +313,7 @@ class SDSSReconstructionFigures(BlissFigures):
                 recon_image, _ = image_decoder.render_images(
                     tile_map["n_sources"],
                     tile_map["locs"],
-                    tile_map["galaxy_bool"],
+                    tile_map["galaxy_bools"],
                     tile_map["galaxy_params"],
                     tile_map["fluxes"],
                     add_noise=False,

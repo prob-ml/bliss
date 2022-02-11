@@ -108,7 +108,7 @@ class ImageDecoder(pl.LightningModule):
         self,
         n_sources: Tensor,
         locs: Tensor,
-        galaxy_bool: Tensor,
+        galaxy_bools: Tensor,
         galaxy_params: Tensor,
         fluxes: Tensor,
         add_noise: bool = True,
@@ -119,7 +119,7 @@ class ImageDecoder(pl.LightningModule):
             n_sources: Number of sources in each tile (batch_size x n_tiles_per_image)
             locs: Locations of sources in each tile
                 (batch_size x n_tiles_per_image x max_sources x 2)
-            galaxy_bool: Whether each source is a galaxy in each tile
+            galaxy_bools: Whether each source is a galaxy in each tile
                 (batch_size x n_tiles_per_image x max_sources x 1)
             galaxy_params : Parameters of each galaxy in each tile
                 (batch_size x n_tiles_per_image x max_sources x latent_dim)
@@ -134,11 +134,11 @@ class ImageDecoder(pl.LightningModule):
         """
         assert n_sources.shape[0] == locs.shape[0]
         assert n_sources.shape[1] == locs.shape[1]
-        assert galaxy_bool.shape[-1] == 1
+        assert galaxy_bools.shape[-1] == 1
 
         # first render the padded tiles
         image_ptiles, var_ptiles = self._render_ptiles(
-            n_sources, locs, galaxy_bool, galaxy_params, fluxes
+            n_sources, locs, galaxy_bools, galaxy_params, fluxes
         )
 
         # render the image from padded tiles
@@ -179,10 +179,10 @@ class ImageDecoder(pl.LightningModule):
 
         return images
 
-    def _render_ptiles(self, n_sources, locs, galaxy_bool, galaxy_params, fluxes):
+    def _render_ptiles(self, n_sources, locs, galaxy_bools, galaxy_params, fluxes):
         # n_sources: is (batch_size x n_tiles_per_image)
         # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
-        # galaxy_bool: Is (batch_size x n_tiles_per_image x max_sources)
+        # galaxy_bools: Is (batch_size x n_tiles_per_image x max_sources)
         # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
         # fluxes: Is (batch_size x n_tiles_per_image x max_sources x 2)
 
@@ -199,14 +199,14 @@ class ImageDecoder(pl.LightningModule):
         # view parameters being explicit about shapes
         n_sources = rearrange(n_sources, "b t -> (b t)")
         locs = rearrange(locs, "b t s xy -> (b t) s xy", xy=2)
-        galaxy_bool = rearrange(galaxy_bool, "b t s 1 -> (b t) s 1")
+        galaxy_bools = rearrange(galaxy_bools, "b t s 1 -> (b t) s 1")
         fluxes = rearrange(fluxes, "b t s band -> (b t) s band")
 
         # draw stars and galaxies
         is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
         is_on_array = rearrange(is_on_array, "bt s -> bt s 1")
-        star_bool = (1 - galaxy_bool) * is_on_array
-        assert star_bool.shape == (n_ptiles, max_sources, 1)
+        star_bools = (1 - galaxy_bools) * is_on_array
+        assert star_bools.shape == (n_ptiles, max_sources, 1)
 
         # final shapes of images.
         img_shape = (
@@ -218,11 +218,11 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # draw stars and galaxies
-        stars = self.star_tile_decoder(locs, fluxes, star_bool)
+        stars = self.star_tile_decoder(locs, fluxes, star_bools)
         galaxies = torch.zeros(img_shape, device=locs.device)
         var_images = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_tile_decoder is not None:
-            galaxies, var_images = self.galaxy_tile_decoder(locs, galaxy_params, galaxy_bool)
+            galaxies, var_images = self.galaxy_tile_decoder(locs, galaxy_params, galaxy_bools)
 
         images = galaxies.view(img_shape) + stars.view(img_shape)
         var_images = var_images.view(img_shape)
@@ -462,11 +462,11 @@ class StarTileDecoder(nn.Module):
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
-    def forward(self, locs, fluxes, star_bool):
+    def forward(self, locs, fluxes, star_bools):
         """Renders star tile from locations and fluxes."""
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
-        # star_bool: Is (n_ptiles x max_stars x 1)
+        # star_bools: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
         psf = self._adjust_psf()
@@ -475,15 +475,15 @@ class StarTileDecoder(nn.Module):
 
         assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
-        assert fluxes.shape[0] == star_bool.shape[0] == n_ptiles
-        assert fluxes.shape[1] == star_bool.shape[1] == max_sources
+        assert fluxes.shape[0] == star_bools.shape[0] == n_ptiles
+        assert fluxes.shape[1] == star_bools.shape[1] == max_sources
         assert fluxes.shape[2] == psf.shape[0] == self.n_bands
-        assert star_bool.shape[2] == 1
+        assert star_bools.shape[2] == 1
 
         # all stars are just the PSF so we copy it.
         expanded_psf = psf.expand(n_ptiles, max_sources, self.n_bands, -1, -1)
         sources = expanded_psf * rearrange(fluxes, "np ms nb -> np ms nb 1 1")
-        sources *= rearrange(star_bool, "np ms 1 -> np ms 1 1 1")
+        sources *= rearrange(star_bools, "np ms 1 -> np ms 1 1 1")
 
         return self.tiler(locs, sources)
 
@@ -564,7 +564,7 @@ class GalaxyTileDecoder(nn.Module):
         self.ptile_slen = ptile_slen
         self.galaxy_decoder = galaxy_decoder
 
-    def forward(self, locs, galaxy_params, galaxy_bool):
+    def forward(self, locs, galaxy_params, galaxy_bools):
         """Renders galaxy tile from locations and galaxy parameters."""
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
@@ -572,29 +572,29 @@ class GalaxyTileDecoder(nn.Module):
         n_galaxy_params = galaxy_params.shape[-1]
 
         galaxy_params = galaxy_params.view(n_ptiles, max_sources, n_galaxy_params)
-        assert galaxy_params.shape[0] == galaxy_bool.shape[0] == n_ptiles
-        assert galaxy_params.shape[1] == galaxy_bool.shape[1] == max_sources
-        assert galaxy_bool.shape[2] == 1
+        assert galaxy_params.shape[0] == galaxy_bools.shape[0] == n_ptiles
+        assert galaxy_params.shape[1] == galaxy_bools.shape[1] == max_sources
+        assert galaxy_bools.shape[2] == 1
 
-        single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bool)
+        single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bools)
 
         ptile = self.tiler(
             locs,
-            single_galaxies * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
+            single_galaxies * galaxy_bools.unsqueeze(-1).unsqueeze(-1),
         )
         var_ptile = self.tiler(
             locs,
-            single_vars * galaxy_bool.unsqueeze(-1).unsqueeze(-1),
+            single_vars * galaxy_bools.unsqueeze(-1).unsqueeze(-1),
         )
 
         return ptile, var_ptile
 
-    def _render_single_galaxies(self, galaxy_params, galaxy_bool):
+    def _render_single_galaxies(self, galaxy_params, galaxy_bools):
 
         # flatten parameters
         n_galaxy_params = galaxy_params.shape[-1]
         z = galaxy_params.view(-1, n_galaxy_params)
-        b = galaxy_bool.flatten()
+        b = galaxy_bools.flatten()
 
         # allocate memory
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1

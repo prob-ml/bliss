@@ -76,7 +76,7 @@ class TestStarEncoderObjective:
         ) * true_is_on_array.unsqueeze(2)
 
         # boolean indicating whether source is galaxy
-        true_galaxy_bool = (torch.rand(n_ptiles, max_detections) > 0.5).float().to(device)
+        true_galaxy_bools = (torch.rand(n_ptiles, max_detections) > 0.5).float().to(device)
 
         # estimated parameters
         loc_mean = torch.randn(
@@ -95,7 +95,7 @@ class TestStarEncoderObjective:
         ) * true_is_on_array.unsqueeze(2)
 
         # for each detection, prob that it is a galaxy
-        prob_galaxy = torch.rand(n_ptiles, max_detections, device=device)
+        galaxy_probs = torch.rand(n_ptiles, max_detections, device=device)
 
         # get loss for locations
         locs_log_probs_all = get_params_logprob_all_combs(true_locs, loc_mean, loc_logvar)
@@ -108,7 +108,7 @@ class TestStarEncoderObjective:
         (locs_loss, star_params_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
-            true_galaxy_bool,
+            true_galaxy_bools,
             true_is_on_array,
         )
 
@@ -120,11 +120,11 @@ class TestStarEncoderObjective:
         ).all()
 
         # when there are no stars: stars loss should be zero
-        which_no_stars = ((1 - true_galaxy_bool) * true_is_on_array).sum(1) == 0
+        which_no_stars = ((1 - true_galaxy_bools) * true_is_on_array).sum(1) == 0
         assert (star_params_loss[which_no_stars] == 0).all()
 
         # when there is only one source, and that source is a star
-        which_one_star = (true_n_sources == 1) & (true_galaxy_bool[:, 0] == 0)
+        which_one_star = (true_n_sources == 1) & (true_galaxy_bools[:, 0] == 0)
         assert (
             star_params_loss[which_one_star] == -star_params_log_probs_all[which_one_star][:, 0, 0]
         ).all()
@@ -132,7 +132,7 @@ class TestStarEncoderObjective:
         # a more thorough check for all possible true_n_sources
         for i in range(n_ptiles):
             local_true_n_sources = int(true_n_sources[i])
-            local_true_galaxy_bool = true_galaxy_bool[i, 0:local_true_n_sources]
+            local_true_galaxy_bools = true_galaxy_bools[i, 0:local_true_n_sources]
 
             if true_n_sources[i] == 0:
                 assert locs_loss[i] == 0
@@ -148,7 +148,7 @@ class TestStarEncoderObjective:
             local_log_flux_mean = log_flux_mean[i, 0:local_true_n_sources, :]
             local_log_flux_logvar = log_flux_logvar[i, 0:local_true_n_sources, :]
 
-            prob_galaxy_i = prob_galaxy[i, 0:local_true_n_sources]
+            galaxy_probs_i = galaxy_probs[i, 0:local_true_n_sources]
 
             min_locs_loss = 1e16
             min_star_params_loss = 1e16
@@ -166,14 +166,14 @@ class TestStarEncoderObjective:
                     .sum(-1)
                 )
 
-                p = prob_galaxy_i.unsqueeze(0)[:, perm].squeeze()
-                galaxy_bool_loss_perm = -local_true_galaxy_bool * torch.log(p)
-                galaxy_bool_loss_perm -= (1 - local_true_galaxy_bool) * torch.log(1 - p)
+                p = galaxy_probs_i.unsqueeze(0)[:, perm].squeeze()
+                galaxy_bool_loss_perm = -local_true_galaxy_bools * torch.log(p)
+                galaxy_bool_loss_perm -= (1 - local_true_galaxy_bools) * torch.log(1 - p)
 
                 if locs_loss_perm.sum() < min_locs_loss:
                     min_locs_loss = locs_loss_perm.sum()
                     min_star_params_loss = (
-                        star_params_loss_perm * (1 - local_true_galaxy_bool)
+                        star_params_loss_perm * (1 - local_true_galaxy_bools)
                     ).sum()
 
             assert torch.abs(locs_loss[i] - min_locs_loss) < 1e-5

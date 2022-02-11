@@ -118,9 +118,9 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
 
     if coadd_objects is not None:
         locs_true = coadd_objects["locs"]
-        galaxy_bool_true = coadd_objects["galaxy_bool"]
-        locs_galaxies_true = locs_true[galaxy_bool_true > 0.5]
-        locs_stars_true = locs_true[galaxy_bool_true < 0.5]
+        true_galaxy_bools = coadd_objects["galaxy_bools"]
+        locs_galaxies_true = locs_true[true_galaxy_bools > 0.5]
+        locs_stars_true = locs_true[true_galaxy_bools < 0.5]
         if locs_stars_true.shape[0] > 0:
             ax_true.scatter(
                 locs_stars_true[:, 1], locs_stars_true[:, 0], color="b", marker="+", s=20
@@ -154,10 +154,10 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
 
     if map_recon is not None:
         locs_pred = map_recon["plocs"][0]
-        star_bool = map_recon["star_bool"][0]
-        galaxy_bool = map_recon["galaxy_bool"][0]
-        locs_galaxies = locs_pred[galaxy_bool[:, 0] > 0.5, :]
-        locs_stars = locs_pred[star_bool[:, 0] > 0.5, :]
+        star_bools = map_recon["star_bools"][0]
+        galaxy_bools = map_recon["galaxy_bools"][0]
+        locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]
+        locs_stars = locs_pred[star_bools[:, 0] > 0.5, :]
         if locs_galaxies.shape[0] > 0:
             in_bounds = torch.all((locs_galaxies > 0) & (locs_galaxies < scene_size), dim=-1)
             locs_galaxies = locs_galaxies[in_bounds]
@@ -215,8 +215,8 @@ def get_objects_from_coadd(coadd_cat, h, w, scene_size):
         & (w + scene_size > locs_true[:, 1])
     )
     locs_true = locs_true[objects_in_scene]
-    galaxy_bool = torch.from_numpy(np.array(coadd_cat["galaxy_bool"]).astype(float))
-    galaxy_bool = galaxy_bool[objects_in_scene]
+    galaxy_bools = torch.from_numpy(np.array(coadd_cat["galaxy_bools"]).astype(float))
+    galaxy_bools = galaxy_bools[objects_in_scene]
 
     # Shift locs by lower limit
     locs_true[:, 0] = locs_true[:, 0] - h
@@ -224,7 +224,7 @@ def get_objects_from_coadd(coadd_cat, h, w, scene_size):
 
     return {
         "locs": locs_true,
-        "galaxy_bool": galaxy_bool,
+        "galaxy_bools": galaxy_bools,
     }
 
 

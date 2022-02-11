@@ -108,12 +108,12 @@ def get_full_params_from_tiles(
     tile_locs = tile_params["locs"]
 
     param_names_to_gather = {
-        "galaxy_bool",
-        "star_bool",
+        "galaxy_bools",
+        "star_bools",
         "galaxy_params",
         "fluxes",
         "log_fluxes",
-        "prob_galaxy",
+        "galaxy_probs",
     }
     param_names_to_mask = {"locs", "plocs"}.union(param_names_to_gather)
 
@@ -499,7 +499,7 @@ class LocationEncoder(nn.Module):
 
     @staticmethod
     def _get_normal_samples(mean, sd, tile_is_on_array):
-        # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bool'/'tile_star_bool'.
+        # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bools'/'tile_star_bools'.
         # return shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert tile_is_on_array.shape[-1] == 1
         return torch.normal(mean, sd) * tile_is_on_array

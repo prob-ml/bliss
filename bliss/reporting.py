@@ -136,10 +136,13 @@ class ClassificationMetrics(Metric):
         """Update the internal state of the metric including correct # of classifications."""
         true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
         true_locs, est_locs = true_params["plocs"], est_params["plocs"]
-        true_galaxy_bool, est_galaxy_bool = true_params["galaxy_bool"], est_params["galaxy_bool"]
+        true_galaxy_bools, est_galaxy_bools = (
+            true_params["galaxy_bools"],
+            est_params["galaxy_bools"],
+        )
         batch_size = len(true_n_sources)
-        assert len(true_galaxy_bool.shape) == len(est_galaxy_bool.shape) == 3
-        assert true_galaxy_bool.shape[0] == est_galaxy_bool.shape[0] == batch_size
+        assert len(true_galaxy_bools.shape) == len(est_galaxy_bools.shape) == 3
+        assert true_galaxy_bools.shape[0] == est_galaxy_bools.shape[0] == batch_size
         assert len(true_locs.shape) == len(est_locs.shape) == 3
         assert true_locs.shape[-1] == est_locs.shape[-1] == 2
         assert true_locs.shape[0] == est_locs.shape[0] == batch_size
@@ -147,7 +150,7 @@ class ClassificationMetrics(Metric):
         for b in range(batch_size):
             ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
             tlocs, elocs = true_locs[b], est_locs[b]
-            tgbool, egbool = true_galaxy_bool[b].reshape(-1), est_galaxy_bool[b].reshape(-1)
+            tgbool, egbool = true_galaxy_bools[b].reshape(-1), est_galaxy_bools[b].reshape(-1)
             if ntrue > 0 and nest > 0:
                 mtrue, mest, dkeep, _ = match_by_locs(tlocs, elocs, self.slack)
                 tgbool = tgbool[mtrue][dkeep].reshape(-1)
@@ -278,8 +281,8 @@ def scene_metrics(
     eparams = apply_mag_cut(est_params, mag_cut)
     tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
     eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
-    tparams["galaxy_bool"] = tparams["galaxy_bool"].reshape(1, -1, 1)
-    eparams["galaxy_bool"] = eparams["galaxy_bool"].reshape(1, -1, 1)
+    tparams["galaxy_bools"] = tparams["galaxy_bools"].reshape(1, -1, 1)
+    eparams["galaxy_bools"] = eparams["galaxy_bools"].reshape(1, -1, 1)
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
@@ -298,7 +301,7 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
 
 def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
-    names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
+    names = {"objid", "x", "y", "galaxy_bools", "flux", "mag", "hlr"}
     assert names.issubset(set(coadd_cat.columns))
 
     # filter saturated objects
@@ -319,7 +322,7 @@ def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
         data[n] = torch.from_numpy(np.array(arr)).reshape(-1)
 
     # final adjustments.
-    data["galaxy_bool"] = data["galaxy_bool"].bool()
+    data["galaxy_bools"] = data["galaxy_bools"].bool()
     x, y = data["x"].reshape(-1, 1), data["y"].reshape(-1, 1)
     data["plocs"] = torch.hstack((x, y)).reshape(-1, 2)
     data["n_sources"] = len(x)
@@ -477,21 +480,21 @@ def plot_image(fig, ax, image, vrange=None):
     fig.colorbar(im, cax=cax, orientation="vertical")
 
 
-def plot_locs(ax, slen, bpad, locs, color="r", marker="x", s=20, prob_galaxy=None):
+def plot_locs(ax, slen, bpad, locs, color="r", marker="x", s=20, galaxy_probs=None):
     assert len(locs.shape) == 2
     assert locs.shape[1] == 2
     assert isinstance(slen, int)
     assert isinstance(bpad, int)
-    if prob_galaxy is not None:
-        assert len(prob_galaxy.shape) == 1
+    if galaxy_probs is not None:
+        assert len(galaxy_probs.shape) == 1
 
     x = locs[:, 1] * slen - 0.5 + bpad
     y = locs[:, 0] * slen - 0.5 + bpad
     for i, (xi, yi) in enumerate(zip(x, y)):
         if xi > bpad and yi > bpad:
             ax.scatter(xi, yi, color=color, marker=marker, s=s)
-            if prob_galaxy is not None:
-                ax.annotate(f"{prob_galaxy[i]:.2f}", (xi, yi), color=color, fontsize=8)
+            if galaxy_probs is not None:
+                ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
 
 
 def plot_image_and_locs(
@@ -506,13 +509,13 @@ def plot_image_and_locs(
     annotate_axis: bool = False,
     add_borders: bool = False,
     vrange: tuple = None,
-    prob_galaxy: Tensor = None,
+    galaxy_probs: Tensor = None,
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
-    if prob_galaxy is not None:
-        assert "galaxy_bool" in estimate, "Inconsistent inputs to plot_image_and_locs"
-    use_galaxy_bool = "galaxy_bool" in estimate if estimate is not None else False
+    if galaxy_probs is not None:
+        assert "galaxy_bools" in estimate, "Inconsistent inputs to plot_image_and_locs"
+    use_galaxy_bools = "galaxy_bools" in estimate if estimate is not None else False
     bpad = int((images.shape[-1] - slen) / 2)
 
     image = images[idx, 0].cpu().numpy()
@@ -520,18 +523,18 @@ def plot_image_and_locs(
     # true parameters on full image.
     true_n_sources = true_params["n_sources"][idx].cpu().numpy()
     true_locs = true_params["locs"][idx].cpu().numpy()
-    true_galaxy_bool = true_params["galaxy_bool"][idx].cpu().numpy()
-    true_star_bool = true_params["star_bool"][idx].cpu().numpy()
-    true_galaxy_locs = true_locs * true_galaxy_bool
-    true_star_locs = true_locs * true_star_bool
+    true_galaxy_bools = true_params["galaxy_bools"][idx].cpu().numpy()
+    true_star_bools = true_params["star_bools"][idx].cpu().numpy()
+    true_galaxy_locs = true_locs * true_galaxy_bools
+    true_star_locs = true_locs * true_star_bools
 
     # convert tile estimates to full parameterization for plotting
     if estimate is not None:
         n_sources = estimate["n_sources"][idx].cpu().numpy()
         locs = estimate["locs"][idx].cpu().numpy()
 
-    if prob_galaxy is not None:
-        prob_galaxy = prob_galaxy[idx].cpu().numpy().reshape(-1)
+    if galaxy_probs is not None:
+        galaxy_probs = galaxy_probs[idx].cpu().numpy().reshape(-1)
 
     # annotate useful information around the axis
     if annotate_axis and estimate is not None:
@@ -550,19 +553,19 @@ def plot_image_and_locs(
     plot_image(fig, ax, image, vrange=(vmin, vmax))
 
     # plot locations
-    plot_locs(ax, slen, bpad, true_galaxy_locs, "r", "x", s=20, prob_galaxy=None)
-    plot_locs(ax, slen, bpad, true_star_locs, "c", "x", s=20, prob_galaxy=None)
+    plot_locs(ax, slen, bpad, true_galaxy_locs, "r", "x", s=20, galaxy_probs=None)
+    plot_locs(ax, slen, bpad, true_star_locs, "c", "x", s=20, galaxy_probs=None)
 
     if estimate is not None:
-        if use_galaxy_bool:
-            galaxy_bool = estimate["galaxy_bool"][idx].cpu().numpy()
-            star_bool = estimate["star_bool"][idx].cpu().numpy()
-            galaxy_locs = locs * galaxy_bool
-            star_locs = locs * star_bool
-            plot_locs(ax, slen, bpad, galaxy_locs, "b", "+", s=30, prob_galaxy=prob_galaxy)
-            plot_locs(ax, slen, bpad, star_locs, "m", "+", s=30, prob_galaxy=prob_galaxy)
+        if use_galaxy_bools:
+            galaxy_bools = estimate["galaxy_bools"][idx].cpu().numpy()
+            star_bools = estimate["star_bools"][idx].cpu().numpy()
+            galaxy_locs = locs * galaxy_bools
+            star_locs = locs * star_bools
+            plot_locs(ax, slen, bpad, galaxy_locs, "b", "+", s=30, galaxy_probs=galaxy_probs)
+            plot_locs(ax, slen, bpad, star_locs, "m", "+", s=30, galaxy_probs=galaxy_probs)
         else:
-            plot_locs(ax, slen, bpad, locs, "b", "+", s=30, prob_galaxy=None)
+            plot_locs(ax, slen, bpad, locs, "b", "+", s=30, galaxy_probs=None)
 
     if labels is not None:
         colors = ["r", "b", "c", "m"]

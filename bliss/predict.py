@@ -41,7 +41,7 @@ def predict_on_image(
         tile_map: Dictionary containing MAP estimates for parameters of sources in each tile.
         full_map: Dictionary containing MAP estimates for parameters of sources on full image.
         var_params: Dictionary containing tensors of variational parameters corresponding
-            to each tile in `image`. The variational parameters include `prob_galaxy`, `loc_mean`,
+            to each tile in `image`. The variational parameters include `galaxy_probs`, `loc_mean`,
             `loc_logvar`, etc.
     """
     # prepare and check consistency
@@ -68,15 +68,15 @@ def predict_on_image(
     assert not binary_encoder.training
     assert image.shape[1] == binary_encoder.n_bands
 
-    prob_galaxy = binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
-    galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
-    star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)
-    var_params_n_sources["galaxy_bool"] = galaxy_bool
-    var_params_n_sources["star_bool"] = star_bool
-    var_params_n_sources["prob_galaxy"] = prob_galaxy
-    tile_map["galaxy_bool"] = galaxy_bool
-    tile_map["star_bool"] = star_bool
-    tile_map["prob_galaxy"] = prob_galaxy
+    galaxy_probs = binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
+    galaxy_bools = (galaxy_probs > 0.5).float() * tile_is_on_array
+    star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)
+    var_params_n_sources["galaxy_bools"] = galaxy_bools
+    var_params_n_sources["star_bools"] = star_bools
+    var_params_n_sources["galaxy_probs"] = galaxy_probs
+    tile_map["galaxy_bools"] = galaxy_bools
+    tile_map["star_bools"] = star_bools
+    tile_map["galaxy_probs"] = galaxy_probs
 
     # get galaxy measurement predictions
     assert not galaxy_encoder.training
@@ -87,7 +87,7 @@ def predict_on_image(
     galaxy_param_mean, _ = galaxy_encoder.encode(ptiles, tile_map["locs"])
     latent_dim = galaxy_param_mean.shape[-1]
     galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-    galaxy_param_mean *= tile_is_on_array * galaxy_bool
+    galaxy_param_mean *= tile_is_on_array * galaxy_bools
     var_params_n_sources["galaxy_param_mean"] = galaxy_param_mean
     tile_map["galaxy_params"] = galaxy_param_mean
 
@@ -150,8 +150,8 @@ def predict_on_scene(
     # where to collect results.
     var_params = []
     locs = torch.tensor([])
-    galaxy_bool = torch.tensor([])
-    prob_galaxy = torch.tensor([])
+    galaxy_bools = torch.tensor([])
+    galaxy_probs = torch.tensor([])
     fluxes = torch.tensor([])
     mags = torch.tensor([])
 
@@ -177,8 +177,8 @@ def predict_on_scene(
                     )
 
                     est_locs = est_params["plocs"].cpu().reshape(-1, 2)
-                    est_gbool = est_params["galaxy_bool"].cpu().reshape(-1)
-                    est_pgalaxy = est_params["prob_galaxy"].cpu().reshape(-1)
+                    est_gbool = est_params["galaxy_bools"].cpu().reshape(-1)
+                    est_pgalaxy = est_params["galaxy_probs"].cpu().reshape(-1)
                     est_star_flux = est_params["fluxes"].cpu().reshape(-1)
                     est_galaxy_params = est_params["galaxy_params"].cpu().reshape(-1, latent_dim)
 
@@ -204,8 +204,8 @@ def predict_on_scene(
 
                     # concatenate to obtain tensors on full image.
                     locs = torch.cat((locs, est_locs))
-                    galaxy_bool = torch.cat((galaxy_bool, est_gbool))
-                    prob_galaxy = torch.cat((prob_galaxy, est_pgalaxy))
+                    galaxy_bools = torch.cat((galaxy_bools, est_gbool))
+                    galaxy_probs = torch.cat((galaxy_probs, est_pgalaxy))
                     fluxes = torch.cat((fluxes, est_fluxes))
                     mags = torch.cat((mags, est_mags))
 
@@ -217,8 +217,8 @@ def predict_on_scene(
 
     full_map = {
         "plocs": locs,
-        "galaxy_bool": galaxy_bool,
-        "prob_galaxy": prob_galaxy,
+        "galaxy_bools": galaxy_bools,
+        "galaxy_probs": galaxy_probs,
         "flux": fluxes,
         "mag": mags,
         "n_sources": torch.tensor([len(locs)]),
@@ -274,11 +274,11 @@ def predict(cfg: DictConfig):
         print(f"Prediction saved to {cfg.predict.output_file}")
 
 
-def get_star_bool(n_sources, galaxy_bool):
-    assert n_sources.shape[0] == galaxy_bool.shape[0]
-    assert galaxy_bool.shape[-1] == 1
-    max_sources = galaxy_bool.shape[-2]
+def get_star_bools(n_sources, galaxy_bools):
+    assert n_sources.shape[0] == galaxy_bools.shape[0]
+    assert galaxy_bools.shape[-1] == 1
+    max_sources = galaxy_bools.shape[-2]
     assert n_sources.le(max_sources).all()
     is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-    is_on_array = is_on_array.view(*galaxy_bool.shape)
-    return (1 - galaxy_bool) * is_on_array
+    is_on_array = is_on_array.view(*galaxy_bools.shape)
+    return (1 - galaxy_bools) * is_on_array

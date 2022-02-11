@@ -11,7 +11,7 @@ from bliss import reporting
 def test_scene_metrics():
     true_params = {
         "plocs": torch.tensor([[50.0, 50.0]]).float(),
-        "galaxy_bool": torch.tensor([1]).bool(),
+        "galaxy_bools": torch.tensor([1]).bool(),
         "n_sources": torch.tensor([1]).long(),
         "mag": torch.tensor([23.0]).float(),
     }
