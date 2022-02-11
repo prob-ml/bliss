@@ -13,7 +13,7 @@ def test_scene_metrics():
         "plocs": torch.tensor([[50.0, 50.0]]).float(),
         "galaxy_bools": torch.tensor([1]).bool(),
         "n_sources": torch.tensor([1]).long(),
-        "mag": torch.tensor([23.0]).float(),
+        "mags": torch.tensor([23.0]).float(),
     }
     reporting.scene_metrics(true_params, true_params, mag_cut=25, slack=1.0, mag_slack=0.25)
 
