@@ -124,10 +124,10 @@ def get_full_params_from_tiles(
 
     # sanity check to prevent silent error when e.g. parameter name is misspelled.
     for k in tile_params:
-        if k not in param_names_to_mask and k != "n_sources":
+        if k not in param_names_to_mask and k not in {"n_sources", "is_on_array"}:
             raise ValueError(
                 f"The key '{k}' in the `tile_params` Tensor dictionary is not one of the standard"
-                "ones (check spelling?"
+                "ones (check spelling?)"
             )
 
     plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=n_tiles_w)
