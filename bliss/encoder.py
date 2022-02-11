@@ -3,6 +3,7 @@ from typing import Dict, Optional
 
 import torch
 from torch import Tensor, nn
+from einops import rearrange
 
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
@@ -84,33 +85,34 @@ class Encoder(nn.Module):
             A dictionary of the maximum a posteriori
             of the catalog in tiles. Specifically, this dictionary comprises:
             - The output of LocationEncoder.max_a_post()
-            - 'galaxy_bool', 'star_bool', and 'prob_galaxy' from BinaryEncoder.
-            - 'galaxy_param' from GalaxyEncoder.
+            - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
+            - 'galaxy_params' from GalaxyEncoder.
         """
         var_params = self.location_encoder.encode(image_ptiles)
         tile_map = self.location_encoder.max_a_post(var_params)
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            prob_galaxy = self.binary_encoder(image_ptiles, tile_map["locs"])
-            prob_galaxy = prob_galaxy.view(-1, 1, 1)
-            prob_galaxy *= tile_map["is_on_array"]
-            galaxy_bool = (prob_galaxy > 0.5).float() * tile_map["is_on_array"]
-            star_bool = get_star_bool(tile_map["n_sources"], galaxy_bool)
+            galaxy_probs = self.binary_encoder(image_ptiles, tile_map["locs"])
+            galaxy_probs = galaxy_probs.view(-1, 1, 1)
+            galaxy_probs *= tile_map["is_on_array"]
+            galaxy_bools = (galaxy_probs > 0.5).float() * tile_map["is_on_array"]
+            star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)
             tile_map.update(
                 {
-                    "galaxy_bool": galaxy_bool,
-                    "star_bool": star_bool,
-                    "prob_galaxy": prob_galaxy,
+                    "galaxy_bools": galaxy_bools,
+                    "star_bools": star_bools,
+                    "galaxy_probs": galaxy_probs,
                 }
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_param_mean = self.galaxy_encoder.sample(image_ptiles, tile_map["locs"])
-            latent_dim = galaxy_param_mean.shape[-1]
-            galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-            galaxy_param_mean *= tile_map["is_on_array"] * tile_map["galaxy_bool"]
-            tile_map.update({"galaxy_param": galaxy_param_mean})
+            galaxy_params = self.galaxy_encoder.sample(image_ptiles, tile_map["locs"])
+            galaxy_params = rearrange(
+                galaxy_params, "(n_ptiles n_sources) d -> n_ptiles n_sources d", n_sources=1
+            )
+            galaxy_params *= tile_map["is_on_array"] * tile_map["galaxy_bools"]
+            tile_map.update({"galaxy_params": galaxy_params})
 
         return tile_map
 
@@ -121,11 +123,11 @@ class Encoder(nn.Module):
         )
 
 
-def get_star_bool(n_sources, galaxy_bool):
-    assert n_sources.shape[0] == galaxy_bool.shape[0]
-    assert galaxy_bool.shape[-1] == 1
-    max_sources = galaxy_bool.shape[-2]
+def get_star_bools(n_sources, galaxy_bools):
+    assert n_sources.shape[0] == galaxy_bools.shape[0]
+    assert galaxy_bools.shape[-1] == 1
+    max_sources = galaxy_bools.shape[-2]
     assert n_sources.le(max_sources).all()
     is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-    is_on_array = is_on_array.view(*galaxy_bool.shape)
-    return (1 - galaxy_bool) * is_on_array
+    is_on_array = is_on_array.view(*galaxy_bools.shape)
+    return (1 - galaxy_bools) * is_on_array

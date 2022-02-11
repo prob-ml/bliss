@@ -51,7 +51,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             images, _ = self.image_decoder.render_images(
                 batch["n_sources"],
                 batch["locs"],
-                batch["galaxy_bool"],
+                batch["galaxy_bools"],
                 batch["galaxy_params"],
                 batch["fluxes"],
                 add_noise=True,
