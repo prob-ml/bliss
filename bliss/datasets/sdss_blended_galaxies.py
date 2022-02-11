@@ -148,7 +148,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                 chunk_device = chunk.to(self.prerender_device)
                 image_ptiles = encoder.get_images_in_ptiles(chunk_device.unsqueeze(0))
                 tile_map = encoder.max_a_post(image_ptiles)
-                if tile_map["galaxy_bool"].sum() > 0:
+                if tile_map["galaxy_bools"].sum() > 0:
                     catalogs.append(cpu(tile_map))
                     chunks_with_galaxies.append(chunk.cpu())
         chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)

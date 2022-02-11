@@ -32,7 +32,7 @@ plt.switch_backend("Agg")
 def _get_log_probs_all_perms(
     locs_log_probs_all,
     star_params_log_probs_all,
-    true_galaxy_bool,
+    true_galaxy_bools,
     is_on_array,
 ):
     # get log-probability under every possible matching of estimated source to true source
@@ -52,13 +52,13 @@ def _get_log_probs_all_perms(
         ).sum(1)
 
         # if star, evaluate the star parameters,
-        # hence the multiplication by (1 - true_galaxy_bool)
+        # hence the multiplication by (1 - true_galaxy_bools)
         # the diagonal is a clever way of selecting the elements of each permutation (first index
         # of mean/var with second index of true_param etc.)
         star_params_log_probs_all_perm[:, i] = (
             star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
             * is_on_array
-            * (1 - true_galaxy_bool)
+            * (1 - true_galaxy_bools)
         ).sum(1)
 
     return locs_log_probs_all_perm, star_params_log_probs_all_perm
@@ -67,14 +67,14 @@ def _get_log_probs_all_perms(
 def get_min_perm_loss(
     locs_log_probs_all,
     star_params_log_probs_all,
-    true_galaxy_bool,
+    true_galaxy_bools,
     is_on_array,
 ):
     # get log-probability under every possible matching of estimated star to true star
     locs_log_probs_all_perm, star_params_log_probs_all_perm = _get_log_probs_all_perms(
         locs_log_probs_all,
         star_params_log_probs_all,
-        true_galaxy_bool,
+        true_galaxy_bools,
         is_on_array,
     )
 
@@ -203,10 +203,10 @@ class SleepPhase(pl.LightningModule):
             true_is_on_array shape = (n_ptiles x max_detections)
                 Indicates if sources is on (1) or off (0)
 
-            true_galaxy_bool shape = (n_ptiles x max_detections x 1)
+            true_galaxy_bools shape = (n_ptiles x max_detections x 1)
                 indicating whether each source is a galaxy (1) or star (0)
 
-            prob_galaxy shape = (n_ptiles x max_detections)
+            galaxy_probs shape = (n_ptiles x max_detections)
                 are probabilities for each source to be a galaxy
 
             n_source_log_probs shape = (n_ptiles x (max_detections + 1))
@@ -216,13 +216,13 @@ class SleepPhase(pl.LightningModule):
             images,
             true_tile_locs,
             true_tile_log_fluxes,
-            true_tile_galaxy_bool,
+            true_tile_galaxy_bools,
             true_tile_n_sources,
         ) = (
             batch["images"],
             batch["locs"],
             batch["log_fluxes"],
-            batch["galaxy_bool"],
+            batch["galaxy_bools"],
             batch["n_sources"],
         )
 
@@ -235,14 +235,14 @@ class SleepPhase(pl.LightningModule):
         # clip decoder output since constraint is: max_detections <= max_sources (per tile)
         true_tile_locs = true_tile_locs[:, :, 0:max_sources]
         true_tile_log_fluxes = true_tile_log_fluxes[:, :, 0:max_sources]
-        true_tile_galaxy_bool = true_tile_galaxy_bool[:, :, 0:max_sources]
+        true_tile_galaxy_bools = true_tile_galaxy_bools[:, :, 0:max_sources]
         true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
 
         # flatten so first dimension is ptile
         # b: batch, s: n_tiles_per_image
         true_tile_locs = rearrange(true_tile_locs, "b n s xy -> (b n) s xy", xy=2)
         true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
-        true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
+        true_tile_galaxy_bools = rearrange(true_tile_galaxy_bools, "b n s 1 -> (b n) s")
         true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
         true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
@@ -273,7 +273,7 @@ class SleepPhase(pl.LightningModule):
         (locs_loss, star_params_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
-            true_tile_galaxy_bool,
+            true_tile_galaxy_bools,
             true_tile_is_on_array,
         )
 

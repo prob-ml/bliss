@@ -101,21 +101,34 @@ def get_full_params_from_tiles(
         these values will be zeroed out. Thus, it is imperative to use the "n_sources"
         element to verify which locations/fluxes/parameters are zeroed out.
 
-        Note: The locations (`"locs"`) are between 0 and 1. The output also contains
+        NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
         pixel locations ("plocs") that are between 0 and slen.
+
+    Raises:
+        ValueError: If one of the parameter names in `tile_params` is not one of {`galaxy_bools`,
+            `star_bools`, `galaxy_params`, `fluxes`, `log_fluxes`, `galaxy_probs`, `plocs`, `locs`,
+            `n_sources`} where the latter two are required. This error is likely due to misspelling.
     """
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
 
     param_names_to_gather = {
-        "galaxy_bool",
-        "star_bool",
+        "galaxy_bools",
+        "star_bools",
         "galaxy_params",
         "fluxes",
         "log_fluxes",
-        "prob_galaxy",
+        "galaxy_probs",
     }
     param_names_to_mask = {"locs", "plocs"}.union(param_names_to_gather)
+
+    # sanity check to prevent silent error when e.g. parameter name is misspelled.
+    for k in tile_params:
+        if k not in param_names_to_mask and k not in {"n_sources", "is_on_array"}:
+            raise ValueError(
+                f"The key '{k}' in the `tile_params` Tensor dictionary is not one of the standard"
+                "ones (check spelling?)"
+            )
 
     plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=n_tiles_w)
     tile_params_to_gather = {
@@ -499,7 +512,7 @@ class LocationEncoder(nn.Module):
 
     @staticmethod
     def _get_normal_samples(mean, sd, tile_is_on_array):
-        # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bool'/'tile_star_bool'.
+        # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bools'/'tile_star_bools'.
         # return shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert tile_is_on_array.shape[-1] == 1
         return torch.normal(mean, sd) * tile_is_on_array

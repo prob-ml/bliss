@@ -124,7 +124,7 @@ class GalaxyEncoder(pl.LightningModule):
         recon_mean, recon_var = self.image_decoder.render_images(
             batch["n_sources"],
             batch["locs"],
-            batch["galaxy_bool"],
+            batch["galaxy_bools"],
             tile_galaxy_params,
             batch["fluxes"],
             add_noise=False,
@@ -157,8 +157,8 @@ class GalaxyEncoder(pl.LightningModule):
         keys = [
             "images",
             "locs",
-            "galaxy_bool",
-            "star_bool",
+            "galaxy_bools",
+            "star_bools",
             "fluxes",
             "log_fluxes",
             "n_sources",
@@ -184,8 +184,8 @@ class GalaxyEncoder(pl.LightningModule):
         tile_est = {
             "n_sources": batch["n_sources"],
             "locs": batch["locs"],
-            "galaxy_bool": batch["galaxy_bool"],
-            "star_bool": batch["star_bool"],
+            "galaxy_bools": batch["galaxy_bools"],
+            "star_bools": batch["star_bools"],
             "fluxes": batch["fluxes"],
             "log_fluxes": batch["log_fluxes"],
             "galaxy_params": tile_galaxy_params,
@@ -197,7 +197,7 @@ class GalaxyEncoder(pl.LightningModule):
         recon_images, _ = self.image_decoder.render_images(
             tile_est["n_sources"],
             tile_est["locs"],
-            tile_est["galaxy_bool"],
+            tile_est["galaxy_bools"],
             tile_est["galaxy_params"],
             tile_est["fluxes"],
             add_noise=False,

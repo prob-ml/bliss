@@ -13,18 +13,18 @@ def test_metrics():
     est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]]).reshape(
         2, 2, 2
     )
-    true_galaxy_bool = torch.tensor([[1, 0], [1, 1]]).reshape(2, 2, 1)
-    est_galaxy_bool = torch.tensor([[0, 1], [1, 0]]).reshape(2, 2, 1)
+    true_galaxy_bools = torch.tensor([[1, 0], [1, 1]]).reshape(2, 2, 1)
+    est_galaxy_bools = torch.tensor([[0, 1], [1, 0]]).reshape(2, 2, 1)
 
     true_params = {
         "n_sources": torch.tensor([1, 2]),
         "plocs": true_locs * slen,
-        "galaxy_bool": true_galaxy_bool,
+        "galaxy_bools": true_galaxy_bools,
     }
     est_params = {
         "n_sources": torch.tensor([2, 2]),
         "plocs": est_locs * slen,
-        "galaxy_bool": est_galaxy_bool,
+        "galaxy_bools": est_galaxy_bools,
     }
 
     results_detection = detect(true_params, est_params)

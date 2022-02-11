@@ -152,8 +152,8 @@ def reconstruct_img(
         recon_image, _ = decoder.render_images(
             tile_map["n_sources"],
             tile_map["locs"],
-            tile_map["galaxy_bool"],
-            tile_map["galaxy_param"],
+            tile_map["galaxy_bools"],
+            tile_map["galaxy_params"],
             tile_map["fluxes"],
             add_noise=False,
         )
@@ -194,8 +194,8 @@ def combine_full_maps(full_maps: List[Dict[str, Tensor]], chunk_slen: int) -> Di
         sum(max_sources) is the sum of the maximum sources found on each chunk.
         The members of the dictionary are equivalent to those in get_full_params_from_tiles().
 
-        Note that the output of this function is not sorted; you must rely on galaxy_bool and
-        star_bool to determine if a particular source is actually on or not.
+        Note that the output of this function is not sorted; you must rely on galaxy_bools and
+        star_bools to determine if a particular source is actually on or not.
     """
 
     params = {}
