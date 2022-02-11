@@ -301,8 +301,8 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
 
 def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
-    names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
-    assert names.issubset(set(coadd_cat.columns))
+    coadd_names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
+    assert coadd_names.issubset(set(coadd_cat.columns))
 
     # filter saturated objects
     coadd_cat = coadd_cat[~coadd_cat["is_saturated"].data]
@@ -315,14 +315,14 @@ def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
 
     # extract required arrays with correct byte order, otherwise torch error.
     data = {}
-    for n in names:
+    for n in coadd_names:
         arr = []
         for v in coadd_cat[n]:
             arr.append(v)
         data[n] = torch.from_numpy(np.array(arr)).reshape(-1)
 
     # final adjustments.
-    data["galaxy_bools"] = data["galaxy_bools"].bool()
+    data["galaxy_bools"] = data["galaxy_bool"].bool()
     x, y = data["x"].reshape(-1, 1), data["y"].reshape(-1, 1)
     data["plocs"] = torch.hstack((x, y)).reshape(-1, 2)
     data["n_sources"] = len(x)
