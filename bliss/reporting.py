@@ -301,7 +301,7 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
 
 def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
-    names = {"objid", "x", "y", "galaxy_bools", "flux", "mag", "hlr"}
+    names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
     assert names.issubset(set(coadd_cat.columns))
 
     # filter saturated objects
