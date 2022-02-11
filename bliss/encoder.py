@@ -70,23 +70,27 @@ class Encoder(nn.Module):
     def max_a_post(self, image_ptiles: Tensor) -> Dict[str, Tensor]:
         """Get maximum a posteriori of catalog from image padded tiles.
 
-        Note that, strictly speaking, this is not the true MAP of the variational
-        distribution of the catalog.
-        Rather, we use sequential estimation; the MAP of the locations is first estimated,
-        then plugged-in to the binary and galaxy encoders. Thus, the binary and galaxy
-        encoders are conditioned on the location MAP. The true MAP would require optimizing
-        over the entire catalog jointly, but this is not tractable.
+                Note that, strictly speaking, this is not the true MAP of the variational
+                distribution of the catalog.
+                Rather, we use sequential estimation; the MAP of the locations is first estimated,
+                then plugged-in to the binary and galaxy encoders. Thus, the binary and galaxy
+                encoders are conditioned on the location MAP. The true MAP would require optimizing
+                over the entire catalog jointly, but this is not tractable.
 
-        Args:
-            image_ptiles: A tensor of padded image tiles,
-                with shape `n_ptiles * n_bands * h * w`.
+                Args:
+                    image_ptiles: A tensor of padded image tiles,
+                        with shape `n_ptiles * n_bands * h * w`.
 
-        Returns:
-            A dictionary of the maximum a posteriori
-            of the catalog in tiles. Specifically, this dictionary comprises:
-            - The output of LocationEncoder.max_a_post()
-            - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
-            - 'galaxy_params' from GalaxyEncoder.
+                Returns:
+                    A dictionary of the maximum a posteriori
+                    of the catalog in tiles. Specifically, this dictionary comprises:
+                    - The output of LocationEncoder.max_a_post()
+        <<<<<<< HEAD
+                    - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
+        =======
+                    - 'galaxy_bool', 'star_bool', and 'prob_galaxy' from BinaryEncoder.
+        >>>>>>> use galaxy_params not galaxy_param
+                    - 'galaxy_params' from GalaxyEncoder.
         """
         var_params = self.location_encoder.encode(image_ptiles)
         tile_map = self.location_encoder.max_a_post(var_params)
