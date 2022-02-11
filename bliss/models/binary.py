@@ -101,8 +101,8 @@ class BinaryEncoder(pl.LightningModule):
         """Splits `images` into padded tiles and runs `self.forward()` on them."""
         batch_size = images.shape[0]
         ptiles = self.get_images_in_tiles(images)
-        prob_galaxy = self(ptiles, tile_locs)
-        return prob_galaxy.view(batch_size, -1, 1, 1)
+        galaxy_probs = self(ptiles, tile_locs)
+        return galaxy_probs.view(batch_size, -1, 1, 1)
 
     def forward(self, image_ptiles, tile_locs):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
@@ -124,30 +124,30 @@ class BinaryEncoder(pl.LightningModule):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
 
         images = batch["images"]
-        galaxy_bool = batch["galaxy_bool"].reshape(-1)
-        prob_galaxy = self.forward_image(images, batch["locs"]).reshape(-1)
+        galaxy_bools = batch["galaxy_bools"].reshape(-1)
+        galaxy_probs = self.forward_image(images, batch["locs"]).reshape(-1)
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 
         # we need to calculate cross entropy loss, only for "on" sources
-        loss = BCELoss(reduction="none")(prob_galaxy, galaxy_bool) * tile_is_on_array
+        loss = BCELoss(reduction="none")(galaxy_probs, galaxy_bools) * tile_is_on_array
         loss = loss.sum()
 
         # get predictions for calculating metrics
-        pred_galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
-        correct = ((pred_galaxy_bool.eq(galaxy_bool)) * tile_is_on_array).sum()
+        pred_galaxy_bools = (galaxy_probs > 0.5).float() * tile_is_on_array
+        correct = ((pred_galaxy_bools.eq(galaxy_bools)) * tile_is_on_array).sum()
         total_n_sources = batch["n_sources"].sum()
         acc = correct / total_n_sources
 
         # finally organize quantities and return as a dictionary
-        pred_star_bool = (1 - pred_galaxy_bool) * tile_is_on_array
+        pred_star_bools = (1 - pred_galaxy_bools) * tile_is_on_array
 
         return {
             "loss": loss,
             "acc": acc,
-            "galaxy_bool": pred_galaxy_bool.reshape(images.shape[0], -1, 1, 1),
-            "star_bool": pred_star_bool.reshape(images.shape[0], -1, 1, 1),
-            "prob_galaxy": prob_galaxy.reshape(images.shape[0], -1, 1, 1),
+            "galaxy_bools": pred_galaxy_bools.reshape(images.shape[0], -1, 1, 1),
+            "star_bools": pred_star_bools.reshape(images.shape[0], -1, 1, 1),
+            "galaxy_probs": galaxy_probs.reshape(images.shape[0], -1, 1, 1),
         }
 
     def configure_optimizers(self):
@@ -204,9 +204,9 @@ class BinaryEncoder(pl.LightningModule):
         # prediction
         pred = self.get_prediction(batch)
         tile_est = dict(true_tile_params.items())
-        tile_est["galaxy_bool"] = pred["galaxy_bool"]
-        tile_est["star_bool"] = pred["star_bool"]
-        tile_est["prob_galaxy"] = pred["prob_galaxy"]
+        tile_est["galaxy_bools"] = pred["galaxy_bools"]
+        tile_est["star_bools"] = pred["star_bools"]
+        tile_est["galaxy_probs"] = pred["galaxy_probs"]
         est = get_full_params_from_tiles(tile_est, self.tile_slen)
         # setup figure and axes
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
@@ -224,7 +224,7 @@ class BinaryEncoder(pl.LightningModule):
                 labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),
                 annotate_axis=False,
                 add_borders=True,
-                prob_galaxy=est["prob_galaxy"],
+                galaxy_probs=est["galaxy_probs"],
             )
 
         fig.tight_layout()
