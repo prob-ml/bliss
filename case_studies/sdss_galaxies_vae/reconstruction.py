@@ -215,7 +215,7 @@ def get_objects_from_coadd(coadd_cat, h, w, scene_size):
         & (w + scene_size > locs_true[:, 1])
     )
     locs_true = locs_true[objects_in_scene]
-    galaxy_bools = torch.from_numpy(np.array(coadd_cat["galaxy_bools"]).astype(float))
+    galaxy_bools = torch.from_numpy(np.array(coadd_cat["galaxy_bool"]).astype(float))
     galaxy_bools = galaxy_bools[objects_in_scene]
 
     # Shift locs by lower limit
