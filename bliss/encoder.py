@@ -3,6 +3,7 @@ from typing import Dict, Optional
 
 import torch
 from torch import Tensor, nn
+from einops import rearrange
 
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
@@ -106,11 +107,12 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_param_mean = self.galaxy_encoder.sample(image_ptiles, tile_map["locs"])
-            latent_dim = galaxy_param_mean.shape[-1]
-            galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-            galaxy_param_mean *= tile_map["is_on_array"] * tile_map["galaxy_bools"]
-            tile_map.update({"galaxy_params": galaxy_param_mean})
+            galaxy_params = self.galaxy_encoder.sample(image_ptiles, tile_map["locs"])
+            galaxy_params = rearrange(
+                galaxy_params, "(n_ptiles n_sources) d -> n_ptiles n_sources d", n_sources=1
+            )
+            galaxy_params *= tile_map["is_on_array"] * tile_map["galaxy_bools"]
+            tile_map.update({"galaxy_params": galaxy_params})
 
         return tile_map
 
