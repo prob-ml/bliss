@@ -1,8 +1,10 @@
 import warnings
+from typing import Tuple
 
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, Dataset, IterableDataset
+from einops import rearrange
 
 from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
@@ -18,6 +20,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self,
         prior: ImagePrior,
         decoder: ImageDecoder,
+        background_values: Tuple[float, ...],
         n_batches=10,
         batch_size=32,
         generate_device="cpu",
@@ -31,6 +34,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_prior.requires_grad_(False)  # freeze decoder weights.
         self.image_decoder = decoder.to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
+
+        assert len(background_values) == self.image_decoder.n_bands
+        background_tensor = torch.tensor(background_values).to(generate_device)
+        self.background_tensor = rearrange(background_tensor, "n_bands -> 1 n_bands 1 1")
+
         self.testing_file = testing_file
 
         # check sleep training will work.
@@ -54,13 +62,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["galaxy_bools"],
                 batch["galaxy_params"],
                 batch["fluxes"],
+                self.background_tensor,
                 add_noise=True,
             )
-            background = self.image_decoder.get_background(images.shape[-1])
             batch.update(
                 {
                     "images": images,
-                    "background": background,
+                    "background": self.background_tensor,
                     "slen": torch.tensor([self.image_decoder.slen]),
                 }
             )

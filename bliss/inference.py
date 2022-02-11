@@ -17,6 +17,7 @@ def reconstruct_scene_at_coordinates(
     encoder: Encoder,
     decoder: ImageDecoder,
     img: Tensor,
+    background: Tensor,
     h: int,
     w: int,
     scene_length: int,
@@ -36,6 +37,8 @@ def reconstruct_scene_at_coordinates(
             Trained ImageDecoder module.
         img:
             A NxCxHxW tensor of N HxW images (with C bands).
+        bg:
+            A NxCxHxW tensor or a 1xCx1x1 tensor.
         h:
             Starting height coordinate (top-left)
         w:
@@ -80,9 +83,15 @@ def reconstruct_scene_at_coordinates(
     scene = img[
         :, :, h_padded : (h_padded + adj_scene_length), w_padded : (w_padded + adj_scene_length)
     ]
+    if not bg.shape[2] == bg.shape[3] == 1:
+        bg = background[
+            :, :, h_padded : (h_padded + adj_scene_length), w_padded : (w_padded + adj_scene_length)
+        ]
+    else:
+        bg = background
     assert scene.shape[2] == scene.shape[3] == adj_scene_length
 
-    recon, map_scene = reconstruct_scene(encoder, decoder, scene, slen, bp, device=device)
+    recon, map_scene = reconstruct_scene(encoder, decoder, scene, bg, slen, bp, device=device)
 
     # Get reconstruction at coordinates
     recon_at_coords = recon[
@@ -107,20 +116,19 @@ def reconstruct_scene(
     encoder: Encoder,
     decoder: ImageDecoder,
     scene: Tensor,
+    background: Tensor,
     slen: int = 80,
     bp: int = 24,
     device=None,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     if device is None:
         device = torch.device("cpu")
-    chunks = split_scene_into_chunks(scene, slen, bp)
+    chunks, bgs = split_scene_into_chunks(scene, background, slen, bp)
     reconstructions = []
-    bgs = []
     full_maps = []
-    for chunk in tqdm(chunks):
-        recon, bg, full_map = reconstruct_img(encoder, decoder, chunk.unsqueeze(0).to(device))
+    for chunk, bg in tqdm(zip(chunks, bgs)):
+        recon, full_map = reconstruct_img(encoder, decoder, chunk.unsqueeze(0).to(device), bg)
         reconstructions.append(recon.cpu())
-        bgs.append(bg.cpu())
         full_maps.append(cpu(full_map))
     reconstructions = torch.cat(reconstructions, dim=0)
     bgs = torch.cat(bgs, dim=0)
@@ -129,25 +137,42 @@ def reconstruct_scene(
     return scene_recon, map_recon
 
 
-def split_scene_into_chunks(scene: Tensor, slen: int, bp: int) -> Tensor:
+def split_scene_into_chunks(scene: Tensor, background: Tensor, slen: int, bp: int) -> Tensor:
     kernel_size = slen + bp * 2
     chunks = F.unfold(scene, kernel_size=kernel_size, stride=slen)
-    return rearrange(
+    chunks = rearrange(
         chunks,
         "b (c h w) n -> (b n) c h w",
         c=scene.shape[1],
         h=kernel_size,
         w=kernel_size,
     )
+    if background.shape[0] == background.shape[2] == background.shape[3] == 1:
+        bg = [background] * chunks.shape[0]
+    else:
+        bg = F.unfold(background, kernel_size=kernel_size, stride=slen)
+        bg = rearrange(
+            bg,
+            "b (c h w) n -> (b n) c h w",
+            c=scene.shape[1],
+            h=kernel_size,
+            w=kernel_size,
+        )
+    return chunks, bg
 
 
 def reconstruct_img(
-    encoder: Encoder, decoder: ImageDecoder, img: Tensor
+    encoder: Encoder, decoder: ImageDecoder, img: Tensor, background: Tensor
 ) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
     img_ptiles = encoder.get_images_in_ptiles(img)
+    if background.shape == img.shape:
+        bg_ptiles = encoder.get_images_in_ptiles(background)
+    else:
+        # This is essentially an assert statement
+        bg_ptiles = rearrange(background, "1 c 1 1 -> 1 c 1 1")
 
     with torch.no_grad():
-        tile_map = encoder.max_a_post(img_ptiles)
+        tile_map = encoder.max_a_post(img_ptiles, bg_ptiles=bg_ptiles)
         tile_map = get_params_in_batches(tile_map, img.shape[0])
         recon_image, _ = decoder.render_images(
             tile_map["n_sources"],
@@ -157,9 +182,8 @@ def reconstruct_img(
             tile_map["fluxes"],
             add_noise=False,
         )
-        background = decoder.get_background(recon_image.shape[-1]).unsqueeze(0)
         full_map = get_full_params_from_tiles(tile_map, decoder.tile_slen)
-    return recon_image, background, full_map
+    return recon_image, full_map
 
 
 def combine_chunks_into_scene(recon_chunks: Tensor, bgs: Tensor, slen: int):

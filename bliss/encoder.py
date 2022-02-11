@@ -67,7 +67,7 @@ class Encoder(nn.Module):
     def sample(self, image_ptiles, n_samples):
         raise NotImplementedError("Sampling from Encoder not yet available.")
 
-    def max_a_post(self, image_ptiles: Tensor) -> Dict[str, Tensor]:
+    def max_a_post(self, image_ptiles: Tensor, bg_ptiles: Tensor = None) -> Dict[str, Tensor]:
         """Get maximum a posteriori of catalog from image padded tiles.
 
         Note that, strictly speaking, this is not the true MAP of the variational
@@ -80,6 +80,9 @@ class Encoder(nn.Module):
         Args:
             image_ptiles: A tensor of padded image tiles,
                 with shape `n_ptiles * n_bands * h * w`.
+            bg_ptiles: A tensor of padded background tiles,
+                with shape `n_ptiles * n_bands * h * w` (can
+                have singleton dimensions as well).
 
         Returns:
             A dictionary of the maximum a posteriori
@@ -107,7 +110,8 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.sample(image_ptiles, tile_map["locs"])
+            assert bg_ptiles is not None
+            galaxy_params = self.galaxy_encoder.sample(image_ptiles - bg_ptiles, tile_map["locs"])
             galaxy_params = rearrange(
                 galaxy_params, "(n_ptiles n_sources) d -> n_ptiles n_sources d", n_sources=1
             )

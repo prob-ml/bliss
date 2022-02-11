@@ -21,6 +21,7 @@ from bliss.sleep import SleepPhase
 def reconstruct(cfg):
     sdss_data = get_sdss_data(cfg.paths.sdss, cfg.reconstruct.sdss_pixel_scale)
     my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
+    background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
     coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
     device = torch.device(cfg.reconstruct.device)
 
@@ -53,7 +54,7 @@ def reconstruct(cfg):
         true = my_image[:, :, h : (h + scene_size), w : (w + scene_size)]
         coadd_objects = get_objects_from_coadd(coadd_cat, h, w, scene_size)
         recon, map_recon = reconstruct_scene_at_coordinates(
-            encoder, dec, my_image, h, w, scene_size, device=device
+            encoder, dec, my_image, background, h, w, scene_size, device=device
         )
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:
@@ -82,6 +83,7 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
 
     return {
         "image": sdss_data[0]["image"][0],
+        "background": sdss_data[0]["background"][0],
         "wcs": sdss_data[0]["wcs"][0],
         "pixel_scale": sdss_pixel_scale,
     }

@@ -71,7 +71,7 @@ class GalaxyEncoder(pl.LightningModule):
             )
 
     def encode(self, image_ptiles, tile_locs):
-        """Runs galaxy encoder on input image ptiles."""
+        """Runs galaxy encoder on input image ptiles that have had background removed."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         n_ptiles = image_ptiles.shape[0]
 
@@ -79,10 +79,6 @@ class GalaxyEncoder(pl.LightningModule):
         tile_locs = tile_locs.reshape(n_ptiles, self.max_sources, 2)
         centered_ptiles = self.center_ptiles(image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-
-        # remove background before encoding
-        ptile_background = self.image_decoder.get_background(self.slen)
-        centered_ptiles -= ptile_background.unsqueeze(0)
 
         # We can assume there is one galaxy per_tile and encode each tile independently.
         z, pz_z = self.enc(centered_ptiles)
@@ -109,8 +105,9 @@ class GalaxyEncoder(pl.LightningModule):
 
     def _get_loss(self, batch):
         images = batch["images"]
+        background = batch["background"]
         tile_locs = batch["locs"]
-        ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        ptiles = get_images_in_tiles(images - background, self.tile_slen, self.ptile_slen)
         z, pq_z = self.encode(ptiles, tile_locs)
         tile_galaxy_params = rearrange(
             z,
@@ -127,6 +124,7 @@ class GalaxyEncoder(pl.LightningModule):
             batch["galaxy_bools"],
             tile_galaxy_params,
             batch["fluxes"],
+            background,
             add_noise=False,
         )
 
@@ -156,6 +154,7 @@ class GalaxyEncoder(pl.LightningModule):
         samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
         keys = [
             "images",
+            "background",
             "locs",
             "galaxy_bools",
             "star_bools",
@@ -168,6 +167,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # extract non-params entries so that 'get_full_params' to works.
         images = batch["images"]
+        background = batch["background"]
         tile_locs = batch["locs"]
         slen = int(batch["slen"].unique().item())
         # obtain map estimates
@@ -200,6 +200,7 @@ class GalaxyEncoder(pl.LightningModule):
             tile_est["galaxy_bools"],
             tile_est["galaxy_params"],
             tile_est["fluxes"],
+            background,
             add_noise=False,
         )
         residuals = (images - recon_images) / torch.sqrt(recon_images)
