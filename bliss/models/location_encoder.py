@@ -103,6 +103,11 @@ def get_full_params_from_tiles(
 
         NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
         pixel locations ("plocs") that are between 0 and slen.
+
+    Raises:
+        ValueError: If one of the parameter names in `tile_params` is not one of {`galaxy_bools`,
+            `star_bools`, `galaxy_params`, `fluxes`, `log_fluxes`, `galaxy_probs`, `plocs`, `locs`,
+            `n_sources`} where the latter two are required. This error is likely due to misspelling.
     """
     tile_n_sources = tile_params["n_sources"]
     tile_locs = tile_params["locs"]
@@ -116,6 +121,14 @@ def get_full_params_from_tiles(
         "galaxy_probs",
     }
     param_names_to_mask = {"locs", "plocs"}.union(param_names_to_gather)
+
+    # sanity check to prevent silent error when e.g. parameter name is misspelled.
+    for k in tile_params:
+        if k not in param_names_to_mask and k != "n_sources":
+            raise ValueError(
+                f"The key '{k}' in the `tile_params` Tensor dictionary is not one of the standard"
+                "ones (check spelling?"
+            )
 
     plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=n_tiles_w)
     tile_params_to_gather = {
