@@ -20,7 +20,6 @@ def convert_flux_to_mag(flux, nelec_per_nmgy=987.31):
 
 
 class SloanDigitalSkySurvey(Dataset):
-    # pylint: disable=dangerous-default-value
     def __init__(
         self,
         sdss_dir="data/sdss",
@@ -57,7 +56,7 @@ class SloanDigitalSkySurvey(Dataset):
             self.items[idx] = self.get_from_disk(idx)
         return self.items[idx]
 
-    def get_from_disk(self, idx, verbose=False):
+    def get_from_disk(self, idx):
         if self.rcfgcs[idx] is None:
             return None
         run, camcol, field, gain = self.rcfgcs[idx]

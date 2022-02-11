@@ -16,7 +16,7 @@ class TestSDSS:
             bands=range(5),
         )
         an_obj = sdss_obj[0]
-        for k in {"image", "background", "gain", "nelec_per_nmgy_list", "calibration"}:
+        for k in ("image", "background", "gain", "nelec_per_nmgy_list", "calibration"):
             assert isinstance(an_obj[k], np.ndarray)
 
         assert an_obj["field"] == 269
