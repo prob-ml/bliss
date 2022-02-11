@@ -292,10 +292,10 @@ def scene_metrics(
 
 def apply_mag_cut(params: dict, mag_cut=25.0):
     """Apply magnitude cut to given parameters."""
-    assert "mag" in params
-    keep = params["mag"] < mag_cut
+    assert "mags" in params, "Magnitude parameter missing in `params` when trying to apply mag cut."
+    keep = params["mags"] < mag_cut
     d = {k: v[keep] for k, v in params.items() if k != "n_sources"}
-    d["n_sources"] = torch.tensor([len(d["mag"])])
+    d["n_sources"] = torch.tensor([len(d["mags"])])
     return d
 
 
@@ -326,6 +326,9 @@ def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
     x, y = data["x"].reshape(-1, 1), data["y"].reshape(-1, 1)
     data["plocs"] = torch.hstack((x, y)).reshape(-1, 2)
     data["n_sources"] = len(x)
+    data["fluxes"] = data["flux"]
+    data["hlrs"] = data["hlr"]
+    data["mags"] = data["mag"]
 
     return data
 
