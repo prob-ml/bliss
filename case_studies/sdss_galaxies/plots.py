@@ -75,7 +75,7 @@ def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: 
 
     coadd_cat["x"] = x
     coadd_cat["y"] = y
-    coadd_cat["galaxy_bools"] = galaxy_bools
+    coadd_cat["galaxy_bool"] = galaxy_bools
     coadd_cat["flux"] = flux
     coadd_cat["mag"] = mag
     coadd_cat["hlr"] = hlr
