@@ -152,6 +152,7 @@ def reconstruct_scene(
     bgs = torch.cat(bgs, dim=0)
     scene_recon = combine_chunks_into_scene(reconstructions, bgs, slen)
     map_recon = combine_full_maps(full_maps, slen)
+    map_recon["fluxes"] = get_full_fluxes(decoder, map_recon, device)
 
     return scene_recon, map_recon
 
@@ -261,3 +262,13 @@ def combine_full_maps(full_maps: List[Dict[str, Tensor]], chunk_slen: int) -> Di
     params["locs"][..., 1] = params["locs"][..., 1] / (chunk_slen * n_chunks_w)
 
     return params
+
+
+def get_full_fluxes(decoder: ImageDecoder, full_params: Dict[str, Tensor], device) -> Tensor:
+    """Computes fluxes for galaxies and adjusts tensor of fluxes appropriately."""
+    galaxy_latents = full_params["galaxy_params"].to(device)  # temporarily in device for decoder.
+    galaxy_decoder = decoder.galaxy_tile_decoder.galaxy_decoder
+    galaxy_fluxes = galaxy_decoder(galaxy_latents).sum((-1, -2, -3)).cpu()
+    galaxy_bool = full_params["galaxy_bool"]
+    star_fluxes = full_params["fluxes"]
+    return star_fluxes * (1 - galaxy_bool) + galaxy_fluxes * galaxy_bool
