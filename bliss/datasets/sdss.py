@@ -58,72 +58,69 @@ class SloanDigitalSkySurvey(Dataset):
         return self.items[idx]
 
     def get_from_disk(self, idx, verbose=False):
-        # pylint: disable=too-many-statements
         if self.rcfgcs[idx] is None:
             return None
         run, camcol, field, gain = self.rcfgcs[idx]
 
         camcol_dir = self.sdss_path.joinpath(str(run), str(camcol))
         field_dir = camcol_dir.joinpath(str(field))
-
-        image_list = []
-        background_list = []
-        nelec_per_nmgy_list = []
-        calibration_list = []
-        gain_list = []
-        wcs_list = []
+        frame_list = []
 
         for b, bl in enumerate("ugriz"):
-            if b not in self.bands:
-                continue
+            if b in self.bands:
+                frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
+                frame_list.append(frame)
 
-            frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
-            frame_path = str(field_dir.joinpath(frame_name))
-            if verbose:
-                print("loading sdss image from", frame_path)
-            frame = fits.open(frame_path)
-            calibration = frame[1].data  # pylint: disable=maybe-no-member
-            nelec_per_nmgy = gain[b] / calibration
+        ret = {}
+        for k in frame_list[0]:
+            data_per_band = [frame[k] for frame in frame_list]
+            if isinstance(data_per_band[0], np.ndarray):
+                ret[k] = np.stack(data_per_band)
+            else:
+                ret[k] = data_per_band
+        ret.update(
+            {
+                "field": field,
+            }
+        )
+        return ret
 
-            sky_small = frame[2].data["ALLSKY"][0]  # pylint: disable=maybe-no-member
-            sky_x = frame[2].data["XINTERP"][0]  # pylint: disable=maybe-no-member
-            sky_y = frame[2].data["YINTERP"][0]  # pylint: disable=maybe-no-member
+    def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
+        frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
+        frame_path = str(field_dir.joinpath(frame_name))
+        frame = fits.open(frame_path)
+        calibration = frame[1].data  # pylint: disable=maybe-no-member
+        nelec_per_nmgy = gain / calibration
 
-            small_rows = np.mgrid[0 : sky_small.shape[0]]
-            small_cols = np.mgrid[0 : sky_small.shape[1]]
-            small_rcs = (small_rows, small_cols)
-            sky_interp = RegularGridInterpolator(small_rcs, sky_small, method="nearest")
+        sky_small = frame[2].data["ALLSKY"][0]  # pylint: disable=maybe-no-member
+        sky_x = frame[2].data["XINTERP"][0]  # pylint: disable=maybe-no-member
+        sky_y = frame[2].data["YINTERP"][0]  # pylint: disable=maybe-no-member
 
-            sky_y = sky_y.clip(0, sky_small.shape[0] - 1)
-            sky_x = sky_x.clip(0, sky_small.shape[1] - 1)
-            large_points = rearrange(np.meshgrid(sky_y, sky_x), "n x y -> y x n")
-            large_sky = sky_interp(large_points)
-            large_sky_nelec = large_sky * gain[b]
+        small_rows = np.mgrid[0 : sky_small.shape[0]]
+        small_cols = np.mgrid[0 : sky_small.shape[1]]
+        small_rcs = (small_rows, small_cols)
+        sky_interp = RegularGridInterpolator(small_rcs, sky_small, method="nearest")
 
-            pixels_ss_nmgy = frame[0].data  # pylint: disable=maybe-no-member
-            pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
-            pixels_nelec = pixels_ss_nelec + large_sky_nelec
+        sky_y = sky_y.clip(0, sky_small.shape[0] - 1)
+        sky_x = sky_x.clip(0, sky_small.shape[1] - 1)
+        large_points = rearrange(np.meshgrid(sky_y, sky_x), "n x y -> y x n")
+        large_sky = sky_interp(large_points)
+        large_sky_nelec = large_sky * gain
 
-            image_list.append(pixels_nelec)
-            background_list.append(large_sky_nelec)
+        pixels_ss_nmgy = frame[0].data  # pylint: disable=maybe-no-member
+        pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
+        pixels_nelec = pixels_ss_nelec + large_sky_nelec
 
-            gain_list.append(gain[b])
-            nelec_per_nmgy_list.append(nelec_per_nmgy)
-            calibration_list.append(calibration)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FITSFixedWarning)
+            wcs = WCS(frame[0])
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=FITSFixedWarning)
-                wcs = WCS(frame[0])
-            wcs_list.append(wcs)
-
-            frame.close()
-
+        frame.close()
         return {
-            "image": np.stack(image_list),
-            "field": field,
-            "background": np.stack(background_list),
-            "nelec_per_nmgy": np.stack(nelec_per_nmgy_list),
-            "gain": np.stack(gain_list),
-            "calibration": np.stack(calibration_list),
-            "wcs": wcs_list,
+            "image": pixels_nelec,
+            "background": large_sky_nelec,
+            "gain": np.array(gain),
+            "nelec_per_nmgy_list": nelec_per_nmgy,
+            "calibration": calibration,
+            "wcs": wcs,
         }

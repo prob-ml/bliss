@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 
@@ -15,7 +16,12 @@ class TestSDSS:
             bands=range(5),
         )
         an_obj = sdss_obj[0]
+        for k in {"image", "background", "gain", "nelec_per_nmgy_list", "calibration"}:
+            assert isinstance(an_obj[k], np.ndarray)
+
+        assert an_obj["field"] == 269
         assert an_obj["gain"][3] == pytest.approx(4.76)
+        assert isinstance(an_obj["wcs"], list)
 
         sdss_obj9 = SloanDigitalSkySurvey(
             sdss_dir,
@@ -24,4 +30,4 @@ class TestSDSS:
             fields=[269, 745],
             bands=range(5),
         )
-        sdss_obj9[0]
+        assert (len(sdss_obj9)) == 2
