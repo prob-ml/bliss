@@ -152,10 +152,6 @@ predict:
         camcol: 1
         fields:
             - 12
-        stampsize: 5
-        overwrite_fits_cache: False
-        overwrite_cache: False
-        center_subpixel: True
     bands:
         - 2
 
