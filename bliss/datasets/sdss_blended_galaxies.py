@@ -72,8 +72,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             camcol=camcol,
             fields=(field,),
             bands=bands,
-            overwrite_cache=True,
-            overwrite_fits_cache=True,
         )
         image = torch.from_numpy(sdss_data[0]["image"][0])
         image = rearrange(image, "h w -> 1 1 h w")

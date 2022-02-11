@@ -78,8 +78,6 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
         camcol=camcol,
         fields=(field,),
         bands=bands,
-        overwrite_cache=True,
-        overwrite_fits_cache=True,
     )
 
     return {
