@@ -101,7 +101,7 @@ def get_full_params_from_tiles(
         these values will be zeroed out. Thus, it is imperative to use the "n_sources"
         element to verify which locations/fluxes/parameters are zeroed out.
 
-        Note: The locations (`"locs"`) are between 0 and 1. The output also contains
+        NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
         pixel locations ("plocs") that are between 0 and slen.
     """
     tile_n_sources = tile_params["n_sources"]
