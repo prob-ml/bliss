@@ -1,4 +1,6 @@
 """Functions to evaluate the performance of BLISS predictions."""
+from typing import Optional, Tuple
+
 import galsim
 import matplotlib as mpl
 import numpy as np
@@ -299,7 +301,9 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
     return d
 
 
-def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
+def get_params_from_coadd(
+    coadd_cat, xlim: Optional[Tuple[int, int]] = None, ylim: Optional[Tuple[int, int]] = None
+):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
     coadd_names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
     assert coadd_names.issubset(set(coadd_cat.columns))
@@ -307,10 +311,13 @@ def get_params_from_coadd(coadd_cat: str, h: int, w: int, bp: int):
     # filter saturated objects
     coadd_cat = coadd_cat[~coadd_cat["is_saturated"].data]
 
-    # filter objects in border, outside of image, or that do not fit in a chunk.
-    # NOTE: This assumes tiling scheme used in `predict.py`
+    # only return objects inside limits.
     x, y = coadd_cat["x"], coadd_cat["y"]
-    keep = (x > bp) & (x < w - bp) & (y > bp) & (y < h - bp)
+    keep = np.ones(len(coadd_cat)).astype(bool)
+    if xlim:
+        keep &= (x > xlim[0]) & (x < xlim[1])
+    if ylim:
+        keep &= (y > ylim[0]) & (y < ylim[1])
     coadd_cat = coadd_cat[keep]
 
     # extract required arrays with correct byte order, otherwise torch error.
