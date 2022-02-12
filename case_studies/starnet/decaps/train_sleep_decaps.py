@@ -62,13 +62,13 @@ with initialize(config_path=args.config_path):
 
     
     
-cfg.model.decoder.kwargs.update({'n_bands': 2, 
+cfg.model.decoder.kwargs.update({'n_bands': 1, 
                                  'slen': 300, 
                                  'tile_slen': 10, 
                                  'ptile_slen': 30, 
                                  'border_padding': 5, 
-                                 'background_values': [667., 495], 
-                                 'psf_params_file': './psf/ziband_psf_fitted.npy'})
+                                 'background_values': [667.], 
+                                 'psf_params_file': './psf/zband_psf_fitted.npy'})
 
 cfg.model.encoder.kwargs.update({'ptile_slen': 20})
 
