@@ -162,6 +162,20 @@ class ImageDecoder(pl.LightningModule):
 
         return background
 
+    def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
+        galaxy_params = rearrange(galaxy_params_in, "b t s d -> (b t s) d")
+        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(galaxy_params)
+        galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
+        galaxy_fluxes = rearrange(
+            galaxy_fluxes,
+            "(b t s) -> b t s 1",
+            b=galaxy_params_in.shape[0],
+            t=galaxy_params_in.shape[1],
+            s=galaxy_params_in.shape[2],
+        )
+        galaxy_fluxes *= galaxy_bools
+        return galaxy_fluxes
+
     def forward(self):
         """Decodes latent representation into an image."""
         return self.star_tile_decoder.psf_forward()

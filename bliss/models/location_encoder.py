@@ -118,6 +118,7 @@ def get_full_params_from_tiles(
         "galaxy_params",
         "fluxes",
         "log_fluxes",
+        "galaxy_fluxes",
         "galaxy_probs",
     }
     param_names_to_mask = {"locs", "plocs"}.union(param_names_to_gather)
@@ -127,7 +128,7 @@ def get_full_params_from_tiles(
         if k not in param_names_to_mask and k not in {"n_sources", "is_on_array"}:
             raise ValueError(
                 f"The key '{k}' in the `tile_params` Tensor dictionary is not one of the standard"
-                "ones (check spelling?)"
+                " ones (check spelling?)"
             )
 
     plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=n_tiles_w)
