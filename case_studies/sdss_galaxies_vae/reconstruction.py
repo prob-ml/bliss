@@ -55,7 +55,6 @@ def reconstruct(cfg):
         recon, map_recon = reconstruct_scene_at_coordinates(
             encoder, dec, my_image, h, w, scene_size, device=device
         )
-        assert torch.all(map_recon["galaxy_fluxes"] >= 0.0)
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:
             fig = create_figure(

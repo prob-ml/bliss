@@ -166,6 +166,7 @@ class ImageDecoder(pl.LightningModule):
         galaxy_params = rearrange(galaxy_params_in, "b t s d -> (b t s) d")
         galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(galaxy_params)
         galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
+        assert torch.all(galaxy_fluxes >= 0.0)
         galaxy_fluxes = rearrange(
             galaxy_fluxes,
             "(b t s) -> b t s 1",
