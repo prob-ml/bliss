@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch
+from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.nn import BCELoss
@@ -97,35 +98,40 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward_image(self, images, tile_locs):
-        """Splits `images` into padded tiles and runs `self.forward()` on them."""
-        batch_size = images.shape[0]
-        ptiles = self.get_images_in_tiles(images)
-        galaxy_probs = self(ptiles, tile_locs)
-        return galaxy_probs.view(batch_size, -1, 1, 1)
-
     def forward(self, image_ptiles, tile_locs):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
-        n_ptiles = image_ptiles.shape[0]
+        batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
 
         # in each padded tile we need to center the corresponding galaxy/star
-        tile_locs = tile_locs.reshape(n_ptiles, self.max_sources, 2)
-        centered_ptiles = self.center_ptiles(image_ptiles, tile_locs)
+        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
+        centered_ptiles = self.center_ptiles(image_ptiles_flat, tile_locs_flat)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
         log_img = torch.log(centered_ptiles - centered_ptiles.min() + 1.0)
         h = self.enc_conv(log_img)
-        z = self.enc_final(h).reshape(n_ptiles, 1)
-        return torch.sigmoid(z).clamp(1e-4, 1 - 1e-4)
+        h2 = self.enc_final(h)
+        z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
+        return rearrange(
+            z,
+            "(b nth ntw s) 1 -> b nth ntw s 1",
+            b=batch_size,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
+            s=self.max_sources,
+        )
 
     def get_prediction(self, batch):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
 
         images = batch["images"]
         galaxy_bools = batch["galaxy_bools"].reshape(-1)
-        galaxy_probs = self.forward_image(images, batch["locs"]).reshape(-1)
+        locs = batch["locs"]
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
+        ptiles = self.get_images_in_tiles(images)
+        galaxy_probs = self.forward(ptiles, locs).reshape(-1)
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 
@@ -142,13 +148,25 @@ class BinaryEncoder(pl.LightningModule):
         # finally organize quantities and return as a dictionary
         pred_star_bools = (1 - pred_galaxy_bools) * tile_is_on_array
 
-        return {
+        ret = {
             "loss": loss,
             "acc": acc,
-            "galaxy_bools": pred_galaxy_bools.reshape(images.shape[0], -1, 1, 1),
-            "star_bools": pred_star_bools.reshape(images.shape[0], -1, 1, 1),
-            "galaxy_probs": galaxy_probs.reshape(images.shape[0], -1, 1, 1),
+            "galaxy_bools": pred_galaxy_bools,
+            "star_bools": pred_star_bools,
+            "galaxy_probs": galaxy_probs,
         }
+
+        for k in ("galaxy_bools", "star_bools", "galaxy_probs"):
+            ret[k] = rearrange(
+                ret[k],
+                "(b nth ntw s) -> b nth ntw s 1",
+                b=batch_size,
+                nth=n_tiles_h,
+                ntw=n_tiles_w,
+                s=max_sources,
+            )
+
+        return ret
 
     def configure_optimizers(self):
         """Pytorch lightning method."""

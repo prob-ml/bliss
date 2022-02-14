@@ -21,7 +21,9 @@ class TestSourceEncoder:
         """
         device = devices.device
 
-        n_image_tiles = 30
+        batch_size = 2
+        n_tiles_h = 3
+        n_tiles_w = 5
         max_detections = 4
         ptile_slen = 10
         n_bands = 2
@@ -42,18 +44,22 @@ class TestSourceEncoder:
             star_encoder.eval()
 
             # simulate image padded tiles
-            image_ptiles = (torch.randn(n_image_tiles, n_bands, ptile_slen, ptile_slen) + 10.0).to(
-                device
-            )
+            image_ptiles = (
+                torch.randn(batch_size, n_tiles_h, n_tiles_w, n_bands, ptile_slen, ptile_slen)
+                + 10.0
+            ).to(device)
 
             n_star_per_tile = (
-                torch.from_numpy(np.random.choice(max_detections, n_image_tiles))
+                torch.from_numpy(
+                    np.random.choice(max_detections, batch_size * n_tiles_h * n_tiles_w)
+                )
                 .type(torch.LongTensor)
                 .to(device)
             )
 
             var_params = star_encoder.encode(image_ptiles)
-            pred = star_encoder.encode_for_n_sources(var_params, n_star_per_tile)
+            var_params_flat = var_params.reshape(-1, var_params.shape[-1])
+            pred = star_encoder.encode_for_n_sources(var_params_flat, n_star_per_tile)
 
             assert torch.all(pred["loc_mean"] >= 0.0)
             assert torch.all(pred["loc_mean"] <= 1.0)
@@ -81,6 +87,7 @@ class TestSourceEncoder:
             # we check the variational parameters against the hidden parameters
             # one by one
             h_out = star_encoder.encode(image_ptiles)
+            h_out = h_out.reshape(-1, h_out.shape[-1])
 
             # get index matrices
             locs_mean_indx_mat = star_encoder.loc_mean_indx
@@ -89,7 +96,7 @@ class TestSourceEncoder:
             log_flux_var_indx_mat = star_encoder.log_flux_logvar_indx
             prob_n_source_indx_mat = star_encoder.prob_n_source_indx
 
-            for i in range(n_image_tiles):
+            for i in range(batch_size * n_tiles_h * n_tiles_w):
                 if n_star_per_tile[i] == 0:
                     assert torch.all(pred["loc_mean"][i] == 0)
                     assert torch.all(pred["loc_logvar"][i] == 0)

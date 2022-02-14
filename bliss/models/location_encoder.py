@@ -1,6 +1,5 @@
 from typing import Dict, Optional, Tuple
 
-import numpy as np
 import torch
 from einops import rearrange, reduce, repeat
 from torch import Tensor, nn
@@ -19,27 +18,29 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
         ptile_slen: Side length of padded tile
 
     Returns:
-        A (batchsize x tiles_per_batch) x n_bands x tile_weight x tile_width image
+        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_weight x tile_width image
     """
     assert len(images.shape) == 4
     n_bands = images.shape[1]
     window = ptile_slen
+    n_tiles_h, n_tiles_w = get_n_tiles_hw(images.shape[2], images.shape[3], window, tile_slen)
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    return rearrange(tiles, "b (c h w) n -> (b n) c h w", c=n_bands, h=window, w=window)
+    return rearrange(
+        tiles,
+        "b (c h w) (nth ntw) -> b nth ntw c h w",
+        nth=n_tiles_h,
+        ntw=n_tiles_w,
+        c=n_bands,
+        h=window,
+        w=window,
+    )
 
 
 def get_n_tiles_hw(h, w, window, tile_slen):
     nh = ((h - window) // tile_slen) + 1
     nw = ((w - window) // tile_slen) + 1
     return nh, nw
-
-
-def get_params_in_batches(params: Dict["str", torch.Tensor], batch_size):
-    out = {}
-    for k, v in params.items():
-        out[k] = v.view(batch_size, -1, *v.shape[1:])
-    return out
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -85,7 +86,7 @@ def get_full_params_from_tiles(
             samples from the variational distribution or the maximum a posteriori (such as from
             LocationEncoder.max_a_post or SleepPhase.tile_map_estimate).
             The first three dimensions of each tensor in this dictionary
-            should be of shape `n_samples x n_tiles_per_image x max_detections`.ge.
+            should be of shape `batch_size x n_tiles_h x n_tiles_w x max_detections`.ge.
         tile_slen:
             Side-length of each tile.
         n_tiles_w:
@@ -95,7 +96,7 @@ def get_full_params_from_tiles(
 
     Returns:
         A dictionary of tensors with the same members as those in `tile_params`.
-        The first two dimensions of each tensor is `n_samples x max(n_sources)`,
+        The first two dimensions of each tensor is `batch_size x max(n_sources)`,
         where `max(n_sources)` is the maximum number of sources detected across samples.
         In samples where the number of sources detected is less than max(n_sources),
         these values will be zeroed out. Thus, it is imperative to use the "n_sources"
@@ -130,7 +131,7 @@ def get_full_params_from_tiles(
                 "ones (check spelling?)"
             )
 
-    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen, n_tiles_w=n_tiles_w)
+    plocs, locs = get_full_locs_from_tiles(tile_locs, tile_slen)
     tile_params_to_gather = {
         "locs": locs,
         "plocs": plocs,
@@ -140,50 +141,38 @@ def get_full_params_from_tiles(
     )
 
     params = {}
-    max_detections = tile_locs.shape[2]
+    max_detections = tile_locs.shape[3]
     indices_to_retrieve, is_on_array = get_indices_of_on_sources(tile_n_sources, max_detections)
     for param_name, tile_param in tile_params_to_gather.items():
         k = tile_param.shape[-1]
-        param = rearrange(tile_param, "b t d k -> b (t d) k", k=k)
-        indices_for_param = repeat(indices_to_retrieve, "b n -> b n k", k=k)
+        param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
+        indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
         param = torch.gather(param, dim=1, index=indices_for_param)
         if param_name in param_names_to_mask:
             param *= is_on_array.unsqueeze(-1)
         params[param_name] = param
 
-    params["n_sources"] = reduce(tile_params["n_sources"], "b n -> b", "sum")
+    params["n_sources"] = reduce(tile_params["n_sources"], "b nth ntw -> b", "sum")
     assert params["locs"].shape[1] == params["n_sources"].max().int().item()
     return params
 
 
-def get_full_locs_from_tiles(
-    tile_locs: Tensor, tile_slen: int, n_tiles_w: Optional[int] = None
-) -> Tuple[Tensor, Tensor]:
+def get_full_locs_from_tiles(tile_locs: Tensor, tile_slen: int) -> Tuple[Tensor, Tensor]:
     """Get the full image locations from tile locations.
 
     Args:
         tile_locs:
-            A tensor of shape `n_samples x n_tiles_per_image x max_detections x 2`,
+            A tensor of shape `batch_size x n_tiles_h x n_tiles_w x max_detections x 2`,
             representing the locations in each tile.
         tile_slen:
             The side-length of each tile.
-        n_tiles_w:
-            Defaults to None. Can directly specify the number of tiles in width.
-            This is necessary when the original image was not square.
 
     Returns:
         A tuple of two elements, "plocs" and "locs".
         "plocs" are the pixel coordinates of each source (between 0 and slen).
         "locs" are the scaled locations of each source (between 0 and 1).
     """
-    n_samples, n_tiles_per_image, _, _ = tile_locs.shape
-    if n_tiles_w is None:
-        n_tiles_h = int(np.sqrt(n_tiles_per_image))
-        n_tiles_w = n_tiles_h
-    else:
-        n_tiles_h = n_tiles_per_image // n_tiles_w
-    assert n_tiles_h * n_tiles_w == n_tiles_per_image
-
+    batch_size, n_tiles_h, n_tiles_w, _, _ = tile_locs.shape
     slen = n_tiles_h * tile_slen
     wlen = n_tiles_w * tile_slen
     # coordinates on tiles.
@@ -192,11 +181,13 @@ def get_full_locs_from_tiles(
     tile_coords = torch.cartesian_prod(x_coords, y_coords)
 
     # recenter and renormalize locations.
-    tile_locs = rearrange(tile_locs, "b n d xy -> (b n) d xy", xy=2)
-    bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=n_samples).float()
+    tile_locs = rearrange(tile_locs, "b nth ntw d xy -> (b nth ntw) d xy", xy=2)
+    bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=batch_size).float()
 
     plocs = tile_locs * tile_slen + bias
-    plocs = rearrange(plocs, "(b n) d xy -> b n d xy", b=n_samples)
+    plocs = rearrange(
+        plocs, "(b nth ntw) d xy -> b nth ntw d xy", b=batch_size, nth=n_tiles_h, ntw=n_tiles_w
+    )
     locs = plocs.clone()
     locs[..., 0] /= slen
     locs[..., 1] /= wlen
@@ -209,7 +200,7 @@ def get_indices_of_on_sources(tile_n_sources: Tensor, max_detections: int) -> Te
 
     Args:
         tile_n_sources:
-            A Tensor of shape `n_samples x n_tiles_per_image`, containing the
+            A Tensor of shape `batch_size x n_tiles_h x n_tiles_w`, containing the
             number of detected sources in a given tile.
         max_detections:
             The maximum number of detections allowed in a given tile.
@@ -226,9 +217,9 @@ def get_indices_of_on_sources(tile_n_sources: Tensor, max_detections: int) -> Te
         the elements of this tensor would take values from 0 up to and including 5.
     """
     tile_is_on_array_sampled = get_is_on_from_n_sources(tile_n_sources, max_detections)
-    n_sources = tile_is_on_array_sampled.sum(dim=(1, 2))  # per sample.
+    n_sources = reduce(tile_is_on_array_sampled, "b nth ntw d -> b", "sum")
     max_sources = n_sources.max().int().item()
-    tile_is_on_array = rearrange(tile_is_on_array_sampled, "b n d -> b (n d)")
+    tile_is_on_array = rearrange(tile_is_on_array_sampled, "b nth ntw d -> b (nth ntw d)")
     indices_sorted = tile_is_on_array.long().argsort(dim=1, descending=True)
     indices_sorted = indices_sorted[:, :max_sources]
 
@@ -321,7 +312,7 @@ class LocationEncoder(nn.Module):
 
         Args:
             image_ptiles: A tensor of padded image tiles,
-                with shape `n_ptiles * n_bands * h * w`.
+                with shape `b * n_tiles_h * n_tiles_w * n_bands * h * w`.
 
         Returns:
             A tensor of variational parameters in matrix form per-tile
@@ -331,11 +322,17 @@ class LocationEncoder(nn.Module):
         """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
-        var_params = self.enc_conv(log_img)
-
-        # Concatenate all output parameters for all possible n_sources
-        return self.enc_final(var_params)
+        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        log_img = torch.log(image_ptiles_flat - image_ptiles_flat.min() + 1.0)
+        var_params_conv = self.enc_conv(log_img)
+        var_params_flat = self.enc_final(var_params_conv)
+        return rearrange(
+            var_params_flat,
+            "(b nth ntw) d -> b nth ntw d",
+            b=image_ptiles.shape[0],
+            nth=image_ptiles.shape[1],
+            ntw=image_ptiles.shape[2],
+        )
 
     def sample(self, var_params: Tensor, n_samples: int) -> Dict[str, Tensor]:
         """Sample from encoded variational distribution.
@@ -350,7 +347,8 @@ class LocationEncoder(nn.Module):
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
+        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params_flat)
 
         # sample number of sources.
         # tile_n_sources shape = (n_samples x n_ptiles)
@@ -362,7 +360,7 @@ class LocationEncoder(nn.Module):
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get var_params conditioned on n_sources
-        pred = self.encode_for_n_sources(var_params, tile_n_sources)
+        pred = self.encode_for_n_sources(var_params_flat, tile_n_sources)
 
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
@@ -371,12 +369,27 @@ class LocationEncoder(nn.Module):
             pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
         )
         tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
-        return {
+        sample_flat = {
             "n_sources": tile_n_sources,
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
         }
+        sample = {}
+        for k, v in sample_flat.items():
+            if k == "n_sources":
+                pattern = "ns (b nth ntw) -> ns b nth ntw"
+            else:
+                pattern = "ns (b nth ntw) s k -> ns b nth ntw s k"
+            sample[k] = rearrange(
+                v,
+                pattern,
+                b=var_params.shape[0],
+                nth=var_params.shape[1],
+                ntw=var_params.shape[2],
+            )
+
+        return sample
 
     def max_a_post(self, var_params: Tensor) -> Dict[str, Tensor]:
         """Derive maximum a posteriori from variational parameters.
@@ -391,8 +404,9 @@ class LocationEncoder(nn.Module):
             The dictionary contains
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
-        tile_n_sources = self.tile_map_n_sources(var_params)
-        pred = self.encode_for_n_sources(var_params, tile_n_sources)
+        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+        tile_n_sources = self.tile_map_n_sources(var_params_flat)
+        pred = self.encode_for_n_sources(var_params_flat, tile_n_sources)
 
         tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
@@ -410,20 +424,32 @@ class LocationEncoder(nn.Module):
         tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, tile_is_on_array)
         tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
 
-        return {
+        max_a_post_flat = {
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
             "n_sources": tile_n_sources,
             "is_on_array": tile_is_on_array,
         }
+        max_a_post = {}
+        for k, v in max_a_post_flat.items():
+            if k == "n_sources":
+                pattern = "(b nth ntw) -> b nth ntw"
+            else:
+                pattern = "(b nth ntw) s k -> b nth ntw s k"
+            max_a_post[k] = rearrange(
+                v, pattern, b=var_params.shape[0], nth=var_params.shape[1], ntw=var_params.shape[2]
+            )
+        return max_a_post
 
-    def encode_for_n_sources(self, var_params, tile_n_sources):
+    def encode_for_n_sources(self, var_params_flat, tile_n_sources):
         """Get variational parameters conditioned on number of sources in tile.
 
         Args:
-            var_params: The output of `self.encode(ptiles)` which is the variational parameters
-                in matrix form. Has size `n_ptiles * n_bands`.
+            var_params_flat: The output of `self.encode(ptiles)`,
+                where the first three dimensions have been flattened.
+                These are the variational parameters in matrix form.
+                Has size `(batch_size x n_tiles_h x n_tiles_w) * d`.
             tile_n_sources:
                 A tensor of the number of sources in each tile.
 
@@ -445,14 +471,16 @@ class LocationEncoder(nn.Module):
         else:
             raise ValueError("tile_n_sources must have shape size 1 or 2")
 
-        assert var_params.shape[0] == tile_n_sources.shape[1]
+        assert var_params_flat.shape[0] == tile_n_sources.shape[1]
         # get probability of params except n_sources
         # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        var_params_for_n_sources = self._get_var_params_for_n_sources(var_params, tile_n_sources)
+        var_params_for_n_sources = self._get_var_params_for_n_sources(
+            var_params_flat, tile_n_sources
+        )
 
         # get probability of n_sources
         # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
-        n_source_log_probs = self._get_logprob_n_from_var_params(var_params)
+        n_source_log_probs = self._get_logprob_n_from_var_params(var_params_flat)
         var_params_for_n_sources["n_source_log_probs"] = n_source_log_probs
         if squeeze:
             var_params_for_n_sources = {
