@@ -10,7 +10,7 @@ from tqdm import tqdm
 from bliss.datasets.sdss_blended_galaxies import cpu
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import get_full_params_from_tiles, get_params_in_batches
+from bliss.models.location_encoder import get_full_params_from_tiles
 
 
 def reconstruct_scene_at_coordinates(
@@ -148,7 +148,6 @@ def reconstruct_img(
 
     with torch.no_grad():
         tile_map = encoder.max_a_post(img_ptiles)
-        tile_map = get_params_in_batches(tile_map, img.shape[0])
         recon_image, _ = decoder.render_images(
             tile_map["n_sources"],
             tile_map["locs"],

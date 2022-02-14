@@ -22,7 +22,6 @@ from bliss.models.location_encoder import (
     get_full_params_from_tiles,
     get_images_in_tiles,
     get_is_on_from_n_sources,
-    get_params_in_batches,
 )
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
@@ -158,23 +157,21 @@ class SleepPhase(pl.LightningModule):
     def tile_map_estimate(self, batch):
         images = batch["images"]
 
-        batch_size = images.shape[0]
         image_ptiles = get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
         var_params = self.image_encoder.encode(image_ptiles)
         tile_map = self.image_encoder.max_a_post(var_params)
-        tile_est = get_params_in_batches(tile_map, batch_size)
-        tile_est["galaxy_params"] = batch["galaxy_params"]
+        tile_map["galaxy_params"] = batch["galaxy_params"]
 
         # FIXME: True galaxy params are not necessarily consistent with other MAP estimates
         # need to do some matching to ensure correctness of residual images?
         # maybe doesn't matter because only care about detection if not estimating
         # galaxy_parameters.
-        max_sources = tile_est["locs"].shape[2]
-        tile_est["galaxy_params"] = tile_est["galaxy_params"][:, :, :max_sources]
-        tile_est["galaxy_params"] = tile_est["galaxy_params"].contiguous()
-        return tile_est
+        max_sources = tile_map["locs"].shape[2]
+        tile_map["galaxy_params"] = tile_map["galaxy_params"][:, :, :max_sources]
+        tile_map["galaxy_params"] = tile_map["galaxy_params"].contiguous()
+        return tile_map
 
     def _get_loss(self, batch):
         """Private method to evaluate loss on the input minibatch.
@@ -233,17 +230,19 @@ class SleepPhase(pl.LightningModule):
         max_sources = self.image_encoder.max_detections
 
         # clip decoder output since constraint is: max_detections <= max_sources (per tile)
-        true_tile_locs = true_tile_locs[:, :, 0:max_sources]
-        true_tile_log_fluxes = true_tile_log_fluxes[:, :, 0:max_sources]
-        true_tile_galaxy_bools = true_tile_galaxy_bools[:, :, 0:max_sources]
+        true_tile_locs = true_tile_locs[:, :, :, 0:max_sources]
+        true_tile_log_fluxes = true_tile_log_fluxes[:, :, :, 0:max_sources]
+        true_tile_galaxy_bools = true_tile_galaxy_bools[:, :, :, 0:max_sources]
         true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
 
         # flatten so first dimension is ptile
         # b: batch, s: n_tiles_per_image
-        true_tile_locs = rearrange(true_tile_locs, "b n s xy -> (b n) s xy", xy=2)
-        true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
-        true_tile_galaxy_bools = rearrange(true_tile_galaxy_bools, "b n s 1 -> (b n) s")
-        true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
+        true_tile_locs = rearrange(true_tile_locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
+        true_tile_log_fluxes = rearrange(
+            true_tile_log_fluxes, "b nth ntw s bands -> (b nth ntw) s bands"
+        )
+        true_tile_galaxy_bools = rearrange(true_tile_galaxy_bools, "b nth ntw s 1 -> (b nth ntw) s")
+        true_tile_n_sources = rearrange(true_tile_n_sources, "b nth ntw -> (b nth ntw)")
         true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
@@ -251,7 +250,8 @@ class SleepPhase(pl.LightningModule):
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
         var_params = self.image_encoder.encode(image_ptiles)
-        pred = self.image_encoder.encode_for_n_sources(var_params, true_tile_n_sources)
+        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+        pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
         n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)

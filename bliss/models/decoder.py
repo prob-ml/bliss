@@ -118,13 +118,13 @@ class ImageDecoder(pl.LightningModule):
         Args:
             n_sources: Number of sources in each tile (batch_size x n_tiles_per_image)
             locs: Locations of sources in each tile
-                (batch_size x n_tiles_per_image x max_sources x 2)
+                (batch_size x n_tiles_h x n_tiles_w x max_sources x 2)
             galaxy_bools: Whether each source is a galaxy in each tile
-                (batch_size x n_tiles_per_image x max_sources x 1)
+                (batch_size x n_tiles_h x n_tiles_w x max_sources x 1)
             galaxy_params : Parameters of each galaxy in each tile
-                (batch_size x n_tiles_per_image x max_sources x latent_dim)
+                (batch_size x n_tiles_h x n_tiles_w x max_sources x latent_dim)
             fluxes: Flux of each source in each time
-                (batch_size x n_tiles_per_image x max_sources x n_bands)
+                (batch_size x n_tiles_h x n_tiles_w x max_sources x n_bands)
             add_noise: Add noise to the output image?
                 (defaults to True)
 
@@ -180,38 +180,35 @@ class ImageDecoder(pl.LightningModule):
         return images
 
     def _render_ptiles(self, n_sources, locs, galaxy_bools, galaxy_params, fluxes):
-        # n_sources: is (batch_size x n_tiles_per_image)
-        # locs: is (batch_size x n_tiles_per_image x max_sources x 2)
-        # galaxy_bools: Is (batch_size x n_tiles_per_image x max_sources)
-        # galaxy_params : is (batch_size x n_tiles_per_image x max_sources x latent_dim)
-        # fluxes: Is (batch_size x n_tiles_per_image x max_sources x 2)
+        # n_sources: is (batch_size x n_tiles_h x n_tiles_w)
+        # locs: is (batch_size x n_tiles_h x n_tiles_w x max_sources x 2)
+        # galaxy_bools: Is (batch_size x n_tiles_h x n_tiles_w x max_sources)
+        # galaxy_params : is (batch_size x n_tiles_h x n_tiles_w x max_sources x latent_dim)
+        # fluxes: Is (batch_size x n_tiles_h x n_tiles_w x max_sources x 2)
 
         # returns the ptiles with shape =
-        # (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
+        # (batch_size x n_tiles_h x n_tiles_w x n_bands x ptile_slen x ptile_slen)
 
-        # b: batch, n: n_tiles_per_image, s: max_sources
-        n_tiles_per_image = n_sources.shape[1]
-        max_sources = locs.shape[2]
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
         assert (n_sources <= max_sources).all()
         batch_size = n_sources.shape[0]
-        n_ptiles = batch_size * n_tiles_per_image
 
         # view parameters being explicit about shapes
-        n_sources = rearrange(n_sources, "b t -> (b t)")
-        locs = rearrange(locs, "b t s xy -> (b t) s xy", xy=2)
-        galaxy_bools = rearrange(galaxy_bools, "b t s 1 -> (b t) s 1")
-        fluxes = rearrange(fluxes, "b t s band -> (b t) s band")
+        n_sources = rearrange(n_sources, "b nth ntw -> (b nth ntw)")
+        locs = rearrange(locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
+        galaxy_bools = rearrange(galaxy_bools, "b nth ntw s 1 -> (b nth ntw) s 1")
+        fluxes = rearrange(fluxes, "b nth ntw s band -> (b nth ntw) s band")
 
         # draw stars and galaxies
         is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-        is_on_array = rearrange(is_on_array, "bt s -> bt s 1")
+        is_on_array = rearrange(is_on_array, "b_nth_ntw s -> b_nth_ntw s 1")
         star_bools = (1 - galaxy_bools) * is_on_array
-        assert star_bools.shape == (n_ptiles, max_sources, 1)
 
         # final shapes of images.
         img_shape = (
             batch_size,
-            n_tiles_per_image,
+            n_tiles_h,
+            n_tiles_w,
             self.n_bands,
             self.ptile_slen,
             self.ptile_slen,
@@ -262,7 +259,7 @@ def reconstruct_image_from_ptiles(
 
     Args:
         image_ptiles: Tensor of size
-            (batch_size x n_tiles_per_image x n_bands x ptile_slen x ptile_slen)
+            (batch_size x n_tiles_h x n_tiles_w x n_bands x ptile_slen x ptile_slen)
         tile_slen:
             Size of the original (non-overlapping) tiles.
         border_padding:
@@ -271,17 +268,11 @@ def reconstruct_image_from_ptiles(
     Returns:
         Reconstructed image of size (batch_size x n_bands x height x width)
     """
-    _, n_tiles_per_image, _, ptile_slen, _ = image_ptiles.shape
-    n_tiles_width = np.sqrt(n_tiles_per_image)
-    # check it is an integer
-    assert n_tiles_width % 1 == 0
-    n_tiles_width = int(n_tiles_width)
-    n_tiles_height = n_tiles_width
-
-    image_ptiles_prefold = rearrange(image_ptiles, "b n c h w -> b (c h w) n")
+    _, n_tiles_h, n_tiles_w, _, ptile_slen, _ = image_ptiles.shape
+    image_ptiles_prefold = rearrange(image_ptiles, "b nth ntw c h w -> b (c h w) (nth ntw)")
     kernel_size = (ptile_slen, ptile_slen)
     stride = (tile_slen, tile_slen)
-    n_tiles_hw = (n_tiles_height, n_tiles_width)
+    n_tiles_hw = (n_tiles_h, n_tiles_w)
 
     output_size = []
     for i in (0, 1):
