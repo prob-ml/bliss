@@ -1,5 +1,5 @@
 """Scripts to produce BLISS estimates on survey images. Currently only SDSS is supported."""
-from typing import Dict, Optional
+from typing import Optional
 
 import torch
 from torch import Tensor, nn
@@ -8,6 +8,7 @@ from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.location_encoder import (
     LocationEncoder,
+    TileCatalog,
     get_images_in_tiles,
     get_is_on_from_n_sources,
 )
@@ -66,7 +67,7 @@ class Encoder(nn.Module):
     def sample(self, image_ptiles, n_samples):
         raise NotImplementedError("Sampling from Encoder not yet available.")
 
-    def max_a_post(self, image: Tensor, background: Tensor) -> Dict[str, Tensor]:
+    def max_a_post(self, image: Tensor, background: Tensor) -> TileCatalog:
         """Get maximum a posteriori of catalog from image padded tiles.
 
         Note that, strictly speaking, this is not the true MAP of the variational
@@ -94,10 +95,10 @@ class Encoder(nn.Module):
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            galaxy_probs = self.binary_encoder.forward(image, background, tile_map["locs"])
-            galaxy_probs *= tile_map["is_on_array"]
-            galaxy_bools = (galaxy_probs > 0.5).float() * tile_map["is_on_array"]
-            star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)
+            galaxy_probs = self.binary_encoder.forward(image, background, tile_map.locs)
+            galaxy_probs *= tile_map.is_on_array
+            galaxy_bools = (galaxy_probs > 0.5).float() * tile_map.is_on_array
+            star_bools = get_star_bools(tile_map.n_sources, galaxy_bools)
             tile_map.update(
                 {
                     "galaxy_bools": galaxy_bools,
@@ -107,8 +108,8 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map["locs"])
-            galaxy_params *= tile_map["is_on_array"] * tile_map["galaxy_bools"]
+            galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map.locs)
+            galaxy_params *= tile_map.is_on_array * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})
 
         return tile_map

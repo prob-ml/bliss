@@ -14,7 +14,7 @@ from bliss.datasets.sdss_blended_galaxies import cpu
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import get_full_params_from_tiles
+from bliss.models.location_encoder import TileCatalog
 from bliss.reporting import get_params_from_coadd
 
 
@@ -347,7 +347,8 @@ class SimulatedFrame:
         tile_cat_cropped = {}
         for k, v in self.tile_catalog.items():
             tile_cat_cropped[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
-        full_cat = get_full_params_from_tiles(tile_cat_cropped, self.tile_slen)
+        tile_cat_cropped = TileCatalog(self.tile_slen, tile_cat_cropped)
+        full_cat = tile_cat_cropped.get_full_params()
         full_cat["fluxes"] = (
             full_cat["galaxy_bools"] * full_cat["galaxy_fluxes"]
             + full_cat["star_bools"] * full_cat["fluxes"]

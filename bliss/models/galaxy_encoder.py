@@ -13,7 +13,7 @@ from torch.optim import Adam
 
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.models.location_encoder import get_full_params_from_tiles, get_images_in_tiles
+from bliss.models.location_encoder import TileCatalog, get_images_in_tiles
 from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
 from bliss.reporting import plot_image, plot_image_and_locs
@@ -201,16 +201,19 @@ class GalaxyEncoder(pl.LightningModule):
         # obtain map estimates
         z, _ = self.encode(images, background, tile_locs)
 
-        tile_est = {
-            "n_sources": batch["n_sources"],
-            "locs": batch["locs"],
-            "galaxy_bools": batch["galaxy_bools"],
-            "star_bools": batch["star_bools"],
-            "fluxes": batch["fluxes"],
-            "log_fluxes": batch["log_fluxes"],
-            "galaxy_params": z,
-        }
-        est = get_full_params_from_tiles(tile_est, self.tile_slen)
+        tile_est = TileCatalog(
+            self.tile_slen,
+            {
+                "n_sources": batch["n_sources"],
+                "locs": batch["locs"],
+                "galaxy_bools": batch["galaxy_bools"],
+                "star_bools": batch["star_bools"],
+                "fluxes": batch["fluxes"],
+                "log_fluxes": batch["log_fluxes"],
+                "galaxy_params": z,
+            },
+        )
+        est = tile_est.get_full_params()
 
         # draw all reconstruction images.
         # render_images automatically accounts for tiles with no galaxies.
