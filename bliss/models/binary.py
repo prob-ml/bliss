@@ -98,11 +98,6 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward_image(self, images, tile_locs):
-        """Splits `images` into padded tiles and runs `self.forward()` on them."""
-        ptiles = self.get_images_in_tiles(images)
-        return self(ptiles, tile_locs)
-
     def forward(self, image_ptiles, tile_locs):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
@@ -135,7 +130,8 @@ class BinaryEncoder(pl.LightningModule):
         galaxy_bools = batch["galaxy_bools"].reshape(-1)
         locs = batch["locs"]
         batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
-        galaxy_probs = self.forward_image(images, locs).reshape(-1)
+        ptiles = self.get_images_in_tiles(images)
+        galaxy_probs = self.forward(ptiles, locs).reshape(-1)
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 
