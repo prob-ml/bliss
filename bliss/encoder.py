@@ -117,6 +117,10 @@ class Encoder(nn.Module):
             images, self.location_encoder.tile_slen, self.location_encoder.ptile_slen
         )
 
+    @property
+    def border_padding(self) -> int:
+        return self.location_encoder.border_padding
+
 
 def get_star_bools(n_sources, galaxy_bools):
     assert n_sources.shape[0] == galaxy_bools.shape[0]

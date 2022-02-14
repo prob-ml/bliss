@@ -21,7 +21,6 @@ def reconstruct_scene_at_coordinates(
     w: int,
     scene_length: int,
     slen: int = 80,
-    bp: int = 24,
     device=None,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     """Reconstruct all objects contained within a scene, padding as needed.
@@ -44,8 +43,6 @@ def reconstruct_scene_at_coordinates(
             Size of (square) image to reconstruct.
         slen:
             The side-lengths of smaller chunks to create. Defaults to 80.
-        bp:
-            Border padding needed by encoder. Defaults to 24.
         device:
             Device used for rendering each chunk (i.e. a torch.device). Note
             that chunks are moved onto and off the device to allow for rendering
@@ -63,6 +60,7 @@ def reconstruct_scene_at_coordinates(
 
     """
     # Adjust bp so that we get an even number of chunks in scene
+    bp = encoder.border_padding
     extra = (scene_length - bp * 2) % slen
     while extra < (2 * bp):
         extra += slen
@@ -82,7 +80,7 @@ def reconstruct_scene_at_coordinates(
     ]
     assert scene.shape[2] == scene.shape[3] == adj_scene_length
 
-    recon, map_scene = reconstruct_scene(encoder, decoder, scene, slen, bp, device=device)
+    recon, map_scene = reconstruct_scene(encoder, decoder, scene, slen=slen, device=device)
 
     # Get reconstruction at coordinates
     recon_at_coords = recon[
@@ -108,12 +106,11 @@ def reconstruct_scene(
     decoder: ImageDecoder,
     scene: Tensor,
     slen: int = 80,
-    bp: int = 24,
     device=None,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     if device is None:
         device = torch.device("cpu")
-    chunks = split_scene_into_chunks(scene, slen, bp)
+    chunks = split_scene_into_chunks(scene, slen, encoder.border_padding)
     reconstructions = []
     bgs = []
     full_maps = []
