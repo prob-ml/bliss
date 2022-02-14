@@ -15,7 +15,6 @@ from bliss.models.location_encoder import (
     get_images_in_tiles,
     get_is_on_from_n_sources,
     get_n_tiles_hw,
-    get_params_in_batches,
 )
 
 
@@ -56,13 +55,13 @@ def predict_on_image(
 
     # get MAP estimates and variational parameters from image_encoder
     var_params = image_encoder.encode(ptiles)
-    tile_n_sources = image_encoder.tile_map_n_sources(var_params)
+    var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+    tile_n_sources = image_encoder.tile_map_n_sources(var_params_flat)
     tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
 
     tile_map = image_encoder.max_a_post(var_params)
-    tile_map = get_params_in_batches(tile_map, image.shape[0])
 
-    var_params_n_sources = image_encoder.encode_for_n_sources(var_params, tile_n_sources)
+    var_params_n_sources = image_encoder.encode_for_n_sources(var_params_flat, tile_n_sources)
 
     # binary prediction
     assert not binary_encoder.training

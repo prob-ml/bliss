@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch
+from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.nn import BCELoss
@@ -101,6 +102,7 @@ class BinaryEncoder(pl.LightningModule):
         """Splits `images` into padded tiles and runs `self.forward()` on them."""
         batch_size = images.shape[0]
         ptiles = self.get_images_in_tiles(images)
+        ptiles = rearrange(ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         galaxy_probs = self(ptiles, tile_locs)
         return galaxy_probs.view(batch_size, -1, 1, 1)
 
