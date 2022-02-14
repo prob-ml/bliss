@@ -377,9 +377,13 @@ class LocationEncoder(nn.Module):
         }
         sample = {}
         for k, v in sample_flat.items():
+            if k == "n_sources":
+                pattern = "ns (b nth ntw) -> ns b nth ntw"
+            else:
+                pattern = "ns (b nth ntw) s k -> ns b nth ntw s k"
             sample[k] = rearrange(
                 v,
-                "ns (b nth ntw) k -> ns b nth ntw k",
+                pattern,
                 b=var_params.shape[0],
                 nth=var_params.shape[1],
                 ntw=var_params.shape[2],

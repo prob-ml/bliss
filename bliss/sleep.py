@@ -230,17 +230,19 @@ class SleepPhase(pl.LightningModule):
         max_sources = self.image_encoder.max_detections
 
         # clip decoder output since constraint is: max_detections <= max_sources (per tile)
-        true_tile_locs = true_tile_locs[:, :, 0:max_sources]
-        true_tile_log_fluxes = true_tile_log_fluxes[:, :, 0:max_sources]
-        true_tile_galaxy_bools = true_tile_galaxy_bools[:, :, 0:max_sources]
+        true_tile_locs = true_tile_locs[:, :, :, 0:max_sources]
+        true_tile_log_fluxes = true_tile_log_fluxes[:, :, :, 0:max_sources]
+        true_tile_galaxy_bools = true_tile_galaxy_bools[:, :, :, 0:max_sources]
         true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
 
         # flatten so first dimension is ptile
         # b: batch, s: n_tiles_per_image
-        true_tile_locs = rearrange(true_tile_locs, "b n s xy -> (b n) s xy", xy=2)
-        true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
-        true_tile_galaxy_bools = rearrange(true_tile_galaxy_bools, "b n s 1 -> (b n) s")
-        true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
+        true_tile_locs = rearrange(true_tile_locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
+        true_tile_log_fluxes = rearrange(
+            true_tile_log_fluxes, "b nth ntw s bands -> (b nth ntw) s bands"
+        )
+        true_tile_galaxy_bools = rearrange(true_tile_galaxy_bools, "b nth ntw s 1 -> (b nth ntw) s")
+        true_tile_n_sources = rearrange(true_tile_n_sources, "b nth ntw -> (b nth ntw)")
         true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles

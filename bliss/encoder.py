@@ -3,7 +3,6 @@ from typing import Dict, Optional
 
 import torch
 from torch import Tensor, nn
-from einops import rearrange
 
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
@@ -91,18 +90,9 @@ class Encoder(nn.Module):
         var_params = self.location_encoder.encode(image_ptiles)
         tile_map = self.location_encoder.max_a_post(var_params)
 
-        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        locs_flat = rearrange(tile_map["locs"], "b nth ntw s xy -> (b nth ntw) s xy")
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            galaxy_probs = self.binary_encoder(image_ptiles_flat, locs_flat)
-            galaxy_probs = rearrange(
-                galaxy_probs,
-                "(b nth ntw) 1 -> b nth ntw 1 1",
-                b=image_ptiles.shape[0],
-                nth=image_ptiles.shape[1],
-                ntw=image_ptiles.shape[2],
-            )
+            galaxy_probs = self.binary_encoder(image_ptiles, tile_map["locs"])
             galaxy_probs *= tile_map["is_on_array"]
             galaxy_bools = (galaxy_probs > 0.5).float() * tile_map["is_on_array"]
             star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)
@@ -115,15 +105,7 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.sample(image_ptiles_flat, locs_flat)
-            galaxy_params = rearrange(
-                galaxy_params,
-                "(b nth ntw n_sources) d -> b nth ntw n_sources d",
-                b=image_ptiles.shape[0],
-                nth=image_ptiles.shape[1],
-                ntw=image_ptiles.shape[2],
-                n_sources=1,
-            )
+            galaxy_params = self.galaxy_encoder.sample(image_ptiles, tile_map["locs"])
             galaxy_params *= tile_map["is_on_array"] * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})
 

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 import pytorch_lightning as pl
 import torch
@@ -124,10 +124,17 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         chunk = self.chunks[idx]
         tile_map = self.catalogs[idx]
         return {
-            "images": chunk,
+            "images": chunk.unsqueeze(0),
             **tile_map,
-            "slen": torch.tensor([self.slen]),
+            "slen": torch.tensor([self.slen]).unsqueeze(0),
         }
+
+    @staticmethod
+    def _collate(tile_catalogs: List[Dict[str, Tensor]]):
+        out = {}
+        for k in tile_catalogs[0]:
+            out[k] = torch.cat([x[k] for x in tile_catalogs], dim=0)
+        return out
 
     def _prerender_chunks(self, image):
         chunks = F.unfold(image, kernel_size=self.kernel_size, stride=self.stride)
@@ -159,13 +166,13 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         return chunks_with_galaxies, catalogs
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=2, num_workers=0, shuffle=True)
+        return DataLoader(self, batch_size=2, num_workers=0, shuffle=True, collate_fn=self._collate)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=10, num_workers=0)
+        return DataLoader(self, batch_size=10, num_workers=0, collate_fn=self._collate)
 
     def test_dataloader(self):
-        return DataLoader(self, batch_size=1, num_workers=0)
+        return DataLoader(self, batch_size=1, num_workers=0, collate_fn=self._collate)
 
 
 def cpu(x: Dict[str, Tensor]):

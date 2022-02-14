@@ -69,6 +69,9 @@ def predict_on_image(
 
     galaxy_probs = binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
     galaxy_bools = (galaxy_probs > 0.5).float() * tile_is_on_array
+
+    galaxy_probs = rearrange(galaxy_probs, "b (nth ntw) s 1 -> b nth ntw s 1", nth=ptiles.shape[1])
+    galaxy_bools = rearrange(galaxy_bools, "b (nth ntw) s 1 -> b nth ntw s 1", nth=ptiles.shape[1])
     star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)
     var_params_n_sources["galaxy_bools"] = galaxy_bools
     var_params_n_sources["star_bools"] = star_bools
@@ -86,7 +89,10 @@ def predict_on_image(
     galaxy_param_mean, _ = galaxy_encoder.encode(ptiles, tile_map["locs"])
     latent_dim = galaxy_param_mean.shape[-1]
     galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
-    galaxy_param_mean *= tile_is_on_array * galaxy_bools
+    galaxy_param_mean *= tile_is_on_array * galaxy_bools.reshape(1, -1, 1, 1)
+    galaxy_param_mean = rearrange(
+        galaxy_param_mean, "b (nth ntw) s d -> b nth ntw s d", nth=ptiles.shape[1]
+    )
     var_params_n_sources["galaxy_param_mean"] = galaxy_param_mean
     tile_map["galaxy_params"] = galaxy_param_mean
 
