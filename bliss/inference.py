@@ -19,7 +19,7 @@ def reconstruct_scene_at_coordinates(
     img: Tensor,
     h_range: Tuple[int, int],
     w_range: Tuple[int, int],
-    slen: int = 80,
+    slen: int = 300,
     device=None,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     """Reconstruct all objects contained within a scene, padding as needed.
