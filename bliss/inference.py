@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 import torch
 from einops import rearrange, repeat
@@ -38,8 +38,6 @@ def reconstruct_scene_at_coordinates(
             Range of height coordinates.
         w_range:
             Range of width coordinates.
-        scene_length:
-            Size of (square) image to reconstruct.
         slen:
             The side-lengths of smaller chunks to create. Defaults to 80.
         device:
@@ -61,18 +59,6 @@ def reconstruct_scene_at_coordinates(
     bp = encoder.border_padding
     h_range_pad = (h_range[0] - bp, h_range[1] + bp)
     w_range_pad = (w_range[0] - bp, w_range[1] + bp)
-    # extra = (scene_length - bp * 2) % slen
-    # while extra < (2 * bp):
-    #     extra += slen
-    # adj_scene_length = scene_length + extra
-    # if h + adj_scene_length - bp > img.shape[2]:
-    #     h_padded = img.shape[2] - adj_scene_length
-    # else:
-    #     h_padded = h - bp
-    # if w + adj_scene_length - bp > img.shape[3]:
-    #     w_padded = img.shape[3] - adj_scene_length
-    # else:
-    #     w_padded = w - bp
 
     # First get the mininum coordinates to ensure everything is detected
     scene = img[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
@@ -81,9 +67,6 @@ def reconstruct_scene_at_coordinates(
     chunked_scene = ChunkedScene(scene, slen, bp)
     recon, map_scene = chunked_scene.reconstruct(encoder, decoder, device)
     assert recon.shape == scene.shape
-
-    # recon, map_scene = reconstruct_scene(encoder, decoder, scene, slen=slen, device=device)
-
     # Get reconstruction at coordinates
     recon_at_coords = recon[
         :,
@@ -91,15 +74,6 @@ def reconstruct_scene_at_coordinates(
         bp:-bp,
         bp:-bp,
     ]
-
-    # Adjust locations based on padding
-    # h_adj = h_padded - (h - bp)
-    # w_adj = w_padded - (w - bp)
-    # plocs = map_scene["plocs"]
-    # plocs[..., 0] -= bp
-    # plocs[..., 1] -= bp
-    # map_scene["plocs"] = plocs
-
     return recon_at_coords, map_scene
 
 
@@ -214,11 +188,10 @@ class ChunkedScene:
             bg_all = F.fold(
                 bg_rearranged, output_size=output_size, kernel_size=kernel_size, stride=self.slen
             )
-            # recon = recon_no_bg + bg_all
             recon_images[chunk_type] = recon_no_bg
             recon_bgs[chunk_type] = bg_all
 
-        ## Assemble the final image
+        # Assemble the final image
         main = recon_images["main"]
         main_bg = recon_bgs["main"]
         right = recon_images.get("right", None)
@@ -228,9 +201,8 @@ class ChunkedScene:
             right_bg = recon_bgs["right"]
             main[:, :, :, -2 * self.bp :] += right[:, :, :, : 2 * self.bp]
             main += main_bg
-            top_of_image = torch.cat(
-                (main, right[:, :, :, 2 * self.bp :] + right_bg[:, :, :, 2 * self.bp :]), dim=3
-            )
+            right_to_cat = right[:, :, :, 2 * self.bp :] + right_bg[:, :, :, 2 * self.bp :]
+            top_of_image = torch.cat((main, right_to_cat), dim=3)
 
         bottom = recon_images.get("bottom", None)
         if bottom is not None:
@@ -242,18 +214,15 @@ class ChunkedScene:
             else:
                 bottom_right_bg = recon_bgs["bottom_right"]
                 bottom[:, :, :, -2 * self.bp :] += bottom_right[:, :, :, : 2 * self.bp]
-                bottom_of_image = torch.cat((bottom, bottom_right[:, :, :, 2 * self.bp :]), dim=3)
-                bottom_of_image_bg = torch.cat(
-                    (bottom_bg, bottom_right_bg[:, :, :, 2 * self.bp :]), dim=3
-                )
+                bottom_right_to_cat = bottom_right[:, :, :, 2 * self.bp :]
+                bottom_of_image = torch.cat((bottom, bottom_right_to_cat), dim=3)
+                bot_right_to_cat_bg = bottom_right_bg[:, :, :, 2 * self.bp :]
+                bottom_of_image_bg = torch.cat((bottom_bg, bot_right_to_cat_bg), dim=3)
             top_of_image[:, :, -2 * self.bp :, :] += bottom_of_image[:, :, : 2 * self.bp, :]
-            image = torch.cat(
-                (
-                    top_of_image,
-                    bottom_of_image[:, :, 2 * self.bp :] + bottom_of_image_bg[:, :, 2 * self.bp :],
-                ),
-                dim=2,
+            bottom_of_image_to_cat = (
+                bottom_of_image[:, :, 2 * self.bp :] + bottom_of_image_bg[:, :, 2 * self.bp :]
             )
+            image = torch.cat((top_of_image, bottom_of_image_to_cat), dim=2)
         else:
             image = top_of_image
         return image
