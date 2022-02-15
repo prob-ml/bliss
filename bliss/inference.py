@@ -203,8 +203,8 @@ class ChunkedScene:
             )
             n_tiles_h = math.ceil((output_size[0] - 2 * self.bp) / self.slen)
             bgs = rearrange(bgs, "(b nh nw) c h w -> b nh nw c h w", b=1, nh=n_tiles_h)
-            bgs[:, :-1, :, :, -self.bp :, :] = 0.0
-            bgs[:, :, :-1, :, :, -self.bp :] = 0.0
+            bgs[:, :-1, :, :, -2*self.bp :, :] = 0.0
+            bgs[:, :, :-1, :, :, -2*self.bp :] = 0.0
             bg_rearranged = rearrange(bgs, "b nh nw c h w -> b (c h w) (nh nw)", b=1, c=1)
             bg_all = F.fold(
                 bg_rearranged, output_size=output_size, kernel_size=kernel_size, stride=self.slen
@@ -260,7 +260,7 @@ class ChunkedScene:
                 params["plocs"] = plocs
 
             for param_name in full_maps[0]:
-                if param_name not in {"locs", "ploc", "n_sources"}:
+                if param_name not in {"locs", "plocs", "n_sources"}:
                     tensors = torch.cat([full_map[param_name] for full_map in full_maps], dim=1)
                     if params.get(param_name, None) is not None:
                         params[param_name] = torch.cat((params[param_name], tensors), dim=1)
