@@ -98,7 +98,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
     # pick standard ranges for residuals
-    scene_size = true.shape[-1]
+    scene_size = max(true.shape[-2], true.shape[-1])
     vmin_res, vmax_res = res.min().item(), res.max().item()
 
     ax_true = axes[0]

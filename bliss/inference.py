@@ -95,10 +95,10 @@ def reconstruct_scene_at_coordinates(
     # Adjust locations based on padding
     # h_adj = h_padded - (h - bp)
     # w_adj = w_padded - (w - bp)
-    plocs = map_scene["plocs"]
-    plocs[..., 0] -= bp
-    plocs[..., 1] -= bp
-    map_scene["plocs"] = plocs
+    # plocs = map_scene["plocs"]
+    # plocs[..., 0] -= bp
+    # plocs[..., 1] -= bp
+    # map_scene["plocs"] = plocs
 
     return recon_at_coords, map_scene
 
@@ -139,7 +139,7 @@ class ChunkedScene:
             )
             self.size_dict["bottom"] = bottom_border.shape[2:]
             self.biases["bottom"] = (
-                torch.cartesian_prod(offsets_h, torch.tensor([n_chunks_w])) * self.slen
+                torch.cartesian_prod(torch.tensor([n_chunks_h]), offsets_w) * self.slen
             )
 
         if right_chunk_width > bp * 2:
@@ -149,7 +149,7 @@ class ChunkedScene:
             )
             self.size_dict["right"] = right_border.shape[2:]
             self.biases["right"] = (
-                torch.cartesian_prod(torch.tensor([n_chunks_h]), offsets_w) * self.slen
+                torch.cartesian_prod(offsets_h, torch.tensor([n_chunks_w])) * self.slen
             )
 
         if (bottom_chunk_height > bp * 2) and (right_chunk_width > bp * 2):
