@@ -62,7 +62,7 @@ def reconstruct(cfg):
         true = my_image[:, :, h:h_end, w:w_end]
         coadd_objects = get_objects_from_coadd(coadd_cat, h, w, h_end, w_end)
         recon, map_recon = reconstruct_scene_at_coordinates(
-            encoder, dec, my_image, (h, h_end), (w, w_end), device=device
+            encoder, dec, my_image, (h, h_end), (w, w_end), slen=cfg.reconstruct.slen, device=device
         )
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:

@@ -7,6 +7,7 @@ def test_reconstruct(model_setup, devices):
         "reconstruct.outdir": None,
         "reconstruct.real": False,
         "reconstruct.device": "cpu",
+        "reconstruct.slen": 80,
         "+reconstruct.scenes.sdss_recon1_test.h": 200 + 50,
         "+reconstruct.scenes.sdss_recon1_test.w": 1700 + 150,
         "+reconstruct.scenes.sdss_recon1_test.size": 100,
