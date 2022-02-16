@@ -49,11 +49,20 @@ def reconstruct(cfg):
         outdir = None
 
     for scene_name, scene_coords in cfg.reconstruct.scenes.items():
+        bp = encoder.border_padding
         h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
-        true = my_image[:, :, h : (h + scene_size), w : (w + scene_size)]
-        coadd_objects = get_objects_from_coadd(coadd_cat, h, w, scene_size)
+        if scene_size == "all":
+            h = bp
+            w = bp
+            h_end = ((my_image.shape[2] - 2 * bp) // 4) * 4 + bp
+            w_end = ((my_image.shape[3] - 2 * bp) // 4) * 4 + bp
+        else:
+            h_end = h + scene_size
+            w_end = w + scene_size
+        true = my_image[:, :, h:h_end, w:w_end]
+        coadd_objects = get_objects_from_coadd(coadd_cat, h, w, h_end, w_end)
         recon, map_recon = reconstruct_scene_at_coordinates(
-            encoder, dec, my_image, h, w, scene_size, device=device
+            encoder, dec, my_image, (h, h_end), (w, w_end), slen=cfg.reconstruct.slen, device=device
         )
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:
@@ -98,7 +107,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
     # pick standard ranges for residuals
-    scene_size = true.shape[-1]
+    scene_size = max(true.shape[-2], true.shape[-1])
     vmin_res, vmax_res = res.min().item(), res.max().item()
 
     ax_true = axes[0]
@@ -200,7 +209,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     return fig
 
 
-def get_objects_from_coadd(coadd_cat, h, w, scene_size):
+def get_objects_from_coadd(coadd_cat, h, w, h_end, w_end):
     locs_true_w = torch.from_numpy(np.array(coadd_cat["x"]).astype(float))
     locs_true_h = torch.from_numpy(np.array(coadd_cat["y"]).astype(float))
     locs_true = torch.stack((locs_true_h, locs_true_w), dim=1)
@@ -209,8 +218,8 @@ def get_objects_from_coadd(coadd_cat, h, w, scene_size):
     objects_in_scene = (
         (h < locs_true[:, 0])
         & (w < locs_true[:, 1])
-        & (h + scene_size > locs_true[:, 0])
-        & (w + scene_size > locs_true[:, 1])
+        & (h_end > locs_true[:, 0])
+        & (w_end > locs_true[:, 1])
     )
     locs_true = locs_true[objects_in_scene]
     galaxy_bools = torch.from_numpy(np.array(coadd_cat["galaxy_bool"]).astype(float))
