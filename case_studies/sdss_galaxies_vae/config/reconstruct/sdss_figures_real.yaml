@@ -13,3 +13,7 @@ scenes:
         h: 200
         w: 200
         size: 1200
+    sdss_recon3:
+        h: 24
+        w: 24
+        size: "all"

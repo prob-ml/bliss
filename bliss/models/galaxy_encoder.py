@@ -82,7 +82,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # remove background before encoding
-        ptile_background = self.image_decoder.get_background(self.slen)
+        ptile_background = self.image_decoder.get_background(self.slen, self.slen)
         centered_ptiles -= ptile_background.unsqueeze(0)
 
         # We can assume there is one galaxy per_tile and encode each tile independently.

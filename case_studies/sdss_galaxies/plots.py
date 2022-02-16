@@ -147,7 +147,11 @@ class DetectionClassificationFigures(BlissFigures):
         assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
         device = sleep_net.device
 
-        bp = 24
+        # load specific models that are needed.
+        image_encoder = sleep_net.image_encoder.to(device).eval()
+        galaxy_decoder = sleep_net.image_decoder.galaxy_tile_decoder.galaxy_decoder.eval()
+
+        bp = image_encoder.border_padding
         clen = 300
         h, w = scene.shape[-2], scene.shape[-1]
 
@@ -159,10 +163,6 @@ class DetectionClassificationFigures(BlissFigures):
         for my_id in ids:
             idx = np.where(coadd_params["objid"] == my_id)[0].item()
             coadd_params["galaxy_bools"][idx] = 0
-
-        # load specific models that are needed.
-        image_encoder = sleep_net.image_encoder.to(device).eval()
-        galaxy_decoder = sleep_net.image_decoder.galaxy_tile_decoder.galaxy_decoder.eval()
 
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
@@ -281,8 +281,6 @@ class SDSSReconstructionFigures(BlissFigures):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
         assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
         device = sleep_net.device
-
-        bp = 24
 
         image_encoder = sleep_net.image_encoder.to(device).eval()
         image_decoder = sleep_net.image_decoder.to(device).eval()

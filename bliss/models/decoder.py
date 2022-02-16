@@ -146,7 +146,7 @@ class ImageDecoder(pl.LightningModule):
         var_images = reconstruct_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
 
         # add background and noise
-        background = self.get_background(images.shape[-1])
+        background = self.get_background(images.shape[-2], images.shape[-1])
         images += background.unsqueeze(0)
         var_images += background.unsqueeze(0)
         if add_noise:
@@ -154,8 +154,8 @@ class ImageDecoder(pl.LightningModule):
 
         return images, var_images
 
-    def get_background(self, slen):
-        background_shape = (self.n_bands, slen, slen)
+    def get_background(self, hlen, wlen):
+        background_shape = (self.n_bands, hlen, wlen)
         background = torch.zeros(*background_shape, device=self.device)
         for i in range(self.n_bands):
             background[i] = self.background_values[i]
