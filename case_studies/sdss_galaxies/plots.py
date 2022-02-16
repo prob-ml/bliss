@@ -148,7 +148,7 @@ class DetectionClassificationFigures(BlissFigures):
         assert encoder.device == decoder.device
         device = encoder.device
 
-        bp = 24
+        bp = encoder.border_padding
         slen = 300  # chunk side-length
         h, w = scene.shape[-2], scene.shape[-1]
 
@@ -170,7 +170,13 @@ class DetectionClassificationFigures(BlissFigures):
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
         _, est_params = reconstruct_scene_at_coordinates(
-            encoder, decoder, scene_torch, bp, bp, scene_length, slen, bp, device=device
+            encoder,
+            decoder,
+            scene_torch,
+            (bp, bp + scene_length),
+            (bp, bp + scene_length),
+            slen,
+            device=device,
         )
 
         mag_bins = np.arange(18, 23, 0.25)  # skip 23
@@ -278,7 +284,7 @@ class SDSSReconstructionFigures(BlissFigures):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
         device = encoder.device
 
-        bp = 24
+        bp = encoder.border_padding
         data = {}
 
         for figname in self.fignames:
@@ -302,7 +308,7 @@ class SDSSReconstructionFigures(BlissFigures):
             with torch.no_grad():
 
                 recon_image, recon_map = reconstruct_scene_at_coordinates(
-                    encoder, decoder, chunk, bp, bp, hb, hb, bp, device=device
+                    encoder, decoder, chunk, (bp, bp + hb), (bp, bp + wb), slen=hb, device=device
                 )
 
             recon_image = recon_image.cpu().numpy().reshape(hb, wb)

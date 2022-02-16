@@ -56,7 +56,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["fluxes"],
                 add_noise=True,
             )
-            background = self.image_decoder.get_background(images.shape[-1])
+            background = self.image_decoder.get_background(images.shape[-2], images.shape[-1])
             batch.update(
                 {
                     "images": images,
