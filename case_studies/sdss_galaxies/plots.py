@@ -169,12 +169,13 @@ class DetectionClassificationFigures(BlissFigures):
 
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
+        lims = (bp, bp + scene_length)
         _, est_params = reconstruct_scene_at_coordinates(
             encoder,
             decoder,
             scene_torch,
-            (bp, bp + scene_length),
-            (bp, bp + scene_length),
+            lims,
+            lims,
             slen,
             device=device,
         )
@@ -306,9 +307,10 @@ class SDSSReconstructionFigures(BlissFigures):
             chunk_np = chunk.reshape(hb, wb).cpu().numpy()
 
             with torch.no_grad():
-
+                hlims = (bp, bp + hb)
+                wlims = (bp, bp + wb)
                 recon_image, recon_map = reconstruct_scene_at_coordinates(
-                    encoder, decoder, chunk, (bp, bp + hb), (bp, bp + wb), slen=hb, device=device
+                    encoder, decoder, chunk, hlims, wlims, slen=hb, device=device
                 )
 
             recon_image = recon_image.cpu().numpy().reshape(hb, wb)
