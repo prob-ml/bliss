@@ -59,7 +59,7 @@ class TestSourceEncoder:
 
             var_params = star_encoder.encode(image_ptiles)
             var_params2 = star_encoder.encode(image_ptiles[:, :-2, :-3])
-            assert torch.allclose(var_params[:, :-2, :-3], var_params2)
+            assert torch.allclose(var_params[:, :-2, :-3], var_params2, atol=1e-5)
             var_params_flat = var_params.reshape(-1, var_params.shape[-1])
             pred = star_encoder.encode_for_n_sources(var_params_flat, n_star_per_tile)
 
