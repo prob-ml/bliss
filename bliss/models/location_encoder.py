@@ -264,8 +264,7 @@ class LocationEncoder(nn.Module):
         """
         super().__init__()
         background_tensor = torch.tensor(background)
-        min_brightness = F.relu(background_tensor - detection_sigma * background_tensor.sqrt())
-        self.register_buffer("min_brightness", min_brightness, persistent=False)
+        self.register_buffer("background", background_tensor, persistent=False)
 
         self.max_detections = max_detections
         self.n_bands = n_bands
@@ -331,7 +330,7 @@ class LocationEncoder(nn.Module):
         # Forward to the layer that is shared by all n_sources.
         image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         log_img = torch.log(
-            F.relu(image_ptiles_flat - self.min_brightness.view(1, -1, 1, 1), inplace=True) + 1.0
+            F.relu(image_ptiles_flat - self.background.view(1, -1, 1, 1) + 100.0, inplace=True) + 1.0
         )
         var_params_conv = self.enc_conv(log_img)
         var_params_flat = self.enc_final(var_params_conv)
