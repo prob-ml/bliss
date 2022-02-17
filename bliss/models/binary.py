@@ -23,6 +23,7 @@ class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
         background: Tuple[float, ...],
+        detection_sigma: float = 5.0,
         n_bands: int = 1,
         tile_slen: int = 4,
         ptile_slen: int = 52,
@@ -52,7 +53,7 @@ class BinaryEncoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         background_tensor = torch.tensor(background)
-        min_brightness = background_tensor - 3 * background_tensor.sqrt()
+        min_brightness = F.relu(background_tensor - detection_sigma * background_tensor.sqrt())
         self.register_buffer("min_brightness", min_brightness, persistent=False)
         self.optimizer_params = optimizer_params
 

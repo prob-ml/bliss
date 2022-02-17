@@ -238,6 +238,7 @@ class LocationEncoder(nn.Module):
     def __init__(
         self,
         background: Tuple[float, ...],
+        detection_sigma: float = 5.0,
         max_detections: int = 1,
         n_bands: int = 1,
         tile_slen: int = 2,
@@ -263,7 +264,7 @@ class LocationEncoder(nn.Module):
         """
         super().__init__()
         background_tensor = torch.tensor(background)
-        min_brightness = background_tensor - 3 * background_tensor.sqrt()
+        min_brightness = F.relu(background_tensor - detection_sigma * background_tensor.sqrt())
         self.register_buffer("min_brightness", min_brightness, persistent=False)
 
         self.max_detections = max_detections
