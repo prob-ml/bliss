@@ -23,7 +23,6 @@ class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
         background: Tuple[float, ...],
-        detection_sigma: float = 6.0,
         n_bands: int = 1,
         tile_slen: int = 4,
         ptile_slen: int = 52,
@@ -104,7 +103,7 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward(self, image_ptiles, tile_locs):
+    def forward(self, image_ptiles, tile_locs, background: Tensor = None):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
@@ -118,9 +117,9 @@ class BinaryEncoder(pl.LightningModule):
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
-        centered_ptiles = torch.log(
-            F.relu(centered_ptiles - self.background.min_brightness.view(1, -1, 1, 1) + 100.0, inplace=True) + 1.0
-        )
+        if background is None:
+            background = self.background.view(1, -1, 1, 1)
+        centered_ptiles = torch.log1p(F.relu(centered_ptiles - background + 100.0, inplace=True))
         h = self.enc_conv(centered_ptiles)
         h2 = self.enc_final(h)
         z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)

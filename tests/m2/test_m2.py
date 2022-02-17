@@ -100,7 +100,9 @@ class TestStarSleepEncoderM2:
         background = reduce(test_image, "n c h w -> 1 c 1 1", "min")
 
         # get estimated parameters
-        estimate = get_map_estimate(trained_star_encoder_m2, test_image.to(device), background, slen)
+        estimate = get_map_estimate(
+            trained_star_encoder_m2, test_image.to(device), background, slen
+        )
 
         # check metrics if cuda is true
         if not devices.use_cuda:

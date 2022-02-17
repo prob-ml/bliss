@@ -238,7 +238,6 @@ class LocationEncoder(nn.Module):
     def __init__(
         self,
         background: Tuple[float, ...],
-        detection_sigma: float = 6.0,
         max_detections: int = 1,
         n_bands: int = 1,
         tile_slen: int = 2,
@@ -331,9 +330,7 @@ class LocationEncoder(nn.Module):
         image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         if background is None:
             background = self.background.view(1, -1, 1, 1)
-        log_img = torch.log1p(
-            F.relu(image_ptiles_flat - background + 100.0, inplace=True)
-        )
+        log_img = torch.log1p(F.relu(image_ptiles_flat - background + 100.0, inplace=True))
         var_params_conv = self.enc_conv(log_img)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(
