@@ -4,6 +4,7 @@ from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import nn
 from torch.nn import BCELoss
+from torch.nn.utils import weight_norm as wn
 from torch.optim import Adam
 
 from bliss.models.decoder import get_mgrid
@@ -67,15 +68,13 @@ class BinaryEncoder(pl.LightningModule):
         self.enc_conv = EncoderCNN(self.n_bands, channel, spatial_dropout)
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
-            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
-            nn.BatchNorm1d(hidden),
+            wn(nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden)),
             nn.ReLU(True),
             nn.Dropout(dropout),
-            nn.Linear(hidden, hidden),
-            nn.BatchNorm1d(hidden),
+            wn(nn.Linear(hidden, hidden)),
             nn.ReLU(True),
             nn.Dropout(dropout),
-            nn.Linear(hidden, 1),
+            wn(nn.Linear(hidden, 1)),
         )
 
         # grid for center cropped tiles

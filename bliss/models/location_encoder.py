@@ -5,6 +5,7 @@ from einops import rearrange, reduce, repeat
 from torch import Tensor, nn
 from torch.distributions import categorical
 from torch.nn import functional as F
+from torch.nn.utils import weight_norm as wn
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
@@ -286,15 +287,13 @@ class LocationEncoder(nn.Module):
         self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
-            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
-            nn.BatchNorm1d(hidden),
+            wn(nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden)),
             nn.ReLU(True),
             nn.Dropout(dropout),
-            nn.Linear(hidden, hidden),
-            nn.BatchNorm1d(hidden),
+            wn(nn.Linear(hidden, hidden)),
             nn.ReLU(True),
             nn.Dropout(dropout),
-            nn.Linear(hidden, self.dim_out_all),
+            wn(nn.Linear(hidden, self.dim_out_all)),
         )
         self.log_softmax = nn.LogSoftmax(dim=1)
 
@@ -639,8 +638,7 @@ class EncoderCNN(nn.Module):
 
     def _make_layer(self, n_bands, channel, dropout):
         layers = [
-            nn.Conv2d(n_bands, channel, 3, padding=1),
-            nn.BatchNorm2d(channel),
+            wn(nn.Conv2d(n_bands, channel, 3, padding=1)),
             nn.ReLU(True),
         ]
         in_channel = channel
@@ -661,8 +659,9 @@ class EncoderCNN(nn.Module):
 class ConvBlock(nn.Module):
     """A Convolution Layer.
 
-    This module is two stacks of Conv2D -> ReLU -> BatchNorm, with dropout
+    This module is two stacks of Conv2D -> ReLU, with dropout
     in the middle, and an option to downsample with a stride of 2.
+    Weight normalization is applied to each Conv2D layer.
 
     Parameters:
         in_channel: Number of input channels
@@ -678,28 +677,24 @@ class ConvBlock(nn.Module):
         stride = 1
         if self.downsample:
             stride = 2
-            self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
-            self.sc_bn = nn.BatchNorm2d(out_channel)
-        self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride)
-        self.bn1 = nn.BatchNorm2d(out_channel)
+            self.sc_conv = wn(nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride))
+        self.conv1 = wn(nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride))
         self.drop1 = nn.Dropout2d(dropout)
-        self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(out_channel)
+        self.conv2 = wn(nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1))
 
     def forward(self, x):
         """Runs convolutional block on inputs."""
         identity = x
 
         x = self.conv1(x)
-        x = F.relu(self.bn1(x))
+        x = F.relu(x)
 
         x = self.drop1(x)
 
         x = self.conv2(x)
-        x = self.bn2(x)
 
         if self.downsample:
-            identity = self.sc_bn(self.sc_conv(identity))
+            identity = self.sc_conv(identity)
 
         out = x + identity
         return F.relu(out)
