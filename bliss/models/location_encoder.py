@@ -238,7 +238,7 @@ class LocationEncoder(nn.Module):
     def __init__(
         self,
         background: Tuple[float, ...],
-        detection_sigma: float = 5.0,
+        detection_sigma: float = 6.0,
         max_detections: int = 1,
         n_bands: int = 1,
         tile_slen: int = 2,

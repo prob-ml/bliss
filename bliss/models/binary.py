@@ -23,7 +23,7 @@ class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
         background: Tuple[float, ...],
-        detection_sigma: float = 5.0,
+        detection_sigma: float = 6.0,
         n_bands: int = 1,
         tile_slen: int = 4,
         ptile_slen: int = 52,
