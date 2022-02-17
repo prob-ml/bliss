@@ -237,6 +237,7 @@ class LocationEncoder(nn.Module):
 
     def __init__(
         self,
+        background: Tuple[float, ...],
         max_detections: int = 1,
         n_bands: int = 1,
         tile_slen: int = 2,
@@ -249,6 +250,7 @@ class LocationEncoder(nn.Module):
         """Initializes LocationEncoder.
 
         Args:
+            background: Per-channel background in images
             max_detections: Number of maximum detections in a single tile.
             n_bands: number of bands
             tile_slen: dimension of full image, we assume its square for now
@@ -260,6 +262,10 @@ class LocationEncoder(nn.Module):
             hidden: TODO (document this)
         """
         super().__init__()
+        background_tensor = torch.tensor(background)
+        min_brightness = background_tensor - 3 * background_tensor.sqrt()
+        self.register_buffer("min_brightness", min_brightness, persistent=False)
+
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.tile_slen = tile_slen
@@ -323,7 +329,7 @@ class LocationEncoder(nn.Module):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
         image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        log_img = torch.log(image_ptiles_flat - image_ptiles_flat.min() + 1.0)
+        log_img = torch.log(F.relu(image_ptiles_flat - self.min_brightness.view(1, -1, 1, 1)) + 1.0)
         var_params_conv = self.enc_conv(log_img)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(

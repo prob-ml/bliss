@@ -1,9 +1,11 @@
+from typing import Tuple
+
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import nn
-from torch.nn import BCELoss
+from torch.nn import BCELoss, functional as F
 from torch.optim import Adam
 
 from bliss.models.decoder import get_mgrid
@@ -20,6 +22,7 @@ from bliss.reporting import plot_image_and_locs
 class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
+        background: Tuple[float, ...],
         n_bands: int = 1,
         tile_slen: int = 4,
         ptile_slen: int = 52,
@@ -36,6 +39,7 @@ class BinaryEncoder(pl.LightningModule):
         image is a star or a galaxy.
 
         Arguments:
+            background: Per-channel background in images
             n_bands: number of bands
             tile_slen: dimension (in pixels) of each tile.
             ptile_slen: dimension (in pixels) of the individual image padded tiles.
@@ -47,6 +51,9 @@ class BinaryEncoder(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
+        background_tensor = torch.tensor(background)
+        min_brightness = background_tensor - 3 * background_tensor.sqrt()
+        self.register_buffer("min_brightness", min_brightness, persistent=False)
         self.optimizer_params = optimizer_params
 
         self.max_sources = 1  # by construction.
@@ -112,7 +119,7 @@ class BinaryEncoder(pl.LightningModule):
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
-        log_img = torch.log(centered_ptiles - centered_ptiles.min() + 1.0)
+        log_img = torch.log(F.relu(centered_ptiles - self.min_brightness.view(1, -1, 1, 1)) + 1.0)
         h = self.enc_conv(log_img)
         h2 = self.enc_final(h)
         z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)

@@ -72,7 +72,7 @@ def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
     ptiles = get_images_in_tiles(images, image_encoder.tile_slen, image_encoder.ptile_slen)
     var_params = image_encoder.encode(ptiles)
     var_params2 = image_encoder.encode(ptiles[:, :25, :25])
-    assert torch.allclose(var_params[0,:25,:25], var_params2)
+    assert torch.allclose(var_params[0, :25, :25], var_params2, atol=1e-5)
     tile_map = image_encoder.max_a_post(var_params)
 
     return get_full_params_from_tiles(tile_map, image_encoder.tile_slen)

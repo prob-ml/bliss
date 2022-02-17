@@ -28,9 +28,12 @@ class TestSourceEncoder:
         ptile_slen = 10
         n_bands = 2
         tile_slen = 2
+        background = (10.0, 20.0)
+        background_tensor = torch.tensor(background).view(1, 1, 1, -1, 1, 1)
 
         # get encoder
         star_encoder = LocationEncoder(
+            background,
             channel=8,
             dropout=0,
             hidden=64,
@@ -46,7 +49,8 @@ class TestSourceEncoder:
             # simulate image padded tiles
             image_ptiles = (
                 torch.randn(batch_size, n_tiles_h, n_tiles_w, n_bands, ptile_slen, ptile_slen)
-                + 10.0
+                * background_tensor.sqrt()
+                + background_tensor
             ).to(device)
 
             n_star_per_tile = (
@@ -59,7 +63,7 @@ class TestSourceEncoder:
 
             var_params = star_encoder.encode(image_ptiles)
             var_params2 = star_encoder.encode(image_ptiles[:, :-2, :-3])
-            assert torch.allclose(var_params[:, :-2, :-3], var_params2)
+            assert torch.allclose(var_params[:, :-2, :-3], var_params2, atol=1e-5)
             var_params_flat = var_params.reshape(-1, var_params.shape[-1])
             pred = star_encoder.encode_for_n_sources(var_params_flat, n_star_per_tile)
 
@@ -152,10 +156,17 @@ class TestSourceEncoder:
         n_bands = 2
         tile_slen = 2
         n_samples = 5
+        background = (10.0, 20.0)
+        background_tensor = torch.tensor(background).view(1, -1, 1, 1)
 
-        images = torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(device)
+        images = (
+            torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(device)
+            * background_tensor.sqrt()
+            + background_tensor
+        )
 
         star_encoder = LocationEncoder(
+            background,
             channel=8,
             dropout=0,
             hidden=64,
