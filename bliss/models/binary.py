@@ -98,7 +98,7 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward(self, image_ptiles, tile_locs):
+    def forward(self, image_ptiles, tile_locs, image_min=None):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
@@ -109,8 +109,10 @@ class BinaryEncoder(pl.LightningModule):
         centered_ptiles = self.center_ptiles(image_ptiles_flat, tile_locs_flat)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
-        # forward to layer shared by all n_sources
-        log_img = torch.log(centered_ptiles - centered_ptiles.min() + 1.0)
+        if image_min is None:
+            assert self.training
+            image_min = centered_ptiles.min()
+        log_img = torch.log(centered_ptiles - image_min + 1.0)
         h = self.enc_conv(log_img)
         h2 = self.enc_final(h)
         z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
@@ -131,7 +133,8 @@ class BinaryEncoder(pl.LightningModule):
         locs = batch["locs"]
         batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
         ptiles = self.get_images_in_tiles(images)
-        galaxy_probs = self.forward(ptiles, locs).reshape(-1)
+        image_min = ptiles.min()
+        galaxy_probs = self.forward(ptiles, locs, image_min).reshape(-1)
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 

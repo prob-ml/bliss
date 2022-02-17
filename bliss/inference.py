@@ -86,6 +86,7 @@ class ChunkedScene:
         self.chunk_dict = {}
         self.size_dict = {}
         self.biases = {}
+        self.image_min = scene.min()
 
         n_chunks_h = (scene.shape[2] - (bp * 2)) // slen
         n_chunks_w = (scene.shape[3] - (bp * 2)) // slen
@@ -158,7 +159,9 @@ class ChunkedScene:
         bgs = []
         full_maps = []
         for chunk in tqdm(chunks):
-            recon, bg, full_map = reconstruct_img(encoder, decoder, chunk.unsqueeze(0).to(device))
+            recon, bg, full_map = reconstruct_img(
+                encoder, decoder, chunk.unsqueeze(0).to(device), self.image_min
+            )
             reconstructions.append(recon.cpu())
             bgs.append(bg.cpu())
             full_maps.append(cpu(full_map))
@@ -264,12 +267,12 @@ class ChunkedScene:
 
 
 def reconstruct_img(
-    encoder: Encoder, decoder: ImageDecoder, img: Tensor
+    encoder: Encoder, decoder: ImageDecoder, img: Tensor, image_min: float
 ) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
     img_ptiles = encoder.get_images_in_ptiles(img)
 
     with torch.no_grad():
-        tile_map = encoder.max_a_post(img_ptiles)
+        tile_map = encoder.max_a_post(img_ptiles, image_min)
         recon_image, _ = decoder.render_images(
             tile_map["n_sources"],
             tile_map["locs"],

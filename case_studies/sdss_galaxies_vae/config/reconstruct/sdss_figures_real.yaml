@@ -5,15 +5,24 @@ scenes:
         h: 200
         w: 1700
         size: 300
+        slen: 300
     sdss_recon1:
         h: 1150
         w: 1000
         size: 300
+        slen: 300
+    sdss_recon1_80:
+        h: 1150
+        w: 1000
+        size: 300
+        slen: 80
     sdss_recon2:
         h: 200
         w: 200
         size: 1200
+        slen: 300
     sdss_recon3:
         h: 24
         w: 24
         size: "all"
+        slen: 300

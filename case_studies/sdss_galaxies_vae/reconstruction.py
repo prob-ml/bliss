@@ -50,7 +50,12 @@ def reconstruct(cfg):
 
     for scene_name, scene_coords in cfg.reconstruct.scenes.items():
         bp = encoder.border_padding
-        h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
+        h, w, scene_size, slen = (
+            scene_coords["h"],
+            scene_coords["w"],
+            scene_coords["size"],
+            scene_coords["slen"],
+        )
         if scene_size == "all":
             h = bp
             w = bp
@@ -62,7 +67,7 @@ def reconstruct(cfg):
         true = my_image[:, :, h:h_end, w:w_end]
         coadd_objects = get_objects_from_coadd(coadd_cat, h, w, h_end, w_end)
         recon, map_recon = reconstruct_scene_at_coordinates(
-            encoder, dec, my_image, (h, h_end), (w, w_end), slen=cfg.reconstruct.slen, device=device
+            encoder, dec, my_image, (h, h_end), (w, w_end), slen=slen, device=device
         )
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:

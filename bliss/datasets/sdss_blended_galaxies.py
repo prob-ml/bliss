@@ -136,7 +136,8 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             out[k] = torch.cat([x[k] for x in tile_catalogs], dim=0)
         return out
 
-    def _prerender_chunks(self, image):
+    def _prerender_chunks(self, image: Tensor):
+        image_min = image.min()
         chunks = F.unfold(image, kernel_size=self.kernel_size, stride=self.stride)
         chunks = rearrange(
             chunks,
@@ -152,7 +153,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             for chunk in tqdm(chunks):
                 chunk_device = chunk.to(self.prerender_device)
                 image_ptiles = encoder.get_images_in_ptiles(chunk_device.unsqueeze(0))
-                tile_map = encoder.max_a_post(image_ptiles)
+                tile_map = encoder.max_a_post(image_ptiles, image_min)
                 if tile_map["galaxy_bools"].sum() > 0:
                     catalogs.append(cpu(tile_map))
                     chunks_with_galaxies.append(chunk.cpu())
