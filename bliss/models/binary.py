@@ -52,9 +52,7 @@ class BinaryEncoder(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
-        background_tensor = torch.tensor(background)
-        min_brightness = F.relu(background_tensor - detection_sigma * background_tensor.sqrt())
-        self.register_buffer("min_brightness", min_brightness, persistent=False)
+        self.register_buffer("background", torch.tensor(background), persistent=False)
         self.optimizer_params = optimizer_params
 
         self.max_sources = 1  # by construction.
@@ -121,7 +119,7 @@ class BinaryEncoder(pl.LightningModule):
 
         # forward to layer shared by all n_sources
         centered_ptiles = torch.log(
-            F.relu(centered_ptiles - self.min_brightness.view(1, -1, 1, 1), inplace=True) + 1.0
+            F.relu(centered_ptiles - self.background.min_brightness.view(1, -1, 1, 1) + 100.0, inplace=True) + 1.0
         )
         h = self.enc_conv(centered_ptiles)
         h2 = self.enc_final(h)
