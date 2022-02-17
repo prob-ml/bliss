@@ -330,7 +330,9 @@ class LocationEncoder(nn.Module):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
         image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        log_img = torch.log(F.relu(image_ptiles_flat - self.min_brightness.view(1, -1, 1, 1)) + 1.0)
+        log_img = torch.log(
+            F.relu(image_ptiles_flat - self.min_brightness.view(1, -1, 1, 1), inplace=True) + 1.0
+        )
         var_params_conv = self.enc_conv(log_img)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(

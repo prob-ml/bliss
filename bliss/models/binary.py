@@ -120,8 +120,10 @@ class BinaryEncoder(pl.LightningModule):
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
-        log_img = torch.log(F.relu(centered_ptiles - self.min_brightness.view(1, -1, 1, 1)) + 1.0)
-        h = self.enc_conv(log_img)
+        centered_ptiles = torch.log(
+            F.relu(centered_ptiles - self.min_brightness, inplace=True) + 1.0
+        )
+        h = self.enc_conv(centered_ptiles)
         h2 = self.enc_final(h)
         z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
         return rearrange(
