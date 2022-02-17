@@ -53,7 +53,7 @@ class BinaryEncoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         background_tensor = torch.tensor(background)
-        min_brightness = F.relu(background_tensor - detection_sigma * background_tensor.sqrt())
+        min_brightness = F.relu(background_tensor - detection_sigma * background_tensor.sqrt()).min()
         self.register_buffer("min_brightness", min_brightness, persistent=False)
         self.optimizer_params = optimizer_params
 
