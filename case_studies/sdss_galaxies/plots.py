@@ -316,6 +316,8 @@ class SDSSReconstructionFigures(BlissFigures):
                     tile_map["fluxes"],
                     add_noise=False,
                 )
+                # FIXME Need to use actual background value
+                recon_image += 865.0
 
             recon_image = recon_image.cpu().numpy().reshape(hb, wb)
 

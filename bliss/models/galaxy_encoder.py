@@ -70,21 +70,18 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
-    def encode(self, image_ptiles, tile_locs):
+    def encode(self, image_ptiles, bg_ptiles, tile_locs):
         """Runs galaxy encoder on input image ptiles."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
 
         # in each padded tile we need to center the corresponding galaxy
-        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        image_ptiles_flat = rearrange(
+            image_ptiles - bg_ptiles, "b nth ntw c h w -> (b nth ntw) c h w"
+        )
         tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
         centered_ptiles = self.center_ptiles(image_ptiles_flat, tile_locs_flat)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-
-        # remove background before encoding
-        ptile_background = self.image_decoder.get_background(self.slen, self.slen)
-        centered_ptiles -= ptile_background.unsqueeze(0)
-
         # We can assume there is one galaxy per_tile and encode each tile independently.
         z_flat, pq_z_flat = self.enc(centered_ptiles)
         z = rearrange(
@@ -108,8 +105,8 @@ class GalaxyEncoder(pl.LightningModule):
             pq_z = pq_z_flat
         return z, pq_z
 
-    def sample(self, image_ptiles, tile_locs):
-        z, _ = self.encode(image_ptiles, tile_locs)
+    def sample(self, image_ptiles, bg_ptiles, tile_locs):
+        z, _ = self.encode(image_ptiles, bg_ptiles, tile_locs)
         return z
 
     def training_step(self, batch, batch_idx):
@@ -128,9 +125,11 @@ class GalaxyEncoder(pl.LightningModule):
 
     def _get_loss(self, batch):
         images = batch["images"]
+        background = batch["background"]
         tile_locs = batch["locs"]
         ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        z, pq_z = self.encode(ptiles, tile_locs)
+        bg_ptiles = get_images_in_tiles(background, self.tile_slen, self.ptile_slen)
+        z, pq_z = self.encode(ptiles, bg_ptiles, tile_locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
         recon_mean = self.image_decoder.render_images(
@@ -141,6 +140,7 @@ class GalaxyEncoder(pl.LightningModule):
             batch["fluxes"],
             add_noise=False,
         )
+        recon_mean += background
 
         recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         if self.crop_loss_at_border:
@@ -180,11 +180,13 @@ class GalaxyEncoder(pl.LightningModule):
 
         # extract non-params entries so that 'get_full_params' to works.
         images = batch["images"]
+        background = batch["background"]
         tile_locs = batch["locs"]
         slen = int(batch["slen"].unique().item())
         # obtain map estimates
         ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
-        z, _ = self.encode(ptiles, tile_locs)
+        bg_ptiles = get_images_in_tiles(background, self.tile_slen, self.ptile_slen)
+        z, _ = self.encode(ptiles, bg_ptiles, tile_locs)
 
         tile_est = {
             "n_sources": batch["n_sources"],
@@ -207,6 +209,7 @@ class GalaxyEncoder(pl.LightningModule):
             tile_est["fluxes"],
             add_noise=False,
         )
+        recon_images += background
         residuals = (images - recon_images) / torch.sqrt(recon_images)
 
         # draw worst `n_samples` examples as measured by absolute avg. residual error.
