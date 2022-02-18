@@ -162,6 +162,7 @@ class GalaxyEncoder(pl.LightningModule):
         samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
         keys = [
             "images",
+            "background",
             "locs",
             "galaxy_bools",
             "star_bools",
