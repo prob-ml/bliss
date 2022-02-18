@@ -60,7 +60,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["fluxes"],
                 add_noise=False,
             )
-            background = self.get_background(images.shape[-2], images.shape[-1])
+            background = self.get_background(*images.shape)
             images += background
             images = self._apply_noise(images)
             batch.update(
@@ -73,8 +73,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         return batch
 
-    def get_background(self, hlen, wlen):
-        return self.background.reshape(1, -1, 1, 1).expand(1, -1, hlen, wlen)
+    def get_background(self, batch_size, c, hlen, wlen):
+        return self.background.reshape(1, c, 1, 1).expand(batch_size, -1, hlen, wlen)
 
     @staticmethod
     def _apply_noise(images_mean):
