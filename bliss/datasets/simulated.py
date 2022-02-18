@@ -1,3 +1,4 @@
+from typing import Tuple
 import warnings
 
 import pytorch_lightning as pl
@@ -19,6 +20,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self,
         prior: ImagePrior,
         decoder: ImageDecoder,
+        background: Tuple[float, ...],
         n_batches=10,
         batch_size=32,
         generate_device="cpu",
@@ -33,6 +35,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_decoder = decoder.to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
+        self.background = torch.tensor(background, device=generate_device)
 
         # check sleep training will work.
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
@@ -57,10 +60,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["fluxes"],
                 add_noise=False,
             )
-            background = self.image_decoder.get_background(images.shape[-2], images.shape[-1])
-            images += background.unsqueeze(0)
+            background = self.get_background(images.shape[-2], images.shape[-1])
+            images += background
             images = self._apply_noise(images)
-            background = rearrange(background, "c h w -> 1 c h w")
             batch.update(
                 {
                     "images": images,
@@ -70,6 +72,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             )
 
         return batch
+
+    def get_background(self, hlen, wlen):
+        return self.background.reshape(1, -1, 1, 1).expand(1, -1, hlen, wlen)
 
     @staticmethod
     def _apply_noise(images_mean):

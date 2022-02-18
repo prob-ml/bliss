@@ -23,7 +23,6 @@ class ImageDecoder(pl.LightningModule):
         tile_slen: Side-length of each tile.
         ptile_slen: Padded side-length of each tile (for reconstructing image).
         border_padding: Size of border around the final image where sources will not be present.
-        background_values: Magnitude of the background (per-band)
         star_tile_decoder: Module which renders stars on individual tiles.
         galaxy_tile_decoder: Module which renders galaxies on individual tiles.
     """
@@ -39,7 +38,6 @@ class ImageDecoder(pl.LightningModule):
         galaxy_ae_ckpt: str = None,
         psf_params_file: str = None,
         psf_slen: int = 25,
-        background_values: Tuple[float, ...] = (686.0,),
         sdss_bands: Tuple[int, ...] = (2,),
     ):
         """Initializes ImageDecoder.
@@ -54,7 +52,6 @@ class ImageDecoder(pl.LightningModule):
             galaxy_ae_ckpt: Path where state_dict of trained galaxy autoencoder is located.
             psf_params_file: Path where point-spread-function (PSF) data is located.
             psf_slen: Side-length of reconstruced star image from PSF.
-            background_values: Magnitude of the background (per-band)
             sdss_bands: Bands to retrieve from PSF.
         """
         super().__init__()
@@ -66,9 +63,6 @@ class ImageDecoder(pl.LightningModule):
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         self.border_padding = self._validate_border_padding(border_padding)
-
-        assert len(background_values) == n_bands
-        self.background_values = background_values
 
         self.star_tile_decoder = StarTileDecoder(
             tile_slen,
@@ -139,14 +133,6 @@ class ImageDecoder(pl.LightningModule):
 
         image_ptiles, _ = self._render_ptiles(n_sources, locs, galaxy_bools, galaxy_params, fluxes)
         return reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
-
-    def get_background(self, hlen, wlen):
-        background_shape = (self.n_bands, hlen, wlen)
-        background = torch.zeros(*background_shape, device=self.device)
-        for i in range(self.n_bands):
-            background[i] = self.background_values[i]
-
-        return background
 
     def forward(self):
         """Decodes latent representation into an image."""
