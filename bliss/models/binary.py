@@ -3,7 +3,7 @@ import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import nn, Tensor
-from torch.nn import BCELoss, functional as F
+from torch.nn import BCELoss
 from torch.optim import Adam
 
 from bliss.models.decoder import get_mgrid

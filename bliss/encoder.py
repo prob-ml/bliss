@@ -78,10 +78,10 @@ class Encoder(nn.Module):
         over the entire catalog jointly, but this is not tractable.
 
         Args:
-            image_ptiles: A tensor of padded image tiles,
-                with shape `n_ptiles * n_bands * h * w`.
-            bg_ptiles: A tensor of padded background tiles,
-                with shape `n_ptiles * n_bands * h * w`.
+            image: An astronomical image,
+                with shape `n * n_bands * h * w`.
+            background: Background associated with image,
+                with shape `n * n_bands * h * w`.
 
         Returns:
             A dictionary of the maximum a posteriori
