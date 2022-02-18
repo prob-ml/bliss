@@ -2,6 +2,7 @@ import warnings
 
 import pytorch_lightning as pl
 import torch
+from einops import rearrange
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from bliss.models.decoder import ImageDecoder
@@ -57,6 +58,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 add_noise=True,
             )
             background = self.image_decoder.get_background(images.shape[-2], images.shape[-1])
+            background = rearrange(background, "c h w -> 1 c h w")
             batch.update(
                 {
                     "images": images,

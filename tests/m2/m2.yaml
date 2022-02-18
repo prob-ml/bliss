@@ -46,7 +46,6 @@ models:
       - 3
   encoder:
     _target_: bliss.models.location_encoder.LocationEncoder
-    background: ${models.decoder.background_values}
     n_bands: ${models.decoder.n_bands}
     tile_slen: ${models.decoder.tile_slen}
     ptile_slen: 8

@@ -156,11 +156,15 @@ class SleepPhase(pl.LightningModule):
 
     def tile_map_estimate(self, batch):
         images = batch["images"]
+        background = batch["background"]
 
         image_ptiles = get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
-        var_params = self.image_encoder.encode(image_ptiles)
+        background_ptiles = get_images_in_tiles(
+            background, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
+        )
+        var_params = self.image_encoder.encode(image_ptiles, background_ptiles)
         tile_map = self.image_encoder.max_a_post(var_params)
         tile_map["galaxy_params"] = batch["galaxy_params"]
 
@@ -211,12 +215,14 @@ class SleepPhase(pl.LightningModule):
         """
         (
             images,
+            background,
             true_tile_locs,
             true_tile_log_fluxes,
             true_tile_galaxy_bools,
             true_tile_n_sources,
         ) = (
             batch["images"],
+            batch["background"],
             batch["locs"],
             batch["log_fluxes"],
             batch["galaxy_bools"],
@@ -249,7 +255,10 @@ class SleepPhase(pl.LightningModule):
         image_ptiles = get_images_in_tiles(
             images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
-        var_params = self.image_encoder.encode(image_ptiles)
+        background_ptiles = get_images_in_tiles(
+            background, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
+        )
+        var_params = self.image_encoder.encode(image_ptiles, background_ptiles)
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
         pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
 

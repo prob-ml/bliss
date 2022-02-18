@@ -237,7 +237,6 @@ class LocationEncoder(nn.Module):
 
     def __init__(
         self,
-        background: Tuple[float, ...],
         max_detections: int = 1,
         n_bands: int = 1,
         tile_slen: int = 2,
@@ -250,7 +249,6 @@ class LocationEncoder(nn.Module):
         """Initializes LocationEncoder.
 
         Args:
-            background: Per-channel background in images
             max_detections: Number of maximum detections in a single tile.
             n_bands: number of bands
             tile_slen: dimension of full image, we assume its square for now
@@ -262,8 +260,6 @@ class LocationEncoder(nn.Module):
             hidden: TODO (document this)
         """
         super().__init__()
-        background_tensor = torch.tensor(background)
-        self.register_buffer("background", background_tensor, persistent=False)
 
         self.max_detections = max_detections
         self.n_bands = n_bands
@@ -312,7 +308,7 @@ class LocationEncoder(nn.Module):
     def forward(self, image_ptiles, tile_n_sources):
         raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
 
-    def encode(self, image_ptiles: Tensor, background: Tensor = None) -> Tensor:
+    def encode(self, image_ptiles: Tensor, background: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
 
         Args:
@@ -327,10 +323,8 @@ class LocationEncoder(nn.Module):
         """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        if background is None:
-            background = self.background.view(1, -1, 1, 1)
-        log_img = torch.log1p(F.relu(image_ptiles_flat - background + 100.0, inplace=True))
+        log_img = torch.log1p(F.relu(image_ptiles - background + 100.0, inplace=True))
+        log_img = rearrange(log_img, "b nth ntw c h w -> (b nth ntw) c h w")
         var_params_conv = self.enc_conv(log_img)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(

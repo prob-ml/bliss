@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
@@ -22,7 +20,6 @@ from bliss.reporting import plot_image_and_locs
 class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
-        background: Tuple[float, ...],
         n_bands: int = 1,
         tile_slen: int = 4,
         ptile_slen: int = 52,
@@ -39,7 +36,6 @@ class BinaryEncoder(pl.LightningModule):
         image is a star or a galaxy.
 
         Arguments:
-            background: Per-channel background in images
             n_bands: number of bands
             tile_slen: dimension (in pixels) of each tile.
             ptile_slen: dimension (in pixels) of the individual image padded tiles.
@@ -51,7 +47,6 @@ class BinaryEncoder(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
-        self.register_buffer("background", torch.tensor(background), persistent=False)
         self.optimizer_params = optimizer_params
 
         self.max_sources = 1  # by construction.
@@ -103,7 +98,7 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward(self, image_ptiles, tile_locs, background: Tensor = None):
+    def forward(self, image_ptiles: Tensor, background: Tensor, tile_locs: Tensor):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
@@ -136,11 +131,13 @@ class BinaryEncoder(pl.LightningModule):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
 
         images = batch["images"]
+        background = batch["background"]
         galaxy_bools = batch["galaxy_bools"].reshape(-1)
         locs = batch["locs"]
         batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
         ptiles = self.get_images_in_tiles(images)
-        galaxy_probs = self.forward(ptiles, locs).reshape(-1)
+        bg_ptiles = self.get_images_in_tiles(background)
+        galaxy_probs = self.forward(ptiles, bg_ptiles, locs).reshape(-1)
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 
