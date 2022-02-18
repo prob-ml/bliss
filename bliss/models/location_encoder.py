@@ -7,7 +7,7 @@ from torch.distributions import categorical
 from torch.nn import functional as F
 
 
-def get_images_in_tiles(images, tile_slen, ptile_slen):
+def get_images_in_tiles(images, tile_slen, ptile_slen, make_contiguous=True):
     """Divides a batch of full images into padded tiles.
 
     This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.
@@ -26,7 +26,7 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     n_tiles_h, n_tiles_w = get_n_tiles_hw(images.shape[2], images.shape[3], window, tile_slen)
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    return rearrange(
+    ptiles = rearrange(
         tiles,
         "b (c h w) (nth ntw) -> b nth ntw c h w",
         nth=n_tiles_h,
@@ -35,6 +35,9 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
         h=window,
         w=window,
     )
+    if make_contiguous:
+        ptiles = ptiles.contiguous()
+    return ptiles
 
 
 def get_n_tiles_hw(h, w, window, tile_slen):
