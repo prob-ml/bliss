@@ -16,6 +16,7 @@ def get_images_in_tiles(images, tile_slen, ptile_slen, make_contiguous=True):
         images: Tensor of images with size (batchsize x n_bands x slen x slen)
         tile_slen: Side length of tile
         ptile_slen: Side length of padded tile
+        make_contiguous: Make the output a continuous tensor. Defaults to True.
 
     Returns:
         A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_weight x tile_width image
