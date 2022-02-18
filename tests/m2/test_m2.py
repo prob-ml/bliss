@@ -8,6 +8,7 @@ from einops import reduce
 from bliss.models.location_encoder import (
     get_full_params_from_tiles,
     get_images_in_tiles,
+    subtract_bg_and_log_transform,
 )
 
 
@@ -69,9 +70,12 @@ def get_map_estimate(image_encoder, images, background, slen: int, wlen: int = N
     assert border1 == image_encoder.border_padding, "incompatible border"
 
     # obtained estimates per tile, then on full image.
-    ptiles = get_images_in_tiles(images, image_encoder.tile_slen, image_encoder.ptile_slen)
-    var_params = image_encoder.encode(ptiles, background)
-    var_params2 = image_encoder.encode(ptiles[:, :25, :25], background)
+    log_images = subtract_bg_and_log_transform(images, background)
+    log_image_ptiles = get_images_in_tiles(
+        log_images, image_encoder.tile_slen, image_encoder.ptile_slen
+    )
+    var_params = image_encoder.encode(log_image_ptiles)
+    var_params2 = image_encoder.encode(log_image_ptiles[:, :25, :25])
     assert torch.allclose(var_params[0, :25, :25], var_params2, atol=1e-5)
     tile_map = image_encoder.max_a_post(var_params)
 

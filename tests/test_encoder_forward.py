@@ -5,6 +5,7 @@ from bliss.models.location_encoder import (
     LocationEncoder,
     get_images_in_tiles,
     get_is_on_from_n_sources,
+    subtract_bg_and_log_transform,
 )
 
 
@@ -61,10 +62,12 @@ class TestSourceEncoder:
                 .to(device)
             )
 
-            var_params = star_encoder.encode(image_ptiles, background_tensor.view(1, -1, 1, 1))
-            var_params2 = star_encoder.encode(
-                image_ptiles[:, :-2, :-3], background_tensor.view(1, -1, 1, 1)
+            log_image_ptiles = subtract_bg_and_log_transform(
+                image_ptiles, background_tensor.view(1, -1, 1, 1)
             )
+
+            var_params = star_encoder.encode(log_image_ptiles)
+            var_params2 = star_encoder.encode(log_image_ptiles[:, :-2, :-3])
             assert torch.allclose(var_params[:, :-2, :-3], var_params2, atol=1e-5)
             var_params_flat = var_params.reshape(-1, var_params.shape[-1])
             pred = star_encoder.encode_for_n_sources(var_params_flat, n_star_per_tile)
@@ -94,7 +97,7 @@ class TestSourceEncoder:
 
             # we check the variational parameters against the hidden parameters
             # one by one
-            h_out = star_encoder.encode(image_ptiles, background_tensor.view(1, -1, 1, 1))
+            h_out = star_encoder.encode(log_image_ptiles)
             h_out = h_out.reshape(-1, h_out.shape[-1])
 
             # get index matrices
@@ -176,6 +179,7 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
         ).to(device)
-        image_ptiles = get_images_in_tiles(images, tile_slen, ptile_slen)
-        var_params = star_encoder.encode(image_ptiles, background_tensor)
+        images_sans_bg = subtract_bg_and_log_transform(images, background_tensor)
+        log_image_ptiles = get_images_in_tiles(images_sans_bg, tile_slen, ptile_slen)
+        var_params = star_encoder.encode(log_image_ptiles)
         star_encoder.sample(var_params, n_samples)
