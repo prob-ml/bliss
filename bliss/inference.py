@@ -262,11 +262,9 @@ class ChunkedScene:
 def reconstruct_img(
     encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor
 ) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
-    img_ptiles = encoder.get_images_in_ptiles(img)
-    bg_ptiles = encoder.get_images_in_ptiles(bg)
 
     with torch.no_grad():
-        tile_map = encoder.max_a_post(img_ptiles, bg_ptiles)
+        tile_map = encoder.max_a_post(img, bg)
         recon_image = decoder.render_images(
             tile_map["n_sources"],
             tile_map["locs"],

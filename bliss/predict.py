@@ -15,6 +15,7 @@ from bliss.models.location_encoder import (
     get_images_in_tiles,
     get_is_on_from_n_sources,
     get_n_tiles_hw,
+    subtract_bg_and_log_transform,
 )
 
 
@@ -53,10 +54,11 @@ def predict_on_image(
     assert image_encoder.max_detections == 1
 
     # get padded tiles.
-    ptiles = get_images_in_tiles(image, image_encoder.tile_slen, image_encoder.ptile_slen)
-    background = torch.tensor(background, device=ptiles.device).reshape(1, -1, 1, 1)
+    background = torch.tensor(background, device=image.device).reshape(1, -1, 1, 1)
+    log_image = subtract_bg_and_log_transform(image, background)
+    log_ptiles = get_images_in_tiles(log_image, image_encoder.tile_slen, image_encoder.ptile_slen)
     # get MAP estimates and variational parameters from image_encoder
-    var_params = image_encoder.encode(ptiles, background)
+    var_params = image_encoder.encode(log_ptiles)
     var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
     tile_n_sources = image_encoder.tile_map_n_sources(var_params_flat)
     tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
@@ -70,12 +72,16 @@ def predict_on_image(
     assert image.shape[1] == binary_encoder.n_bands
 
     galaxy_probs = (
-        binary_encoder(ptiles, background, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
+        binary_encoder(log_ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
     )
     galaxy_bools = (galaxy_probs > 0.5).float() * tile_is_on_array
 
-    galaxy_probs = rearrange(galaxy_probs, "b (nth ntw) s 1 -> b nth ntw s 1", nth=ptiles.shape[1])
-    galaxy_bools = rearrange(galaxy_bools, "b (nth ntw) s 1 -> b nth ntw s 1", nth=ptiles.shape[1])
+    galaxy_probs = rearrange(
+        galaxy_probs, "b (nth ntw) s 1 -> b nth ntw s 1", nth=log_ptiles.shape[1]
+    )
+    galaxy_bools = rearrange(
+        galaxy_bools, "b (nth ntw) s 1 -> b nth ntw s 1", nth=log_ptiles.shape[1]
+    )
     star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)
     var_params_n_sources["galaxy_bools"] = galaxy_bools
     var_params_n_sources["star_bools"] = star_bools
@@ -90,12 +96,15 @@ def predict_on_image(
     assert image_encoder.border_padding == galaxy_encoder.border_padding
     assert image_encoder.tile_slen == galaxy_encoder.tile_slen
 
-    galaxy_param_mean, _ = galaxy_encoder.encode(ptiles, background, tile_map["locs"])
+    galaxy_ptiles = get_images_in_tiles(
+        image - background, image_encoder.tile_slen, image_encoder.ptile_slen
+    )
+    galaxy_param_mean, _ = galaxy_encoder.encode(galaxy_ptiles, tile_map["locs"])
     latent_dim = galaxy_param_mean.shape[-1]
     galaxy_param_mean = galaxy_param_mean.reshape(1, -1, 1, latent_dim)
     galaxy_param_mean *= tile_is_on_array * galaxy_bools.reshape(1, -1, 1, 1)
     galaxy_param_mean = rearrange(
-        galaxy_param_mean, "b (nth ntw) s d -> b nth ntw s d", nth=ptiles.shape[1]
+        galaxy_param_mean, "b (nth ntw) s d -> b nth ntw s d", nth=log_ptiles.shape[1]
     )
     var_params_n_sources["galaxy_param_mean"] = galaxy_param_mean
     tile_map["galaxy_params"] = galaxy_param_mean
