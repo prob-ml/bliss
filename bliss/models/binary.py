@@ -87,11 +87,13 @@ class BinaryEncoder(pl.LightningModule):
         """Divide a batch of full images into padded tiles similar to nn.conv2d."""
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
-    def center_ptiles(self, image_ptiles, tile_locs):
+    def flatten_and_center_ptiles(self, log_image_ptiles, tile_locs):
         """Return padded tiles centered on each corresponding source."""
+        log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
         return center_ptiles(
-            image_ptiles,
-            tile_locs,
+            log_image_ptiles_flat,
+            tile_locs_flat,
             self.tile_slen,
             self.ptile_slen,
             self.border_padding,
@@ -105,11 +107,7 @@ class BinaryEncoder(pl.LightningModule):
         batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
 
         # in each padded tile we need to center the corresponding galaxy/star
-        log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
-        centered_ptiles = self.center_ptiles(log_image_ptiles_flat, tile_locs_flat)
-        del log_image_ptiles_flat
-        del tile_locs_flat
+        centered_ptiles = self.flatten_and_center_ptiles(log_image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
