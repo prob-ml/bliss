@@ -23,6 +23,7 @@ def predict_on_image(
     image_encoder: LocationEncoder,
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
+    background=(865.0,),
 ):
     """This function takes in a single image and outputs the prediction from trained models.
 
@@ -52,9 +53,9 @@ def predict_on_image(
 
     # get padded tiles.
     ptiles = get_images_in_tiles(image, image_encoder.tile_slen, image_encoder.ptile_slen)
-
+    background = torch.tensor(background, device=ptiles.device).reshape(1, -1, 1, 1)
     # get MAP estimates and variational parameters from image_encoder
-    var_params = image_encoder.encode(ptiles)
+    var_params = image_encoder.encode(ptiles, background)
     var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
     tile_n_sources = image_encoder.tile_map_n_sources(var_params_flat)
     tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, 1).reshape(1, -1, 1, 1)
@@ -67,7 +68,9 @@ def predict_on_image(
     assert not binary_encoder.training
     assert image.shape[1] == binary_encoder.n_bands
 
-    galaxy_probs = binary_encoder(ptiles, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
+    galaxy_probs = (
+        binary_encoder(ptiles, background, tile_map["locs"]).reshape(1, -1, 1, 1) * tile_is_on_array
+    )
     galaxy_bools = (galaxy_probs > 0.5).float() * tile_is_on_array
 
     galaxy_probs = rearrange(galaxy_probs, "b (nth ntw) s 1 -> b nth ntw s 1", nth=ptiles.shape[1])
