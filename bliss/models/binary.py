@@ -98,13 +98,13 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward(self, image_ptiles: Tensor, background: Tensor, tile_locs: Tensor):
+    def forward(self, image_ptiles: Tensor, bg_ptiles: Tensor, tile_locs: Tensor):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
 
         # in each padded tile we need to center the corresponding galaxy/star
-        image_ptiles = torch.log1p(F.relu(image_ptiles - background + 100.0, inplace=True))
+        image_ptiles = torch.log1p(F.relu(image_ptiles - bg_ptiles + 100.0, inplace=True))
         image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
         centered_ptiles = self.center_ptiles(image_ptiles_flat, tile_locs_flat)
@@ -113,8 +113,6 @@ class BinaryEncoder(pl.LightningModule):
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
-        if background is None:
-            background = self.background.view(1, -1, 1, 1)
         h = self.enc_conv(centered_ptiles)
         h2 = self.enc_final(h)
         z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)

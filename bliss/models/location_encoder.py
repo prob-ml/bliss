@@ -308,7 +308,7 @@ class LocationEncoder(nn.Module):
     def forward(self, image_ptiles, tile_n_sources):
         raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
 
-    def encode(self, image_ptiles: Tensor, background: Tensor) -> Tensor:
+    def encode(self, image_ptiles: Tensor, bg_ptiles: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
 
         Args:
@@ -323,7 +323,7 @@ class LocationEncoder(nn.Module):
         """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        log_img = torch.log1p(F.relu(image_ptiles - background + 100.0, inplace=True))
+        log_img = torch.log1p(F.relu(image_ptiles - bg_ptiles + 100.0, inplace=True))
         log_img = rearrange(log_img, "b nth ntw c h w -> (b nth ntw) c h w")
         var_params_conv = self.enc_conv(log_img)
         var_params_flat = self.enc_final(var_params_conv)
