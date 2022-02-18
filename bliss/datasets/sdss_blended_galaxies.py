@@ -180,14 +180,13 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
 def make_image_into_chunks(image, kernel_size, stride):
     chunks = F.unfold(image, kernel_size=kernel_size, stride=stride)
-    chunks = rearrange(
+    return rearrange(
         chunks,
         "b (c h w) n -> (b n) c h w",
         c=image.shape[1],
         h=kernel_size,
         w=kernel_size,
     )
-    return chunks
 
 
 def cpu(x: Dict[str, Tensor]):

@@ -314,6 +314,8 @@ class LocationEncoder(nn.Module):
         Args:
             image_ptiles: A tensor of padded image tiles,
                 with shape `b * n_tiles_h * n_tiles_w * n_bands * h * w`.
+            bg_ptiles: A tensor of padded background tiles,
+                with shape `b * n_tiles_h * n_tiles_w * n_bands * h * w`.
 
         Returns:
             A tensor of variational parameters in matrix form per-tile

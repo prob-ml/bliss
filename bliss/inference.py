@@ -1,4 +1,3 @@
-import math
 from typing import Dict, Tuple
 
 import torch
@@ -175,18 +174,15 @@ class ChunkedScene:
 
     def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
         reconstructions = []
-        # bgs = []
         full_maps = []
         for chunk, bg in tqdm(zip(chunks, bgs)):
             recon, full_map = reconstruct_img(
                 encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
             )
             reconstructions.append(recon.cpu())
-            # bgs.append(bg.cpu())
             full_maps.append(cpu(full_map))
         return {
             "reconstructions": torch.cat(reconstructions, dim=0),
-            # "bgs": torch.cat(bgs, dim=0),
             "full_maps": full_maps,
         }
 

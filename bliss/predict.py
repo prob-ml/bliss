@@ -36,6 +36,7 @@ def predict_on_image(
         image_encoder: Trained ImageEncoder model. Assumed to be in correct device already.
         galaxy_encoder: Trained GalaxyEncoder model. Assumed to be in correct device already.
         binary_encoder: Trained BinaryEncoder model. Assumed to be in correct device already.
+        background: Tuple of background constants per-channel.
 
     Returns:
         tile_map: Dictionary containing MAP estimates for parameters of sources in each tile.

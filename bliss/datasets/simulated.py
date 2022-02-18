@@ -3,7 +3,6 @@ import warnings
 
 import pytorch_lightning as pl
 import torch
-from einops import rearrange
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from bliss.models.decoder import ImageDecoder
@@ -60,7 +59,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["fluxes"],
                 add_noise=False,
             )
-            background = self.get_background(*images.shape)
+            background = self.make_background(*images.shape)
             images += background
             images = self._apply_noise(images)
             batch.update(
@@ -73,7 +72,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         return batch
 
-    def get_background(self, batch_size, c, hlen, wlen):
+    def make_background(self, batch_size, c, hlen, wlen):
         return self.background.reshape(1, c, 1, 1).expand(batch_size, -1, hlen, wlen)
 
     @staticmethod
