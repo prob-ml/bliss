@@ -270,7 +270,7 @@ def reconstruct_img(
 
     with torch.no_grad():
         tile_map = encoder.max_a_post(img_ptiles)
-        recon_image, _ = decoder.render_images(
+        recon_image = decoder.render_images(
             tile_map["n_sources"],
             tile_map["locs"],
             tile_map["galaxy_bools"],

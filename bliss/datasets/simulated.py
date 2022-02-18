@@ -49,7 +49,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def get_batch(self):
         with torch.no_grad():
             batch = self.image_prior.sample_prior(batch_size=self.batch_size)
-            images, _ = self.image_decoder.render_images(
+            images = self.image_decoder.render_images(
                 batch["n_sources"],
                 batch["locs"],
                 batch["galaxy_bools"],

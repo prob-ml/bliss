@@ -112,7 +112,7 @@ class ImageDecoder(pl.LightningModule):
         galaxy_params: Tensor,
         fluxes: Tensor,
         add_noise: bool = True,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> Tensor:
         """Renders catalog latent variables into a full astronomical image.
 
         Args:
@@ -137,22 +137,18 @@ class ImageDecoder(pl.LightningModule):
         assert galaxy_bools.shape[-1] == 1
 
         # first render the padded tiles
-        image_ptiles, var_ptiles = self._render_ptiles(
-            n_sources, locs, galaxy_bools, galaxy_params, fluxes
-        )
+        image_ptiles, _ = self._render_ptiles(n_sources, locs, galaxy_bools, galaxy_params, fluxes)
 
         # render the image from padded tiles
         images = reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
-        var_images = reconstruct_image_from_ptiles(var_ptiles, self.tile_slen, self.border_padding)
 
         # add background and noise
         background = self.get_background(images.shape[-2], images.shape[-1])
         images += background.unsqueeze(0)
-        var_images += background.unsqueeze(0)
         if add_noise:
             images = self._apply_noise(images)
 
-        return images, var_images
+        return images
 
     def get_background(self, hlen, wlen):
         background_shape = (self.n_bands, hlen, wlen)

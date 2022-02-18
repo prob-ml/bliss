@@ -133,7 +133,7 @@ class GalaxyEncoder(pl.LightningModule):
         z, pq_z = self.encode(ptiles, tile_locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
-        recon_mean, recon_var = self.image_decoder.render_images(
+        recon_mean = self.image_decoder.render_images(
             batch["n_sources"],
             batch["locs"],
             batch["galaxy_bools"],
@@ -142,7 +142,7 @@ class GalaxyEncoder(pl.LightningModule):
             add_noise=False,
         )
 
-        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
+        recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         if self.crop_loss_at_border:
             slen = batch["slen"].unique().item()
             bp = (recon_losses.shape[-1] - slen) // 2
@@ -199,7 +199,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # draw all reconstruction images.
         # render_images automatically accounts for tiles with no galaxies.
-        recon_images, _ = self.image_decoder.render_images(
+        recon_images = self.image_decoder.render_images(
             tile_est["n_sources"],
             tile_est["locs"],
             tile_est["galaxy_bools"],
