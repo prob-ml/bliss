@@ -132,23 +132,13 @@ class ImageDecoder(pl.LightningModule):
             A tuple of the **full** image in shape (batch_size x n_bands x slen x slen) and
             its variance (same size).
         """
+        assert not add_noise
         assert n_sources.shape[0] == locs.shape[0]
         assert n_sources.shape[1] == locs.shape[1]
         assert galaxy_bools.shape[-1] == 1
 
-        # first render the padded tiles
         image_ptiles, _ = self._render_ptiles(n_sources, locs, galaxy_bools, galaxy_params, fluxes)
-
-        # render the image from padded tiles
-        images = reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
-
-        # add background and noise
-        background = self.get_background(images.shape[-2], images.shape[-1])
-        images += background.unsqueeze(0)
-        if add_noise:
-            images = self._apply_noise(images)
-
-        return images
+        return reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
 
     def get_background(self, hlen, wlen):
         background_shape = (self.n_bands, hlen, wlen)
@@ -161,19 +151,6 @@ class ImageDecoder(pl.LightningModule):
     def forward(self):
         """Decodes latent representation into an image."""
         return self.star_tile_decoder.psf_forward()
-
-    @staticmethod
-    def _apply_noise(images_mean):
-        # add noise to images.
-
-        if torch.any(images_mean <= 0):
-            warnings.warn("image mean less than 0")
-            images_mean = images_mean.clamp(min=1.0)
-
-        images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
-        images += images_mean
-
-        return images
 
     def _render_ptiles(self, n_sources, locs, galaxy_bools, galaxy_params, fluxes):
         # n_sources: is (batch_size x n_tiles_h x n_tiles_w)

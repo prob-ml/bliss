@@ -55,9 +55,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["galaxy_bools"],
                 batch["galaxy_params"],
                 batch["fluxes"],
-                add_noise=True,
+                add_noise=False,
             )
             background = self.image_decoder.get_background(images.shape[-2], images.shape[-1])
+            images += background.unsqueeze(0)
+            images = self._apply_noise(images)
             background = rearrange(background, "c h w -> 1 c h w")
             batch.update(
                 {
@@ -68,6 +70,19 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             )
 
         return batch
+
+    @staticmethod
+    def _apply_noise(images_mean):
+        # add noise to images.
+
+        if torch.any(images_mean <= 0):
+            warnings.warn("image mean less than 0")
+            images_mean = images_mean.clamp(min=1.0)
+
+        images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
+        images += images_mean
+
+        return images
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=0)
