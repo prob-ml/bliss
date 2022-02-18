@@ -8,6 +8,7 @@ from bliss.models.location_encoder import (
 )
 
 
+# pylint: disable=too-many-statements
 class TestSourceEncoder:
     def test_forward(self, devices):
         """Tests forward function of source encoder.
