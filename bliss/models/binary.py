@@ -107,6 +107,8 @@ class BinaryEncoder(pl.LightningModule):
         image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
         centered_ptiles = self.center_ptiles(image_ptiles_flat, tile_locs_flat)
+        del image_ptiles_flat
+        del tile_locs_flat
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
