@@ -13,6 +13,7 @@ from bliss.models.location_encoder import (
     get_full_params_from_tiles,
     get_images_in_tiles,
     get_is_on_from_n_sources,
+    subtract_bg_and_log_transform,
 )
 from bliss.reporting import plot_image_and_locs
 
@@ -98,17 +99,16 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward(self, image_ptiles: Tensor, bg_ptiles: Tensor, tile_locs: Tensor):
+    def forward(self, log_image_ptiles: Tensor, tile_locs: Tensor):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
-        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
+        assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
         batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
 
         # in each padded tile we need to center the corresponding galaxy/star
-        image_ptiles = torch.log1p(F.relu(image_ptiles - bg_ptiles + 100.0, inplace=True))
-        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
-        centered_ptiles = self.center_ptiles(image_ptiles_flat, tile_locs_flat)
-        del image_ptiles_flat
+        centered_ptiles = self.center_ptiles(log_image_ptiles_flat, tile_locs_flat)
+        del log_image_ptiles_flat
         del tile_locs_flat
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
@@ -133,9 +133,9 @@ class BinaryEncoder(pl.LightningModule):
         galaxy_bools = batch["galaxy_bools"].reshape(-1)
         locs = batch["locs"]
         batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
-        ptiles = self.get_images_in_tiles(images)
-        bg_ptiles = self.get_images_in_tiles(background)
-        galaxy_probs = self.forward(ptiles, bg_ptiles, locs).reshape(-1)
+        log_images = subtract_bg_and_log_transform(images, background)
+        log_ptiles = self.get_images_in_tiles(log_images)
+        galaxy_probs = self.forward(log_ptiles, locs).reshape(-1)
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 
