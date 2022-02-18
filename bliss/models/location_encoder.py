@@ -697,7 +697,7 @@ class ConvBlock(nn.Module):
         identity = x
 
         x = self.conv1(x)
-        x = F.relu(self.bn1(x))
+        x = F.relu(self.bn1(x), inplace=True)
 
         x = self.drop1(x)
 
@@ -708,7 +708,7 @@ class ConvBlock(nn.Module):
             identity = self.sc_bn(self.sc_conv(identity))
 
         out = x + identity
-        return F.relu(out)
+        return F.relu(out, inplace=True)
 
 
 def _sample_class_weights(class_weights, n_samples=1):
