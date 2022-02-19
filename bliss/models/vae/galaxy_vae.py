@@ -27,6 +27,6 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
     def forward(self, image: Tensor):
         q_z = self.encode(image)
         z = q_z.rsample()
-        log_pz = self.p_z.log_prob(z)
-        log_qz = q_z.log_prob(z)
+        log_pz = self.p_z.log_prob(z).sum(-1)
+        log_qz = q_z.log_prob(z).sum(-1)
         return z, log_pz - log_qz

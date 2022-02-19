@@ -22,10 +22,10 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         # Embed the autoencoder
         # assert vae_ckpt is not None
         vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))
-        self.encoder = vae.get_encoder()
+        self.encoder = vae.get_encoder().eval()
         self.encoder.requires_grad_(False)
 
-        self.decoder = vae.get_decoder()
+        self.decoder = vae.get_decoder().eval()
         self.decoder.requires_grad_(False)
 
         self.latent_dim = vae.latent_dim
@@ -36,6 +36,12 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         log_prob = self.flow.log_prob(latent).sum(-1).mean()
         loss = -log_prob
         return loss, latent
+
+    def sample(self, n_samples):
+        return self.flow.sample(n_samples)
+
+    def log_prob(self, x):
+        return self.flow.log_prob(x)
 
     def training_step(self, batch, batch_idx):
         images, background = batch["images"], batch["background"]

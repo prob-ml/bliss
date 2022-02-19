@@ -106,6 +106,9 @@ models:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         decoder: ${models.decoder}
         autoencoder: ${models.galaxy_vae}
+        hidden: ${models.galaxy_vae.hidden}
+        vae_flow: ${models.galaxy_flow}
+        vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     galaxy_flow:
         _target_: bliss.models.vae.galaxy_flow.CenteredGalaxyLatentFlow
         vae: ${models.galaxy_vae}
@@ -130,8 +133,6 @@ models:
         prob_galaxy: 0.7
         galaxy_prior:
             _target_: bliss.models.vae.prior.GalaxyVAEPrior
-            vae: ${models.galaxy_vae}
-            vae_ckpt: ${paths.project}/models/sdss_vae.pt
             vae_flow: ${models.galaxy_flow}
             vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     sleep:
