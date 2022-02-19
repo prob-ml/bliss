@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 from torch.distributions import Normal
+from torch.nn import functional as F
 
 from bliss.models.galaxy_net import CenteredGalaxyEncoder, OneCenteredGalaxyAE
 
@@ -31,7 +32,7 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
     def encode(self, image: Tensor):
         encoded = self.features(image)
         mean, logvar = torch.split(encoded, (self.latent_dim, self.latent_dim), -1)
-        return Normal(mean, logvar.exp() + 1e-3)
+        return Normal(mean, F.softplus(logvar) + 1e-3)
 
     def forward(self, image: Tensor):
         q_z = self.encode(image)
