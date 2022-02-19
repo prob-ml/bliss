@@ -132,7 +132,6 @@ class GalaxyEncoder(pl.LightningModule):
             batch["galaxy_bools"],
             z,
             batch["fluxes"],
-            add_noise=False,
         )
         recon_mean += background
 
@@ -201,7 +200,6 @@ class GalaxyEncoder(pl.LightningModule):
             tile_est["galaxy_bools"],
             tile_est["galaxy_params"],
             tile_est["fluxes"],
-            add_noise=False,
         )
         recon_images += background
         residuals = (images - recon_images) / torch.sqrt(recon_images)

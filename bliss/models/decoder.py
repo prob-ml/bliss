@@ -104,7 +104,6 @@ class ImageDecoder(pl.LightningModule):
         galaxy_bools: Tensor,
         galaxy_params: Tensor,
         fluxes: Tensor,
-        add_noise: bool = True,
     ) -> Tensor:
         """Renders catalog latent variables into a full astronomical image.
 
@@ -118,19 +117,16 @@ class ImageDecoder(pl.LightningModule):
                 (batch_size x n_tiles_h x n_tiles_w x max_sources x latent_dim)
             fluxes: Flux of each source in each time
                 (batch_size x n_tiles_h x n_tiles_w x max_sources x n_bands)
-            add_noise: Add noise to the output image?
-                (defaults to True)
 
         Returns:
             A tuple of the **full** image in shape (batch_size x n_bands x slen x slen) and
             its variance (same size).
         """
-        assert not add_noise
         assert n_sources.shape[0] == locs.shape[0]
         assert n_sources.shape[1] == locs.shape[1]
         assert galaxy_bools.shape[-1] == 1
 
-        image_ptiles, _ = self._render_ptiles(n_sources, locs, galaxy_bools, galaxy_params, fluxes)
+        image_ptiles = self._render_ptiles(n_sources, locs, galaxy_bools, galaxy_params, fluxes)
         return reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
 
     def forward(self):
@@ -175,14 +171,10 @@ class ImageDecoder(pl.LightningModule):
         # draw stars and galaxies
         stars = self.star_tile_decoder(locs, fluxes, star_bools)
         galaxies = torch.zeros(img_shape, device=locs.device)
-        var_images = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_tile_decoder is not None:
-            galaxies, var_images = self.galaxy_tile_decoder(locs, galaxy_params, galaxy_bools)
+            galaxies = self.galaxy_tile_decoder(locs, galaxy_params, galaxy_bools)
 
-        images = galaxies.view(img_shape) + stars.view(img_shape)
-        var_images = var_images.view(img_shape)
-
-        return images, var_images
+        return galaxies.view(img_shape) + stars.view(img_shape)
 
     def _validate_border_padding(self, border_padding):
         # Border Padding
@@ -525,18 +517,12 @@ class GalaxyTileDecoder(nn.Module):
         assert galaxy_params.shape[1] == galaxy_bools.shape[1] == max_sources
         assert galaxy_bools.shape[2] == 1
 
-        single_galaxies, single_vars = self._render_single_galaxies(galaxy_params, galaxy_bools)
+        single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bools)
 
-        ptile = self.tiler(
+        return self.tiler(
             locs,
             single_galaxies * galaxy_bools.unsqueeze(-1).unsqueeze(-1),
         )
-        var_ptile = self.tiler(
-            locs,
-            single_vars * galaxy_bools.unsqueeze(-1).unsqueeze(-1),
-        )
-
-        return ptile, var_ptile
 
     def _render_single_galaxies(self, galaxy_params, galaxy_bools):
 
@@ -548,27 +534,20 @@ class GalaxyTileDecoder(nn.Module):
         # allocate memory
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
         gal = torch.zeros(z.shape[0], self.n_bands, slen, slen, device=galaxy_params.device)
-        var = torch.zeros(z.shape[0], self.n_bands, slen, slen, device=galaxy_params.device)
 
         # forward only galaxies that are on!
         # no background
         gal_on = self.galaxy_decoder(z[b == 1])
-        var_on = gal_on  # poisson approximation, mean = var.
 
         # size the galaxy (either trims or crops to the size of ptile)
         gal_on = self._size_galaxy(gal_on)
-        var_on = self._size_galaxy(var_on)
 
         # set galaxies
         gal[b == 1] = gal_on
-        var[b == 1] = var_on
 
         batchsize = galaxy_params.shape[0]
         gal_shape = (batchsize, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
-        single_galaxies = gal.view(gal_shape)
-        single_vars = var.view(gal_shape)
-
-        return single_galaxies, single_vars
+        return gal.view(gal_shape)
 
     def _size_galaxy(self, galaxy):
         # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen

@@ -57,7 +57,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["galaxy_bools"],
                 batch["galaxy_params"],
                 batch["fluxes"],
-                add_noise=False,
             )
             background = self.make_background(*images.shape)
             images += background

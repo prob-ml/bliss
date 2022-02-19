@@ -314,7 +314,6 @@ class SDSSReconstructionFigures(BlissFigures):
                     tile_map["galaxy_bools"],
                     tile_map["galaxy_params"],
                     tile_map["fluxes"],
-                    add_noise=False,
                 )
                 # FIXME Need to use actual background value
                 recon_image += 865.0

@@ -271,7 +271,6 @@ def reconstruct_img(
             tile_map["galaxy_bools"],
             tile_map["galaxy_params"],
             tile_map["fluxes"],
-            add_noise=False,
         )
         full_map = get_full_params_from_tiles(tile_map, decoder.tile_slen)
     return recon_image, full_map
