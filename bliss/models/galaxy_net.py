@@ -98,6 +98,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.dec = CenteredGalaxyDecoder(
             slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
         )
+        self.latent_dim = latent_dim
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
@@ -123,7 +124,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         with torch.no_grad():
             for _ in tqdm(range(n_batches)):
                 galaxy = next(iter(dataloader))
-                latent_batch = self.enc(galaxy["images"], galaxy["background"])[0]
+                latent_batch = self.enc(galaxy["images"] - galaxy["background"])[0]
                 latent_list.append(latent_batch)
         return torch.cat(latent_list, dim=0)
 
