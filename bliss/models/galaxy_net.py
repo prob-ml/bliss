@@ -124,7 +124,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         with torch.no_grad():
             for _ in tqdm(range(n_batches)):
                 galaxy = next(iter(dataloader))
-                latent_batch = self.enc(galaxy["images"] - galaxy["background"])[0]
+                img = (galaxy["images"] - galaxy["background"]).to(self.device)
+                latent_batch = self.enc(img)[0]
                 latent_list.append(latent_batch)
         return torch.cat(latent_list, dim=0)
 
