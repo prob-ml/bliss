@@ -3,10 +3,12 @@ import os
 import numpy as np
 import pytest
 import torch
+from einops import reduce
 
 from bliss.models.location_encoder import (
     get_full_params_from_tiles,
     get_images_in_tiles,
+    subtract_bg_and_log_transform,
 )
 
 
@@ -29,13 +31,12 @@ def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
 def trained_star_encoder_m2(m2_model_setup, devices):
     overrides = {
         "training.trainer.check_val_every_n_epoch": 9999,
-        "training.n_epochs": 50 if devices.use_cuda else 1,
     }
 
     if devices.use_cuda:
         overrides.update(
             {
-                "training.n_epochs": 50,
+                "training.n_epochs": 60,
             }
         )
     else:
@@ -53,7 +54,7 @@ def trained_star_encoder_m2(m2_model_setup, devices):
     return sleep_net.image_encoder.to(devices.device)
 
 
-def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
+def get_map_estimate(image_encoder, images, background, slen: int, wlen: int = None):
     # return full estimate of parameters in full image.
     # NOTE: slen*wlen is size of the image without border padding
 
@@ -69,8 +70,13 @@ def get_map_estimate(image_encoder, images, slen: int, wlen: int = None):
     assert border1 == image_encoder.border_padding, "incompatible border"
 
     # obtained estimates per tile, then on full image.
-    ptiles = get_images_in_tiles(images, image_encoder.tile_slen, image_encoder.ptile_slen)
-    var_params = image_encoder.encode(ptiles)
+    log_images = subtract_bg_and_log_transform(images, background)
+    log_image_ptiles = get_images_in_tiles(
+        log_images, image_encoder.tile_slen, image_encoder.ptile_slen
+    )
+    var_params = image_encoder.encode(log_image_ptiles)
+    var_params2 = image_encoder.encode(log_image_ptiles[:, :25, :25])
+    assert torch.allclose(var_params[0, :25, :25], var_params2, atol=1e-5)
     tile_map = image_encoder.max_a_post(var_params)
 
     return get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
@@ -94,8 +100,13 @@ class TestStarSleepEncoderM2:
         true_locs = torch.from_numpy(hubble_data["true_locs"]).to(device)
         true_fluxes = torch.from_numpy(hubble_data["true_fluxes"]).to(device)
 
+        # Estimated background
+        background = reduce(test_image, "n c h w -> 1 c 1 1", "min")
+
         # get estimated parameters
-        estimate = get_map_estimate(trained_star_encoder_m2, test_image.to(device), slen)
+        estimate = get_map_estimate(
+            trained_star_encoder_m2, test_image.to(device), background, slen
+        )
 
         # check metrics if cuda is true
         if not devices.use_cuda:
