@@ -92,12 +92,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.save_hyperparameters()
         self.optimizer_params = optimizer_params
 
-        self.enc = CenteredGalaxyEncoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
-        self.dec = CenteredGalaxyDecoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
+        self.enc = self.make_encoder(slen, latent_dim, n_bands, hidden)
+        self.dec = self.make_decoder(slen, latent_dim, n_bands, hidden)
         self.latent_dim = latent_dim
 
         self.register_buffer("zero", torch.zeros(1))
@@ -111,6 +107,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def get_loss(self, image: Tensor, recon_mean: Tensor):
         return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
+
+    def make_encoder(self, slen, latent_dim, n_bands, hidden):
+        return CenteredGalaxyEncoder(slen, latent_dim, n_bands, hidden)
+
+    def make_decoder(self, slen, latent_dim, n_bands, hidden):
+        return CenteredGalaxyDecoder(slen, latent_dim, n_bands, hidden)
 
     def get_encoder(self):
         return self.enc

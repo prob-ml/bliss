@@ -22,8 +22,7 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         decoder: ImageDecoder,
         autoencoder: Union[OneCenteredGalaxyAE, OneCenteredGalaxyVAE],
-        autoencoder_ckpt: str = None,
-        hidden: int = 256,
+        hidden: int,
         optimizer_params: dict = None,
         crop_loss_at_border=False,
         checkpoint_path: Optional[str] = None,
@@ -51,11 +50,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        if autoencoder_ckpt is not None:
-            autoencoder.load_state_dict(
-                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
-            )
-        self.enc = autoencoder.get_encoder(allow_pad=True)
+        self.enc = autoencoder.make_encoder(self.slen, autoencoder.latent_dim, self.n_bands, hidden)
         self.latent_dim = autoencoder.latent_dim
 
         # grid for center cropped tiles

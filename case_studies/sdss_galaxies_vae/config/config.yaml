@@ -106,8 +106,6 @@ models:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         decoder: ${models.decoder}
         autoencoder: ${models.galaxy_vae}
-        autoencoder_ckpt: ${paths.project}/models/sdss_vae.pt
-        hidden: 256
     galaxy_flow:
         _target_: bliss.models.vae.galaxy_flow.CenteredGalaxyLatentFlow
         vae: ${models.galaxy_vae}

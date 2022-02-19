@@ -7,18 +7,8 @@ from bliss.models.galaxy_net import CenteredGalaxyEncoder, OneCenteredGalaxyAE
 
 
 class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
-    def __init__(
-        self,
-        slen: int,
-        latent_dim: int,
-        hidden: int,
-        n_bands: int,
-        optimizer_params: dict = None,
-    ):
-        super().__init__(slen, latent_dim, hidden, n_bands, optimizer_params=optimizer_params)
-        self.enc = CenteredGalaxyVencoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
+    def make_encoder(self, slen, latent_dim, n_bands, hidden):
+        return CenteredGalaxyVencoder(slen, latent_dim, n_bands, hidden)
 
 
 class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
