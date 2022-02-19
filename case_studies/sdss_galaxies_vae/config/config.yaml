@@ -113,12 +113,11 @@ models:
         vae: ${models.galaxy_vae}
         vae_ckpt: ${paths.project}/models/sdss_vae.pt
     galaxy_vae:
-        _target_: bliss.models.vae.galaxy_net.OneCenteredGalaxyVAE
-        latent_dim: 64
-        n_bands: 1
+        _target_: bliss.models.vae.galaxy_vae.OneCenteredGalaxyVAE
         slen: 53
-        residual_delay_n_steps: 3000
-        min_sd: 1e-3
+        latent_dim: 8
+        hidden: 256
+        n_bands: 1
     prior:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1
