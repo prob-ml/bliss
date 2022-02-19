@@ -7,6 +7,10 @@ from torch.distributions import categorical
 from torch.nn import functional as F
 
 
+def subtract_bg_and_log_transform(image, background, slack=100.0):
+    return torch.log1p(F.relu(image - background + slack, inplace=True))
+
+
 def get_images_in_tiles(images, tile_slen, ptile_slen):
     """Divides a batch of full images into padded tiles.
 
@@ -260,6 +264,7 @@ class LocationEncoder(nn.Module):
             hidden: TODO (document this)
         """
         super().__init__()
+
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.tile_slen = tile_slen
@@ -307,12 +312,14 @@ class LocationEncoder(nn.Module):
     def forward(self, image_ptiles, tile_n_sources):
         raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
 
-    def encode(self, image_ptiles: Tensor) -> Tensor:
+    def encode(self, log_image_ptiles: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
 
         Args:
-            image_ptiles: A tensor of padded image tiles,
+            log_image_ptiles: A tensor of padded image tiles,
                 with shape `b * n_tiles_h * n_tiles_w * n_bands * h * w`.
+                These are assumed to have the background subtracted
+                and log-transformed by `subtract_and_log_transform()`.
 
         Returns:
             A tensor of variational parameters in matrix form per-tile
@@ -322,16 +329,15 @@ class LocationEncoder(nn.Module):
         """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        log_img = torch.log(image_ptiles_flat - image_ptiles_flat.min() + 1.0)
-        var_params_conv = self.enc_conv(log_img)
+        log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        var_params_conv = self.enc_conv(log_image_ptiles_flat)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(
             var_params_flat,
             "(b nth ntw) d -> b nth ntw d",
-            b=image_ptiles.shape[0],
-            nth=image_ptiles.shape[1],
-            ntw=image_ptiles.shape[2],
+            b=log_image_ptiles.shape[0],
+            nth=log_image_ptiles.shape[1],
+            ntw=log_image_ptiles.shape[2],
         )
 
     def sample(self, var_params: Tensor, n_samples: int) -> Dict[str, Tensor]:
@@ -691,7 +697,7 @@ class ConvBlock(nn.Module):
         identity = x
 
         x = self.conv1(x)
-        x = F.relu(self.bn1(x))
+        x = F.relu(self.bn1(x), inplace=True)
 
         x = self.drop1(x)
 
@@ -702,7 +708,7 @@ class ConvBlock(nn.Module):
             identity = self.sc_bn(self.sc_conv(identity))
 
         out = x + identity
-        return F.relu(out)
+        return F.relu(out, inplace=True)
 
 
 def _sample_class_weights(class_weights, n_samples=1):

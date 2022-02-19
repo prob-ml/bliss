@@ -49,6 +49,8 @@ datasets:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
         prior: ${models.prior}
+        background:
+            - 865.0
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
@@ -88,8 +90,6 @@ models:
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         galaxy_ae: ${models.galaxy_net}
         galaxy_ae_ckpt: ${paths.project}/models/sdss_autoencoder.pt
-        background_values:
-            - 865.0
         sdss_bands:
             - 2
     encoder:

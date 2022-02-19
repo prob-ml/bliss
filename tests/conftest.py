@@ -52,7 +52,7 @@ class ModelSetup:
                 "+training.seed": 42,
                 "training.trainer.logger": False,
                 "training.trainer.check_val_every_n_epoch": 1001,
-                "training.trainer.deterministic": True,
+                "training.trainer.deterministic": not self.devices.use_cuda,
             }
         )
         cfg = self.get_cfg(overrides)

@@ -1,4 +1,3 @@
-import math
 from typing import Dict, Tuple
 
 import torch
@@ -17,6 +16,7 @@ def reconstruct_scene_at_coordinates(
     encoder: Encoder,
     decoder: ImageDecoder,
     img: Tensor,
+    background: Tensor,
     h_range: Tuple[int, int],
     w_range: Tuple[int, int],
     slen: int = 300,
@@ -34,6 +34,8 @@ def reconstruct_scene_at_coordinates(
             Trained ImageDecoder module.
         img:
             A NxCxHxW tensor of N HxW images (with C bands).
+        background:
+            A NxCxHxW tensor of N HxW background values (with C bands).
         h_range:
             Range of height coordinates.
         w_range:
@@ -62,11 +64,13 @@ def reconstruct_scene_at_coordinates(
 
     # First get the mininum coordinates to ensure everything is detected
     scene = img[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    bg_scene = background[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
     assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
-    chunked_scene = ChunkedScene(scene, slen, bp)
+    chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
     recon, map_scene = chunked_scene.reconstruct(encoder, decoder, device)
     assert recon.shape == scene.shape
+    recon += bg_scene
     # Get reconstruction at coordinates
     recon_at_coords = recon[
         :,
@@ -78,18 +82,20 @@ def reconstruct_scene_at_coordinates(
 
 
 class ChunkedScene:
-    def __init__(self, scene: Tensor, slen: int, bp: int):
+    def __init__(self, scene: Tensor, bg_scene: Tensor, slen: int, bp: int):
         """Split scenes into square chunks of side length `slen+bp*2` using `F.unfold`."""
         self.slen = slen
         self.bp = bp
         kernel_size = slen + bp * 2
         self.chunk_dict = {}
+        self.bg_dict = {}
         self.size_dict = {}
         self.biases = {}
 
         n_chunks_h = (scene.shape[2] - (bp * 2)) // slen
         n_chunks_w = (scene.shape[3] - (bp * 2)) // slen
         self.chunk_dict["main"] = self._chunk_image(scene, (kernel_size, kernel_size), slen)
+        self.bg_dict["main"] = self._chunk_image(bg_scene, (kernel_size, kernel_size), slen)
         self.size_dict["main"] = (n_chunks_h * slen + bp * 2, n_chunks_w * slen + bp * 2)
 
         offsets_h = torch.tensor(range(n_chunks_h))
@@ -108,8 +114,12 @@ class ChunkedScene:
 
         if bottom_chunk_height > bp * 2:
             bottom_border = scene[:, :, bottom_border_start:, : (right_border_start + 2 * bp)]
+            bg_bottom_border = bg_scene[:, :, bottom_border_start:, : (right_border_start + 2 * bp)]
             self.chunk_dict["bottom"] = self._chunk_image(
                 bottom_border, (bottom_chunk_height, kernel_size), slen
+            )
+            self.bg_dict["bottom"] = self._chunk_image(
+                bg_bottom_border, (bottom_chunk_height, kernel_size), slen
             )
             self.size_dict["bottom"] = bottom_border.shape[2:]
             self.biases["bottom"] = (
@@ -118,8 +128,12 @@ class ChunkedScene:
 
         if right_chunk_width > bp * 2:
             right_border = scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
+            bg_right_border = bg_scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
             self.chunk_dict["right"] = self._chunk_image(
                 right_border, (kernel_size, right_chunk_width), slen
+            )
+            self.bg_dict["right"] = self._chunk_image(
+                bg_right_border, (kernel_size, right_chunk_width), slen
             )
             self.size_dict["right"] = right_border.shape[2:]
             self.biases["right"] = (
@@ -128,7 +142,9 @@ class ChunkedScene:
 
         if (bottom_chunk_height > bp * 2) and (right_chunk_width > bp * 2):
             bottom_right_border = scene[:, :, bottom_border_start:, right_border_start:]
+            bg_bottom_right_border = bg_scene[:, :, bottom_border_start:, right_border_start:]
             self.chunk_dict["bottom_right"] = bottom_right_border
+            self.bg_dict["bottom_right"] = bg_bottom_right_border
             self.size_dict["bottom_right"] = bottom_right_border.shape[2:]
             self.biases["bottom_right"] = (
                 torch.cartesian_prod(torch.tensor([n_chunks_h]), torch.tensor([n_chunks_w]))
@@ -148,80 +164,60 @@ class ChunkedScene:
     def reconstruct(self, encoder, decoder, device):
         chunk_est_dict = {}
         for chunk_type, chunks in self.chunk_dict.items():
-            chunk_est_dict[chunk_type] = self._reconstruct_chunks(chunks, encoder, decoder, device)
+            bgs = self.bg_dict[chunk_type]
+            chunk_est_dict[chunk_type] = self._reconstruct_chunks(
+                chunks, bgs, encoder, decoder, device
+            )
         scene_recon = self._combine_into_scene(chunk_est_dict)
         map_recon = self._combine_full_maps(chunk_est_dict)
         return scene_recon, map_recon
 
-    def _reconstruct_chunks(self, chunks, encoder, decoder, device):
+    def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
         reconstructions = []
-        bgs = []
         full_maps = []
-        for chunk in tqdm(chunks):
-            recon, bg, full_map = reconstruct_img(encoder, decoder, chunk.unsqueeze(0).to(device))
+        for chunk, bg in tqdm(zip(chunks, bgs)):
+            recon, full_map = reconstruct_img(
+                encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
+            )
             reconstructions.append(recon.cpu())
-            bgs.append(bg.cpu())
             full_maps.append(cpu(full_map))
         return {
             "reconstructions": torch.cat(reconstructions, dim=0),
-            "bgs": torch.cat(bgs, dim=0),
             "full_maps": full_maps,
         }
 
     def _combine_into_scene(self, chunk_est_dict: Dict):
         recon_images = {}
-        recon_bgs = {}
         for chunk_type, chunk_est in chunk_est_dict.items():
             reconstructions = chunk_est["reconstructions"]
-            bgs = chunk_est["bgs"]
             kernel_size = reconstructions.shape[-2], reconstructions.shape[-1]
-            rr = rearrange(reconstructions - bgs, "(b n) c h w -> b (c h w) n", b=1, c=1)
+            rr = rearrange(reconstructions, "(b n) c h w -> b (c h w) n", b=1, c=1)
             output_size = self.size_dict[chunk_type]
             recon_no_bg = F.fold(
                 rr, output_size=output_size, kernel_size=kernel_size, stride=self.slen
             )
-            n_tiles_h = math.ceil((output_size[0] - 2 * self.bp) / self.slen)
-            bgs = rearrange(bgs, "(b nh nw) c h w -> b nh nw c h w", b=1, nh=n_tiles_h)
-            bgs[:, :-1, :, :, -2 * self.bp :, :] = 0.0
-            bgs[:, :, :-1, :, :, -2 * self.bp :] = 0.0
-            bg_rearranged = rearrange(bgs, "b nh nw c h w -> b (c h w) (nh nw)", b=1, c=1)
-            bg_all = F.fold(
-                bg_rearranged, output_size=output_size, kernel_size=kernel_size, stride=self.slen
-            )
             recon_images[chunk_type] = recon_no_bg
-            recon_bgs[chunk_type] = bg_all
-
         # Assemble the final image
         main = recon_images["main"]
-        main_bg = recon_bgs["main"]
         right = recon_images.get("right", None)
         if right is None:
-            top_of_image = main + main_bg
+            top_of_image = main
         else:
-            right_bg = recon_bgs["right"]
             main[:, :, :, -2 * self.bp :] += right[:, :, :, : 2 * self.bp]
-            main += main_bg
-            right_to_cat = right[:, :, :, 2 * self.bp :] + right_bg[:, :, :, 2 * self.bp :]
+            right_to_cat = right[:, :, :, 2 * self.bp :]
             top_of_image = torch.cat((main, right_to_cat), dim=3)
 
         bottom = recon_images.get("bottom", None)
         if bottom is not None:
-            bottom_bg = recon_bgs["bottom"]
             bottom_right = recon_images.get("bottom_right", None)
             if bottom_right is None:
                 bottom_of_image = bottom
-                bottom_of_image_bg = bottom_bg
             else:
-                bottom_right_bg = recon_bgs["bottom_right"]
                 bottom[:, :, :, -2 * self.bp :] += bottom_right[:, :, :, : 2 * self.bp]
                 bottom_right_to_cat = bottom_right[:, :, :, 2 * self.bp :]
                 bottom_of_image = torch.cat((bottom, bottom_right_to_cat), dim=3)
-                bot_right_to_cat_bg = bottom_right_bg[:, :, :, 2 * self.bp :]
-                bottom_of_image_bg = torch.cat((bottom_bg, bot_right_to_cat_bg), dim=3)
             top_of_image[:, :, -2 * self.bp :, :] += bottom_of_image[:, :, : 2 * self.bp, :]
-            bottom_of_image_to_cat = (
-                bottom_of_image[:, :, 2 * self.bp :] + bottom_of_image_bg[:, :, 2 * self.bp :]
-            )
+            bottom_of_image_to_cat = bottom_of_image[:, :, 2 * self.bp :]
             image = torch.cat((top_of_image, bottom_of_image_to_cat), dim=2)
         else:
             image = top_of_image
@@ -264,22 +260,17 @@ class ChunkedScene:
 
 
 def reconstruct_img(
-    encoder: Encoder, decoder: ImageDecoder, img: Tensor
+    encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor
 ) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
-    img_ptiles = encoder.get_images_in_ptiles(img)
 
     with torch.no_grad():
-        tile_map = encoder.max_a_post(img_ptiles)
-        recon_image, _ = decoder.render_images(
+        tile_map = encoder.max_a_post(img, bg)
+        recon_image = decoder.render_images(
             tile_map["n_sources"],
             tile_map["locs"],
             tile_map["galaxy_bools"],
             tile_map["galaxy_params"],
             tile_map["fluxes"],
-            add_noise=False,
-        )
-        background = decoder.get_background(recon_image.shape[-2], recon_image.shape[-1]).unsqueeze(
-            0
         )
         full_map = get_full_params_from_tiles(tile_map, decoder.tile_slen)
-    return recon_image, background, full_map
+    return recon_image, full_map

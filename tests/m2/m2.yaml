@@ -24,6 +24,9 @@ datasets:
     _target_: bliss.datasets.simulated.SimulatedDataset
     prior: ${models.prior}
     decoder: ${models.decoder}
+    background:
+      - 686.0
+      - 1123.0
     n_batches: 10
     batch_size: 20
     generate_device: "cuda:0"
@@ -38,9 +41,6 @@ models:
     ptile_slen: 26
     border_padding: 3
     psf_params_file: data/sdss/2583/2/136/psField-002583-2-0136.fits
-    background_values:
-      - 686.0
-      - 1123.0
     sdss_bands:
       - 2
       - 3

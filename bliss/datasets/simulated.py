@@ -1,3 +1,4 @@
+from typing import Tuple
 import warnings
 
 import pytorch_lightning as pl
@@ -18,6 +19,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self,
         prior: ImagePrior,
         decoder: ImageDecoder,
+        background: Tuple[float, ...],
         n_batches=10,
         batch_size=32,
         generate_device="cpu",
@@ -32,6 +34,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_decoder = decoder.to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
+        self.background = torch.tensor(background, device=generate_device)
 
         # check sleep training will work.
         n_tiles_per_image = self.image_decoder.n_tiles_per_image
@@ -48,15 +51,16 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def get_batch(self):
         with torch.no_grad():
             batch = self.image_prior.sample_prior(batch_size=self.batch_size)
-            images, _ = self.image_decoder.render_images(
+            images = self.image_decoder.render_images(
                 batch["n_sources"],
                 batch["locs"],
                 batch["galaxy_bools"],
                 batch["galaxy_params"],
                 batch["fluxes"],
-                add_noise=True,
             )
-            background = self.image_decoder.get_background(images.shape[-2], images.shape[-1])
+            background = self.make_background(*images.shape)
+            images += background
+            images = self._apply_noise(images)
             batch.update(
                 {
                     "images": images,
@@ -66,6 +70,22 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             )
 
         return batch
+
+    def make_background(self, batch_size, c, hlen, wlen):
+        return self.background.reshape(1, c, 1, 1).expand(batch_size, -1, hlen, wlen)
+
+    @staticmethod
+    def _apply_noise(images_mean):
+        # add noise to images.
+
+        if torch.any(images_mean <= 0):
+            warnings.warn("image mean less than 0")
+            images_mean = images_mean.clamp(min=1.0)
+
+        images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
+        images += images_mean
+
+        return images
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=0)

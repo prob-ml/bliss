@@ -5,9 +5,11 @@ from bliss.models.location_encoder import (
     LocationEncoder,
     get_images_in_tiles,
     get_is_on_from_n_sources,
+    subtract_bg_and_log_transform,
 )
 
 
+# pylint: disable=too-many-statements
 class TestSourceEncoder:
     def test_forward(self, devices):
         """Tests forward function of source encoder.
@@ -28,6 +30,8 @@ class TestSourceEncoder:
         ptile_slen = 10
         n_bands = 2
         tile_slen = 2
+        background = (10.0, 20.0)
+        background_tensor = torch.tensor(background).view(1, 1, 1, -1, 1, 1)
 
         # get encoder
         star_encoder = LocationEncoder(
@@ -46,7 +50,8 @@ class TestSourceEncoder:
             # simulate image padded tiles
             image_ptiles = (
                 torch.randn(batch_size, n_tiles_h, n_tiles_w, n_bands, ptile_slen, ptile_slen)
-                + 10.0
+                * background_tensor.sqrt()
+                + background_tensor
             ).to(device)
 
             n_star_per_tile = (
@@ -57,7 +62,13 @@ class TestSourceEncoder:
                 .to(device)
             )
 
-            var_params = star_encoder.encode(image_ptiles)
+            log_image_ptiles = subtract_bg_and_log_transform(
+                image_ptiles, background_tensor.view(1, -1, 1, 1)
+            )
+
+            var_params = star_encoder.encode(log_image_ptiles)
+            var_params2 = star_encoder.encode(log_image_ptiles[:, :-2, :-3])
+            assert torch.allclose(var_params[:, :-2, :-3], var_params2, atol=1e-5)
             var_params_flat = var_params.reshape(-1, var_params.shape[-1])
             pred = star_encoder.encode_for_n_sources(var_params_flat, n_star_per_tile)
 
@@ -86,7 +97,7 @@ class TestSourceEncoder:
 
             # we check the variational parameters against the hidden parameters
             # one by one
-            h_out = star_encoder.encode(image_ptiles)
+            h_out = star_encoder.encode(log_image_ptiles)
             h_out = h_out.reshape(-1, h_out.shape[-1])
 
             # get index matrices
@@ -150,8 +161,14 @@ class TestSourceEncoder:
         n_bands = 2
         tile_slen = 2
         n_samples = 5
+        background = (10.0, 20.0)
+        background_tensor = torch.tensor(background).view(1, -1, 1, 1)
 
-        images = torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(device)
+        images = (
+            torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(device)
+            * background_tensor.sqrt()
+            + background_tensor
+        )
 
         star_encoder = LocationEncoder(
             channel=8,
@@ -162,6 +179,7 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
         ).to(device)
-        image_ptiles = get_images_in_tiles(images, tile_slen, ptile_slen)
-        var_params = star_encoder.encode(image_ptiles)
+        images_sans_bg = subtract_bg_and_log_transform(images, background_tensor)
+        log_image_ptiles = get_images_in_tiles(images_sans_bg, tile_slen, ptile_slen)
+        var_params = star_encoder.encode(log_image_ptiles)
         star_encoder.sample(var_params, n_samples)

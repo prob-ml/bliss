@@ -75,6 +75,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         )
         image = torch.from_numpy(sdss_data[0]["image"][0])
         image = rearrange(image, "h w -> 1 1 h w")
+        background = torch.from_numpy(sdss_data[0]["background"][0])
+        background = rearrange(background, "h w -> 1 1 h w")
+
         self.bp = bp
         self.slen = slen + 2 * bp
         self.kernel_size = self.slen + 2 * self.bp
@@ -112,7 +115,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             print(f"INFO: Loading cached chunks and catalog from {cache_file}")
             self.chunks, self.catalogs = torch.load(cache_file)
         else:
-            self.chunks, self.catalogs = self._prerender_chunks(image)
+            self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
             if cache_file is not None:
                 print(f"INFO: Saving cached chunks and catalog to {cache_file}")
                 torch.save((self.chunks, self.catalogs), cache_file)
@@ -122,9 +125,11 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
     def __getitem__(self, idx):
         chunk = self.chunks[idx]
+        bg = self.bgs[idx]
         tile_map = self.catalogs[idx]
         return {
             "images": chunk.unsqueeze(0),
+            "background": bg.unsqueeze(0),
             **tile_map,
             "slen": torch.tensor([self.slen]).unsqueeze(0),
         }
@@ -136,34 +141,31 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             out[k] = torch.cat([x[k] for x in tile_catalogs], dim=0)
         return out
 
-    def _prerender_chunks(self, image):
-        chunks = F.unfold(image, kernel_size=self.kernel_size, stride=self.stride)
-        chunks = rearrange(
-            chunks,
-            "b (c h w) n -> (b n) c h w",
-            c=image.shape[1],
-            h=self.kernel_size,
-            w=self.kernel_size,
-        )
+    def _prerender_chunks(self, image, background):
+        chunks = make_image_into_chunks(image, self.kernel_size, self.stride)
+        bg_chunks = make_image_into_chunks(background, self.kernel_size, self.stride)
         catalogs = []
         chunks_with_galaxies = []
+        bgs_with_galaxies = []
         encoder = self.encoder.to(self.prerender_device)
         with torch.no_grad():
-            for chunk in tqdm(chunks):
-                chunk_device = chunk.to(self.prerender_device)
-                image_ptiles = encoder.get_images_in_ptiles(chunk_device.unsqueeze(0))
-                tile_map = encoder.max_a_post(image_ptiles)
+            for chunk, bg in tqdm(zip(chunks, bg_chunks)):
+                chunk_device = chunk.to(self.prerender_device).unsqueeze(0)
+                bg_device = bg.to(self.prerender_device).unsqueeze(0)
+                tile_map = encoder.max_a_post(chunk_device, bg_device)
                 if tile_map["galaxy_bools"].sum() > 0:
                     catalogs.append(cpu(tile_map))
                     chunks_with_galaxies.append(chunk.cpu())
+                    bgs_with_galaxies.append(bg.cpu())
         chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
+        bgs_with_galaxies = torch.stack(bgs_with_galaxies, dim=0)
         # pylint: disable=consider-using-f-string
         print(
             "INFO: Number of chunks with galaxies: {ng}/{g}".format(
                 ng=chunks_with_galaxies.shape[0], g=chunks.shape[0]
             )
         )
-        return chunks_with_galaxies, catalogs
+        return chunks_with_galaxies, bgs_with_galaxies, catalogs
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=2, num_workers=0, shuffle=True, collate_fn=self._collate)
@@ -173,6 +175,17 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=1, num_workers=0, collate_fn=self._collate)
+
+
+def make_image_into_chunks(image, kernel_size, stride):
+    chunks = F.unfold(image, kernel_size=kernel_size, stride=stride)
+    return rearrange(
+        chunks,
+        "b (c h w) n -> (b n) c h w",
+        c=image.shape[1],
+        h=kernel_size,
+        w=kernel_size,
+    )
 
 
 def cpu(x: Dict[str, Tensor]):
