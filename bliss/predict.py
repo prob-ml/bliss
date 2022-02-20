@@ -140,6 +140,8 @@ def predict_on_scene(
         clen: Dimensions of (unpadded) chunks we want to extract from scene.
         scene: Tensor of shape (1, n_bands, h, w) containing image of scene we will make
             predictions.
+        bg_scene: Tensor of shape (1, n_bands, h, w) corresponding to the background values
+            of scene
         device: Device where each model is currently and where padded chunks will be moved.
         image_encoder: Trained ImageEncoder model.
         galaxy_encoder: Trained GalaxyEncoder model.

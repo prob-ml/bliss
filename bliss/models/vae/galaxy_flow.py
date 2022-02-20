@@ -43,14 +43,6 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
     def log_prob(self, x):
         return self.flow.log_prob(x)
 
-    @property
-    def loc(self):
-        return self.flow._transform._transforms[0].running_mean
-
-    @property
-    def scale(self):
-        return self.flow._transform._transforms[0].running_var.sqrt()
-
     def training_step(self, batch, batch_idx):
         images, background = batch["images"], batch["background"]
         loss, _ = self.forward(images, background)

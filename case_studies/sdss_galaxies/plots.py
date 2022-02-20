@@ -13,7 +13,6 @@ import seaborn as sns
 import torch
 from astropy.table import Table
 from astropy.wcs.wcs import WCS
-from hydra import compose, initialize
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
