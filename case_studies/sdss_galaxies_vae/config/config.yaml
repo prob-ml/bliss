@@ -116,7 +116,7 @@ models:
     galaxy_vae:
         _target_: bliss.models.vae.galaxy_vae.OneCenteredGalaxyVAE
         slen: 53
-        latent_dim: 8
+        latent_dim: 32
         hidden: 256
         n_bands: 1
     prior:
