@@ -21,10 +21,10 @@ from bliss.models.location_encoder import (
 
 def predict_on_image(
     image: torch.Tensor,
+    background: torch.Tensor,
     image_encoder: LocationEncoder,
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
-    background=(865.0,),
 ):
     """This function takes in a single image and outputs the prediction from trained models.
 
@@ -54,7 +54,6 @@ def predict_on_image(
     assert image_encoder.max_detections == 1
 
     # get padded tiles.
-    background = torch.tensor(background, device=image.device).reshape(1, -1, 1, 1)
     log_image = subtract_bg_and_log_transform(image, background)
     log_ptiles = get_images_in_tiles(log_image, image_encoder.tile_slen, image_encoder.ptile_slen)
     # get MAP estimates and variational parameters from image_encoder
@@ -121,6 +120,7 @@ def predict_on_image(
 def predict_on_scene(
     clen: int,
     scene: torch.Tensor,
+    bg_scene: torch.Tensor,
     image_encoder: LocationEncoder,
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
@@ -188,10 +188,12 @@ def predict_on_scene(
                         y1 = y1 + (h - y1 - bp) % tile_slen
 
                     pchunk = scene[:, :, y1 - bp : y1 + clen + bp, x1 - bp : x1 + clen + bp]
+                    bchunk = bg_scene[:, :, y1 - bp : y1 + clen + bp, x1 - bp : x1 + clen + bp]
                     pchunk = pchunk.to(device)
+                    bchunk = bchunk.to(device)
 
                     _, est_params, vparams = predict_on_image(
-                        pchunk, image_encoder, binary_encoder, galaxy_encoder
+                        pchunk, bchunk, image_encoder, binary_encoder, galaxy_encoder
                     )
 
                     est_locs = est_params["plocs"].cpu().reshape(-1, 2)
@@ -260,6 +262,8 @@ def predict(cfg: DictConfig):
     sdss_obj = instantiate(cfg.predict.sdss)
     image = sdss_obj[0]["image"][0]
     image = rearrange(torch.from_numpy(image), "h w -> 1 1 h w")
+    background = sdss_obj[0]["background"][0]
+    background = rearrange(torch.from_numpy(background), "h w -> 1 1 h w")
 
     # load models.
     sleep_net = instantiate(cfg.models.sleep)
@@ -284,7 +288,15 @@ def predict(cfg: DictConfig):
     galaxy_decoder = sleep_net.image_decoder.galaxy_tile_decoder.galaxy_decoder.eval().to(device)
 
     var_params, _ = predict_on_scene(
-        clen, image, image_encoder, binary_encoder, galaxy_encoder, galaxy_decoder, device, testing
+        clen,
+        image,
+        background,
+        image_encoder,
+        binary_encoder,
+        galaxy_encoder,
+        galaxy_decoder,
+        device,
+        testing,
     )
 
     if cfg.predict.output_file is not None:

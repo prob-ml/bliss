@@ -56,6 +56,7 @@ def get_sdss_data(cfg):
 
     return {
         "image": sdss_data[0]["image"][0],
+        "background": sdss_data[0]["background"][0],
         "wcs": sdss_data[0]["wcs"][0],
         "pixel_scale": cfg.plots.sdss_pixel_scale,
     }
@@ -140,7 +141,7 @@ class DetectionClassificationFigures(BlissFigures):
             "classification": "sdss-classification-acc.png",
         }
 
-    def compute_data(self, scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, scene, background, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
         assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
         device = sleep_net.device
@@ -164,9 +165,11 @@ class DetectionClassificationFigures(BlissFigures):
 
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
+        background_torch = torch.from_numpy(background).reshape(1, 1, h, w)
         _, est_params = predict_on_scene(
             clen,
             scene_torch,
+            background_torch,
             image_encoder,
             binary_encoder,
             galaxy_encoder,
@@ -275,7 +278,7 @@ class SDSSReconstructionFigures(BlissFigures):
     def fignames(self):
         return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(len(self.lims))}}
 
-    def compute_data(self, scene, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, scene, background, sleep_net, binary_encoder, galaxy_encoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
         assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
         device = sleep_net.device
@@ -296,13 +299,16 @@ class SDSSReconstructionFigures(BlissFigures):
             chunk = scene[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
             chunk = torch.from_numpy(chunk.reshape(1, 1, hb, wb)).to(device)
 
+            bchunk = background[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
+            bchunk = torch.from_numpy(bchunk.reshape(1, 1, hb, wb)).to(device)
+
             # for plotting
             chunk_np = chunk.reshape(hb, wb).cpu().numpy()
 
             with torch.no_grad():
 
                 tile_map, _, _ = predict_on_image(
-                    chunk, image_encoder, binary_encoder, galaxy_encoder
+                    chunk, bchunk, image_encoder, binary_encoder, galaxy_encoder
                 )
 
                 # plot image from tile est.
@@ -314,7 +320,7 @@ class SDSSReconstructionFigures(BlissFigures):
                     tile_map["fluxes"],
                 )
                 # FIXME Need to use actual background value
-                recon_image += 865.0
+                recon_image += bchunk
 
             recon_image = recon_image.cpu().numpy().reshape(hb, wb)
 
@@ -684,16 +690,18 @@ def plots(cfg):
     # FIGURE 2: Classification and Detection metrics
     if 2 in fig:
         scene = get_sdss_data(cfg)["image"]
+        background = get_sdss_data(cfg)["background"]
         coadd_cat = Table.read(cfg.plots.coadd_cat, format="fits")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
-        dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+        dc_fig.save_figures(scene, background, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in fig:
         scene = get_sdss_data(cfg)["image"]
+        background = get_sdss_data(cfg)["background"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
-        sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
+        sdss_rec_fig.save_figures(scene, background, sleep_net, binary_encoder, galaxy_encoder)
         mpl.rc_file_defaults()
 
     else:

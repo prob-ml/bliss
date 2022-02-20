@@ -10,7 +10,7 @@ class TestGenerate:
         cfg = get_config({}, devices)
         dataset = instantiate(
             cfg.datasets.simulated,
-            generate_device = "cuda:0" if devices.use_cuda else "cpu",
+            generate_device="cuda:0" if devices.use_cuda else "cpu",
         )
         filepath = Path(cfg.paths.root) / "example.pt"
         imagepath = Path(cfg.paths.root) / "example_images.pdf"
