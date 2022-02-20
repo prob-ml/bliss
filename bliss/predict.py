@@ -8,7 +8,7 @@ from tqdm import tqdm
 from bliss.datasets import sdss
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.models.galaxy_net import OneCenteredGalaxyDecoder
+from bliss.models.galaxy_net import CenteredGalaxyDecoder
 from bliss.models.location_encoder import (
     LocationEncoder,
     get_full_params_from_tiles,
@@ -124,7 +124,7 @@ def predict_on_scene(
     image_encoder: LocationEncoder,
     binary_encoder: BinaryEncoder,
     galaxy_encoder: GalaxyEncoder,
-    galaxy_decoder: OneCenteredGalaxyDecoder,
+    galaxy_decoder: CenteredGalaxyDecoder,
     device: torch.device = "cpu",
     testing=False,
 ):
@@ -143,7 +143,7 @@ def predict_on_scene(
         device: Device where each model is currently and where padded chunks will be moved.
         image_encoder: Trained ImageEncoder model.
         galaxy_encoder: Trained GalaxyEncoder model.
-        galaxy_decoder: Trained OneCenteredGalaxyDecoder model.
+        galaxy_decoder: Trained CenteredGalaxyDecoder model.
         binary_encoder: Trained BinaryEncoder model.
         testing: Whether we are unit testing and we only want to run 1 chunk.
 
@@ -237,8 +237,8 @@ def predict_on_scene(
         "plocs": locs,
         "galaxy_bools": galaxy_bools,
         "galaxy_probs": galaxy_probs,
-        "flux": fluxes,
-        "mag": mags,
+        "fluxes": fluxes,
+        "mags": mags,
         "n_sources": torch.tensor([len(locs)]),
     }
 

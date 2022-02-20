@@ -52,8 +52,6 @@ def get_sdss_data(cfg):
         camcol=camcol,
         fields=(field,),
         bands=bands,
-        overwrite_cache=True,
-        overwrite_fits_cache=True,
     )
 
     return {
@@ -398,7 +396,8 @@ class AEReconstructionFigures(BlissFigures):
         n_iters = int(np.ceil(n_images // 128))
         for i in range(n_iters):  # in batches otherwise GPU error.
             bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
-            recon_mean = autoencoder.forward(bimages, background).detach().to("cpu")
+            recon_mean, _ = autoencoder.forward(bimages, background)
+            recon_mean = recon_mean.detach().to("cpu")
             recon_means = torch.cat((recon_means, recon_mean))
         residuals = (images - recon_means) / recon_means.sqrt()
         assert recon_means.shape[0] == noiseless_images.shape[0]
@@ -660,17 +659,20 @@ def plots(cfg):
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in fig:
         autoencoder = instantiate(cfg.models.galaxy_net)
-        autoencoder.load_state_dict(torch.load(cfg.models.decoder.autoencoder_ckpt))
+        autoencoder.load_state_dict(torch.load(cfg.models.prior.galaxy_prior.autoencoder_ckpt))
         autoencoder = autoencoder.to(device).eval()
 
         # generate galsim simulated galaxies images if file does not exist.
         galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
         if not galaxies_file.exists():
             print(f"Generating individual galaxy images and saving to: {galaxies_file}")
-            overrides = ["experiment=sdss_individual_galaxies"]
-            with initialize(config_path="config"):
-                cfg = compose("config", overrides=overrides)
-                generate.generate(cfg)
+            dataset = instantiate(
+                cfg.datasets.sdss_galaxies, batch_size=512, n_batches=20, num_workers=20
+            )
+            imagepath = galaxies_file.parent / (galaxies_file.stem + "_images.pdf")
+            generate.generate(
+                dataset, galaxies_file, imagepath, n_plots=25, global_params=("background", "slen")
+            )
 
         # create figure classes and plot.
         ae_figures = AEReconstructionFigures(outdir, overwrite=overwrite, n_examples=5)

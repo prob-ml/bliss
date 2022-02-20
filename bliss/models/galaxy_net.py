@@ -117,6 +117,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def make_encoder(self, slen, latent_dim, n_bands, hidden):
         return CenteredGalaxyEncoder(slen, latent_dim, n_bands, hidden)
 
+    def make_deblender(self, slen, latent_dim, n_bands, hidden):
+        return self.make_encoder(slen, latent_dim, n_bands, hidden)
+
     def make_decoder(self, slen, latent_dim, n_bands, hidden):
         return CenteredGalaxyDecoder(slen, latent_dim, n_bands, hidden)
 

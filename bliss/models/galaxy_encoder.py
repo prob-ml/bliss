@@ -24,7 +24,7 @@ class GalaxyEncoder(pl.LightningModule):
         decoder: ImageDecoder,
         autoencoder: Union[OneCenteredGalaxyAE, OneCenteredGalaxyVAE],
         hidden: int,
-        vae_flow: Optional[CenteredGalaxyLatentFlow]=None,
+        vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
         vae_flow_ckpt: Optional[str] = None,
         optimizer_params: dict = None,
         crop_loss_at_border=False,
