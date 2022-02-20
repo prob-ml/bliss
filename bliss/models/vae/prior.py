@@ -10,6 +10,8 @@ class GalaxyVAEPrior:
         vae_flow_ckpt: str,
     ):
         self.flow = vae_flow
+        self.flow.eval()
+        self.flow.requires_grad_(False)
         self.flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
 
     def sample(self, n_latent_samples, device):

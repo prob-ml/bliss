@@ -3,7 +3,11 @@ from torch import Tensor
 from torch.distributions import Normal
 from torch.nn import functional as F
 
-from bliss.models.galaxy_net import CenteredGalaxyDecoder, CenteredGalaxyEncoder, OneCenteredGalaxyAE
+from bliss.models.galaxy_net import (
+    CenteredGalaxyDecoder,
+    CenteredGalaxyEncoder,
+    OneCenteredGalaxyAE,
+)
 
 
 class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
@@ -30,6 +34,8 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
     def forward(self, image: Tensor):
         q_z = self.encode(image)
         z = q_z.rsample()
-        log_pz = self.p_z.log_prob(z).sum(-1)
+        p_z = Normal(self.p_z.loc, self.p_z.scale)
+        log_pz = p_z.log_prob(z).sum(-1)
+        assert not torch.any(torch.isnan(log_pz))
         log_qz = q_z.log_prob(z).sum(-1)
         return z, log_pz - log_qz
