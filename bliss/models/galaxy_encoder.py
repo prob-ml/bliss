@@ -14,6 +14,7 @@ from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.models.location_encoder import get_full_params_from_tiles, get_images_in_tiles
 from bliss.models.vae.galaxy_vae import CenteredGalaxyVencoder, OneCenteredGalaxyVAE
+from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.reporting import plot_image, plot_image_and_locs
 
 
@@ -23,8 +24,8 @@ class GalaxyEncoder(pl.LightningModule):
         decoder: ImageDecoder,
         autoencoder: Union[OneCenteredGalaxyAE, OneCenteredGalaxyVAE],
         hidden: int,
-        vae_flow=None,
-        vae_flow_ckpt=None,
+        vae_flow: Optional[CenteredGalaxyLatentFlow]=None,
+        vae_flow_ckpt: Optional[str] = None,
         optimizer_params: dict = None,
         crop_loss_at_border=False,
         checkpoint_path: Optional[str] = None,
@@ -55,7 +56,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.enc = autoencoder.make_deblender(
             self.slen, autoencoder.latent_dim, self.n_bands, hidden
         )
-        if isinstance(self.enc, CenteredGalaxyVencoder):
+        if vae_flow is not None:
             vae_flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
             vae_flow.eval()
             vae_flow.requires_grad_(False)
