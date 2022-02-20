@@ -3,17 +3,20 @@ from torch import Tensor
 from torch.distributions import Normal
 from torch.nn import functional as F
 
-from bliss.models.galaxy_net import CenteredGalaxyEncoder, OneCenteredGalaxyAE
+from bliss.models.galaxy_net import CenteredGalaxyDecoder, CenteredGalaxyEncoder, OneCenteredGalaxyAE
 
 
 class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
     def make_encoder(self, slen, latent_dim, n_bands, hidden):
         return CenteredGalaxyVencoder(slen, latent_dim, n_bands, hidden)
 
+    def make_decoder(self, slen, latent_dim, n_bands, hidden):
+        return CenteredGalaxyDecoder(slen, latent_dim, n_bands, hidden, use_weight_norm=True)
+
 
 class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
     def __init__(self, slen, latent_dim, n_bands, hidden):
-        super().__init__(slen, latent_dim * 2, n_bands, hidden)
+        super().__init__(slen, latent_dim * 2, n_bands, hidden, use_weight_norm=True)
         self.latent_dim = latent_dim
         self.register_buffer("zero", torch.tensor(0.0))
         self.register_buffer("one", torch.tensor(1.0))

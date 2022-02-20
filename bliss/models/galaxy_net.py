@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from torch import nn, Tensor
 from torch.distributions import Normal
 from torch.nn import functional as F
+from torch.nn.utils import weight_norm
 from torch.optim import Adam
 from tqdm import tqdm
 
@@ -15,7 +16,7 @@ plt.ioff()
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256, use_weight_norm=False):
         super().__init__()
 
         self.slen = slen
@@ -23,16 +24,17 @@ class CenteredGalaxyEncoder(nn.Module):
 
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
         min_slen = f(f(slen))
+        wn = lambda x: weight_norm(x) if use_weight_norm else x
 
         self.features = nn.Sequential(
-            nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
+            wn(nn.Conv2d(n_bands, 4, 5, stride=3, padding=0)),
             nn.LeakyReLU(),
-            nn.Conv2d(4, 8, 5, stride=3, padding=0),
+            wn(nn.Conv2d(4, 8, 5, stride=3, padding=0)),
             nn.LeakyReLU(),
             nn.Flatten(1, -1),
-            nn.Linear(8 * min_slen ** 2, hidden),
+            wn(nn.Linear(8 * min_slen ** 2, hidden)),
             nn.LeakyReLU(),
-            nn.Linear(hidden, latent_dim),
+            wn(nn.Linear(hidden, latent_dim)),
         )
 
     def forward(self, image):
@@ -41,7 +43,7 @@ class CenteredGalaxyEncoder(nn.Module):
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256, use_weight_norm=False):
         super().__init__()
 
         self.slen = slen
@@ -51,17 +53,19 @@ class CenteredGalaxyDecoder(nn.Module):
         self.min_slen = f(f(slen))
         assert g(g(self.min_slen)) == slen
 
+        wn = lambda x: weight_norm(x) if use_weight_norm else x
+
         self.fc = nn.Sequential(
-            nn.Linear(latent_dim, hidden),
+            wn(nn.Linear(latent_dim, hidden)),
             nn.LeakyReLU(),
-            nn.Linear(hidden, 8 * self.min_slen ** 2),
+            wn(nn.Linear(hidden, 8 * self.min_slen ** 2)),
             nn.LeakyReLU(),
         )
 
         self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(8, 4, 5, stride=3),
+            wn(nn.ConvTranspose2d(8, 4, 5, stride=3)),
             nn.LeakyReLU(),
-            nn.ConvTranspose2d(4, n_bands, 5, stride=3),
+            wn(nn.ConvTranspose2d(4, n_bands, 5, stride=3)),
         )
 
     def forward(self, z):
