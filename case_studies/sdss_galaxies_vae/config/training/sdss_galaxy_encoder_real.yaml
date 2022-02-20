@@ -19,4 +19,4 @@ training:
   n_epochs: 160
   trainer:
     enable_checkpointing: True
-    check_val_every_n_epoch: 1
+    check_val_every_n_epoch: 10
