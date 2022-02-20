@@ -17,6 +17,9 @@ class OneCenteredGalaxyVAE(OneCenteredGalaxyAE):
     def make_decoder(self, slen, latent_dim, n_bands, hidden):
         return CenteredGalaxyDecoder(slen, latent_dim, n_bands, hidden, use_weight_norm=True)
 
+    def make_deblender(self, slen, latent_dim, n_bands, hidden):
+        return CenteredGalaxyVencoder(slen, latent_dim, n_bands, hidden)
+
 
 class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
     def __init__(self, slen, latent_dim, n_bands, hidden):
@@ -37,5 +40,8 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
         p_z = Normal(self.p_z.loc, self.p_z.scale)
         log_pz = p_z.log_prob(z).sum(-1)
         assert not torch.any(torch.isnan(log_pz))
+        assert not torch.any(torch.isinf(log_pz))
         log_qz = q_z.log_prob(z).sum(-1)
+        assert not torch.any(torch.isnan(log_qz))
+        assert not torch.any(torch.isinf(log_qz))
         return z, log_pz - log_qz

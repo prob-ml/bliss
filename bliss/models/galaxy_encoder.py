@@ -52,7 +52,9 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        self.enc = autoencoder.make_encoder(self.slen, autoencoder.latent_dim, self.n_bands, hidden)
+        self.enc = autoencoder.make_deblender(
+            self.slen, autoencoder.latent_dim, self.n_bands, hidden
+        )
         if isinstance(self.enc, CenteredGalaxyVencoder):
             vae_flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
             vae_flow.eval()
@@ -143,6 +145,8 @@ class GalaxyEncoder(pl.LightningModule):
             bp = (recon_losses.shape[-1] - slen) // 2
             bp = bp * 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
+        assert not torch.any(torch.isnan(recon_losses))
+        assert not torch.any(torch.isinf(recon_losses))
         return recon_losses.sum() - pq_z.sum()
 
     def validation_epoch_end(self, outputs):
