@@ -2,9 +2,6 @@
 models:
     prior:
         mean_sources: 0.04
-datasets:
-    simulated:
-        batch_size: 8
 
 training:
     name: "sdss_galaxy_encoder"
