@@ -139,6 +139,8 @@ class GalaxyEncoder(pl.LightningModule):
         )
         recon_mean += background
 
+        assert not torch.any(torch.isnan(recon_mean))
+        assert not torch.any(torch.isinf(recon_mean))
         recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         if self.crop_loss_at_border:
             slen = batch["slen"].unique().item()

@@ -109,8 +109,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean = self.dec.forward(z)
         return recon_mean + background, pq_z
 
-    def get_loss(self, image: Tensor, recon_mean: Tensor):
-        return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
+    def get_loss(self, image: Tensor, recon_mean: Tensor, pq_z: Tensor):
+        recon_loss = -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
+        pq_z_loss = -pq_z.sum()
+        return recon_loss + pq_z_loss
 
     def make_encoder(self, slen, latent_dim, n_bands, hidden):
         return CenteredGalaxyEncoder(slen, latent_dim, n_bands, hidden)
@@ -151,7 +153,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
         recon_mean, pq_z = self.forward(images, background)
-        loss = self.get_loss(images, recon_mean) - pq_z.sum()
+        loss = self.get_loss(images, recon_mean, pq_z)
         self.log("train/loss", loss)
         return loss
 
@@ -162,9 +164,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        recon_mean, pq_z = self(images, background)
+        recon_mean, pq_z = self.forward(images, background)
         residuals = (images - recon_mean) / torch.sqrt(recon_mean)
-        loss = self.get_loss(images, recon_mean)
+        loss = self.get_loss(images, recon_mean, pq_z)
 
         # metrics
         self.log("val/loss", loss)
