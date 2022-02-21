@@ -2,11 +2,8 @@ name: "sdss_vae"
 model: ${models.galaxy_vae}
 dataset: ${datasets.sdss_galaxies}
 optimizer_params:
-  main:
-    lr: 1e-3
-  residual:
-    lr: 1e-3
-n_epochs: 8001
+  lr: 1e-3
+n_epochs: 1001
 trainer:
   check_val_every_n_epoch: 10
   enable_checkpointing: true

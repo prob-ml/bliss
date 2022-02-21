@@ -9,7 +9,6 @@ def test_galaxy_autoencoder_toy_gaussian(model_setup, devices):
     if use_cuda:
         overrides.update(
             {
-                "models.galaxy_net.residual_delay_n_steps": 500,
                 "training.n_epochs": 101,
                 "training.trainer.check_val_every_n_epoch": 50,
             }
@@ -17,7 +16,6 @@ def test_galaxy_autoencoder_toy_gaussian(model_setup, devices):
     else:
         overrides.update(
             {
-                "models.galaxy_net.residual_delay_n_steps": 0,
                 "datasets.toy_gaussian.batch_size": 10,
                 "datasets.toy_gaussian.n_batches": 1,
                 "training.n_epochs": 2,

@@ -13,7 +13,8 @@ from torch.optim import Adam
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.models.location_encoder import get_full_params_from_tiles, get_images_in_tiles
-from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
+from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
+from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.reporting import plot_image, plot_image_and_locs
 
 
@@ -22,8 +23,9 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         decoder: ImageDecoder,
         autoencoder: Union[OneCenteredGalaxyAE, OneCenteredGalaxyVAE],
-        autoencoder_ckpt: str = None,
-        hidden: int = 256,
+        hidden: int,
+        vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
+        vae_flow_ckpt: Optional[str] = None,
         optimizer_params: dict = None,
         crop_loss_at_border=False,
         checkpoint_path: Optional[str] = None,
@@ -51,11 +53,14 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        if autoencoder_ckpt is not None:
-            autoencoder.load_state_dict(
-                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
-            )
-        self.enc = autoencoder.get_encoder(allow_pad=True)
+        self.enc = autoencoder.make_deblender(
+            self.slen, autoencoder.latent_dim, self.n_bands, hidden
+        )
+        if vae_flow is not None:
+            vae_flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
+            vae_flow.eval()
+            vae_flow.requires_grad_(False)
+            self.enc.p_z = vae_flow
         self.latent_dim = autoencoder.latent_dim
 
         # grid for center cropped tiles
@@ -104,6 +109,23 @@ class GalaxyEncoder(pl.LightningModule):
         z, _ = self.encode(image_ptiles, tile_locs)
         return z
 
+    def max_a_post(self, image_ptiles, tile_locs):
+        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
+        batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
+
+        centered_ptiles = self.flatten_and_center_ptiles(image_ptiles, tile_locs)
+        assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
+        # We can assume there is one galaxy per_tile and encode each tile independently.
+        z_flat = self.enc.max_a_post(centered_ptiles)
+        return rearrange(
+            z_flat,
+            "(b nth ntw s) d -> b nth ntw s d",
+            b=batch_size,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
+            s=self.max_sources,
+        )
+
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
         batch_size = len(batch["images"])
@@ -135,13 +157,20 @@ class GalaxyEncoder(pl.LightningModule):
         )
         recon_mean += background
 
+        assert not torch.any(torch.isnan(recon_mean))
+        assert not torch.any(torch.isinf(recon_mean))
         recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         if self.crop_loss_at_border:
             slen = batch["slen"].unique().item()
             bp = (recon_losses.shape[-1] - slen) // 2
             bp = bp * 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
-        return recon_losses.sum() - pq_z.sum()
+        assert not torch.any(torch.isnan(recon_losses))
+        assert not torch.any(torch.isinf(recon_losses))
+
+        # For divergence loss, we only evaluate tiles with a galaxy in them
+        divergence_loss = (pq_z.unsqueeze(-1) * batch["galaxy_bools"]).sum()
+        return recon_losses.sum() - divergence_loss
 
     def validation_epoch_end(self, outputs):
         """Pytorch lightning method run at end of validation epoch."""
