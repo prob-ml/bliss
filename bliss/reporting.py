@@ -296,6 +296,8 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
     """Apply magnitude cut to given parameters."""
     assert "mags" in params, "Magnitude parameter missing in `params` when trying to apply mag cut."
     keep = params["mags"] < mag_cut
+    if len(keep.shape) == 3:
+        keep = rearrange(keep, "n s 1 -> n s")
     d = {k: v[keep] for k, v in params.items() if k != "n_sources"}
     d["n_sources"] = torch.tensor([len(d["mags"])])
     return d

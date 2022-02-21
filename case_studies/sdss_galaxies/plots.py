@@ -149,15 +149,11 @@ class DetectionClassificationFigures(BlissFigures):
         bp = encoder.border_padding
         slen = 300  # chunk side-length
         h, w = scene.shape[-2], scene.shape[-1]
-
-        # FIXME: For now reconstruct_scene_at_coordinates can only handle square images.
-        # so we use min(h,w), remove once we can deal with rectangular images.
-        scene_length = min(h, w) + 2 * bp
+        hlims = (bp, h - bp)
+        wlims = (bp, w - bp)
 
         # load coadd catalog
-        coadd_params = reporting.get_params_from_coadd(
-            coadd_cat, xlim=(bp, scene_length - bp), ylim=(bp, scene_length - bp)
-        )
+        coadd_params = reporting.get_params_from_coadd(coadd_cat, wlims, hlims)
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
@@ -168,15 +164,15 @@ class DetectionClassificationFigures(BlissFigures):
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
         background_torch = torch.from_numpy(background).reshape(1, 1, h, w)
-        lims = (bp, bp + scene_length)
+
         _, est_params = reconstruct_scene_at_coordinates(
             encoder,
             decoder,
             scene_torch,
             background_torch,
-            lims,
-            lims,
-            slen,
+            hlims,
+            wlims,
+            slen=slen,
             device=device,
         )
 
