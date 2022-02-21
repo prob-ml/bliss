@@ -175,6 +175,11 @@ class DetectionClassificationFigures(BlissFigures):
             slen=slen,
             device=device,
         )
+        est_params["fluxes"] = (
+            est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
+            + est_params["star_bools"] * est_params["fluxes"]
+        )
+        est_params["mags"] = sdss.convert_flux_to_mag(est_params["fluxes"])
 
         mag_bins = np.arange(18, 23, 0.25)  # skip 23
         precisions = []
@@ -279,6 +284,12 @@ class SDSSReconstructionFigures(BlissFigures):
 
     def compute_data(self, scene, background, coadd_cat, encoder, decoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
+        if not isinstance(scene, torch.Tensor):
+            scene = torch.from_numpy(scene)
+            background = torch.from_numpy(background)
+
+        scene = scene.unsqueeze(0).unsqueeze(0)
+        background = background.unsqueeze(0).unsqueeze(0)
         device = encoder.device
 
         bp = encoder.border_padding
@@ -286,38 +297,20 @@ class SDSSReconstructionFigures(BlissFigures):
 
         for figname in self.fignames:
             xlim, ylim = self.lims[figname]
-            h, w = ylim[1] - ylim[0], xlim[1] - xlim[0]
-            assert h >= bp and w >= bp
-            hb = h + 2 * bp
-            wb = w + 2 * bp
-            assert hb == wb
+            height, width = ylim[1] - ylim[0], xlim[1] - xlim[0]
+            slen = min(height, width)
+            assert height >= bp and width >= bp
+            assert xlim[0] >= bp
+            assert ylim[0] >= bp
 
-            coadd_data = reporting.get_params_from_coadd(
-                coadd_cat, xlim=(bp, wb - bp), ylim=(bp, hb - bp)
-            )
-
-            chunk = scene[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
-            chunk = torch.from_numpy(chunk.reshape(1, 1, hb, wb)).to(device)
-
-            bchunk = background[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
-            bchunk = torch.from_numpy(bchunk.reshape(1, 1, hb, wb)).to(device)
-
-            # for plotting
-            chunk_np = chunk.reshape(hb, wb).cpu().numpy()
-
+            coadd_data = reporting.get_params_from_coadd(coadd_cat, xlim, ylim)
             with torch.no_grad():
-                hlims = (bp, bp + hb)
-                wlims = (bp, bp + wb)
                 recon_image, recon_map = reconstruct_scene_at_coordinates(
-                    encoder, decoder, chunk, bchunk, hlims, wlims, slen=hb, device=device
+                    encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device
                 )
-                recon_image += bchunk
-
-            recon_image = recon_image.cpu().numpy().reshape(hb, wb)
-
             # only keep section inside border padding
-            true_image = chunk_np[bp : hb - bp, bp : wb - bp]
-            recon_image = recon_image[bp : hb - bp, bp : wb - bp]
+            true_image = scene[0, 0, ylim[0] : ylim[1], xlim[0] : xlim[1]].cpu()
+            recon_image = recon_image[0,0].cpu()
             res_image = (true_image - recon_image) / np.sqrt(recon_image)
 
             data[figname] = (true_image, recon_image, res_image, recon_map, coadd_data)
@@ -354,7 +347,7 @@ class SDSSReconstructionFigures(BlissFigures):
             reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
             reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
-            locs_true = coadd_data["locs"]
+            locs_true = coadd_data["plocs"]
             true_galaxy_bools = coadd_data["galaxy_bools"]
             locs_galaxies_true = locs_true[true_galaxy_bools > 0.5]
             locs_stars_true = locs_true[true_galaxy_bools < 0.5]
