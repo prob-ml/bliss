@@ -167,7 +167,10 @@ class GalaxyEncoder(pl.LightningModule):
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
         assert not torch.any(torch.isnan(recon_losses))
         assert not torch.any(torch.isinf(recon_losses))
-        return recon_losses.sum() - pq_z.sum()
+
+        # For divergence loss, we only evaluate tiles with a galaxy in them
+        divergence_loss = (pq_z.unsqueeze(-1) * batch["galaxy_bools"]).sum()
+        return recon_losses.sum() - divergence_loss
 
     def validation_epoch_end(self, outputs):
         """Pytorch lightning method run at end of validation epoch."""
