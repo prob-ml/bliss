@@ -10,7 +10,7 @@ from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
 from bliss import reporting
-from bliss.datasets.sdss import SloanDigitalSkySurvey
+from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import reconstruct_scene_at_coordinates
 from bliss.models.binary import BinaryEncoder
@@ -61,7 +61,14 @@ def reconstruct(cfg):
             h_end = h + scene_size
             w_end = w + scene_size
         true = my_image[:, :, h:h_end, w:w_end]
-        coadd_objects = get_objects_from_coadd(coadd_cat, h, w, h_end, w_end)
+        coadd_data = reporting.get_params_from_coadd(
+            coadd_cat,
+            xlim=(w, w_end),
+            ylim=(h, h_end),
+        )
+        coadd_data["x"] = coadd_data["x"] - w
+        coadd_data["y"] = coadd_data["y"] - h
+        coadd_data["plocs"] = torch.stack((coadd_data["y"], coadd_data["x"]), dim=1)
         recon, map_recon = reconstruct_scene_at_coordinates(
             encoder,
             dec,
@@ -72,16 +79,29 @@ def reconstruct(cfg):
             slen=cfg.reconstruct.slen,
             device=device,
         )
+        map_recon["fluxes"] = (
+            map_recon["galaxy_bools"] * map_recon["galaxy_fluxes"]
+            + map_recon["star_bools"] * map_recon["fluxes"]
+        )
+        map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
+        scene_metrics_map = reporting.scene_metrics(
+            coadd_data,
+            map_recon,
+            mag_cut=20.0,
+        )
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:
             fig = create_figure(
                 true[0, 0],
                 recon[0, 0],
                 resid[0, 0],
-                coadd_objects=coadd_objects,
+                coadd_objects=coadd_data,
                 map_recon=map_recon,
             )
             fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
+            torch.save(scene_metrics_map, outdir / (scene_name + ".pt"))
+            torch.save(coadd_data, outdir / (scene_name + "_coadd.pt"))
+            torch.save(map_recon, outdir / (scene_name + "_map_recon.pt"))
 
 
 def get_sdss_data(sdss_dir, sdss_pixel_scale):
@@ -133,7 +153,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
     if coadd_objects is not None:
-        locs_true = coadd_objects["locs"]
+        locs_true = coadd_objects["plocs"]
         true_galaxy_bools = coadd_objects["galaxy_bools"]
         locs_galaxies_true = locs_true[true_galaxy_bools > 0.5]
         locs_stars_true = locs_true[true_galaxy_bools < 0.5]
