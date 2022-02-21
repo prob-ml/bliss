@@ -1,11 +1,7 @@
 import math
-import os
-from pathlib import Path
 
 import torch
-from hydra.utils import instantiate
 from matplotlib import pyplot as plt
-from omegaconf import DictConfig, OmegaConf
 
 from bliss.reporting import plot_image
 
@@ -29,19 +25,11 @@ def visualize(batch, path, n_samples, figsize=(12, 12)):
     fig.savefig(path, bbox_inches="tight")
 
 
-def generate(cfg: DictConfig):
+def generate(dataset, filepath, imagepath, n_plots: int, global_params=("background", "slen")):
     # setup
-    paths = OmegaConf.to_container(cfg.paths, resolve=True)
-    output = Path(paths["output"])
-    if not os.path.exists(output.as_posix()):
-        os.makedirs(output.as_posix())
-
-    filepath = Path(cfg.generate.file)
-    imagepath = Path(filepath.parent).joinpath(filepath.stem + "_images.pdf")
-    dataset = instantiate(cfg.generate.dataset)
 
     # params common to all batches (do not stack).
-    global_params = set(cfg.generate.common)
+    global_params = set(global_params)
 
     # get batches and combine them
     fbatch = {}
@@ -62,4 +50,4 @@ def generate(cfg: DictConfig):
 
     # save batch and images as pdf for visualization purposes.
     torch.save(fbatch, filepath)
-    visualize(fbatch, imagepath, cfg.generate.n_plots)
+    visualize(fbatch, imagepath, n_plots)

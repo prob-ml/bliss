@@ -30,6 +30,7 @@ datasets:
         binary_ckpt: ${paths.project}/models/sdss_binary.pt
         sdss_dir: ${paths.sdss}
         prerender_device: "cuda"
+        stride_factor: 0.25
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
         num_workers: 5
@@ -49,6 +50,8 @@ datasets:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
         prior: ${models.prior}
+        background:
+            - 865.0
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
@@ -88,8 +91,6 @@ models:
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         galaxy_ae: ${models.galaxy_vae}
         galaxy_ae_ckpt: ${paths.project}/models/sdss_vae.pt
-        background_values:
-            - 865.0
         sdss_bands:
             - 2
     encoder:
@@ -106,19 +107,19 @@ models:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         decoder: ${models.decoder}
         autoencoder: ${models.galaxy_vae}
-        autoencoder_ckpt: ${paths.project}/models/sdss_vae.pt
-        hidden: 256
+        hidden: ${models.galaxy_vae.hidden}
+        #vae_flow: ${models.galaxy_flow}
+        #vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     galaxy_flow:
         _target_: bliss.models.vae.galaxy_flow.CenteredGalaxyLatentFlow
         vae: ${models.galaxy_vae}
         vae_ckpt: ${paths.project}/models/sdss_vae.pt
     galaxy_vae:
-        _target_: bliss.models.vae.galaxy_net.OneCenteredGalaxyVAE
-        latent_dim: 64
-        n_bands: 1
+        _target_: bliss.models.vae.galaxy_vae.OneCenteredGalaxyVAE
         slen: 53
-        residual_delay_n_steps: 3000
-        min_sd: 1e-3
+        latent_dim: 32
+        hidden: 256
+        n_bands: 1
     prior:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1
@@ -133,10 +134,9 @@ models:
         prob_galaxy: 0.7
         galaxy_prior:
             _target_: bliss.models.vae.prior.GalaxyVAEPrior
-            vae: ${models.galaxy_vae}
-            vae_ckpt: ${paths.project}/models/sdss_vae.pt
-            vae_flow: ${models.galaxy_flow}
-            vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
+            latent_dim: ${models.galaxy_vae.latent_dim}
+            #vae_flow: ${models.galaxy_flow}
+            #vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}

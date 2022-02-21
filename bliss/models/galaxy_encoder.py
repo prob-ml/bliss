@@ -13,7 +13,8 @@ from torch.optim import Adam
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.models.location_encoder import get_full_params_from_tiles, get_images_in_tiles
-from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
+from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
+from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.reporting import plot_image, plot_image_and_locs
 
 
@@ -22,8 +23,9 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         decoder: ImageDecoder,
         autoencoder: Union[OneCenteredGalaxyAE, OneCenteredGalaxyVAE],
-        autoencoder_ckpt: str = None,
-        hidden: int = 256,
+        hidden: int,
+        vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
+        vae_flow_ckpt: Optional[str] = None,
         optimizer_params: dict = None,
         crop_loss_at_border=False,
         checkpoint_path: Optional[str] = None,
@@ -51,11 +53,14 @@ class GalaxyEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         # will be trained.
-        if autoencoder_ckpt is not None:
-            autoencoder.load_state_dict(
-                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
-            )
-        self.enc = autoencoder.get_encoder(allow_pad=True)
+        self.enc = autoencoder.make_deblender(
+            self.slen, autoencoder.latent_dim, self.n_bands, hidden
+        )
+        if vae_flow is not None:
+            vae_flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
+            vae_flow.eval()
+            vae_flow.requires_grad_(False)
+            self.enc.p_z = vae_flow
         self.latent_dim = autoencoder.latent_dim
 
         # grid for center cropped tiles
@@ -71,20 +76,12 @@ class GalaxyEncoder(pl.LightningModule):
             )
 
     def encode(self, image_ptiles, tile_locs):
-        """Runs galaxy encoder on input image ptiles."""
+        """Runs galaxy encoder on input image ptiles (with bg substracted)."""
         assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
 
-        # in each padded tile we need to center the corresponding galaxy
-        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
-        centered_ptiles = self.center_ptiles(image_ptiles_flat, tile_locs_flat)
+        centered_ptiles = self.flatten_and_center_ptiles(image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-
-        # remove background before encoding
-        ptile_background = self.image_decoder.get_background(self.slen, self.slen)
-        centered_ptiles -= ptile_background.unsqueeze(0)
-
         # We can assume there is one galaxy per_tile and encode each tile independently.
         z_flat, pq_z_flat = self.enc(centered_ptiles)
         z = rearrange(
@@ -112,6 +109,23 @@ class GalaxyEncoder(pl.LightningModule):
         z, _ = self.encode(image_ptiles, tile_locs)
         return z
 
+    def max_a_post(self, image_ptiles, tile_locs):
+        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
+        batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
+
+        centered_ptiles = self.flatten_and_center_ptiles(image_ptiles, tile_locs)
+        assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
+        # We can assume there is one galaxy per_tile and encode each tile independently.
+        z_flat = self.enc.max_a_post(centered_ptiles)
+        return rearrange(
+            z_flat,
+            "(b nth ntw s) d -> b nth ntw s d",
+            b=batch_size,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
+            s=self.max_sources,
+        )
+
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
         batch_size = len(batch["images"])
@@ -128,27 +142,35 @@ class GalaxyEncoder(pl.LightningModule):
 
     def _get_loss(self, batch):
         images = batch["images"]
+        background = batch["background"]
         tile_locs = batch["locs"]
-        ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        ptiles = get_images_in_tiles(images - background, self.tile_slen, self.ptile_slen)
         z, pq_z = self.encode(ptiles, tile_locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
-        recon_mean, recon_var = self.image_decoder.render_images(
+        recon_mean = self.image_decoder.render_images(
             batch["n_sources"],
             batch["locs"],
             batch["galaxy_bools"],
             z,
             batch["fluxes"],
-            add_noise=False,
         )
+        recon_mean += background
 
-        recon_losses = -Normal(recon_mean, recon_var.sqrt()).log_prob(images)
+        assert not torch.any(torch.isnan(recon_mean))
+        assert not torch.any(torch.isinf(recon_mean))
+        recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         if self.crop_loss_at_border:
             slen = batch["slen"].unique().item()
             bp = (recon_losses.shape[-1] - slen) // 2
             bp = bp * 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
-        return recon_losses.sum() - pq_z.sum()
+        assert not torch.any(torch.isnan(recon_losses))
+        assert not torch.any(torch.isinf(recon_losses))
+
+        # For divergence loss, we only evaluate tiles with a galaxy in them
+        divergence_loss = (pq_z.unsqueeze(-1) * batch["galaxy_bools"]).sum()
+        return recon_losses.sum() - divergence_loss
 
     def validation_epoch_end(self, outputs):
         """Pytorch lightning method run at end of validation epoch."""
@@ -168,6 +190,7 @@ class GalaxyEncoder(pl.LightningModule):
         samples = np.random.choice(len(batch["n_sources"]), n_samples, replace=False)
         keys = [
             "images",
+            "background",
             "locs",
             "galaxy_bools",
             "star_bools",
@@ -180,10 +203,11 @@ class GalaxyEncoder(pl.LightningModule):
 
         # extract non-params entries so that 'get_full_params' to works.
         images = batch["images"]
+        background = batch["background"]
         tile_locs = batch["locs"]
         slen = int(batch["slen"].unique().item())
         # obtain map estimates
-        ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        ptiles = get_images_in_tiles(images - background, self.tile_slen, self.ptile_slen)
         z, _ = self.encode(ptiles, tile_locs)
 
         tile_est = {
@@ -199,14 +223,14 @@ class GalaxyEncoder(pl.LightningModule):
 
         # draw all reconstruction images.
         # render_images automatically accounts for tiles with no galaxies.
-        recon_images, _ = self.image_decoder.render_images(
+        recon_images = self.image_decoder.render_images(
             tile_est["n_sources"],
             tile_est["locs"],
             tile_est["galaxy_bools"],
             tile_est["galaxy_params"],
             tile_est["fluxes"],
-            add_noise=False,
         )
+        recon_images += background
         residuals = (images - recon_images) / torch.sqrt(recon_images)
 
         # draw worst `n_samples` examples as measured by absolute avg. residual error.
@@ -274,10 +298,12 @@ class GalaxyEncoder(pl.LightningModule):
             self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Validation Images", fig)
         plt.close(fig)
 
-    def center_ptiles(self, image_ptiles, tile_locs):
+    def flatten_and_center_ptiles(self, image_ptiles, tile_locs):
+        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
         return center_ptiles(
-            image_ptiles,
-            tile_locs,
+            image_ptiles_flat,
+            tile_locs_flat,
             self.tile_slen,
             self.ptile_slen,
             self.border_padding,
