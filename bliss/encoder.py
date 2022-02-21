@@ -113,7 +113,7 @@ class Encoder(nn.Module):
         if self.galaxy_encoder is not None:
             del log_image_ptiles
             image_ptiles = self.get_images_in_ptiles(image - background)
-            galaxy_params = self.galaxy_encoder.sample(image_ptiles, tile_map["locs"])
+            galaxy_params = self.galaxy_encoder.max_a_post(image_ptiles, tile_map["locs"])
             galaxy_params *= tile_map["is_on_array"] * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})
 

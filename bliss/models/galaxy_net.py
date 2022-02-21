@@ -42,6 +42,9 @@ class CenteredGalaxyEncoder(nn.Module):
         """Encodes galaxy from image."""
         return self.features(image), torch.tensor(0.0, device=image.device)
 
+    def max_a_post(self, image):
+        return self.features(image)
+
 
 class CenteredGalaxyDecoder(nn.Module):
     def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256, use_weight_norm=False):

@@ -45,3 +45,6 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
         assert not torch.any(torch.isnan(log_qz))
         assert not torch.any(torch.isinf(log_qz))
         return z, log_pz - log_qz
+
+    def max_a_post(self, image):
+        return self.encode(image).loc

@@ -109,6 +109,24 @@ class GalaxyEncoder(pl.LightningModule):
         z, _ = self.encode(image_ptiles, tile_locs)
         return z
 
+    def max_a_post(self, image_ptiles, tile_locs):
+        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
+        batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
+
+        centered_ptiles = self.flatten_and_center_ptiles(image_ptiles, tile_locs)
+        assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
+        # We can assume there is one galaxy per_tile and encode each tile independently.
+        z_flat = self.enc.max_a_post(centered_ptiles)
+        z = rearrange(
+            z_flat,
+            "(b nth ntw s) d -> b nth ntw s d",
+            b=batch_size,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
+            s=self.max_sources,
+        )
+        return z
+
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
         batch_size = len(batch["images"])
