@@ -1,23 +1,31 @@
+from typing import Optional
+
 import torch
 
 from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
-from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
 
 
 class GalaxyVAEPrior:
     def __init__(
         self,
-        vae: OneCenteredGalaxyVAE,
-        vae_ckpt: str,
-        vae_flow: CenteredGalaxyLatentFlow,
-        vae_flow_ckpt: str,
+        latent_dim: int,
+        vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
+        vae_flow_ckpt: str = None,
     ):
-        vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))
-        self.vae = vae
-        vae_flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
-        self.vae.dist_main = vae_flow.flow_main
-        self.vae.dist_residual = vae_flow.flow_residual
+        self.latent_dim = latent_dim
+        if vae_flow is None:
+            self.flow = None
+        else:
+            self.flow = vae_flow
+            assert self.latent_dim == self.flow.latent_dim
+            self.flow.eval()
+            self.flow.requires_grad_(False)
+            self.flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
 
     def sample(self, n_latent_samples, device):
-        self.vae = self.vae.to(device=device)
-        return self.vae.sample_latent(n_latent_samples)
+        if self.flow is None:
+            samples = torch.randn((n_latent_samples, self.latent_dim), device=device)
+        else:
+            self.flow = self.flow.to(device=device)
+            samples = self.flow.sample(n_latent_samples)
+        return samples

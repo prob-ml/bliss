@@ -106,14 +106,13 @@ models:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         decoder: ${models.decoder}
         autoencoder: ${models.galaxy_net}
-        autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
-        hidden: 256
+        hidden: ${models.galaxy_net.hidden}
     galaxy_net:
         _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
         slen: 53
-        latent_dim: 64
+        latent_dim: 8
+        hidden: 256
         n_bands: 1
-        residual_delay_n_steps: 500
     prior:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1

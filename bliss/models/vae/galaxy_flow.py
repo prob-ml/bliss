@@ -5,7 +5,7 @@ from nflows import distributions, flows, transforms
 from nflows.transforms.base import Transform
 from torch.optim import Adam
 
-from bliss.models.vae.galaxy_net import OneCenteredGalaxyVAE
+from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
 
 
 class CenteredGalaxyLatentFlow(pl.LightningModule):
@@ -22,31 +22,30 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         # Embed the autoencoder
         # assert vae_ckpt is not None
         vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))
-        self.encoder = vae.get_encoder()
+        self.encoder = vae.get_encoder().eval()
         self.encoder.requires_grad_(False)
 
-        self.decoder = vae.get_decoder()
+        self.decoder = vae.get_decoder().eval()
         self.decoder.requires_grad_(False)
 
         self.latent_dim = vae.latent_dim
-
-        self.flow_main = make_flow(self.latent_dim // 2, n_layers)
-        self.flow_residual = make_flow(self.latent_dim // 2, n_layers)
+        self.flow = make_flow(self.latent_dim, n_layers)
 
     def forward(self, image, background):
-        latent, _ = self.encoder(image, background)
-        latent_main, latent_residual = torch.split(
-            latent, (self.latent_dim // 2, self.latent_dim // 2), -1
-        )
-        return (
-            -self.flow_main.log_prob(latent_main).mean()
-            - self.flow_residual.log_prob(latent_residual).mean(),
-            latent,
-        )
+        latent, _ = self.encoder(image - background)
+        log_prob = self.flow.log_prob(latent).sum(-1).mean()
+        loss = -log_prob
+        return loss, latent
+
+    def sample(self, n_samples):
+        return self.flow.sample(n_samples)
+
+    def log_prob(self, x):
+        return self.flow.log_prob(x)
 
     def training_step(self, batch, batch_idx):
         images, background = batch["images"], batch["background"]
-        loss, _ = self(images, background)
+        loss, _ = self.forward(images, background)
         self.log("train/loss", loss, prog_bar=True)
         return loss
 
@@ -54,17 +53,11 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         images, background = batch["images"], batch["background"]
         loss, latent = self(images, background)
         self.log("val/loss", loss, prog_bar=True)
-        latent_main, latent_residual = torch.split(
-            latent, (self.latent_dim // 2, self.latent_dim // 2), -1
-        )
-        u_main = self.flow_main.transform_to_noise(latent_main)
-        u_residual = self.flow_residual.transform_to_noise(latent_residual)
+        u = self.flow.transform_to_noise(latent)
 
         return {
-            "latent_main": latent_main,
-            "latent_residual": latent_residual,
-            "u_main": u_main,
-            "u_residual": u_residual,
+            "latent": latent,
+            "u": u,
         }
 
     def validation_epoch_end(self, outputs):
@@ -76,12 +69,12 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
 
         base_size = 8
         agg_posterior_before = plt.figure(figsize=(base_size, base_size))
-        latent_main = output_tensors["latent_main"].cpu().detach().numpy()
-        plt.scatter(latent_main[:, 0], latent_main[:, 1])
+        latent = output_tensors["latent"].cpu().detach().numpy()
+        plt.scatter(latent[:, 0], latent[:, 1])
 
         agg_posterior_after = plt.figure(figsize=(base_size, base_size))
-        u_main = output_tensors["u_main"].cpu().detach().numpy()
-        plt.scatter(u_main[:, 0], u_main[:, 1])
+        u = output_tensors["u"].cpu().detach().numpy()
+        plt.scatter(u[:, 0], u[:, 1])
 
         if self.logger:
             heading = f"Epoch:{self.current_epoch}"

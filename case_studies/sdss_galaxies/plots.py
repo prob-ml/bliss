@@ -13,7 +13,6 @@ import seaborn as sns
 import torch
 from astropy.table import Table
 from astropy.wcs.wcs import WCS
-from hydra import compose, initialize
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
@@ -52,12 +51,11 @@ def get_sdss_data(cfg):
         camcol=camcol,
         fields=(field,),
         bands=bands,
-        overwrite_cache=True,
-        overwrite_fits_cache=True,
     )
 
     return {
         "image": sdss_data[0]["image"][0],
+        "background": sdss_data[0]["background"][0],
         "wcs": sdss_data[0]["wcs"][0],
         "pixel_scale": cfg.plots.sdss_pixel_scale,
     }
@@ -142,7 +140,7 @@ class DetectionClassificationFigures(BlissFigures):
             "classification": "sdss-classification-acc.png",
         }
 
-    def compute_data(self, scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, scene, background, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
         assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
         device = sleep_net.device
@@ -166,9 +164,11 @@ class DetectionClassificationFigures(BlissFigures):
 
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
+        background_torch = torch.from_numpy(background).reshape(1, 1, h, w)
         _, est_params = predict_on_scene(
             clen,
             scene_torch,
+            background_torch,
             image_encoder,
             binary_encoder,
             galaxy_encoder,
@@ -277,7 +277,7 @@ class SDSSReconstructionFigures(BlissFigures):
     def fignames(self):
         return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(len(self.lims))}}
 
-    def compute_data(self, scene, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, scene, background, sleep_net, binary_encoder, galaxy_encoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
         assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
         device = sleep_net.device
@@ -298,13 +298,16 @@ class SDSSReconstructionFigures(BlissFigures):
             chunk = scene[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
             chunk = torch.from_numpy(chunk.reshape(1, 1, hb, wb)).to(device)
 
+            bchunk = background[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
+            bchunk = torch.from_numpy(bchunk.reshape(1, 1, hb, wb)).to(device)
+
             # for plotting
             chunk_np = chunk.reshape(hb, wb).cpu().numpy()
 
             with torch.no_grad():
 
                 tile_map, _, _ = predict_on_image(
-                    chunk, image_encoder, binary_encoder, galaxy_encoder
+                    chunk, bchunk, image_encoder, binary_encoder, galaxy_encoder
                 )
 
                 # plot image from tile est.
@@ -316,7 +319,7 @@ class SDSSReconstructionFigures(BlissFigures):
                     tile_map["fluxes"],
                 )
                 # FIXME Need to use actual background value
-                recon_image += 865.0
+                recon_image += bchunk
 
             recon_image = recon_image.cpu().numpy().reshape(hb, wb)
 
@@ -398,7 +401,8 @@ class AEReconstructionFigures(BlissFigures):
         n_iters = int(np.ceil(n_images // 128))
         for i in range(n_iters):  # in batches otherwise GPU error.
             bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
-            recon_mean = autoencoder.forward(bimages, background).detach().to("cpu")
+            recon_mean, _ = autoencoder.forward(bimages, background)
+            recon_mean = recon_mean.detach().to("cpu")
             recon_means = torch.cat((recon_means, recon_mean))
         residuals = (images - recon_means) / recon_means.sqrt()
         assert recon_means.shape[0] == noiseless_images.shape[0]
@@ -660,17 +664,20 @@ def plots(cfg):
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in fig:
         autoencoder = instantiate(cfg.models.galaxy_net)
-        autoencoder.load_state_dict(torch.load(cfg.models.decoder.autoencoder_ckpt))
+        autoencoder.load_state_dict(torch.load(cfg.models.prior.galaxy_prior.autoencoder_ckpt))
         autoencoder = autoencoder.to(device).eval()
 
         # generate galsim simulated galaxies images if file does not exist.
         galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
         if not galaxies_file.exists():
             print(f"Generating individual galaxy images and saving to: {galaxies_file}")
-            overrides = ["experiment=sdss_individual_galaxies"]
-            with initialize(config_path="config"):
-                cfg = compose("config", overrides=overrides)
-                generate.generate(cfg)
+            dataset = instantiate(
+                cfg.datasets.sdss_galaxies, batch_size=512, n_batches=20, num_workers=20
+            )
+            imagepath = galaxies_file.parent / (galaxies_file.stem + "_images.pdf")
+            generate.generate(
+                dataset, galaxies_file, imagepath, n_plots=25, global_params=("background", "slen")
+            )
 
         # create figure classes and plot.
         ae_figures = AEReconstructionFigures(outdir, overwrite=overwrite, n_examples=5)
@@ -682,16 +689,18 @@ def plots(cfg):
     # FIGURE 2: Classification and Detection metrics
     if 2 in fig:
         scene = get_sdss_data(cfg)["image"]
+        background = get_sdss_data(cfg)["background"]
         coadd_cat = Table.read(cfg.plots.coadd_cat, format="fits")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
-        dc_fig.save_figures(scene, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+        dc_fig.save_figures(scene, background, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in fig:
         scene = get_sdss_data(cfg)["image"]
+        background = get_sdss_data(cfg)["background"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
-        sdss_rec_fig.save_figures(scene, sleep_net, binary_encoder, galaxy_encoder)
+        sdss_rec_fig.save_figures(scene, background, sleep_net, binary_encoder, galaxy_encoder)
         mpl.rc_file_defaults()
 
     else:

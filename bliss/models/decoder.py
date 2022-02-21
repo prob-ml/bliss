@@ -497,7 +497,7 @@ class StarTileDecoder(nn.Module):
 
 class GalaxyTileDecoder(nn.Module):
     def __init__(
-        self, tile_slen, ptile_slen, n_bands, galaxy_decoder: galaxy_net.OneCenteredGalaxyDecoder
+        self, tile_slen, ptile_slen, n_bands, galaxy_decoder: galaxy_net.CenteredGalaxyDecoder
     ):
         super().__init__()
         self.n_bands = n_bands
