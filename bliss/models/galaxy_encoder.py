@@ -117,7 +117,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
         # We can assume there is one galaxy per_tile and encode each tile independently.
         z_flat = self.enc.max_a_post(centered_ptiles)
-        z = rearrange(
+        return rearrange(
             z_flat,
             "(b nth ntw s) d -> b nth ntw s d",
             b=batch_size,
@@ -125,7 +125,6 @@ class GalaxyEncoder(pl.LightningModule):
             ntw=n_tiles_w,
             s=self.max_sources,
         )
-        return z
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
