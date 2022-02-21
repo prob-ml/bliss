@@ -101,7 +101,7 @@ def reconstruct(cfg):
             fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
             torch.save(scene_metrics_map, outdir / (scene_name + ".pt"))
             torch.save(coadd_data, outdir / (scene_name + "_coadd.pt"))
-            torch.save(map_recon, outdir/ (scene_name + "_map_recon.pt"))
+            torch.save(map_recon, outdir / (scene_name + "_map_recon.pt"))
 
 
 def get_sdss_data(sdss_dir, sdss_pixel_scale):
