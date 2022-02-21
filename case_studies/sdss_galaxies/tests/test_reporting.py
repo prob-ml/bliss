@@ -33,7 +33,10 @@ def test_coadd(devices, get_config):
     coadd_cat["hlr"] = reporting.get_hlr_coadd(coadd_cat[:5], psf)
 
     # params for calculating metrics
-    _ = reporting.get_params_from_coadd(coadd_cat, h=1489, w=2048, bp=24)
+    h = 1489
+    w = 2048
+    bp = 24
+    _ = reporting.get_params_from_coadd(coadd_cat, (bp, w - bp), (bp, h - bp))
 
 
 def test_measurements():
