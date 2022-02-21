@@ -311,7 +311,6 @@ class SDSSReconstructionFigures(BlissFigures):
                 recon_image, recon_map = reconstruct_scene_at_coordinates(
                     encoder, decoder, chunk, bchunk, hlims, wlims, slen=hb, device=device
                 )
-                # FIXME Need to use actual background value
                 recon_image += bchunk
 
             recon_image = recon_image.cpu().numpy().reshape(hb, wb)
