@@ -142,13 +142,19 @@ def predict_on_scene(
         scene: Tensor of shape (1, n_bands, h, w) containing image of scene we will make
             predictions.
         bg_scene: Tensor of shape (1, n_bands, h, w) corresponding to the background values
-            of scene
-        device: Device where each model is currently and where padded chunks will be moved.
-        image_encoder: Trained ImageEncoder model.
-        galaxy_encoder: Trained GalaxyEncoder model.
-        galaxy_decoder: Trained CenteredGalaxyDecoder model.
-        binary_encoder: Trained BinaryEncoder model.
-        testing: Whether we are unit testing and we only want to run 1 chunk.
+            of scene.
+        device:
+            Device where each model is currently and where padded chunks will be moved.
+        image_encoder:
+            Trained ImageEncoder model.
+        galaxy_encoder:
+            Trained GalaxyEncoder model.
+        galaxy_decoder:
+            Trained CenteredGalaxyDecoder model.
+        binary_encoder:
+            Trained BinaryEncoder model.
+        testing:
+            Whether we are unit testing and we only want to run 1 chunk.
 
     Returns:
         results: List containing the results of prediction on each chunk, i.e. tuples of
