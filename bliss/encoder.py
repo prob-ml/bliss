@@ -86,9 +86,9 @@ class Encoder(nn.Module):
         Returns:
             A dictionary of the maximum a posteriori
             of the catalog in tiles. Specifically, this dictionary comprises:
-            - The output of LocationEncoder.max_a_post()
-            - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
-            - 'galaxy_params' from GalaxyEncoder.
+                - The output of LocationEncoder.max_a_post()
+                - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
+                - 'galaxy_params' from GalaxyEncoder.
         """
         log_image = subtract_bg_and_log_transform(image, background)
         log_image_ptiles = self.get_images_in_ptiles(log_image)
