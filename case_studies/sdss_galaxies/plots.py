@@ -181,6 +181,7 @@ class DetectionClassificationFigures(BlissFigures):
             slen=slen,
             device=device,
         )
+        est_params["plocs"] = est_params["plocs"] - 0.5
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
             + est_params["star_bools"] * est_params["fluxes"]
@@ -320,6 +321,7 @@ class SDSSReconstructionFigures(BlissFigures):
                 recon_image, recon_map = reconstruct_scene_at_coordinates(
                     encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device
                 )
+            recon_map["plocs"] = recon_map["plocs"] - 0.5
             # only keep section inside border padding
             true_image = scene[0, 0, ylim[0] : ylim[1], xlim[0] : xlim[1]].cpu()
             recon_image = recon_image[0, 0].cpu()
