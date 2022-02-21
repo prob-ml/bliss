@@ -154,7 +154,7 @@ class DetectionClassificationFigures(BlissFigures):
         h, w = scene.shape[-2], scene.shape[-1]
 
         # load coadd catalog
-        coadd_params = reporting.get_params_from_coadd(coadd_cat, (h, h + clen), (w, w + clen), bp)
+        coadd_params = reporting.get_params_from_coadd(coadd_cat, (bp, w - bp), (bp, h - bp))
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
