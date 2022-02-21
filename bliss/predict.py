@@ -117,6 +117,7 @@ def predict_on_image(
     return tile_map, full_map, var_params_n_sources
 
 
+# pylint: disable=too-many-statements
 def predict_on_scene(
     clen: int,
     scene: torch.Tensor,
