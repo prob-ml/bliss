@@ -153,7 +153,13 @@ class DetectionClassificationFigures(BlissFigures):
         wlims = (bp, w - bp)
 
         # load coadd catalog
-        coadd_params = reporting.get_params_from_coadd(coadd_cat, wlims, hlims)
+        coadd_params = reporting.get_params_from_coadd(
+            coadd_cat,
+            wlims,
+            hlims,
+            shift_plocs_to_lim_start=True,
+            convert_xy_to_hw=True,
+        )
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
@@ -303,14 +309,20 @@ class SDSSReconstructionFigures(BlissFigures):
             assert xlim[0] >= bp
             assert ylim[0] >= bp
 
-            coadd_data = reporting.get_params_from_coadd(coadd_cat, xlim, ylim)
+            coadd_data = reporting.get_params_from_coadd(
+                coadd_cat,
+                xlim,
+                ylim,
+                shift_plocs_to_lim_start=True,
+                convert_xy_to_hw=True,
+            )
             with torch.no_grad():
                 recon_image, recon_map = reconstruct_scene_at_coordinates(
                     encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device
                 )
             # only keep section inside border padding
             true_image = scene[0, 0, ylim[0] : ylim[1], xlim[0] : xlim[1]].cpu()
-            recon_image = recon_image[0,0].cpu()
+            recon_image = recon_image[0, 0].cpu()
             res_image = (true_image - recon_image) / np.sqrt(recon_image)
 
             data[figname] = (true_image, recon_image, res_image, recon_map, coadd_data)
