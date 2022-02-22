@@ -29,7 +29,6 @@ class ImageDecoder(pl.LightningModule):
     def __init__(
         self,
         n_bands: int = 1,
-        slen: int = 50,
         tile_slen: int = 2,
         ptile_slen: int = 10,
         border_padding: int = None,
@@ -55,10 +54,7 @@ class ImageDecoder(pl.LightningModule):
         """
         super().__init__()
         self.n_bands = n_bands
-        assert slen % 1 == 0, "slen must be an integer."
-        assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
         assert tile_slen <= ptile_slen
-        self.slen = int(slen)
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         self.border_padding = self._validate_border_padding(border_padding)
@@ -91,11 +87,6 @@ class ImageDecoder(pl.LightningModule):
         if self.galaxy_tile_decoder is None:
             return None
         return self.galaxy_tile_decoder.galaxy_decoder
-
-    @property
-    def n_tiles_per_image(self):
-        n_tiles_per_image = (self.slen / self.tile_slen) ** 2
-        return int(n_tiles_per_image)
 
     def render_images(
         self,

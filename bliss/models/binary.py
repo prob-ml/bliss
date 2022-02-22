@@ -196,8 +196,11 @@ class BinaryEncoder(pl.LightningModule):
         batch = {}
         for b in outputs:
             for k, v in b.items():
-                curr_val = batch.get(k, torch.tensor([], device=v.device))
-                batch[k] = torch.cat([curr_val, v])
+                if k in ("hlen", "wlen") and k not in batch:
+                    batch[k] = v
+                else:
+                    curr_val = batch.get(k, torch.tensor([], device=v.device))
+                    batch[k] = torch.cat([curr_val, v])
 
         if self.n_bands == 1:
             self.make_plots(batch)
@@ -217,8 +220,11 @@ class BinaryEncoder(pl.LightningModule):
         nrows = int(n_samples ** 0.5)  # for figure
 
         # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
+        exclude = {"images", "background", "hlen", "wlen"}
+        hlen = batch["hlen"].item()
+        wlen = batch["wlen"].item()
+        assert hlen == wlen
+        slen = hlen
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params_from_tiles(true_tile_params, self.tile_slen)
         # prediction

@@ -44,7 +44,6 @@ class GalaxyEncoder(pl.LightningModule):
 
         # extract useful info from image_decoder
         self.n_bands = self.image_decoder.n_bands
-        self.decoder_slen = self.image_decoder.slen
 
         # put image dimensions together
         self.tile_slen = self.image_decoder.tile_slen
@@ -178,8 +177,11 @@ class GalaxyEncoder(pl.LightningModule):
         batch = {}
         for b in outputs:
             for k, v in b.items():
-                curr_val = batch.get(k, torch.tensor([], device=v.device))
-                batch[k] = torch.cat([curr_val, v])
+                if k in ("hlen", "wlen") and k not in batch:
+                    batch[k] = v
+                else:
+                    curr_val = batch.get(k, torch.tensor([], device=v.device))
+                    batch[k] = torch.cat([curr_val, v])
         if self.n_bands == 1:
             self._make_plots(batch)
 
@@ -205,7 +207,12 @@ class GalaxyEncoder(pl.LightningModule):
         images = batch["images"]
         background = batch["background"]
         tile_locs = batch["locs"]
-        slen = int(batch["slen"].unique().item())
+
+        hlen = batch["hlen"].item()
+        wlen = batch["wlen"].item()
+        assert hlen == wlen
+        slen = hlen
+
         # obtain map estimates
         ptiles = get_images_in_tiles(images - background, self.tile_slen, self.ptile_slen)
         z, _ = self.encode(ptiles, tile_locs)

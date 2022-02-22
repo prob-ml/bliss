@@ -36,7 +36,6 @@ models:
   decoder:
     _target_: bliss.models.decoder.ImageDecoder
     n_bands: 2
-    slen: 100
     tile_slen: 2
     ptile_slen: 26
     border_padding: 3

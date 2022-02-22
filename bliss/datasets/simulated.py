@@ -37,7 +37,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.background = torch.tensor(background, device=generate_device)
 
         # check sleep training will work.
-        n_tiles_per_image = self.image_decoder.n_tiles_per_image
+        n_tiles_per_image = self.image_prior.n_tiles_h * self.image_prior.n_tiles_w
         total_ptiles = n_tiles_per_image * self.batch_size
         assert total_ptiles > 1, "Need at least 2 tiles over all batches."
 
@@ -65,7 +65,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 {
                     "images": images,
                     "background": background,
-                    "slen": torch.tensor([self.image_decoder.slen]),
+                    "hlen": torch.tensor(self.image_prior.tile_slen * self.image_prior.n_tiles_h),
+                    "wlen": torch.tensor(self.image_prior.tile_slen * self.image_prior.n_tiles_w),
                 }
             )
 

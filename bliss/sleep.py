@@ -228,9 +228,6 @@ class SleepPhase(pl.LightningModule):
         )
 
         # some constants
-        batch_size = images.shape[0]
-        n_tiles_per_image = self.image_decoder.n_tiles_per_image
-        n_ptiles = batch_size * n_tiles_per_image
         max_sources = self.image_encoder.max_detections
 
         # clip decoder output since constraint is: max_detections <= max_sources (per tile)
@@ -240,7 +237,7 @@ class SleepPhase(pl.LightningModule):
         true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
 
         # flatten so first dimension is ptile
-        # b: batch, s: n_tiles_per_image
+        # b: batch, s: max_sources
         true_tile_locs = rearrange(true_tile_locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
         true_tile_log_fluxes = rearrange(
             true_tile_log_fluxes, "b nth ntw s bands -> (b nth ntw) s bands"
@@ -259,7 +256,9 @@ class SleepPhase(pl.LightningModule):
         pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
-        n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)
+        n_source_log_probs = rearrange(
+            pred["n_source_log_probs"], "nptiles s -> nptiles s", s=max_sources + 1
+        )
         nllloss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
         counter_loss = nllloss(n_source_log_probs, true_tile_n_sources)
 
@@ -342,8 +341,12 @@ class SleepPhase(pl.LightningModule):
 
     def _get_full_params(self, batch):
         # true
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
+        exclude = {"images", "background", "hlen", "wlen"}
+        hlen = batch["hlen"].item()
+        wlen = batch["wlen"].item()
+        assert hlen == wlen
+        slen = hlen
+
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
 
