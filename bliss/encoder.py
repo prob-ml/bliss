@@ -129,6 +129,10 @@ class Encoder(nn.Module):
     def border_padding(self) -> int:
         return self.location_encoder.border_padding
 
+    @property
+    def device(self):
+        return self._dummy_param.device
+
 
 def get_star_bools(n_sources, galaxy_bools):
     assert n_sources.shape[0] == galaxy_bools.shape[0]

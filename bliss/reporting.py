@@ -304,7 +304,11 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
 
 
 def get_params_from_coadd(
-    coadd_cat, xlim: Optional[Tuple[int, int]] = None, ylim: Optional[Tuple[int, int]] = None
+    coadd_cat,
+    xlim: Optional[Tuple[int, int]] = None,
+    ylim: Optional[Tuple[int, int]] = None,
+    shift_plocs_to_lim_start=False,
+    convert_xy_to_hw=False,
 ):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
     coadd_names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
@@ -338,6 +342,12 @@ def get_params_from_coadd(
     data["fluxes"] = data["flux"]
     data["hlrs"] = data["hlr"]
     data["mags"] = data["mag"]
+
+    if shift_plocs_to_lim_start:
+        data["plocs"] = data["plocs"] - torch.tensor((xlim[0], ylim[0])).unsqueeze(0)
+
+    if convert_xy_to_hw:
+        data["plocs"] = torch.stack((data["plocs"][:, 1], data["plocs"][:, 0]), dim=1)
 
     return data
 
