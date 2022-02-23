@@ -26,6 +26,82 @@ from bliss.models.galaxy_net import OneCenteredGalaxyAE
 pl.seed_everything(0)
 
 
+CB_color_cycle = [
+    "#377eb8",
+    "#ff7f00",
+    "#4daf4a",
+    "#f781bf",
+    "#a65628",
+    "#984ea3",
+    "#999999",
+    "#e41a1c",
+    "#dede00",
+]
+
+
+def set_rc_params(
+    figsize=(10, 10),
+    fontsize=18,
+    title_size="large",
+    label_size="medium",
+    legend_fontsize="medium",
+    tick_label_size="small",
+    major_tick_size=7,
+    minor_tick_size=4,
+    major_tick_width=0.8,
+    minor_tick_width=0.6,
+    lines_marker_size=8,
+):
+    # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
+    rc_params = {
+        # font.
+        "font.family": "serif",
+        "font.sans-serif": "Helvetica",
+        "text.usetex": True,
+        "mathtext.fontset": "cm",
+        "font.size": fontsize,
+        # figure
+        "figure.figsize": figsize,
+        # axes
+        "axes.labelsize": label_size,
+        "axes.titlesize": title_size,
+        # ticks
+        "xtick.labelsize": tick_label_size,
+        "ytick.labelsize": tick_label_size,
+        "xtick.major.size": major_tick_size,
+        "ytick.major.size": major_tick_size,
+        "xtick.major.width": major_tick_width,
+        "ytick.major.width": major_tick_width,
+        "ytick.minor.size": minor_tick_size,
+        "xtick.minor.size": minor_tick_size,
+        "xtick.minor.width": minor_tick_width,
+        "ytick.minor.width": minor_tick_width,
+        # markers
+        "lines.markersize": lines_marker_size,
+        # legend
+        "legend.fontsize": legend_fontsize,
+        # colors
+        "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
+    }
+    mpl.rcParams.update(rc_params)
+    sns.set_context(rc=rc_params)
+
+
+def format_plot(ax, xlims=None, ylims=None, xticks=None, yticks=None, xlabel="", ylabel=""):
+    if xlims is not None:
+        ax.set_xlim(xlims)
+    if ylims is not None:
+        ax.set_ylim(ylims)
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    if xticks:
+        ax.set_xticks(xticks)
+    if yticks:
+        ax.set_yticks(yticks)
+
+
 def remove_outliers(*args, level=0.99):
     # each arg in args should be 1D numpy.array with same number of data points.
     for arg in args:
@@ -226,17 +302,17 @@ class DetectionClassificationFigures(BlissFigures):
         galaxy_accs = data["galaxy_accs"]
         star_accs = data["star_accs"]
 
-        reporting.set_rc_params(tick_label_size=22, label_size=30)
+        set_rc_params(tick_label_size=22, label_size=30)
         f1, ax = plt.subplots(1, 1, figsize=(10, 10))
-        reporting.format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="value of metric")
+        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="value of metric")
         ax.plot(mag_bins, recalls, "-o", label=r"\rm recall")
         ax.plot(mag_bins, precisions, "-o", label=r"\rm precision")
         plt.xlim(18, 23)
         ax.legend(loc="best", prop={"size": 22})
 
-        reporting.set_rc_params(tick_label_size=22, label_size=30)
+        set_rc_params(tick_label_size=22, label_size=30)
         f2, ax = plt.subplots(1, 1, figsize=(10, 10))
-        reporting.format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="accuracy")
+        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="accuracy")
         ax.plot(mag_bins, class_accs, "-o", label=r"\rm classification accuracy")
         ax.plot(mag_bins, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
         ax.plot(mag_bins, star_accs, "-o", label=r"\rm star classification accuracy")
@@ -333,7 +409,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
         plt.style.use("seaborn-colorblind")
         pad = 6.0
-        reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
+        set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname in self.fignames:
             true, recon, res, recon_map, coadd_data = data[figname]
             xlim, _ = self.lims[figname]
@@ -496,7 +572,7 @@ class AEReconstructionFigures(BlissFigures):
     def reconstruction_figure(self, images, recons, residuals):
         plt.style.use("seaborn-colorblind")
         pad = 6.0
-        reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
+        set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         fig, axes = plt.subplots(nrows=self.n_examples, ncols=3, figsize=(12, 20))
 
         assert images.shape[0] == recons.shape[0] == residuals.shape[0] == self.n_examples
@@ -542,14 +618,14 @@ class AEReconstructionFigures(BlissFigures):
         sns.scatterplot(x=x, y=y, s=10, color="0.15", ax=ax)
         sns.histplot(x=x, y=y, pthresh=0.1, cmap="mako", ax=ax, cbar=True)
         sns.kdeplot(x=x, y=y, levels=10, color="w", linewidths=1, ax=ax)
-        reporting.format_plot(ax, **plot_kwargs)
+        format_plot(ax, **plot_kwargs)
 
     def make_2d_hist(self, x, y, color="m", height=7, **plot_kwargs):
         # NOTE: This creates its own figure object which makes it hard to use.
         # TODO: Revive if useful later on.
         g = sns.jointplot(x=x, y=y, color=color, kind="hist", marginal_ticks=True, height=height)
         g.ax_joint.axline(xy1=(np.median(x), np.median(y)), slope=1.0)
-        reporting.format_plot(g.ax_joint, **plot_kwargs)
+        format_plot(g.ax_joint, **plot_kwargs)
 
     def scatter_bin_plot(self, ax, x, y, xlims, delta, capsize=5.0, **plot_kwargs):
 
@@ -575,11 +651,11 @@ class AEReconstructionFigures(BlissFigures):
 
         errs = errs.T.reshape(2, -1)
         ax.errorbar(xs, ys, yerr=errs, marker="o", c="m", linestyle="--", capsize=capsize)
-        reporting.format_plot(ax, **plot_kwargs)
+        format_plot(ax, **plot_kwargs)
 
     def make_scatter_contours_plot(self, meas):
         sns.set_theme(style="darkgrid")
-        reporting.set_rc_params(
+        set_rc_params(
             fontsize=22, legend_fontsize="small", tick_label_size="small", label_size="medium"
         )
         fig, axes = plt.subplots(2, 2, figsize=(12, 12))
@@ -621,7 +697,7 @@ class AEReconstructionFigures(BlissFigures):
     def make_scatter_bin_plots(self, meas):
         fig, axes = plt.subplots(2, 2, figsize=(16, 16))
         ax1, ax2, ax3, ax4 = axes.flatten()
-        reporting.set_rc_params(fontsize=24)
+        set_rc_params(fontsize=24)
 
         # fluxes / magnitudes
         true_mags, recon_mags = meas["true_mags"], meas["recon_mags"]
