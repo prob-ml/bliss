@@ -354,8 +354,8 @@ class SDSSReconstructionFigures(BlissFigures):
             ax_res.set_title("Residual", pad=pad)
 
             # plot images
-            reporting.plot_image(fig, ax_true, true, vrange=(800, 1200))
-            reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
+            reporting.plot_image(fig, ax_true, true, vrange=(800, 1000))
+            reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1000))
             reporting.plot_image(fig, ax_res, res, vrange=(-5, 5))
 
             locs_true = coadd_data["plocs"]
