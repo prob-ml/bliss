@@ -196,7 +196,7 @@ class BinaryEncoder(pl.LightningModule):
         batch = {}
         for b in outputs:
             for k, v in b.items():
-                if k in ("hlen", "wlen") and k not in batch:
+                if k in {"hlen", "wlen"} and k not in batch:
                     batch[k] = v
                 else:
                     curr_val = batch.get(k, torch.tensor([], device=v.device))
