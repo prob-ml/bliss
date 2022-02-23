@@ -228,9 +228,6 @@ class SleepPhase(pl.LightningModule):
         )
 
         # some constants
-        batch_size = images.shape[0]
-        n_tiles_per_image = self.image_decoder.n_tiles_per_image
-        n_ptiles = batch_size * n_tiles_per_image
         max_sources = self.image_encoder.max_detections
 
         # clip decoder output since constraint is: max_detections <= max_sources (per tile)
@@ -240,7 +237,7 @@ class SleepPhase(pl.LightningModule):
         true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
 
         # flatten so first dimension is ptile
-        # b: batch, s: n_tiles_per_image
+        # b: batch, s: max_sources
         true_tile_locs = rearrange(true_tile_locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
         true_tile_log_fluxes = rearrange(
             true_tile_log_fluxes, "b nth ntw s bands -> (b nth ntw) s bands"
@@ -259,7 +256,9 @@ class SleepPhase(pl.LightningModule):
         pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
-        n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)
+        n_source_log_probs = rearrange(
+            pred["n_source_log_probs"], "nptiles s -> nptiles s", s=max_sources + 1
+        )
         nllloss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
         counter_loss = nllloss(n_source_log_probs, true_tile_n_sources)
 
@@ -315,7 +314,7 @@ class SleepPhase(pl.LightningModule):
         self.log("val/star_params_loss", star_params_loss.mean(), batch_size=batch_size)
 
         # get metrics and log on full image parameters.
-        true_params, est_params, _ = self._get_full_params(batch)
+        true_params, est_params = self._get_full_params(batch)
         metrics = self.val_detection_metrics(true_params, est_params)
         self.log("val/precision", metrics["precision"], batch_size=batch_size)
         self.log("val/recall", metrics["recall"], batch_size=batch_size)
@@ -330,7 +329,7 @@ class SleepPhase(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        true_params, est_params, _ = self._get_full_params(batch)
+        true_params, est_params = self._get_full_params(batch)
         metrics = self.test_detection_metrics(true_params, est_params)
         batch_size = len(batch["images"])
         self.log("precision", metrics["precision"], batch_size=batch_size)
@@ -342,15 +341,15 @@ class SleepPhase(pl.LightningModule):
 
     def _get_full_params(self, batch):
         # true
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
+        exclude = {"images", "background"}
+
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
 
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
         est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
-        return true_params, est_params, slen
+        return true_params, est_params
 
     # pylint: disable=too-many-statements
     def _make_plots(self, batch, kind="validation", n_samples=16):
@@ -362,11 +361,15 @@ class SleepPhase(pl.LightningModule):
             return
         nrows = int(n_samples ** 0.5)  # for figure
 
-        true_params, est_params, slen = self._get_full_params(batch)
+        true_params, est_params = self._get_full_params(batch)
 
         # setup figure and axes.
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
+
+        images = batch["images"]
+        assert images.shape[-2] == images.shape[-1]
+        slen = images.shape[-2] - 2 * self.image_encoder.border_padding
 
         for i in range(n_samples):
             plot_image_and_locs(

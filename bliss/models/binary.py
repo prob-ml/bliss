@@ -197,7 +197,7 @@ class BinaryEncoder(pl.LightningModule):
         for b in outputs:
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
-                batch[k] = torch.cat([curr_val, v])
+                batch[k] = torch.cat((curr_val, v))
 
         if self.n_bands == 1:
             self.make_plots(batch)
@@ -217,8 +217,7 @@ class BinaryEncoder(pl.LightningModule):
         nrows = int(n_samples ** 0.5)  # for figure
 
         # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
+        exclude = {"images", "background"}
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params_from_tiles(true_tile_params, self.tile_slen)
         # prediction
@@ -231,6 +230,10 @@ class BinaryEncoder(pl.LightningModule):
         # setup figure and axes
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
+
+        # Currently, plots require square images
+        assert batch["images"].shape[-2] == batch["images"].shape[-1]
+        slen = batch["images"].shape[-1] - 2 * self.border_padding
 
         for i in range(n_samples):
             plot_image_and_locs(

@@ -61,7 +61,6 @@ class ImagePrior(pl.LightningModule):
 
     Attributes:
         n_bands: Number of bands (colors) in the image
-        n_tiles_per_image: Number of tiles per image
         min_sources: Minimum number of sources in a tile
         max_sources: Maximum number of sources in a tile
         mean_sources: Mean rate of sources appearing in a tile
@@ -112,6 +111,7 @@ class ImagePrior(pl.LightningModule):
         assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
         self.n_tiles_h = int(slen) // tile_slen
         self.n_tiles_w = self.n_tiles_h
+        self.tile_slen = tile_slen
 
         assert max_sources > 0, "No sources will be drawn."
         self.min_sources = min_sources
