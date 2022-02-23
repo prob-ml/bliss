@@ -24,4 +24,4 @@ hydra_temp/
 bin/
 .pytest_cache/
 data/sdss/rcf_list
-data/sdss_all/
+data/sdss_all
