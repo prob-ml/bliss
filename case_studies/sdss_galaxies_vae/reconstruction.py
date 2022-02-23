@@ -1,6 +1,5 @@
 # flake8: noqa
 # pylint: skip-file
-import argparse
 from pathlib import Path
 
 import numpy as np
@@ -13,9 +12,7 @@ from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import reconstruct_scene_at_coordinates
-from bliss.models.binary import BinaryEncoder
-from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.sleep import SleepPhase
+from case_studies.sdss_galaxies.plots import set_rc_params
 
 
 def reconstruct(cfg):
@@ -129,7 +126,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     """Make figures related to detection and classification in SDSS."""
     plt.style.use("seaborn-colorblind")
     pad = 6.0
-    reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
+    set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
     # for figname in self.fignames:
     # true, recon, res, locs, locs_pred = data
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
