@@ -345,9 +345,6 @@ class SDSSReconstructionFigures(BlissFigures):
             fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
             assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
-            # pick standard ranges for residuals
-            vmin_res, vmax_res = res.min().item(), res.max().item()
-
             ax_true = axes[0]
             ax_recon = axes[1]
             ax_res = axes[2]
@@ -359,86 +356,54 @@ class SDSSReconstructionFigures(BlissFigures):
             # plot images
             reporting.plot_image(fig, ax_true, true, vrange=(800, 1200))
             reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
-            reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
+            reporting.plot_image(fig, ax_res, res, vrange=(-5, 5))
 
             locs_true = coadd_data["plocs"]
             true_galaxy_bools = coadd_data["galaxy_bools"]
             locs_galaxies_true = locs_true[true_galaxy_bools > 0.5]
             locs_stars_true = locs_true[true_galaxy_bools < 0.5]
 
+            s = 30 * np.sqrt(300 / scene_size)  # marker size
+
             if locs_stars_true.shape[0] > 0:
-                ax_true.scatter(
-                    locs_stars_true[:, 1], locs_stars_true[:, 0], color="b", marker="+", s=20
-                )
-                ax_recon.scatter(
-                    locs_stars_true[:, 1],
-                    locs_stars_true[:, 0],
-                    color="b",
-                    marker="+",
-                    s=20,
-                    label="SDSS Stars",
-                )
-                ax_res.scatter(
-                    locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="b", marker="+", s=20
-                )
+                x, y = locs_stars_true[:, 1], locs_stars_true[:, 0]
+                ax_true.scatter(x, y, color="b", marker="+", s=s)
+                ax_recon.scatter(x, y, color="b", marker="+", s=s, label="SDSS Stars")
+                ax_res.scatter(x, y, color="b", marker="+", s=s)
             if locs_galaxies_true.shape[0] > 0:
-                ax_true.scatter(
-                    locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="m", marker="+", s=20
-                )
-                ax_recon.scatter(
-                    locs_galaxies_true[:, 1],
-                    locs_galaxies_true[:, 0],
-                    color="m",
-                    marker="+",
-                    s=20,
-                    label="SDSS Galaxies",
-                )
-                ax_res.scatter(
-                    locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="m", marker="+", s=20
-                )
+                x, y = locs_galaxies_true[:, 1], locs_galaxies_true[:, 0]
+                ax_true.scatter(x, y, color="r", marker="+", s=s)
+                ax_recon.scatter(x, y, color="r", marker="+", s=s, label="SDSS Galaxies")
+                ax_res.scatter(x, y, color="r", marker="+", s=s)
 
             if recon_map is not None:
+                s *= 1.5
                 locs_pred = recon_map["plocs"][0]
                 star_bools = recon_map["star_bools"][0]
                 galaxy_bools = recon_map["galaxy_bools"][0]
                 locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]
                 locs_stars = locs_pred[star_bools[:, 0] > 0.5, :]
+                if locs_stars.shape[0] > 0:
+                    in_bounds = torch.all((locs_stars > 0) & (locs_stars < scene_size), dim=-1)
+                    locs_stars = locs_stars[in_bounds]
+                    x, y = locs_stars[:, 1], locs_stars[:, 0]
+                    ax_true.scatter(x, y, color="c", marker="x", s=s, alpha=0.6)
+                    ax_recon.scatter(
+                        x, y, color="c", marker="x", s=s, label="Predicted Star", alpha=0.6
+                    )
+                    ax_res.scatter(x, y, color="c", marker="x", s=s)
+
                 if locs_galaxies.shape[0] > 0:
                     in_bounds = torch.all(
                         (locs_galaxies > 0) & (locs_galaxies < scene_size), dim=-1
                     )
                     locs_galaxies = locs_galaxies[in_bounds]
-                    ax_true.scatter(
-                        locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20
-                    )
+                    x, y = locs_galaxies[:, 1], locs_galaxies[:, 0]
+                    ax_true.scatter(x, y, color="pink", marker="x", s=s * 1.5)
                     ax_recon.scatter(
-                        locs_galaxies[:, 1],
-                        locs_galaxies[:, 0],
-                        color="c",
-                        marker="x",
-                        s=20,
-                        label="Predicted Galaxy",
-                        alpha=0.6,
+                        x, y, color="pink", marker="x", s=20, label="Predicted Galaxy", alpha=0.6
                     )
-                    ax_res.scatter(
-                        locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20
-                    )
-                if locs_stars.shape[0] > 0:
-                    in_bounds = torch.all((locs_stars > 0) & (locs_stars < scene_size), dim=-1)
-                    locs_stars = locs_stars[in_bounds]
-                    ax_true.scatter(
-                        locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20, alpha=0.6
-                    )
-                    ax_recon.scatter(
-                        locs_stars[:, 1],
-                        locs_stars[:, 0],
-                        color="r",
-                        marker="x",
-                        s=20,
-                        label="Predicted Star",
-                        alpha=0.6,
-                    )
-                    ax_res.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
+                    ax_res.scatter(x, y, color="c", marker="x", s=s)
                 ax_recon.legend(
                     bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
                     loc="lower left",
@@ -619,8 +584,8 @@ class AEReconstructionFigures(BlissFigures):
         # fluxes / magnitudes
         x, y = remove_outliers(meas["true_mags"], meas["recon_mags"], level=0.95)
         mag_ticks = (16, 17, 18, 19)
-        xlabel = r"\rm true mag."
-        ylabel = r"\rm recon mag."
+        xlabel = r"$m_{\rm true}$"
+        ylabel = r"$m_{\rm recon}"
         self.make_scatter_contours(
             ax1, x, y, xlabel=xlabel, ylabel=ylabel, xticks=mag_ticks, yticks=mag_ticks
         )
@@ -664,7 +629,7 @@ class AEReconstructionFigures(BlissFigures):
             xlims=(x.min(), x.max()),
             delta=0.25,
             xlabel=r"\rm $m_{\rm true}$",
-            ylabel=r"\rm $(m_{\rm recon} - m_{\rm true}) / m_{\rm true}",
+            ylabel=r"\rm $(m_{\rm recon} - m_{\rm true}) / m_{\rm true}$",
             xticks=[16, 17, 18, 19, 20],
         )
 
