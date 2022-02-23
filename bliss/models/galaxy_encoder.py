@@ -160,9 +160,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert not torch.any(torch.isinf(recon_mean))
         recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         if self.crop_loss_at_border:
-            slen = batch["slen"].unique().item()
-            bp = (recon_losses.shape[-1] - slen) // 2
-            bp = bp * 2
+            bp = self.border_padding * 2
             recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
         assert not torch.any(torch.isnan(recon_losses))
         assert not torch.any(torch.isinf(recon_losses))
@@ -177,11 +175,8 @@ class GalaxyEncoder(pl.LightningModule):
         batch = {}
         for b in outputs:
             for k, v in b.items():
-                if k in {"hlen", "wlen"} and k not in batch:
-                    batch[k] = v
-                else:
-                    curr_val = batch.get(k, torch.tensor([], device=v.device))
-                    batch[k] = torch.cat([curr_val, v])
+                curr_val = batch.get(k, torch.tensor([], device=v.device))
+                batch[k] = torch.cat([curr_val, v])
         if self.n_bands == 1:
             self._make_plots(batch)
 
@@ -207,11 +202,6 @@ class GalaxyEncoder(pl.LightningModule):
         images = batch["images"]
         background = batch["background"]
         tile_locs = batch["locs"]
-
-        hlen = batch["hlen"].item()
-        wlen = batch["wlen"].item()
-        assert hlen == wlen
-        slen = hlen
 
         # obtain map estimates
         ptiles = get_images_in_tiles(images - background, self.tile_slen, self.ptile_slen)
@@ -243,10 +233,8 @@ class GalaxyEncoder(pl.LightningModule):
         # draw worst `n_samples` examples as measured by absolute avg. residual error.
         worst_indices = residuals.abs().mean(dim=(1, 2, 3)).argsort(descending=True)[:n_samples]
 
-        # use same vmin, vmax throughout for residuals
         if self.crop_loss_at_border:
-            bp = (recon_images.shape[-1] - slen) // 2
-            bp = bp * 2
+            bp = self.border_padding * 2
             residuals[:, :, :bp, :] = 0.0
             residuals[:, :, -bp:, :] = 0.0
             residuals[:, :, :, :bp] = 0.0
@@ -277,6 +265,9 @@ class GalaxyEncoder(pl.LightningModule):
 
             # plot!
             labels = None if i > 0 else ("t. gal", None, "t. star", None)
+            # Plotting only works on square images
+            assert images.shape[-2] == images.shape[-1]
+            slen = images.shape[-1] - 2 * self.border_padding
             plot_image_and_locs(idx, fig, true_ax, images, slen, est, labels=labels, vrange=vrange)
             plot_image_and_locs(
                 idx, fig, recon_ax, recon_images, slen, est, labels=labels, vrange=vrange

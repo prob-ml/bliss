@@ -314,7 +314,7 @@ class SleepPhase(pl.LightningModule):
         self.log("val/star_params_loss", star_params_loss.mean(), batch_size=batch_size)
 
         # get metrics and log on full image parameters.
-        true_params, est_params, _ = self._get_full_params(batch)
+        true_params, est_params = self._get_full_params(batch)
         metrics = self.val_detection_metrics(true_params, est_params)
         self.log("val/precision", metrics["precision"], batch_size=batch_size)
         self.log("val/recall", metrics["recall"], batch_size=batch_size)
@@ -329,7 +329,7 @@ class SleepPhase(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        true_params, est_params, _ = self._get_full_params(batch)
+        true_params, est_params = self._get_full_params(batch)
         metrics = self.test_detection_metrics(true_params, est_params)
         batch_size = len(batch["images"])
         self.log("precision", metrics["precision"], batch_size=batch_size)
@@ -341,11 +341,7 @@ class SleepPhase(pl.LightningModule):
 
     def _get_full_params(self, batch):
         # true
-        exclude = {"images", "background", "hlen", "wlen"}
-        hlen = batch["hlen"].item()
-        wlen = batch["wlen"].item()
-        assert hlen == wlen
-        slen = hlen
+        exclude = {"images", "background"}
 
         true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
         true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
@@ -353,7 +349,7 @@ class SleepPhase(pl.LightningModule):
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
         est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
-        return true_params, est_params, slen
+        return true_params, est_params
 
     # pylint: disable=too-many-statements
     def _make_plots(self, batch, kind="validation", n_samples=16):
@@ -365,11 +361,15 @@ class SleepPhase(pl.LightningModule):
             return
         nrows = int(n_samples ** 0.5)  # for figure
 
-        true_params, est_params, slen = self._get_full_params(batch)
+        true_params, est_params = self._get_full_params(batch)
 
         # setup figure and axes.
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
+
+        images = batch["images"]
+        assert images.shape[-2] == images.shape[-1]
+        slen = images.shape[-2] - 2 * self.image_encoder.border_padding
 
         for i in range(n_samples):
             plot_image_and_locs(

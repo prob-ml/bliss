@@ -65,8 +65,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 {
                     "images": images,
                     "background": background,
-                    "hlen": torch.tensor(self.image_prior.tile_slen * self.image_prior.n_tiles_h),
-                    "wlen": torch.tensor(self.image_prior.tile_slen * self.image_prior.n_tiles_w),
                 }
             )
 
