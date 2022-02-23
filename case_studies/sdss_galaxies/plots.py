@@ -154,11 +154,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         # load coadd catalog
         coadd_params = reporting.get_params_from_coadd(
-            coadd_cat,
-            wlims,
-            hlims,
-            shift_plocs_to_lim_start=True,
-            convert_xy_to_hw=True,
+            coadd_cat, wlims, hlims, shift_plocs_to_lim_start=True, convert_xy_to_hw=True
         )
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
@@ -299,7 +295,7 @@ class SDSSReconstructionFigures(BlissFigures):
         background = background.unsqueeze(0).unsqueeze(0)
         device = encoder.device
 
-        bp = encoder.border_padding
+        bp = int(encoder.border_padding)
         data = {}
 
         for figname in self.fignames:
@@ -310,10 +306,10 @@ class SDSSReconstructionFigures(BlissFigures):
             assert xlim[0] >= bp
             assert ylim[0] >= bp
 
-            coadd_data = reporting.get_params_from_coadd(
+            coadd_data = reporting.get_params_from_coadd(  # noqa: WPS317
                 coadd_cat,
-                xlim,
-                ylim,
+                (xlim[0] + bp, xlim[1] - bp),
+                (ylim[0] + bp, ylim[1] - bp),
                 shift_plocs_to_lim_start=True,
                 convert_xy_to_hw=True,
             )
