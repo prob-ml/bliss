@@ -663,8 +663,8 @@ class AEReconstructionFigures(BlissFigures):
             y,
             xlims=(x.min(), x.max()),
             delta=0.25,
-            xlabel=r"\rm true mag.",
-            ylabel=r"\rm mag. relative error",
+            xlabel=r"\rm $m_{\rm true}$",
+            ylabel=r"\rm $(m_{\rm recon} - m_{\rm true}) / m_{\rm true}",
             xticks=[16, 17, 18, 19, 20],
         )
 
