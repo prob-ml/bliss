@@ -65,10 +65,9 @@ def reconstruct(cfg):
             coadd_cat,
             xlim=(w, w_end),
             ylim=(h, h_end),
+            shift_plocs_to_lim_start=True,
+            convert_xy_to_hw=True,
         )
-        coadd_data["x"] = coadd_data["x"] - w
-        coadd_data["y"] = coadd_data["y"] - h
-        coadd_data["plocs"] = torch.stack((coadd_data["y"], coadd_data["x"]), dim=1)
         recon, map_recon = reconstruct_scene_at_coordinates(
             encoder,
             dec,
@@ -84,6 +83,7 @@ def reconstruct(cfg):
             + map_recon["star_bools"] * map_recon["fluxes"]
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
+        map_recon["plocs"] = map_recon["plocs"] - 0.5
         scene_metrics_map = reporting.scene_metrics(
             coadd_data,
             map_recon,

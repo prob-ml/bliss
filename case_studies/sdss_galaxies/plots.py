@@ -19,8 +19,9 @@ from matplotlib import pyplot as plt
 from bliss import generate, reporting
 from bliss.datasets import sdss
 from bliss.datasets.galsim_galaxies import load_psf_from_file
+from bliss.encoder import Encoder
+from bliss.inference import reconstruct_scene_at_coordinates
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.predict import predict_on_image, predict_on_scene
 
 pl.seed_everything(0)
 
@@ -140,21 +141,21 @@ class DetectionClassificationFigures(BlissFigures):
             "classification": "sdss-classification-acc.png",
         }
 
-    def compute_data(self, scene, background, coadd_cat, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, scene, background, coadd_cat, encoder, decoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
-        assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
-        device = sleep_net.device
+        assert encoder.device == decoder.device
+        device = encoder.device
 
-        # load specific models that are needed.
-        image_encoder = sleep_net.image_encoder.to(device).eval()
-        galaxy_decoder = sleep_net.image_decoder.galaxy_tile_decoder.galaxy_decoder.eval()
-
-        bp = image_encoder.border_padding
-        clen = 300
+        bp = encoder.border_padding
+        slen = 300  # chunk side-length
         h, w = scene.shape[-2], scene.shape[-1]
+        hlims = (bp, h - bp)
+        wlims = (bp, w - bp)
 
         # load coadd catalog
-        coadd_params = reporting.get_params_from_coadd(coadd_cat, (bp, w - bp), (bp, h - bp))
+        coadd_params = reporting.get_params_from_coadd(
+            coadd_cat, wlims, hlims, shift_plocs_to_lim_start=True, convert_xy_to_hw=True
+        )
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
@@ -165,16 +166,23 @@ class DetectionClassificationFigures(BlissFigures):
         # predict using models on scene.
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
         background_torch = torch.from_numpy(background).reshape(1, 1, h, w)
-        _, est_params = predict_on_scene(
-            clen,
+
+        _, est_params = reconstruct_scene_at_coordinates(
+            encoder,
+            decoder,
             scene_torch,
             background_torch,
-            image_encoder,
-            binary_encoder,
-            galaxy_encoder,
-            galaxy_decoder,
-            device,
+            hlims,
+            wlims,
+            slen=slen,
+            device=device,
         )
+        est_params["plocs"] = est_params["plocs"] - 0.5
+        est_params["fluxes"] = (
+            est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
+            + est_params["star_bools"] * est_params["fluxes"]
+        )
+        est_params["mags"] = sdss.convert_flux_to_mag(est_params["fluxes"])
 
         mag_bins = np.arange(18, 23, 0.25)  # skip 23
         precisions = []
@@ -277,62 +285,49 @@ class SDSSReconstructionFigures(BlissFigures):
     def fignames(self):
         return {**{f"sdss_recon{i}": f"sdss_reconstruction{i}.png" for i in range(len(self.lims))}}
 
-    def compute_data(self, scene, background, sleep_net, binary_encoder, galaxy_encoder):
+    def compute_data(self, scene, background, coadd_cat, encoder, decoder):
         assert isinstance(scene, (torch.Tensor, np.ndarray))
-        assert sleep_net.device == binary_encoder.device == galaxy_encoder.device
-        device = sleep_net.device
+        if not isinstance(scene, torch.Tensor):
+            scene = torch.from_numpy(scene)
+            background = torch.from_numpy(background)
 
-        image_encoder = sleep_net.image_encoder.to(device).eval()
-        image_decoder = sleep_net.image_decoder.to(device).eval()
+        scene = scene.unsqueeze(0).unsqueeze(0)
+        background = background.unsqueeze(0).unsqueeze(0)
+        device = encoder.device
 
-        bp = image_encoder.border_padding
-
+        bp = int(encoder.border_padding)
         data = {}
 
         for figname in self.fignames:
             xlim, ylim = self.lims[figname]
-            h, w = ylim[1] - ylim[0], xlim[1] - xlim[0]
-            assert h >= bp and w >= bp
-            hb = h + 2 * bp
-            wb = w + 2 * bp
-            chunk = scene[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
-            chunk = torch.from_numpy(chunk.reshape(1, 1, hb, wb)).to(device)
+            height, width = ylim[1] - ylim[0], xlim[1] - xlim[0]
+            slen = min(height, width)
+            assert height >= bp and width >= bp
+            assert xlim[0] >= bp
+            assert ylim[0] >= bp
 
-            bchunk = background[ylim[0] - bp : ylim[1] + bp, xlim[0] - bp : xlim[1] + bp]
-            bchunk = torch.from_numpy(bchunk.reshape(1, 1, hb, wb)).to(device)
-
-            # for plotting
-            chunk_np = chunk.reshape(hb, wb).cpu().numpy()
-
+            coadd_data = reporting.get_params_from_coadd(  # noqa: WPS317
+                coadd_cat,
+                (xlim[0] + bp, xlim[1] - bp),
+                (ylim[0] + bp, ylim[1] - bp),
+                shift_plocs_to_lim_start=True,
+                convert_xy_to_hw=True,
+            )
             with torch.no_grad():
-
-                tile_map, _, _ = predict_on_image(
-                    chunk, bchunk, image_encoder, binary_encoder, galaxy_encoder
+                recon_image, recon_map = reconstruct_scene_at_coordinates(
+                    encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device
                 )
+            recon_map["plocs"] = recon_map["plocs"] - 0.5
+            # only keep section inside border padding
+            true_image = scene[0, 0, ylim[0] : ylim[1], xlim[0] : xlim[1]].cpu()
+            recon_image = recon_image[0, 0].cpu()
+            res_image = (true_image - recon_image) / np.sqrt(recon_image)
 
-                # plot image from tile est.
-                recon_image = image_decoder.render_images(
-                    tile_map["n_sources"],
-                    tile_map["locs"],
-                    tile_map["galaxy_bools"],
-                    tile_map["galaxy_params"],
-                    tile_map["fluxes"],
-                )
-                # FIXME Need to use actual background value
-                recon_image += bchunk
-
-            recon_image = recon_image.cpu().numpy().reshape(hb, wb)
-
-            # only keep section inside obrder padding
-            true_image = chunk_np[bp : hb - bp, bp : wb - bp]
-            recon_image = recon_image[bp : hb - bp, bp : wb - bp]
-            residual = (true_image - recon_image) / np.sqrt(recon_image)
-
-            data[figname] = (true_image, recon_image, residual)
+            data[figname] = (true_image, recon_image, res_image, recon_map, coadd_data)
 
         return data
 
-    def create_figures(self, data):
+    def create_figures(self, data):  # pylint: disable=too-many-statements
         """Make figures related to reconstruction in SDSS."""
         out_figures = {}
 
@@ -340,12 +335,11 @@ class SDSSReconstructionFigures(BlissFigures):
         pad = 6.0
         reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname in self.fignames:
-            true, recon, res = data[figname]
+            true, recon, res, recon_map, coadd_data = data[figname]
+            xlim, _ = self.lims[figname]
+            scene_size = xlim[1] - xlim[0]
             fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
             assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
-
-            # pick standard ranges for residuals
-            vmin_res, vmax_res = res.min().item(), res.max().item()
 
             ax_true = axes[0]
             ax_recon = axes[1]
@@ -356,9 +350,71 @@ class SDSSReconstructionFigures(BlissFigures):
             ax_res.set_title("Residual", pad=pad)
 
             # plot images
-            reporting.plot_image(fig, ax_true, true, vrange=(800, 1200))
-            reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
-            reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
+            reporting.plot_image(fig, ax_true, true, vrange=(800, 1000))
+            reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1000))
+            reporting.plot_image(fig, ax_res, res, vrange=(-5, 5))
+
+            locs_true = coadd_data["plocs"]
+            true_galaxy_bools = coadd_data["galaxy_bools"]
+            locs_galaxies_true = locs_true[true_galaxy_bools > 0.5]
+            locs_stars_true = locs_true[true_galaxy_bools < 0.5]
+
+            s = 55 * 300 / scene_size  # marker size
+            lw = 2 * np.sqrt(300 / scene_size)
+
+            if locs_stars_true.shape[0] > 0:
+                x, y = locs_stars_true[:, 1], locs_stars_true[:, 0]
+                ax_true.scatter(x, y, color="b", marker="+", s=s, linewidths=lw)
+                ax_recon.scatter(
+                    x, y, color="b", marker="+", s=s, label="SDSS Stars", linewidths=lw
+                )
+                ax_res.scatter(x, y, color="b", marker="+", s=s, linewidths=lw, alpha=0.5)
+            if locs_galaxies_true.shape[0] > 0:
+                x, y = locs_galaxies_true[:, 1], locs_galaxies_true[:, 0]
+                ax_true.scatter(x, y, color="r", marker="+", s=s, linewidths=lw)
+                ax_recon.scatter(
+                    x, y, color="r", marker="+", s=s, label="SDSS Galaxies", linewidths=lw
+                )
+                ax_res.scatter(x, y, color="r", marker="+", s=s, linewidths=lw, alpha=0.5)
+
+            if recon_map is not None:
+                s *= 0.75
+                lw *= 0.75
+                locs_pred = recon_map["plocs"][0]
+                star_bools = recon_map["star_bools"][0]
+                galaxy_bools = recon_map["galaxy_bools"][0]
+                locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]
+                locs_stars = locs_pred[star_bools[:, 0] > 0.5, :]
+                if locs_stars.shape[0] > 0:
+                    label = "Predicted Star"
+                    in_bounds = torch.all((locs_stars > 0) & (locs_stars < scene_size), dim=-1)
+                    locs_stars = locs_stars[in_bounds]
+                    x, y = locs_stars[:, 1], locs_stars[:, 0]
+                    ax_true.scatter(x, y, color="aqua", marker="x", s=s, linewidths=lw)
+                    ax_recon.scatter(
+                        x, y, color="aqua", marker="x", s=s, label=label, linewidths=lw
+                    )
+                    ax_res.scatter(x, y, color="aqua", marker="x", s=s, linewidths=lw, alpha=0.5)
+
+                if locs_galaxies.shape[0] > 0:
+                    label = "Predicted Galaxy"
+                    in_bounds = torch.all(
+                        (locs_galaxies > 0) & (locs_galaxies < scene_size), dim=-1
+                    )
+                    locs_galaxies = locs_galaxies[in_bounds]
+                    x, y = locs_galaxies[:, 1], locs_galaxies[:, 0]
+                    ax_true.scatter(x, y, color="hotpink", marker="x", s=s, linewidths=lw)
+                    ax_recon.scatter(
+                        x, y, color="hotpink", marker="x", s=s, label=label, linewidths=lw
+                    )
+                    ax_res.scatter(x, y, color="hotpink", marker="x", s=s, linewidths=lw, alpha=0.5)
+                ax_recon.legend(
+                    bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+                    loc="lower left",
+                    ncol=2,
+                    mode="expand",
+                    borderaxespad=0.0,
+                )
 
             plt.subplots_adjust(hspace=-0.4)
             plt.tight_layout()
@@ -532,8 +588,8 @@ class AEReconstructionFigures(BlissFigures):
         # fluxes / magnitudes
         x, y = remove_outliers(meas["true_mags"], meas["recon_mags"], level=0.95)
         mag_ticks = (16, 17, 18, 19)
-        xlabel = r"\rm true mag."
-        ylabel = r"\rm recon mag."
+        xlabel = r"$m^{\rm true}$"
+        ylabel = r"$m^{\rm recon}$"
         self.make_scatter_contours(
             ax1, x, y, xlabel=xlabel, ylabel=ylabel, xticks=mag_ticks, yticks=mag_ticks
         )
@@ -576,8 +632,8 @@ class AEReconstructionFigures(BlissFigures):
             y,
             xlims=(x.min(), x.max()),
             delta=0.25,
-            xlabel=r"\rm true mag.",
-            ylabel=r"\rm mag. relative error",
+            xlabel=r"\rm $m^{\rm true}$",
+            ylabel=r"\rm $(m^{\rm recon} - m^{\rm true}) / m^{\rm true}$",
             xticks=[16, 17, 18, 19, 20],
         )
 
@@ -602,7 +658,7 @@ class AEReconstructionFigures(BlissFigures):
             x,
             y,
             xlims=(-0.85, 0.85),
-            delta=0.1,
+            delta=0.2,
             xticks=[-1.0, -0.5, 0.0, 0.5, 1.0],
             xlabel=r"$g_{1}^{\rm true}$",
             ylabel=r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$",
@@ -615,7 +671,7 @@ class AEReconstructionFigures(BlissFigures):
             x,
             y,
             xlims=(-0.85, 0.85),
-            delta=0.25,
+            delta=0.2,
             xticks=[-1.0, -0.5, 0.0, 0.5, 1.0],
             xlabel=r"$g_{2}^{\rm true}$",
             ylabel=r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$",
@@ -642,24 +698,28 @@ def plots(cfg):
     outdir = cfg.plots.outdir
     overwrite = cfg.plots.overwrite
     device = torch.device(cfg.plots.device)
+    coadd_cat = Table.read(cfg.plots.coadd_cat, format="fits")
 
     if not Path(outdir).exists():
         warnings.warn("Specified output directory does not exist, will attempt to create it.")
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
-    # load models necessary for SDSS reconstructions.
+    # load models required for SDSS reconstructions.
     if fig.intersection({2, 3}):
-        sleep_net = instantiate(cfg.models.sleep)
-        sleep_net.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
-        sleep_net = sleep_net.to(device).eval()
+        sleep = instantiate(cfg.models.sleep)
+        sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
+        location = sleep.image_encoder.to(device).eval()
 
-        binary_encoder = instantiate(cfg.models.binary)
-        binary_encoder.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
-        binary_encoder = binary_encoder.to(device).eval()
+        binary = instantiate(cfg.models.binary)
+        binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
+        binary = binary.to(device).eval()
 
-        galaxy_encoder = instantiate(cfg.models.galaxy_encoder)
-        galaxy_encoder.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
-        galaxy_encoder = galaxy_encoder.to(device).eval()
+        galaxy = instantiate(cfg.models.galaxy_encoder)
+        galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
+        galaxy = galaxy.to(device).eval()
+
+        decoder = sleep.image_decoder.to(device).eval()
+        encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in fig:
@@ -690,9 +750,8 @@ def plots(cfg):
     if 2 in fig:
         scene = get_sdss_data(cfg)["image"]
         background = get_sdss_data(cfg)["background"]
-        coadd_cat = Table.read(cfg.plots.coadd_cat, format="fits")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
-        dc_fig.save_figures(scene, background, coadd_cat, sleep_net, binary_encoder, galaxy_encoder)
+        dc_fig.save_figures(scene, background, coadd_cat, encoder, decoder)
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
@@ -700,7 +759,7 @@ def plots(cfg):
         scene = get_sdss_data(cfg)["image"]
         background = get_sdss_data(cfg)["background"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
-        sdss_rec_fig.save_figures(scene, background, sleep_net, binary_encoder, galaxy_encoder)
+        sdss_rec_fig.save_figures(scene, background, coadd_cat, encoder, decoder)
         mpl.rc_file_defaults()
 
     else:
