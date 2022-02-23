@@ -399,11 +399,11 @@ class SDSSReconstructionFigures(BlissFigures):
                     )
                     locs_galaxies = locs_galaxies[in_bounds]
                     x, y = locs_galaxies[:, 1], locs_galaxies[:, 0]
-                    ax_true.scatter(x, y, color="pink", marker="x", s=s * 1.5)
+                    ax_true.scatter(x, y, color="hotpink", marker="x", s=s)
                     ax_recon.scatter(
-                        x, y, color="pink", marker="x", s=20, label="Predicted Galaxy", alpha=0.6
+                        x, y, color="hotpink", marker="x", s=s, label="Predicted Galaxy", alpha=0.6
                     )
-                    ax_res.scatter(x, y, color="c", marker="x", s=s)
+                    ax_res.scatter(x, y, color="hotpink", marker="x", s=s)
                 ax_recon.legend(
                     bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
                     loc="lower left",
@@ -585,7 +585,7 @@ class AEReconstructionFigures(BlissFigures):
         x, y = remove_outliers(meas["true_mags"], meas["recon_mags"], level=0.95)
         mag_ticks = (16, 17, 18, 19)
         xlabel = r"$m_{\rm true}$"
-        ylabel = r"$m_{\rm recon}"
+        ylabel = r"$m_{\rm recon}$"
         self.make_scatter_contours(
             ax1, x, y, xlabel=xlabel, ylabel=ylabel, xticks=mag_ticks, yticks=mag_ticks
         )
