@@ -1,6 +1,5 @@
 # flake8: noqa
 # pylint: skip-file
-import argparse
 from pathlib import Path
 
 import numpy as np
@@ -13,9 +12,7 @@ from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import reconstruct_scene_at_coordinates
-from bliss.models.binary import BinaryEncoder
-from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.sleep import SleepPhase
+from case_studies.sdss_galaxies.plots import set_rc_params
 
 
 def reconstruct(cfg):
@@ -65,10 +62,9 @@ def reconstruct(cfg):
             coadd_cat,
             xlim=(w, w_end),
             ylim=(h, h_end),
+            shift_plocs_to_lim_start=True,
+            convert_xy_to_hw=True,
         )
-        coadd_data["x"] = coadd_data["x"] - w
-        coadd_data["y"] = coadd_data["y"] - h
-        coadd_data["plocs"] = torch.stack((coadd_data["y"], coadd_data["x"]), dim=1)
         recon, map_recon = reconstruct_scene_at_coordinates(
             encoder,
             dec,
@@ -84,6 +80,7 @@ def reconstruct(cfg):
             + map_recon["star_bools"] * map_recon["fluxes"]
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
+        map_recon["plocs"] = map_recon["plocs"] - 0.5
         scene_metrics_map = reporting.scene_metrics(
             coadd_data,
             map_recon,
@@ -129,7 +126,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     """Make figures related to detection and classification in SDSS."""
     plt.style.use("seaborn-colorblind")
     pad = 6.0
-    reporting.set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
+    set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
     # for figname in self.fignames:
     # true, recon, res, locs, locs_pred = data
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))

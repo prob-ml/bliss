@@ -2,9 +2,7 @@
 from typing import Optional, Tuple
 
 import galsim
-import matplotlib as mpl
 import numpy as np
-import seaborn as sns
 import torch
 import tqdm
 from astropy.table import Table
@@ -18,18 +16,6 @@ from torch import Tensor
 from torchmetrics import Metric
 
 from bliss.datasets.sdss import convert_flux_to_mag, convert_mag_to_flux
-
-CB_color_cycle = [
-    "#377eb8",
-    "#ff7f00",
-    "#4daf4a",
-    "#f781bf",
-    "#a65628",
-    "#984ea3",
-    "#999999",
-    "#e41a1c",
-    "#dede00",
-]
 
 
 class DetectionMetrics(Metric):
@@ -304,7 +290,11 @@ def apply_mag_cut(params: dict, mag_cut=25.0):
 
 
 def get_params_from_coadd(
-    coadd_cat, xlim: Optional[Tuple[int, int]] = None, ylim: Optional[Tuple[int, int]] = None
+    coadd_cat,
+    xlim: Optional[Tuple[int, int]] = None,
+    ylim: Optional[Tuple[int, int]] = None,
+    shift_plocs_to_lim_start=False,
+    convert_xy_to_hw=False,
 ):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
     coadd_names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
@@ -338,6 +328,12 @@ def get_params_from_coadd(
     data["fluxes"] = data["flux"]
     data["hlrs"] = data["hlr"]
     data["mags"] = data["mag"]
+
+    if shift_plocs_to_lim_start:
+        data["plocs"] = data["plocs"] - torch.tensor((xlim[0], ylim[0])).unsqueeze(0)
+
+    if convert_xy_to_hw:
+        data["plocs"] = torch.stack((data["plocs"][:, 1], data["plocs"][:, 0]), dim=1)
 
     return data
 
@@ -593,66 +589,3 @@ def plot_image_and_locs(
             mode="expand",
             borderaxespad=0.0,
         )
-
-
-def set_rc_params(
-    figsize=(10, 10),
-    fontsize=18,
-    title_size="large",
-    label_size="medium",
-    legend_fontsize="medium",
-    tick_label_size="small",
-    major_tick_size=7,
-    minor_tick_size=4,
-    major_tick_width=0.8,
-    minor_tick_width=0.6,
-    lines_marker_size=8,
-):
-    # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
-    rc_params = {
-        # font.
-        "font.family": "serif",
-        "font.sans-serif": "Helvetica",
-        "text.usetex": True,
-        "mathtext.fontset": "cm",
-        "font.size": fontsize,
-        # figure
-        "figure.figsize": figsize,
-        # axes
-        "axes.labelsize": label_size,
-        "axes.titlesize": title_size,
-        # ticks
-        "xtick.labelsize": tick_label_size,
-        "ytick.labelsize": tick_label_size,
-        "xtick.major.size": major_tick_size,
-        "ytick.major.size": major_tick_size,
-        "xtick.major.width": major_tick_width,
-        "ytick.major.width": major_tick_width,
-        "ytick.minor.size": minor_tick_size,
-        "xtick.minor.size": minor_tick_size,
-        "xtick.minor.width": minor_tick_width,
-        "ytick.minor.width": minor_tick_width,
-        # markers
-        "lines.markersize": lines_marker_size,
-        # legend
-        "legend.fontsize": legend_fontsize,
-        # colors
-        "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
-    }
-    mpl.rcParams.update(rc_params)
-    sns.set_context(rc=rc_params)
-
-
-def format_plot(ax, xlims=None, ylims=None, xticks=None, yticks=None, xlabel="", ylabel=""):
-    if xlims is not None:
-        ax.set_xlim(xlims)
-    if ylims is not None:
-        ax.set_ylim(ylims)
-
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-
-    if xticks:
-        ax.set_xticks(xticks)
-    if yticks:
-        ax.set_yticks(yticks)

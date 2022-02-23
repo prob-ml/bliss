@@ -175,7 +175,7 @@ class ChunkedScene:
     def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
         reconstructions = []
         full_maps = []
-        for chunk, bg in tqdm(zip(chunks, bgs)):
+        for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
             recon, full_map = reconstruct_img(
                 encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
             )
