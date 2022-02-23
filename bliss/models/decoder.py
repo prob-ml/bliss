@@ -18,7 +18,6 @@ class ImageDecoder(pl.LightningModule):
 
     Attributes:
         n_bands: Number of bands (colors) in the image
-        slen: Side-length of astronomical image (image is assumed to be square).
         tile_slen: Side-length of each tile.
         ptile_slen: Padded side-length of each tile (for reconstructing image).
         border_padding: Size of border around the final image where sources will not be present.
@@ -42,7 +41,6 @@ class ImageDecoder(pl.LightningModule):
 
         Args:
             n_bands: Number of bands (colors) in the image
-            slen: Side-length of astronomical image (image is assumed to be square).
             tile_slen: Side-length of each tile.
             ptile_slen: Padded side-length of each tile (for reconstructing image).
             border_padding: Size of border around the final image where sources will not be present.
