@@ -245,9 +245,9 @@ class ChunkedScene:
 
         tile_map_list = []
         for tile_map_row in main:
-            tile_map_row_combined = cat_tile_catelog(tile_map_row, 1)
+            tile_map_row_combined = cat_tile_catalog(tile_map_row, 1)
             tile_map_list.append(tile_map_row_combined)
-        tile_map = cat_tile_catelog(tile_map_list, 0)
+        tile_map = cat_tile_catalog(tile_map_list, 0)
         return tile_map
 
 
@@ -270,7 +270,7 @@ def reconstruct_img(
     return recon_image, tile_map
 
 
-def cat_tile_catelog(tile_maps, tile_dim=0):
+def cat_tile_catalog(tile_maps, tile_dim=0):
     assert tile_dim in {0, 1}
     out = {}
     for k in tile_maps[0].keys():
