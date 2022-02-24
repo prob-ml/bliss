@@ -243,7 +243,7 @@ class DetectionClassificationFigures(BlissFigures):
         scene_torch = torch.from_numpy(scene).reshape(1, 1, h, w)
         background_torch = torch.from_numpy(background).reshape(1, 1, h, w)
 
-        _, est_params = reconstruct_scene_at_coordinates(
+        _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
             decoder,
             scene_torch,
@@ -253,6 +253,7 @@ class DetectionClassificationFigures(BlissFigures):
             slen=slen,
             device=device,
         )
+        est_params = get_full_params_from_tiles(tile_est_params, encoder.tile_slen)
         est_params["plocs"] = est_params["plocs"] - 0.5
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
@@ -390,9 +391,10 @@ class SDSSReconstructionFigures(BlissFigures):
                 convert_xy_to_hw=True,
             )
             with torch.no_grad():
-                recon_image, recon_map = reconstruct_scene_at_coordinates(
+                recon_image, tile_recon_map = reconstruct_scene_at_coordinates(
                     encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device
                 )
+            recon_map = get_full_params_from_tiles(tile_recon_map)
             recon_map["plocs"] = recon_map["plocs"] - 0.5
             # only keep section inside border padding
             true_image = scene[0, 0, ylim[0] : ylim[1], xlim[0] : xlim[1]].cpu()
