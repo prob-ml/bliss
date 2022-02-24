@@ -1,5 +1,6 @@
 from typing import Dict, Tuple
 
+import numpy as np
 import torch
 from einops import rearrange, repeat
 from torch import Tensor
@@ -68,7 +69,7 @@ def reconstruct_scene_at_coordinates(
     assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
-    recon, map_scene = chunked_scene.reconstruct(encoder, decoder, device)
+    recon, tile_map_scene = chunked_scene.reconstruct(encoder, decoder, device)
     assert recon.shape == scene.shape
     recon += bg_scene
     # Get reconstruction at coordinates
@@ -78,7 +79,7 @@ def reconstruct_scene_at_coordinates(
         bp:-bp,
         bp:-bp,
     ]
-    return recon_at_coords, map_scene
+    return recon_at_coords, tile_map_scene
 
 
 class ChunkedScene:
@@ -94,6 +95,8 @@ class ChunkedScene:
 
         n_chunks_h = (scene.shape[2] - (bp * 2)) // slen
         n_chunks_w = (scene.shape[3] - (bp * 2)) // slen
+        self.n_chunks_h_main = n_chunks_h
+        self.n_chunks_w_main = n_chunks_w
         self.chunk_dict["main"] = self._chunk_image(scene, (kernel_size, kernel_size), slen)
         self.bg_dict["main"] = self._chunk_image(bg_scene, (kernel_size, kernel_size), slen)
         self.size_dict["main"] = (n_chunks_h * slen + bp * 2, n_chunks_w * slen + bp * 2)
@@ -169,21 +172,21 @@ class ChunkedScene:
                 chunks, bgs, encoder, decoder, device
             )
         scene_recon = self._combine_into_scene(chunk_est_dict)
-        map_recon = self._combine_full_maps(chunk_est_dict)
-        return scene_recon, map_recon
+        tile_map_recon = self._combine_tile_maps(chunk_est_dict)
+        return scene_recon, tile_map_recon
 
     def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
         reconstructions = []
-        full_maps = []
+        tile_maps = []
         for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            recon, full_map = reconstruct_img(
+            recon, tile_map = reconstruct_img(
                 encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
             )
             reconstructions.append(recon.cpu())
-            full_maps.append(cpu(full_map))
+            tile_maps.append(cpu(tile_map))
         return {
             "reconstructions": torch.cat(reconstructions, dim=0),
-            "full_maps": full_maps,
+            "tile_maps": tile_maps,
         }
 
     def _combine_into_scene(self, chunk_est_dict: Dict):
@@ -222,6 +225,30 @@ class ChunkedScene:
         else:
             image = top_of_image
         return image
+
+    def _combine_tile_maps(self, chunk_est_dict: Dict):
+        main = np.array(chunk_est_dict["main"]["tile_maps"])
+        n_chunks_h_main = self.n_chunks_h_main
+        n_chunks_w_main = self.n_chunks_w_main
+
+        main = main.reshape(n_chunks_h_main, n_chunks_w_main)
+
+        if "right" in chunk_est_dict:
+            right = np.array(chunk_est_dict["right"]["tile_maps"]).reshape(-1, 1)
+            main = np.concatenate((main, right), axis=1)
+        if "bottom" in chunk_est_dict:
+            bottom = chunk_est_dict["bottom"]["tile_maps"]
+            if "bottom_right" in chunk_est_dict:
+                bottom += chunk_est_dict["bottom_right"]["tile_maps"]
+            bottom = np.array(bottom).reshape(1, -1)
+            main = np.concatenate((main, bottom), axis=0)
+
+        tile_map_list = []
+        for tile_map_row in main:
+            tile_map_row_combined = cat_tile_catelog(tile_map_row, 1)
+            tile_map_list.append(tile_map_row_combined)
+        tile_map = cat_tile_catelog(tile_map_list, 0)
+        return tile_map
 
     def _combine_full_maps(self, chunk_est_dict: Dict):
         params = {}
@@ -275,5 +302,14 @@ def reconstruct_img(
         tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
             tile_map["galaxy_bools"], tile_map["galaxy_params"]
         )
-        full_map = get_full_params_from_tiles(tile_map, decoder.tile_slen)
-    return recon_image, full_map
+    return recon_image, tile_map
+
+
+def cat_tile_catelog(tile_maps, tile_dim=0):
+    assert tile_dim in {0, 1}
+    out = {}
+    for k in tile_maps[0].keys():
+        tensors = [tm[k] for tm in tile_maps]
+        value = torch.cat(tensors, dim=(tile_dim + 1))
+        out[k] = value
+    return out

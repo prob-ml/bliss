@@ -12,6 +12,7 @@ from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import reconstruct_scene_at_coordinates
+from bliss.models.location_encoder import get_full_params_from_tiles
 from case_studies.sdss_galaxies.plots import set_rc_params
 
 
@@ -65,7 +66,7 @@ def reconstruct(cfg):
             shift_plocs_to_lim_start=True,
             convert_xy_to_hw=True,
         )
-        recon, map_recon = reconstruct_scene_at_coordinates(
+        recon, tile_map_recon = reconstruct_scene_at_coordinates(
             encoder,
             dec,
             my_image,
@@ -75,6 +76,7 @@ def reconstruct(cfg):
             slen=cfg.reconstruct.slen,
             device=device,
         )
+        map_recon = get_full_params_from_tiles(tile_map_recon, encoder.tile_slen)
         map_recon["fluxes"] = (
             map_recon["galaxy_bools"] * map_recon["galaxy_fluxes"]
             + map_recon["star_bools"] * map_recon["fluxes"]

@@ -77,9 +77,7 @@ def get_is_on_from_n_sources(n_sources, max_sources):
     return is_on_array
 
 
-def get_full_params_from_tiles(
-    tile_params: Dict[str, Tensor], tile_slen: int, n_tiles_w: Optional[int] = None
-) -> Dict[str, Tensor]:
+def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -> Dict[str, Tensor]:
     """Converts image parameters in tiles to parameters of full image.
 
     By parameters, we mean samples from the variational distribution, not the variational
@@ -90,13 +88,9 @@ def get_full_params_from_tiles(
             samples from the variational distribution or the maximum a posteriori (such as from
             LocationEncoder.max_a_post or SleepPhase.tile_map_estimate).
             The first three dimensions of each tensor in this dictionary
-            should be of shape `batch_size x n_tiles_h x n_tiles_w x max_detections`.ge.
+            should be of shape `batch_size x n_tiles_h x n_tiles_w x max_detections`.
         tile_slen:
             Side-length of each tile.
-        n_tiles_w:
-            Defaults to None. Number of tiles in the width direction. If not specified,
-            assume that the image is square (i.e. the same number of tiles both height-wise
-            and width-wise).
 
     Returns:
         A dictionary of tensors with the same members as those in `tile_params`.
