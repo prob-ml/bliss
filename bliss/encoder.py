@@ -2,6 +2,7 @@
 from typing import Dict, Optional
 
 import torch
+from einops import rearrange
 from torch import Tensor, nn
 
 from bliss.models.binary import BinaryEncoder
@@ -64,8 +65,44 @@ class Encoder(nn.Module):
             ".forward() method for Encoder not available. Use .max_a_post() or .sample()."
         )
 
-    def sample(self, image_ptiles, n_samples):
-        raise NotImplementedError("Sampling from Encoder not yet available.")
+    def sample(self, n_samples: int, image: Tensor, background: Tensor) -> Dict[str, Tensor]:
+        log_image = subtract_bg_and_log_transform(image, background)
+        log_image_ptiles = self.get_images_in_ptiles(log_image)
+        del log_image
+        var_params = self.location_encoder.encode(log_image_ptiles)
+        tile_samples = self.location_encoder.sample(var_params, n_samples)
+
+        if self.binary_encoder is not None:
+            assert not self.binary_encoder.training
+            locs = rearrange(tile_samples["locs"], "ns n nth ntw s xy -> (ns n) nth ntw s xy")
+            log_image_ptiles = log_image_ptiles.expand(n_samples, -1, -1, -1, -1, -1)
+            galaxy_probs = self.binary_encoder(log_image_ptiles, locs)
+            galaxy_probs = rearrange(
+                galaxy_probs, "(ns n) nth ntw s 1 -> ns n nth ntw s 1", ns=n_samples
+            )
+            galaxy_probs *= tile_samples["is_on_array"]
+            galaxy_bools = (galaxy_probs > torch.rand_like(galaxy_probs)).float()
+            star_bools = get_star_bools(tile_samples["n_sources"], galaxy_bools)
+            tile_samples.update(
+                {
+                    "galaxy_bools": galaxy_bools,
+                    "star_bools": star_bools,
+                    "galaxy_probs": galaxy_probs,
+                }
+            )
+
+        if ("galaxy_bools" in tile_samples) and (self.galaxy_encoder is not None):
+            del log_image_ptiles
+            image_ptiles = self.get_images_in_ptiles(image - background)
+            image_ptiles = image_ptiles.expand(n_samples, -1, -1, -1, -1, -1)
+            galaxy_params = self.galaxy_encoder.sample(image_ptiles, locs)
+            galaxy_params = rearrange(
+                galaxy_params, "(ns n) nth ntw s d -> ns n nth ntw s d", ns=n_samples
+            )
+            galaxy_params *= tile_samples["is_on_array"] * tile_samples["galaxy_bools"]
+            tile_samples.update({"galaxy_params": galaxy_params})
+
+        return tile_samples
 
     def max_a_post(self, image: Tensor, background: Tensor) -> Dict[str, Tensor]:
         """Get maximum a posteriori of catalog from image padded tiles.

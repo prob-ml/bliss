@@ -11,7 +11,11 @@ from matplotlib import pyplot as plt
 from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
-from bliss.inference import reconstruct_scene_at_coordinates, infer_blends
+from bliss.inference import (
+    reconstruct_scene_at_coordinates,
+    infer_blends,
+    sample_scene_at_coordinates,
+)
 from bliss.models.location_encoder import get_full_params_from_tiles
 from case_studies.sdss_galaxies.plots import set_rc_params
 
@@ -66,7 +70,18 @@ def reconstruct(cfg):
             shift_plocs_to_lim_start=True,
             convert_xy_to_hw=True,
         )
-        recon, tile_map_recon = reconstruct_scene_at_coordinates(
+        # recon, tile_map_recon = reconstruct_scene_at_coordinates(
+        #     encoder,
+        #     dec,
+        #     my_image,
+        #     my_background,
+        #     (h, h_end),
+        #     (w, w_end),
+        #     slen=cfg.reconstruct.slen,
+        #     device=device,
+        # )
+        recon, tile_map_recon = sample_scene_at_coordinates(
+            5,
             encoder,
             dec,
             my_image,

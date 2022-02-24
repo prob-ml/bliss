@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from einops import rearrange, reduce
 from torch import Tensor
+from torch.distributions import Normal
 from torch.nn import functional as F
 from tqdm import tqdm
 
@@ -68,7 +69,7 @@ def reconstruct_scene_at_coordinates(
     assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
-    recon, tile_map_scene = chunked_scene.reconstruct(encoder, decoder, device)
+    recon, tile_map_scene = chunked_scene.reconstruct_at_map(encoder, decoder, device)
     assert recon.shape == scene.shape
     recon += bg_scene
     # Get reconstruction at coordinates
@@ -81,36 +82,92 @@ def reconstruct_scene_at_coordinates(
     return recon_at_coords, tile_map_scene
 
 
+def sample_scene_at_coordinates(
+    n_samples: int,
+    encoder: Encoder,
+    decoder: ImageDecoder,
+    img: Tensor,
+    background: Tensor,
+    h_range: Tuple[int, int],
+    w_range: Tuple[int, int],
+    slen: int = 300,
+    device=None,
+):
+    bp = encoder.border_padding
+    h_range_pad = (h_range[0] - bp, h_range[1] + bp)
+    w_range_pad = (w_range[0] - bp, w_range[1] + bp)
+
+    # First get the mininum coordinates to ensure everything is detected
+    scene = img[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    bg_scene = background[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
+    assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
+    chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
+
+    recon_imgs, samples_scene, posterior_probs = chunked_scene.reconstruct_samples(
+        n_samples, encoder, decoder, device
+    )
+    assert recon_imgs.shape[1:] == scene.shape
+    recon += bg_scene.unsqueeze(-1)
+
+    recon = recon_imgs[posterior_probs.argmax()]
+    map_scene = samples_scene[posterior_probs.argmax()]
+
+    # Get reconstruction at coordinates
+    recon_at_coords = recon[
+        :,
+        :,
+        bp:-bp,
+        bp:-bp,
+    ]
+    return recon_at_coords, map_scene
+
+    # # Get reconstruction at coordinates
+    # recon_at_coords = recon_imgs[
+    #     :,
+    #     :,
+    #     :,
+    #     bp:-bp,
+    #     bp:-bp,
+    # ]
+    # return recon_at_coords, samples_scene, posterior_probs
+
+
 class ChunkedScene:
     def __init__(self, scene: Tensor, bg_scene: Tensor, slen: int, bp: int):
         """Split scenes into square chunks of side length `slen+bp*2` using `F.unfold`."""
+        self.scene = scene
+        self.bg_scene = bg_scene
         self.slen = slen
         self.bp = bp
+
         kernel_size = slen + bp * 2
         self.kernel_size = kernel_size
         self.output_size = (scene.shape[2], scene.shape[3])
         self.chunk_dict = {}
         self.bg_dict = {}
 
-        n_chunks_h = (scene.shape[2] - (bp * 2)) // slen
-        n_chunks_w = (scene.shape[3] - (bp * 2)) // slen
+        n_chunks_h = (self.scene.shape[2] - (bp * 2)) // slen
+        n_chunks_w = (self.scene.shape[3] - (bp * 2)) // slen
         self.n_chunks_h_main = n_chunks_h
         self.n_chunks_w_main = n_chunks_w
-        self.chunk_dict["main"] = self._chunk_image(scene, (kernel_size, kernel_size), slen)
-        self.bg_dict["main"] = self._chunk_image(bg_scene, (kernel_size, kernel_size), slen)
+        self.chunk_dict["main"] = self._chunk_image(self.scene, (kernel_size, kernel_size), slen)
+        self.bg_dict["main"] = self._chunk_image(self.bg_scene, (kernel_size, kernel_size), slen)
 
         # Get leftover chunks
         bottom_border_start = bp + slen * n_chunks_h - bp
-        bottom_chunk_height = scene.shape[2] - bottom_border_start
+        bottom_chunk_height = self.scene.shape[2] - bottom_border_start
         assert bottom_chunk_height >= bp * 2
 
         right_border_start = bp + slen * n_chunks_w - bp
-        right_chunk_width = scene.shape[3] - right_border_start
+        right_chunk_width = self.scene.shape[3] - right_border_start
         assert right_chunk_width >= bp * 2
 
         if bottom_chunk_height > bp * 2:
-            bottom_border = scene[:, :, bottom_border_start:, : (right_border_start + 2 * bp)]
-            bg_bottom_border = bg_scene[:, :, bottom_border_start:, : (right_border_start + 2 * bp)]
+            bottom_border = self.scene[:, :, bottom_border_start:, : (right_border_start + 2 * bp)]
+            bg_bottom_border = self.bg_scene[
+                :, :, bottom_border_start:, : (right_border_start + 2 * bp)
+            ]
             self.chunk_dict["bottom"] = self._chunk_image(
                 bottom_border, (bottom_chunk_height, kernel_size), slen
             )
@@ -119,8 +176,10 @@ class ChunkedScene:
             )
 
         if right_chunk_width > bp * 2:
-            right_border = scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
-            bg_right_border = bg_scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
+            right_border = self.scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
+            bg_right_border = self.bg_scene[
+                :, :, : (bottom_border_start + 2 * bp), right_border_start:
+            ]
             self.chunk_dict["right"] = self._chunk_image(
                 right_border, (kernel_size, right_chunk_width), slen
             )
@@ -129,8 +188,8 @@ class ChunkedScene:
             )
 
         if (bottom_chunk_height > bp * 2) and (right_chunk_width > bp * 2):
-            bottom_right_border = scene[:, :, bottom_border_start:, right_border_start:]
-            bg_bottom_right_border = bg_scene[:, :, bottom_border_start:, right_border_start:]
+            bottom_right_border = self.scene[:, :, bottom_border_start:, right_border_start:]
+            bg_bottom_right_border = self.bg_scene[:, :, bottom_border_start:, right_border_start:]
             self.chunk_dict["bottom_right"] = bottom_right_border
             self.bg_dict["bottom_right"] = bg_bottom_right_border
 
@@ -144,22 +203,35 @@ class ChunkedScene:
             w=kernel_size[1],
         )
 
-    def reconstruct(self, encoder, decoder, device):
+    def reconstruct_at_map(self, encoder, decoder, device):
         chunk_est_dict = {}
         for chunk_type, chunks in self.chunk_dict.items():
             bgs = self.bg_dict[chunk_type]
-            chunk_est_dict[chunk_type] = self._reconstruct_chunks(
+            chunk_est_dict[chunk_type] = self._reconstruct_chunks_at_map(
                 chunks, bgs, encoder, decoder, device
             )
         scene_recon = self._combine_into_scene(chunk_est_dict)
         tile_map_recon = self._combine_tile_maps(chunk_est_dict)
         return scene_recon, tile_map_recon
 
-    def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
+    def reconstruct_samples(self, n_samples, encoder, decoder, device):
+        chunk_sample_dict = {}
+        for chunk_type, chunks in self.chunk_dict.items():
+            bgs = self.bg_dict[chunk_type]
+            chunk_sample_dict[chunk_type] = self._reconstruct_chunks_samples(
+                n_samples, chunks, bgs, encoder, decoder, device
+            )
+        scenes_recon = self._combine_into_scene(chunk_sample_dict)
+        samples_recon = self._combine_full_maps(chunk_sample_dict)
+        scenes_with_bg = scenes_recon + self.bg_scene
+        posterior_probs = Normal(scenes_with_bg, scenes_with_bg.sqrt()).log_prob(self.image)
+        return scenes_recon, samples_recon, posterior_probs
+
+    def _reconstruct_chunks_at_map(self, chunks, bgs, encoder, decoder, device):
         reconstructions = []
         tile_maps = []
         for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            recon, tile_map = reconstruct_img(
+            recon, tile_map = reconstruct_img_at_map(
                 encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
             )
             reconstructions.append(recon.cpu())
@@ -167,6 +239,24 @@ class ChunkedScene:
         return {
             "reconstructions": torch.cat(reconstructions, dim=0),
             "tile_maps": tile_maps,
+        }
+
+    def _reconstruct_chunks_samples(self, n_samples, chunks, bgs, encoder, decoder, device):
+        reconstructions = []
+        full_samples_list = []
+        for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
+            recon, full_samples = sample_img(
+                n_samples,
+                encoder,
+                decoder,
+                chunk.unsqueeze(0).to(device),
+                bg.unsqueeze(0).to(device),
+            )
+            reconstructions.append(recon.cpu())
+            full_samples_list.append(cpu(full_samples))
+        return {
+            "reconstructions": torch.cat(reconstructions, dim=1),
+            "full_samples": full_samples_list,
         }
 
     def _combine_into_scene(self, chunk_est_dict: Dict):
@@ -243,9 +333,9 @@ class ChunkedScene:
         return cat_tile_catalog(tile_map_list, 0)
 
 
-def reconstruct_img(
+def reconstruct_img_at_map(
     encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor
-) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
+) -> Tuple[Tensor, Dict[str, Tensor]]:
 
     with torch.no_grad():
         tile_map = encoder.max_a_post(img, bg)
@@ -276,3 +366,33 @@ def infer_blends(tile_map, tile_range: int):
     n_galaxies_per_tile = reduce(tile_map["galaxy_bools"], "n nth ntw s 1 -> n 1 nth ntw", "sum")
     kernel = torch.ones((1, 1, tile_range, tile_range))
     return F.conv2d(n_galaxies_per_tile, kernel, padding=tile_range - 1).unsqueeze(-1)
+
+
+def sample_img(n_samples: int, encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor):
+    with torch.no_grad():
+        tile_samples = encoder.sample(n_samples, img, bg)
+        tile_samples = squeeze_tile_samples(tile_samples)
+        recon_images = decoder.render_images(
+            tile_samples["n_sources"],
+            tile_samples["locs"],
+            tile_samples["galaxy_bools"],
+            tile_samples["galaxy_params"],
+            tile_samples["fluxes"],
+        )
+        tile_samples["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
+            tile_samples["galaxy_bools"], tile_samples["galaxy_params"]
+        )
+        tile_samples = unsqueeze_tile_samples(n_samples, tile_samples)
+    return recon_images, tile_samples
+
+
+def squeeze_tile_samples(tile_samples):
+    for k in tile_samples:
+        tile_samples[k] = tile_samples[k].reshape(-1, *tile_samples[k].shape[2:])
+    return tile_samples
+
+
+def unsqueeze_tile_samples(n_samples, tile_samples):
+    for k in tile_samples:
+        tile_samples[k] = tile_samples[k].reshape(n_samples, -1, *tile_samples[k].shape[1:])
+    return tile_samples

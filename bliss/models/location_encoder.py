@@ -376,6 +376,7 @@ class LocationEncoder(nn.Module):
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
+            "is_on_array": tile_is_on_array,
         }
         sample = {}
         for k, v in sample_flat.items():
