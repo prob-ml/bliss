@@ -22,6 +22,7 @@ from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.encoder import Encoder
 from bliss.inference import reconstruct_scene_at_coordinates
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.location_encoder import get_full_params_from_tiles
 
 pl.seed_everything(0)
 
