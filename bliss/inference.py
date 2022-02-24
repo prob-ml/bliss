@@ -88,6 +88,8 @@ class ChunkedScene:
         self.slen = slen
         self.bp = bp
         kernel_size = slen + bp * 2
+        self.kernel_size = kernel_size
+        self.output_size = (scene.shape[2], scene.shape[3])
         self.chunk_dict = {}
         self.bg_dict = {}
         self.size_dict = {}
@@ -190,41 +192,45 @@ class ChunkedScene:
         }
 
     def _combine_into_scene(self, chunk_est_dict: Dict):
-        recon_images = {}
-        for chunk_type, chunk_est in chunk_est_dict.items():
-            reconstructions = chunk_est["reconstructions"]
-            kernel_size = reconstructions.shape[-2], reconstructions.shape[-1]
-            rr = rearrange(reconstructions, "(b n) c h w -> b (c h w) n", b=1, c=1)
-            output_size = self.size_dict[chunk_type]
-            recon_no_bg = F.fold(
-                rr, output_size=output_size, kernel_size=kernel_size, stride=self.slen
-            )
-            recon_images[chunk_type] = recon_no_bg
-        # Assemble the final image
-        main = recon_images["main"]
-        right = recon_images.get("right", None)
-        if right is None:
-            top_of_image = main
-        else:
-            main[:, :, :, -2 * self.bp :] += right[:, :, :, : 2 * self.bp]
-            right_to_cat = right[:, :, :, 2 * self.bp :]
-            top_of_image = torch.cat((main, right_to_cat), dim=3)
+        main = chunk_est_dict["main"]["reconstructions"]
+        main = rearrange(
+            main,
+            "(nch ncw) c h w -> nch ncw c h w",
+            nch=self.n_chunks_h_main,
+            ncw=self.n_chunks_w_main,
+        )
 
-        bottom = recon_images.get("bottom", None)
-        if bottom is not None:
-            bottom_right = recon_images.get("bottom_right", None)
-            if bottom_right is None:
-                bottom_of_image = bottom
-            else:
-                bottom[:, :, :, -2 * self.bp :] += bottom_right[:, :, :, : 2 * self.bp]
-                bottom_right_to_cat = bottom_right[:, :, :, 2 * self.bp :]
-                bottom_of_image = torch.cat((bottom, bottom_right_to_cat), dim=3)
-            top_of_image[:, :, -2 * self.bp :, :] += bottom_of_image[:, :, : 2 * self.bp, :]
-            bottom_of_image_to_cat = bottom_of_image[:, :, 2 * self.bp :]
-            image = torch.cat((top_of_image, bottom_of_image_to_cat), dim=2)
+        if "right" in chunk_est_dict:
+            right = chunk_est_dict["right"]["reconstructions"]
+            right_padding = self.kernel_size - right.shape[-1]
+            right = F.pad(right, (0, right_padding, 0, 0))
+            right = rearrange(right, "nch c h w -> nch 1 c h w")
+            main = torch.cat((main, right), dim=1)
         else:
-            image = top_of_image
-        return image
+            right_padding = 0
+        if "bottom" in chunk_est_dict:
+            bottom = chunk_est_dict["bottom"]["reconstructions"]
+            bottom_padding = self.kernel_size - bottom.shape[-2]
+            bottom = F.pad(bottom, (0, 0, 0, bottom_padding))
+            if "bottom_right" in chunk_est_dict:
+                bottom_right = chunk_est_dict["bottom_right"]["reconstructions"]
+                bottom_right = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
+                bottom = torch.cat((bottom, bottom_right), dim=0)
+            bottom = rearrange(bottom, "ncw c h w -> 1 ncw c h w")
+            main = torch.cat((main, bottom), axis=0)
+        else:
+            bottom_padding = 0
+        image_flat = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
+        output_size = (self.output_size[0] + bottom_padding, self.output_size[1] + right_padding)
+        image = F.fold(
+            image_flat, output_size=output_size, kernel_size=self.kernel_size, stride=self.slen
+        )
+        return image[
+            :,
+            :,
+            : (-bottom_padding if bottom_padding else None),
+            : (-right_padding if right_padding else None),
+        ]
 
     def _combine_tile_maps(self, chunk_est_dict: Dict):
         main = np.array(chunk_est_dict["main"]["tile_maps"])
