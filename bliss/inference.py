@@ -2,7 +2,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 import torch
-from einops import rearrange, repeat
+from einops import rearrange, repeat, reduce
 from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
@@ -278,3 +278,9 @@ def cat_tile_catalog(tile_maps, tile_dim=0):
         value = torch.cat(tensors, dim=(tile_dim + 1))
         out[k] = value
     return out
+
+
+def infer_blends(tile_map, tile_range: int):
+    n_galaxies_per_tile = reduce(tile_map["galaxy_bools"], "n nth ntw s 1 -> n 1 nth ntw", "sum")
+    kernel = torch.ones((1, 1, tile_range, tile_range))
+    return F.conv2d(n_galaxies_per_tile, kernel, padding=tile_range - 1).unsqueeze(-1)

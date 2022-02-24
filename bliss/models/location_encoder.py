@@ -119,6 +119,7 @@ def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -
         "log_fluxes",
         "galaxy_fluxes",
         "galaxy_probs",
+        "galaxy_blends",
     }
     param_names_to_mask = {"locs", "plocs"}.union(param_names_to_gather)
 
