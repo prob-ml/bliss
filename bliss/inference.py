@@ -250,41 +250,6 @@ class ChunkedScene:
         tile_map = cat_tile_catelog(tile_map_list, 0)
         return tile_map
 
-    def _combine_full_maps(self, chunk_est_dict: Dict):
-        params = {}
-        for chunk_type, chunk_est in chunk_est_dict.items():
-            full_maps = chunk_est["full_maps"]
-            biases = self.biases[chunk_type]
-            plocs = []
-            # Get new locations
-            for i, bias in enumerate(biases):
-                max_sources = full_maps[i]["locs"].shape[1]
-                n_sources_i = full_maps[i]["n_sources"].unsqueeze(-1)
-
-                bias_i = repeat(bias, "xy -> 1 max_sources xy", max_sources=max_sources)
-
-                mask_i = torch.tensor(range(max_sources))
-                mask_i = repeat(mask_i, "max_sources -> n max_sources", n=n_sources_i.shape[0])
-                mask_i = mask_i < n_sources_i
-                bias_i *= mask_i.unsqueeze(-1)
-
-                plocs_i = full_maps[i]["plocs"] + bias_i
-                plocs.append(plocs_i)
-            plocs = torch.cat(plocs, dim=1)
-            if params.get("plocs", None) is not None:
-                params["plocs"] = torch.cat((params["plocs"], plocs), dim=1)
-            else:
-                params["plocs"] = plocs
-
-            for param_name in full_maps[0]:
-                if param_name not in {"locs", "plocs", "n_sources"}:
-                    tensors = torch.cat([full_map[param_name] for full_map in full_maps], dim=1)
-                    if params.get(param_name, None) is not None:
-                        params[param_name] = torch.cat((params[param_name], tensors), dim=1)
-                    else:
-                        params[param_name] = tensors
-        return params
-
 
 def reconstruct_img(
     encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor
