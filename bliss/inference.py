@@ -92,8 +92,6 @@ class ChunkedScene:
         self.output_size = (scene.shape[2], scene.shape[3])
         self.chunk_dict = {}
         self.bg_dict = {}
-        self.size_dict = {}
-        self.biases = {}
 
         n_chunks_h = (scene.shape[2] - (bp * 2)) // slen
         n_chunks_w = (scene.shape[3] - (bp * 2)) // slen
@@ -101,12 +99,10 @@ class ChunkedScene:
         self.n_chunks_w_main = n_chunks_w
         self.chunk_dict["main"] = self._chunk_image(scene, (kernel_size, kernel_size), slen)
         self.bg_dict["main"] = self._chunk_image(bg_scene, (kernel_size, kernel_size), slen)
-        self.size_dict["main"] = (n_chunks_h * slen + bp * 2, n_chunks_w * slen + bp * 2)
 
         offsets_h = torch.tensor(range(n_chunks_h))
         offsets_w = torch.tensor(range(n_chunks_w))
         offsets = torch.cartesian_prod(offsets_h, offsets_w)
-        self.biases["main"] = offsets * self.slen
 
         # Get leftover chunks
         bottom_border_start = bp + slen * n_chunks_h - bp
@@ -126,10 +122,6 @@ class ChunkedScene:
             self.bg_dict["bottom"] = self._chunk_image(
                 bg_bottom_border, (bottom_chunk_height, kernel_size), slen
             )
-            self.size_dict["bottom"] = bottom_border.shape[2:]
-            self.biases["bottom"] = (
-                torch.cartesian_prod(torch.tensor([n_chunks_h]), offsets_w) * self.slen
-            )
 
         if right_chunk_width > bp * 2:
             right_border = scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
@@ -140,21 +132,12 @@ class ChunkedScene:
             self.bg_dict["right"] = self._chunk_image(
                 bg_right_border, (kernel_size, right_chunk_width), slen
             )
-            self.size_dict["right"] = right_border.shape[2:]
-            self.biases["right"] = (
-                torch.cartesian_prod(offsets_h, torch.tensor([n_chunks_w])) * self.slen
-            )
 
         if (bottom_chunk_height > bp * 2) and (right_chunk_width > bp * 2):
             bottom_right_border = scene[:, :, bottom_border_start:, right_border_start:]
             bg_bottom_right_border = bg_scene[:, :, bottom_border_start:, right_border_start:]
             self.chunk_dict["bottom_right"] = bottom_right_border
             self.bg_dict["bottom_right"] = bg_bottom_right_border
-            self.size_dict["bottom_right"] = bottom_right_border.shape[2:]
-            self.biases["bottom_right"] = (
-                torch.cartesian_prod(torch.tensor([n_chunks_h]), torch.tensor([n_chunks_w]))
-                * self.slen
-            )
 
     def _chunk_image(self, image, kernel_size, stride):
         chunks = F.unfold(image, kernel_size=kernel_size, stride=stride)
