@@ -1,7 +1,8 @@
 from typing import Dict, Tuple
 
+import numpy as np
 import torch
-from einops import rearrange, repeat
+from einops import rearrange, reduce
 from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
@@ -9,7 +10,6 @@ from tqdm import tqdm
 from bliss.datasets.sdss_blended_galaxies import cpu
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import get_full_params_from_tiles
 
 
 def reconstruct_scene_at_coordinates(
@@ -68,7 +68,7 @@ def reconstruct_scene_at_coordinates(
     assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
-    recon, map_scene = chunked_scene.reconstruct(encoder, decoder, device)
+    recon, tile_map_scene = chunked_scene.reconstruct(encoder, decoder, device)
     assert recon.shape == scene.shape
     recon += bg_scene
     # Get reconstruction at coordinates
@@ -78,7 +78,7 @@ def reconstruct_scene_at_coordinates(
         bp:-bp,
         bp:-bp,
     ]
-    return recon_at_coords, map_scene
+    return recon_at_coords, tile_map_scene
 
 
 class ChunkedScene:
@@ -87,21 +87,17 @@ class ChunkedScene:
         self.slen = slen
         self.bp = bp
         kernel_size = slen + bp * 2
+        self.kernel_size = kernel_size
+        self.output_size = (scene.shape[2], scene.shape[3])
         self.chunk_dict = {}
         self.bg_dict = {}
-        self.size_dict = {}
-        self.biases = {}
 
         n_chunks_h = (scene.shape[2] - (bp * 2)) // slen
         n_chunks_w = (scene.shape[3] - (bp * 2)) // slen
+        self.n_chunks_h_main = n_chunks_h
+        self.n_chunks_w_main = n_chunks_w
         self.chunk_dict["main"] = self._chunk_image(scene, (kernel_size, kernel_size), slen)
         self.bg_dict["main"] = self._chunk_image(bg_scene, (kernel_size, kernel_size), slen)
-        self.size_dict["main"] = (n_chunks_h * slen + bp * 2, n_chunks_w * slen + bp * 2)
-
-        offsets_h = torch.tensor(range(n_chunks_h))
-        offsets_w = torch.tensor(range(n_chunks_w))
-        offsets = torch.cartesian_prod(offsets_h, offsets_w)
-        self.biases["main"] = offsets * self.slen
 
         # Get leftover chunks
         bottom_border_start = bp + slen * n_chunks_h - bp
@@ -121,10 +117,6 @@ class ChunkedScene:
             self.bg_dict["bottom"] = self._chunk_image(
                 bg_bottom_border, (bottom_chunk_height, kernel_size), slen
             )
-            self.size_dict["bottom"] = bottom_border.shape[2:]
-            self.biases["bottom"] = (
-                torch.cartesian_prod(torch.tensor([n_chunks_h]), offsets_w) * self.slen
-            )
 
         if right_chunk_width > bp * 2:
             right_border = scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
@@ -135,21 +127,12 @@ class ChunkedScene:
             self.bg_dict["right"] = self._chunk_image(
                 bg_right_border, (kernel_size, right_chunk_width), slen
             )
-            self.size_dict["right"] = right_border.shape[2:]
-            self.biases["right"] = (
-                torch.cartesian_prod(offsets_h, torch.tensor([n_chunks_w])) * self.slen
-            )
 
         if (bottom_chunk_height > bp * 2) and (right_chunk_width > bp * 2):
             bottom_right_border = scene[:, :, bottom_border_start:, right_border_start:]
             bg_bottom_right_border = bg_scene[:, :, bottom_border_start:, right_border_start:]
             self.chunk_dict["bottom_right"] = bottom_right_border
             self.bg_dict["bottom_right"] = bg_bottom_right_border
-            self.size_dict["bottom_right"] = bottom_right_border.shape[2:]
-            self.biases["bottom_right"] = (
-                torch.cartesian_prod(torch.tensor([n_chunks_h]), torch.tensor([n_chunks_w]))
-                * self.slen
-            )
 
     def _chunk_image(self, image, kernel_size, stride):
         chunks = F.unfold(image, kernel_size=kernel_size, stride=stride)
@@ -169,94 +152,95 @@ class ChunkedScene:
                 chunks, bgs, encoder, decoder, device
             )
         scene_recon = self._combine_into_scene(chunk_est_dict)
-        map_recon = self._combine_full_maps(chunk_est_dict)
-        return scene_recon, map_recon
+        tile_map_recon = self._combine_tile_maps(chunk_est_dict)
+        return scene_recon, tile_map_recon
 
     def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
         reconstructions = []
-        full_maps = []
+        tile_maps = []
         for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            recon, full_map = reconstruct_img(
+            recon, tile_map = reconstruct_img(
                 encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
             )
             reconstructions.append(recon.cpu())
-            full_maps.append(cpu(full_map))
+            tile_maps.append(cpu(tile_map))
         return {
             "reconstructions": torch.cat(reconstructions, dim=0),
-            "full_maps": full_maps,
+            "tile_maps": tile_maps,
         }
 
     def _combine_into_scene(self, chunk_est_dict: Dict):
-        recon_images = {}
-        for chunk_type, chunk_est in chunk_est_dict.items():
-            reconstructions = chunk_est["reconstructions"]
-            kernel_size = reconstructions.shape[-2], reconstructions.shape[-1]
-            rr = rearrange(reconstructions, "(b n) c h w -> b (c h w) n", b=1, c=1)
-            output_size = self.size_dict[chunk_type]
-            recon_no_bg = F.fold(
-                rr, output_size=output_size, kernel_size=kernel_size, stride=self.slen
-            )
-            recon_images[chunk_type] = recon_no_bg
-        # Assemble the final image
-        main = recon_images["main"]
-        right = recon_images.get("right", None)
-        if right is None:
-            top_of_image = main
-        else:
-            main[:, :, :, -2 * self.bp :] += right[:, :, :, : 2 * self.bp]
-            right_to_cat = right[:, :, :, 2 * self.bp :]
-            top_of_image = torch.cat((main, right_to_cat), dim=3)
+        main = chunk_est_dict["main"]["reconstructions"]
+        main = rearrange(
+            main,
+            "(nch ncw) c h w -> nch ncw c h w",
+            nch=self.n_chunks_h_main,
+            ncw=self.n_chunks_w_main,
+        )
 
-        bottom = recon_images.get("bottom", None)
+        right = chunk_est_dict.get("right")
+        if right is not None:
+            right = right["reconstructions"]
+            right_padding = self.kernel_size - right.shape[-1]
+            right = F.pad(right, (0, right_padding, 0, 0))
+            right = rearrange(right, "nch c h w -> nch 1 c h w")
+            main = torch.cat((main, right), dim=1)
+        else:
+            right_padding = 0
+
+        bottom = chunk_est_dict.get("bottom")
         if bottom is not None:
-            bottom_right = recon_images.get("bottom_right", None)
-            if bottom_right is None:
-                bottom_of_image = bottom
-            else:
-                bottom[:, :, :, -2 * self.bp :] += bottom_right[:, :, :, : 2 * self.bp]
-                bottom_right_to_cat = bottom_right[:, :, :, 2 * self.bp :]
-                bottom_of_image = torch.cat((bottom, bottom_right_to_cat), dim=3)
-            top_of_image[:, :, -2 * self.bp :, :] += bottom_of_image[:, :, : 2 * self.bp, :]
-            bottom_of_image_to_cat = bottom_of_image[:, :, 2 * self.bp :]
-            image = torch.cat((top_of_image, bottom_of_image_to_cat), dim=2)
+            bottom = bottom["reconstructions"]
+            bottom_padding = self.kernel_size - bottom.shape[-2]
+            bottom = F.pad(bottom, (0, 0, 0, bottom_padding))
+
+            bottom_right = chunk_est_dict.get("bottom_right")
+            if bottom_right is not None:
+                bottom_right = bottom_right["reconstructions"]
+                bottom_right = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
+                bottom = torch.cat((bottom, bottom_right), dim=0)
+            bottom = rearrange(bottom, "ncw c h w -> 1 ncw c h w")
+            main = torch.cat((main, bottom), axis=0)
         else:
-            image = top_of_image
-        return image
+            bottom_padding = 0
+        image_flat = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
+        output_size = (self.output_size[0] + bottom_padding, self.output_size[1] + right_padding)
+        image = F.fold(
+            image_flat, output_size=output_size, kernel_size=self.kernel_size, stride=self.slen
+        )
+        return image[
+            :,
+            :,
+            : (-bottom_padding if bottom_padding else None),
+            : (-right_padding if right_padding else None),
+        ]
 
-    def _combine_full_maps(self, chunk_est_dict: Dict):
-        params = {}
-        for chunk_type, chunk_est in chunk_est_dict.items():
-            full_maps = chunk_est["full_maps"]
-            biases = self.biases[chunk_type]
-            plocs = []
-            # Get new locations
-            for i, bias in enumerate(biases):
-                max_sources = full_maps[i]["locs"].shape[1]
-                n_sources_i = full_maps[i]["n_sources"].unsqueeze(-1)
+    def _combine_tile_maps(self, chunk_est_dict: Dict):
+        main = np.array(chunk_est_dict["main"]["tile_maps"])
+        n_chunks_h_main = self.n_chunks_h_main
+        n_chunks_w_main = self.n_chunks_w_main
 
-                bias_i = repeat(bias, "xy -> 1 max_sources xy", max_sources=max_sources)
+        main = main.reshape(n_chunks_h_main, n_chunks_w_main)
 
-                mask_i = torch.tensor(range(max_sources))
-                mask_i = repeat(mask_i, "max_sources -> n max_sources", n=n_sources_i.shape[0])
-                mask_i = mask_i < n_sources_i
-                bias_i *= mask_i.unsqueeze(-1)
+        right = chunk_est_dict.get("right")
+        if right is not None:
+            right = np.array(right["tile_maps"]).reshape(-1, 1)
+            main = np.concatenate((main, right), axis=1)
 
-                plocs_i = full_maps[i]["plocs"] + bias_i
-                plocs.append(plocs_i)
-            plocs = torch.cat(plocs, dim=1)
-            if params.get("plocs", None) is not None:
-                params["plocs"] = torch.cat((params["plocs"], plocs), dim=1)
-            else:
-                params["plocs"] = plocs
+        bottom = chunk_est_dict.get("bottom")
+        if bottom is not None:
+            bottom = bottom["tile_maps"]
+            bottom_right = chunk_est_dict.get("bottom_right")
+            if bottom_right is not None:
+                bottom += bottom_right["tile_maps"]
+            bottom = np.array(bottom).reshape(1, -1)
+            main = np.concatenate((main, bottom), axis=0)
 
-            for param_name in full_maps[0]:
-                if param_name not in {"locs", "plocs", "n_sources"}:
-                    tensors = torch.cat([full_map[param_name] for full_map in full_maps], dim=1)
-                    if params.get(param_name, None) is not None:
-                        params[param_name] = torch.cat((params[param_name], tensors), dim=1)
-                    else:
-                        params[param_name] = tensors
-        return params
+        tile_map_list = []
+        for tile_map_row in main:
+            tile_map_row_combined = cat_tile_catalog(tile_map_row, 1)
+            tile_map_list.append(tile_map_row_combined)
+        return cat_tile_catalog(tile_map_list, 0)
 
 
 def reconstruct_img(
@@ -275,5 +259,20 @@ def reconstruct_img(
         tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
             tile_map["galaxy_bools"], tile_map["galaxy_params"]
         )
-        full_map = get_full_params_from_tiles(tile_map, decoder.tile_slen)
-    return recon_image, full_map
+    return recon_image, tile_map
+
+
+def cat_tile_catalog(tile_maps, tile_dim=0):
+    assert tile_dim in {0, 1}
+    out = {}
+    for k in tile_maps[0].keys():
+        tensors = [tm[k] for tm in tile_maps]
+        value = torch.cat(tensors, dim=(tile_dim + 1))
+        out[k] = value
+    return out
+
+
+def infer_blends(tile_map, tile_range: int):
+    n_galaxies_per_tile = reduce(tile_map["galaxy_bools"], "n nth ntw s 1 -> n 1 nth ntw", "sum")
+    kernel = torch.ones((1, 1, tile_range, tile_range))
+    return F.conv2d(n_galaxies_per_tile, kernel, padding=tile_range - 1).unsqueeze(-1)
