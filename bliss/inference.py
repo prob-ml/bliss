@@ -107,11 +107,14 @@ def sample_scene_at_coordinates(
     recon_imgs, samples_scene, posterior_probs = chunked_scene.reconstruct_samples(
         n_samples, encoder, decoder, device
     )
-    assert recon_imgs.shape[1:] == scene.shape
-    recon += bg_scene.unsqueeze(-1)
+    print(recon_imgs.shape)
+    recon_imgs += bg_scene
 
-    recon = recon_imgs[posterior_probs.argmax()]
-    map_scene = samples_scene[posterior_probs.argmax()]
+    recon = recon_imgs[posterior_probs.argmax()].unsqueeze(0)
+    map_scene = index_tile_samples(samples_scene, posterior_probs.argmax())
+    print(recon.shape)
+    print(scene.shape)
+    assert recon.shape == scene.shape
 
     # Get reconstruction at coordinates
     recon_at_coords = recon[
@@ -222,9 +225,10 @@ class ChunkedScene:
                 n_samples, chunks, bgs, encoder, decoder, device
             )
         scenes_recon = self._combine_into_scene(chunk_sample_dict)
-        samples_recon = self._combine_full_maps(chunk_sample_dict)
+        samples_recon = self._combine_tile_samples(chunk_sample_dict)
         scenes_with_bg = scenes_recon + self.bg_scene
-        posterior_probs = Normal(scenes_with_bg, scenes_with_bg.sqrt()).log_prob(self.image)
+        posterior_probs = Normal(scenes_with_bg, scenes_with_bg.sqrt()).log_prob(self.scene)
+        posterior_probs = reduce(posterior_probs, "ns c h w -> ns", "sum")
         return scenes_recon, samples_recon, posterior_probs
 
     def _reconstruct_chunks_at_map(self, chunks, bgs, encoder, decoder, device):
@@ -243,9 +247,9 @@ class ChunkedScene:
 
     def _reconstruct_chunks_samples(self, n_samples, chunks, bgs, encoder, decoder, device):
         reconstructions = []
-        full_samples_list = []
+        tile_samples_list = []
         for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            recon, full_samples = sample_img(
+            recon, tile_samples = sample_img(
                 n_samples,
                 encoder,
                 decoder,
@@ -253,17 +257,17 @@ class ChunkedScene:
                 bg.unsqueeze(0).to(device),
             )
             reconstructions.append(recon.cpu())
-            full_samples_list.append(cpu(full_samples))
+            tile_samples_list.append(cpu(tile_samples))
         return {
             "reconstructions": torch.cat(reconstructions, dim=1),
-            "full_samples": full_samples_list,
+            "tile_samples": tile_samples_list,
         }
 
     def _combine_into_scene(self, chunk_est_dict: Dict):
         main = chunk_est_dict["main"]["reconstructions"]
         main = rearrange(
             main,
-            "(nch ncw) c h w -> nch ncw c h w",
+            "(ns nch ncw) c h w -> ns nch ncw c h w",
             nch=self.n_chunks_h_main,
             ncw=self.n_chunks_w_main,
         )
@@ -273,8 +277,8 @@ class ChunkedScene:
             right = right["reconstructions"]
             right_padding = self.kernel_size - right.shape[-1]
             right = F.pad(right, (0, right_padding, 0, 0))
-            right = rearrange(right, "nch c h w -> nch 1 c h w")
-            main = torch.cat((main, right), dim=1)
+            right = rearrange(right, "(ns nch) c h w -> ns nch 1 c h w", nch=self.n_chunks_h_main)
+            main = torch.cat((main, right), dim=2)
         else:
             right_padding = 0
 
@@ -283,17 +287,18 @@ class ChunkedScene:
             bottom = bottom["reconstructions"]
             bottom_padding = self.kernel_size - bottom.shape[-2]
             bottom = F.pad(bottom, (0, 0, 0, bottom_padding))
-
+            bottom = rearrange(bottom, "(ns ncw) c h w -> ns ncw c h w", ncw=self.n_chunks_w_main)
             bottom_right = chunk_est_dict.get("bottom_right")
             if bottom_right is not None:
                 bottom_right = bottom_right["reconstructions"]
+                bottom_right = rearrange(bottom_right, "ns c h w -> ns 1 c h w")
                 bottom_right = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
                 bottom = torch.cat((bottom, bottom_right), dim=0)
-            bottom = rearrange(bottom, "ncw c h w -> 1 ncw c h w")
-            main = torch.cat((main, bottom), axis=0)
+            bottom = rearrange(bottom, "ns ncw c h w -> ns 1 ncw c h w")
+            main = torch.cat((main, bottom), dim=1)
         else:
             bottom_padding = 0
-        image_flat = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
+        image_flat = rearrange(main, "ns nch ncw c h w -> ns (c h w) (nch ncw)")
         output_size = (self.output_size[0] + bottom_padding, self.output_size[1] + right_padding)
         image = F.fold(
             image_flat, output_size=output_size, kernel_size=self.kernel_size, stride=self.slen
@@ -306,23 +311,36 @@ class ChunkedScene:
         ]
 
     def _combine_tile_maps(self, chunk_est_dict: Dict):
-        main = np.array(chunk_est_dict["main"]["tile_maps"])
+        args = {}
+        for chunk_type in ("main", "right", "bottom", "bottom_right"):
+            args[chunk_type] = chunk_est_dict.get(chunk_type, {"tile_maps": None})["tile_maps"]
+        return self._combine_tile_catalogs(
+            args["main"], args["right"], args["bottom"], args["bottom_right"]
+        )
+
+    def _combine_tile_samples(self, chunk_est_dict: Dict):
+        args = {}
+        for chunk_type in ("main", "right", "bottom", "bottom_right"):
+            args[chunk_type] = chunk_est_dict.get(chunk_type, {"tile_samples": None})[
+                "tile_samples"
+            ]
+        return self._combine_tile_catalogs(
+            args["main"], args["right"], args["bottom"], args["bottom_right"]
+        )
+
+    def _combine_tile_catalogs(self, main, right, bottom, bottom_right):
         n_chunks_h_main = self.n_chunks_h_main
         n_chunks_w_main = self.n_chunks_w_main
 
-        main = main.reshape(n_chunks_h_main, n_chunks_w_main)
+        main = np.array(main).reshape(n_chunks_h_main, n_chunks_w_main)
 
-        right = chunk_est_dict.get("right")
         if right is not None:
-            right = np.array(right["tile_maps"]).reshape(-1, 1)
+            right = np.array(right).reshape(-1, 1)
             main = np.concatenate((main, right), axis=1)
 
-        bottom = chunk_est_dict.get("bottom")
         if bottom is not None:
-            bottom = bottom["tile_maps"]
-            bottom_right = chunk_est_dict.get("bottom_right")
             if bottom_right is not None:
-                bottom += bottom_right["tile_maps"]
+                bottom += bottom_right
             bottom = np.array(bottom).reshape(1, -1)
             main = np.concatenate((main, bottom), axis=0)
 
@@ -396,3 +414,10 @@ def unsqueeze_tile_samples(n_samples, tile_samples):
     for k in tile_samples:
         tile_samples[k] = tile_samples[k].reshape(n_samples, -1, *tile_samples[k].shape[1:])
     return tile_samples
+
+
+def index_tile_samples(tile_samples, idx):
+    out = {}
+    for k, v in tile_samples.items():
+        out[k] = v[idx]
+    return out
