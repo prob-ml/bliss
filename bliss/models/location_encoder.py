@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 import torch
 from einops import rearrange, reduce, repeat
 from torch import Tensor, nn
-from torch.distributions import categorical
+from torch.distributions import categorical, Normal
 from torch.nn import functional as F
 
 
@@ -393,6 +393,34 @@ class LocationEncoder(nn.Module):
             )
 
         return sample
+
+    def log_prob(self, var_params: Tensor, tile_sample: Dict[str, Tensor]):
+        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+        tile_n_sources = rearrange(tile_sample["n_sources"], "ns b nth ntw -> ns (b nth ntw)")
+        is_on_array_flat = rearrange(
+            tile_sample["is_on_array"], "ns b nth ntw s 1 -> ns (b nth ntw) s"
+        )
+        pred = self.encode_for_n_sources(var_params_flat, tile_n_sources)
+        log_source_prob = tile_sample["n_source_log_probs"]
+
+        locs_flat = rearrange(tile_sample["locs"], "ns b nth ntw s xy -> ns (b nth ntw) s xy")
+        loc_mean = pred["loc_mean"]
+        loc_sd = torch.exp(0.5 * pred["loc_logvar"])
+        log_prob_locs = Normal(loc_mean, loc_sd).log_prob(locs_flat).sum(-1)
+
+        log_fluxes_flat = rearrange(
+            tile_sample["log_fluxes"], "ns b nth ntw s k -> ns (b nth ntw) s k"
+        )
+        log_flux_mean = pred["log_flux_mean"]
+        log_flux_sd = torch.exp(0.5 * pred["log_flux_logvar"])
+        log_prob_log_fluxes = Normal(log_flux_mean, log_flux_sd).log_prob(log_fluxes_flat).sum(-1)
+
+        log_prob_flat = (
+            log_source_prob
+            + (log_prob_locs * is_on_array_flat)
+            + (log_prob_log_fluxes * is_on_array_flat)
+        )
+        return reduce(log_prob_flat, "ns n s -> ns", "sum")
 
     def max_a_post(self, var_params: Tensor) -> Dict[str, Tensor]:
         """Derive maximum a posteriori from variational parameters.

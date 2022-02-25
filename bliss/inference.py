@@ -104,14 +104,12 @@ def sample_scene_at_coordinates(
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
 
-    recon_imgs, samples_scene, posterior_probs = chunked_scene.reconstruct_samples(
-        n_samples, encoder, decoder, device
-    )
-    print(recon_imgs.shape)
-    recon_imgs += bg_scene
+    recon, map_scene = chunked_scene.reconstruct_samples(n_samples, encoder, decoder, device)
+    # print(recon_imgs.shape)
+    recon += bg_scene
 
-    recon = recon_imgs[posterior_probs.argmax()].unsqueeze(0)
-    map_scene = index_tile_samples(samples_scene, posterior_probs.argmax())
+    # recon = recon_imgs[posterior_probs.argmax()].unsqueeze(0)
+    # map_scene = index_tile_samples(samples_scene, posterior_probs.argmax())
     print(recon.shape)
     print(scene.shape)
     assert recon.shape == scene.shape
@@ -226,10 +224,7 @@ class ChunkedScene:
             )
         scenes_recon = self._combine_into_scene(chunk_sample_dict)
         samples_recon = self._combine_tile_samples(chunk_sample_dict)
-        scenes_with_bg = scenes_recon + self.bg_scene
-        posterior_probs = Normal(scenes_with_bg, scenes_with_bg.sqrt()).log_prob(self.scene)
-        posterior_probs = reduce(posterior_probs, "ns c h w -> ns", "sum")
-        return scenes_recon, samples_recon, posterior_probs
+        return scenes_recon, samples_recon
 
     def _reconstruct_chunks_at_map(self, chunks, bgs, encoder, decoder, device):
         reconstructions = []
@@ -256,8 +251,10 @@ class ChunkedScene:
                 chunk.unsqueeze(0).to(device),
                 bg.unsqueeze(0).to(device),
             )
+
             reconstructions.append(recon.cpu())
             tile_samples_list.append(cpu(tile_samples))
+
         return {
             "reconstructions": torch.stack(reconstructions, dim=1),
             "tile_samples": tile_samples_list,
@@ -410,6 +407,14 @@ def sample_img(n_samples: int, encoder: Encoder, decoder: ImageDecoder, img: Ten
             tile_samples["galaxy_bools"], tile_samples["galaxy_params"]
         )
         tile_samples = unsqueeze_tile_samples(n_samples, tile_samples)
+
+    # recon_img_with_bg = recon_images + bg
+    # posterior_probs = Normal(recon_img_with_bg, recon_img_with_bg.sqrt()).log_prob(img)
+    # posterior_probs = reduce(posterior_probs, "ns c h w -> ns", "sum")
+    # recon_img_best = torch.argmax(posterior_probs)
+    recon_images = recon_images[0].unsqueeze(0)
+    tile_samples = index_tile_samples(tile_samples, 0)
+    assert not torch.any(torch.isnan(recon_images))
     return recon_images, tile_samples
 
 
