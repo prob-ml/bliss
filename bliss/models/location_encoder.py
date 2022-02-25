@@ -7,7 +7,7 @@ from torch.distributions import categorical
 from torch.nn import functional as F
 
 
-def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold: float = 5.0):
+def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold: float = 4.0):
     """Transforms image before encoder network.
 
     This subtracts background plus a few standard deviations from the image,
@@ -16,8 +16,7 @@ def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold
     Arguments:
         images: Tensor of images (n x c x h x w).
         background: Tensor of background (n x c x h x w).
-        z_threshold: Number of standard deviations to further subtract from
-        background. Default is 5.0.
+        z_threshold: Number of standard deviations to further subtract.
 
     Returns:
         A Tensor of the transformed images (n x c x h x w).
