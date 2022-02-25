@@ -259,7 +259,7 @@ class ChunkedScene:
             reconstructions.append(recon.cpu())
             tile_samples_list.append(cpu(tile_samples))
         return {
-            "reconstructions": torch.cat(reconstructions, dim=1),
+            "reconstructions": torch.stack(reconstructions, dim=1),
             "tile_samples": tile_samples_list,
         }
 
@@ -267,7 +267,7 @@ class ChunkedScene:
         main = chunk_est_dict["main"]["reconstructions"]
         main = rearrange(
             main,
-            "(ns nch ncw) c h w -> ns nch ncw c h w",
+            "ns (nch ncw) c h w -> ns nch ncw c h w",
             nch=self.n_chunks_h_main,
             ncw=self.n_chunks_w_main,
         )
@@ -277,7 +277,7 @@ class ChunkedScene:
             right = right["reconstructions"]
             right_padding = self.kernel_size - right.shape[-1]
             right = F.pad(right, (0, right_padding, 0, 0))
-            right = rearrange(right, "(ns nch) c h w -> ns nch 1 c h w", nch=self.n_chunks_h_main)
+            right = rearrange(right, "ns nch c h w -> ns nch 1 c h w")
             main = torch.cat((main, right), dim=2)
         else:
             right_padding = 0
@@ -287,13 +287,13 @@ class ChunkedScene:
             bottom = bottom["reconstructions"]
             bottom_padding = self.kernel_size - bottom.shape[-2]
             bottom = F.pad(bottom, (0, 0, 0, bottom_padding))
-            bottom = rearrange(bottom, "(ns ncw) c h w -> ns ncw c h w", ncw=self.n_chunks_w_main)
+            # bottom = rearrange(bottom, "ns ncw c h w -> ns ncw c h w", ncw=self.n_chunks_w_main)
             bottom_right = chunk_est_dict.get("bottom_right")
             if bottom_right is not None:
                 bottom_right = bottom_right["reconstructions"]
-                bottom_right = rearrange(bottom_right, "ns c h w -> ns 1 c h w")
+                bottom_right = rearrange(bottom_right, "ns 1 c h w -> ns 1 c h w")
                 bottom_right = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
-                bottom = torch.cat((bottom, bottom_right), dim=0)
+                bottom = torch.cat((bottom, bottom_right), dim=1)
             bottom = rearrange(bottom, "ns ncw c h w -> ns 1 ncw c h w")
             main = torch.cat((main, bottom), dim=1)
         else:
@@ -372,10 +372,19 @@ def reconstruct_img_at_map(
 
 def cat_tile_catalog(tile_maps, tile_dim=0):
     assert tile_dim in {0, 1}
+    if len(tile_maps[0]["locs"].shape) == 5:
+        # "b nth ntw s xy"
+        tile_dim = tile_dim + 1
+    elif len(tile_maps[0]["locs"].shape) == 6:
+        # "ns b nth ntw s xy"
+        tile_dim = tile_dim + 2
+    else:
+        raise ValueError("Tile catalog dimensions are off.")
+
     out = {}
     for k in tile_maps[0].keys():
         tensors = [tm[k] for tm in tile_maps]
-        value = torch.cat(tensors, dim=(tile_dim + 1))
+        value = torch.cat(tensors, dim=(tile_dim))
         out[k] = value
     return out
 
