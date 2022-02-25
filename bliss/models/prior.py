@@ -160,6 +160,15 @@ class ImagePrior(pl.LightningModule):
             "log_fluxes": log_fluxes,
         }
 
+    def log_prob(self, tile_catalog):
+        log_prob_n_sources = self._log_prob_n_sources(tile_catalog["n_sources"])
+        log_prob_binary = self._log_prob_galaxies(
+            tile_catalog["star_bools"], tile_catalog["galaxy_bools"]
+        )
+        log_prob_galaxy = self._log_prob_galaxy_params(tile_catalog["galaxy_params"])
+        log_prob_fluxes = self._log_prob_fluxes(tile_catalog["star_bools"], tile_catalog["fluxes"])
+        return log_prob_n_sources + log_prob_binary + log_prob_galaxy + log_prob_fluxes
+
     @staticmethod
     def _get_log_fluxes(fluxes):
         log_fluxes = torch.where(
