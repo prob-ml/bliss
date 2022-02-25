@@ -130,6 +130,10 @@ class Encoder(nn.Module):
         return self.location_encoder.border_padding
 
     @property
+    def tile_slen(self) -> int:
+        return self.location_encoder.tile_slen
+
+    @property
     def device(self):
         return self._dummy_param.device
 
