@@ -384,7 +384,7 @@ def cat_tile_catalog(tile_maps, tile_dim=0):
     out = {}
     for k in tile_maps[0].keys():
         tensors = [tm[k] for tm in tile_maps]
-        value = torch.cat(tensors, dim=(tile_dim))
+        value = torch.cat(tensors, dim=tile_dim)
         out[k] = value
     return out
 
