@@ -14,7 +14,7 @@ def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold
     then a log1p.
 
     Arguments:
-        images: Tensor of images (n x c x h x w).
+        image: Tensor of images (n x c x h x w).
         background: Tensor of background (n x c x h x w).
         z_threshold: Number of standard deviations to further subtract.
 
