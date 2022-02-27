@@ -283,6 +283,8 @@ class ImageEncoder(nn.Module):
             hidden: TODO (document this)
         """
         super().__init__()
+        
+
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.tile_slen = tile_slen
@@ -418,7 +420,8 @@ class ImageEncoder(nn.Module):
     def get_var_params_all(self, image_ptiles):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        # log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
+        log_img = torch.log(image_ptiles - 100.)
         h = self.enc_conv(log_img)
 
         # Concatenate all output parameters for all possible n_sources
