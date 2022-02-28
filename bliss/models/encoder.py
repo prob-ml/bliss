@@ -421,7 +421,7 @@ class ImageEncoder(nn.Module):
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
         # log_img = torch.log(image_ptiles - image_ptiles.min() + 1.0)
-        log_img = torch.log(image_ptiles - 100.)
+        log_img = torch.log(image_ptiles)
         h = self.enc_conv(log_img)
 
         # Concatenate all output parameters for all possible n_sources

@@ -67,12 +67,15 @@ cfg.model.decoder.kwargs.update({'n_bands': 1,
                                  'tile_slen': 10, 
                                  'ptile_slen': 30, 
                                  'border_padding': 5, 
-                                 'background_values': [680.], 
-                                 'psf_params_file': './psf/zband_psf_gauss.npy'})
+                                 'max_sources': 3,
+                                 'background_values': [667.], 
+                                 'psf_params_file': './psf/zband_psf_fitted.npy'})
 
 cfg.model.encoder.kwargs.update({'ptile_slen': 20})
 
-cfg.dataset.kwargs.update({'n_batches': 40, 'batch_size': 5})
+cfg.dataset.kwargs.update({'n_batches': 40, 'batch_size': 1})
+
+cfg.training.update({'n_epochs': 100})
 
 print('config: ')
 print(cfg)
