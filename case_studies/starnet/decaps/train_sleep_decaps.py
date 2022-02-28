@@ -62,18 +62,18 @@ with initialize(config_path=args.config_path):
 
     
     
-cfg.model.decoder.kwargs.update({'n_bands': 1, 
+cfg.model.decoder.kwargs.update({'n_bands': 2, 
                                  'slen': 300, 
                                  'tile_slen': 10, 
                                  'ptile_slen': 30, 
                                  'border_padding': 5, 
                                  'max_sources': 3,
-                                 'background_values': [667.], 
-                                 'psf_params_file': './psf/zband_psf_fitted.npy'})
+                                 'background_values': [667., 496.], 
+                                 'psf_params_file': './psf/ziband_psf_fitted.npy'})
 
 cfg.model.encoder.kwargs.update({'ptile_slen': 20})
 
-cfg.dataset.kwargs.update({'n_batches': 40, 'batch_size': 1})
+cfg.dataset.kwargs.update({'n_batches': 40, 'batch_size': 4})
 
 cfg.training.update({'n_epochs': 100})
 
