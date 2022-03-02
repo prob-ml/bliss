@@ -233,6 +233,7 @@ class DetectionClassificationFigures(BlissFigures):
         coadd_params = reporting.get_params_from_coadd(
             coadd_cat, wlims, hlims, shift_plocs_to_lim_start=True, convert_xy_to_hw=True
         )
+        coadd_params["plocs"] += bp
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
@@ -255,7 +256,7 @@ class DetectionClassificationFigures(BlissFigures):
             device=device,
         )
         est_params = get_full_params_from_tiles(tile_est_params, encoder.tile_slen)
-        est_params["plocs"] = est_params["plocs"] - 0.5
+        est_params["plocs"] += bp - 0.5
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
             + est_params["star_bools"] * est_params["fluxes"]
@@ -383,19 +384,14 @@ class SDSSReconstructionFigures(BlissFigures):
             assert height >= bp and width >= bp
             assert xlim[0] >= bp
             assert ylim[0] >= bp
-
-            coadd_data = reporting.get_params_from_coadd(  # noqa: WPS317
-                coadd_cat,
-                (xlim[0] + bp, xlim[1] - bp),
-                (ylim[0] + bp, ylim[1] - bp),
-                shift_plocs_to_lim_start=True,
-                convert_xy_to_hw=True,
+            coadd_data = reporting.get_params_from_coadd(
+                coadd_cat, xlim, ylim, shift_plocs_to_lim_start=True, convert_xy_to_hw=True
             )
             with torch.no_grad():
                 recon_image, tile_recon_map = reconstruct_scene_at_coordinates(
                     encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device
                 )
-            recon_map = get_full_params_from_tiles(tile_recon_map)
+            recon_map = get_full_params_from_tiles(tile_recon_map, encoder.tile_slen)
             recon_map["plocs"] = recon_map["plocs"] - 0.5
             # only keep section inside border padding
             true_image = scene[0, 0, ylim[0] : ylim[1], xlim[0] : xlim[1]].cpu()
@@ -771,9 +767,9 @@ class AEReconstructionFigures(BlissFigures):
 
 
 @hydra.main(config_path="./config", config_name="config")
-def plots(cfg):
+def plots(cfg):  # pylint: disable=too-many-statements
 
-    fig = set(cfg.plots.fig)
+    figs = set(cfg.plots.figs)
     outdir = cfg.plots.outdir
     overwrite = cfg.plots.overwrite
     device = torch.device(cfg.plots.device)
@@ -784,7 +780,7 @@ def plots(cfg):
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
     # load models required for SDSS reconstructions.
-    if fig.intersection({2, 3}):
+    if figs.intersection({2, 3}):
         sleep = instantiate(cfg.models.sleep)
         sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
         location = sleep.image_encoder.to(device).eval()
@@ -801,7 +797,8 @@ def plots(cfg):
         encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
-    if 1 in fig:
+    if 1 in figs:
+        print("Creating autoencoder figures...")
         autoencoder = instantiate(cfg.models.galaxy_net)
         autoencoder.load_state_dict(torch.load(cfg.models.prior.galaxy_prior.autoencoder_ckpt))
         autoencoder = autoencoder.to(device).eval()
@@ -826,7 +823,8 @@ def plots(cfg):
         mpl.rc_file_defaults()
 
     # FIGURE 2: Classification and Detection metrics
-    if 2 in fig:
+    if 2 in figs:
+        print("Creating classification and detection metrics from SDSS frame figures...")
         scene = get_sdss_data(cfg)["image"]
         background = get_sdss_data(cfg)["background"]
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
@@ -834,15 +832,18 @@ def plots(cfg):
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
-    if 3 in fig:
+    if 3 in figs:
+        print("Creating reconstructions from SDSS figures...")
         scene = get_sdss_data(cfg)["image"]
         background = get_sdss_data(cfg)["background"]
         sdss_rec_fig = SDSSReconstructionFigures(outdir, overwrite=overwrite)
         sdss_rec_fig.save_figures(scene, background, coadd_cat, encoder, decoder)
         mpl.rc_file_defaults()
 
-    else:
-        raise NotImplementedError("The figure specified has not been created.")
+    if not figs.intersection({1, 2, 3}):
+        raise NotImplementedError(
+            "No figures were created, cfg.plots.figs should be a subset of [1,2,3]."
+        )
 
 
 if __name__ == "__main__":
