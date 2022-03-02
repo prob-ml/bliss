@@ -16,8 +16,6 @@ def main(cfg):
         from bliss.train import train as task
     elif cfg.mode == "generate":
         from bliss.generate import generate as task
-    elif cfg.mode == "predict":
-        from bliss.predict import predict as task
     else:
         raise KeyError
     task(cfg)
