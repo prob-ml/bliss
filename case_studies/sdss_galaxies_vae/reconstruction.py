@@ -2,7 +2,6 @@
 # pylint: skip-file
 from pathlib import Path
 
-import numpy as np
 import torch
 from astropy.table import Table
 from hydra.utils import instantiate
@@ -11,7 +10,7 @@ from matplotlib import pyplot as plt
 from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
-from bliss.inference import reconstruct_scene_at_coordinates, infer_blends
+from bliss.inference import infer_blends, reconstruct_scene_at_coordinates
 from bliss.models.location_encoder import get_full_params_from_tiles
 from case_studies.sdss_galaxies.plots import set_rc_params
 
@@ -133,8 +132,6 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     plt.style.use("seaborn-colorblind")
     pad = 6.0
     set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
-    # for figname in self.fignames:
-    # true, recon, res, locs, locs_pred = data
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
     assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
@@ -241,46 +238,5 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     return fig
 
 
-def get_objects_from_coadd(coadd_cat, h, w, h_end, w_end):
-    locs_true_w = torch.from_numpy(np.array(coadd_cat["x"]).astype(float))
-    locs_true_h = torch.from_numpy(np.array(coadd_cat["y"]).astype(float))
-    locs_true = torch.stack((locs_true_h, locs_true_w), dim=1)
-
-    ## Get relevant objects
-    objects_in_scene = (
-        (h < locs_true[:, 0])
-        & (w < locs_true[:, 1])
-        & (h_end > locs_true[:, 0])
-        & (w_end > locs_true[:, 1])
-    )
-    locs_true = locs_true[objects_in_scene]
-    galaxy_bools = torch.from_numpy(np.array(coadd_cat["galaxy_bool"]).astype(float))
-    galaxy_bools = galaxy_bools[objects_in_scene]
-
-    # Shift locs by lower limit
-    locs_true[:, 0] = locs_true[:, 0] - h
-    locs_true[:, 1] = locs_true[:, 1] - w
-
-    return {
-        "locs": locs_true,
-        "galaxy_bools": galaxy_bools,
-    }
-
-
 if __name__ == "__main__":
     pass
-    # parser = argparse.ArgumentParser(description="Create figures related to SDSS galaxies.")
-    # parser.add_argument(
-    #     "-o",
-    #     "--output",
-    #     default="output/sdss_figures",
-    #     type=str,
-    #     help="Where to save figures and caches relative to $BLISS_HOME.",
-    # )
-    # parser.add_argument(
-    #     "-r",
-    #     "--real",
-    #     action="store_true",
-    #     help="Use galaxy encoder trained on real images",
-    # )
-    # args = vars(parser.parse_args())

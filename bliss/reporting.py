@@ -297,7 +297,7 @@ def get_params_from_coadd(
     convert_xy_to_hw=False,
 ):
     """Load coadd catalog from file, add extra useful information, convert to tensors."""
-    coadd_names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr"}
+    coadd_names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr", "ra", "dec"}
     assert coadd_names.issubset(set(coadd_cat.columns))
 
     # filter saturated objects
