@@ -1,5 +1,5 @@
-from typing import Tuple
 import warnings
+from typing import Tuple
 
 import pytorch_lightning as pl
 import torch

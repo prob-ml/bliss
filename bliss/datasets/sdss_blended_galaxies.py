@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, List, Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -160,11 +160,11 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
         bgs_with_galaxies = torch.stack(bgs_with_galaxies, dim=0)
         # pylint: disable=consider-using-f-string
-        print(
-            "INFO: Number of chunks with galaxies: {ng}/{g}".format(
-                ng=chunks_with_galaxies.shape[0], g=chunks.shape[0]
-            )
+        msg = "INFO: Number of chunks with galaxies: {ng}/{g}".format(
+            ng=chunks_with_galaxies.shape[0],
+            g=chunks.shape[0],
         )
+        print(msg)
         return chunks_with_galaxies, bgs_with_galaxies, catalogs
 
     def train_dataloader(self):
