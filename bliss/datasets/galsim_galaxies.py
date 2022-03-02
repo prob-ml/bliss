@@ -110,7 +110,8 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         n_bands=1,
         slen=53,
         min_flux=1e3,
-        max_flux=3.5e5,
+        max_flux=1e6,
+        alpha=0.55,
         min_a_d=0.8,
         max_a_d=6.5,
         min_a_b=0.8,
@@ -135,7 +136,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
         self.min_flux = min_flux
         self.max_flux = max_flux
-        self.alpha = 0.5
+        self.alpha = alpha
 
         self.min_a_d = min_a_d
         self.max_a_d = max_a_d
