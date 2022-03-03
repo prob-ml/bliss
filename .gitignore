@@ -24,8 +24,12 @@ hydra_temp/
 bin/
 .pytest_cache/
 
-./case_studies/starnet/fits/*
+case_studies/starnet/fits/*
+case_studies/starnet/decaps/data/*
+case_studies/starnet/sandbox/*
+case_studies/starnet/decaps/fits/*
 *.zpt
 *.npz
+*.npy
 *.phot
 *deleteme*
