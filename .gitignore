@@ -33,3 +33,6 @@ case_studies/starnet/decaps/fits/*
 *.npy
 *.phot
 *deleteme*
+
+data/sdss/rcf_list
+data/sdss_all

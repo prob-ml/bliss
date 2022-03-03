@@ -14,13 +14,17 @@ import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
 from torch.distributions import Normal
-from torch.nn import CrossEntropyLoss
+from torch.optim import Adam
 
-from bliss.metrics import eval_error_on_batch
-from bliss.models import decoder, encoder
-from bliss.models.encoder import get_full_params
-from bliss.optimizer import get_optimizer
-from bliss.plotting import plot_image_and_locs
+from bliss.models.decoder import ImageDecoder
+from bliss.models.location_encoder import (
+    LocationEncoder,
+    get_full_params_from_tiles,
+    get_images_in_tiles,
+    get_is_on_from_n_sources,
+    subtract_bg_and_log_transform,
+)
+from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
 
@@ -28,8 +32,7 @@ plt.switch_backend("Agg")
 def _get_log_probs_all_perms(
     locs_log_probs_all,
     star_params_log_probs_all,
-    prob_galaxy,
-    true_galaxy_bool,
+    true_galaxy_bools,
     is_on_array,
 ):
     # get log-probability under every possible matching of estimated source to true source
@@ -41,7 +44,6 @@ def _get_log_probs_all_perms(
         n_ptiles, n_permutations, device=locs_log_probs_all.device
     )
     star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
-    galaxy_bool_log_probs_all_perm = locs_log_probs_all_perm.clone()
 
     for i, perm in enumerate(permutations(range(max_detections))):
         # note that we multiply is_on_array, we only evaluate the loss if the source is on.
@@ -50,55 +52,39 @@ def _get_log_probs_all_perms(
         ).sum(1)
 
         # if star, evaluate the star parameters,
-        # hence the multiplication by (1 - true_galaxy_bool)
+        # hence the multiplication by (1 - true_galaxy_bools)
         # the diagonal is a clever way of selecting the elements of each permutation (first index
         # of mean/var with second index of true_param etc.)
         star_params_log_probs_all_perm[:, i] = (
             star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
             * is_on_array
-            * (1 - true_galaxy_bool)
+            * (1 - true_galaxy_bools)
         ).sum(1)
 
-        prob_galaxy_i = prob_galaxy[:, perm]
-        galaxy_bool_loss = true_galaxy_bool * torch.log(prob_galaxy_i)
-        galaxy_bool_loss += (1 - true_galaxy_bool) * torch.log(1 - prob_galaxy_i)
-        galaxy_bool_log_probs_all_perm[:, i] = (galaxy_bool_loss * is_on_array).sum(1)
-
-    return (
-        locs_log_probs_all_perm,
-        star_params_log_probs_all_perm,
-        galaxy_bool_log_probs_all_perm,
-    )
+    return locs_log_probs_all_perm, star_params_log_probs_all_perm
 
 
 def get_min_perm_loss(
     locs_log_probs_all,
     star_params_log_probs_all,
-    prob_galaxy,
-    true_galaxy_bool,
+    true_galaxy_bools,
     is_on_array,
 ):
     # get log-probability under every possible matching of estimated star to true star
-    (
-        locs_log_probs_all_perm,
-        star_params_log_probs_all_perm,
-        galaxy_bool_log_probs_all_perm,
-    ) = _get_log_probs_all_perms(
+    locs_log_probs_all_perm, star_params_log_probs_all_perm = _get_log_probs_all_perms(
         locs_log_probs_all,
         star_params_log_probs_all,
-        prob_galaxy,
-        true_galaxy_bool,
+        true_galaxy_bools,
         is_on_array,
     )
 
     # find the permutation that minimizes the location losses
     locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
-
-    # get the star & galaxy losses according to the found permutation
     indx = indx.unsqueeze(1)
+
+    # get the star losses according to the found permutation.
     star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, indx).squeeze()
-    galaxy_bool_loss = -torch.gather(galaxy_bool_log_probs_all_perm, 1, indx).squeeze()
-    return locs_loss, star_params_loss, galaxy_bool_loss
+    return locs_loss, star_params_loss
 
 
 def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
@@ -118,9 +104,7 @@ def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
 
 class SleepPhase(pl.LightningModule):
-    """Summary line.
-
-    Implementation of sleep-phase training using pytorch-lightning framework.
+    """Implementation of sleep-phase training using pytorch-lightning framework.
 
     Example:
         In python script, set up the sleep-phase model and pytorch-lightning trainer::
@@ -135,33 +119,37 @@ class SleepPhase(pl.LightningModule):
 
     def __init__(
         self,
-        encoder_kwargs: dict,
-        decoder_kwargs: dict,
+        encoder: LocationEncoder,
+        decoder: ImageDecoder,
         annotate_probs: bool = False,
+        slack=1.0,
         optimizer_params: dict = None,
     ):
         """Initializes SleepPhase class.
 
         Args:
-            encoder_kwargs: Keyword args passed to ImageEncoder
-            decoder_kwargs: Keyword args passed to ImageDecoder
+            encoder: keyword arguments to instantiate ImageEncoder
+            decoder: keyword arguments to instantiate ImageDecoder
             annotate_probs: Should probabilities be annotated on plot? Defaults to False.
+            slack: Threshold distance in pixels for matching objects.
             optimizer_params: Parameters passed to optimizer. Defaults to None.
         """
         super().__init__()
-        self.save_hyperparameters()
-
-        self.image_encoder = encoder.ImageEncoder(**encoder_kwargs)
-        self.image_decoder = decoder.ImageDecoder(**decoder_kwargs)
+        self.image_encoder = encoder
+        self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
+        self.optimizer_params = optimizer_params
 
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
         assert self.image_decoder.border_padding == self.image_encoder.border_padding
-        assert self.image_encoder.max_detections <= self.image_decoder.max_sources
 
         # plotting
         self.annotate_probs = annotate_probs
+
+        # metrics
+        self.val_detection_metrics = DetectionMetrics(slack)
+        self.test_detection_metrics = DetectionMetrics(slack)
 
     def forward(self, image_ptiles, tile_n_sources):
         """Encodes parameters from image tiles."""
@@ -169,17 +157,23 @@ class SleepPhase(pl.LightningModule):
 
     def tile_map_estimate(self, batch):
         images = batch["images"]
-        tile_est = self.image_encoder.tile_map_estimate(images)
-        tile_est["galaxy_params"] = batch["galaxy_params"]
+        background = batch["background"]
+        log_images = subtract_bg_and_log_transform(images, background)
+        log_image_ptiles = get_images_in_tiles(
+            log_images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
+        )
+        var_params = self.image_encoder.encode(log_image_ptiles)
+        tile_map = self.image_encoder.max_a_post(var_params)
+        tile_map["galaxy_params"] = batch["galaxy_params"]
 
         # FIXME: True galaxy params are not necessarily consistent with other MAP estimates
         # need to do some matching to ensure correctness of residual images?
         # maybe doesn't matter because only care about detection if not estimating
         # galaxy_parameters.
-        max_sources = tile_est["locs"].shape[2]
-        tile_est["galaxy_params"] = tile_est["galaxy_params"][:, :, :max_sources]
-        tile_est["galaxy_params"] = tile_est["galaxy_params"].contiguous()
-        return tile_est
+        max_sources = tile_map["locs"].shape[2]
+        tile_map["galaxy_params"] = tile_map["galaxy_params"][:, :, :max_sources]
+        tile_map["galaxy_params"] = tile_map["galaxy_params"].contiguous()
+        return tile_map
 
     def _get_loss(self, batch):
         """Private method to evaluate loss on the input minibatch.
@@ -193,7 +187,6 @@ class SleepPhase(pl.LightningModule):
                 counter_loss:
                 locs_loss:
                 star_params_loss:
-                galaxy_bool_loss:
 
         Notes:
             loc_mean shape = (n_ptiles x max_detections x 2)
@@ -209,10 +202,10 @@ class SleepPhase(pl.LightningModule):
             true_is_on_array shape = (n_ptiles x max_detections)
                 Indicates if sources is on (1) or off (0)
 
-            true_galaxy_bool shape = (n_ptiles x max_detections x 1)
+            true_galaxy_bools shape = (n_ptiles x max_detections x 1)
                 indicating whether each source is a galaxy (1) or star (0)
 
-            prob_galaxy shape = (n_ptiles x max_detections)
+            galaxy_probs shape = (n_ptiles x max_detections)
                 are probabilities for each source to be a galaxy
 
             n_source_log_probs shape = (n_ptiles x (max_detections + 1))
@@ -220,46 +213,54 @@ class SleepPhase(pl.LightningModule):
         """
         (
             images,
+            background,
             true_tile_locs,
             true_tile_log_fluxes,
-            true_tile_galaxy_bool,
+            true_tile_galaxy_bools,
             true_tile_n_sources,
         ) = (
             batch["images"],
+            batch["background"],
             batch["locs"],
             batch["log_fluxes"],
-            batch["galaxy_bool"],
+            batch["galaxy_bools"],
             batch["n_sources"],
         )
 
         # some constants
-        batch_size = images.shape[0]
-        n_tiles_per_image = self.image_decoder.n_tiles_per_image
-        n_ptiles = batch_size * n_tiles_per_image
         max_sources = self.image_encoder.max_detections
 
         # clip decoder output since constraint is: max_detections <= max_sources (per tile)
-        true_tile_locs = true_tile_locs[:, :, 0:max_sources]
-        true_tile_log_fluxes = true_tile_log_fluxes[:, :, 0:max_sources]
-        true_tile_galaxy_bool = true_tile_galaxy_bool[:, :, 0:max_sources]
+        true_tile_locs = true_tile_locs[:, :, :, 0:max_sources]
+        true_tile_log_fluxes = true_tile_log_fluxes[:, :, :, 0:max_sources]
+        true_tile_galaxy_bools = true_tile_galaxy_bools[:, :, :, 0:max_sources]
         true_tile_n_sources = true_tile_n_sources.clamp(max=max_sources)
 
         # flatten so first dimension is ptile
-        # b: batch, s: n_tiles_per_image
-        true_tile_locs = rearrange(true_tile_locs, "b n s xy -> (b n) s xy", xy=2)
-        true_tile_log_fluxes = rearrange(true_tile_log_fluxes, "b n s bands -> (b n) s bands")
-        true_tile_galaxy_bool = rearrange(true_tile_galaxy_bool, "b n s 1 -> (b n) s")
-        true_tile_n_sources = rearrange(true_tile_n_sources, "b n -> (b n)")
-        true_tile_is_on_array = encoder.get_is_on_from_n_sources(true_tile_n_sources, max_sources)
+        # b: batch, s: max_sources
+        true_tile_locs = rearrange(true_tile_locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
+        true_tile_log_fluxes = rearrange(
+            true_tile_log_fluxes, "b nth ntw s bands -> (b nth ntw) s bands"
+        )
+        true_tile_galaxy_bools = rearrange(true_tile_galaxy_bools, "b nth ntw s 1 -> (b nth ntw) s")
+        true_tile_n_sources = rearrange(true_tile_n_sources, "b nth ntw -> (b nth ntw)")
+        true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
-        image_ptiles = self.image_encoder.get_images_in_tiles(images)
-        pred = self.image_encoder.forward(image_ptiles, true_tile_n_sources)
+        log_images = subtract_bg_and_log_transform(images, background)
+        log_image_ptiles = get_images_in_tiles(
+            log_images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
+        )
+        var_params = self.image_encoder.encode(log_image_ptiles)
+        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+        pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
-        n_source_log_probs = pred["n_source_log_probs"].view(n_ptiles, max_sources + 1)
-        cross_entropy = CrossEntropyLoss(reduction="none").requires_grad_(False)
-        counter_loss = cross_entropy(n_source_log_probs, true_tile_n_sources)
+        n_source_log_probs = rearrange(
+            pred["n_source_log_probs"], "nptiles s -> nptiles s", s=max_sources + 1
+        )
+        nllloss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
+        counter_loss = nllloss(n_source_log_probs, true_tile_n_sources)
 
         # the following two functions computes the log-probability of parameters when
         # each estimated source i is matched with true source j.
@@ -270,71 +271,55 @@ class SleepPhase(pl.LightningModule):
         star_params_log_probs_all = get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
-        prob_galaxy = rearrange(pred["prob_galaxy"], "bn s 1 -> bn s")
 
         # inside _get_min_perm_loss is where the matching happens:
         # we construct a bijective map from each estimated source to each true source
-        (locs_loss, star_params_loss, galaxy_bool_loss) = get_min_perm_loss(
+        (locs_loss, star_params_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
-            prob_galaxy,
-            true_tile_galaxy_bool,
+            true_tile_galaxy_bools,
             true_tile_is_on_array,
         )
 
-        loss_vec = (
-            locs_loss * (locs_loss.detach() < 1e6).float()
-            + counter_loss
-            + star_params_loss
-            + galaxy_bool_loss
-        )
+        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss + star_params_loss
         loss = loss_vec.mean()
 
-        return (
-            loss,
-            counter_loss,
-            locs_loss,
-            star_params_loss,
-            galaxy_bool_loss,
-        )
+        return loss, counter_loss, locs_loss, star_params_loss
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
-        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
-        name = self.hparams["optimizer_params"]["name"]
-        kwargs = self.hparams["optimizer_params"]["kwargs"]
-        return get_optimizer(name, self.image_encoder.parameters(), kwargs)
+        return Adam(self.image_encoder.parameters(), **self.optimizer_params)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
+        batch_size = len(batch["n_sources"])
         loss = self._get_loss(batch)[0]
-        self.log("train/loss", loss)
+        self.log("train/loss", loss, batch_size=batch_size)
         return loss
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
+        batch_size = len(batch["images"])
         (
             detection_loss,
             counter_loss,
             locs_loss,
             star_params_loss,
-            galaxy_bool_loss,
         ) = self._get_loss(batch)
 
-        self.log("val/loss", detection_loss)
-        self.log("val/counter_loss", counter_loss.mean())
-        self.log("val/locs_loss", locs_loss.mean())
-        self.log("val/gal_bool_loss", galaxy_bool_loss.mean())
-        self.log("val/star_params_loss", star_params_loss.mean())
+        # log all losses
+        self.log("val/loss", detection_loss, batch_size=batch_size)
+        self.log("val/counter_loss", counter_loss.mean(), batch_size=batch_size)
+        self.log("val/locs_loss", locs_loss.mean(), batch_size=batch_size)
+        self.log("val/star_params_loss", star_params_loss.mean(), batch_size=batch_size)
 
-        # calculate metrics for this batch
-        metrics = self._get_metrics(batch)
-        self.log("val/acc_counts", metrics["counts_acc"])
-        self.log("val/gal_counts", metrics["galaxy_counts_acc"])
-        self.log("val/locs_mae", metrics["locs_mae"])
-        self.log("val/star_fluxes_mae", metrics["star_fluxes_mae"])
-        self.log("val/avg_tpr", metrics["avg_tpr"])
-        self.log("val/avg_ppv", metrics["avg_ppv"])
+        # get metrics and log on full image parameters.
+        true_params, est_params = self._get_full_params(batch)
+        metrics = self.val_detection_metrics(true_params, est_params)
+        self.log("val/precision", metrics["precision"], batch_size=batch_size)
+        self.log("val/recall", metrics["recall"], batch_size=batch_size)
+        self.log("val/f1", metrics["f1"], batch_size=batch_size)
+        self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -344,52 +329,27 @@ class SleepPhase(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        metrics = self._get_metrics(batch)
-        self.log("acc_counts", metrics["counts_acc"])
-        self.log("acc_gal_counts", metrics["galaxy_counts_acc"])
-        self.log("locs_mae", metrics["locs_mae"])
-        self.log("star_fluxes_mae", metrics["star_fluxes_mae"])
-        self.log("avg_tpr", metrics["avg_tpr"])
-        self.log("avg_ppv", metrics["avg_ppv"])
+        true_params, est_params = self._get_full_params(batch)
+        metrics = self.test_detection_metrics(true_params, est_params)
+        batch_size = len(batch["images"])
+        self.log("precision", metrics["precision"], batch_size=batch_size)
+        self.log("recall", metrics["recall"], batch_size=batch_size)
+        self.log("f1", metrics["f1"], batch_size=batch_size)
+        self.log("avg_distance", metrics["avg_distance"], batch_size=batch_size)
 
         return batch
 
-    def test_epoch_end(self, outputs):
-        """Pytorch lightning method."""
-        if self.image_decoder.n_bands == 1:
-            self._make_plots(outputs[-1], kind="testing")
+    def _get_full_params(self, batch):
+        # true
+        exclude = {"images", "background"}
 
-    def _get_metrics(self, batch):
-        # get images and properties
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
-        true_params = {k: v for k, v in batch.items() if k not in exclude}
+        true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
+        true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
 
-        # get params on full image.
-        true_params = get_full_params(true_params, slen)
-
-        # get map estimates
+        # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        estimates = get_full_params(tile_estimate, slen)
-
-        # get detection and star fluxes metrics
-        errors = eval_error_on_batch(true_params, estimates, slen)
-
-        locs_mae = errors["locs_mae_vec"].mean()
-        star_fluxes_mae = errors["fluxes_mae_vec"].mean()
-        counts_acc = errors["count_bool"].float().mean()
-        galaxy_counts_acc = errors["galaxy_counts_bool"].float().mean()
-        avg_tpr = errors["tpr_vec"].mean()
-        avg_ppv = errors["ppv_vec"].mean()
-
-        return {
-            "counts_acc": counts_acc,
-            "galaxy_counts_acc": galaxy_counts_acc,
-            "locs_mae": locs_mae,
-            "star_fluxes_mae": star_fluxes_mae,
-            "avg_tpr": avg_tpr,
-            "avg_ppv": avg_ppv,
-        }
+        est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
+        return true_params, est_params
 
     # pylint: disable=too-many-statements
     def _make_plots(self, batch, kind="validation", n_samples=16):
@@ -401,19 +361,15 @@ class SleepPhase(pl.LightningModule):
             return
         nrows = int(n_samples ** 0.5)  # for figure
 
-        # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
-        true_params_dict = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(true_params_dict, slen)
-
-        # obtain map estimates
-        tile_estimate = self.tile_map_estimate(batch)
-        estimate = get_full_params(tile_estimate, slen)
+        true_params, est_params = self._get_full_params(batch)
 
         # setup figure and axes.
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
+
+        images = batch["images"]
+        assert images.shape[-2] == images.shape[-1]
+        slen = images.shape[-2] - 2 * self.image_encoder.border_padding
 
         for i in range(n_samples):
             plot_image_and_locs(
@@ -423,11 +379,10 @@ class SleepPhase(pl.LightningModule):
                 batch["images"],
                 slen,
                 true_params,
-                estimate=estimate,
-                labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),
+                estimate=est_params,
+                labels=None if i > 0 else ("t. gal", "p. source", "t. star"),
                 annotate_axis=True,
                 add_borders=True,
-                prob_galaxy=estimate["prob_galaxy"],
             )
 
         fig.tight_layout()

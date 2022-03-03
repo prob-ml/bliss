@@ -1,0 +1,15 @@
+# @package _global_
+generate:
+  dataset: ${datasets.sdss_galaxies}
+  file: data/simulated_sdss_individual_galaxies.pt
+  common: 
+    - background
+    - slen
+
+datasets:
+  sdss_galaxies:
+    batch_size: 512
+    n_batches: 20
+    num_workers: 20
+    flux_sample: uniform
+

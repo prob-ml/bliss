@@ -37,8 +37,8 @@ jobs:
       - name: Install Poetry
         run: |
           pip install --upgrade pip
-          pip install "poetry-core==1.0.0"
-          pip install "poetry==1.1.7"
+          pip install "poetry-core>=1.0.0"
+          pip install "poetry==1.1.11"
 
       - name: Install fftw3
         run: |
@@ -61,7 +61,7 @@ jobs:
 
       - name: Run flake8
         run: |
-          poetry run flake8 bliss/ tests/
+          poetry run flake8 .
 
       - name: Run darglint
         run: |
@@ -76,7 +76,7 @@ jobs:
           poetry run pytest --cov=./bliss --cov-report=xml --durations=0
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2
         with:
           file: ./coverage.xml
           flags: unittests

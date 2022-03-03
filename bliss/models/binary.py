@@ -1,14 +1,21 @@
 import pytorch_lightning as pl
 import torch
+from einops import rearrange
 from matplotlib import pyplot as plt
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import BCELoss
+from torch.optim import Adam
 
 from bliss.models.decoder import get_mgrid
-from bliss.models.encoder import EncoderCNN, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.galaxy_encoder import center_ptiles, get_full_params
-from bliss.optimizer import get_optimizer
-from bliss.plotting import plot_image_and_locs
+from bliss.models.galaxy_encoder import center_ptiles
+from bliss.models.location_encoder import (
+    EncoderCNN,
+    get_full_params_from_tiles,
+    get_images_in_tiles,
+    get_is_on_from_n_sources,
+    subtract_bg_and_log_transform,
+)
+from bliss.reporting import plot_image_and_locs
 
 
 class BinaryEncoder(pl.LightningModule):
@@ -41,6 +48,7 @@ class BinaryEncoder(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
+        self.optimizer_params = optimizer_params
 
         self.max_sources = 1  # by construction.
 
@@ -79,11 +87,13 @@ class BinaryEncoder(pl.LightningModule):
         """Divide a batch of full images into padded tiles similar to nn.conv2d."""
         return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
 
-    def center_ptiles(self, image_ptiles, tile_locs):
+    def flatten_and_center_ptiles(self, log_image_ptiles, tile_locs):
         """Return padded tiles centered on each corresponding source."""
+        log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
         return center_ptiles(
-            image_ptiles,
-            tile_locs,
+            log_image_ptiles_flat,
+            tile_locs_flat,
             self.tile_slen,
             self.ptile_slen,
             self.border_padding,
@@ -91,78 +101,93 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward_image(self, images, tile_locs):
-        """Splits `images` into padded tiles and runs `self.forward()` on them."""
-        batch_size = images.shape[0]
-        ptiles = self.get_images_in_tiles(images)
-        prob_galaxy = self(ptiles, tile_locs)
-        return prob_galaxy.view(batch_size, -1, 1, 1)
-
-    def forward(self, image_ptiles, tile_locs):
+    def forward(self, log_image_ptiles: Tensor, tile_locs: Tensor):
         """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
-        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
-        n_ptiles = image_ptiles.shape[0]
+        assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
+        batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
 
         # in each padded tile we need to center the corresponding galaxy/star
-        tile_locs = tile_locs.reshape(n_ptiles, self.max_sources, 2)
-        centered_ptiles = self.center_ptiles(image_ptiles, tile_locs)
+        centered_ptiles = self.flatten_and_center_ptiles(log_image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
-        log_img = torch.log(centered_ptiles - centered_ptiles.min() + 1.0)
-        h = self.enc_conv(log_img)
-        z = self.enc_final(h).reshape(n_ptiles, 1)
-        return torch.sigmoid(z).clamp(1e-4, 1 - 1e-4)
+        h = self.enc_conv(centered_ptiles)
+        h2 = self.enc_final(h)
+        z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
+        return rearrange(
+            z,
+            "(b nth ntw s) 1 -> b nth ntw s 1",
+            b=batch_size,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
+            s=self.max_sources,
+        )
 
     def get_prediction(self, batch):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
 
         images = batch["images"]
-        galaxy_bool = batch["galaxy_bool"].reshape(-1)
-        prob_galaxy = self.forward_image(images, batch["locs"]).reshape(-1)
+        background = batch["background"]
+        galaxy_bools = batch["galaxy_bools"].reshape(-1)
+        locs = batch["locs"]
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
+        log_images = subtract_bg_and_log_transform(images, background)
+        log_ptiles = self.get_images_in_tiles(log_images)
+        galaxy_probs = self.forward(log_ptiles, locs).reshape(-1)
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 
         # we need to calculate cross entropy loss, only for "on" sources
-        loss = BCELoss(reduction="none")(prob_galaxy, galaxy_bool) * tile_is_on_array
+        loss = BCELoss(reduction="none")(galaxy_probs, galaxy_bools) * tile_is_on_array
         loss = loss.sum()
 
         # get predictions for calculating metrics
-        pred_galaxy_bool = (prob_galaxy > 0.5).float() * tile_is_on_array
-        correct = ((pred_galaxy_bool.eq(galaxy_bool)) * tile_is_on_array).sum()
+        pred_galaxy_bools = (galaxy_probs > 0.5).float() * tile_is_on_array
+        correct = ((pred_galaxy_bools.eq(galaxy_bools)) * tile_is_on_array).sum()
         total_n_sources = batch["n_sources"].sum()
         acc = correct / total_n_sources
 
         # finally organize quantities and return as a dictionary
-        pred_star_bool = (1 - pred_galaxy_bool) * tile_is_on_array
+        pred_star_bools = (1 - pred_galaxy_bools) * tile_is_on_array
 
-        return {
+        ret = {
             "loss": loss,
             "acc": acc,
-            "galaxy_bool": pred_galaxy_bool.reshape(images.shape[0], -1, 1, 1),
-            "star_bool": pred_star_bool.reshape(images.shape[0], -1, 1, 1),
-            "prob_galaxy": prob_galaxy.reshape(images.shape[0], -1, 1, 1),
+            "galaxy_bools": pred_galaxy_bools,
+            "star_bools": pred_star_bools,
+            "galaxy_probs": galaxy_probs,
         }
+
+        for k in ("galaxy_bools", "star_bools", "galaxy_probs"):
+            ret[k] = rearrange(
+                ret[k],
+                "(b nth ntw s) -> b nth ntw s 1",
+                b=batch_size,
+                nth=n_tiles_h,
+                ntw=n_tiles_w,
+                s=max_sources,
+            )
+
+        return ret
 
     def configure_optimizers(self):
         """Pytorch lightning method."""
-        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
-        name = self.hparams["optimizer_params"]["name"]
-        kwargs = self.hparams["optimizer_params"]["kwargs"]
-        return get_optimizer(name, self.parameters(), kwargs)
+        return Adam(self.parameters(), **self.optimizer_params)
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning method."""
+        batch_size = len(batch["images"])
         pred = self.get_prediction(batch)
-        self.log("train/loss", pred["loss"])
-        self.log("train/acc", pred["acc"])
+        self.log("train/loss", pred["loss"], batch_size=batch_size)
+        self.log("train/acc", pred["acc"], batch_size=batch_size)
         return pred["loss"]
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
+        batch_size = len(batch["images"])
         pred = self.get_prediction(batch)
-        self.log("val/loss", pred["loss"])
-        self.log("val/acc", pred["acc"])
+        self.log("val/loss", pred["loss"], batch_size=batch_size)
+        self.log("val/acc", pred["acc"], batch_size=batch_size)
         return batch
 
     def validation_epoch_end(self, outputs):
@@ -172,15 +197,16 @@ class BinaryEncoder(pl.LightningModule):
         for b in outputs:
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
-                batch[k] = torch.cat([curr_val, v])
+                batch[k] = torch.cat((curr_val, v))
 
         if self.n_bands == 1:
             self.make_plots(batch)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
+        batch_size = len(batch["images"])
         pred = self.get_prediction(batch)
-        self.log("acc", pred["acc"])
+        self.log("acc", pred["acc"], batch_size=batch_size)
 
     def make_plots(self, batch, n_samples=16):
         """Produced informative plots demonstrating encoder performance."""
@@ -191,22 +217,23 @@ class BinaryEncoder(pl.LightningModule):
         nrows = int(n_samples ** 0.5)  # for figure
 
         # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "slen", "background"}
-        slen = int(batch["slen"].unique().item())
-        tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params(tile_params, slen)
-
+        exclude = {"images", "background"}
+        true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
+        true_params = get_full_params_from_tiles(true_tile_params, self.tile_slen)
         # prediction
         pred = self.get_prediction(batch)
-        tile_est = dict(tile_params.items())
-        tile_est["galaxy_bool"] = pred["galaxy_bool"]
-        tile_est["star_bool"] = pred["star_bool"]
-        tile_est["prob_galaxy"] = pred["prob_galaxy"]
-        est = get_full_params(tile_est, slen)
-
+        tile_est = dict(true_tile_params.items())
+        tile_est["galaxy_bools"] = pred["galaxy_bools"]
+        tile_est["star_bools"] = pred["star_bools"]
+        tile_est["galaxy_probs"] = pred["galaxy_probs"]
+        est = get_full_params_from_tiles(tile_est, self.tile_slen)
         # setup figure and axes
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
+
+        # Currently, plots require square images
+        assert batch["images"].shape[-2] == batch["images"].shape[-1]
+        slen = batch["images"].shape[-1] - 2 * self.border_padding
 
         for i in range(n_samples):
             plot_image_and_locs(
@@ -220,7 +247,7 @@ class BinaryEncoder(pl.LightningModule):
                 labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),
                 annotate_axis=False,
                 add_borders=True,
-                prob_galaxy=est["prob_galaxy"],
+                galaxy_probs=est["galaxy_probs"],
             )
 
         fig.tight_layout()

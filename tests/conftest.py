@@ -1,24 +1,10 @@
+from pathlib import Path
+
 import pytest
 import pytorch_lightning as pl
 import torch
 from hydra import compose, initialize
-
-from bliss import sleep
-from bliss.datasets import galsim_galaxies, simulated
-from bliss.models import binary, galaxy_encoder, galaxy_net
-
-models = {
-    "SleepPhase": sleep.SleepPhase,
-    "GalaxyEncoder": galaxy_encoder.GalaxyEncoder,
-    "OneCenteredGalaxyAE": galaxy_net.OneCenteredGalaxyAE,
-    "BinaryEncoder": binary.BinaryEncoder,
-}
-
-datasets = {
-    "ToyGaussian": galsim_galaxies.ToyGaussian,
-    "SDSSGalaxies": galsim_galaxies.SDSSGalaxies,
-    "SimulatedDataset": simulated.SimulatedDataset,
-}
+from hydra.utils import instantiate
 
 
 # command line arguments for tests
@@ -31,18 +17,11 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_collection_modifyitems(config, items):
-    # skip `multi_gpu` required tests when running on cpu or only single gpu is avaiable
-    if config.getoption("--gpu") and torch.cuda.device_count() >= 2:
-        return
-    skip = pytest.mark.skip(reason="need --gpu option and more than 2 available gpus to run")
-    for item in items:
-        if "multi_gpu" in item.keywords:
-            item.add_marker(skip)
-
-
 def get_cfg(overrides, devices):
     overrides.update({"gpus": devices.gpus})
+    overrides.update(
+        {"training.weight_save_path": None, "paths.root": Path(__file__).parents[1].as_posix()}
+    )
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
@@ -67,39 +46,40 @@ class ModelSetup:
         return get_cfg(overrides, self.devices)
 
     def get_trainer(self, overrides):
+        overrides.update(
+            {
+                # Testing-specific overrides
+                "+training.seed": 42,
+                "training.trainer.logger": False,
+                "training.trainer.check_val_every_n_epoch": 1001,
+                "training.trainer.deterministic": not self.devices.use_cuda,
+            }
+        )
         cfg = self.get_cfg(overrides)
-        if cfg.training.deterministic:
+        if cfg.training.trainer.deterministic:
             pl.seed_everything(cfg.training.seed)
-            return pl.Trainer(**cfg.training.trainer, deterministic=True)
-        return pl.Trainer(**cfg.training.trainer)
+        return instantiate(cfg.training.trainer)
 
-    def get_dataset(self, overrides):
+    def get_dataset_for_training(self, overrides):
         cfg = self.get_cfg(overrides)
-        return datasets[cfg.dataset.name](**cfg.dataset.kwargs)
+        return instantiate(cfg.training.dataset)
 
-    def get_model(self, overrides):
+    def get_model_for_training(self, overrides):
         cfg = self.get_cfg(overrides)
-        model = models[cfg.model.name](**cfg.model.kwargs)
+        model = instantiate(cfg.training.model, optimizer_params=cfg.training.optimizer_params)
         return model.to(self.devices.device)
 
     def get_trained_model(self, overrides):
-        dataset = self.get_dataset(overrides)
+        dataset = self.get_dataset_for_training(overrides)
         trainer = self.get_trainer(overrides)
-        model = self.get_model(overrides)
+        model = self.get_model_for_training(overrides)
         trainer.fit(model, datamodule=dataset)
         return model.to(self.devices.device)
 
     def test_model(self, overrides, model):
-        test_module = self.get_dataset(overrides)
+        test_module = self.get_dataset_for_training(overrides)
         trainer = self.get_trainer(overrides)
         return trainer.test(model, datamodule=test_module)[0]
-
-
-@pytest.fixture(scope="session")
-def paths():
-    with initialize(config_path="../config"):
-        cfg = compose("config")
-    return cfg.paths
 
 
 @pytest.fixture(scope="session")

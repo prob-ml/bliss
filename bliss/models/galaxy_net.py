@@ -1,19 +1,23 @@
+from typing import Tuple
+
 import pytorch_lightning as pl
 import torch
 from matplotlib import pyplot as plt
-from torch import nn
+from torch import nn, Tensor
 from torch.distributions import Normal
 from torch.nn import functional as F
+from torch.nn.utils import weight_norm
+from torch.optim import Adam
+from tqdm import tqdm
 
-from bliss.optimizer import get_optimizer
-from bliss.plotting import plot_image
+from bliss.reporting import plot_image
 
 plt.switch_backend("Agg")
 plt.ioff()
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256, use_weight_norm=False):
         super().__init__()
 
         self.slen = slen
@@ -21,25 +25,29 @@ class CenteredGalaxyEncoder(nn.Module):
 
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
         min_slen = f(f(slen))
+        wn = lambda x: weight_norm(x) if use_weight_norm else x
 
         self.features = nn.Sequential(
-            nn.Conv2d(n_bands, 4, 5, stride=3, padding=0),
+            wn(nn.Conv2d(n_bands, 4, 5, stride=3, padding=0)),
             nn.LeakyReLU(),
-            nn.Conv2d(4, 8, 5, stride=3, padding=0),
+            wn(nn.Conv2d(4, 8, 5, stride=3, padding=0)),
             nn.LeakyReLU(),
             nn.Flatten(1, -1),
-            nn.Linear(8 * min_slen ** 2, hidden),
+            wn(nn.Linear(8 * min_slen ** 2, hidden)),
             nn.LeakyReLU(),
-            nn.Linear(hidden, latent_dim),
+            wn(nn.Linear(hidden, latent_dim)),
         )
 
     def forward(self, image):
         """Encodes galaxy from image."""
+        return self.features(image), torch.tensor(0.0, device=image.device)
+
+    def max_a_post(self, image):
         return self.features(image)
 
 
 class CenteredGalaxyDecoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256):
+    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256, use_weight_norm=False):
         super().__init__()
 
         self.slen = slen
@@ -49,17 +57,19 @@ class CenteredGalaxyDecoder(nn.Module):
         self.min_slen = f(f(slen))
         assert g(g(self.min_slen)) == slen
 
+        wn = lambda x: weight_norm(x) if use_weight_norm else x
+
         self.fc = nn.Sequential(
-            nn.Linear(latent_dim, hidden),
+            wn(nn.Linear(latent_dim, hidden)),
             nn.LeakyReLU(),
-            nn.Linear(hidden, 8 * self.min_slen ** 2),
+            wn(nn.Linear(hidden, 8 * self.min_slen ** 2)),
             nn.LeakyReLU(),
         )
 
         self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(8, 4, 5, stride=3),
+            wn(nn.ConvTranspose2d(8, 4, 5, stride=3)),
             nn.LeakyReLU(),
-            nn.ConvTranspose2d(4, n_bands, 5, stride=3),
+            wn(nn.ConvTranspose2d(4, n_bands, 5, stride=3)),
         )
 
     def forward(self, z):
@@ -80,33 +90,59 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def __init__(
         self,
-        slen=53,
-        latent_dim=8,
-        hidden=256,
-        n_bands=1,
+        slen: int,
+        latent_dim: int,
+        hidden: int,
+        n_bands: int,
         optimizer_params: dict = None,
     ):
         super().__init__()
         self.save_hyperparameters()
+        self.optimizer_params = optimizer_params
 
-        self.enc = CenteredGalaxyEncoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
-        self.dec = CenteredGalaxyDecoder(
-            slen=slen, latent_dim=latent_dim, hidden=hidden, n_bands=n_bands
-        )
+        self.enc = self.make_encoder(slen, latent_dim, n_bands, hidden)
+        self.dec = self.make_decoder(slen, latent_dim, n_bands, hidden)
+        self.latent_dim = latent_dim
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
-    def forward(self, image, background):
+    def forward(self, image: Tensor, background: Tensor) -> Tuple[Tensor, Tensor]:
         """Gets reconstructed image from running through encoder and decoder."""
-        z = self.enc.forward(image - background)
+        z, pq_z = self.enc.forward(image - background)
         recon_mean = self.dec.forward(z)
-        return recon_mean + background
+        return recon_mean + background, pq_z
 
-    def get_loss(self, image, recon_mean):
-        return -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
+    def get_loss(self, image: Tensor, recon_mean: Tensor, pq_z: Tensor):
+        recon_loss = -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
+        pq_z_loss = -pq_z.sum()
+        return recon_loss + pq_z_loss
+
+    def make_encoder(self, slen, latent_dim, n_bands, hidden):
+        return CenteredGalaxyEncoder(slen, latent_dim, n_bands, hidden)
+
+    def make_deblender(self, slen, latent_dim, n_bands, hidden):
+        return self.make_encoder(slen, latent_dim, n_bands, hidden)
+
+    def make_decoder(self, slen, latent_dim, n_bands, hidden):
+        return CenteredGalaxyDecoder(slen, latent_dim, n_bands, hidden)
+
+    def get_encoder(self):
+        return self.enc
+
+    def get_decoder(self):
+        return self.dec
+
+    def generate_latents(self, dataloader, n_batches):
+        """Induces a latent distribution for a non-probabilistic autoencoder."""
+        latent_list = []
+        with torch.no_grad():
+            for _ in tqdm(range(n_batches)):
+                galaxy = next(iter(dataloader))
+                img = (galaxy["images"] - galaxy["background"]).to(self.device)
+                latent_batch = self.enc(img)[0]
+                latent_list.append(latent_batch)
+        return torch.cat(latent_list, dim=0)
 
     # ---------------
     # Optimizer
@@ -114,10 +150,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configures optimizers for training (pytorch lightning)."""
-        assert self.hparams["optimizer_params"] is not None, "Need to specify 'optimizer_params'."
-        name = self.hparams["optimizer_params"]["name"]
-        kwargs = self.hparams["optimizer_params"]["kwargs"]
-        return get_optimizer(name, self.parameters(), kwargs)
+        return Adam(self.parameters(), **self.optimizer_params)
 
     # ---------------
     # Training
@@ -126,8 +159,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        recon_mean = self(images, background)
-        loss = self.get_loss(images, recon_mean)
+        recon_mean, pq_z = self.forward(images, background)
+        loss = self.get_loss(images, recon_mean, pq_z)
         self.log("train/loss", loss)
         return loss
 
@@ -138,9 +171,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        recon_mean = self(images, background)
+        recon_mean, pq_z = self.forward(images, background)
         residuals = (images - recon_mean) / torch.sqrt(recon_mean)
-        loss = self.get_loss(images, recon_mean)
+        loss = self.get_loss(images, recon_mean, pq_z)
 
         # metrics
         self.log("val/loss", loss)
@@ -217,6 +250,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         """Testing step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        recon_mean = self(images, background)
+        recon_mean, _ = self.forward(images, background)
         residuals = (images - recon_mean) / torch.sqrt(images)
         self.log("max_residual", residuals.abs().max())

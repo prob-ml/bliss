@@ -2,7 +2,7 @@ import torch
 from matplotlib import pyplot as plt
 from copy import deepcopy
 
-from bliss.models.encoder import get_is_on_from_n_sources
+from bliss.models.location_encoder import get_is_on_from_n_sources
 
 def filter_catalog(catalog, which_keep): 
     catalog_filtered = dict()

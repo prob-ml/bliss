@@ -23,10 +23,9 @@ repos:
         exclude: ^(.*fits|.*pt|.*npz|.*ckpt|.*png|.*inv|.*npy)
       - id: isort
         name: isort
-        entry: isort --line-length 100
+        entry: isort
         language: system
         types: [python]
-        args: [--profile black, --line-length 100]
       - id: pylint
         name: pylint
         entry: pylint
@@ -46,6 +45,6 @@ repos:
         args:
           - "--line-length=100"
   - repo: https://github.com/terrencepreilly/darglint
-    rev: v1.8.0
+    rev: v1.8.1
     hooks:
       - id: darglint

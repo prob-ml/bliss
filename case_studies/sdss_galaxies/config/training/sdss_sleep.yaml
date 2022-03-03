@@ -1,0 +1,11 @@
+# @package _global_
+training:
+  name: "sdss_sleep"
+  model: ${models.sleep}
+  dataset: ${datasets.simulated}
+  optimizer_params:
+    lr: 1e-4
+  n_epochs: 1501
+  save_top_k: 10
+  trainer:
+    enable_checkpointing: True

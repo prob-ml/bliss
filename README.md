@@ -3,9 +3,10 @@
 
 Bayesian Light Source Separator (BLISS)
 ========================================
+[![](https://img.shields.io/badge/docs-master-blue.svg)](https://prob-ml.github.io/bliss/)
 ![tests](https://github.com/applied-bayes/bliss/workflows/tests/badge.svg)
 [![codecov.io](https://codecov.io/gh/prob-ml/bliss/branch/master/graphs/badge.svg?branch=master&token=Jgzv0gn3rA)](http://codecov.io/github/prob-ml/bliss?branch=master)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![wemake-python-styleguide](https://img.shields.io/badge/style-wemake-000000.svg)](https://github.com/wemake-services/wemake-python-styleguide)
 
 # Introduction
 
@@ -36,12 +37,16 @@ poetry install
 poetry shell
 ```
 
-4. Finally, set an environment variable called `BLISS_HOME` to the absolute path of the `bliss` directory.
-
 # Latest updates
-## Galaxies
+### Galaxies
    - BLISS now includes a galaxy model based on a VAE that was trained on Galsim galaxies.
    - BLISS now includes an algorithm for detecting, measuring, and deblending galaxies.
 
-## Stars
+### Stars
    - BLISS already includes the StarNet functionality from its predecessor repo: [DeblendingStarFields](https://github.com/Runjing-Liu120/DeblendingStarfields).
+
+
+# References
+
+Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. *Variational Inference for Deblending Crowded Starfields.* [arXiv:2102.02409](https://arxiv.org/abs/2102.02409), 2021.
+
