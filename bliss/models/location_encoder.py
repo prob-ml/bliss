@@ -258,6 +258,7 @@ class LocationEncoder(nn.Module):
 
     def __init__(
         self,
+<<<<<<< HEAD
         input_transform: Union[LogBackgroundTransform, ConcatBackgroundTransform],
         max_detections: int = 1,
         n_bands: int = 1,
@@ -267,6 +268,16 @@ class LocationEncoder(nn.Module):
         spatial_dropout=0,
         dropout=0,
         hidden: int = 128,
+=======
+        max_detections: int,
+        n_bands: int,
+        tile_slen: int,
+        ptile_slen: int,
+        channel: int,
+        dropout,
+        hidden: int,
+        spatial_dropout=0
+>>>>>>> restored one default to not break tests
     ):
         """Initializes LocationEncoder.
 
