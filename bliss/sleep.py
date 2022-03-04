@@ -119,8 +119,8 @@ class SleepPhase(pl.LightningModule):
         self,
         encoder: LocationEncoder,
         decoder: ImageDecoder,
-        annotate_probs: bool,
-        slack,
+        annotate_probs: bool = False,
+        slack=1.0,
         optimizer_params: dict = None,
     ):
         """Initializes SleepPhase class.
