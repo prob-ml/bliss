@@ -80,12 +80,12 @@ class ImagePrior(pl.LightningModule):
         min_sources: int,
         max_sources: int,
         mean_sources: int,
-        loc_min: float,
-        loc_max: float,
         f_min: float,
         f_max: float,
         alpha: float,
         prob_galaxy: float,
+        loc_min: float = 0.0,
+        loc_max: float = 1.0,
         galaxy_prior: GalaxyPrior = None,
     ):
         """Initializes ImagePrior.
