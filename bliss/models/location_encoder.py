@@ -257,7 +257,7 @@ class LocationEncoder(nn.Module):
         channel: int,
         dropout,
         hidden: int,
-        spatial_dropout=0
+        spatial_dropout=0,
     ):
         """Initializes LocationEncoder.
 
