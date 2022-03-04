@@ -255,9 +255,9 @@ class LocationEncoder(nn.Module):
         tile_slen: int,
         ptile_slen: int,
         channel: int,
-        spatial_dropout,
         dropout,
         hidden: int,
+        spatial_dropout=0
     ):
         """Initializes LocationEncoder.
 
