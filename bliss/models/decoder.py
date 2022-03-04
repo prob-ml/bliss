@@ -27,9 +27,9 @@ class ImageDecoder(pl.LightningModule):
 
     def __init__(
         self,
-        n_bands: int = 1,
-        tile_slen: int = 2,
-        ptile_slen: int = 10,
+        n_bands: int,
+        tile_slen: int,
+        ptile_slen: int,
         border_padding: int = None,
         galaxy_ae: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
         galaxy_ae_ckpt: str = None,

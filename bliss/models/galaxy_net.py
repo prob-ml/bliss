@@ -17,7 +17,14 @@ plt.ioff()
 
 
 class CenteredGalaxyEncoder(nn.Module):
-    def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256, use_weight_norm=False):
+    def __init__(
+        self, 
+        slen, 
+        latent_dim, 
+        n_bands, 
+        hidden, 
+        use_weight_norm=False
+    ):
         super().__init__()
 
         self.slen = slen

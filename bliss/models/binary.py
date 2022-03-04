@@ -21,13 +21,13 @@ from bliss.reporting import plot_image_and_locs
 class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
-        n_bands: int = 1,
-        tile_slen: int = 4,
-        ptile_slen: int = 52,
-        channel: int = 8,
-        hidden: int = 128,
-        spatial_dropout: float = 0,
-        dropout: float = 0,
+        n_bands: int,
+        tile_slen: int,
+        ptile_slen: int,
+        channel: int,
+        hidden: int,
+        spatial_dropout: float,
+        dropout: float,
         optimizer_params: dict = None,
     ):
         """Encoder which conditioned on other source params returns probability of galaxy vs. star.

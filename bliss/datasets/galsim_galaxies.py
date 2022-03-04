@@ -19,19 +19,19 @@ def load_psf_from_file(psf_image_file: str, pixel_scale: float):
 class ToyGaussian(pl.LightningDataModule, Dataset):
     def __init__(
         self,
-        num_workers=0,
-        batch_size=64,
-        n_batches=10,
-        slen=53,
-        n_bands=1,
-        pixel_scale=0.396,
-        background=845,
-        psf_fwhm=1.4,
-        min_flux=300,
-        max_flux=10000,
-        min_hlr=0.8,
-        max_hlr=4.0,
-        max_e=0.6,
+        num_workers,
+        batch_size,
+        n_batches,
+        slen,
+        n_bands,
+        pixel_scale,
+        background,
+        psf_fwhm,
+        min_flux,
+        max_flux,
+        min_hlr,
+        max_hlr,
+        max_e,
     ):
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
@@ -104,21 +104,21 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 class SDSSGalaxies(pl.LightningDataModule, Dataset):
     def __init__(
         self,
-        num_workers=0,
-        batch_size=64,
-        n_batches=10,
-        n_bands=1,
-        slen=53,
-        min_flux=1e3,
-        max_flux=3.5e5,
-        min_a_d=0.8,
-        max_a_d=6.5,
-        min_a_b=0.8,
-        max_a_b=3.6,
-        background=865.0,
-        pixel_scale=0.396,  # SDSS
-        psf_image_file: str = None,
-        flux_sample="uniform",
+        num_workers,
+        batch_size,
+        n_batches,
+        n_bands,
+        slen,
+        min_flux,
+        max_flux,
+        min_a_d,
+        max_a_d,
+        min_a_b,
+        max_a_b,
+        background,
+        pixel_scale,  # SDSS
+        flux_sample,
+        psf_image_file: str = None 
     ):
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
