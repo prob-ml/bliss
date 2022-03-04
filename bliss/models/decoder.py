@@ -408,7 +408,7 @@ class StarTileDecoder(nn.Module):
             self.normalization_constant[i] = 1 / psf_i.sum()
         self.normalization_constant = self.normalization_constant.detach()
 
-    def forward(self, locs, fluxes, star_bool, detach_psf = False):
+    def forward(self, locs, fluxes, star_bools, detach_psf = False):
         """Renders star tile from locations and fluxes."""
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
