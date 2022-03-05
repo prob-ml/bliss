@@ -21,24 +21,7 @@ def reconstruct(cfg):
     my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
     coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
     device = torch.device(cfg.reconstruct.device)
-
-    sleep = instantiate(cfg.models.sleep).to(device).eval()
-    sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint, map_location=sleep.device))
-
-    binary = instantiate(cfg.models.binary).to(device).eval()
-    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint, map_location=binary.device))
-
-    galaxy = instantiate(cfg.models.galaxy_encoder).to(device).eval()
-    if cfg.reconstruct.real:
-        galaxy_state_dict = torch.load(
-            cfg.predict.galaxy_checkpoint_real, map_location=galaxy.device
-        )
-    else:
-        galaxy_state_dict = torch.load(cfg.predict.galaxy_checkpoint, map_location=galaxy.device)
-    galaxy.load_state_dict(galaxy_state_dict)
-    location = sleep.image_encoder.to(device).eval()
-    dec = sleep.image_decoder.to(device).eval()
-    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
+    dec, encoder = load_models(cfg, device)
 
     if cfg.reconstruct.outdir is not None:
         outdir = Path(cfg.reconstruct.outdir)
@@ -125,6 +108,26 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
         "wcs": sdss_data[0]["wcs"][0],
         "pixel_scale": sdss_pixel_scale,
     }
+
+def load_models(cfg, device):
+    sleep = instantiate(cfg.models.sleep).to(device).eval()
+    sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint, map_location=sleep.device))
+
+    binary = instantiate(cfg.models.binary).to(device).eval()
+    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint, map_location=binary.device))
+
+    galaxy = instantiate(cfg.models.galaxy_encoder).to(device).eval()
+    if cfg.reconstruct.real:
+        galaxy_state_dict = torch.load(
+            cfg.predict.galaxy_checkpoint_real, map_location=galaxy.device
+        )
+    else:
+        galaxy_state_dict = torch.load(cfg.predict.galaxy_checkpoint, map_location=galaxy.device)
+    galaxy.load_state_dict(galaxy_state_dict)
+    location = sleep.image_encoder.to(device).eval()
+    dec = sleep.image_decoder.to(device).eval()
+    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
+    return dec, encoder
 
 
 def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
