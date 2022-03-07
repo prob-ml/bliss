@@ -1,6 +1,7 @@
 # flake8: noqa
 # pylint: skip-file
 from pathlib import Path
+from typing import Tuple
 
 import torch
 import pandas as pd
@@ -13,7 +14,9 @@ from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import infer_blends, reconstruct_scene_at_coordinates
+from bliss.models.decoder import ImageDecoder
 from bliss.models.location_encoder import get_full_params_from_tiles
+from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
 
@@ -23,7 +26,7 @@ def reconstruct(cfg):
     my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
     coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
     device = torch.device(cfg.reconstruct.device)
-    dec, encoder = load_models(cfg, device)
+    dec, encoder, prior = load_models(cfg, device)
 
     if cfg.reconstruct.outdir is not None:
         outdir = Path(cfg.reconstruct.outdir)
@@ -55,6 +58,7 @@ def reconstruct(cfg):
         recon_best = None
         tile_map_recon_best = None
         for z in (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0):
+            # for z in (5.5, ):
             encoder.z_threshold = z
             recon, tile_map_recon = reconstruct_scene_at_coordinates(
                 encoder,
@@ -67,6 +71,8 @@ def reconstruct(cfg):
                 device=device,
             )
             ll = Normal(recon, recon.sqrt()).log_prob(true).sum()
+            prior_val = tile_map_prior(prior, tile_map_recon)
+            ll += prior_val
             if (ll_best is None) or (ll > ll_best):
                 z_best = z
                 ll_best = ll
@@ -144,7 +150,7 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
     }
 
 
-def load_models(cfg, device):
+def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
     sleep = instantiate(cfg.models.sleep).to(device).eval()
     sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint, map_location=sleep.device))
 
@@ -162,7 +168,9 @@ def load_models(cfg, device):
     location = sleep.image_encoder.to(device).eval()
     dec = sleep.image_decoder.to(device).eval()
     encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
-    return dec, encoder
+
+    prior = instantiate(cfg.models.prior).to(device).eval()
+    return dec, encoder, prior
 
 
 def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
@@ -309,6 +317,33 @@ def expected_precision(tile_map, threshold=0.5, mag_cutoff=24.0):
     galaxies_predicted = (gal_probs.exp() * (gal_probs.exp() > threshold)).sum()
     # return n_galaxies_predicted, galaxies_predicted, galaxies_predicted / n_galaxies_predicted
     return galaxies_predicted / n_galaxies_predicted
+
+
+from torch.distributions import Poisson
+
+
+def tile_map_prior(prior: ImagePrior, tile_map):
+    # Source probabilities
+    dist_sources = Poisson(torch.tensor(prior.mean_sources))
+    log_prob_no_source = dist_sources.log_prob(torch.tensor(0))
+    log_prob_one_source = dist_sources.log_prob(torch.tensor(1))
+    log_prob_source = (tile_map["n_sources"] == 0) * log_prob_no_source + (
+        tile_map["n_sources"] == 1
+    ) * log_prob_one_source
+
+    # Binary probabilities
+    galaxy_log_prob = torch.tensor(0.7).log()
+    star_log_prob = torch.tensor(0.3).log()
+    log_prob_binary = (
+        galaxy_log_prob * tile_map["galaxy_bools"] + star_log_prob * tile_map["star_bools"]
+    )
+
+    # Galaxy probabiltiies
+    gal_dist = Normal(0.0, 1.0)
+    galaxy_probs = gal_dist.log_prob(tile_map["galaxy_params"]) * tile_map["galaxy_bools"]
+
+    # prob_normalized =
+    return log_prob_source.sum() + log_prob_binary.sum() + galaxy_probs.sum()
 
 
 if __name__ == "__main__":
