@@ -156,7 +156,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
 
     # pick standard ranges for residuals
     scene_size = max(true.shape[-2], true.shape[-1])
-    vmin_res, vmax_res = res.min().item(), res.max().item()
+    vmin_res, vmax_res = -6.0, 6.0
 
     ax_true = axes[0]
     ax_recon = axes[1]
