@@ -64,8 +64,6 @@ class ImagePrior(pl.LightningModule):
         min_sources: Minimum number of sources in a tile
         max_sources: Maximum number of sources in a tile
         mean_sources: Mean rate of sources appearing in a tile
-        loc_min: Per-tile lower-bound on the location of sources
-        loc_max: Per-tile upper-bound on the location of sources
         f_min: Prior parameter on fluxes
         f_max: Prior parameter on fluxes
         alpha: Prior parameter on fluxes
@@ -84,9 +82,7 @@ class ImagePrior(pl.LightningModule):
         f_max: float,
         alpha: float,
         prob_galaxy: float,
-        loc_min: float = 0.0,
-        loc_max: float = 1.0,
-        galaxy_prior: GalaxyPrior = None,
+        galaxy_prior: Optional[GalaxyPrior] = None,
     ):
         """Initializes ImagePrior.
 
@@ -97,8 +93,6 @@ class ImagePrior(pl.LightningModule):
             min_sources: Minimum number of sources in a tile
             max_sources: Maximum number of sources in a tile
             mean_sources: Mean rate of sources appearing in a tile
-            loc_min: Per-tile lower-bound on the location of sources
-            loc_max: Per-tile upper-bound on the location of sources
             f_min: Prior parameter on fluxes
             f_max: Prior parameter on fluxes
             alpha: Prior parameter on fluxes (pareto parameter)
@@ -117,8 +111,6 @@ class ImagePrior(pl.LightningModule):
         self.min_sources = min_sources
         self.max_sources = max_sources
         self.mean_sources = mean_sources
-        self.loc_min = loc_min
-        self.loc_max = loc_max
         self.f_min = f_min
         self.f_max = f_max
         self.alpha = alpha
@@ -192,8 +184,6 @@ class ImagePrior(pl.LightningModule):
             2,
         )
         locs = torch.rand(*shape, device=is_on_array.device)
-        locs *= self.loc_max - self.loc_min
-        locs += self.loc_min
         locs *= is_on_array.unsqueeze(-1)
 
         return locs
