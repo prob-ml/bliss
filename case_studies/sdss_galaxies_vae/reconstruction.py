@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import torch
+import pandas as pd
 from astropy.table import Table
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
@@ -69,11 +70,14 @@ def reconstruct(cfg):
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
         map_recon["plocs"] = map_recon["plocs"] - 0.5
-        scene_metrics_map = reporting.scene_metrics(
-            coadd_data,
-            map_recon,
-            mag_cut=20.0,
-        )
+        scene_metrics_by_mag = {}
+        for mag in range(18, 25):
+            scene_metrics_map = reporting.scene_metrics(
+                coadd_data,
+                map_recon,
+                mag_cut=float(mag),
+            )
+            scene_metrics_by_mag[mag] = scene_metrics_map
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:
             fig = create_figure(
@@ -84,9 +88,12 @@ def reconstruct(cfg):
                 map_recon=map_recon,
             )
             fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
-            torch.save(scene_metrics_map, outdir / (scene_name + ".pt"))
+            # scene_metrics_table = create_scene_metrics_table(scene_coords)
+            # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
+            torch.save(scene_metrics_by_mag, outdir / (scene_name + ".pt"))
             torch.save(coadd_data, outdir / (scene_name + "_coadd.pt"))
             torch.save(map_recon, outdir / (scene_name + "_map_recon.pt"))
+            torch.save(tile_map_recon, outdir / (scene_name + "_tile_map_recon.pt"))
 
 
 def get_sdss_data(sdss_dir, sdss_pixel_scale):
@@ -108,6 +115,7 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
         "wcs": sdss_data[0]["wcs"][0],
         "pixel_scale": sdss_pixel_scale,
     }
+
 
 def load_models(cfg, device):
     sleep = instantiate(cfg.models.sleep).to(device).eval()
@@ -239,6 +247,17 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
     plt.tight_layout()
 
     return fig
+
+
+def create_scene_metrics_table(scene_metrics_by_mag):
+    x = {}
+    columns = ("precision", "recall", "f1")
+    for c in columns:
+        x[c] = {}
+        for k, v in scene_metrics_by_mag.items():
+            print(v)
+            x[c][k] = v[c].item()
+    return pd.DataFrame(x)
 
 
 if __name__ == "__main__":
