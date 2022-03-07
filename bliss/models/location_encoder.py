@@ -138,7 +138,11 @@ def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -
 
     # sanity check to prevent silent error when e.g. parameter name is misspelled.
     for k in tile_params:
-        if k not in param_names_to_mask and k not in {"n_sources", "n_sources_log_prob", "is_on_array"}:
+        if k not in param_names_to_mask and k not in {
+            "n_sources",
+            "n_sources_log_prob",
+            "is_on_array",
+        }:
             raise ValueError(
                 f"The key '{k}' in the `tile_params` Tensor dictionary is not one of the standard"
                 " ones (check spelling?)"

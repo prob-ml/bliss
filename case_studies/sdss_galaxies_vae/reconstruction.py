@@ -7,6 +7,7 @@ import pandas as pd
 from astropy.table import Table
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
+from torch.distributions import Normal
 
 from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
@@ -49,16 +50,31 @@ def reconstruct(cfg):
             shift_plocs_to_lim_start=True,
             convert_xy_to_hw=True,
         )
-        recon, tile_map_recon = reconstruct_scene_at_coordinates(
-            encoder,
-            dec,
-            my_image,
-            my_background,
-            (h, h_end),
-            (w, w_end),
-            slen=cfg.reconstruct.slen,
-            device=device,
-        )
+        ll_best = None
+        z_best = None
+        recon_best = None
+        tile_map_recon_best = None
+        for z in (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0):
+            encoder.z_threshold = z
+            recon, tile_map_recon = reconstruct_scene_at_coordinates(
+                encoder,
+                dec,
+                my_image,
+                my_background,
+                (h, h_end),
+                (w, w_end),
+                slen=cfg.reconstruct.slen,
+                device=device,
+            )
+            ll = Normal(recon, recon.sqrt()).log_prob(true).sum()
+            if (ll_best is None) or (ll > ll_best):
+                z_best = z
+                ll_best = ll
+                recon_best = recon
+                tile_map_recon_best = tile_map_recon
+        print(f"Best z was {z_best}")
+        recon, tile_map_recon = recon_best, tile_map_recon_best
+        resid = (true - recon) / recon.sqrt()
         tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
         print(
             f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image."
@@ -84,9 +100,12 @@ def reconstruct(cfg):
                 mag_cut=float(mag),
             )
             scene_metrics_by_mag[mag] = scene_metrics_map
-            scene_metrics_by_mag[mag]['expected_recall'] = expected_recall(tile_map_recon, mag_cutoff=float(mag))
-            scene_metrics_by_mag[mag]['expected_precision'] = expected_precision(tile_map_recon, mag_cutoff=float(mag))
-        resid = (true - recon) / recon.sqrt()
+            scene_metrics_by_mag[mag]["expected_recall"] = expected_recall(
+                tile_map_recon, mag_cutoff=float(mag)
+            )
+            scene_metrics_by_mag[mag]["expected_precision"] = expected_precision(
+                tile_map_recon, mag_cutoff=float(mag)
+            )
         if outdir is not None:
             fig = create_figure(
                 true[0, 0],
@@ -263,9 +282,14 @@ def create_scene_metrics_table(scene_metrics_by_mag):
     for c in columns:
         x[c] = {}
         for k, v in scene_metrics_by_mag.items():
-            print(v)
             x[c][k] = v[c].item()
-    return pd.DataFrame(x)
+    scene_metrics_df = pd.DataFrame(x)
+    tex_lines = []
+    for k, v in scene_metrics_df.iterrows():
+        line = f"{k} & {v['recall']:.2f} ({v['expected_recall']:.2f}) & {v['precision']:.2f} ({v['expected_precision']:.2f}) \\\\\n"
+        tex_lines.append(line)
+    return scene_metrics_df, tex_lines
+
 
 def expected_recall(tile_map, threshold=0.5, mag_cutoff=24.0):
     galaxy_probs = (tile_map["galaxy_probs"] * (tile_map["mags"] <= mag_cutoff)).log()
@@ -285,6 +309,7 @@ def expected_precision(tile_map, threshold=0.5, mag_cutoff=24.0):
     galaxies_predicted = (gal_probs.exp() * (gal_probs.exp() > threshold)).sum()
     # return n_galaxies_predicted, galaxies_predicted, galaxies_predicted / n_galaxies_predicted
     return galaxies_predicted / n_galaxies_predicted
+
 
 if __name__ == "__main__":
     pass

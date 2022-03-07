@@ -36,6 +36,7 @@ class Encoder(nn.Module):
         location_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
+        z_threshold: float = 4.0,
     ):
         """Initializes Encoder.
 
@@ -58,6 +59,7 @@ class Encoder(nn.Module):
         self.location_encoder = location_encoder
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
+        self.z_threshold = z_threshold
 
     def forward(self, x):
         raise NotImplementedError(
@@ -90,7 +92,7 @@ class Encoder(nn.Module):
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
-        log_image = subtract_bg_and_log_transform(image, background)
+        log_image = subtract_bg_and_log_transform(image, background, z_threshold=self.z_threshold)
         log_image_ptiles = self.get_images_in_ptiles(log_image)
         del log_image
         var_params = self.location_encoder.encode(log_image_ptiles)
