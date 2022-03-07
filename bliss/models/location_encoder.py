@@ -138,7 +138,7 @@ def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -
 
     # sanity check to prevent silent error when e.g. parameter name is misspelled.
     for k in tile_params:
-        if k not in param_names_to_mask and k not in {"n_sources", "is_on_array"}:
+        if k not in param_names_to_mask and k not in {"n_sources", "n_sources_log_prob", "is_on_array"}:
             raise ValueError(
                 f"The key '{k}' in the `tile_params` Tensor dictionary is not one of the standard"
                 " ones (check spelling?)"
@@ -426,6 +426,7 @@ class LocationEncoder(nn.Module):
         tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+        tile_n_sources_log_prob, _ = torch.max(pred["n_source_log_probs"], dim=1)
 
         # set sd so we return map estimates.
         # first locs
@@ -445,10 +446,11 @@ class LocationEncoder(nn.Module):
             "fluxes": tile_fluxes,
             "n_sources": tile_n_sources,
             "is_on_array": tile_is_on_array,
+            "n_sources_log_prob": tile_n_sources_log_prob,
         }
         max_a_post = {}
         for k, v in max_a_post_flat.items():
-            if k == "n_sources":
+            if k in {"n_sources", "n_sources_log_prob"}:
                 pattern = "(b nth ntw) -> b nth ntw"
             else:
                 pattern = "(b nth ntw) s k -> b nth ntw s k"

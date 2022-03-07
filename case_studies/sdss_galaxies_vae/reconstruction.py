@@ -70,6 +70,12 @@ def reconstruct(cfg):
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
         map_recon["plocs"] = map_recon["plocs"] - 0.5
+
+        tile_map_recon["fluxes"] = (
+            tile_map_recon["galaxy_bools"] * tile_map_recon["galaxy_fluxes"]
+            + tile_map_recon["star_bools"] * tile_map_recon["fluxes"]
+        )
+        tile_map_recon["mags"] = convert_flux_to_mag(tile_map_recon["fluxes"])
         scene_metrics_by_mag = {}
         for mag in range(18, 25):
             scene_metrics_map = reporting.scene_metrics(
@@ -78,6 +84,8 @@ def reconstruct(cfg):
                 mag_cut=float(mag),
             )
             scene_metrics_by_mag[mag] = scene_metrics_map
+            scene_metrics_by_mag[mag]['expected_recall'] = expected_recall(tile_map_recon, mag_cutoff=float(mag))
+            scene_metrics_by_mag[mag]['expected_precision'] = expected_precision(tile_map_recon, mag_cutoff=float(mag))
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:
             fig = create_figure(
@@ -251,7 +259,7 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
 
 def create_scene_metrics_table(scene_metrics_by_mag):
     x = {}
-    columns = ("precision", "recall", "f1")
+    columns = ("recall", "expected_recall", "precision", "expected_precision")
     for c in columns:
         x[c] = {}
         for k, v in scene_metrics_by_mag.items():
@@ -259,6 +267,24 @@ def create_scene_metrics_table(scene_metrics_by_mag):
             x[c][k] = v[c].item()
     return pd.DataFrame(x)
 
+def expected_recall(tile_map, threshold=0.5, mag_cutoff=24.0):
+    galaxy_probs = (tile_map["galaxy_probs"] * (tile_map["mags"] <= mag_cutoff)).log()
+    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1)
+    gal_probs = galaxy_probs + source_probs
+    total_galaxies = gal_probs.exp().sum()
+    galaxies_predicted = (gal_probs.exp() * (gal_probs.exp() > threshold)).sum()
+    # return total_galaxies, galaxies_predicted, galaxies_predicted / total_galaxies
+    return galaxies_predicted / total_galaxies
+
+
+def expected_precision(tile_map, threshold=0.5, mag_cutoff=24.0):
+    galaxy_probs = (tile_map["galaxy_probs"] * (tile_map["mags"] <= mag_cutoff)).log()
+    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1)
+    gal_probs = galaxy_probs + source_probs
+    n_galaxies_predicted = (gal_probs.exp() > threshold).sum()
+    galaxies_predicted = (gal_probs.exp() * (gal_probs.exp() > threshold)).sum()
+    # return n_galaxies_predicted, galaxies_predicted, galaxies_predicted / n_galaxies_predicted
+    return galaxies_predicted / n_galaxies_predicted
 
 if __name__ == "__main__":
     pass
