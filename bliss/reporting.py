@@ -579,9 +579,9 @@ def plot_image_and_locs(
         colors = ["r", "b", "c", "m"]
         markers = ["x", "+", "x", "+"]
         sizes = [25, 35, 25, 35]
-        for l, c, m, s in zip(labels, colors, markers, sizes):
-            if l is not None:
-                ax.scatter(0, 0, color=c, s=s, marker=m, label=l)
+        for ell, c, m, s in zip(labels, colors, markers, sizes):
+            if ell is not None:
+                ax.scatter(0, 0, color=c, s=s, marker=m, label=ell)
         ax.legend(
             bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
             loc="lower left",

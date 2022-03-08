@@ -120,14 +120,14 @@ class StandardizationTransform(Transform):
         self.register_buffer("sigma", sigma)
 
     def forward(self, inputs, context=None):
-        U = (inputs - self.mu) / self.sigma
+        u = (inputs - self.mu) / self.sigma
         log_det = -self.sigma.log().sum()
-        return U, log_det
+        return u, log_det
 
     def inverse(self, inputs, context=None):
-        X = inputs * self.sigma + self.mu
+        x = inputs * self.sigma + self.mu
         log_det = self.sigma.log().sum()
-        return X, log_det
+        return x, log_det
 
 
 class BatchNormTransform(Transform):
@@ -154,13 +154,13 @@ class BatchNormTransform(Transform):
             mean = self.running_mean
             var = self.running_var
 
-        U = (inputs - mean) / var.sqrt()
+        u = (inputs - mean) / var.sqrt()
         log_det = -0.5 * torch.log(var).sum()
-        return U, log_det
+        return u, log_det
 
     def inverse(self, inputs, context=None):
         mean = self.running_mean
         var = self.running_var
-        X = inputs * var.sqrt() + mean
+        x = inputs * var.sqrt() + mean
         log_det = 0.5 * torch.log(var).sum()
-        return X, log_det
+        return x, log_det

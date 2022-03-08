@@ -3,7 +3,7 @@ from typing import Tuple
 import pytorch_lightning as pl
 import torch
 from matplotlib import pyplot as plt
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.utils import weight_norm

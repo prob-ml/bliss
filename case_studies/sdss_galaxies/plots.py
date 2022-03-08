@@ -326,7 +326,7 @@ class AEReconstructionFigures(BlissFigures):
         sns.kdeplot(x=x, y=y, levels=10, color="w", linewidths=1, ax=ax)
         format_plot(ax, **plot_kwargs)
 
-    def make_2d_hist(self, x, y, color="m", height=7, **plot_kwargs):
+    def make_twod_hist(self, x, y, color="m", height=7, **plot_kwargs):
         # NOTE: This creates its own figure object which makes it hard to use.
         # TODO: Revive if useful later on.
         g = sns.jointplot(x=x, y=y, color=color, kind="hist", marginal_ticks=True, height=height)
