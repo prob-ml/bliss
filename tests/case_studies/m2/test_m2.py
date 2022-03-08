@@ -30,11 +30,7 @@ def trained_star_encoder_m2(m2_model_setup, devices):
     }
 
     if devices.use_cuda:
-        overrides.update(
-            {
-                "training.n_epochs": 60,
-            }
-        )
+        overrides.update({"training.n_epochs": 60})
     else:
         overrides.update(
             {
