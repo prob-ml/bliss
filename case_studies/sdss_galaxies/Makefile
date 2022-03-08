@@ -15,3 +15,6 @@ models/sdss_sleep.pt: models/sdss_autoencoder.pt
 
 models/sdss_galaxy_encoder_real.pt: models/sdss_sleep.pt models/sdss_autoencoder.pt
 	./run_experiment.sh sdss_galaxy_encoder_real
+
+clean:
+	rm models/sdss_autoencoder.pt models/sdss_binary.pt models/sdss_galaxy_encoder.pt models/sdss_sleep.pt
