@@ -280,7 +280,9 @@ class GalaxyEncoder(pl.LightningModule):
 
         fig.tight_layout()
         if self.logger:
-            self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Validation Images", fig)
+            self.logger.experiment.add_figure(
+                f"Epoch:{self.current_epoch}/Worst Validation Images", fig
+            )
         plt.close(fig)
 
     def _get_images_in_centered_tiles(
