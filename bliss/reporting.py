@@ -478,14 +478,16 @@ def get_single_galaxy_measurements(
     }
 
 
-def plot_image(fig, ax, image, vrange=None):
+def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="viridis"):
     vmin = image.min().item() if vrange is None else vrange[0]
     vmax = image.max().item() if vrange is None else vrange[1]
 
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
-    fig.colorbar(im, cax=cax, orientation="vertical")
+    if colorbar:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap=cmap)
+    if colorbar:
+        fig.colorbar(im, cax=cax, orientation="vertical")
 
 
 def plot_locs(ax, slen, bpad, locs, color="r", marker="x", s=20, galaxy_probs=None):

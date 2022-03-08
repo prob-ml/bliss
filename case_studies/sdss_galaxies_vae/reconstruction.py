@@ -57,8 +57,8 @@ def reconstruct(cfg):
         z_best = None
         recon_best = None
         tile_map_recon_best = None
-        for z in (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0):
-            # for z in (5.5, ):
+        # for z in (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0):
+        for z in (5.5,):
             encoder.z_threshold = z
             recon, tile_map_recon = reconstruct_scene_at_coordinates(
                 encoder,
@@ -106,6 +106,16 @@ def reconstruct(cfg):
                 mag_cut=float(mag),
             )
             scene_metrics_by_mag[mag] = scene_metrics_map
+            conf_matrix = scene_metrics_map["conf_matrix"]
+            scene_metrics_by_mag[mag]["galaxy_accuracy"] = conf_matrix[0, 0] / (
+                conf_matrix[0, 0] + conf_matrix[0, 1]
+            )
+            scene_metrics_by_mag[mag]["star_accuracy"] = conf_matrix[1, 1] / (
+                conf_matrix[1, 1] + conf_matrix[1, 0]
+            )
+            scene_metrics_by_mag[mag].update(
+                expected_accuracy(tile_map_recon, mag_cutoff=float(mag))
+            )
             scene_metrics_by_mag[mag]["expected_recall"] = expected_recall(
                 tile_map_recon, mag_cutoff=float(mag)
             )
@@ -117,10 +127,24 @@ def reconstruct(cfg):
                 true[0, 0],
                 recon[0, 0],
                 resid[0, 0],
-                coadd_objects=coadd_data,
+                # coadd_objects=coadd_data,
                 map_recon=map_recon,
+                include_residuals=False,
+                colorbar=False,
+                scatter_on_true=False,
             )
             fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
+            fig_with_coadd = create_figure(
+                true[0, 0],
+                recon[0, 0],
+                resid[0, 0],
+                coadd_objects=coadd_data,
+                map_recon=map_recon,
+                include_residuals=False,
+                colorbar=False,
+                scatter_on_true=True,
+            )
+            fig_with_coadd.savefig(outdir / (scene_name + "_coadd.pdf"), format="pdf")
             # scene_metrics_table = create_scene_metrics_table(scene_coords)
             # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
             torch.save(scene_metrics_by_mag, outdir / (scene_name + ".pt"))
@@ -173,66 +197,115 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
     return dec, encoder, prior
 
 
-def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
+def create_figure(
+    true,
+    recon,
+    res,
+    coadd_objects=None,
+    map_recon=None,
+    include_residuals: bool = True,
+    colorbar=True,
+    scatter_size: int = 100,
+    scatter_on_true: bool = True,
+):
     """Make figures related to detection and classification in SDSS."""
     plt.style.use("seaborn-colorblind")
+
+    true_gal_col = "m"
+    true_star_col = "b"
+    pred_gal_col = "c"
+    pred_star_col = "r"
+    # true_gal_col = "#e78ac3"
+    # true_star_col = "#8da0cb"
+    # pred_gal_col = "#fbb4ae"`
+    # pred_star_col = "#66c2a5"
     pad = 6.0
     set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
-    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
+    ncols = 2 + include_residuals
+    figsize = (20 + 10 * include_residuals, 12)
+    fig, axes = plt.subplots(nrows=1, ncols=ncols, figsize=figsize)
     assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
     # pick standard ranges for residuals
     scene_size = max(true.shape[-2], true.shape[-1])
-    vmin_res, vmax_res = -6.0, 6.0
 
     ax_true = axes[0]
     ax_recon = axes[1]
-    ax_res = axes[2]
 
     ax_true.set_title("Original Image", pad=pad)
     ax_recon.set_title("Reconstruction", pad=pad)
-    ax_res.set_title("Residual", pad=pad)
 
     # plot images
-    reporting.plot_image(fig, ax_true, true, vrange=(800, 1200))
-    reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1200))
-    reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
+    reporting.plot_image(
+        fig, ax_true, true, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
+    )
+    reporting.plot_image(
+        fig, ax_recon, recon, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
+    )
+
+    if include_residuals:
+        ax_res = axes[2]
+        ax_res.set_title("Residual", pad=pad)
+        vmin_res, vmax_res = -6.0, 6.0
+        reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
     if coadd_objects is not None:
         locs_true = coadd_objects["plocs"]
         true_galaxy_bools = coadd_objects["galaxy_bools"]
         locs_galaxies_true = locs_true[true_galaxy_bools > 0.5]
         locs_stars_true = locs_true[true_galaxy_bools < 0.5]
-        if locs_stars_true.shape[0] > 0:
-            ax_true.scatter(
-                locs_stars_true[:, 1], locs_stars_true[:, 0], color="b", marker="+", s=20
-            )
-            ax_recon.scatter(
-                locs_stars_true[:, 1],
-                locs_stars_true[:, 0],
-                color="b",
-                marker="+",
-                s=20,
-                label="SDSS Stars",
-            )
-            ax_res.scatter(
-                locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="b", marker="+", s=20
-            )
         if locs_galaxies_true.shape[0] > 0:
-            ax_true.scatter(
-                locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="m", marker="+", s=20
-            )
+            if scatter_on_true:
+                ax_true.scatter(
+                    locs_galaxies_true[:, 1],
+                    locs_galaxies_true[:, 0],
+                    color=true_gal_col,
+                    marker="+",
+                    s=scatter_size,
+                    label="COADD Galaxies",
+                )
             ax_recon.scatter(
                 locs_galaxies_true[:, 1],
                 locs_galaxies_true[:, 0],
                 color="m",
                 marker="+",
-                s=20,
+                s=scatter_size,
                 label="SDSS Galaxies",
             )
-            ax_res.scatter(
-                locs_galaxies_true[:, 1], locs_galaxies_true[:, 0], color="m", marker="+", s=20
+        if locs_stars_true.shape[0] > 0:
+            if scatter_on_true:
+                ax_true.scatter(
+                    locs_stars_true[:, 1],
+                    locs_stars_true[:, 0],
+                    color=true_star_col,
+                    marker="+",
+                    s=scatter_size,
+                    label="COADD Stars",
+                )
+            ax_recon.scatter(
+                locs_stars_true[:, 1],
+                locs_stars_true[:, 0],
+                color="b",
+                marker="+",
+                s=scatter_size,
+                label="SDSS Stars",
             )
+            if include_residuals:
+                ax_res.scatter(
+                    locs_galaxies_true[:, 1],
+                    locs_galaxies_true[:, 0],
+                    color="b",
+                    marker="+",
+                    s=scatter_size,
+                )
+            if include_residuals:
+                ax_res.scatter(
+                    locs_galaxies_true[:, 1],
+                    locs_galaxies_true[:, 0],
+                    color="m",
+                    marker="+",
+                    s=scatter_size,
+                )
 
     if map_recon is not None:
         locs_pred = map_recon["plocs"][0]
@@ -243,45 +316,75 @@ def create_figure(true, recon, res, coadd_objects=None, map_recon=None):
         if locs_galaxies.shape[0] > 0:
             in_bounds = torch.all((locs_galaxies > 0) & (locs_galaxies < scene_size), dim=-1)
             locs_galaxies = locs_galaxies[in_bounds]
-            ax_true.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20)
+            if scatter_on_true:
+                ax_true.scatter(
+                    locs_galaxies[:, 1],
+                    locs_galaxies[:, 0],
+                    color=pred_gal_col,
+                    marker="x",
+                    s=scatter_size,
+                    label="Predicted Galaxy",
+                )
             ax_recon.scatter(
                 locs_galaxies[:, 1],
                 locs_galaxies[:, 0],
-                color="c",
+                color=pred_gal_col,
                 marker="x",
-                s=20,
+                s=scatter_size,
                 label="Predicted Galaxy",
                 alpha=0.6,
             )
-            ax_res.scatter(locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=20)
+            if include_residuals:
+                ax_res.scatter(
+                    locs_galaxies[:, 1], locs_galaxies[:, 0], color="c", marker="x", s=scatter_size
+                )
         if locs_stars.shape[0] > 0:
             in_bounds = torch.all((locs_stars > 0) & (locs_stars < scene_size), dim=-1)
             locs_stars = locs_stars[in_bounds]
-            ax_true.scatter(
-                locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20, alpha=0.6
-            )
+            if scatter_on_true:
+                ax_true.scatter(
+                    locs_stars[:, 1],
+                    locs_stars[:, 0],
+                    color=pred_star_col,
+                    marker="x",
+                    s=scatter_size,
+                    alpha=0.6,
+                    label="Predicted Star",
+                )
             ax_recon.scatter(
                 locs_stars[:, 1],
                 locs_stars[:, 0],
                 color="r",
                 marker="x",
-                s=20,
+                s=scatter_size,
                 label="Predicted Star",
                 alpha=0.6,
             )
-            ax_res.scatter(locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=20)
-        ax_recon.legend(
-            bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-            loc="lower left",
-            ncol=2,
-            mode="expand",
-            borderaxespad=0.0,
-        )
+            if include_residuals:
+                ax_res.scatter(
+                    locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=scatter_size
+                )
 
+    ax_recon.legend(
+        # bbox_to_anchor=(0.0, 0.0, 0.0, 0.0),
+        bbox_to_anchor=(0.0, -0.1, 1.0, 0.5),
+        loc="lower left",
+        ncol=4,
+        mode="expand",
+        borderaxespad=0.0,
+    )
     plt.subplots_adjust(hspace=-0.4)
     plt.tight_layout()
 
     return fig
+
+
+def create_scene_accuracy_table(scene_metrics_by_mag):
+    tex_lines = []
+    for k, v in scene_metrics_by_mag.items():
+        line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
+        tex_lines.append(line)
+    return tex_lines
 
 
 def create_scene_metrics_table(scene_metrics_by_mag):
@@ -317,6 +420,29 @@ def expected_precision(tile_map, threshold=0.5, mag_cutoff=24.0):
     galaxies_predicted = (gal_probs.exp() * (gal_probs.exp() > threshold)).sum()
     # return n_galaxies_predicted, galaxies_predicted, galaxies_predicted / n_galaxies_predicted
     return galaxies_predicted / n_galaxies_predicted
+
+
+def expected_accuracy(tile_map, mag_cutoff=24.0):
+    gal_probs = (
+        tile_map["galaxy_bools"] * tile_map["galaxy_probs"] * (tile_map["mags"] <= mag_cutoff)
+    )
+    star_probs = (
+        tile_map["star_bools"] * (1 - tile_map["galaxy_probs"]) * (tile_map["mags"] <= mag_cutoff)
+    )
+    expected_accuracy = (gal_probs + star_probs).sum() / (
+        (tile_map["galaxy_bools"] + tile_map["star_bools"]) * (tile_map["mags"] <= mag_cutoff)
+    ).sum()
+    expected_galaxy_accuracy = (
+        gal_probs.sum() / (tile_map["galaxy_bools"] * (tile_map["mags"] <= mag_cutoff)).sum()
+    )
+    expected_star_accuracy = (
+        star_probs.sum() / (tile_map["star_bools"] * (tile_map["mags"] <= mag_cutoff)).sum()
+    )
+    return {
+        "expected_accuracy": expected_accuracy,
+        "expected_galaxy_accuracy": expected_galaxy_accuracy,
+        "expected_star_accuracy": expected_star_accuracy,
+    }
 
 
 from torch.distributions import Poisson
