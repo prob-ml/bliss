@@ -46,7 +46,7 @@ class SloanDigitalSkySurvey(Dataset):
             gain = fieldgains[i]
             if (not fields) or field in fields:
                 self.rcfgcs.append((run, camcol, field, gain))
-        self.items = [None] * len(self.rcfgcs)
+        self.items = [None for _ in range(len(self.rcfgcs))]
 
     def __len__(self):
         return len(self.rcfgcs)

@@ -66,10 +66,10 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         flux = (hlr / self.pixel_scale) ** 2 * np.pi * flux_avg  # approx
 
         # sample ellipticity
-        l = self._uniform(0, self.max_e)
+        ell = self._uniform(0, self.max_e)
         theta = self._uniform(0, 2 * np.pi)
-        g1 = l * np.cos(theta)
-        g2 = l * np.sin(theta)
+        g1 = ell * np.cos(theta)
+        g2 = ell * np.sin(theta)
 
         # pylint: disable=no-value-for-parameter
         galaxy = galsim.Gaussian(half_light_radius=hlr).shear(g1=g1, g2=g2).withFlux(flux)

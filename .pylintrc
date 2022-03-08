@@ -55,6 +55,9 @@ disable=too-many-ancestors,
 	# when overriding methods you don't get to pick your arguments
 	unused-argument,
 
+        # flake8 recommends against f-strings
+        consider-using-f-string,
+
 
 [SIMILARITIES]
 
