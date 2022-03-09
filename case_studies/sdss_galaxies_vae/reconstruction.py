@@ -6,6 +6,7 @@ from typing import Tuple
 import torch
 import pandas as pd
 from astropy.table import Table
+from einops import rearrange, repeat
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from torch.distributions import Normal
@@ -143,6 +144,19 @@ def reconstruct(cfg):
                 colorbar=False,
                 scatter_on_true=True,
             )
+            fig_with_tile_map = create_figure(
+                true[0, 0],
+                recon[0, 0],
+                resid[0, 0],
+                map_recon=map_recon,
+                include_residuals=False,
+                colorbar=False,
+                scatter_on_true=True,
+                tile_map=tile_map_recon,
+            )
+            fig_with_tile_map.savefig(
+                outdir / (scene_name + "_with_tile_map.pdf"), format="pdf"
+            )
             fig_scatter_on_true.savefig(
                 outdir / (scene_name + "_scatter_on_true.pdf"), format="pdf"
             )
@@ -219,6 +233,7 @@ def create_figure(
     colorbar=True,
     scatter_size: int = 100,
     scatter_on_true: bool = True,
+    tile_map = None,
 ):
     """Make figures related to detection and classification in SDSS."""
     plt.style.use("seaborn-colorblind")
@@ -251,9 +266,18 @@ def create_figure(
     reporting.plot_image(
         fig, ax_true, true, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
     )
-    reporting.plot_image(
-        fig, ax_recon, recon, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
-    )
+    if not tile_map:
+        reporting.plot_image(
+            fig, ax_recon, recon, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
+        )
+    else:
+        is_on_array = rearrange(tile_map["is_on_array"], "1 nth ntw 1 1 -> nth ntw 1 1")
+        is_on_array = repeat(is_on_array, "nth ntw 1 1 -> nth ntw h w", h=4, w=4)
+        is_on_array = rearrange(is_on_array, "nth ntw h w -> (nth h) (ntw w)")
+        ax_recon.matshow(is_on_array, vmin=0, vmax=1, cmap="gist_gray")
+        for grid in range(3, is_on_array.shape[-1], 4):
+            ax_recon.axvline(grid + 0.5, color="purple")
+            ax_recon.axhline(grid + 0.5, color="purple")
 
     if include_residuals:
         ax_res = axes[2]
