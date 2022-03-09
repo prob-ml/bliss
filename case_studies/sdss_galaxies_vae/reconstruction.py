@@ -134,6 +134,18 @@ def reconstruct(cfg):
                 scatter_on_true=False,
             )
             fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
+            fig_scatter_on_true = create_figure(
+                true[0, 0],
+                recon[0, 0],
+                resid[0, 0],
+                map_recon=map_recon,
+                include_residuals=False,
+                colorbar=False,
+                scatter_on_true=True,
+            )
+            fig_scatter_on_true.savefig(
+                outdir / (scene_name + "_scatter_on_true.pdf"), format="pdf"
+            )
             fig_with_coadd = create_figure(
                 true[0, 0],
                 recon[0, 0],
