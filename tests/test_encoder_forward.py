@@ -54,13 +54,8 @@ class TestSourceEncoder:
                 + background_tensor
             ).to(device)
 
-            n_star_per_tile = (
-                torch.from_numpy(
-                    np.random.choice(max_detections, batch_size * n_tiles_h * n_tiles_w)
-                )
-                .type(torch.LongTensor)
-                .to(device)
-            )
+            np_nspt = np.random.choice(max_detections, batch_size * n_tiles_h * n_tiles_w)
+            n_star_per_tile = torch.from_numpy(np_nspt).type(torch.LongTensor).to(device)
 
             log_image_ptiles = subtract_bg_and_log_transform(
                 image_ptiles, background_tensor.view(1, -1, 1, 1)
