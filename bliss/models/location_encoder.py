@@ -665,8 +665,8 @@ class EncoderCNN(nn.Module):
                 downsample = False
             layers += [ConvBlock(in_channel, channel, dropout, downsample)]
             layers += [
-                ConvBlock(channel, channel, dropout, False),
-                ConvBlock(channel, channel, dropout, False),
+                ConvBlock(channel, channel, dropout),
+                ConvBlock(channel, channel, dropout),
             ]
             in_channel = channel
             channel = channel * 2
