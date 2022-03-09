@@ -1,5 +1,6 @@
 import warnings
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
@@ -39,7 +40,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         if isinstance(background, tuple):
             self.background = torch.tensor(background, device=generate_device)
         elif isinstance(background, SimulatedSDSSBackground):
-            self.background = background
+            self.background = background.to(generate_device)
         else:
             raise TypeError("Background should either be tuple or SimulatedSDSSBackground.")
 
@@ -129,10 +130,9 @@ class SimulatedSDSSBackground(nn.Module):
         self.register_buffer("background", background, persistent=False)
         self.height, self.width = self.background.shape[-2:]
 
-    def sample(self, shape):
-        hlen, wlen = shape[-2:]
-        h = torch.randint(0, self.height - hlen)
-        w = torch.randint(0, self.height - hlen)
+    def sample(self, hlen, wlen):
+        h = np.random.randint(self.height - hlen)
+        w = np.random.randint(self.width - wlen)
         return self.background[:, :, h : (h + hlen), w : (w + wlen)]
 
 
