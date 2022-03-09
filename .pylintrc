@@ -36,17 +36,13 @@ disable=too-many-ancestors,
 	missing-module-docstring,
 	missing-class-docstring,
 
-	# we should fix the "too-many" warnings below
+	# not sure it's advisable to "fix" these
 	too-many-arguments,
 	too-many-locals,
 	too-many-instance-attributes,
 
 	# we should remove fixme comments
 	fixme,
-
-	# to be fixed soon
-	import-outside-toplevel,
-	import-error,
 
 	# problems in the tests directory
 	no-self-use,
