@@ -109,5 +109,5 @@ ignore =
     # darglint validates our doc strings
     RST201,RST301,D202
 
-    # TODO: fix the issues that trigger these warnings!
+    # we should consider fixing some of these issues
     E731,W503,WPS202,WPS213,WPS214,WPS231,WPS232,WPS236,WPS336,WPS338,WPS345,WPS347,WPS358,WPS421,WPS440,WPS441,WPS442,WPS602
