@@ -51,7 +51,7 @@ def train(cfg: DictConfig):
 
     # test!
     if cfg.training.testing.file is not None:
-        _ = trainer.test(model, datamodule=dataset)
+        trainer.test(model, datamodule=dataset)
 
     # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None:

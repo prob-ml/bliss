@@ -103,5 +103,11 @@ ignore =
     # implicit string concatenation seems pretty clear
     WPS326,
 
-    # TODO: fix the issues that trigger these warnings!
-    D202,E731,RST201,RST301,W503,WPS122,WPS202,WPS213,WPS214,WPS231,WPS232,WPS236,WPS336,WPS338,WPS345,WPS347,WPS348,WPS358,WPS420,WPS421,WPS425,WPS440,WPS441,WPS442,WPS602
+    # the keyword "del" is useful to us
+    WPS420,
+
+    # darglint validates our doc strings
+    RST201,RST301,D202
+
+    # we should consider fixing some of these issues
+    E731,W503,WPS202,WPS213,WPS214,WPS231,WPS232,WPS236,WPS336,WPS338,WPS345,WPS347,WPS358,WPS421,WPS440,WPS441,WPS442,WPS602
