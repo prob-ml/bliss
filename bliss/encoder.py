@@ -2,6 +2,7 @@
 from typing import Dict, Optional
 
 import torch
+from einops import rearrange
 from torch import Tensor, nn
 
 from bliss.models.binary import BinaryEncoder
@@ -36,6 +37,7 @@ class Encoder(nn.Module):
         location_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
+        z_threshold: float = 4.0,
     ):
         """Initializes Encoder.
 
@@ -58,6 +60,7 @@ class Encoder(nn.Module):
         self.location_encoder = location_encoder
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
+        self.z_threshold = z_threshold
 
     def forward(self, x):
         raise NotImplementedError(
@@ -90,7 +93,7 @@ class Encoder(nn.Module):
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
-        log_image = subtract_bg_and_log_transform(image, background)
+        log_image = subtract_bg_and_log_transform(image, background, z_threshold=self.z_threshold)
         log_image_ptiles = self.get_images_in_ptiles(log_image)
         del log_image
         var_params = self.location_encoder.encode(log_image_ptiles)
@@ -98,7 +101,17 @@ class Encoder(nn.Module):
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            galaxy_probs = self.binary_encoder(log_image_ptiles, tile_map["locs"])
+            centered_ptiles = self.binary_encoder.get_images_in_tiles(image, background, tile_map["locs"], z_threshold=self.z_threshold)
+            galaxy_probs = self.binary_encoder.forward(centered_ptiles)
+            batch_size, n_tiles_h, n_tiles_w, max_sources, _ = tile_map["locs"].shape
+            galaxy_probs = rearrange(
+                galaxy_probs,
+                "(b nth ntw s) 1 -> b nth ntw s 1",
+                b=batch_size,
+                nth=n_tiles_h,
+                ntw=n_tiles_w,
+                s=max_sources,
+            )
             galaxy_probs *= tile_map["is_on_array"]
             galaxy_bools = (galaxy_probs > 0.5).float() * tile_map["is_on_array"]
             star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)
