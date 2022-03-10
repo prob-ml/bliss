@@ -24,7 +24,7 @@ def subtract_bg_and_log_transform(
         A Tensor of the transformed images (n x c x h x w).
     """
     if not legacy:
-        return subtract_bg_sigmoid(image, background)
+        return concat_bg_sigmoid(image, background)
     raise NotImplementedError()
     return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
 
@@ -33,6 +33,10 @@ def subtract_bg_sigmoid(image: Tensor, background: Tensor):
     return torch.log1p(F.relu(image - background, inplace=True)) - torch.log1p(
         F.relu(background - image, inplace=True)
     )
+
+
+def concat_bg_sigmoid(image: Tensor, background: Tensor):
+    return torch.cat((image, background), dim=1)
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
@@ -308,7 +312,7 @@ class LocationEncoder(nn.Module):
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
         # networks to be trained
-        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
+        self.enc_conv = EncoderCNN(n_bands * 2, channel, spatial_dropout)
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),

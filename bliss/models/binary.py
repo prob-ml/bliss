@@ -65,7 +65,7 @@ class BinaryEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
-        self.enc_conv = EncoderCNN(self.n_bands, channel, spatial_dropout)
+        self.enc_conv = EncoderCNN(n_bands * 2, channel, spatial_dropout)
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
@@ -83,9 +83,16 @@ class BinaryEncoder(pl.LightningModule):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def get_images_in_tiles(self, images):
+    def get_images_in_tiles(self, images, background, tile_locs, z_threshold=4.0):
         """Divide a batch of full images into padded tiles similar to nn.conv2d."""
-        return get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
+        log_image_ptiles = get_images_in_tiles(
+            subtract_bg_and_log_transform(images, background, z_threshold=z_threshold),
+            self.tile_slen,
+            self.ptile_slen,
+        )
+        assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
+        # in each padded tile we need to center the corresponding galaxy/star
+        return self.flatten_and_center_ptiles(log_image_ptiles, tile_locs)
 
     def flatten_and_center_ptiles(self, log_image_ptiles, tile_locs):
         """Return padded tiles centered on each corresponding source."""
@@ -101,27 +108,15 @@ class BinaryEncoder(pl.LightningModule):
             self.cached_grid,
         )
 
-    def forward(self, log_image_ptiles: Tensor, tile_locs: Tensor):
-        """Centers padded tiles using `tile_locs` and runs the binary encoder on them."""
-        assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
-        batch_size, n_tiles_h, n_tiles_w = tile_locs.shape[:3]
-
-        # in each padded tile we need to center the corresponding galaxy/star
-        centered_ptiles = self.flatten_and_center_ptiles(log_image_ptiles, tile_locs)
+    def forward(self, centered_ptiles):
+        """Runs the binary encoder on centered_ptiles."""
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
         h = self.enc_conv(centered_ptiles)
         h2 = self.enc_final(h)
         z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
-        return rearrange(
-            z,
-            "(b nth ntw s) 1 -> b nth ntw s 1",
-            b=batch_size,
-            nth=n_tiles_h,
-            ntw=n_tiles_w,
-            s=self.max_sources,
-        )
+        return z
 
     def get_prediction(self, batch):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
@@ -131,9 +126,10 @@ class BinaryEncoder(pl.LightningModule):
         galaxy_bools = batch["galaxy_bools"].reshape(-1)
         locs = batch["locs"]
         batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
-        log_images = subtract_bg_and_log_transform(images, background)
-        log_ptiles = self.get_images_in_tiles(log_images)
-        galaxy_probs = self.forward(log_ptiles, locs).reshape(-1)
+        centered_ptiles = self.get_images_in_tiles(images, background, locs)
+        galaxy_probs = self.forward(centered_ptiles)
+        galaxy_probs = galaxy_probs.reshape(-1)
+
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
         tile_is_on_array = tile_is_on_array.reshape(-1)
 
