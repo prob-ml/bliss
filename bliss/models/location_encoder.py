@@ -7,7 +7,9 @@ from torch.distributions import categorical
 from torch.nn import functional as F
 
 
-def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold: float = 4.0):
+def subtract_bg_and_log_transform(
+    image: Tensor, background: Tensor, z_threshold: float = 4.0, legacy=False
+):
     """Transforms image before encoder network.
 
     This subtracts background plus a few standard deviations from the image,
@@ -21,7 +23,16 @@ def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold
     Returns:
         A Tensor of the transformed images (n x c x h x w).
     """
+    if not legacy:
+        return subtract_bg_sigmoid(image, background)
+    raise NotImplementedError()
     return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
+
+
+def subtract_bg_sigmoid(image: Tensor, background: Tensor):
+    return torch.log1p(F.relu(image - background, inplace=True)) - torch.log1p(
+        F.relu(background - image, inplace=True)
+    )
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
