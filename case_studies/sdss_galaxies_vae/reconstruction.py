@@ -19,6 +19,15 @@ def reconstruct(cfg):
     sdss_data = get_sdss_data(cfg.paths.sdss, cfg.reconstruct.sdss_pixel_scale)
     my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
     my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
+    # Apply masks
+    my_image[:, :, 1200:1360, 1700:1900] = 865.0 + (
+        torch.tensor(865.0).sqrt() * torch.randn_like(my_image[:, :, 1200:1360, 1700:1900])
+    )
+    my_image[:, :, 280:400, 1220:1320] = 865.0 + (
+        torch.tensor(865.0).sqrt() * torch.randn_like(my_image[:, :, 280:400, 1220:1320])
+    )
+    my_background[:, :, 1200:1360, 1700:1900] = 865.0
+    my_background[:, :, 280:400, 1220:1320] = 865.0
     coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
     device = torch.device(cfg.reconstruct.device)
 
