@@ -95,11 +95,13 @@ def reconstruct(cfg):
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
         map_recon["plocs"] = map_recon["plocs"] - 0.5
-        scene_metrics_map = reporting.scene_metrics(
-            coadd_data,
-            map_recon,
-            mag_cut=20.0,
-        )
+        scene_metrics_map = {}
+        for mag_cut in (20, 24):
+            scene_metrics_map[mag_cut] = reporting.scene_metrics(
+                coadd_data,
+                map_recon,
+                mag_cut=mag_cut,
+            )
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:
             fig = create_figure(
