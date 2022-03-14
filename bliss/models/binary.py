@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
-from torch import Tensor, nn
+from torch import Tensor
 from torch.nn import BCELoss
 from torch.optim import Adam
 
