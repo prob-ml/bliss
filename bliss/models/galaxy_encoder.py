@@ -34,7 +34,6 @@ class GalaxyEncoder(pl.LightningModule):
     ):
         super().__init__()
 
-        self.max_sources = 1  # by construction.
         self.crop_loss_at_border = crop_loss_at_border
         self.max_flux_valid_plots = max_flux_valid_plots
         self.optimizer_params = optimizer_params
@@ -75,60 +74,54 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
-    def get_images_in_ptiles(self, images: Tensor, background: Tensor) -> Tensor:
-        return get_images_in_tiles(
-            images - background, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen
-        )
-
-    def encode(self, image_ptiles, tile_locs):
+    def encode(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
-        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
-        batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
-
-        centered_ptiles = self.flatten_and_center_ptiles(image_ptiles, tile_locs)
+        batch_size, nth, ntw, max_sources, _ = tile_locs.shape
+        centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-        # We can assume there is one galaxy per_tile and encode each tile independently.
         z_flat, pq_z_flat = self.enc(centered_ptiles)
         z = rearrange(
             z_flat,
             "(b nth ntw s) d -> b nth ntw s d",
             b=batch_size,
-            nth=n_tiles_h,
-            ntw=n_tiles_w,
-            s=self.max_sources,
+            nth=ntw,
+            ntw=ntw,
+            s=max_sources,
         )
         if pq_z_flat.shape:
             pq_z = rearrange(
                 pq_z_flat,
                 "(b nth ntw s) -> b nth ntw s",
                 b=batch_size,
-                nth=n_tiles_h,
-                ntw=n_tiles_w,
-                s=self.max_sources,
+                nth=nth,
+                ntw=ntw,
+                s=max_sources,
             )
         else:
             pq_z = pq_z_flat
         return z, pq_z
 
-    def sample(self, image_ptiles, tile_locs):
-        z, _ = self.encode(image_ptiles, tile_locs)
+    def sample(self, images, background, tile_locs):
+        z, _ = self.encode(images, background, tile_locs)
         return z
 
-    def max_a_post(self, image_ptiles, tile_locs):
-        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
-        batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
+    def max_a_post(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
+        # assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
+        # batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
 
-        centered_ptiles = self.flatten_and_center_ptiles(image_ptiles, tile_locs)
-        assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-        # We can assume there is one galaxy per_tile and encode each tile independently.
+        # centered_ptiles = self._flatten_and_center_ptiles(image_ptiles, tile_locs)
+        # assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
+        # # We can assume there is one galaxy per_tile and encode each tile independently.
+        batch_size, nth, ntw, max_sources, _ = tile_locs.shape
+        centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
         z_flat = self.enc.max_a_post(centered_ptiles)
         return rearrange(
             z_flat,
             "(b nth ntw s) d -> b nth ntw s d",
             b=batch_size,
-            nth=n_tiles_h,
-            ntw=n_tiles_w,
-            s=self.max_sources,
+            nth=nth,
+            ntw=ntw,
+            s=max_sources,
         )
 
     def training_step(self, batch, batch_idx):
@@ -149,8 +142,7 @@ class GalaxyEncoder(pl.LightningModule):
         images = batch["images"]
         background = batch["background"]
         tile_locs = batch["locs"]
-        ptiles = self.get_images_in_ptiles(images, background)
-        z, pq_z = self.encode(ptiles, tile_locs)
+        z, pq_z = self.encode(images, background, tile_locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
         recon_mean = self.image_decoder.render_images(
@@ -210,8 +202,7 @@ class GalaxyEncoder(pl.LightningModule):
         tile_locs = batch["locs"]
 
         # obtain map estimates
-        ptiles = self.get_images_in_ptiles(images, background)
-        z, _ = self.encode(ptiles, tile_locs)
+        z, _ = self.encode(images, background, tile_locs)
 
         tile_est = {
             "n_sources": batch["n_sources"],
@@ -302,7 +293,15 @@ class GalaxyEncoder(pl.LightningModule):
             self.logger.experiment.add_figure(f"Epoch:{self.current_epoch}/Validation Images", fig)
         plt.close(fig)
 
-    def flatten_and_center_ptiles(self, image_ptiles, tile_locs):
+    def _get_images_in_centered_tiles(
+        self, images: Tensor, background: Tensor, tile_locs: Tensor
+    ) -> Tensor:
+        image_ptiles = get_images_in_tiles(
+            images - background, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen
+        )
+        return self._flatten_and_center_ptiles(image_ptiles, tile_locs)
+
+    def _flatten_and_center_ptiles(self, image_ptiles, tile_locs):
         image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
         return center_ptiles(

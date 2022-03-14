@@ -90,8 +90,6 @@ class BinaryEncoder(pl.LightningModule):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-
-
     def forward(self, images: Tensor, background: Tensor, locs: Tensor):
         centered_tiles = self._get_images_in_centered_tiles(images, background, locs)
         """Runs the binary encoder on centered_ptiles."""
@@ -149,7 +147,9 @@ class BinaryEncoder(pl.LightningModule):
 
         return ret
 
-    def _get_images_in_centered_tiles(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
+    def _get_images_in_centered_tiles(
+        self, images: Tensor, background: Tensor, tile_locs: Tensor
+    ) -> Tensor:
         """Divide a batch of full images into padded tiles similar to nn.conv2d."""
         log_image_ptiles = get_images_in_tiles(
             self.input_transform(images, background),
@@ -173,6 +173,7 @@ class BinaryEncoder(pl.LightningModule):
             self.swap,
             self.cached_grid,
         )
+
     def configure_optimizers(self):
         """Pytorch lightning method."""
         return Adam(self.parameters(), **self.optimizer_params)
