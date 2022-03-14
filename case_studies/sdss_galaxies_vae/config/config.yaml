@@ -80,6 +80,8 @@ datasets:
 models:
     binary:
         _target_: bliss.models.binary.BinaryEncoder
+        input_transform:
+            _target_: bliss.models.location_encoder.ConcatTransform
         n_bands: 1
         tile_slen: 4
         ptile_slen: 52
@@ -100,6 +102,8 @@ models:
             - 2
     encoder:
         _target_: bliss.models.location_encoder.LocationEncoder
+        input_transform:
+            _target_: bliss.models.location_encoder.ConcatTransform
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
         ptile_slen: 52

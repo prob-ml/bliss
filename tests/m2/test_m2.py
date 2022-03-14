@@ -8,7 +8,6 @@ from einops import reduce
 from bliss.models.location_encoder import (
     get_full_params_from_tiles,
     get_images_in_tiles,
-    subtract_bg_and_log_transform,
 )
 
 

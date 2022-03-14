@@ -1,3 +1,5 @@
+from typing import Union
+
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
@@ -9,11 +11,12 @@ from torch.optim import Adam
 from bliss.models.decoder import get_mgrid
 from bliss.models.galaxy_encoder import center_ptiles
 from bliss.models.location_encoder import (
+    ConcatBackgroundTransform,
     EncoderCNN,
     get_full_params_from_tiles,
     get_images_in_tiles,
     get_is_on_from_n_sources,
-    subtract_bg_and_log_transform,
+    LogBackgroundTransform,
 )
 from bliss.reporting import plot_image_and_locs
 
@@ -21,6 +24,7 @@ from bliss.reporting import plot_image_and_locs
 class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
+        input_transform: Union[ConcatBackgroundTransform, LogBackgroundTransform],
         n_bands: int = 1,
         tile_slen: int = 4,
         ptile_slen: int = 52,
@@ -83,10 +87,10 @@ class BinaryEncoder(pl.LightningModule):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def get_images_in_tiles(self, images, background, tile_locs, z_threshold=4.0):
+    def get_images_in_tiles(self, images, background, tile_locs):
         """Divide a batch of full images into padded tiles similar to nn.conv2d."""
         log_image_ptiles = get_images_in_tiles(
-            subtract_bg_and_log_transform(images, background, z_threshold=z_threshold),
+            self.input_transform(images, background),
             self.tile_slen,
             self.ptile_slen,
         )

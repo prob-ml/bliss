@@ -11,7 +11,6 @@ from bliss.models.location_encoder import (
     LocationEncoder,
     get_images_in_tiles,
     get_is_on_from_n_sources,
-    subtract_bg_and_log_transform,
 )
 
 
@@ -93,15 +92,15 @@ class Encoder(nn.Module):
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
-        log_image = subtract_bg_and_log_transform(image, background, z_threshold=self.z_threshold)
-        log_image_ptiles = self.get_images_in_ptiles(log_image)
-        del log_image
-        var_params = self.location_encoder.encode(log_image_ptiles)
+        image_ptiles = self.location_encoder.get_images_in_ptiles(image, background)
+        var_params = self.location_encoder.encode(image_ptiles)
         tile_map = self.location_encoder.max_a_post(var_params)
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            centered_ptiles = self.binary_encoder.get_images_in_tiles(image, background, tile_map["locs"], z_threshold=self.z_threshold)
+            centered_ptiles = self.binary_encoder.get_images_in_tiles(
+                image, background, tile_map["locs"]
+            )
             galaxy_probs = self.binary_encoder.forward(centered_ptiles)
             batch_size, n_tiles_h, n_tiles_w, max_sources, _ = tile_map["locs"].shape
             galaxy_probs = rearrange(
@@ -124,8 +123,7 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            del log_image_ptiles
-            image_ptiles = self.get_images_in_ptiles(image - background)
+            image_ptiles = self.galaxy_encoder.get_images_in_ptiles(image, background)
             galaxy_params = self.galaxy_encoder.max_a_post(image_ptiles, tile_map["locs"])
             galaxy_params *= tile_map["is_on_array"] * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})

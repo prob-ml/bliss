@@ -6,6 +6,7 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
+from torch import Tensor
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.optim import Adam
@@ -73,6 +74,11 @@ class GalaxyEncoder(pl.LightningModule):
             self.load_state_dict(
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
+
+    def get_images_in_ptiles(self, images: Tensor, background: Tensor) -> Tensor:
+        return get_images_in_tiles(
+            images - background, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen
+        )
 
     def encode(self, image_ptiles, tile_locs):
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
@@ -143,7 +149,7 @@ class GalaxyEncoder(pl.LightningModule):
         images = batch["images"]
         background = batch["background"]
         tile_locs = batch["locs"]
-        ptiles = get_images_in_tiles(images - background, self.tile_slen, self.ptile_slen)
+        ptiles = self.get_images_in_ptiles(images, background)
         z, pq_z = self.encode(ptiles, tile_locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
@@ -204,7 +210,7 @@ class GalaxyEncoder(pl.LightningModule):
         tile_locs = batch["locs"]
 
         # obtain map estimates
-        ptiles = get_images_in_tiles(images - background, self.tile_slen, self.ptile_slen)
+        ptiles = self.get_images_in_ptiles(images, background)
         z, _ = self.encode(ptiles, tile_locs)
 
         tile_est = {

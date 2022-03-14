@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -7,36 +7,32 @@ from torch.distributions import categorical
 from torch.nn import functional as F
 
 
-def subtract_bg_and_log_transform(
-    image: Tensor, background: Tensor, z_threshold: float = 4.0, legacy=False
-):
-    """Transforms image before encoder network.
+class LogBackgroundTransform:
+    def __init__(self, z_threshold: float = 4.0) -> None:
+        self.z_threshold = z_threshold
 
-    This subtracts background plus a few standard deviations from the image,
-    then a log1p.
+    def __call__(self, image: Tensor, background: Tensor) -> Tensor:
+        raise NotImplementedError()
+        return torch.log1p(
+            F.relu(image - background + self.z_threshold * background.sqrt(), inplace=True)
+        )
 
-    Arguments:
-        image: Tensor of images (n x c x h x w).
-        background: Tensor of background (n x c x h x w).
-        z_threshold: Number of standard deviations to further subtract.
-
-    Returns:
-        A Tensor of the transformed images (n x c x h x w).
-    """
-    if not legacy:
-        return concat_bg_sigmoid(image, background)
-    raise NotImplementedError()
-    return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
+    def output_channels(self, input_channels: int) -> int:
+        return input_channels
 
 
-def subtract_bg_sigmoid(image: Tensor, background: Tensor):
-    return torch.log1p(F.relu(image - background, inplace=True)) - torch.log1p(
-        F.relu(background - image, inplace=True)
-    )
+class ConcatBackgroundTransform:
+    def __init__(self):
+        pass
+
+    def __call__(self, image: Tensor, background: Tensor) -> Tensor:
+        return torch.cat((image, background), dim=1)
+
+    def output_channels(self, input_channels: int) -> int:
+        return 2 * input_channels
 
 
-def concat_bg_sigmoid(image: Tensor, background: Tensor):
-    return torch.cat((image, background), dim=1)
+
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
@@ -265,6 +261,7 @@ class LocationEncoder(nn.Module):
 
     def __init__(
         self,
+        input_transform: Union[LogBackgroundTransform, ConcatBackgroundTransform],
         max_detections: int = 1,
         n_bands: int = 1,
         tile_slen: int = 2,
@@ -277,6 +274,7 @@ class LocationEncoder(nn.Module):
         """Initializes LocationEncoder.
 
         Args:
+            input_transform: Class which determines how input image and bg are transformed.
             max_detections: Number of maximum detections in a single tile.
             n_bands: number of bands
             tile_slen: dimension of full image, we assume its square for now
@@ -288,6 +286,8 @@ class LocationEncoder(nn.Module):
             hidden: TODO (document this)
         """
         super().__init__()
+
+        self.input_transform = input_transform
 
         self.max_detections = max_detections
         self.n_bands = n_bands
@@ -335,6 +335,11 @@ class LocationEncoder(nn.Module):
 
     def forward(self, image_ptiles, tile_n_sources):
         raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
+
+    def get_images_in_ptiles(self, image: Tensor, background: Tensor) -> Tensor:
+        return get_images_in_tiles(
+            self.input_transform(image, background), self.tile_slen, self.ptile_slen
+        )
 
     def encode(self, log_image_ptiles: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
