@@ -310,17 +310,8 @@ class LocationEncoder(nn.Module):
         # networks to be trained
         n_bands_in = self.input_transform.output_channels(n_bands)
         self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
-        self.enc_final = nn.Sequential(
-            nn.Flatten(1),
-            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
-            nn.BatchNorm1d(hidden),
-            nn.ReLU(True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden, hidden),
-            nn.BatchNorm1d(hidden),
-            nn.ReLU(True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden, self.dim_out_all),
+        self.enc_final = make_enc_final(
+            channel * 4 * dim_enc_conv_out ** 2, hidden, self.dim_out_all, dropout
         )
         self.log_softmax = nn.LogSoftmax(dim=1)
 
@@ -657,6 +648,21 @@ class LocationEncoder(nn.Module):
             d=self.max_detections,
             pd=param_dim,
         )
+
+
+def make_enc_final(in_size, hidden, out_size, dropout):
+    return nn.Sequential(
+        nn.Flatten(1),
+        nn.Linear(in_size, hidden),
+        nn.BatchNorm1d(hidden),
+        nn.ReLU(True),
+        nn.Dropout(dropout),
+        nn.Linear(hidden, hidden),
+        nn.BatchNorm1d(hidden),
+        nn.ReLU(True),
+        nn.Dropout(dropout),
+        nn.Linear(hidden, out_size),
+    )
 
 
 class EncoderCNN(nn.Module):

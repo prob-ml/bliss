@@ -17,6 +17,7 @@ from bliss.models.location_encoder import (
     get_full_params_from_tiles,
     get_images_in_tiles,
     get_is_on_from_n_sources,
+    make_enc_final,
 )
 from bliss.reporting import plot_image_and_locs
 
@@ -73,18 +74,7 @@ class BinaryEncoder(pl.LightningModule):
         dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
         n_bands_in = self.input_transform.output_channels(n_bands)
         self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
-        self.enc_final = nn.Sequential(
-            nn.Flatten(1),
-            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
-            nn.BatchNorm1d(hidden),
-            nn.ReLU(True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden, hidden),
-            nn.BatchNorm1d(hidden),
-            nn.ReLU(True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden, 1),
-        )
+        self.enc_final = make_enc_final(channel * 4 * dim_enc_conv_out ** 2, hidden, 1, dropout)
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
