@@ -59,10 +59,15 @@ class TestSourceEncoder:
             np_nspt = np.random.choice(max_detections, batch_size * n_tiles_h * n_tiles_w)
             n_star_per_tile = torch.from_numpy(np_nspt).type(torch.LongTensor).to(device)
 
-            log_image_ptiles = star_encoder.get_images_in_ptiles(images, background)
-            var_params = star_encoder.encode(log_image_ptiles)
-            var_params2 = star_encoder.encode(log_image_ptiles[:, :-2, :-3])
-            assert torch.allclose(var_params[:, :-2, :-3], var_params2, atol=1e-5)
+            var_params = star_encoder.encode(images, background)
+            h_tile_cutoff = 2
+            w_tile_cutoff = 3
+            h_cutoff = h_tile_cutoff * star_encoder.tile_slen
+            w_cutoff = w_tile_cutoff * star_encoder.tile_slen
+            var_params2 = star_encoder.encode(images[:, -h_cutoff, -w_cutoff], background)
+            assert torch.allclose(
+                var_params[:, :-h_tile_cutoff, :-w_tile_cutoff], var_params2, atol=1e-5
+            )
             var_params_flat = var_params.reshape(-1, var_params.shape[-1])
             pred = star_encoder.encode_for_n_sources(var_params_flat, n_star_per_tile)
 
@@ -174,6 +179,5 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
         ).to(device)
-        log_image_ptiles = star_encoder.get_images_in_ptiles(images, background)
-        var_params = star_encoder.encode(log_image_ptiles)
+        var_params = star_encoder.encode(images, background)
         star_encoder.sample(var_params, n_samples)

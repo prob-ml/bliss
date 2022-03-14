@@ -90,8 +90,7 @@ class Encoder(nn.Module):
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
-        image_ptiles = self.location_encoder.get_images_in_ptiles(image, background)
-        var_params = self.location_encoder.encode(image_ptiles)
+        var_params = self.location_encoder.encode(image, background)
         tile_map = self.location_encoder.max_a_post(var_params)
 
         if self.binary_encoder is not None:

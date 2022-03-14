@@ -333,12 +333,12 @@ class LocationEncoder(nn.Module):
     def forward(self, image_ptiles, tile_n_sources):
         raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
 
-    def get_images_in_ptiles(self, image: Tensor, background: Tensor) -> Tensor:
+    def _get_images_in_ptiles(self, image: Tensor, background: Tensor) -> Tensor:
         return get_images_in_tiles(
             self.input_transform(image, background), self.tile_slen, self.ptile_slen
         )
 
-    def encode(self, log_image_ptiles: Tensor) -> Tensor:
+    def encode(self, image: Tensor, background: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
 
         Args:
@@ -355,15 +355,16 @@ class LocationEncoder(nn.Module):
         """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        image_ptiles = self._get_images_in_ptiles(image, background)
+        log_image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         var_params_conv = self.enc_conv(log_image_ptiles_flat)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(
             var_params_flat,
             "(b nth ntw) d -> b nth ntw d",
-            b=log_image_ptiles.shape[0],
-            nth=log_image_ptiles.shape[1],
-            ntw=log_image_ptiles.shape[2],
+            b=image_ptiles.shape[0],
+            nth=image_ptiles.shape[1],
+            ntw=image_ptiles.shape[2],
         )
 
     def sample(self, var_params: Tensor, n_samples: int) -> Dict[str, Tensor]:

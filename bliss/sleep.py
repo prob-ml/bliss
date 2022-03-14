@@ -156,8 +156,7 @@ class SleepPhase(pl.LightningModule):
     def tile_map_estimate(self, batch):
         images = batch["images"]
         background = batch["background"]
-        image_ptiles = self.image_encoder.get_images_in_ptiles(images, background)
-        var_params = self.image_encoder.encode(image_ptiles)
+        var_params = self.image_encoder.encode(images, background)
         tile_map = self.image_encoder.max_a_post(var_params)
         tile_map["galaxy_params"] = batch["galaxy_params"]
 
@@ -242,8 +241,7 @@ class SleepPhase(pl.LightningModule):
         true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
-        image_ptiles = self.image_encoder.get_images_in_ptiles(images, background)
-        var_params = self.image_encoder.encode(image_ptiles)
+        var_params = self.image_encoder.encode(images, background)
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
         pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
 
