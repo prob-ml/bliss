@@ -13,10 +13,10 @@ from bliss.models.galaxy_encoder import center_ptiles
 from bliss.models.location_encoder import (
     ConcatBackgroundTransform,
     EncoderCNN,
+    LogBackgroundTransform,
     get_full_params_from_tiles,
     get_images_in_tiles,
     get_is_on_from_n_sources,
-    LogBackgroundTransform,
 )
 from bliss.reporting import plot_image_and_locs
 
@@ -41,6 +41,7 @@ class BinaryEncoder(pl.LightningModule):
         image is a star or a galaxy.
 
         Arguments:
+            input_transform: Transformation to apply to input image.
             n_bands: number of bands
             tile_slen: dimension (in pixels) of each tile.
             ptile_slen: dimension (in pixels) of the individual image padded tiles.
@@ -88,7 +89,7 @@ class BinaryEncoder(pl.LightningModule):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def get_images_in_tiles(self, images, background, tile_locs):
+    def get_images_in_tiles(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
         """Divide a batch of full images into padded tiles similar to nn.conv2d."""
         log_image_ptiles = get_images_in_tiles(
             self.input_transform(images, background),
@@ -120,8 +121,7 @@ class BinaryEncoder(pl.LightningModule):
         # forward to layer shared by all n_sources
         h = self.enc_conv(centered_ptiles)
         h2 = self.enc_final(h)
-        z = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
-        return z
+        return torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
 
     def get_prediction(self, batch):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""

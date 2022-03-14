@@ -20,7 +20,6 @@ from bliss.models.decoder import ImageDecoder
 from bliss.models.location_encoder import (
     LocationEncoder,
     get_full_params_from_tiles,
-    get_images_in_tiles,
     get_is_on_from_n_sources,
 )
 from bliss.reporting import DetectionMetrics, plot_image_and_locs

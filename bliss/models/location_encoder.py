@@ -12,7 +12,6 @@ class LogBackgroundTransform:
         self.z_threshold = z_threshold
 
     def __call__(self, image: Tensor, background: Tensor) -> Tensor:
-        raise NotImplementedError()
         return torch.log1p(
             F.relu(image - background + self.z_threshold * background.sqrt(), inplace=True)
         )
@@ -30,9 +29,6 @@ class ConcatBackgroundTransform:
 
     def output_channels(self, input_channels: int) -> int:
         return 2 * input_channels
-
-
-
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):

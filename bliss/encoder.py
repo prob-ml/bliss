@@ -36,7 +36,6 @@ class Encoder(nn.Module):
         location_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
-        z_threshold: float = 4.0,
     ):
         """Initializes Encoder.
 
@@ -59,7 +58,6 @@ class Encoder(nn.Module):
         self.location_encoder = location_encoder
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
-        self.z_threshold = z_threshold
 
     def forward(self, x):
         raise NotImplementedError(
