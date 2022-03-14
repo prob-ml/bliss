@@ -37,12 +37,10 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_decoder = decoder.to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
-        if isinstance(background, tuple):
-            self.background = torch.tensor(background, device=generate_device)
-        elif isinstance(background, SimulatedSDSSBackground):
+        if isinstance(background, SimulatedSDSSBackground):
             self.background = background.to(generate_device)
         else:
-            raise TypeError("Background should either be tuple or SimulatedSDSSBackground.")
+            self.background = torch.tensor(background, device=generate_device)
 
         # check sleep training will work.
         n_tiles_per_image = self.image_prior.n_tiles_h * self.image_prior.n_tiles_w
