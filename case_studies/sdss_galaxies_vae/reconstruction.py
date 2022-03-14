@@ -19,6 +19,12 @@ def reconstruct(cfg):
     sdss_data = get_sdss_data(cfg.paths.sdss, cfg.reconstruct.sdss_pixel_scale)
     my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
     my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
+    my_image, my_background = reporting.apply_mask(
+        my_image,
+        my_background,
+        regions=((1200, 1360, 1700, 1900), (280, 400, 1220, 1320)),
+        mask_bg_val=865.0,
+    )
     coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
     device = torch.device(cfg.reconstruct.device)
 
@@ -86,11 +92,13 @@ def reconstruct(cfg):
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
         map_recon["plocs"] = map_recon["plocs"] - 0.5
-        scene_metrics_map = reporting.scene_metrics(
-            coadd_data,
-            map_recon,
-            mag_cut=20.0,
-        )
+        scene_metrics_map = {}
+        for mag_cut in (20, 24):
+            scene_metrics_map[mag_cut] = reporting.scene_metrics(
+                coadd_data,
+                map_recon,
+                mag_cut=mag_cut,
+            )
         resid = (true - recon) / recon.sqrt()
         if outdir is not None:
             fig = create_figure(
