@@ -50,7 +50,9 @@ def trained_star_encoder_m2(m2_model_setup, devices):
     return sleep_net.image_encoder.to(devices.device)
 
 
-def get_map_estimate(image_encoder: LocationEncoder, images, background, slen: int, wlen: int = None):
+def get_map_estimate(
+    image_encoder: LocationEncoder, images, background, slen: int, wlen: int = None
+):
     # return full estimate of parameters in full image.
     # NOTE: slen*wlen is size of the image without border padding
 
@@ -69,7 +71,9 @@ def get_map_estimate(image_encoder: LocationEncoder, images, background, slen: i
     var_params = image_encoder.encode(images, background)
     tile_cutoff = 25
     cutoff = (tile_cutoff - 1) * image_encoder.tile_slen + image_encoder.ptile_slen
-    var_params2 = image_encoder.encode(images[:, :, :cutoff, :cutoff], background[:, :, :cutoff, :cutoff])
+    var_params2 = image_encoder.encode(
+        images[:, :, :cutoff, :cutoff], background[:, :, :cutoff, :cutoff]
+    )
     assert torch.allclose(var_params[0, :tile_cutoff, :tile_cutoff], var_params2, atol=1e-5)
     tile_map = image_encoder.max_a_post(var_params)
 

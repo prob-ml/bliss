@@ -64,7 +64,10 @@ class TestSourceEncoder:
             w_tile_cutoff = 3
             h_cutoff = h_tile_cutoff * star_encoder.tile_slen
             w_cutoff = w_tile_cutoff * star_encoder.tile_slen
-            var_params2 = star_encoder.encode(images[:, :, :-h_cutoff, :-w_cutoff], background_tensor[:, :, :-h_cutoff, :-w_cutoff])
+            var_params2 = star_encoder.encode(
+                images[:, :, :-h_cutoff, :-w_cutoff],
+                background_tensor[:, :, :-h_cutoff, :-w_cutoff],
+            )
             assert torch.allclose(
                 var_params[:, :-h_tile_cutoff, :-w_tile_cutoff], var_params2, atol=1e-5
             )
