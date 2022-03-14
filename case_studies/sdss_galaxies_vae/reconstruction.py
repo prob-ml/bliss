@@ -15,21 +15,11 @@ from bliss.models.location_encoder import get_full_params_from_tiles
 from case_studies.sdss_galaxies.plots import set_rc_params
 
 
-def apply_masks(image, background, regions, mask_bg_val=865.0):
-    for (h, h_end, w, w_end) in regions:
-        img = image[:, :, h:h_end, w:w_end]
-        image[:, :, h:h_end, w:w_end] = mask_bg_val + torch.tensor(
-            mask_bg_val
-        ).sqrt() * torch.randn_like(img)
-        background[:, :, h:h_end, w:w_end] = mask_bg_val
-    return image, background
-
-
 def reconstruct(cfg):
     sdss_data = get_sdss_data(cfg.paths.sdss, cfg.reconstruct.sdss_pixel_scale)
     my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
     my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
-    my_image, my_background = apply_masks(
+    my_image, my_background = reporting.apply_mask(
         my_image,
         my_background,
         regions=((1200, 1360, 1700, 1900), (280, 400, 1220, 1320)),
