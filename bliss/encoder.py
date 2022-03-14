@@ -95,10 +95,7 @@ class Encoder(nn.Module):
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            centered_ptiles = self.binary_encoder.get_images_in_tiles(
-                image, background, tile_map["locs"]
-            )
-            galaxy_probs = self.binary_encoder.forward(centered_ptiles)
+            galaxy_probs = self.binary_encoder.forward(image, background, tile_map["locs"])
             batch_size, n_tiles_h, n_tiles_w, max_sources, _ = tile_map["locs"].shape
             galaxy_probs = rearrange(
                 galaxy_probs,
