@@ -53,6 +53,7 @@ class BinaryEncoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.optimizer_params = optimizer_params
+        self.input_transform = input_transform
 
         self.max_sources = 1  # by construction.
 
