@@ -51,7 +51,13 @@ datasets:
         decoder: ${models.decoder}
         prior: ${models.prior}
         background:
-            - 865.0
+            _target_: bliss.datasets.simulated.SimulatedSDSSBackground
+            sdss_dir: ${paths.sdss}
+            run: 94
+            camcol: 1
+            field: 12
+            bands:
+                - 2
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
