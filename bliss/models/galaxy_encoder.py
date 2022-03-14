@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -74,7 +74,7 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
-    def encode(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
+    def encode(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tuple[Tensor, Tensor]:
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
@@ -106,12 +106,6 @@ class GalaxyEncoder(pl.LightningModule):
         return z
 
     def max_a_post(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
-        # assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
-        # batch_size, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
-
-        # centered_ptiles = self._flatten_and_center_ptiles(image_ptiles, tile_locs)
-        # assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-        # # We can assume there is one galaxy per_tile and encode each tile independently.
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
         z_flat = self.enc.max_a_post(centered_ptiles)
