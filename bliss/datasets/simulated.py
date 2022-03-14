@@ -47,11 +47,11 @@ class SimulatedSDSSBackground(nn.Module):
 
     def sample(self, shape) -> Tensor:
         batch_size, c, hlen, wlen = shape
-        assert self.background.shape[0] == batch_size
         assert self.background.shape[1] == c
         h = np.random.randint(self.height - hlen)
         w = np.random.randint(self.width - wlen)
-        return self.background[:, :, h : (h + hlen), w : (w + wlen)]
+        slice = self.background[:, :, h : (h + hlen), w : (w + wlen)]
+        return slice.expand(batch_size, -1, -1, -1)
 
 
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
