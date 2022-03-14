@@ -50,8 +50,8 @@ class SimulatedSDSSBackground(nn.Module):
         assert self.background.shape[1] == c
         h = np.random.randint(self.height - hlen)
         w = np.random.randint(self.width - wlen)
-        slice = self.background[:, :, h : (h + hlen), w : (w + wlen)]
-        return slice.expand(batch_size, -1, -1, -1)
+        bg = self.background[:, :, h : (h + hlen), w : (w + wlen)]
+        return bg.expand(batch_size, -1, -1, -1)
 
 
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
