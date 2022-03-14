@@ -50,7 +50,9 @@ datasets:
         decoder: ${models.decoder}
         prior: ${models.prior}
         background:
-            - 865.0
+            _target_: bliss.datasets.simulated.ConstantBackground
+            background:
+                - 865.0
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
