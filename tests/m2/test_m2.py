@@ -5,7 +5,7 @@ import pytest
 import torch
 from einops import reduce
 
-from bliss.models.location_encoder import get_full_params_from_tiles
+from bliss.models.location_encoder import LocationEncoder, get_full_params_from_tiles
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
@@ -50,7 +50,7 @@ def trained_star_encoder_m2(m2_model_setup, devices):
     return sleep_net.image_encoder.to(devices.device)
 
 
-def get_map_estimate(image_encoder, images, background, slen: int, wlen: int = None):
+def get_map_estimate(image_encoder: LocationEncoder, images, background, slen: int, wlen: int = None):
     # return full estimate of parameters in full image.
     # NOTE: slen*wlen is size of the image without border padding
 
@@ -66,10 +66,11 @@ def get_map_estimate(image_encoder, images, background, slen: int, wlen: int = N
     assert border1 == image_encoder.border_padding, "incompatible border"
 
     # obtained estimates per tile, then on full image.
-    log_image_ptiles = image_encoder.get_images_in_ptiles(images, background)
-    var_params = image_encoder.encode(log_image_ptiles)
-    var_params2 = image_encoder.encode(log_image_ptiles[:, :25, :25])
-    assert torch.allclose(var_params[0, :25, :25], var_params2, atol=1e-5)
+    var_params = image_encoder.encode(images, background)
+    tile_cutoff = 25
+    cutoff = (tile_cutoff - 1) * image_encoder.tile_slen + image_encoder.ptile_slen
+    var_params2 = image_encoder.encode(images[:, :, :cutoff, :cutoff], background[:, :, :cutoff, :cutoff])
+    assert torch.allclose(var_params[0, :tile_cutoff, :tile_cutoff], var_params2, atol=1e-5)
     tile_map = image_encoder.max_a_post(var_params)
 
     return get_full_params_from_tiles(tile_map, image_encoder.tile_slen)

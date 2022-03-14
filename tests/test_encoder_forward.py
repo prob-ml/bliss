@@ -53,18 +53,18 @@ class TestSourceEncoder:
                 ptile_slen + (n_tiles_h - 1) * tile_slen,
                 ptile_slen + (n_tiles_w - 1) * tile_slen,
             )
-            background_tensor = torch.tensor(background).expand(*images.shape)
+            background_tensor = torch.tensor(background).reshape(1, -1, 1, 1).expand(*images.shape)
             images *= background_tensor.sqrt()
             images += background_tensor
             np_nspt = np.random.choice(max_detections, batch_size * n_tiles_h * n_tiles_w)
             n_star_per_tile = torch.from_numpy(np_nspt).type(torch.LongTensor).to(device)
 
-            var_params = star_encoder.encode(images, background)
+            var_params = star_encoder.encode(images, background_tensor)
             h_tile_cutoff = 2
             w_tile_cutoff = 3
             h_cutoff = h_tile_cutoff * star_encoder.tile_slen
             w_cutoff = w_tile_cutoff * star_encoder.tile_slen
-            var_params2 = star_encoder.encode(images[:, -h_cutoff, -w_cutoff], background)
+            var_params2 = star_encoder.encode(images[:, :, :-h_cutoff, :-w_cutoff], background_tensor[:, :, :-h_cutoff, :-w_cutoff])
             assert torch.allclose(
                 var_params[:, :-h_tile_cutoff, :-w_tile_cutoff], var_params2, atol=1e-5
             )
@@ -96,7 +96,7 @@ class TestSourceEncoder:
 
             # we check the variational parameters against the hidden parameters
             # one by one
-            h_out = star_encoder.encode(log_image_ptiles)
+            h_out = star_encoder.encode(images, background_tensor)
             h_out = h_out.reshape(-1, h_out.shape[-1])
 
             # get index matrices
@@ -168,6 +168,7 @@ class TestSourceEncoder:
             * background_tensor.sqrt()
             + background_tensor
         )
+        background_tensor = background_tensor.expand(*images.shape)
 
         star_encoder = LocationEncoder(
             LogBackgroundTransform(),
@@ -179,5 +180,5 @@ class TestSourceEncoder:
             n_bands=n_bands,
             max_detections=max_detections,
         ).to(device)
-        var_params = star_encoder.encode(images, background)
+        var_params = star_encoder.encode(images, background_tensor)
         star_encoder.sample(var_params, n_samples)
