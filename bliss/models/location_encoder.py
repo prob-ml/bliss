@@ -342,10 +342,8 @@ class LocationEncoder(nn.Module):
         """Encodes variational parameters from image padded tiles.
 
         Args:
-            log_image_ptiles: A tensor of padded image tiles,
-                with shape `b * n_tiles_h * n_tiles_w * n_bands * h * w`.
-                These are assumed to have the background subtracted
-                and log-transformed by `subtract_and_log_transform()`.
+            image: An astronomical image with shape `b * n_bands * h * w`.
+            background: Background for `image` with the same shape as `image`.
 
         Returns:
             A tensor of variational parameters in matrix form per-tile

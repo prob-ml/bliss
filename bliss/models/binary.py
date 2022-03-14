@@ -91,8 +91,8 @@ class BinaryEncoder(pl.LightningModule):
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
     def forward(self, images: Tensor, background: Tensor, locs: Tensor):
-        centered_tiles = self._get_images_in_centered_tiles(images, background, locs)
         """Runs the binary encoder on centered_ptiles."""
+        centered_tiles = self._get_images_in_centered_tiles(images, background, locs)
         assert centered_tiles.shape[-1] == centered_tiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources

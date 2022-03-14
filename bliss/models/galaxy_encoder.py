@@ -74,7 +74,9 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
-    def encode(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tuple[Tensor, Tensor]:
+    def encode(
+        self, images: Tensor, background: Tensor, tile_locs: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
