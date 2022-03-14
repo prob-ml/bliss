@@ -71,7 +71,8 @@ class BinaryEncoder(pl.LightningModule):
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
-        self.enc_conv = EncoderCNN(n_bands * 2, channel, spatial_dropout)
+        n_bands_in = self.input_transform.output_channels(n_bands)
+        self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
