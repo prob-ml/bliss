@@ -36,7 +36,7 @@ disable=too-many-ancestors,
 	missing-module-docstring,
 	missing-class-docstring,
 
-	# we should fix the "too-many" warnings below
+	# not sure it's advisable to "fix" these
 	too-many-arguments,
 	too-many-locals,
 	too-many-instance-attributes,
@@ -44,16 +44,15 @@ disable=too-many-ancestors,
 	# we should remove fixme comments
 	fixme,
 
-	# to be fixed soon
-	import-outside-toplevel,
-	import-error,
-
 	# problems in the tests directory
 	no-self-use,
 	redefined-outer-name,
 
 	# when overriding methods you don't get to pick your arguments
 	unused-argument,
+
+        # flake8 recommends against f-strings
+        consider-using-f-string,
 
 
 [SIMILARITIES]

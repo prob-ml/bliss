@@ -10,7 +10,6 @@ from bliss.models.location_encoder import (
     LocationEncoder,
     get_images_in_tiles,
     get_is_on_from_n_sources,
-    subtract_bg_and_log_transform,
 )
 
 
@@ -36,7 +35,6 @@ class Encoder(nn.Module):
         location_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
-        z_threshold: float = 4.0,
     ):
         """Initializes Encoder.
 
@@ -59,7 +57,6 @@ class Encoder(nn.Module):
         self.location_encoder = location_encoder
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
-        self.z_threshold = z_threshold
 
     def forward(self, x):
         raise NotImplementedError(
@@ -92,15 +89,12 @@ class Encoder(nn.Module):
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
-        log_image = subtract_bg_and_log_transform(image, background, z_threshold=self.z_threshold)
-        log_image_ptiles = self.get_images_in_ptiles(log_image)
-        del log_image
-        var_params = self.location_encoder.encode(log_image_ptiles)
+        var_params = self.location_encoder.encode(image, background)
         tile_map = self.location_encoder.max_a_post(var_params)
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            galaxy_probs = self.binary_encoder(log_image_ptiles, tile_map["locs"])
+            galaxy_probs = self.binary_encoder.forward(image, background, tile_map["locs"])
             galaxy_probs *= tile_map["is_on_array"]
             galaxy_bools = (galaxy_probs > 0.5).float() * tile_map["is_on_array"]
             star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)
@@ -113,9 +107,7 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            del log_image_ptiles
-            image_ptiles = self.get_images_in_ptiles(image - background)
-            galaxy_params = self.galaxy_encoder.max_a_post(image_ptiles, tile_map["locs"])
+            galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map["locs"])
             galaxy_params *= tile_map["is_on_array"] * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})
 

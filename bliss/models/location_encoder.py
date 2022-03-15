@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -7,21 +7,28 @@ from torch.distributions import categorical
 from torch.nn import functional as F
 
 
-def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold: float = 4.0):
-    """Transforms image before encoder network.
+class LogBackgroundTransform:
+    def __init__(self, z_threshold: float = 4.0) -> None:
+        self.z_threshold = z_threshold
 
-    This subtracts background plus a few standard deviations from the image,
-    then a log1p.
+    def __call__(self, image: Tensor, background: Tensor) -> Tensor:
+        return torch.log1p(
+            F.relu(image - background + self.z_threshold * background.sqrt(), inplace=True)
+        )
 
-    Arguments:
-        image: Tensor of images (n x c x h x w).
-        background: Tensor of background (n x c x h x w).
-        z_threshold: Number of standard deviations to further subtract.
+    def output_channels(self, input_channels: int) -> int:
+        return input_channels
 
-    Returns:
-        A Tensor of the transformed images (n x c x h x w).
-    """
-    return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
+
+class ConcatBackgroundTransform:
+    def __init__(self):
+        pass
+
+    def __call__(self, image: Tensor, background: Tensor) -> Tensor:
+        return torch.cat((image, background), dim=1)
+
+    def output_channels(self, input_channels: int) -> int:
+        return 2 * input_channels
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
@@ -254,6 +261,7 @@ class LocationEncoder(nn.Module):
 
     def __init__(
         self,
+        input_transform: Union[LogBackgroundTransform, ConcatBackgroundTransform],
         max_detections: int = 1,
         n_bands: int = 1,
         tile_slen: int = 2,
@@ -266,6 +274,7 @@ class LocationEncoder(nn.Module):
         """Initializes LocationEncoder.
 
         Args:
+            input_transform: Class which determines how input image and bg are transformed.
             max_detections: Number of maximum detections in a single tile.
             n_bands: number of bands
             tile_slen: dimension of full image, we assume its square for now
@@ -277,6 +286,8 @@ class LocationEncoder(nn.Module):
             hidden: TODO (document this)
         """
         super().__init__()
+
+        self.input_transform = input_transform
 
         self.max_detections = max_detections
         self.n_bands = n_bands
@@ -301,18 +312,13 @@ class LocationEncoder(nn.Module):
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
         # networks to be trained
-        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
-        self.enc_final = nn.Sequential(
-            nn.Flatten(1),
-            nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
-            nn.BatchNorm1d(hidden),
-            nn.ReLU(True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden, hidden),
-            nn.BatchNorm1d(hidden),
-            nn.ReLU(True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden, self.dim_out_all),
+        n_bands_in = self.input_transform.output_channels(n_bands)
+        self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
+        self.enc_final = make_enc_final(
+            channel * 4 * dim_enc_conv_out ** 2,
+            hidden,
+            self.dim_out_all,
+            dropout,
         )
         self.log_softmax = nn.LogSoftmax(dim=1)
 
@@ -325,14 +331,17 @@ class LocationEncoder(nn.Module):
     def forward(self, image_ptiles, tile_n_sources):
         raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
 
-    def encode(self, log_image_ptiles: Tensor) -> Tensor:
+    def _get_images_in_ptiles(self, image: Tensor, background: Tensor) -> Tensor:
+        return get_images_in_tiles(
+            self.input_transform(image, background), self.tile_slen, self.ptile_slen
+        )
+
+    def encode(self, image: Tensor, background: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
 
         Args:
-            log_image_ptiles: A tensor of padded image tiles,
-                with shape `b * n_tiles_h * n_tiles_w * n_bands * h * w`.
-                These are assumed to have the background subtracted
-                and log-transformed by `subtract_and_log_transform()`.
+            image: An astronomical image with shape `b * n_bands * h * w`.
+            background: Background for `image` with the same shape as `image`.
 
         Returns:
             A tensor of variational parameters in matrix form per-tile
@@ -342,15 +351,16 @@ class LocationEncoder(nn.Module):
         """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        image_ptiles = self._get_images_in_ptiles(image, background)
+        log_image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         var_params_conv = self.enc_conv(log_image_ptiles_flat)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(
             var_params_flat,
             "(b nth ntw) d -> b nth ntw d",
-            b=log_image_ptiles.shape[0],
-            nth=log_image_ptiles.shape[1],
-            ntw=log_image_ptiles.shape[2],
+            b=image_ptiles.shape[0],
+            nth=image_ptiles.shape[1],
+            ntw=image_ptiles.shape[2],
         )
 
     def sample(self, var_params: Tensor, n_samples: int) -> Dict[str, Tensor]:
@@ -649,6 +659,21 @@ class LocationEncoder(nn.Module):
         )
 
 
+def make_enc_final(in_size, hidden, out_size, dropout):
+    return nn.Sequential(
+        nn.Flatten(1),
+        nn.Linear(in_size, hidden),
+        nn.BatchNorm1d(hidden),
+        nn.ReLU(True),
+        nn.Dropout(dropout),
+        nn.Linear(hidden, hidden),
+        nn.BatchNorm1d(hidden),
+        nn.ReLU(True),
+        nn.Dropout(dropout),
+        nn.Linear(hidden, out_size),
+    )
+
+
 class EncoderCNN(nn.Module):
     def __init__(self, n_bands, channel, dropout):
         super().__init__()
@@ -671,8 +696,8 @@ class EncoderCNN(nn.Module):
                 downsample = False
             layers += [ConvBlock(in_channel, channel, dropout, downsample)]
             layers += [
-                ConvBlock(channel, channel, dropout, False),
-                ConvBlock(channel, channel, dropout, False),
+                ConvBlock(channel, channel, dropout),
+                ConvBlock(channel, channel, dropout),
             ]
             in_channel = channel
             channel = channel * 2

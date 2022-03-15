@@ -1,10 +1,14 @@
-from typing import Tuple
 import warnings
+from typing import Union
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
+from einops import rearrange
+from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
+from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
 
@@ -14,12 +18,48 @@ warnings.filterwarnings(
 )
 
 
+class ConstantBackground(nn.Module):
+    def __init__(self, background):
+        super().__init__()
+        background = torch.tensor(background)
+        background = rearrange(background, "c -> 1 c 1 1")
+        self.register_buffer("background", background, persistent=False)
+
+    def sample(self, shape) -> Tensor:
+        batch_size, c, hlen, wlen = shape
+        return self.background.expand(batch_size, c, hlen, wlen)
+
+
+class SimulatedSDSSBackground(nn.Module):
+    def __init__(self, sdss_dir, run, camcol, field, bands):
+        super().__init__()
+        sdss_data = SloanDigitalSkySurvey(
+            sdss_dir=sdss_dir,
+            run=run,
+            camcol=camcol,
+            fields=(field,),
+            bands=bands,
+        )
+        background = torch.from_numpy(sdss_data[0]["background"])
+        background = rearrange(background, "c h w -> 1 c h w", c=len(bands))
+        self.register_buffer("background", background, persistent=False)
+        self.height, self.width = self.background.shape[-2:]
+
+    def sample(self, shape) -> Tensor:
+        batch_size, c, hlen, wlen = shape
+        assert self.background.shape[1] == c
+        h = np.random.randint(self.height - hlen)
+        w = np.random.randint(self.width - wlen)
+        bg = self.background[:, :, h : (h + hlen), w : (w + wlen)]
+        return bg.expand(batch_size, -1, -1, -1)
+
+
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
         prior: ImagePrior,
         decoder: ImageDecoder,
-        background: Tuple[float, ...],
+        background: Union[ConstantBackground, SimulatedSDSSBackground],
         n_batches=10,
         batch_size=32,
         generate_device="cpu",
@@ -34,7 +74,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_decoder = decoder.to(generate_device)
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
-        self.background = torch.tensor(background, device=generate_device)
+        self.background = background.to(generate_device)
 
         # check sleep training will work.
         n_tiles_per_image = self.image_prior.n_tiles_h * self.image_prior.n_tiles_w
@@ -58,7 +98,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 batch["galaxy_params"],
                 batch["fluxes"],
             )
-            background = self.make_background(*images.shape)
+            background = self.background.sample(images.shape)
             images += background
             images = self._apply_noise(images)
             batch.update(
@@ -69,9 +109,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             )
 
         return batch
-
-    def make_background(self, batch_size, c, hlen, wlen):
-        return self.background.reshape(1, c, 1, 1).expand(batch_size, -1, hlen, wlen)
 
     @staticmethod
     def _apply_noise(images_mean):

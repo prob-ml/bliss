@@ -40,16 +40,9 @@ class TestStarEncoderObjective:
         for n in range(n_ptiles):
             for i in range(max_detections):
                 for j in range(max_detections):
-
-                    param_loglik_ij = (
-                        Normal(
-                            param_mean[n, i],
-                            (torch.exp(param_logvar[n, i]) + 1e-5).sqrt(),
-                        )
-                        .log_prob(true_params[n, j])
-                        .sum()
-                    )
-
+                    mean = param_mean[n, i]
+                    sd = (torch.exp(param_logvar[n, i]) + 1e-5).sqrt()
+                    param_loglik_ij = Normal(mean, sd).log_prob(true_params[n, j]).sum()
                     assert param_loglik_ij == param_log_probs_all[n, i, j]
 
     # pylint: disable=too-many-statements
@@ -157,14 +150,9 @@ class TestStarEncoderObjective:
                     local_loc_mean[perm, :], (torch.exp(local_loc_logvar[perm, :]) + 1e-5).sqrt()
                 ).log_prob(local_true_locs)
 
-                star_params_loss_perm = (
-                    -Normal(
-                        local_log_flux_mean[perm, :],
-                        (torch.exp(local_log_flux_logvar[perm, :]) + 1e-5).sqrt(),
-                    )
-                    .log_prob(local_true_log_fluxes)
-                    .sum(-1)
-                )
+                mean = local_log_flux_mean[perm, :]
+                sd = (torch.exp(local_log_flux_logvar[perm, :]) + 1e-5).sqrt()
+                star_params_loss_perm = -Normal(mean, sd).log_prob(local_true_log_fluxes).sum(-1)
 
                 p = galaxy_probs_i.unsqueeze(0)[:, perm].squeeze()
                 galaxy_bool_loss_perm = -local_true_galaxy_bools * torch.log(p)

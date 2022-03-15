@@ -18,6 +18,17 @@ from torchmetrics import Metric
 from bliss.datasets.sdss import convert_flux_to_mag, convert_mag_to_flux
 
 
+def apply_mask(image, background, regions, mask_bg_val=865.0):
+    """Replaces specified regions with background noise."""
+    for (h, h_end, w, w_end) in regions:
+        img = image[:, :, h:h_end, w:w_end]
+        image[:, :, h:h_end, w:w_end] = mask_bg_val + torch.tensor(
+            mask_bg_val
+        ).sqrt() * torch.randn_like(img)
+        background[:, :, h:h_end, w:w_end] = mask_bg_val
+    return image, background
+
+
 class DetectionMetrics(Metric):
     """Calculates aggregate detection metrics on batches over full images (not tiles)."""
 
@@ -581,9 +592,9 @@ def plot_image_and_locs(
         colors = ["r", "b", "c", "m"]
         markers = ["x", "+", "x", "+"]
         sizes = [25, 35, 25, 35]
-        for l, c, m, s in zip(labels, colors, markers, sizes):
-            if l is not None:
-                ax.scatter(0, 0, color=c, s=s, marker=m, label=l)
+        for ell, c, m, s in zip(labels, colors, markers, sizes):
+            if ell is not None:
+                ax.scatter(0, 0, color=c, s=s, marker=m, label=ell)
         ax.legend(
             bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
             loc="lower left",

@@ -25,15 +25,12 @@ def reconstruct(cfg):
     sdss_data = get_sdss_data(cfg.paths.sdss, cfg.reconstruct.sdss_pixel_scale)
     my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
     my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
-    # Apply masks
-    my_image[:, :, 1200:1360, 1700:1900] = 865.0 + (
-        torch.tensor(865.0).sqrt() * torch.randn_like(my_image[:, :, 1200:1360, 1700:1900])
+    my_image, my_background = reporting.apply_mask(
+        my_image,
+        my_background,
+        regions=((1200, 1360, 1700, 1900), (280, 400, 1220, 1320)),
+        mask_bg_val=865.0,
     )
-    my_image[:, :, 280:400, 1220:1320] = 865.0 + (
-        torch.tensor(865.0).sqrt() * torch.randn_like(my_image[:, :, 280:400, 1220:1320])
-    )
-    my_background[:, :, 1200:1360, 1700:1900] = 865.0
-    my_background[:, :, 280:400, 1220:1320] = 865.0
     coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
     device = torch.device(cfg.reconstruct.device)
     dec, encoder, prior = load_models(cfg, device)
@@ -63,33 +60,16 @@ def reconstruct(cfg):
             shift_plocs_to_lim_start=True,
             convert_xy_to_hw=True,
         )
-        ll_best = None
-        z_best = None
-        recon_best = None
-        tile_map_recon_best = None
-        # for z in (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0):
-        for z in (5.5,):
-            encoder.z_threshold = z
-            recon, tile_map_recon = reconstruct_scene_at_coordinates(
-                encoder,
-                dec,
-                my_image,
-                my_background,
-                (h, h_end),
-                (w, w_end),
-                slen=cfg.reconstruct.slen,
-                device=device,
-            )
-            ll = Normal(recon, recon.sqrt()).log_prob(true).sum()
-            prior_val = tile_map_prior(prior, tile_map_recon)
-            ll += prior_val
-            if (ll_best is None) or (ll > ll_best):
-                z_best = z
-                ll_best = ll
-                recon_best = recon
-                tile_map_recon_best = tile_map_recon
-        print(f"Best z was {z_best}")
-        recon, tile_map_recon = recon_best, tile_map_recon_best
+        recon, tile_map_recon = reconstruct_scene_at_coordinates(
+            encoder,
+            dec,
+            my_image,
+            my_background,
+            (h, h_end),
+            (w, w_end),
+            slen=cfg.reconstruct.slen,
+            device=device,
+        )
         resid = (true - recon) / recon.sqrt()
         tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
         print(
