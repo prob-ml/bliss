@@ -311,7 +311,10 @@ class LocationEncoder(nn.Module):
         n_bands_in = self.input_transform.output_channels(n_bands)
         self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
         self.enc_final = make_enc_final(
-            channel * 4 * dim_enc_conv_out ** 2, hidden, self.dim_out_all, dropout,
+            channel * 4 * dim_enc_conv_out ** 2,
+            hidden,
+            self.dim_out_all,
+            dropout,
         )
         self.log_softmax = nn.LogSoftmax(dim=1)
 
