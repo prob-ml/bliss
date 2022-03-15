@@ -9,6 +9,18 @@ scenes:
         h: 1150
         w: 1000
         size: 300
+    sdss_recon2:
+        h: 460
+        w: 742
+        size: 300
+    sdss_recon3:
+        h: 1150 #1400
+        w: 1710
+        size: 300
+    sdss_recon4_star_galaxy:
+        h: 557 #1400
+        w: 408
+        size: 300
     sdss_recon_all:
         h: 24
         w: 24
