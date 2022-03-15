@@ -142,14 +142,11 @@ def get_full_params_from_tiles(tile_params: Dict[str, Tensor], tile_slen: int) -
         "galaxy_blends",
     }
     param_names_to_mask = {"locs", "plocs"}.union(param_names_to_gather)
+    other_param_names = {"n_sources", "n_sources_log_prob", "is_on_array"}
 
     # sanity check to prevent silent error when e.g. parameter name is misspelled.
     for k in tile_params:
-        if k not in param_names_to_mask and k not in {
-            "n_sources",
-            "n_sources_log_prob",
-            "is_on_array",
-        }:
+        if k not in param_names_to_mask.union(other_param_names):
             raise ValueError(
                 f"The key '{k}' in the `tile_params` Tensor dictionary is not one of the standard"
                 " ones (check spelling?)"
