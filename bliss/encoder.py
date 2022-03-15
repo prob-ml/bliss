@@ -2,7 +2,6 @@
 from typing import Dict, Optional
 
 import torch
-from einops import rearrange
 from torch import Tensor, nn
 
 from bliss.models.binary import BinaryEncoder
@@ -96,15 +95,6 @@ class Encoder(nn.Module):
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             galaxy_probs = self.binary_encoder.forward(image, background, tile_map["locs"])
-            batch_size, n_tiles_h, n_tiles_w, max_sources, _ = tile_map["locs"].shape
-            galaxy_probs = rearrange(
-                galaxy_probs,
-                "(b nth ntw s) 1 -> b nth ntw s 1",
-                b=batch_size,
-                nth=n_tiles_h,
-                ntw=n_tiles_w,
-                s=max_sources,
-            )
             galaxy_probs *= tile_map["is_on_array"]
             galaxy_bools = (galaxy_probs > 0.5).float() * tile_map["is_on_array"]
             star_bools = get_star_bools(tile_map["n_sources"], galaxy_bools)

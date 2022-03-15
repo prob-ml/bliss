@@ -88,7 +88,16 @@ class BinaryEncoder(pl.LightningModule):
         # forward to layer shared by all n_sources
         h = self.enc_conv(centered_tiles)
         h2 = self.enc_final(h)
-        return torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
+        galaxy_probs = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
+        return rearrange(
+            galaxy_probs,
+            "(b nth ntw s) 1 -> b nth ntw s 1",
+            b=batch_size,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
+            s=max_sources,
+        )
 
     def get_prediction(self, batch):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
