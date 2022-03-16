@@ -809,7 +809,7 @@ def plots(cfg):  # pylint: disable=too-many-statements
             dataset = instantiate(
                 cfg.datasets.sdss_galaxies, batch_size=512, n_batches=20, num_workers=20
             )
-            imagepath = galaxies_file.parent / (galaxies_file.stem + "_images.pdf")
+            imagepath = galaxies_file.parent / (galaxies_file.stem + "_images.jpg")
             generate.generate(
                 dataset, galaxies_file, imagepath, n_plots=25, global_params=("background", "slen")
             )

@@ -7,7 +7,7 @@ from bliss.reporting import plot_image
 
 
 def visualize(batch, path, n_samples, figsize=(12, 12)):
-    # visualize in a pdf format 30 images from the batch
+    # visualize 30 images from the batch
     assert math.sqrt(n_samples) % 1 == 0
     nrows = int(math.sqrt(n_samples))
 
@@ -48,6 +48,6 @@ def generate(dataset, filepath, imagepath, n_plots: int, global_params=("backgro
     # assumes all data are tensors (including metadata).
     fbatch = {k: v.cpu() for k, v in fbatch.items()}
 
-    # save batch and images as pdf for visualization purposes.
+    # save batch and images for visualization purposes.
     torch.save(fbatch, filepath)
     visualize(fbatch, imagepath, n_plots)
