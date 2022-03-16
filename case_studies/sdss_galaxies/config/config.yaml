@@ -52,12 +52,16 @@ datasets:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
         prior: ${models.prior}
-        background:
-            _target_: bliss.datasets.simulated.ConstantBackground
-            background:
-                - 865.0
         n_tiles_h: 10
         n_tiles_w: 10
+        background:
+            _target_: bliss.datasets.simulated.SimulatedSDSSBackground
+            sdss_dir: ${paths.sdss}
+            run: 94
+            camcol: 1
+            field: 12
+            bands:
+                - 2
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
@@ -72,7 +76,7 @@ datasets:
         background: 865.
         psf_fwhm: 0.8
         pixel_scale: 0.4
-        min_flux: 300 # to be observable it cannot be too below background.
+        min_flux: 300
         max_flux: 10000
         min_hlr: 0.8
         max_hlr: 3.0
@@ -82,7 +86,7 @@ models:
     binary:
         _target_: bliss.models.binary.BinaryEncoder
         input_transform:
-            _target_: bliss.models.location_encoder.LogBackgroundTransform
+            _target_: bliss.models.location_encoder.ConcatBackgroundTransform
         n_bands: 1
         tile_slen: 4
         ptile_slen: 52
@@ -105,7 +109,7 @@ models:
     encoder:
         _target_: bliss.models.location_encoder.LocationEncoder
         input_transform:
-            _target_: bliss.models.location_encoder.LogBackgroundTransform
+            _target_: bliss.models.location_encoder.ConcatBackgroundTransform
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
         ptile_slen: 52
