@@ -53,6 +53,8 @@ datasets:
             _target_: bliss.datasets.simulated.ConstantBackground
             background:
                 - 865.0
+        n_tiles_h: 10
+        n_tiles_w: 10
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
@@ -121,8 +123,6 @@ models:
     prior:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1
-        slen: 40
-        tile_slen: 4
         max_sources: 1
         mean_sources: 0.03
         min_sources: 0
