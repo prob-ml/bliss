@@ -23,24 +23,47 @@ from case_studies.sdss_galaxies.plots import set_rc_params
 
 
 def reconstruct(cfg):
-    sdss_data = get_sdss_data(cfg.paths.sdss, cfg.reconstruct.sdss_pixel_scale)
-    my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
-    my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
-    my_image, my_background = reporting.apply_mask(
-        my_image,
-        my_background,
-        regions=((1200, 1360, 1700, 1900), (280, 400, 1220, 1320)),
-        mask_bg_val=865.0,
-    )
-    coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
-    device = torch.device(cfg.reconstruct.device)
-    dec, encoder, prior = load_models(cfg, device)
-
     if cfg.reconstruct.outdir is not None:
         outdir = Path(cfg.reconstruct.outdir)
         outdir.mkdir(exist_ok=True)
     else:
         outdir = None
+    if not cfg.reconstruct.generated_frame:
+        sdss_data = get_sdss_data(cfg.paths.sdss, cfg.reconstruct.sdss_pixel_scale)
+        my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
+        my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
+        my_image, my_background = reporting.apply_mask(
+            my_image,
+            my_background,
+            regions=((1200, 1360, 1700, 1900), (280, 400, 1220, 1320)),
+            mask_bg_val=865.0,
+        )
+        coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
+    else:
+        if outdir is not None:
+            sim_frame_path = outdir / "simulated_frame.pt"
+        else:
+            sim_frame_path = None
+        if sim_frame_path and sim_frame_path.exists():
+            true_cat = torch.load(sim_frame_path)
+        else:
+            dataset = instantiate(
+                cfg.datasets.simulated,
+                prior=instantiate(cfg.models.prior, slen=1400),
+                n_batches=1,
+                batch_size=1,
+                generate_device="cpu",
+            )
+            print("INFO: started generating frame")
+            true_cat = dataset.get_batch()
+            print("INFO: done generating frame")
+            if sim_frame_path:
+                torch.save(true_cat, sim_frame_path)
+        my_image = true_cat["images"]
+        my_background = true_cat["background"]
+        coadd_cat = None
+    device = torch.device(cfg.reconstruct.device)
+    dec, encoder, prior = load_models(cfg, device)
 
     for scene_name, scene_coords in cfg.reconstruct.scenes.items():
         bp = encoder.border_padding
@@ -54,13 +77,28 @@ def reconstruct(cfg):
             h_end = h + scene_size
             w_end = w + scene_size
         true = my_image[:, :, h:h_end, w:w_end]
-        coadd_data = reporting.get_params_from_coadd(
-            coadd_cat,
-            xlim=(w, w_end),
-            ylim=(h, h_end),
-            shift_plocs_to_lim_start=True,
-            convert_xy_to_hw=True,
-        )
+        if coadd_cat is not None:
+            coadd_data = reporting.get_params_from_coadd(
+                coadd_cat,
+                xlim=(w, w_end),
+                ylim=(h, h_end),
+                shift_plocs_to_lim_start=True,
+                convert_xy_to_hw=True,
+            )
+        else:
+            coadd_data = {}
+            del true_cat["images"]
+            del true_cat["background"]
+            true_cat["galaxy_fluxes"] = dec.get_galaxy_fluxes(
+                true_cat["galaxy_bools"].to(device), true_cat["galaxy_params"].to(device)
+            ).cpu()
+            coadd_data = get_full_params_from_tiles(true_cat, encoder.tile_slen)
+            coadd_data["fluxes"] = (
+                coadd_data["galaxy_bools"] * coadd_data["galaxy_fluxes"]
+                + coadd_data["star_bools"] * coadd_data["fluxes"]
+            )
+            coadd_data["mags"] = convert_flux_to_mag(coadd_data["fluxes"])
+            coadd_data["plocs"] = coadd_data["plocs"] - 0.5
         recon, tile_map_recon = reconstruct_scene_at_coordinates(
             encoder,
             dec,
@@ -122,6 +160,7 @@ def reconstruct(cfg):
                 scatter_on_true=False,
             )
             fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
+            fig.savefig(outdir / (scene_name + ".png"), format="png")
             fig_scatter_on_true = create_figure(
                 true[0, 0],
                 recon[0, 0],
@@ -145,17 +184,17 @@ def reconstruct(cfg):
             fig_scatter_on_true.savefig(
                 outdir / (scene_name + "_scatter_on_true.pdf"), format="pdf"
             )
-            fig_with_coadd = create_figure(
-                true[0, 0],
-                recon[0, 0],
-                resid[0, 0],
-                coadd_objects=coadd_data,
-                map_recon=map_recon,
-                include_residuals=False,
-                colorbar=False,
-                scatter_on_true=True,
-            )
-            fig_with_coadd.savefig(outdir / (scene_name + "_coadd.pdf"), format="pdf")
+            # fig_with_coadd = create_figure(
+            #     true[0, 0],
+            #     recon[0, 0],
+            #     resid[0, 0],
+            #     coadd_objects=coadd_data,
+            #     map_recon=map_recon,
+            #     include_residuals=False,
+            #     colorbar=False,
+            #     scatter_on_true=True,
+            # )
+            # fig_with_coadd.savefig(outdir / (scene_name + "_coadd.pdf"), format="pdf")
             # scene_metrics_table = create_scene_metrics_table(scene_coords)
             # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
             torch.save(scene_metrics_by_mag, outdir / (scene_name + ".pt"))
