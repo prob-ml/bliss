@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Tuple
 
 import torch
+import numpy as np
 import pandas as pd
 from astropy.table import Table
 from einops import rearrange, repeat
@@ -405,9 +406,6 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
         line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
         tex_lines.append(line)
     return tex_lines
-
-
-import numpy as np
 
 
 def create_scene_metrics_table(scene_metrics_by_mag):
