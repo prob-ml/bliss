@@ -62,8 +62,6 @@ models:
   prior:
     _target_: bliss.models.prior.ImagePrior
     n_bands: 2
-    slen: 100
-    tile_slen: 2
     max_sources: 5
     mean_sources: 0.48
     min_sources: 0
