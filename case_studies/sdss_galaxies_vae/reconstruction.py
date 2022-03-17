@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Tuple
 
 import torch
+import numpy as np
 import pandas as pd
 from astropy.table import Table
 from einops import rearrange, repeat
@@ -106,12 +107,9 @@ def reconstruct(cfg):
             scene_metrics_by_mag[mag].update(
                 expected_accuracy(tile_map_recon, mag_cutoff=float(mag))
             )
-            scene_metrics_by_mag[mag]["expected_recall"] = expected_recall(
-                tile_map_recon, mag_cutoff=float(mag)
-            )
-            scene_metrics_by_mag[mag]["expected_precision"] = expected_precision(
-                tile_map_recon, mag_cutoff=float(mag)
-            )
+            if mag == 24:
+                scene_metrics_by_mag[mag]["expected_recall"] = expected_recall(tile_map_recon)
+                scene_metrics_by_mag[mag]["expected_precision"] = expected_precision(tile_map_recon)
         if outdir is not None:
             fig = create_figure(
                 true[0, 0],
@@ -416,33 +414,35 @@ def create_scene_metrics_table(scene_metrics_by_mag):
     for c in columns:
         x[c] = {}
         for k, v in scene_metrics_by_mag.items():
-            x[c][k] = v[c].item()
+            if c in v:
+                x[c][k] = v[c].item()
     scene_metrics_df = pd.DataFrame(x)
     tex_lines = []
     for k, v in scene_metrics_df.iterrows():
-        line = f"{k} & {v['recall']:.2f} ({v['expected_recall']:.2f}) & {v['precision']:.2f} ({v['expected_precision']:.2f}) \\\\\n"
+        line = f"{k} & {v['recall']:.2f}"
+        if not np.isnan(v["expected_recall"]):
+            line += f" ({v['expected_recall']:.2f})"
+        line += f" & {v['precision']:.2f}"
+        if not np.isnan(v["expected_precision"]):
+            line += f" ({v['expected_precision']:.2f})"
+        line += " \\\\\n"
         tex_lines.append(line)
     return scene_metrics_df, tex_lines
 
 
-def expected_recall(tile_map, threshold=0.5, mag_cutoff=24.0):
-    galaxy_probs = (tile_map["galaxy_probs"] * (tile_map["mags"] <= mag_cutoff)).log()
-    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1)
-    gal_probs = galaxy_probs + source_probs
-    total_galaxies = gal_probs.exp().sum()
-    galaxies_predicted = (gal_probs.exp() * (gal_probs.exp() > threshold)).sum()
-    # return total_galaxies, galaxies_predicted, galaxies_predicted / total_galaxies
-    return galaxies_predicted / total_galaxies
+def expected_recall(tile_map):
+    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1).exp()
+    prob_if_on = source_probs * tile_map["is_on_array"]
+    prob_if_off = (1 - source_probs) * (1 - tile_map["is_on_array"])
+    recall = prob_if_on.sum() / (prob_if_on.sum() + prob_if_off.sum())
+    return recall
 
 
-def expected_precision(tile_map, threshold=0.5, mag_cutoff=24.0):
-    galaxy_probs = (tile_map["galaxy_probs"] * (tile_map["mags"] <= mag_cutoff)).log()
-    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1)
-    gal_probs = galaxy_probs + source_probs
-    n_galaxies_predicted = (gal_probs.exp() > threshold).sum()
-    galaxies_predicted = (gal_probs.exp() * (gal_probs.exp() > threshold)).sum()
-    # return n_galaxies_predicted, galaxies_predicted, galaxies_predicted / n_galaxies_predicted
-    return galaxies_predicted / n_galaxies_predicted
+def expected_precision(tile_map):
+    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1).exp()
+    prob_if_on = source_probs * tile_map["is_on_array"]
+    precision = prob_if_on.sum() / tile_map["is_on_array"].sum()
+    return precision
 
 
 def expected_accuracy(tile_map, mag_cutoff=24.0):
