@@ -124,6 +124,8 @@ class ImagePrior(pl.LightningModule):
 
         Args:
             batch_size: The number of samples to draw.
+            n_tiles_h: Number of tiles height-wise.
+            n_tiles_w: Number of tiles width-wise.
 
         Returns:
             A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.
@@ -191,9 +193,7 @@ class ImagePrior(pl.LightningModule):
         # shape (batch_size x n_tiles_h x n_tiles_w)
         # the booleans returned (galaxy_bools, star_bools) are of shape
         # (batch_size x n_tiles_h x n_tiles_w x max_sources x 1)
-        # this last dimension is so it is parallel to other galaxy/star params.
-
-        # batch_size = n_sources.size(0)
+        # this last dimension is so it is consistent with other catalog values.
         batch_size, n_tiles_h, n_tiles_w, max_sources = is_on_array.shape
         uniform = torch.rand(
             batch_size,
@@ -212,15 +212,13 @@ class ImagePrior(pl.LightningModule):
         """Samples fluxes.
 
         Arguments:
-            n_stars: Tensor indicating number of stars per tile
-            star_bools: Tensor indicating whether each object is a star or not
-            batch_size: Size of the batches
+            star_bools: Tensor indicating whether each object is a star or not.
+                Has shape (batch_size x n_tiles_h x n_tiles_w x max_sources x 1)
 
         Returns:
             fluxes, tensor shape
-            (batch_size x self.n_tiles_h x self.n_tiles_w x self.max_sources x n_bands)
+            (batch_size x n_tiles_h x n_tiles_w x max_sources x n_bands)
         """
-        # shape = (batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         device = star_bools.device
         batch_size, n_tiles_h, n_tiles_w, max_sources, _ = star_bools.shape
         shape = (batch_size, n_tiles_h, n_tiles_w, max_sources, 1)
