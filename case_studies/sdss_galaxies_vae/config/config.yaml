@@ -212,7 +212,6 @@ reconstruct:
     psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     real: False
     slen: 300
-    generated_frame: False
     outdir:
     scenes:
         # sdss_recon0:
