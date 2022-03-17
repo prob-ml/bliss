@@ -4,6 +4,7 @@ from typing import Optional
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
+from torch import Tensor
 from torch.distributions import Poisson
 
 from bliss.datasets.galsim_galaxies import SDSSGalaxies
@@ -75,8 +76,6 @@ class ImagePrior(pl.LightningModule):
     def __init__(
         self,
         n_bands: int = 1,
-        slen: int = 50,
-        tile_slen: int = 2,
         min_sources: int = 0,
         max_sources: int = 2,
         mean_sources: int = 0.4,
@@ -92,8 +91,6 @@ class ImagePrior(pl.LightningModule):
 
         Args:
             n_bands: Number of bands (colors) in the image.
-            slen: Side-length of astronomical image (image is assumed to be square).
-            tile_slen: Side-length of each tile.
             min_sources: Minimum number of sources in a tile
             max_sources: Maximum number of sources in a tile
             mean_sources: Mean rate of sources appearing in a tile
@@ -107,12 +104,6 @@ class ImagePrior(pl.LightningModule):
         """
         super().__init__()
         self.n_bands = n_bands
-        assert slen % 1 == 0, "slen must be an integer."
-        assert slen % tile_slen == 0, "slen must be divisible by tile_slen"
-        self.n_tiles_h = int(slen) // tile_slen
-        self.n_tiles_w = self.n_tiles_h
-        self.tile_slen = tile_slen
-
         assert max_sources > 0, "No sources will be drawn."
         self.min_sources = min_sources
         self.max_sources = max_sources
@@ -128,11 +119,13 @@ class ImagePrior(pl.LightningModule):
         if self.prob_galaxy > 0.0:
             assert self.galaxy_prior is not None
 
-    def sample_prior(self, batch_size: int = 1) -> dict:
+    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> dict:
         """Samples latent variables from the prior of an astronomical image.
 
         Args:
             batch_size: The number of samples to draw.
+            n_tiles_h: Number of tiles height-wise.
+            n_tiles_w: Number of tiles width-wise.
 
         Returns:
             A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.
@@ -140,13 +133,15 @@ class ImagePrior(pl.LightningModule):
             `(batch_size, self.n_tiles_h, self.n_tiles_w)`.
             The remaining dimensions are variable-specific.
         """
-        n_sources = self._sample_n_sources(batch_size)
+        assert n_tiles_h > 0
+        assert n_tiles_w > 0
+        n_sources = self._sample_n_sources(batch_size, n_tiles_h, n_tiles_w)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-        locs = self._sample_locs(is_on_array, batch_size)
+        locs = self._sample_locs(is_on_array)
 
-        _, _, galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(n_sources, is_on_array)
+        galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(is_on_array)
         galaxy_params = self._sample_galaxy_params(galaxy_bools)
-        fluxes = self._sample_fluxes(n_sources, star_bools, batch_size)
+        fluxes = self._sample_fluxes(star_bools)
         log_fluxes = self._get_log_fluxes(fluxes)
 
         # per tile quantities.
@@ -167,30 +162,25 @@ class ImagePrior(pl.LightningModule):
         )  # prevent log(0) errors.
         return torch.log(log_fluxes)
 
-    def _sample_n_sources(self, batch_size):
+    def _sample_n_sources(self, batch_size, n_tiles_h, n_tiles_w):
         # returns number of sources for each batch x tile
         # output dimension is batch_size x n_tiles_h x n_tiles_w
 
         # always poisson distributed.
         p = torch.full((1,), self.mean_sources, device=self.device, dtype=torch.float)
         m = Poisson(p)
-        n_sources = m.sample([batch_size, self.n_tiles_h, self.n_tiles_w])
+        n_sources = m.sample([batch_size, n_tiles_h, n_tiles_w])
 
         # long() here is necessary because used for indexing and one_hot encoding.
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
         return rearrange(n_sources.long(), "b nth ntw 1 -> b nth ntw")
 
-    def _sample_locs(self, is_on_array, batch_size):
+    def _sample_locs(self, is_on_array):
         # output dimension is batch_size x n_tiles_h x n_tiles_w x max_sources x 2
 
         # 2 = (x,y)
-        shape = (
-            batch_size,
-            self.n_tiles_h,
-            self.n_tiles_w,
-            self.max_sources,
-            2,
-        )
+        batch_size, n_tiles_h, n_tiles_w, max_sources = is_on_array.shape
+        shape = (batch_size, n_tiles_h, n_tiles_w, max_sources, 2)
         locs = torch.rand(*shape, device=is_on_array.device)
         locs *= self.loc_max - self.loc_min
         locs += self.loc_min
@@ -198,57 +188,51 @@ class ImagePrior(pl.LightningModule):
 
         return locs
 
-    def _sample_n_galaxies_and_stars(self, n_sources, is_on_array):
+    def _sample_n_galaxies_and_stars(self, is_on_array):
         # the counts returned (n_galaxies, n_stars) are of
         # shape (batch_size x n_tiles_h x n_tiles_w)
         # the booleans returned (galaxy_bools, star_bools) are of shape
         # (batch_size x n_tiles_h x n_tiles_w x max_sources x 1)
-        # this last dimension is so it is parallel to other galaxy/star params.
-
-        batch_size = n_sources.size(0)
+        # this last dimension is so it is consistent with other catalog values.
+        batch_size, n_tiles_h, n_tiles_w, max_sources = is_on_array.shape
         uniform = torch.rand(
             batch_size,
-            self.n_tiles_h,
-            self.n_tiles_w,
-            self.max_sources,
+            n_tiles_h,
+            n_tiles_w,
+            max_sources,
             1,
             device=is_on_array.device,
         )
         galaxy_bools = uniform < self.prob_galaxy
         galaxy_bools = (galaxy_bools * is_on_array.unsqueeze(-1)).float()
         star_bools = (1 - galaxy_bools) * is_on_array.unsqueeze(-1)
-        n_galaxies = galaxy_bools.sum((-2, -1))
-        n_stars = star_bools.sum((-2, -1))
-        assert torch.all(n_stars <= n_sources) and torch.all(n_galaxies <= n_sources)
+        return galaxy_bools, star_bools
 
-        return n_galaxies, n_stars, galaxy_bools, star_bools
-
-    def _sample_fluxes(self, n_stars, star_bools, batch_size):
+    def _sample_fluxes(self, star_bools: Tensor):
         """Samples fluxes.
 
         Arguments:
-            n_stars: Tensor indicating number of stars per tile
-            star_bools: Tensor indicating whether each object is a star or not
-            batch_size: Size of the batches
+            star_bools: Tensor indicating whether each object is a star or not.
+                Has shape (batch_size x n_tiles_h x n_tiles_w x max_sources x 1)
 
         Returns:
             fluxes, tensor shape
-            (batch_size x self.n_tiles_h x self.n_tiles_w x self.max_sources x n_bands)
+            (batch_size x n_tiles_h x n_tiles_w x max_sources x n_bands)
         """
-        assert n_stars.shape[0] == batch_size
-
-        shape = (batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        base_fluxes = self._draw_pareto_maxed(shape)
+        device = star_bools.device
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = star_bools.shape
+        shape = (batch_size, n_tiles_h, n_tiles_w, max_sources, 1)
+        base_fluxes = self._draw_pareto_maxed(shape, device)
 
         if self.n_bands > 1:
             shape = (
                 batch_size,
-                self.n_tiles_h,
-                self.n_tiles_w,
-                self.max_sources,
+                n_tiles_h,
+                n_tiles_w,
+                max_sources,
                 self.n_bands - 1,
             )
-            colors = torch.randn(*shape, device=base_fluxes.device)
+            colors = torch.randn(*shape, device=device)
             fluxes = 10 ** (colors / 2.5) * base_fluxes
             fluxes = torch.cat((base_fluxes, fluxes), dim=-1)
             fluxes *= star_bools.float()
@@ -257,26 +241,20 @@ class ImagePrior(pl.LightningModule):
 
         return fluxes
 
-    def _draw_pareto_maxed(self, shape):
+    def _draw_pareto_maxed(self, shape, device):
         # draw pareto conditioned on being less than f_max
 
         u_max = self._pareto_cdf(self.f_max)
-        uniform_samples = torch.rand(*shape, device=self.device) * u_max
+        uniform_samples = torch.rand(*shape, device=device) * u_max
         return self.f_min / (1.0 - uniform_samples) ** (1 / self.alpha)
 
     def _pareto_cdf(self, x):
         return 1 - (self.f_min / x) ** self.alpha
 
     def _sample_galaxy_params(self, galaxy_bools):
-        # galaxy latent variables are obtaind from previously encoded variables from
-        # large dataset of simulated galaxies stored in `self.latents`
-        # NOTE: These latent variables DO NOT follow a specific distribution.
-
-        assert galaxy_bools.shape[1:] == (self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        batch_size = galaxy_bools.size(0)
-        total_latent = batch_size * self.n_tiles_h * self.n_tiles_w * self.max_sources
-
-        # first get random subset of indices to extract from self.latents
+        """Sample latent galaxy params from GalaxyPrior object."""
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = galaxy_bools.shape
+        total_latent = batch_size * n_tiles_h * n_tiles_w * max_sources
         if self.prob_galaxy > 0.0:
             samples = self.galaxy_prior.sample(total_latent, galaxy_bools.device)
         else:
@@ -285,8 +263,8 @@ class ImagePrior(pl.LightningModule):
             samples,
             "(b nth ntw s) g -> b nth ntw s g",
             b=batch_size,
-            nth=self.n_tiles_h,
-            ntw=self.n_tiles_w,
-            s=self.max_sources,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
+            s=max_sources,
         )
         return galaxy_params * galaxy_bools

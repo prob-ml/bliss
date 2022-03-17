@@ -60,6 +60,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         prior: ImagePrior,
         decoder: ImageDecoder,
         background: Union[ConstantBackground, SimulatedSDSSBackground],
+        n_tiles_h: int,
+        n_tiles_w: int,
         n_batches=10,
         batch_size=32,
         generate_device="cpu",
@@ -75,11 +77,15 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
         self.background = background.to(generate_device)
+        self.n_tiles_h = n_tiles_h
+        self.n_tiles_w = n_tiles_w
 
         # check sleep training will work.
-        n_tiles_per_image = self.image_prior.n_tiles_h * self.image_prior.n_tiles_w
-        total_ptiles = n_tiles_per_image * self.batch_size
+        total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
         assert total_ptiles > 1, "Need at least 2 tiles over all batches."
+
+    image_prior: ImagePrior
+    image_decoder: ImageDecoder
 
     def __iter__(self):
         return self.batch_generator()
@@ -90,7 +96,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def get_batch(self):
         with torch.no_grad():
-            batch = self.image_prior.sample_prior(batch_size=self.batch_size)
+            batch = self.image_prior.sample_prior(self.batch_size, self.n_tiles_h, self.n_tiles_w)
             images = self.image_decoder.render_images(
                 batch["n_sources"],
                 batch["locs"],
