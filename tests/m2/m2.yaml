@@ -29,6 +29,8 @@ datasets:
       background:
         - 686.0
         - 1123.0
+    n_tiles_h: 50
+    n_tiles_w: 50
     n_batches: 10
     batch_size: 20
     generate_device: "cuda:0"
