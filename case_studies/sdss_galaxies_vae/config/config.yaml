@@ -208,9 +208,7 @@ training:
     weight_save_path: ${paths.project}/models/${training.name}.pt
 
 reconstruct:
-    sdss_pixel_scale: 0.396
     device: "cuda:0"
-    coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
     psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     real: False
     slen: 300
