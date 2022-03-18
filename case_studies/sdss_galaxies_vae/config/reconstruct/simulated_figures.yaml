@@ -1,0 +1,17 @@
+outdir: ${paths.output}/simulated_figures
+real: False
+frame:
+    _target_: reconstruction.SimulatedFrame
+    dataset: ${datasets.simulated}
+    n_tiles_h: 350
+    n_tiles_w: 500
+    cache_dir: ${reconstruct.outdir}
+scenes:
+    sdss_recon1:
+        h: 1000
+        w: 1000
+        size: 300
+    sdss_recon_all:
+        h: 24
+        w: 24
+        size: "all"
