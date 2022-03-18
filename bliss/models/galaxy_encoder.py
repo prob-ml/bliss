@@ -81,18 +81,18 @@ class GalaxyEncoder(pl.LightningModule):
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-        z_flat, pq_z_flat = self.enc(centered_ptiles)
-        z = rearrange(
-            z_flat,
+        galaxy_params_flat, pq_divergence_flat = self.enc(centered_ptiles)
+        galaxy_params = rearrange(
+            galaxy_params_flat,
             "(b nth ntw s) d -> b nth ntw s d",
             b=batch_size,
             nth=ntw,
             ntw=ntw,
             s=max_sources,
         )
-        if pq_z_flat.shape:
-            pq_z = rearrange(
-                pq_z_flat,
+        if pq_divergence_flat.shape:
+            pq_divergence = rearrange(
+                pq_divergence_flat,
                 "(b nth ntw s) -> b nth ntw s",
                 b=batch_size,
                 nth=nth,
@@ -100,19 +100,19 @@ class GalaxyEncoder(pl.LightningModule):
                 s=max_sources,
             )
         else:
-            pq_z = pq_z_flat
-        return z, pq_z
+            pq_divergence = pq_divergence_flat
+        return galaxy_params, pq_divergence
 
     def sample(self, images, background, tile_locs):
-        z, _ = self.encode(images, background, tile_locs)
-        return z
+        galaxy_params, _ = self.encode(images, background, tile_locs)
+        return galaxy_params
 
     def max_a_post(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
-        z_flat = self.enc.max_a_post(centered_ptiles)
+        galaxy_params_flat = self.enc.max_a_post(centered_ptiles)
         return rearrange(
-            z_flat,
+            galaxy_params_flat,
             "(b nth ntw s) d -> b nth ntw s d",
             b=batch_size,
             nth=nth,
@@ -138,16 +138,17 @@ class GalaxyEncoder(pl.LightningModule):
         images = batch["images"]
         background = batch["background"]
         tile_locs = batch["locs"]
-        z, pq_z = self.encode(images, background, tile_locs)
+        galaxy_params, pq_divergence = self.encode(images, background, tile_locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
-        recon_mean = self.image_decoder.render_images(
-            batch["n_sources"],
-            batch["locs"],
-            batch["galaxy_bools"],
-            z,
-            batch["fluxes"],
-        )
+        tile_catalog = {
+            "n_sources": batch["n_sources"],
+            "locs": batch["locs"],
+            "galaxy_bools": batch["galaxy_bools"],
+            "galaxy_params": galaxy_params,
+            "fluxes": batch["fluxes"],
+        }
+        recon_mean = self.image_decoder.render_images(tile_catalog)
         recon_mean += background
 
         assert not torch.any(torch.isnan(recon_mean))
@@ -160,7 +161,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert not torch.any(torch.isinf(recon_losses))
 
         # For divergence loss, we only evaluate tiles with a galaxy in them
-        divergence_loss = (pq_z.unsqueeze(-1) * batch["galaxy_bools"]).sum()
+        divergence_loss = (pq_divergence.unsqueeze(-1) * batch["galaxy_bools"]).sum()
         return recon_losses.sum() - divergence_loss
 
     def validation_epoch_end(self, outputs):
@@ -213,13 +214,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # draw all reconstruction images.
         # render_images automatically accounts for tiles with no galaxies.
-        recon_images = self.image_decoder.render_images(
-            tile_est["n_sources"],
-            tile_est["locs"],
-            tile_est["galaxy_bools"],
-            tile_est["galaxy_params"],
-            tile_est["fluxes"],
-        )
+        recon_images = self.image_decoder.render_images(tile_est)
         recon_images += background
         residuals = (images - recon_images) / torch.sqrt(recon_images)
 

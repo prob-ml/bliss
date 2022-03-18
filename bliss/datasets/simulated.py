@@ -97,13 +97,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def get_batch(self):
         with torch.no_grad():
             batch = self.image_prior.sample_prior(self.batch_size, self.n_tiles_h, self.n_tiles_w)
-            images = self.image_decoder.render_images(
-                batch["n_sources"],
-                batch["locs"],
-                batch["galaxy_bools"],
-                batch["galaxy_params"],
-                batch["fluxes"],
-            )
+            images = self.image_decoder.render_images(batch)
             background = self.background.sample(images.shape)
             images += background
             images = self._apply_noise(images)
