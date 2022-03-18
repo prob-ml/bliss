@@ -323,6 +323,9 @@ class SimulatedFrame:
         else:
             print("INFO: started generating frame")
             tile_catalog = dataset.sample_prior(1, n_tiles_h, n_tiles_w)
+            tile_catalog["galaxy_fluxes"] = dataset.image_decoder.get_galaxy_fluxes(
+                tile_catalog["galaxy_bools"], tile_catalog["galaxy_params"]
+            )
             image, background = dataset.simulate_image_from_catalog(tile_catalog)
             print("INFO: done generating frame")
             if sim_frame_path:
@@ -335,10 +338,6 @@ class SimulatedFrame:
         self.bp = dataset.image_decoder.border_padding
         assert self.image.shape[0] == 1
         assert self.background.shape[0] == 1
-
-        self.tile_catalog["galaxy_fluxes"] = dataset.image_decoder.get_galaxy_fluxes(
-            self.tile_catalog["galaxy_bools"], self.tile_catalog["galaxy_params"]
-        )
 
     def get_catalog(self, hlims, wlims):
         h, h_end = hlims[0] - self.bp, hlims[1] - self.bp
