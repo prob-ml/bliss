@@ -1,5 +1,5 @@
 import warnings
-from typing import Union
+from typing import Dict, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -87,28 +87,15 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     image_prior: ImagePrior
     image_decoder: ImageDecoder
 
-    def __iter__(self):
-        return self.batch_generator()
+    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> Dict[str, Tensor]:
+        return self.image_prior.sample_prior(batch_size, n_tiles_h, n_tiles_w)
 
-    def batch_generator(self):
-        for _ in range(self.n_batches):
-            yield self.get_batch()
-
-    def get_batch(self):
-        with torch.no_grad():
-            batch = self.image_prior.sample_prior(self.batch_size, self.n_tiles_h, self.n_tiles_w)
-            images = self.image_decoder.render_images(batch)
-            background = self.background.sample(images.shape)
-            images += background
-            images = self._apply_noise(images)
-            batch.update(
-                {
-                    "images": images,
-                    "background": background,
-                }
-            )
-
-        return batch
+    def simulate_image_from_catalog(self, tile_catalog: Dict[str, Tensor]) -> Tuple[Tensor, Tensor]:
+        images = self.image_decoder.render_images(tile_catalog)
+        background = self.background.sample(images.shape)
+        images += background
+        images = self._apply_noise(images)
+        return images, background
 
     @staticmethod
     def _apply_noise(images_mean):
@@ -122,6 +109,23 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         images += images_mean
 
         return images
+
+    @property
+    def tile_slen(self) -> int:
+        return self.image_decoder.tile_slen
+
+    def __iter__(self):
+        return self.batch_generator()
+
+    def batch_generator(self):
+        for _ in range(self.n_batches):
+            yield self.get_batch()
+
+    def get_batch(self) -> Dict[str, Tensor]:
+        with torch.no_grad():
+            tile_catalog = self.sample_prior(self.batch_size, self.n_tiles_h, self.n_tiles_w)
+            images, background = self.simulate_image_from_catalog(tile_catalog)
+            return {**tile_catalog, "images": images, "background": background}
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=0)
