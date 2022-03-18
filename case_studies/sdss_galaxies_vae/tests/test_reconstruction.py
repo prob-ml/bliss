@@ -6,6 +6,7 @@ from case_studies.sdss_galaxies_vae.reconstruction import reconstruct
 @pytest.fixture(scope="module")
 def reconstruct_overrides():
     return {
+        "datasets.simulated.generate_device": "cpu",
         "mode": "reconstruct",
         "reconstruct.outdir": None,
         "reconstruct.real": False,
