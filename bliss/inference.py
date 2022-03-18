@@ -357,6 +357,7 @@ class SimulatedFrame:
 
 class SemiSyntheticFrame:
     def __init__(self, dataset: SimulatedDataset, coadd: str, n_tiles_h, n_tiles_w, cache_dir=None):
+        dataset.to("cpu")
         self.tile_slen = dataset.tile_slen
         if cache_dir is not None:
             sim_frame_path = Path(cache_dir) / "simulated_frame.pt"

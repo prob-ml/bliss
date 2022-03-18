@@ -1,4 +1,4 @@
-outdir: ${paths.output}/sdss_figures
+outdir: ${paths.output}/semisynthetic_figures
 real: false
 frame:
     _target_: reconstruction.SDSSFrame
