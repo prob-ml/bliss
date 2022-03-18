@@ -129,8 +129,6 @@ models:
         max_sources: 1
         mean_sources: 0.03
         min_sources: 0
-        loc_min: 0.0
-        loc_max: 1.0
         f_min: 1e3
         f_max: 1e6
         alpha: 0.5
