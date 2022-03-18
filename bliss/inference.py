@@ -358,6 +358,7 @@ class SimulatedFrame:
 class SemiSyntheticFrame:
     def __init__(self, dataset: SimulatedDataset, coadd: str, n_tiles_h, n_tiles_w, cache_dir=None):
         dataset.to("cpu")
+        self.bp = dataset.image_decoder.border_padding
         self.tile_slen = dataset.tile_slen
         if cache_dir is not None:
             sim_frame_path = Path(cache_dir) / "simulated_frame.pt"
@@ -366,14 +367,13 @@ class SemiSyntheticFrame:
         if sim_frame_path and sim_frame_path.exists():
             tile_catalog, image, background = torch.load(sim_frame_path)
         else:
-            hlim = ((0, n_tiles_h * self.tile_slen),)
-            wlim = ((0, n_tiles_w * self.tile_slen),)
+            hlim = ((self.bp, self.bp + n_tiles_h * self.tile_slen),)
+            wlim = ((self.bp, self.bp + n_tiles_w * self.tile_slen),)
             full_coadd_cat = CoaddFullCatalog.from_file(coadd, hlim, wlim)
-            N = full_coadd_cat["plocs"].shape[1]
             full_coadd_cat["galaxy_params"] = (
-                torch.randn((1, N, 32)) * full_coadd_cat["galaxy_bools"]
+                torch.randn((1, full_coadd_cat.n_sources, 32)) * full_coadd_cat["galaxy_bools"]
             )
-            full_coadd_cat["plocs"] = full_coadd_cat["plocs"] + 0.5
+            full_coadd_cat.plocs = full_coadd_cat.plocs + 0.5
             max_sources = dataset.image_prior.max_sources
             tile_catalog = full_coadd_cat.to_tile_params(self.tile_slen, max_sources)
             tile_catalog["galaxy_fluxes"] = dataset.image_decoder.get_galaxy_fluxes(
@@ -388,7 +388,6 @@ class SemiSyntheticFrame:
         self.tile_catalog: TileCatalog = tile_catalog
         self.image = image
         self.background = background
-        self.bp = dataset.image_decoder.border_padding
         assert self.image.shape[0] == 1
         assert self.background.shape[0] == 1
 
@@ -407,7 +406,7 @@ class SemiSyntheticFrame:
             + full_cat["star_bools"] * full_cat["fluxes"]
         )
         full_cat["mags"] = convert_flux_to_mag(full_cat["fluxes"])
-        full_cat["plocs"] = full_cat["plocs"] - 0.5
+        full_cat["plocs"] = full_cat["plocs"] - 1.0
         return full_cat
 
 
