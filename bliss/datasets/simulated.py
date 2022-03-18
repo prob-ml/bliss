@@ -62,9 +62,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         background: Union[ConstantBackground, SimulatedSDSSBackground],
         n_tiles_h: int,
         n_tiles_w: int,
-        n_batches=10,
-        batch_size=32,
-        generate_device="cpu",
+        n_batches,
+        batch_size,
+        generate_device,
         testing_file=None,
     ):
         super().__init__()
