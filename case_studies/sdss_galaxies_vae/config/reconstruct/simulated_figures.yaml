@@ -6,17 +6,12 @@ frame:
     n_tiles_h: 350
     n_tiles_w: 500
     cache_dir: ${reconstruct.outdir}
-        # _target_: ${datasets.simulated._target_}
-        # prior: ${datasets.simulated.prior}
-        # decoder: ${datasets.simulated.decoder}
-        # background: ${datasets.simulated.background}
-        # n_batches: 1
-        # batch_size: 1
-        # generate_device: "cpu"
-        # testing_file: null
 scenes:
     sdss_recon1:
         h: 1000
         w: 1000
         size: 300
-
+    sdss_recon_all:
+        h: 24
+        w: 24
+        size: "all"
