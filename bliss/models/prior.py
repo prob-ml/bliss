@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -113,7 +113,7 @@ class ImagePrior(pl.LightningModule):
         if self.prob_galaxy > 0.0:
             assert self.galaxy_prior is not None
 
-    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> dict:
+    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> Dict[str, Tensor]:
         """Samples latent variables from the prior of an astronomical image.
 
         Args:

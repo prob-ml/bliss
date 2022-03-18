@@ -1,5 +1,10 @@
 outdir: ${paths.output}/sdss_figures
 real: false
+frame:
+    _target_: reconstruction.SDSSFrame
+    sdss_dir: ${paths.sdss}
+    pixel_scale: 0.396
+    coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
 scenes:
     sdss_recon0:
         h: 200
