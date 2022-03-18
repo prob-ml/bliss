@@ -65,41 +65,39 @@ class SDSSFrame:
 
 
 class SimulatedFrame:
-    def __init__(self, dataset: SimulatedDataset, cache_dir=None):
-        self.dataset = dataset
+    def __init__(self, dataset: SimulatedDataset, n_tiles_h: int, n_tiles_w: int, cache_dir=None):
         if cache_dir is not None:
             sim_frame_path = cache_dir / "simulated_frame.pt"
         else:
             sim_frame_path = None
         if sim_frame_path and sim_frame_path.exists():
-            true_cat = torch.load(sim_frame_path)
+            tile_catalog, image, background = torch.load(sim_frame_path)
         else:
             print("INFO: started generating frame")
-            true_cat = self.dataset.get_batch()
+            tile_catalog = dataset.sample_prior(1, n_tiles_h, n_tiles_w)
+            image, background = dataset.simulate_image_from_catalog(tile_catalog)
             print("INFO: done generating frame")
             if sim_frame_path:
-                torch.save(true_cat, sim_frame_path)
-        self.image = true_cat["images"]
-        self.background = true_cat["background"]
+                torch.save((tile_catalog, image, background), sim_frame_path)
+
+        self.tile_catalog = tile_catalog
+        self.image = image
+        self.background = background
+        self.tile_slen = dataset.tile_slen
         assert self.image.shape[0] == 1
         assert self.background.shape[0] == 1
-        coadd_cat = None
 
-        del true_cat["images"]
-        del true_cat["background"]
-        true_cat["galaxy_fluxes"] = self.dataset.image_decoder.get_galaxy_fluxes(
-            true_cat["galaxy_bools"], true_cat["galaxy_params"]
+        self.tile_catalog["galaxy_fluxes"] = dataset.image_decoder.get_galaxy_fluxes(
+            self.tile_catalog["galaxy_bools"], self.tile_catalog["galaxy_params"]
         )
-        self.tile_cat = true_cat
 
     def get_catalog(self, hlims, wlims):
-        tile_slen = self.dataset.image_prior.tile_slen
-        hlims_tile = np.floor(hlims[0] / tile_slen), np.ceil(hlims[1] / tile_slen)
-        wlims_tile = np.floor(wlims[0] / tile_slen), np.ceil(wlims[1] / tile_slen)
+        hlims_tile = np.floor(hlims[0] / self.tile_slen), np.ceil(hlims[1] / self.tile_slen)
+        wlims_tile = np.floor(wlims[0] / self.tile_slen), np.ceil(wlims[1] / self.tile_slen)
         tile_cat_cropped = {}
         for k, v in self.tile_cat:
             tile_cat_cropped[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
-        full_cat = get_full_params_from_tiles(tile_cat_cropped, tile_slen)
+        full_cat = get_full_params_from_tiles(tile_cat_cropped, self.tile_slen)
         full_cat["fluxes"] = (
             full_cat["galaxy_bools"] * full_cat["galaxy_fluxes"]
             + full_cat["star_bools"] * full_cat["fluxes"]
