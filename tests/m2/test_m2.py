@@ -5,7 +5,11 @@ import pytest
 import torch
 from einops import reduce
 
-from bliss.models.location_encoder import LocationEncoder, get_full_params_from_tiles
+from bliss.models.location_encoder import (
+    LocationEncoder,
+    get_full_params_from_tiles,
+    get_tile_params_from_full,
+)
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
@@ -76,8 +80,16 @@ def get_map_estimate(
     )
     assert torch.allclose(var_params[0, :tile_cutoff, :tile_cutoff], var_params2, atol=1e-5)
     tile_map = image_encoder.max_a_post(var_params)
-
-    return get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
+    full_map = get_full_params_from_tiles(tile_map, image_encoder.tile_slen)
+    _, n_tiles_h, n_tiles_w, max_sources, _ = tile_map["locs"].shape
+    tile_map_tilde = get_tile_params_from_full(
+        full_map, image_encoder.tile_slen, n_tiles_h, n_tiles_w, max_sources
+    )
+    for k, v in tile_map.items():
+        if k not in {"n_sources_log_prob"}:
+            assert torch.allclose(v, tile_map_tilde[k])
+    for k, v in tile_map_tilde.items():
+        assert torch.allclose(tile_map[k], v)
 
 
 class TestStarSleepEncoderM2:

@@ -248,6 +248,50 @@ def get_indices_of_on_sources(tile_n_sources: Tensor, max_detections: int) -> Te
     return indices_sorted, is_on_array
 
 
+def get_tile_params_from_full(
+    full_params: Dict[str, Tensor], tile_slen: int, n_tiles_h, n_tiles_w, max_sources
+):
+    full_plocs = full_params["plocs"]
+    batch_size, n_sources, _ = full_plocs.shape
+    assert batch_size == 1
+    tile_coords = (full_plocs // tile_slen).to(torch.int).squeeze(0)
+
+    tile_locs = torch.zeros((batch_size, n_tiles_h, n_tiles_w, max_sources, 2))
+    tile_n_sources = torch.zeros((batch_size, n_tiles_h, n_tiles_w), dtype=torch.int64)
+    tile_is_on_array = torch.zeros((batch_size, n_tiles_h, n_tiles_w, max_sources, 1))
+    param_names_to_gather = {
+        "galaxy_bools",
+        "star_bools",
+        "galaxy_params",
+        "fluxes",
+        "log_fluxes",
+        "galaxy_fluxes",
+        "galaxy_probs",
+        "galaxy_blends",
+    }
+    tile_params = {}
+    for k, v in full_params.items():
+        if k in param_names_to_gather:
+            dim = v.shape[-1]
+            tile_params[k] = torch.zeros((batch_size, n_tiles_h, n_tiles_w, max_sources, dim))
+    n_sources = full_params["n_sources"][0]
+    for (idx, coords) in enumerate(tile_coords[:n_sources]):
+        source_idx = tile_n_sources[0, coords[0], coords[1]]
+        tile_n_sources[0, coords[0], coords[1]] = source_idx + 1
+        tile_is_on_array[0, coords[0], coords[1]] = 1
+        tile_locs[0, coords[0], coords[1], source_idx] = full_plocs[0, idx] - coords * tile_slen
+        for k, _ in tile_params.items():
+            tile_params[k][0, coords[0], coords[1], source_idx] = full_params[k][0, idx]
+    tile_params.update(
+        {
+            "locs": tile_locs,
+            "n_sources": tile_n_sources,
+            "is_on_array": tile_is_on_array,
+        }
+    )
+    return tile_params
+
+
 class LocationEncoder(nn.Module):
     """Encodes the distribution of a latent variable representing an astronomical image.
 
