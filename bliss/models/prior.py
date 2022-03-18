@@ -74,8 +74,6 @@ class ImagePrior(pl.LightningModule):
     def __init__(
         self,
         n_bands: int,
-        slen: int,
-        tile_slen: int,
         min_sources: int,
         max_sources: int,
         mean_sources: int,
@@ -83,7 +81,7 @@ class ImagePrior(pl.LightningModule):
         f_max: float,
         alpha: float,
         prob_galaxy: float,
-        galaxy_prior: Optional[GalaxyPrior] = None,
+        galaxy_prior: GalaxyPrior = None,
     ):
         """Initializes ImagePrior.
 
