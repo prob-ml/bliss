@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -86,36 +86,18 @@ class ImageDecoder(pl.LightningModule):
             return None
         return self.galaxy_tile_decoder.galaxy_decoder
 
-    def render_images(
-        self,
-        n_sources: Tensor,
-        locs: Tensor,
-        galaxy_bools: Tensor,
-        galaxy_params: Tensor,
-        fluxes: Tensor,
-    ) -> Tensor:
-        """Renders catalog latent variables into a full astronomical image.
+    def render_images(self, tile_catalog: Dict[str, Tensor]) -> Tensor:
+        """Renders tile catalog latent variables into a full astronomical image.
 
         Args:
-            n_sources: Number of sources in each tile (batch_size x n_tiles_per_image)
-            locs: Locations of sources in each tile
-                (batch_size x n_tiles_h x n_tiles_w x max_sources x 2)
-            galaxy_bools: Whether each source is a galaxy in each tile
-                (batch_size x n_tiles_h x n_tiles_w x max_sources x 1)
-            galaxy_params : Parameters of each galaxy in each tile
-                (batch_size x n_tiles_h x n_tiles_w x max_sources x latent_dim)
-            fluxes: Flux of each source in each time
-                (batch_size x n_tiles_h x n_tiles_w x max_sources x n_bands)
+            tile_catalog: Tile catalog of astronomical image, comprising tensors
+                of size (batch_size x n_tiles_h x n_tiles_w x max_sources). The only
+                exception is 'n_sources`, which is size batch_size x n_tiles_h x n_tiles_w.
 
         Returns:
-            A tuple of the **full** image in shape (batch_size x n_bands x slen x slen) and
-            its variance (same size).
+            The **full** image in shape (batch_size x n_bands x slen x slen).
         """
-        assert n_sources.shape[0] == locs.shape[0]
-        assert n_sources.shape[1] == locs.shape[1]
-        assert galaxy_bools.shape[-1] == 1
-
-        image_ptiles = self._render_ptiles(n_sources, locs, galaxy_bools, galaxy_params, fluxes)
+        image_ptiles = self._render_ptiles(tile_catalog)
         return reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
 
     def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
@@ -138,7 +120,7 @@ class ImageDecoder(pl.LightningModule):
         """Decodes latent representation into an image."""
         return self.star_tile_decoder.psf_forward()
 
-    def _render_ptiles(self, n_sources, locs, galaxy_bools, galaxy_params, fluxes):
+    def _render_ptiles(self, tile_catalog: Dict[str, Tensor]) -> Tensor:
         # n_sources: is (batch_size x n_tiles_h x n_tiles_w)
         # locs: is (batch_size x n_tiles_h x n_tiles_w x max_sources x 2)
         # galaxy_bools: Is (batch_size x n_tiles_h x n_tiles_w x max_sources)
@@ -148,15 +130,14 @@ class ImageDecoder(pl.LightningModule):
         # returns the ptiles with shape =
         # (batch_size x n_tiles_h x n_tiles_w x n_bands x ptile_slen x ptile_slen)
 
-        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
-        assert (n_sources <= max_sources).all()
-        batch_size = n_sources.shape[0]
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = tile_catalog["locs"].shape
 
         # view parameters being explicit about shapes
-        n_sources = rearrange(n_sources, "b nth ntw -> (b nth ntw)")
-        locs = rearrange(locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
-        galaxy_bools = rearrange(galaxy_bools, "b nth ntw s 1 -> (b nth ntw) s 1")
-        fluxes = rearrange(fluxes, "b nth ntw s band -> (b nth ntw) s band")
+        n_sources = rearrange(tile_catalog["n_sources"], "b nth ntw -> (b nth ntw)")
+        assert (n_sources <= max_sources).all()
+        locs = rearrange(tile_catalog["locs"], "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
+        galaxy_bools = rearrange(tile_catalog["galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
+        fluxes = rearrange(tile_catalog["fluxes"], "b nth ntw s band -> (b nth ntw) s band")
 
         # draw stars and galaxies
         is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
@@ -177,7 +158,7 @@ class ImageDecoder(pl.LightningModule):
         stars = self.star_tile_decoder(locs, fluxes, star_bools)
         galaxies = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_tile_decoder is not None:
-            galaxies = self.galaxy_tile_decoder(locs, galaxy_params, galaxy_bools)
+            galaxies = self.galaxy_tile_decoder(locs, tile_catalog["galaxy_params"], galaxy_bools)
 
         return galaxies.view(img_shape) + stars.view(img_shape)
 

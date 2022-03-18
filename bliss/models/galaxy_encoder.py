@@ -141,13 +141,7 @@ class GalaxyEncoder(pl.LightningModule):
         z, pq_z = self.encode(images, background, tile_locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
-        recon_mean = self.image_decoder.render_images(
-            batch["n_sources"],
-            batch["locs"],
-            batch["galaxy_bools"],
-            z,
-            batch["fluxes"],
-        )
+        recon_mean = self.image_decoder.render_images({"galaxy_params": z, **batch})
         recon_mean += background
 
         assert not torch.any(torch.isnan(recon_mean))
@@ -213,13 +207,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # draw all reconstruction images.
         # render_images automatically accounts for tiles with no galaxies.
-        recon_images = self.image_decoder.render_images(
-            tile_est["n_sources"],
-            tile_est["locs"],
-            tile_est["galaxy_bools"],
-            tile_est["galaxy_params"],
-            tile_est["fluxes"],
-        )
+        recon_images = self.image_decoder.render_images(tile_est)
         recon_images += background
         residuals = (images - recon_images) / torch.sqrt(recon_images)
 
