@@ -73,7 +73,6 @@ class ImagePrior(pl.LightningModule):
 
     def __init__(
         self,
-        galaxy_prior: GalaxyPrior = None,
         n_bands: int,
         slen: int,
         tile_slen: int,
