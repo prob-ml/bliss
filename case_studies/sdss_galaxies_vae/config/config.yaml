@@ -212,6 +212,11 @@ reconstruct:
     psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     real: False
     slen: 300
+    frame:
+        # _target_: bliss.inference.SDSSFrame
+        # sdss_dir: ${paths.sdss}
+        # pixel_scale: 0.396
+        # coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
     outdir:
     scenes:
         # sdss_recon0:
