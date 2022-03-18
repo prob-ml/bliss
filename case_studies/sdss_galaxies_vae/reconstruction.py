@@ -1,12 +1,11 @@
 # flake8: noqa
 # pylint: skip-file
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Union
 
 import torch
 import numpy as np
 import pandas as pd
-from astropy.table import Table
 from einops import rearrange, repeat
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
@@ -15,32 +14,30 @@ from torch.distributions import Normal
 from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
-from bliss.inference import infer_blends, reconstruct_scene_at_coordinates
+from bliss.inference import (
+    infer_blends,
+    reconstruct_scene_at_coordinates,
+    SDSSFrame,
+    SimulatedFrame,
+)
 from bliss.models.decoder import ImageDecoder
 from bliss.models.location_encoder import get_full_params_from_tiles
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
+# class Frame(ABC):
+#     pass
+
 
 def reconstruct(cfg):
-    sdss_data = get_sdss_data(cfg.paths.sdss, cfg.reconstruct.sdss_pixel_scale)
-    my_image = torch.from_numpy(sdss_data["image"]).unsqueeze(0).unsqueeze(0)
-    my_background = torch.from_numpy(sdss_data["background"]).unsqueeze(0).unsqueeze(0)
-    my_image, my_background = reporting.apply_mask(
-        my_image,
-        my_background,
-        regions=((1200, 1360, 1700, 1900), (280, 400, 1220, 1320)),
-        mask_bg_val=865.0,
-    )
-    coadd_cat = Table.read(cfg.reconstruct.coadd_cat, format="fits")
-    device = torch.device(cfg.reconstruct.device)
-    dec, encoder, prior = load_models(cfg, device)
-
     if cfg.reconstruct.outdir is not None:
         outdir = Path(cfg.reconstruct.outdir)
         outdir.mkdir(exist_ok=True)
     else:
         outdir = None
+    frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.reconstruct.frame)
+    device = torch.device(cfg.reconstruct.device)
+    dec, encoder, prior = load_models(cfg, device)
 
     for scene_name, scene_coords in cfg.reconstruct.scenes.items():
         bp = encoder.border_padding
@@ -48,24 +45,17 @@ def reconstruct(cfg):
         if scene_size == "all":
             h = bp
             w = bp
-            h_end = ((my_image.shape[2] - 2 * bp) // 4) * 4 + bp
-            w_end = ((my_image.shape[3] - 2 * bp) // 4) * 4 + bp
+            h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
+            w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         else:
             h_end = h + scene_size
             w_end = w + scene_size
-        true = my_image[:, :, h:h_end, w:w_end]
-        coadd_data = reporting.get_params_from_coadd(
-            coadd_cat,
-            xlim=(w, w_end),
-            ylim=(h, h_end),
-            shift_plocs_to_lim_start=True,
-            convert_xy_to_hw=True,
-        )
+        true = frame.image[:, :, h:h_end, w:w_end]
         recon, tile_map_recon = reconstruct_scene_at_coordinates(
             encoder,
             dec,
-            my_image,
-            my_background,
+            frame.image,
+            frame.background,
             (h, h_end),
             (w, w_end),
             slen=cfg.reconstruct.slen,
@@ -90,9 +80,10 @@ def reconstruct(cfg):
         )
         tile_map_recon["mags"] = convert_flux_to_mag(tile_map_recon["fluxes"])
         scene_metrics_by_mag = {}
+        ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
         for mag in range(18, 25):
             scene_metrics_map = reporting.scene_metrics(
-                coadd_data,
+                ground_truth_catalog,
                 map_recon,
                 mag_cut=float(mag),
             )
@@ -122,6 +113,7 @@ def reconstruct(cfg):
                 scatter_on_true=False,
             )
             fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
+            fig.savefig(outdir / (scene_name + ".png"), format="png")
             fig_scatter_on_true = create_figure(
                 true[0, 0],
                 recon[0, 0],
@@ -149,7 +141,7 @@ def reconstruct(cfg):
                 true[0, 0],
                 recon[0, 0],
                 resid[0, 0],
-                coadd_objects=coadd_data,
+                coadd_objects=ground_truth_catalog,
                 map_recon=map_recon,
                 include_residuals=False,
                 colorbar=False,
@@ -159,7 +151,7 @@ def reconstruct(cfg):
             # scene_metrics_table = create_scene_metrics_table(scene_coords)
             # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
             torch.save(scene_metrics_by_mag, outdir / (scene_name + ".pt"))
-            torch.save(coadd_data, outdir / (scene_name + "_coadd.pt"))
+            torch.save(ground_truth_catalog, outdir / (scene_name + "_ground_truth_catalog.pt"))
             torch.save(map_recon, outdir / (scene_name + "_map_recon.pt"))
             torch.save(tile_map_recon, outdir / (scene_name + "_tile_map_recon.pt"))
 
@@ -273,8 +265,8 @@ def create_figure(
     if coadd_objects is not None:
         locs_true = coadd_objects["plocs"]
         true_galaxy_bools = coadd_objects["galaxy_bools"]
-        locs_galaxies_true = locs_true[true_galaxy_bools > 0.5]
-        locs_stars_true = locs_true[true_galaxy_bools < 0.5]
+        locs_galaxies_true = locs_true[true_galaxy_bools.squeeze(-1) > 0.5]
+        locs_stars_true = locs_true[true_galaxy_bools.squeeze(-1) < 0.5]
         if locs_galaxies_true.shape[0] > 0:
             if scatter_on_true:
                 ax_true.scatter(
