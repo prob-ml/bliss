@@ -55,19 +55,22 @@ class SDSSFrame:
         self.coadd_cat = Table.read(coadd_cat, format="fits")
 
     def get_catalog(self, hlims, wlims):
-        return reporting.get_params_from_coadd(
+        coadd = reporting.get_params_from_coadd(
             self.coadd_cat,
             xlim=wlims,
             ylim=hlims,
             shift_plocs_to_lim_start=True,
             convert_xy_to_hw=True,
         )
+        coadd["galaxy_bools"] = coadd["galaxy_bools"].unsqueeze(-1)
+        return coadd
 
 
 class SimulatedFrame:
     def __init__(self, dataset: SimulatedDataset, n_tiles_h: int, n_tiles_w: int, cache_dir=None):
+        dataset.to("cpu")
         if cache_dir is not None:
-            sim_frame_path = cache_dir / "simulated_frame.pt"
+            sim_frame_path = Path(cache_dir) / "simulated_frame.pt"
         else:
             sim_frame_path = None
         if sim_frame_path and sim_frame_path.exists():
@@ -84,6 +87,7 @@ class SimulatedFrame:
         self.image = image
         self.background = background
         self.tile_slen = dataset.tile_slen
+        self.bp = dataset.image_decoder.border_padding
         assert self.image.shape[0] == 1
         assert self.background.shape[0] == 1
 
@@ -92,10 +96,12 @@ class SimulatedFrame:
         )
 
     def get_catalog(self, hlims, wlims):
-        hlims_tile = np.floor(hlims[0] / self.tile_slen), np.ceil(hlims[1] / self.tile_slen)
-        wlims_tile = np.floor(wlims[0] / self.tile_slen), np.ceil(wlims[1] / self.tile_slen)
+        h, h_end = hlims[0] - self.bp, hlims[1] - self.bp
+        w, w_end = wlims[0] - self.bp, wlims[1] - self.bp
+        hlims_tile = int(np.floor(h / self.tile_slen)), int(np.ceil(h_end / self.tile_slen))
+        wlims_tile = int(np.floor(w / self.tile_slen)), int(np.ceil(w_end / self.tile_slen))
         tile_cat_cropped = {}
-        for k, v in self.tile_cat:
+        for k, v in self.tile_catalog.items():
             tile_cat_cropped[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         full_cat = get_full_params_from_tiles(tile_cat_cropped, self.tile_slen)
         full_cat["fluxes"] = (
@@ -104,6 +110,7 @@ class SimulatedFrame:
         )
         full_cat["mags"] = convert_flux_to_mag(full_cat["fluxes"])
         full_cat["plocs"] = full_cat["plocs"] - 0.5
+        # full_cat["plocs"] = full_cat["plocs"] - torch.tensor((hlims[0], wlims[0])).unsqueeze(0)
         return full_cat
 
 
@@ -343,8 +350,8 @@ def create_figure(
     if coadd_objects is not None:
         locs_true = coadd_objects["plocs"]
         true_galaxy_bools = coadd_objects["galaxy_bools"]
-        locs_galaxies_true = locs_true[true_galaxy_bools > 0.5]
-        locs_stars_true = locs_true[true_galaxy_bools < 0.5]
+        locs_galaxies_true = locs_true[true_galaxy_bools.squeeze(-1) > 0.5]
+        locs_stars_true = locs_true[true_galaxy_bools.squeeze(-1) < 0.5]
         if locs_galaxies_true.shape[0] > 0:
             if scatter_on_true:
                 ax_true.scatter(

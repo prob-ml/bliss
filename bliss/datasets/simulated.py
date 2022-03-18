@@ -48,8 +48,9 @@ class SimulatedSDSSBackground(nn.Module):
     def sample(self, shape) -> Tensor:
         batch_size, c, hlen, wlen = shape
         assert self.background.shape[1] == c
-        h = np.random.randint(self.height - hlen)
-        w = np.random.randint(self.width - wlen)
+        h_diff, w_diff = self.height - hlen, self.width - wlen
+        h = 0 if h_diff == 0 else np.random.randint(h_diff)
+        w = 0 if w_diff == 0 else np.random.randint(w_diff)
         bg = self.background[:, :, h : (h + hlen), w : (w + wlen)]
         return bg.expand(batch_size, -1, -1, -1)
 
@@ -71,14 +72,17 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.n_batches = n_batches
         self.batch_size = batch_size
-        self.image_prior = prior.to(generate_device)
-        self.image_prior.requires_grad_(False)  # freeze decoder weights.
-        self.image_decoder = decoder.to(generate_device)
-        self.image_decoder.requires_grad_(False)  # freeze decoder weights.
         self.testing_file = testing_file
-        self.background = background.to(generate_device)
         self.n_tiles_h = n_tiles_h
         self.n_tiles_w = n_tiles_w
+
+        self.image_prior = prior
+        self.image_decoder = decoder
+        self.background = background
+        self.image_prior.requires_grad_(False)
+        self.image_decoder.requires_grad_(False)
+        self.background.requires_grad_(False)
+        self.to(generate_device)
 
         # check sleep training will work.
         total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
@@ -86,6 +90,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     image_prior: ImagePrior
     image_decoder: ImageDecoder
+
+    def to(self, generate_device):
+        self.image_prior: ImagePrior = self.image_prior.to(generate_device)
+        self.image_decoder: ImageDecoder = self.image_decoder.to(generate_device)
+        self.background: Union[ConstantBackground, SimulatedSDSSBackground] = self.background.to(
+            generate_device
+        )
 
     def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> Dict[str, Tensor]:
         return self.image_prior.sample_prior(batch_size, n_tiles_h, n_tiles_w)
