@@ -135,19 +135,16 @@ class GalaxyEncoder(pl.LightningModule):
         return batch
 
     def _get_loss(self, batch):
-        images = batch["images"]
-        background = batch["background"]
-        tile_locs = batch["locs"]
-        galaxy_params, pq_divergence = self.encode(images, background, tile_locs)
+        images: Tensor = batch["images"]
+        background: Tensor = batch["background"]
+        tile_catalog = TileCatalog(
+            self.tile_slen, {k: v for k, v in batch.items() if k not in {"images", "background"}}
+        )
+        # tile_locs = batch["locs"]
+        galaxy_params, pq_divergence = self.encode(images, background, tile_catalog.locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
-        tile_catalog = {
-            "n_sources": batch["n_sources"],
-            "locs": batch["locs"],
-            "galaxy_bools": batch["galaxy_bools"],
-            "galaxy_params": galaxy_params,
-            "fluxes": batch["fluxes"],
-        }
+        tile_catalog["galaxy_params"] = galaxy_params
         recon_mean = self.image_decoder.render_images(tile_catalog)
         recon_mean += background
 

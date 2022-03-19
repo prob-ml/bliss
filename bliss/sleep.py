@@ -17,7 +17,7 @@ from torch.distributions import Normal
 from torch.optim import Adam
 
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import LocationEncoder, get_is_on_from_n_sources
+from bliss.models.location_encoder import LocationEncoder, TileCatalog, get_is_on_from_n_sources
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
@@ -160,7 +160,7 @@ class SleepPhase(pl.LightningModule):
         # need to do some matching to ensure correctness of residual images?
         # maybe doesn't matter because only care about detection if not estimating
         # galaxy_parameters.
-        max_sources = tile_map["locs"].shape[2]
+        max_sources = tile_map.locs.shape[2]
         tile_map["galaxy_params"] = tile_map["galaxy_params"][:, :, :max_sources]
         tile_map["galaxy_params"] = tile_map["galaxy_params"].contiguous()
         return tile_map
@@ -328,8 +328,9 @@ class SleepPhase(pl.LightningModule):
     def _get_full_params(self, batch):
         # true
         exclude = {"images", "background"}
-
-        true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
+        true_tile_params = TileCatalog(
+            self.image_encoder.tile_slen, {k: v for k, v in batch.items() if k not in exclude}
+        )
         true_params = true_tile_params.get_full_params()
 
         # estimate

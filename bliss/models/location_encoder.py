@@ -46,16 +46,10 @@ class TileCatalog(UserDict):
         self.tile_slen = tile_slen
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
-        self.is_on_array = d.pop("is_on_array")
+        self.n_sources_log_prob = d.pop("n_sources_log_prob", None)
+
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
         assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
-        assert self.is_on_array.shape == (
-            self.batch_size,
-            self.n_tiles_h,
-            self.n_tiles_w,
-            self.max_sources,
-            1,
-        )
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> Tensor:
@@ -70,6 +64,10 @@ class TileCatalog(UserDict):
     def _validate(self, x: Tensor):
         assert isinstance(x, Tensor)
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+
+    @property
+    def is_on_array(self) -> Tensor:
+        return get_is_on_from_n_sources(self.n_sources, self.max_sources)
 
     def get_full_params(self) -> Dict[str, Tensor]:
         """Converts image parameters in tiles to parameters of full image.
@@ -167,6 +165,14 @@ class TileCatalog(UserDict):
 
         is_on_array = torch.gather(tile_is_on_array, dim=1, index=indices_sorted)
         return indices_sorted, is_on_array
+
+    def to_dict(self):
+        out = {}
+        out["locs"] = self.locs
+        out["n_sources"] = self.n_sources
+        for k, v in self.items():
+            out[k] = v
+        return out
 
 
 def get_tile_params_from_full(
@@ -487,7 +493,6 @@ class LocationEncoder(nn.Module):
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
             "n_sources": tile_n_sources,
-            "is_on_array": tile_is_on_array,
             "n_sources_log_prob": tile_n_sources_log_prob,
         }
         max_a_post = {}

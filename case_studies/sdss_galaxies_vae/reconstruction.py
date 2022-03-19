@@ -21,7 +21,6 @@ from bliss.inference import (
     reconstruct_scene_at_coordinates,
 )
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import get_full_params_from_tiles
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
@@ -66,7 +65,7 @@ def reconstruct(cfg):
         print(
             f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image."
         )
-        map_recon = get_full_params_from_tiles(tile_map_recon, encoder.tile_slen)
+        map_recon = tile_map_recon.get_full_params()
         map_recon["fluxes"] = (
             map_recon["galaxy_bools"] * map_recon["galaxy_fluxes"]
             + map_recon["star_bools"] * map_recon["fluxes"]
