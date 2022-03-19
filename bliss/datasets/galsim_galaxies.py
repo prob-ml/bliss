@@ -118,7 +118,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         background,
         pixel_scale,  # SDSS
         flux_sample,
-        psf_image_file: str = "data/psField-000094-1-0012-PSF-image.npy",
+        psf_image_file: str,
     ):
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
