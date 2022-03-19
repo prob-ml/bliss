@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from bliss.models import galaxy_net
-from bliss.models.location_encoder import get_is_on_from_n_sources
+from bliss.models.location_encoder import TileCatalog, get_is_on_from_n_sources
 
 
 class ImageDecoder(pl.LightningModule):
@@ -86,7 +86,7 @@ class ImageDecoder(pl.LightningModule):
             return None
         return self.galaxy_tile_decoder.galaxy_decoder
 
-    def render_images(self, tile_catalog: Dict[str, Tensor]) -> Tensor:
+    def render_images(self, tile_catalog: TileCatalog) -> Tensor:
         """Renders tile catalog latent variables into a full astronomical image.
 
         Args:
@@ -120,7 +120,7 @@ class ImageDecoder(pl.LightningModule):
         """Decodes latent representation into an image."""
         return self.star_tile_decoder.psf_forward()
 
-    def _render_ptiles(self, tile_catalog: Dict[str, Tensor]) -> Tensor:
+    def _render_ptiles(self, tile_catalog: TileCatalog) -> Tensor:
         # n_sources: is (batch_size x n_tiles_h x n_tiles_w)
         # locs: is (batch_size x n_tiles_h x n_tiles_w x max_sources x 2)
         # galaxy_bools: Is (batch_size x n_tiles_h x n_tiles_w x max_sources)
@@ -130,12 +130,12 @@ class ImageDecoder(pl.LightningModule):
         # returns the ptiles with shape =
         # (batch_size x n_tiles_h x n_tiles_w x n_bands x ptile_slen x ptile_slen)
 
-        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = tile_catalog["locs"].shape
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = tile_catalog.locs.shape
 
         # view parameters being explicit about shapes
-        n_sources = rearrange(tile_catalog["n_sources"], "b nth ntw -> (b nth ntw)")
+        n_sources = rearrange(tile_catalog.n_sources, "b nth ntw -> (b nth ntw)")
         assert (n_sources <= max_sources).all()
-        locs = rearrange(tile_catalog["locs"], "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
+        locs = rearrange(tile_catalog.locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
         galaxy_bools = rearrange(tile_catalog["galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
         fluxes = rearrange(tile_catalog["fluxes"], "b nth ntw s band -> (b nth ntw) s band")
 
