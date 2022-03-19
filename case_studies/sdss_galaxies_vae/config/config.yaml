@@ -37,6 +37,7 @@ datasets:
         batch_size: 64
         n_batches: 10
         background: 865
+        n_bands: 1
         slen: 53
         min_flux: 1e3
         max_flux: 3.5e5
@@ -44,6 +45,7 @@ datasets:
         max_a_d: 6.5
         min_a_b: 0.8
         max_a_b: 3.6 # from catalog with mag < 22.2 cut.
+        pixel_scale: 0.396
         flux_sample: "uniform"
         psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     simulated:
@@ -70,6 +72,7 @@ datasets:
         n_batches: 10
         batch_size: 64
         slen: 53
+        n_bands: 1
         background: 865.
         psf_fwhm: 0.8
         pixel_scale: 0.4
@@ -151,6 +154,7 @@ models:
         encoder: ${models.encoder}
         decoder: ${models.decoder}
         annotate_probs: True
+        slack: 1.0
 
 generate:
     dataset:
