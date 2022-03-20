@@ -258,7 +258,7 @@ class CoaddFullCatalog(FullCatalog):
     coadd_names = {
         "objid": "objid",
         "galaxy_bools": "galaxy_bool",
-        "fluxs": "flux",
+        "fluxes": "flux",
         "mags": "mag",
         "hlr": "hlr",
         "ra": "ra",
