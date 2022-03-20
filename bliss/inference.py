@@ -402,12 +402,13 @@ class SemiSyntheticFrame:
         #     tile_cat_cropped[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         tile_cat_cropped = self.tile_catalog.crop(hlims_tile, wlims_tile)
         full_cat = tile_cat_cropped.to_full_params()
+        full_cat["star_bools"] = 1 - full_cat["galaxy_bools"]
         full_cat["fluxes"] = (
             full_cat["galaxy_bools"] * full_cat["galaxy_fluxes"]
             + full_cat["star_bools"] * full_cat["fluxes"]
         )
         full_cat["mags"] = convert_flux_to_mag(full_cat["fluxes"])
-        full_cat["plocs"] = full_cat["plocs"] - 1.0
+        full_cat.plocs = full_cat.plocs - 1.0
         return full_cat
 
 
