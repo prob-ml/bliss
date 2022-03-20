@@ -1,5 +1,5 @@
 [flake8]
-exclude = .git, conftest.py
+exclude = .git
 max-line-length = 100
 inline-quotes = double
 docstring-convention=google
