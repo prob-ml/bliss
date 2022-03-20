@@ -287,25 +287,34 @@ class CoaddFullCatalog(FullCatalog):
         keep = np.ones(len(coadd_table)).astype(bool)
         keep &= (h > hlim[0]) & (h < hlim[1])
         keep &= (w > wlim[0]) & (w < wlim[1])
-        coadd_table = coadd_table[keep]
+        # coadd_table = coadd_table[keep]
 
-        # extract required arrays with correct byte order, otherwise torch error.
+        # # extract required arrays with correct byte order, otherwise torch error.
         height = hlim[1] - hlim[0]
         width = wlim[1] - wlim[0]
         data = {}
-        h = torch.from_numpy(np.array(coadd_table["y"]).astype(np.float32))
-        w = torch.from_numpy(np.array(coadd_table["x"]).astype(np.float32))
-        data["plocs"] = torch.hstack((h - hlim[0], w - wlim[0])).reshape(1, -1, 2)
+        h = torch.from_numpy(np.array(h).astype(np.float32)[keep])
+        w = torch.from_numpy(np.array(w).astype(np.float32)[keep])
+        data["plocs"] = torch.stack((h - hlim[0], w - wlim[0]), dim=1).unsqueeze(0)
         data["n_sources"] = torch.tensor(data["plocs"].shape[1]).reshape(1)
+
         for bliss_name, coadd_name in cls.coadd_names.items():
-            arr = []
-            for v in coadd_table[coadd_name]:
-                arr.append(v)
-            arr = torch.from_numpy(np.array(arr))
+            arr = column_to_tensor(coadd_table, coadd_name)[keep]
             data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
-        # final adjustments.
         data["galaxy_bools"] = data["galaxy_bools"].bool()
         return cls(height, width, data)
+
+
+def column_to_tensor(table, colname):
+    dtypes = {
+        np.dtype(">i8"): int,
+        np.dtype("bool"): bool,
+        np.dtype(">f8"): np.float32,
+    }
+    x = np.array(table[colname])
+    dtype = dtypes[x.dtype]
+    x = x.astype(dtype)
+    return torch.from_numpy(x)
 
 
 def get_flux_coadd(coadd_cat, nelec_per_nmgy=987.31, band="r"):
