@@ -135,4 +135,4 @@ training:
         min_epochs: ${training.n_epochs}
         gpus: ${gpus}
         log_every_n_steps: 10
-        deterministic: False
+    seed: null

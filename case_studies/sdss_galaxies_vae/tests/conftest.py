@@ -1,3 +1,4 @@
+# pylint: skip-file
 from pathlib import Path
 
 import pytest
@@ -5,8 +6,6 @@ import pytorch_lightning as pl
 import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
-
-# command line arguments for tests
 
 
 def get_cfg(overrides, devices):
@@ -40,15 +39,13 @@ class ModelSetup:
         overrides.update(
             {
                 # Testing-specific overrides
-                "+training.seed": 42,
+                "training.seed": 42,
                 "training.trainer.logger": False,
                 "training.trainer.check_val_every_n_epoch": 1001,
-                "training.trainer.deterministic": True,
             }
         )
         cfg = self.get_cfg(overrides)
-        if cfg.training.trainer.deterministic:
-            pl.seed_everything(cfg.training.seed)
+        pl.seed_everything(cfg.training.seed)
         return instantiate(cfg.training.trainer)
 
     def get_dataset_for_training(self, overrides):
