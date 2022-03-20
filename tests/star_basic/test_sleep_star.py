@@ -4,7 +4,9 @@ import pytest
 class TestSleepStarOneTile:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
+        generate_device = "cuda:0" if devices.use_cuda else "cpu"
         return {
+            "datasets.simulated_single_tile.generate_device": generate_device,
             "models.prior": "${priors.star_single_tile}",
             "models.decoder": "${decoders.single_tile}",
             "training.dataset": "${datasets.simulated_single_tile}",
@@ -33,6 +35,7 @@ class TestSleepStarTiles:
     def overrides(self, devices):
         return {
             "training.n_epochs": 201 if devices.use_cuda else 2,
+            "datasets.simulated.generate_device": "cuda:0" if devices.use_cuda else "cpu",
         }
 
     @pytest.fixture(scope="class")
