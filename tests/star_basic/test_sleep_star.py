@@ -5,19 +5,19 @@ class TestSleepStarOneTile:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
         return {
-            "model": "sleep_star_one_tile",
-            "dataset": ("single_tile" if devices.use_cuda else "cpu"),
-            "training": ("unittest" if devices.use_cuda else "cpu"),
-            "optimizer": "m2",
+            "models.prior": "${priors.star_single_tile}",
+            "models.decoder": "${decoders.single_tile}",
+            "training.dataset": "${datasets.simulated_single_tile}",
+            "training.n_epochs": 201 if devices.use_cuda else 2,
         }
 
     @pytest.fixture(scope="class")
-    def trained_sleep(self, overrides, model_setup):
-        return model_setup.get_trained_model(overrides)
+    def trained_sleep(self, overrides, star_basic_model_setup):
+        return star_basic_model_setup.get_trained_model(overrides)
 
-    def test_simulated(self, overrides, trained_sleep, model_setup, devices):
+    def test_simulated(self, overrides, trained_sleep, star_basic_model_setup, devices):
         overrides.update({"testing": "default"})
-        results = model_setup.test_model(overrides, trained_sleep)
+        results = star_basic_model_setup.test_model(overrides, trained_sleep)
         assert {"precision", "f1", "avg_distance"}.issubset(results.keys())
 
         # only expect tests to pass if gpu
@@ -33,19 +33,15 @@ class TestSleepStarTiles:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
         return {
-            "model": "sleep_star_basic",
-            "dataset": "default" if devices.use_cuda else "cpu",
-            "training": "unittest" if devices.use_cuda else "cpu",
-            "optimizer": "m2",
+            "training.n_epochs": 201 if devices.use_cuda else 2,
         }
 
     @pytest.fixture(scope="class")
-    def trained_sleep(self, overrides, model_setup):
-        return model_setup.get_trained_model(overrides)
+    def trained_sleep(self, overrides, star_basic_model_setup):
+        return star_basic_model_setup.get_trained_model(overrides)
 
-    def test_simulated(self, overrides, trained_sleep, model_setup, devices):
-        overrides.update({"testing": "default"})
-        results = model_setup.test_model(overrides, trained_sleep)
+    def test_simulated(self, overrides, trained_sleep, star_basic_model_setup, devices):
+        results = star_basic_model_setup.test_model(overrides, trained_sleep)
         assert {"precision", "f1", "avg_distance"}.issubset(results.keys())
 
         # only expect tests to pass if gpu
