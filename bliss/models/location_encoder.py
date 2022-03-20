@@ -1,5 +1,5 @@
 from collections import UserDict
-from typing import Dict, Tuple, Union
+from typing import Dict, Set, Tuple, Union
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -189,6 +189,18 @@ class TileCatalog(UserDict):
             out[k] = v
         return out
 
+    def equals(self, other, exclude=tuple()):
+        self_dict = self.to_dict()
+        other_dict: Dict[str, Tensor] = other.to_dict()
+        keys = set(self_dict.keys()).union(other_dict.keys()).difference(exclude)
+        for k in keys:
+            if not torch.allclose(self_dict[k], other_dict[k]):
+                return False
+        return True
+
+    def __eq__(self, other):
+        return self.equals(other)
+
 
 def get_tile_params_from_full(
     full_params: Dict[str, Tensor], tile_slen: int, n_tiles_h, n_tiles_w, max_sources
@@ -228,10 +240,9 @@ def get_tile_params_from_full(
         {
             "locs": tile_locs,
             "n_sources": tile_n_sources,
-            "is_on_array": tile_is_on_array,
         }
     )
-    return tile_params
+    return TileCatalog(tile_slen, tile_params)
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):

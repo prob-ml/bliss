@@ -77,15 +77,16 @@ def get_map_estimate(
     assert torch.allclose(var_params[0, :tile_cutoff, :tile_cutoff], var_params2, atol=1e-5)
     tile_map = image_encoder.max_a_post(var_params)
     full_map = tile_map.get_full_params()
-    _, n_tiles_h, n_tiles_w, max_sources, _ = tile_map["locs"].shape
+    # _, n_tiles_h, n_tiles_w, max_sources, _ = tile_map["locs"].shape
+
     tile_map_tilde = get_tile_params_from_full(
-        full_map, image_encoder.tile_slen, n_tiles_h, n_tiles_w, max_sources
+        full_map,
+        image_encoder.tile_slen,
+        tile_map.n_tiles_h,
+        tile_map.n_tiles_w,
+        tile_map.max_sources,
     )
-    for k, v in tile_map.items():
-        if k != "n_sources_log_prob":
-            assert torch.allclose(v, tile_map_tilde[k])
-    for k, v in tile_map_tilde.items():
-        assert torch.allclose(tile_map[k], v)
+    assert tile_map.equals(tile_map_tilde, exclude=("n_sources_log_prob",))
 
     return full_map
 

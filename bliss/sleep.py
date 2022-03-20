@@ -154,15 +154,13 @@ class SleepPhase(pl.LightningModule):
         background = batch["background"]
         var_params = self.image_encoder.encode(images, background)
         tile_map = self.image_encoder.max_a_post(var_params)
-        tile_map["galaxy_params"] = batch["galaxy_params"]
-
         # FIXME: True galaxy params are not necessarily consistent with other MAP estimates
         # need to do some matching to ensure correctness of residual images?
         # maybe doesn't matter because only care about detection if not estimating
         # galaxy_parameters.
-        max_sources = tile_map.locs.shape[2]
-        tile_map["galaxy_params"] = tile_map["galaxy_params"][:, :, :max_sources]
-        tile_map["galaxy_params"] = tile_map["galaxy_params"].contiguous()
+        max_sources = tile_map.max_sources
+        galaxy_params = batch["galaxy_params"]
+        tile_map["galaxy_params"] = galaxy_params[:, :, :, :max_sources].contiguous()
         return tile_map
 
     def _get_loss(self, batch):
