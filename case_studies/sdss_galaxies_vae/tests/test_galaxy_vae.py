@@ -31,7 +31,7 @@ def test_galaxy_autoencoder_toy_gaussian(model_setup, devices):
     if not devices.use_cuda:
         return
 
-    assert results["max_residual"] < 25
+    assert results["max_residual"] < 60
 
 
 def test_galaxy_autoencoder_bulge_disk(model_setup, devices):
@@ -68,4 +68,4 @@ def test_galaxy_autoencoder_bulge_disk(model_setup, devices):
     if not devices.use_cuda:
         return
 
-    assert results["max_residual"] < 30
+    assert results["max_residual"] < 40
