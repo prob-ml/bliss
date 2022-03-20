@@ -206,6 +206,17 @@ class FullCatalog(UserDict):
         assert isinstance(x, Tensor)
         assert x.shape[:-1] == (self.batch_size, self.max_sources)
 
+    def apply_mag_cut(self, mag_cut: float):
+        """Apply magnitude cut to given parameters."""
+        assert self.batch_size == 1
+        assert "mags" in self, "Parameter 'mags' required to apply mag cut."
+        keep = self["mags"] < mag_cut
+        keep = rearrange(keep, "n s 1 -> n s")
+        d = {k: v[keep].unsqueeze(0) for k, v in self.items()}
+        d["plocs"] = self.plocs[keep].unsqueeze(0)
+        d["n_sources"] = keep.sum(dim=-1)
+        return type(self)(self.height, self.width, d)
+
     def get_tile_params(self, tile_slen: int, max_sources_per_tile: int):
         # full_plocs = full_params["plocs"]
         # batch_size, n_sources, v = full_plocs.shape

@@ -14,7 +14,7 @@ from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
-from bliss.reporting import get_params_from_coadd
+from bliss.reporting import CoaddFullCatalog
 
 
 def reconstruct_scene_at_coordinates(
@@ -307,14 +307,7 @@ class SDSSFrame:
         self.coadd_cat = Table.read(coadd_cat, format="fits")
 
     def get_catalog(self, hlims, wlims):
-        coadd = get_params_from_coadd(
-            self.coadd_cat,
-            xlim=wlims,
-            ylim=hlims,
-            shift_plocs_to_lim_start=True,
-            convert_xy_to_hw=True,
-        )
-        coadd["galaxy_bools"] = coadd["galaxy_bools"].unsqueeze(-1)
+        coadd = CoaddFullCatalog.from_coadd(self.coadd_cat, hlims, wlims)
         return coadd
 
 
@@ -361,7 +354,7 @@ class SimulatedFrame:
             + full_cat["star_bools"] * full_cat["fluxes"]
         )
         full_cat["mags"] = convert_flux_to_mag(full_cat["fluxes"])
-        full_cat["plocs"] = full_cat["plocs"] - 0.5
+        # full_cat["plocs"] = full_cat["plocs"] - 0.5
         return full_cat
 
 

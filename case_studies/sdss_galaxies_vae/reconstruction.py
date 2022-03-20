@@ -72,7 +72,7 @@ def reconstruct(cfg):
             + map_recon["star_bools"] * map_recon["fluxes"]
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
-        map_recon["plocs"] = map_recon["plocs"] - 0.5
+        # map_recon["plocs"] = map_recon["plocs"] - 0.5
 
         tile_map_recon["fluxes"] = (
             tile_map_recon["galaxy_bools"] * tile_map_recon["galaxy_fluxes"]

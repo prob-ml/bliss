@@ -1,4 +1,5 @@
 """Functions to evaluate the performance of BLISS predictions."""
+from queue import Full
 from typing import Optional, Tuple
 
 import galsim
@@ -192,8 +193,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 
 
 def scene_metrics(
-    true_params: dict,
-    est_params: dict,
+    true_params: FullCatalog,
+    est_params: FullCatalog,
     mag_cut=25.0,
     slack=1.0,
     mag_slack=0.25,
@@ -222,12 +223,8 @@ def scene_metrics(
     # For calculating precision, we consider a wider bin for the 'true' objects, this way
     # we ensure that underestimating the magnitude of a true object close and above the
     # boundary does not mark this estimated object as FP, thus reducing our precision.
-    tparams = apply_mag_cut(true_params, mag_cut + mag_slack)
-    eparams = apply_mag_cut(est_params, mag_cut)
-
-    # collect params in correct format
-    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
-    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
+    tparams = true_params.apply_mag_cut(mag_cut + mag_slack)
+    eparams = est_params.apply_mag_cut(mag_cut)
 
     # update
     detection_metrics.update(tparams, eparams)
@@ -238,10 +235,8 @@ def scene_metrics(
     # For calculating recall, we consider a wider bin for the 'estimated' objects, this way
     # we ensure that overestimating the magnitude of a true object close and below the boundary
     # does not mean that we missed this object, reducing our TP, and reducing recall.
-    tparams = apply_mag_cut(true_params, mag_cut)
-    eparams = apply_mag_cut(est_params, mag_cut + mag_slack)
-    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
-    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
+    tparams = true_params.apply_mag_cut(mag_cut)
+    eparams = est_params.apply_mag_cut(mag_cut + mag_slack)
     detection_metrics.update(tparams, eparams)
     recall = detection_metrics.compute()["recall"]
     detection_metrics.reset()
@@ -251,12 +246,8 @@ def scene_metrics(
     detection_result = {"precision": precision, "recall": recall, "f1": f1}
 
     # compute classification metrics, these are only computed on matches so ignore mag_slack.
-    tparams = apply_mag_cut(true_params, mag_cut)
-    eparams = apply_mag_cut(est_params, mag_cut)
-    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
-    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
-    tparams["galaxy_bools"] = tparams["galaxy_bools"].reshape(1, -1, 1)
-    eparams["galaxy_bools"] = eparams["galaxy_bools"].reshape(1, -1, 1)
+    tparams = true_params.apply_mag_cut(mag_cut)
+    eparams = est_params.apply_mag_cut(mag_cut)
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
@@ -264,15 +255,16 @@ def scene_metrics(
     return {**detection_result, **classification_result}
 
 
-def apply_mag_cut(params: dict, mag_cut=25.0):
-    """Apply magnitude cut to given parameters."""
-    assert "mags" in params, "Magnitude parameter missing in `params` when trying to apply mag cut."
-    keep = params["mags"] < mag_cut
-    if len(keep.shape) == 3:
-        keep = rearrange(keep, "n s 1 -> n s")
-    d = {k: v[keep] for k, v in params.items() if k != "n_sources"}
-    d["n_sources"] = torch.tensor([len(d["mags"])])
-    return d
+# def apply_mag_cut(full_catalog: FullCatalog, mag_cut=25.0):
+#     """Apply magnitude cut to given parameters."""
+#     assert isinstance(full_catalog, FullCatalog)
+#     assert "mags" in full_catalog, "Magnitude parameter missing in `params` when trying to apply mag cut."
+#     keep = full_catalog["mags"] < mag_cut
+#     if len(keep.shape) == 3:
+#         keep = rearrange(keep, "n s 1 -> n s")
+#     d = {k: v[keep] for k, v in full_catalog.items() if k != "n_sources"}
+#     d["n_sources"] = torch.tensor([len(d["mags"])])
+#     return d
 
 
 def get_params_from_coadd(
@@ -322,6 +314,55 @@ def get_params_from_coadd(
         data["plocs"] = torch.stack((data["plocs"][:, 1], data["plocs"][:, 0]), dim=1)
 
     return data
+
+
+class CoaddFullCatalog(FullCatalog):
+    coadd_names = {
+        "objid": "objid",
+        "galaxy_bools": "galaxy_bool",
+        "fluxs": "flux",
+        "mags": "mag",
+        "hlr": "hlr",
+        "ra": "ra",
+        "dec": "dec",
+    }
+    allowed_params = FullCatalog.allowed_params.union(coadd_names.keys())
+
+    @classmethod
+    def from_coadd(
+        cls,
+        coadd_cat,
+        hlim: Tuple[int, int],
+        wlim: Tuple[int, int],
+    ):
+        """Load coadd catalog from file, add extra useful information, convert to tensors."""
+        assert set(cls.coadd_names.values()).issubset(set(coadd_cat.columns))
+        # filter saturated objects
+        coadd_cat = coadd_cat[~coadd_cat["is_saturated"].data]
+        # only return objects inside limits.
+        w, h = coadd_cat["x"], coadd_cat["y"]
+        keep = np.ones(len(coadd_cat)).astype(bool)
+        keep &= (h > hlim[0]) & (h < hlim[1])
+        keep &= (w > wlim[0]) & (w < wlim[1])
+        coadd_cat = coadd_cat[keep]
+
+        # extract required arrays with correct byte order, otherwise torch error.
+        height = hlim[1] - hlim[0]
+        width = wlim[1] - wlim[0]
+        data = {}
+        h = torch.from_numpy(np.array(coadd_cat["y"]).astype(np.float32))
+        w = torch.from_numpy(np.array(coadd_cat["x"]).astype(np.float32))
+        data["plocs"] = torch.hstack((h - hlim[0], w - wlim[0])).reshape(1, -1, 2)
+        data["n_sources"] = torch.tensor(data["plocs"].shape[1]).reshape(1)
+        for bliss_name, coadd_name in cls.coadd_names.items():
+            arr = []
+            for v in coadd_cat[coadd_name]:
+                arr.append(v)
+            arr = torch.from_numpy(np.array(arr))
+            data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
+        # final adjustments.
+        data["galaxy_bools"] = data["galaxy_bools"].bool()
+        return cls(height, width, data)
 
 
 def get_flux_coadd(coadd_cat, nelec_per_nmgy=987.31, band="r"):
