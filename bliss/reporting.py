@@ -116,25 +116,15 @@ class ClassificationMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true_params: dict, est_params: dict):
+    def update(self, true: FullCatalog, est: FullCatalog):
         """Update the internal state of the metric including correct # of classifications."""
-        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
-        true_locs, est_locs = true_params["plocs"], est_params["plocs"]
-        true_galaxy_bools, est_galaxy_bools = (
-            true_params["galaxy_bools"],
-            est_params["galaxy_bools"],
-        )
-        batch_size = len(true_n_sources)
-        assert len(true_galaxy_bools.shape) == len(est_galaxy_bools.shape) == 3
-        assert true_galaxy_bools.shape[0] == est_galaxy_bools.shape[0] == batch_size
-        assert len(true_locs.shape) == len(est_locs.shape) == 3
-        assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-        assert true_locs.shape[0] == est_locs.shape[0] == batch_size
-
-        for b in range(batch_size):
-            ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
-            tlocs, elocs = true_locs[b], est_locs[b]
-            tgbool, egbool = true_galaxy_bools[b].reshape(-1), est_galaxy_bools[b].reshape(-1)
+        assert isinstance(true, FullCatalog)
+        assert isinstance(est, FullCatalog)
+        assert true.batch_size == est.batch_size
+        for b in range(true.batch_size):
+            ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
+            tlocs, elocs = true.plocs[b], est.plocs[b]
+            tgbool, egbool = true["galaxy_bools"].reshape(-1), est["galaxy_bools"][b].reshape(-1)
             if ntrue > 0 and nest > 0:
                 mtrue, mest, dkeep, _ = match_by_locs(tlocs, elocs, self.slack)
                 tgbool = tgbool[mtrue][dkeep].reshape(-1)
@@ -509,13 +499,13 @@ def plot_image_and_locs(
     ax: Axes,
     images,
     slen: int,
-    true_params: dict,
-    estimate: dict = None,
+    true_params: FullCatalog,
+    estimate: Optional[FullCatalog] = None,
     labels: list = None,
     annotate_axis: bool = False,
     add_borders: bool = False,
     vrange: tuple = None,
-    galaxy_probs: Tensor = None,
+    galaxy_probs: Optional[Tensor] = None,
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
@@ -527,8 +517,8 @@ def plot_image_and_locs(
     image = images[idx, 0].cpu().numpy()
 
     # true parameters on full image.
-    true_n_sources = true_params["n_sources"][idx].cpu().numpy()
-    true_locs = true_params["locs"][idx].cpu().numpy()
+    true_n_sources = true_params.n_sources[idx].cpu().numpy()
+    true_locs = true_params.plocs[idx].cpu().numpy()
     true_galaxy_bools = true_params["galaxy_bools"][idx].cpu().numpy()
     true_star_bools = true_params["star_bools"][idx].cpu().numpy()
     true_galaxy_locs = true_locs * true_galaxy_bools
@@ -536,8 +526,8 @@ def plot_image_and_locs(
 
     # convert tile estimates to full parameterization for plotting
     if estimate is not None:
-        n_sources = estimate["n_sources"][idx].cpu().numpy()
-        locs = estimate["locs"][idx].cpu().numpy()
+        n_sources = estimate.n_sources[idx].cpu().numpy()
+        locs = estimate.plocs[idx].cpu().numpy()
 
     if galaxy_probs is not None:
         galaxy_probs = galaxy_probs[idx].cpu().numpy().reshape(-1)

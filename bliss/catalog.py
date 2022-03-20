@@ -40,6 +40,10 @@ class TileCatalog(UserDict):
         self._validate(item)
         super().__setitem__(key, item)
 
+    def __getitem__(self, key: str) -> Tensor:
+        assert isinstance(key, str)
+        return super().__getitem__(key)
+
     def _validate(self, x: Tensor):
         assert isinstance(x, Tensor)
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
@@ -193,6 +197,10 @@ class FullCatalog(UserDict):
             )
         self._validate(item)
         super().__setitem__(key, item)
+
+    def __getitem__(self, key: str) -> Tensor:
+        assert isinstance(key, str)
+        return super().__getitem__(key)
 
     def _validate(self, x: Tensor):
         assert isinstance(x, Tensor)
