@@ -1,6 +1,6 @@
 import math
 from collections import UserDict
-from typing import Dict, Tuple
+from typing import Dict
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -217,9 +217,7 @@ class FullCatalog(UserDict):
         d["n_sources"] = keep.sum(dim=-1)
         return type(self)(self.height, self.width, d)
 
-    def get_tile_params(self, tile_slen: int, max_sources_per_tile: int):
-        # full_plocs = full_params["plocs"]
-        # batch_size, n_sources, v = full_plocs.shape
+    def to_full_params(self, tile_slen: int, max_sources_per_tile: int):
         assert self.batch_size == 1, "Currently only supported for a single image"
         tile_coords = (self.plocs // tile_slen).to(torch.int).squeeze(0)
 

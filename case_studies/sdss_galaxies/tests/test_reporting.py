@@ -41,7 +41,7 @@ def test_coadd(devices, get_config):
     h = 1489
     w = 2048
     bp = 24
-    reporting.get_params_from_coadd(coadd_cat, (bp, w - bp), (bp, h - bp))
+    reporting.CoaddFullCatalog.from_table(coadd_cat, (bp, h - bp), (bp, w - bp))
 
 
 def test_measurements():

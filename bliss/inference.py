@@ -3,7 +3,6 @@ from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
 import torch
-from astropy.table import Table
 from einops import rearrange, reduce
 from torch import Tensor
 from torch.nn import functional as F
@@ -280,7 +279,7 @@ def cat_tile_catalog(tile_catalogs: Sequence[TileCatalog], tile_dim: int = 0) ->
 
 
 class SDSSFrame:
-    def __init__(self, sdss_dir, pixel_scale, coadd_cat):
+    def __init__(self, sdss_dir: str, pixel_scale: float, coadd_file: str):
         run = 94
         camcol = 1
         field = 12
@@ -304,11 +303,10 @@ class SDSSFrame:
             regions=((1200, 1360, 1700, 1900), (280, 400, 1220, 1320)),
             mask_bg_val=865.0,
         )
-        self.coadd_cat = Table.read(coadd_cat, format="fits")
+        self.coadd_file = coadd_file
 
     def get_catalog(self, hlims, wlims):
-        coadd = CoaddFullCatalog.from_coadd(self.coadd_cat, hlims, wlims)
-        return coadd
+        return CoaddFullCatalog.from_file(self.coadd_file, hlims, wlims)
 
 
 class SimulatedFrame:
@@ -354,7 +352,6 @@ class SimulatedFrame:
             + full_cat["star_bools"] * full_cat["fluxes"]
         )
         full_cat["mags"] = convert_flux_to_mag(full_cat["fluxes"])
-        # full_cat["plocs"] = full_cat["plocs"] - 0.5
         return full_cat
 
 

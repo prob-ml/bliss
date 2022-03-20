@@ -495,10 +495,8 @@ class DetectionClassificationFigures(BlissFigures):
         wlims = (bp, w - bp)
 
         # load coadd catalog
-        coadd_params = reporting.get_params_from_coadd(
-            coadd_cat, wlims, hlims, shift_plocs_to_lim_start=True, convert_xy_to_hw=True
-        )
-        coadd_params["plocs"] += bp
+        coadd_params = reporting.CoaddFullCatalog.from_table(coadd_cat, hlims, wlims)
+        coadd_params.plocs += bp
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
@@ -649,9 +647,7 @@ class SDSSReconstructionFigures(BlissFigures):
             assert height >= bp and width >= bp
             assert xlim[0] >= bp
             assert ylim[0] >= bp
-            coadd_data = reporting.get_params_from_coadd(
-                coadd_cat, xlim, ylim, shift_plocs_to_lim_start=True, convert_xy_to_hw=True
-            )
+            coadd_data = reporting.CoaddFullCatalog.from_table(coadd_cat, ylim, xlim)
             with torch.no_grad():
                 recon_image, tile_recon_map = reconstruct_scene_at_coordinates(
                     encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device

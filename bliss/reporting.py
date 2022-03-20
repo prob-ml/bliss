@@ -1,5 +1,4 @@
 """Functions to evaluate the performance of BLISS predictions."""
-from queue import Full
 from typing import Optional, Tuple
 
 import galsim
@@ -255,67 +254,6 @@ def scene_metrics(
     return {**detection_result, **classification_result}
 
 
-# def apply_mag_cut(full_catalog: FullCatalog, mag_cut=25.0):
-#     """Apply magnitude cut to given parameters."""
-#     assert isinstance(full_catalog, FullCatalog)
-#     assert "mags" in full_catalog, "Magnitude parameter missing in `params` when trying to apply mag cut."
-#     keep = full_catalog["mags"] < mag_cut
-#     if len(keep.shape) == 3:
-#         keep = rearrange(keep, "n s 1 -> n s")
-#     d = {k: v[keep] for k, v in full_catalog.items() if k != "n_sources"}
-#     d["n_sources"] = torch.tensor([len(d["mags"])])
-#     return d
-
-
-def get_params_from_coadd(
-    coadd_cat,
-    xlim: Optional[Tuple[int, int]] = None,
-    ylim: Optional[Tuple[int, int]] = None,
-    shift_plocs_to_lim_start=False,
-    convert_xy_to_hw=False,
-):
-    """Load coadd catalog from file, add extra useful information, convert to tensors."""
-    coadd_names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr", "ra", "dec"}
-    assert coadd_names.issubset(set(coadd_cat.columns))
-
-    # filter saturated objects
-    coadd_cat = coadd_cat[~coadd_cat["is_saturated"].data]
-
-    # only return objects inside limits.
-    x, y = coadd_cat["x"], coadd_cat["y"]
-    keep = np.ones(len(coadd_cat)).astype(bool)
-    if xlim:
-        keep &= (x > xlim[0]) & (x < xlim[1])
-    if ylim:
-        keep &= (y > ylim[0]) & (y < ylim[1])
-    coadd_cat = coadd_cat[keep]
-
-    # extract required arrays with correct byte order, otherwise torch error.
-    data = {}
-    for n in coadd_names:
-        arr = []
-        for v in coadd_cat[n]:
-            arr.append(v)
-        data[n] = torch.from_numpy(np.array(arr)).reshape(-1)
-
-    # final adjustments.
-    data["galaxy_bools"] = data["galaxy_bool"].bool()
-    x, y = data["x"].reshape(-1, 1), data["y"].reshape(-1, 1)
-    data["plocs"] = torch.hstack((x, y)).reshape(-1, 2)
-    data["n_sources"] = len(x)
-    data["fluxes"] = data["flux"]
-    data["hlrs"] = data["hlr"]
-    data["mags"] = data["mag"]
-
-    if shift_plocs_to_lim_start:
-        data["plocs"] = data["plocs"] - torch.tensor((xlim[0], ylim[0])).unsqueeze(0)
-
-    if convert_xy_to_hw:
-        data["plocs"] = torch.stack((data["plocs"][:, 1], data["plocs"][:, 0]), dim=1)
-
-    return data
-
-
 class CoaddFullCatalog(FullCatalog):
     coadd_names = {
         "objid": "objid",
@@ -329,34 +267,39 @@ class CoaddFullCatalog(FullCatalog):
     allowed_params = FullCatalog.allowed_params.union(coadd_names.keys())
 
     @classmethod
-    def from_coadd(
+    def from_file(cls, coadd_file: str, hlim: Tuple[int, int], wlim: Tuple[int, int]):
+        coadd_table = Table.read(coadd_file, format="fits")
+        return cls.from_table(coadd_table, hlim, wlim)
+
+    @classmethod
+    def from_table(
         cls,
-        coadd_cat,
+        coadd_table,
         hlim: Tuple[int, int],
         wlim: Tuple[int, int],
     ):
         """Load coadd catalog from file, add extra useful information, convert to tensors."""
-        assert set(cls.coadd_names.values()).issubset(set(coadd_cat.columns))
+        assert set(cls.coadd_names.values()).issubset(set(coadd_table.columns))
         # filter saturated objects
-        coadd_cat = coadd_cat[~coadd_cat["is_saturated"].data]
+        coadd_table = coadd_table[~coadd_table["is_saturated"].data]
         # only return objects inside limits.
-        w, h = coadd_cat["x"], coadd_cat["y"]
-        keep = np.ones(len(coadd_cat)).astype(bool)
+        w, h = coadd_table["x"], coadd_table["y"]
+        keep = np.ones(len(coadd_table)).astype(bool)
         keep &= (h > hlim[0]) & (h < hlim[1])
         keep &= (w > wlim[0]) & (w < wlim[1])
-        coadd_cat = coadd_cat[keep]
+        coadd_table = coadd_table[keep]
 
         # extract required arrays with correct byte order, otherwise torch error.
         height = hlim[1] - hlim[0]
         width = wlim[1] - wlim[0]
         data = {}
-        h = torch.from_numpy(np.array(coadd_cat["y"]).astype(np.float32))
-        w = torch.from_numpy(np.array(coadd_cat["x"]).astype(np.float32))
+        h = torch.from_numpy(np.array(coadd_table["y"]).astype(np.float32))
+        w = torch.from_numpy(np.array(coadd_table["x"]).astype(np.float32))
         data["plocs"] = torch.hstack((h - hlim[0], w - wlim[0])).reshape(1, -1, 2)
         data["n_sources"] = torch.tensor(data["plocs"].shape[1]).reshape(1)
         for bliss_name, coadd_name in cls.coadd_names.items():
             arr = []
-            for v in coadd_cat[coadd_name]:
+            for v in coadd_table[coadd_name]:
                 arr.append(v)
             arr = torch.from_numpy(np.array(arr))
             data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
