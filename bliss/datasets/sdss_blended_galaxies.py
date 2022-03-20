@@ -41,7 +41,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         w_start: Optional[int] = None,
         scene_size: Optional[int] = None,
         stride_factor: float = 0.5,
-        cache_path: Optional[str] = None,
         prerender_device: str = "cpu",
     ) -> None:
         """Initializes SDSSBlendedGalaxies.
@@ -106,19 +105,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
         binary_encoder.load_state_dict(torch.load(binary_ckpt, map_location=torch.device("cpu")))
         self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
-        cache_file = (
-            Path(cache_path + f"_h{h_start}w{w_start}s{scene_size}.pt")
-            if cache_path is not None
-            else None
-        )
-        if (cache_file is not None) and cache_file.exists():
-            print(f"INFO: Loading cached chunks and catalog from {cache_file}")
-            self.chunks, self.catalogs = torch.load(cache_file)
-        else:
-            self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
-            if cache_file is not None:
-                print(f"INFO: Saving cached chunks and catalog to {cache_file}")
-                torch.save((self.chunks, self.catalogs), cache_file)
+        self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
 
     def __len__(self):
         return len(self.catalogs)
