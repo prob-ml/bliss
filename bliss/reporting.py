@@ -287,9 +287,6 @@ class CoaddFullCatalog(FullCatalog):
         keep = np.ones(len(coadd_table)).astype(bool)
         keep &= (h > hlim[0]) & (h < hlim[1])
         keep &= (w > wlim[0]) & (w < wlim[1])
-        # coadd_table = coadd_table[keep]
-
-        # # extract required arrays with correct byte order, otherwise torch error.
         height = hlim[1] - hlim[0]
         width = wlim[1] - wlim[0]
         data = {}
@@ -310,6 +307,7 @@ def column_to_tensor(table, colname):
         np.dtype(">i8"): int,
         np.dtype("bool"): bool,
         np.dtype(">f8"): np.float32,
+        np.dtype("float64"): np.dtype("float64"),
     }
     x = np.array(table[colname])
     dtype = dtypes[x.dtype]
