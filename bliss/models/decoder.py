@@ -32,7 +32,7 @@ class ImageDecoder(pl.LightningModule):
         ptile_slen: int,
         border_padding: int = None,
         galaxy_ae: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
-        galaxy_ae_ckpt: str = None,
+        galaxy_ae_ckpt: Optional[str] = None,
         psf_params_file: str = None,
         psf_slen: int = 25,
         sdss_bands: Tuple[int, ...] = (2,),
