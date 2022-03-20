@@ -16,7 +16,6 @@ class TestSleepStarOneTile:
         return star_basic_model_setup.get_trained_model(overrides)
 
     def test_simulated(self, overrides, trained_sleep, star_basic_model_setup, devices):
-        overrides.update({"testing": "default"})
         results = star_basic_model_setup.test_model(overrides, trained_sleep)
         assert {"precision", "f1", "avg_distance"}.issubset(results.keys())
 

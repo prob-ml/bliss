@@ -27,7 +27,7 @@ datasets:
         n_tiles_h: 1
         n_tiles_w: 1
         n_batches: 10
-        batch_size: 6400
+        batch_size: 640
         generate_device: "cuda:0"
         background:
             _target_: bliss.datasets.simulated.ConstantBackground
@@ -39,8 +39,8 @@ datasets:
         _target_: bliss.datasets.simulated.SimulatedDataset
         prior: ${models.prior}
         decoder: ${models.decoder}
-        n_tiles_h: 1
-        n_tiles_w: 1
+        n_tiles_h: 5
+        n_tiles_w: 5
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
@@ -57,70 +57,69 @@ decoders:
         tile_slen: 10
         ptile_slen: 10
         border_padding: 0
-        psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
+        psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
         sdss_bands:
             - 2
 
     star_basic:
+        _target_: bliss.models.decoder.ImageDecoder
         n_bands: 1
         tile_slen: 2
         ptile_slen: 6
         border_padding: 2
-        prob_galaxy: 0.0
-        psf_params_file: data/sdss/94/1/12/psField-000094-1-0012.fits
-        background_values:
-            - 865.0
+        psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
 
 priors:
     star_single_tile:
+        _target_: bliss.models.prior.ImagePrior
         n_bands: 1
-        tile_slen: 10
         prob_galaxy: 0.0
         max_sources: 2
         mean_sources: 1.2
         min_sources: 0
         f_min: 1e5
         f_max: 1e6
+        alpha: 0.5
+        galaxy_prior: null
 
     star_basic:
+        _target_: bliss.models.prior.ImagePrior
         n_bands: 1
-        tile_slen: 2
         prob_galaxy: 0.0
         max_sources: 1
         mean_sources: 0.015
         min_sources: 0
         f_min: 1e5
         f_max: 1e6
-        loc_max: 1.0
-        loc_min: 0.
+        alpha: 0.5
+        galaxy_prior: null
 
 models:
     prior: ${priors.star_basic}
     decoder: ${decoders.star_basic}
     encoder:
+        _target_: bliss.models.location_encoder.LocationEncoder
+        input_transform:
+            _target_: bliss.models.location_encoder.LogBackgroundTransform
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
         ptile_slen: ${models.decoder.ptile_slen}
         max_detections: ${models.prior.max_sources}
-        channel: 17
-        spatial_dropout: 0.11399
-        dropout: 0.013123
-        hidden: 185
+        channel: 8
+        spatial_dropout: 0.0
+        dropout: 0.0
+        hidden: 128
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
-        prior: ${models.prior}
         decoder: ${models.decoder}
         annotate_probs: false
 
 training:
     model: "${models.sleep}"
     dataset: "${datasets.simulated}"
-    optimizer:
-        name: Adam
-        kwargs:
-            lr: 1e-3
-            weight_decay: 1e-4
+    optimizer_params:
+        lr: 1e-3
     n_epochs: 201
     experiment: default
     version: null
