@@ -15,6 +15,7 @@ from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
 
+from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import convert_flux_to_mag, convert_mag_to_flux
 
 
@@ -53,21 +54,16 @@ class DetectionMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true_params: dict, est_params: dict):
+    def update(self, true: FullCatalog, est: FullCatalog):
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
-        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
-        true_locs, est_locs = true_params["plocs"], est_params["plocs"]  # plocs = pixel locs.
-        assert len(true_n_sources.shape) == len(est_n_sources.shape) == 1, "Not tiles."
-        assert true_n_sources.shape[0] == est_n_sources.shape[0]
-        assert len(true_locs.shape) == len(est_locs.shape) == 3
-        assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-        assert true_locs.shape[0] == est_locs.shape[0] == true_n_sources.shape[0]
-        batch_size = true_n_sources.shape[0]
+        assert isinstance(true, FullCatalog)
+        assert isinstance(est, FullCatalog)
+        assert true.batch_size == est.batch_size
 
         count = 0
-        for b in range(batch_size):
-            ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
-            tlocs, elocs = true_locs[b], est_locs[b]
+        for b in range(true.batch_size):
+            ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
+            tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
                 _, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
                 tp = len(elocs[mest][dkeep])  # n_matches

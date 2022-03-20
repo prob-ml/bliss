@@ -1,3 +1,4 @@
+import math
 from collections import UserDict
 from typing import Dict, Tuple
 
@@ -57,7 +58,7 @@ class TileCatalog(UserDict):
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
 
-    def get_full_params(self) -> Dict[str, Tensor]:
+    def get_full_params(self):
         """Converts image parameters in tiles to parameters of full image.
 
         By parameters, we mean samples from the variational distribution, not the variational
@@ -74,12 +75,9 @@ class TileCatalog(UserDict):
             NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
             pixel locations ("plocs") that are between 0 and slen.
         """
-        plocs, locs = self._get_full_locs_from_tiles()
-        param_names_to_mask = {"locs", "plocs"}.union(set(self.keys()))
-        tile_params_to_gather = {
-            "locs": locs,
-            "plocs": plocs,
-        }
+        plocs = self._get_full_locs_from_tiles()
+        param_names_to_mask = {"plocs"}.union(set(self.keys()))
+        tile_params_to_gather = {"plocs": plocs}
         tile_params_to_gather.update(self)
 
         params = {}
@@ -94,10 +92,10 @@ class TileCatalog(UserDict):
             params[param_name] = param
 
         params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
-        assert params["locs"].shape[1] == params["n_sources"].max().int().item()
-        return params
+        height, width = self.n_tiles_h * self.tile_slen, self.n_tiles_w * self.tile_slen
+        return FullCatalog(height, width, params)
 
-    def _get_full_locs_from_tiles(self) -> Tuple[Tensor, Tensor]:
+    def _get_full_locs_from_tiles(self) -> Tensor:
         """Get the full image locations from tile locations.
 
         Returns:
@@ -117,18 +115,13 @@ class TileCatalog(UserDict):
         bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=self.batch_size).float()
 
         plocs = locs * self.tile_slen + bias
-        plocs = rearrange(
+        return rearrange(
             plocs,
             "(b nth ntw) d xy -> b nth ntw d xy",
             b=self.batch_size,
             nth=self.n_tiles_h,
             ntw=self.n_tiles_w,
         )
-        locs = plocs.clone()
-        locs[..., 0] /= slen
-        locs[..., 1] /= wlen
-
-        return plocs, locs
 
     def _get_indices_of_on_sources(self) -> Tensor:
         """Get the indices of detected sources from each tile.
@@ -178,47 +171,78 @@ class TileCatalog(UserDict):
         return self.equals(other)
 
 
-def get_tile_params_from_full(
-    full_params: Dict[str, Tensor], tile_slen: int, n_tiles_h, n_tiles_w, max_sources
-):
-    full_plocs = full_params["plocs"]
-    batch_size, n_sources, v = full_plocs.shape
-    assert batch_size == 1
-    tile_coords = (full_plocs // tile_slen).to(torch.int).squeeze(0)
+class FullCatalog(UserDict):
+    allowed_params = TileCatalog.allowed_params
 
-    tile_locs = torch.zeros((batch_size, n_tiles_h, n_tiles_w, max_sources, 2))
-    tile_n_sources = torch.zeros((batch_size, n_tiles_h, n_tiles_w), dtype=torch.int64)
-    tile_is_on_array = torch.zeros((batch_size, n_tiles_h, n_tiles_w, max_sources, 1))
-    param_names_to_gather = {
-        "galaxy_bools",
-        "star_bools",
-        "galaxy_params",
-        "fluxes",
-        "log_fluxes",
-        "galaxy_fluxes",
-        "galaxy_probs",
-        "galaxy_blends",
-    }
-    tile_params = {}
-    for k, v in full_params.items():
-        if k in param_names_to_gather:
-            dim = v.shape[-1]
-            tile_params[k] = torch.zeros((batch_size, n_tiles_h, n_tiles_w, max_sources, dim))
-    n_sources = full_params["n_sources"][0]
-    for (idx, coords) in enumerate(tile_coords[:n_sources]):
-        source_idx = tile_n_sources[0, coords[0], coords[1]]
-        tile_n_sources[0, coords[0], coords[1]] = source_idx + 1
-        tile_is_on_array[0, coords[0], coords[1]] = 1
-        tile_locs[0, coords[0], coords[1], source_idx] = full_plocs[0, idx] - coords * tile_slen
-        for k, v in tile_params.items():
-            v[0, coords[0], coords[1], source_idx] = full_params[k][0, idx]
-    tile_params.update(
-        {
-            "locs": tile_locs,
-            "n_sources": tile_n_sources,
+    def __init__(self, height: int, width: int, d: Dict[str, Tensor]):
+        self.height = height
+        self.width = width
+        self.plocs = d.pop("plocs")
+        self.n_sources = d.pop("n_sources")
+        self.batch_size, self.max_sources, hw = self.plocs.shape
+        assert hw == 2
+        assert self.n_sources.max().int().item() == self.max_sources
+        assert self.n_sources.shape == (self.batch_size,)
+        super().__init__(**d)
+
+    def __setitem__(self, key: str, item: Tensor) -> Tensor:
+        if key not in self.allowed_params:
+            raise ValueError(
+                f"The key '{key}' is not in the allowed parameters for FullCatalog"
+                " (check spelling?)"
+            )
+        self._validate(item)
+        super().__setitem__(key, item)
+
+    def _validate(self, x: Tensor):
+        assert isinstance(x, Tensor)
+        assert x.shape[:-1] == (self.batch_size, self.max_sources)
+
+    def get_tile_params(self, tile_slen: int, max_sources_per_tile: int):
+        # full_plocs = full_params["plocs"]
+        # batch_size, n_sources, v = full_plocs.shape
+        assert self.batch_size == 1, "Currently only supported for a single image"
+        tile_coords = (self.plocs // tile_slen).to(torch.int).squeeze(0)
+
+        n_tiles_h, n_tiles_w = get_n_tiles_hw(self.height, self.width, tile_slen)
+
+        tile_locs = torch.zeros((self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, 2))
+        tile_n_sources = torch.zeros((self.batch_size, n_tiles_h, n_tiles_w), dtype=torch.int64)
+        tile_is_on_array = torch.zeros(
+            (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, 1)
+        )
+        param_names_to_gather = {
+            "galaxy_bools",
+            "star_bools",
+            "galaxy_params",
+            "fluxes",
+            "log_fluxes",
+            "galaxy_fluxes",
+            "galaxy_probs",
+            "galaxy_blends",
         }
-    )
-    return TileCatalog(tile_slen, tile_params)
+        tile_params: Dict[str, Tensor] = {}
+        for k, v in self.items():
+            if k in param_names_to_gather:
+                dim = v.shape[-1]
+                tile_params[k] = torch.zeros(
+                    (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, dim)
+                )
+        n_sources = self.n_sources[0]
+        for (idx, coords) in enumerate(tile_coords[:n_sources]):
+            source_idx = tile_n_sources[0, coords[0], coords[1]]
+            tile_n_sources[0, coords[0], coords[1]] = source_idx + 1
+            tile_is_on_array[0, coords[0], coords[1]] = 1
+            tile_locs[0, coords[0], coords[1], source_idx] = self.plocs[0, idx] - coords * tile_slen
+            for k, v in tile_params.items():
+                v[0, coords[0], coords[1], source_idx] = self[k][0, idx]
+        tile_params.update(
+            {
+                "locs": tile_locs,
+                "n_sources": tile_n_sources,
+            }
+        )
+        return TileCatalog(tile_slen, tile_params)
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
@@ -237,7 +261,9 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     assert len(images.shape) == 4
     n_bands = images.shape[1]
     window = ptile_slen
-    n_tiles_h, n_tiles_w = get_n_tiles_hw(images.shape[2], images.shape[3], window, tile_slen)
+    n_tiles_h, n_tiles_w = get_n_padded_tiles_hw(
+        images.shape[2], images.shape[3], window, tile_slen
+    )
     tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
     return rearrange(
@@ -251,9 +277,13 @@ def get_images_in_tiles(images, tile_slen, ptile_slen):
     )
 
 
-def get_n_tiles_hw(h, w, window, tile_slen):
-    nh = ((h - window) // tile_slen) + 1
-    nw = ((w - window) // tile_slen) + 1
+def get_n_tiles_hw(height: int, width: int, tile_slen: int):
+    return math.ceil(height / tile_slen), math.ceil(width / tile_slen)
+
+
+def get_n_padded_tiles_hw(height, width, window, tile_slen):
+    nh = ((height - window) // tile_slen) + 1
+    nw = ((width - window) // tile_slen) + 1
     return nh, nw
 
 
