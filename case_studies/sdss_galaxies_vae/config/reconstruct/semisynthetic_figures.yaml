@@ -9,8 +9,8 @@ frame:
     cache_dir: ${reconstruct.outdir}
 scenes:
     sdss_recon0:
-        h: 228 #200
-        w: 1724 #1700
+        h: 200 #200
+        w: 1700 #1700
         size: 300
     # sdss_recon1:
     #     h: 1174 #1150

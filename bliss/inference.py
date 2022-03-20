@@ -368,8 +368,10 @@ class SemiSyntheticFrame:
             tile_catalog_dict, image, background = torch.load(sim_frame_path)
             tile_catalog = TileCatalog(self.tile_slen, tile_catalog_dict)
         else:
-            hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
-            wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
+            # hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
+            # wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
+            hlim = (0, n_tiles_h * self.tile_slen)
+            wlim = (0, n_tiles_w * self.tile_slen)
             full_coadd_cat = CoaddFullCatalog.from_file(coadd, hlim, wlim)
             full_coadd_cat["galaxy_params"] = (
                 torch.randn((1, full_coadd_cat.n_sources, 32)) * full_coadd_cat["galaxy_bools"]
@@ -393,8 +395,8 @@ class SemiSyntheticFrame:
         assert self.background.shape[0] == 1
 
     def get_catalog(self, hlims, wlims):
-        h, h_end = hlims[0] - self.bp, hlims[1] - self.bp
-        w, w_end = wlims[0] - self.bp, wlims[1] - self.bp
+        h, h_end = hlims[0], hlims[1]
+        w, w_end = wlims[0], wlims[1]
         hlims_tile = int(np.floor(h / self.tile_slen)), int(np.ceil(h_end / self.tile_slen))
         wlims_tile = int(np.floor(w / self.tile_slen)), int(np.ceil(w_end / self.tile_slen))
         # tile_cat_cropped = {}
@@ -408,7 +410,7 @@ class SemiSyntheticFrame:
             + full_cat["star_bools"] * full_cat["fluxes"]
         )
         full_cat["mags"] = convert_flux_to_mag(full_cat["fluxes"])
-        full_cat.plocs = full_cat.plocs - 1.0
+        # full_cat.plocs = full_cat.plocs - 1.0
         return full_cat
 
 
