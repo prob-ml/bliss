@@ -10,7 +10,6 @@ from torch.nn import functional as F
 from tqdm import tqdm
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
-from bliss.datasets.sdss_blended_galaxies import cpu
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
@@ -169,7 +168,7 @@ class ChunkedScene:
                 encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
             )
             reconstructions.append(recon.cpu())
-            tile_maps.append(cpu(tile_map))
+            tile_maps.append(tile_map.cpu())
         return {
             "reconstructions": torch.cat(reconstructions, dim=0),
             "tile_maps": tile_maps,
@@ -251,7 +250,7 @@ class ChunkedScene:
 
 def reconstruct_img(
     encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor
-) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
+) -> Tuple[Tensor, TileCatalog]:
 
     with torch.no_grad():
         tile_map = encoder.max_a_post(img, bg)

@@ -12,6 +12,7 @@ from tqdm import tqdm
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
 from bliss.models.binary import BinaryEncoder
+from bliss.models.location_encoder import TileCatalog
 from bliss.sleep import SleepPhase
 
 
@@ -115,10 +116,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         bg = self.bgs[idx]
         tile_map = self.catalogs[idx]
         return {
+            **tile_map.to_dict(),
             "images": chunk.unsqueeze(0),
             "background": bg.unsqueeze(0),
-            **tile_map,
-            "slen": torch.tensor([self.slen]).unsqueeze(0),
         }
 
     @staticmethod
@@ -128,10 +128,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             out[k] = torch.cat([x[k] for x in tile_catalogs], dim=0)
         return out
 
-    def _prerender_chunks(self, image, background):
+    def _prerender_chunks(self, image, background) -> Tuple[Tensor, Tensor, List[TileCatalog]]:
         chunks = make_image_into_chunks(image, self.kernel_size, self.stride)
         bg_chunks = make_image_into_chunks(background, self.kernel_size, self.stride)
-        catalogs = []
+        catalogs: List[TileCatalog] = []
         chunks_with_galaxies = []
         bgs_with_galaxies = []
         encoder = self.encoder.to(self.prerender_device)
@@ -141,7 +141,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                 bg_device = bg.to(self.prerender_device).unsqueeze(0)
                 tile_map = encoder.max_a_post(chunk_device, bg_device)
                 if tile_map["galaxy_bools"].sum() > 0:
-                    catalogs.append(cpu(tile_map))
+                    catalogs.append(tile_map.cpu())
                     chunks_with_galaxies.append(chunk.cpu())
                     bgs_with_galaxies.append(bg.cpu())
         chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
@@ -173,10 +173,3 @@ def make_image_into_chunks(image, kernel_size, stride):
         h=kernel_size,
         w=kernel_size,
     )
-
-
-def cpu(x: Dict[str, Tensor]):
-    out = {}
-    for k, v in x.items():
-        out[k] = v.cpu()
-    return out

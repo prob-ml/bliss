@@ -67,7 +67,17 @@ class TileCatalog(UserDict):
 
     @property
     def is_on_array(self) -> Tensor:
+        """Returns a n x nth x ntw x n_sources tensor indicating whether source is on."""
         return get_is_on_from_n_sources(self.n_sources, self.max_sources)
+
+    def cpu(self):
+        return self.to("cpu")
+
+    def to(self, device):
+        out = {}
+        for k, v in self.to_dict().items():
+            out[k] = v.to(device)
+        return type(self)(self.tile_slen, out)
 
     def get_full_params(self) -> Dict[str, Tensor]:
         """Converts image parameters in tiles to parameters of full image.
@@ -166,7 +176,7 @@ class TileCatalog(UserDict):
         is_on_array = torch.gather(tile_is_on_array, dim=1, index=indices_sorted)
         return indices_sorted, is_on_array
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Tensor]:
         out = {}
         out["locs"] = self.locs
         out["n_sources"] = self.n_sources
