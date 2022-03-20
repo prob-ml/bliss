@@ -21,7 +21,7 @@ def overrides(devices):
     return overrides
 
 
-def test_location_encoder(model_setup, overrides, devices):
+def test_sdss_location_encoder(model_setup, overrides, devices):
     trained_location = model_setup.get_trained_model(overrides)
     results = model_setup.test_model(overrides, trained_location)
 
