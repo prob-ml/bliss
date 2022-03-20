@@ -9,8 +9,8 @@ from einops import rearrange, reduce
 from torch import Tensor, nn
 from torch.nn import functional as F
 
+from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.models import galaxy_net
-from bliss.models.location_encoder import TileCatalog, get_is_on_from_n_sources
 
 
 class ImageDecoder(pl.LightningModule):

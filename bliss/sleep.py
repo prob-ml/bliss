@@ -16,8 +16,9 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.optim import Adam
 
+from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import LocationEncoder, TileCatalog, get_is_on_from_n_sources
+from bliss.models.location_encoder import LocationEncoder
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")

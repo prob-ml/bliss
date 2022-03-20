@@ -8,9 +8,9 @@ from einops import rearrange
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
+from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import TileCatalog
 from bliss.models.prior import ImagePrior
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset

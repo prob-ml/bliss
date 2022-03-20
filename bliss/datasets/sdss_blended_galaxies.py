@@ -8,10 +8,10 @@ from torch.nn import functional as F
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
+from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
 from bliss.models.binary import BinaryEncoder
-from bliss.models.location_encoder import TileCatalog
 from bliss.sleep import SleepPhase
 
 

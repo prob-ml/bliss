@@ -5,7 +5,8 @@ import pytest
 import torch
 from einops import reduce
 
-from bliss.models.location_encoder import LocationEncoder, get_tile_params_from_full
+from bliss.catalog import get_tile_params_from_full
+from bliss.models.location_encoder import LocationEncoder
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):

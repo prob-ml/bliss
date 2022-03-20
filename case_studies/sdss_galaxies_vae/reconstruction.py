@@ -12,6 +12,7 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 
 from bliss import reporting
+from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import (
@@ -21,7 +22,6 @@ from bliss.inference import (
     reconstruct_scene_at_coordinates,
 )
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import TileCatalog
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 

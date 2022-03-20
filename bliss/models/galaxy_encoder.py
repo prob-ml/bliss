@@ -11,9 +11,9 @@ from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.optim import Adam
 
+from bliss.catalog import TileCatalog, get_images_in_tiles
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.models.location_encoder import TileCatalog, get_images_in_tiles
 from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
 from bliss.reporting import plot_image, plot_image_and_locs

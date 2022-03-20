@@ -9,11 +9,11 @@ from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
 
+from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import TileCatalog
 from bliss.reporting import get_params_from_coadd
 
 
