@@ -1,7 +1,7 @@
 # flake8: noqa
 # pylint: skip-file
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 
 from bliss import reporting
-from bliss.catalog import TileCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import (
@@ -204,8 +204,8 @@ def create_figure(
     true,
     recon,
     res,
-    coadd_objects=None,
-    map_recon=None,
+    coadd_objects: Optional[FullCatalog] = None,
+    map_recon: Optional[FullCatalog] = None,
     include_residuals: bool = True,
     colorbar=True,
     scatter_size: int = 100,
@@ -248,7 +248,7 @@ def create_figure(
             fig, ax_recon, recon, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
         )
     else:
-        is_on_array = rearrange(tile_map["is_on_array"], "1 nth ntw 1 1 -> nth ntw 1 1")
+        is_on_array = rearrange(tile_map.is_on_array, "1 nth ntw 1 -> nth ntw 1 1")
         is_on_array = repeat(is_on_array, "nth ntw 1 1 -> nth ntw h w", h=4, w=4)
         is_on_array = rearrange(is_on_array, "nth ntw h w -> (nth h) (ntw w)")
         ax_recon.matshow(is_on_array, vmin=0, vmax=1, cmap="gist_gray")
@@ -263,7 +263,7 @@ def create_figure(
         reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
     if coadd_objects is not None:
-        locs_true = coadd_objects["plocs"]
+        locs_true = coadd_objects.plocs
         true_galaxy_bools = coadd_objects["galaxy_bools"]
         locs_galaxies_true = locs_true[true_galaxy_bools.squeeze(-1) > 0.5]
         locs_stars_true = locs_true[true_galaxy_bools.squeeze(-1) < 0.5]
@@ -321,7 +321,7 @@ def create_figure(
                 )
 
     if map_recon is not None:
-        locs_pred = map_recon["plocs"][0]
+        locs_pred = map_recon.plocs[0]
         star_bools = map_recon["star_bools"][0]
         galaxy_bools = map_recon["galaxy_bools"][0]
         locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]
