@@ -21,6 +21,7 @@ from bliss.inference import (
     reconstruct_scene_at_coordinates,
 )
 from bliss.models.decoder import ImageDecoder
+from bliss.models.location_encoder import TileCatalog
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
@@ -421,18 +422,18 @@ def create_scene_metrics_table(scene_metrics_by_mag):
     return scene_metrics_df, tex_lines
 
 
-def expected_recall(tile_map):
-    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1).exp()
-    prob_if_on = source_probs * tile_map["is_on_array"]
-    prob_if_off = (1 - source_probs) * (1 - tile_map["is_on_array"])
+def expected_recall(tile_map: TileCatalog):
+    source_probs = tile_map.n_sources_log_prob.unsqueeze(-1).unsqueeze(-1).exp()
+    prob_if_on = source_probs * tile_map.is_on_array.unsqueeze(-1)
+    prob_if_off = (1 - source_probs) * (1 - tile_map.is_on_array.unsqueeze(-1))
     recall = prob_if_on.sum() / (prob_if_on.sum() + prob_if_off.sum())
     return recall
 
 
-def expected_precision(tile_map):
-    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1).exp()
-    prob_if_on = source_probs * tile_map["is_on_array"]
-    precision = prob_if_on.sum() / tile_map["is_on_array"].sum()
+def expected_precision(tile_map: TileCatalog):
+    source_probs = tile_map.n_sources_log_prob.unsqueeze(-1).unsqueeze(-1).exp()
+    prob_if_on = source_probs * tile_map.is_on_array.unsqueeze(-1)
+    precision = prob_if_on.sum() / tile_map.is_on_array.unsqueeze(-1).sum()
     return precision
 
 

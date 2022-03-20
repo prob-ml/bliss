@@ -99,7 +99,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             generate_device
         )
 
-    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> Dict[str, Tensor]:
+    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> TileCatalog:
         return self.image_prior.sample_prior(self.tile_slen, batch_size, n_tiles_h, n_tiles_w)
 
     def simulate_image_from_catalog(self, tile_catalog: TileCatalog) -> Tuple[Tensor, Tensor]:

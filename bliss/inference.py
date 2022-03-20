@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 import torch
 from astropy.table import Table
 from einops import rearrange, reduce
+from numpy import ndarray
 from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
@@ -157,7 +158,8 @@ class ChunkedScene:
                 chunks, bgs, encoder, decoder, device
             )
         scene_recon = self._combine_into_scene(chunk_est_dict)
-        tile_map_recon = self._combine_tile_maps(chunk_est_dict)
+        chunk_tile_maps_dict = {k: v["tile_maps"] for k, v in chunk_est_dict.items()}
+        tile_map_recon = self._combine_tile_maps(chunk_tile_maps_dict)
         return scene_recon, tile_map_recon
 
     def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
@@ -220,25 +222,24 @@ class ChunkedScene:
             : (-right_padding if right_padding else None),
         ]
 
-    def _combine_tile_maps(self, chunk_est_dict: Dict):
-        main = np.array(chunk_est_dict["main"]["tile_maps"])
+    def _combine_tile_maps(self, chunk_tile_maps_dict: Dict[str, List[TileCatalog]]):
+        main = self._tile_catalog_array(chunk_tile_maps_dict["main"])
         n_chunks_h_main = self.n_chunks_h_main
         n_chunks_w_main = self.n_chunks_w_main
 
         main = main.reshape(n_chunks_h_main, n_chunks_w_main)
 
-        right = chunk_est_dict.get("right")
+        right = chunk_tile_maps_dict.get("right")
         if right is not None:
-            right = np.array(right["tile_maps"]).reshape(-1, 1)
+            right = self._tile_catalog_array(right).reshape(-1, 1)
             main = np.concatenate((main, right), axis=1)
 
-        bottom = chunk_est_dict.get("bottom")
+        bottom = chunk_tile_maps_dict.get("bottom")
         if bottom is not None:
-            bottom = bottom["tile_maps"]
-            bottom_right = chunk_est_dict.get("bottom_right")
+            bottom_right = chunk_tile_maps_dict.get("bottom_right")
             if bottom_right is not None:
-                bottom += bottom_right["tile_maps"]
-            bottom = np.array(bottom).reshape(1, -1)
+                bottom += bottom_right
+            bottom = self._tile_catalog_array(bottom).reshape(1, -1)
             main = np.concatenate((main, bottom), axis=0)
 
         tile_map_list = []
@@ -246,6 +247,12 @@ class ChunkedScene:
             tile_map_row_combined = cat_tile_catalog(tile_map_row, 1)
             tile_map_list.append(tile_map_row_combined)
         return cat_tile_catalog(tile_map_list, 0)
+
+    @staticmethod
+    def _tile_catalog_array(tile_catalogs: List[TileCatalog]):
+        out = np.zeros(len(tile_catalogs), dtype=TileCatalog)
+        out[:] = tile_catalogs
+        return out
 
 
 def reconstruct_img(
@@ -261,14 +268,15 @@ def reconstruct_img(
     return recon_image, tile_map
 
 
-def cat_tile_catalog(tile_maps, tile_dim=0):
+def cat_tile_catalog(tile_catalogs: Sequence[TileCatalog], tile_dim: int = 0) -> TileCatalog:
     assert tile_dim in {0, 1}
     out = {}
-    for k in tile_maps[0].keys():
-        tensors = [tm[k] for tm in tile_maps]
+    tile_catalog_dicts = [tm.to_dict() for tm in tile_catalogs]
+    for k in tile_catalog_dicts[0].keys():
+        tensors = [tm[k] for tm in tile_catalog_dicts]
         value = torch.cat(tensors, dim=(tile_dim + 1))
         out[k] = value
-    return out
+    return TileCatalog(tile_catalogs[0].tile_slen, out)
 
 
 class SDSSFrame:
@@ -344,7 +352,7 @@ class SimulatedFrame:
         hlims_tile = int(np.floor(h / self.tile_slen)), int(np.ceil(h_end / self.tile_slen))
         wlims_tile = int(np.floor(w / self.tile_slen)), int(np.ceil(w_end / self.tile_slen))
         tile_cat_cropped = {}
-        for k, v in self.tile_catalog.items():
+        for k, v in self.tile_catalog.to_dict().items():
             tile_cat_cropped[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         tile_cat_cropped = TileCatalog(self.tile_slen, tile_cat_cropped)
         full_cat = tile_cat_cropped.get_full_params()
@@ -368,7 +376,12 @@ def apply_mask(image, background, regions, mask_bg_val=865.0):
     return image, background
 
 
-def infer_blends(tile_map, tile_range: int):
+def infer_blends(tile_map: TileCatalog, tile_range: int) -> Tensor:
     n_galaxies_per_tile = reduce(tile_map["galaxy_bools"], "n nth ntw s 1 -> n 1 nth ntw", "sum")
     kernel = torch.ones((1, 1, tile_range, tile_range))
-    return F.conv2d(n_galaxies_per_tile, kernel, padding=tile_range - 1).unsqueeze(-1)
+    # blends = F.conv2d(n_galaxies_per_tile, kernel, padding=tile_range - 1)
+    blends = F.conv2d(n_galaxies_per_tile, kernel)
+    # Pad output with zeros
+    output = torch.zeros_like(n_galaxies_per_tile)
+    output[:, :, (tile_range - 1) :, (tile_range - 1) :] += blends
+    return rearrange(output, "n 1 nth ntw -> n nth ntw 1 1")

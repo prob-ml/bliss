@@ -36,9 +36,12 @@ class TileCatalog(UserDict):
     allowed_params = {
         "fluxes",
         "log_fluxes",
+        "mags",
         "galaxy_bools",
         "galaxy_params",
+        "galaxy_fluxes",
         "galaxy_probs",
+        "galaxy_blends",
         "star_bools",
     }
 
@@ -180,6 +183,8 @@ class TileCatalog(UserDict):
         out = {}
         out["locs"] = self.locs
         out["n_sources"] = self.n_sources
+        if self.n_sources_log_prob is not None:
+            out["n_sources_log_prob"] = self.n_sources_log_prob
         for k, v in self.items():
             out[k] = v
         return out
