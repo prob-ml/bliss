@@ -365,10 +365,11 @@ class SemiSyntheticFrame:
         else:
             sim_frame_path = None
         if sim_frame_path and sim_frame_path.exists():
-            tile_catalog, image, background = torch.load(sim_frame_path)
+            tile_catalog_dict, image, background = torch.load(sim_frame_path)
+            tile_catalog = TileCatalog(self.tile_slen, tile_catalog_dict)
         else:
-            hlim = ((self.bp, self.bp + n_tiles_h * self.tile_slen),)
-            wlim = ((self.bp, self.bp + n_tiles_w * self.tile_slen),)
+            hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
+            wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
             full_coadd_cat = CoaddFullCatalog.from_file(coadd, hlim, wlim)
             full_coadd_cat["galaxy_params"] = (
                 torch.randn((1, full_coadd_cat.n_sources, 32)) * full_coadd_cat["galaxy_bools"]
@@ -383,9 +384,9 @@ class SemiSyntheticFrame:
             image, background = dataset.simulate_image_from_catalog(tile_catalog)
             print("INFO: done generating frame")
             if sim_frame_path:
-                torch.save((tile_catalog, image, background), sim_frame_path)
+                torch.save((tile_catalog.to_dict(), image, background), sim_frame_path)
 
-        self.tile_catalog: TileCatalog = tile_catalog
+        self.tile_catalog = tile_catalog
         self.image = image
         self.background = background
         assert self.image.shape[0] == 1
