@@ -330,11 +330,11 @@ class SleepPhase(pl.LightningModule):
         true_tile_params = TileCatalog(
             self.image_encoder.tile_slen, {k: v for k, v in batch.items() if k not in exclude}
         )
-        true_params = true_tile_params.get_full_params()
+        true_params = true_tile_params.to_full_params()
 
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        est_params = tile_estimate.get_full_params()
+        est_params = tile_estimate.to_full_params()
         return true_params, est_params
 
     # pylint: disable=too-many-statements

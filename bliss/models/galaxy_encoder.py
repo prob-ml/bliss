@@ -209,7 +209,7 @@ class GalaxyEncoder(pl.LightningModule):
                 "galaxy_params": z,
             },
         )
-        est = tile_est.get_full_params()
+        est = tile_est.to_full_params()
 
         # draw all reconstruction images.
         # render_images automatically accounts for tiles with no galaxies.

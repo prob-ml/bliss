@@ -222,14 +222,14 @@ class BinaryEncoder(pl.LightningModule):
         true_tile_params = TileCatalog(
             self.tile_slen, {k: v for k, v in batch.items() if k not in exclude}
         )
-        true_params = true_tile_params.get_full_params()
+        true_params = true_tile_params.to_full_params()
         # prediction
         pred = self.get_prediction(batch)
         tile_est = true_tile_params.copy()
         tile_est["galaxy_bools"] = pred["galaxy_bools"]
         tile_est["star_bools"] = pred["star_bools"]
         tile_est["galaxy_probs"] = pred["galaxy_probs"]
-        est = tile_est.get_full_params()
+        est = tile_est.to_full_params()
         # setup figure and axes
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()

@@ -62,7 +62,7 @@ class TileCatalog(UserDict):
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
 
-    def get_full_params(self):
+    def to_full_params(self):
         """Converts image parameters in tiles to parameters of full image.
 
         By parameters, we mean samples from the variational distribution, not the variational
@@ -217,7 +217,7 @@ class FullCatalog(UserDict):
         d["n_sources"] = keep.sum(dim=-1)
         return type(self)(self.height, self.width, d)
 
-    def to_full_params(self, tile_slen: int, max_sources_per_tile: int):
+    def to_tile_params(self, tile_slen: int, max_sources_per_tile: int):
         assert self.batch_size == 1, "Currently only supported for a single image"
         tile_coords = (self.plocs // tile_slen).to(torch.int).squeeze(0)
 

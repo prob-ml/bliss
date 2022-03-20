@@ -346,7 +346,7 @@ class SimulatedFrame:
         for k, v in self.tile_catalog.to_dict().items():
             tile_cat_cropped[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         tile_cat_cropped = TileCatalog(self.tile_slen, tile_cat_cropped)
-        full_cat = tile_cat_cropped.get_full_params()
+        full_cat = tile_cat_cropped.to_full_params()
         full_cat["fluxes"] = (
             full_cat["galaxy_bools"] * full_cat["galaxy_fluxes"]
             + full_cat["star_bools"] * full_cat["fluxes"]
