@@ -66,7 +66,7 @@ def reconstruct(cfg):
         print(
             f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image."
         )
-        map_recon = tile_map_recon.get_full_params()
+        map_recon = tile_map_recon.to_full_params()
         map_recon["fluxes"] = (
             map_recon["galaxy_bools"] * map_recon["galaxy_fluxes"]
             + map_recon["star_bools"] * map_recon["fluxes"]

@@ -25,7 +25,7 @@ def reconstruct_scene_at_coordinates(
     w_range: Tuple[int, int],
     slen: int = 300,
     device=None,
-) -> Tuple[Tensor, Dict[str, Tensor]]:
+) -> Tuple[Tensor, TileCatalog]:
     """Reconstruct all objects contained within a scene, padding as needed.
 
     This function will run the encoder and decoder on a padded image containing the image specified
