@@ -53,8 +53,11 @@ class TestSourceEncoder:
                 n_bands,
                 ptile_slen + (n_tiles_h - 1) * tile_slen,
                 ptile_slen + (n_tiles_w - 1) * tile_slen,
+                device=device,
             )
-            background_tensor = torch.tensor(background).reshape(1, -1, 1, 1).expand(*images.shape)
+            background_tensor = (
+                torch.tensor(background).reshape(1, -1, 1, 1).expand(*images.shape).to(device)
+            )
             images *= background_tensor.sqrt()
             images += background_tensor
             np_nspt = np.random.choice(max_detections, batch_size * n_tiles_h * n_tiles_w)
@@ -165,7 +168,7 @@ class TestSourceEncoder:
         tile_slen = 2
         n_samples = 5
         background = (10.0, 20.0)
-        background_tensor = torch.tensor(background).view(1, -1, 1, 1)
+        background_tensor = torch.tensor(background).view(1, -1, 1, 1).to(device)
 
         images = (
             torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(device)
