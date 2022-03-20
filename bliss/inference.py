@@ -1,11 +1,10 @@
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
 import torch
 from astropy.table import Table
 from einops import rearrange, reduce
-from numpy import ndarray
 from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
@@ -251,7 +250,8 @@ class ChunkedScene:
     @staticmethod
     def _tile_catalog_array(tile_catalogs: List[TileCatalog]):
         out = np.zeros(len(tile_catalogs), dtype=TileCatalog)
-        out[:] = tile_catalogs
+        for i, tile_catalog in enumerate(tile_catalogs):
+            out[i] = tile_catalog
         return out
 
 
@@ -379,7 +379,6 @@ def apply_mask(image, background, regions, mask_bg_val=865.0):
 def infer_blends(tile_map: TileCatalog, tile_range: int) -> Tensor:
     n_galaxies_per_tile = reduce(tile_map["galaxy_bools"], "n nth ntw s 1 -> n 1 nth ntw", "sum")
     kernel = torch.ones((1, 1, tile_range, tile_range))
-    # blends = F.conv2d(n_galaxies_per_tile, kernel, padding=tile_range - 1)
     blends = F.conv2d(n_galaxies_per_tile, kernel)
     # Pad output with zeros
     output = torch.zeros_like(n_galaxies_per_tile)

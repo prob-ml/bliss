@@ -140,7 +140,6 @@ class GalaxyEncoder(pl.LightningModule):
         tile_catalog = TileCatalog(
             self.tile_slen, {k: v for k, v in batch.items() if k not in {"images", "background"}}
         )
-        # tile_locs = batch["locs"]
         galaxy_params, pq_divergence = self.encode(images, background, tile_catalog.locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.

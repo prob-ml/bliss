@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import pytorch_lightning as pl
 import torch
@@ -117,6 +117,7 @@ class ImagePrior(pl.LightningModule):
         """Samples latent variables from the prior of an astronomical image.
 
         Args:
+            tile_slen: Side length of catalog tiles.
             batch_size: The number of samples to draw.
             n_tiles_h: Number of tiles height-wise.
             n_tiles_w: Number of tiles width-wise.

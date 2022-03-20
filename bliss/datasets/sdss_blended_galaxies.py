@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pytorch_lightning as pl
@@ -62,7 +61,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             w_start: Starting width-point of image. If None, start at `bp`.
             scene_size: Total size of the scene to use. If None, use maximum possible size.
             stride_factor: How much should chunks overlap? If 1.0, no overlap.
-            cache_path: If not None, path where cached chunks and catalogs are saved.
             prerender_device: Device to use to prerender chunks.
         """
         super().__init__()

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
