@@ -35,7 +35,7 @@ def test_sdss_location_encoder(model_setup, overrides, devices):
 
     # check testing results are sensible.
     assert results["avg_distance"] < 1.5
-    assert results["precision"] > 0.85
+    assert results["precision"] > 0.8
     assert results["f1"] > 0.8
 
 

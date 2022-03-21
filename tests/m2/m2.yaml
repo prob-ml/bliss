@@ -50,7 +50,7 @@ models:
   encoder:
     _target_: bliss.models.location_encoder.LocationEncoder
     input_transform:
-        _target_: bliss.models.location_encoder.LogBackgroundTransform
+      _target_: bliss.models.location_encoder.LogBackgroundTransform
     n_bands: ${models.decoder.n_bands}
     tile_slen: ${models.decoder.tile_slen}
     ptile_slen: 8
@@ -95,5 +95,5 @@ training:
     min_epochs: ${training.n_epochs}
     gpus: ${gpus}
     log_every_n_steps: 10
-    deterministic: False
   weight_save_path: Null
+  seed: null
