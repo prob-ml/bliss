@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
@@ -381,8 +382,16 @@ class SemiSyntheticFrame:
             tile_catalog["galaxy_fluxes"] = dataset.image_decoder.get_galaxy_fluxes(
                 tile_catalog["galaxy_bools"], tile_catalog["galaxy_params"]
             )
+            tile_catalog["star_bools"] = 1 - tile_catalog["galaxy_bools"]
+            tile_catalog["fluxes"] = (
+                tile_catalog["galaxy_bools"] * tile_catalog["galaxy_fluxes"]
+                + tile_catalog["star_bools"] * tile_catalog["fluxes"]
+            )
+            tile_catalog["mags"] = convert_flux_to_mag(tile_catalog["fluxes"])
             fc = tile_catalog.to_full_params()
-            assert fc.equals(full_coadd_cat, exclude=("galaxy_fluxes",))
+            assert fc.equals(
+                full_coadd_cat, exclude=("galaxy_fluxes", "star_bools", "fluxes", "mags")
+            )
             print("INFO: started generating frame")
             image, background = dataset.simulate_image_from_catalog(tile_catalog)
             print("INFO: done generating frame")
@@ -390,13 +399,21 @@ class SemiSyntheticFrame:
                 torch.save((tile_catalog.to_dict(), image, background), sim_frame_path)
 
         self.tile_catalog = tile_catalog
+        # self.full_catalog = self.tile_catal
         self.image = image
         self.background = background
         assert self.image.shape[0] == 1
         assert self.background.shape[0] == 1
 
     def get_catalog(self, hlims, wlims):
-        return CoaddFullCatalog.from_file(self.coadd_file, hlims, wlims)
+        hlims = (hlims[0] - self.bp, hlims[1] - self.bp)
+        wlims = (wlims[0] - self.bp, wlims[1] - self.bp)
+        hlims_tile = (math.floor(hlims[0] / self.tile_slen), math.ceil(hlims[1] / self.tile_slen))
+        wlims_tile = (math.floor(wlims[0] / self.tile_slen), math.ceil(wlims[1] / self.tile_slen))
+        tile_catalog_cropped = self.tile_catalog.crop(hlims_tile, wlims_tile)
+        full_catalog_cropped = tile_catalog_cropped.to_full_params()
+        full_catalog_cropped.plocs = full_catalog_cropped.plocs - 0.5
+        return full_catalog_cropped
 
 
 def apply_mask(image, background, regions, mask_bg_val=865.0):
