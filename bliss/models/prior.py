@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -8,39 +8,41 @@ from torch import Tensor
 from torch.distributions import Poisson
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import SDSSGalaxies
+from bliss.datasets.galsim_galaxies import SDSSGalaxies, ToyGaussian
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
 
 class GalaxyPrior:
     def __init__(
         self,
+        latents_file: str,
+        n_latent_batches: Optional[int] = None,
         autoencoder: Optional[OneCenteredGalaxyAE] = None,
         autoencoder_ckpt: str = None,
-        latents_file: str = None,
-        n_latent_batches: int = 160,
         psf_image_file: Optional[str] = None,
+        galaxy_dataset: Optional[Union[SDSSGalaxies, ToyGaussian]] = None,
     ):
-        """Initializes GalaxyPrior.
+        """Class to sample galaxy latent variables.
 
         Args:
-            autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
-            autoencoder_ckpt: Location of state_dict for autoencoder (optional).
             latents_file: Location of previously sampled galaxy latent variables.
             n_latent_batches: Number of batches for galaxy latent samples.
-            psf_image_file: Path to psf image file for galaxy latent samples
+            autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
+            autoencoder_ckpt: Location of state_dict for autoencoder (optional).
+            psf_image_file: Path to psf image file for galaxy latent samples.
+            galaxy_dataset: Galaxy dataset for generating galaxy images to encode.
         """
-
-        assert latents_file is not None
         latents_file = Path(latents_file)
         if latents_file.exists():
             latents = torch.load(latents_file, "cpu")
         else:
+            assert galaxy_dataset is not None
+            assert psf_image_file is not None
+            assert autoencoder_ckpt is not None
             autoencoder.load_state_dict(
                 torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
             )
-            dataset = SDSSGalaxies(psf_image_file=psf_image_file)
-            dataloader = dataset.train_dataloader()
+            dataloader = galaxy_dataset.train_dataloader()
             autoencoder = autoencoder.cuda()
             print("INFO: Creating latents from Galsim galaxies...")
             latents = autoencoder.generate_latents(dataloader, n_latent_batches)
@@ -81,7 +83,7 @@ class ImagePrior(pl.LightningModule):
         f_max: float,
         alpha: float,
         prob_galaxy: float,
-        galaxy_prior: GalaxyPrior = None,
+        galaxy_prior: Optional[GalaxyPrior] = None,
     ):
         """Initializes ImagePrior.
 
