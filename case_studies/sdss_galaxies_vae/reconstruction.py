@@ -148,6 +148,7 @@ def reconstruct(cfg):
                 scatter_on_true=True,
             )
             fig_with_coadd.savefig(outdir / (scene_name + "_coadd.pdf"), format="pdf")
+            fig_with_coadd.savefig(outdir / (scene_name + "_coadd.png"), format="png")
             # scene_metrics_table = create_scene_metrics_table(scene_coords)
             # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
             torch.save(scene_metrics_by_mag, outdir / (scene_name + ".pt"))

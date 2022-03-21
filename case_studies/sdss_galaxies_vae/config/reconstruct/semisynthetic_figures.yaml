@@ -1,0 +1,30 @@
+outdir: ${paths.output}/semisynthetic_figures
+real: False
+frame:
+    _target_: bliss.inference.SemiSyntheticFrame
+    dataset: ${datasets.simulated}
+    coadd: ${paths.data}/coadd_catalog_94_1_12.fits
+    n_tiles_h: 360
+    n_tiles_w: 500
+    cache_dir: ${reconstruct.outdir}
+scenes:
+    sdss_recon0:
+        h: 200 #200
+        w: 1700 #1700
+        size: 300
+    sdss_recon1:
+        h: 1150 #1150
+        w: 1000 #1000
+        size: 300
+    sdss_recon2:
+      h: 460 #460
+      w: 742 #742
+      size: 300
+    sdss_recon4_star_galaxy:
+      h: 557 #557
+      w: 408 #408
+      size: 300
+    sdss_recon_all:
+        h: 24 #24
+        w: 24 #24
+        size: "all"

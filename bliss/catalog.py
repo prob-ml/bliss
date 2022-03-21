@@ -1,6 +1,6 @@
 import math
 from collections import UserDict
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -64,6 +64,12 @@ class TileCatalog(UserDict):
         out = {}
         for k, v in self.to_dict().items():
             out[k] = v.to(device)
+        return type(self)(self.tile_slen, out)
+
+    def crop(self, hlims_tile, wlims_tile):
+        out = {}
+        for k, v in self.to_dict().items():
+            out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         return type(self)(self.tile_slen, out)
 
     def to_full_params(self):
@@ -224,6 +230,32 @@ class FullCatalog(UserDict):
             if not torch.allclose(self_value, other_value, equal_nan=True):
                 return False
         return True
+
+    def crop(
+        self,
+        h_min: Optional[int] = None,
+        h_max: Optional[int] = None,
+        w_min: Optional[int] = None,
+        w_max: Optional[int] = None,
+    ):
+        assert self.batch_size == 1
+        keep = torch.ones(self.max_sources, dtype=torch.bool)
+        if h_min is not None:
+            keep *= self.plocs[0, :, 0] >= h_min
+        if h_max is not None:
+            keep *= self.plocs[0, :, 0] <= (self.height - h_max)
+        if w_min is not None:
+            keep *= self.plocs[0, :, 1] >= w_min
+        if w_max is not None:
+            keep *= self.plocs[0, :, 1] <= (self.width - w_max)
+        d = {}
+        d["plocs"] = self.plocs[:, keep] - torch.tensor(
+            [h_min, w_min], dtype=self.plocs.dtype, device=self.plocs.device
+        )
+        d["n_sources"] = keep.sum().reshape(1).to(self.n_sources.dtype).to(self.n_sources.device)
+        for k, v in self.items():
+            d[k] = v[:, keep]
+        return type(self)(self.height - h_min - h_max, self.width - w_min - w_max, d)
 
     def apply_mag_cut(self, mag_cut: float):
         """Apply magnitude cut to given parameters."""
