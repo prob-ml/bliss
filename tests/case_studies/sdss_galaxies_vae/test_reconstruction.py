@@ -46,7 +46,7 @@ def test_reconstruct_simulated(vae_setup, reconstruct_overrides):
     reconstruct(cfg)
 
 
-def test_reconstruct_semisynthetic(model_setup, devices, reconstruct_overrides):
+def test_reconstruct_semisynthetic(vae_setup, reconstruct_overrides):
     overrides = {
         **reconstruct_overrides,
         "+reconstruct.frame._target_": "bliss.inference.SemiSyntheticFrame",
@@ -58,5 +58,5 @@ def test_reconstruct_semisynthetic(model_setup, devices, reconstruct_overrides):
         "+reconstruct.scenes.sdss_recon1_test.w": 24,
         "+reconstruct.scenes.sdss_recon1_test.size": 100,
     }
-    cfg = model_setup.get_cfg(overrides)
+    cfg = vae_setup.get_cfg(overrides)
     reconstruct(cfg)
