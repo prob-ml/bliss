@@ -518,8 +518,8 @@ class DetectionClassificationFigures(BlissFigures):
             slen=slen,
             device=device,
         )
-        est_params = tile_est_params.get_full_params()
-        est_params["plocs"] += bp - 0.5
+        est_params = tile_est_params.to_full_params()
+        est_params.plocs += bp - 0.5
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
             + est_params["star_bools"] * est_params["fluxes"]
@@ -652,8 +652,8 @@ class SDSSReconstructionFigures(BlissFigures):
                 recon_image, tile_recon_map = reconstruct_scene_at_coordinates(
                     encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device
                 )
-            recon_map = tile_recon_map.get_full_params()
-            recon_map["plocs"] = recon_map["plocs"] - 0.5
+            recon_map = tile_recon_map.to_full_params()
+            recon_map.plocs = recon_map.plocs - 0.5
             # only keep section inside border padding
             true_image = scene[0, 0, ylim[0] : ylim[1], xlim[0] : xlim[1]].cpu()
             recon_image = recon_image[0, 0].cpu()
@@ -716,7 +716,7 @@ class SDSSReconstructionFigures(BlissFigures):
             if recon_map is not None:
                 s *= 0.75
                 lw *= 0.75
-                locs_pred = recon_map["plocs"][0]
+                locs_pred = recon_map.plocs[0]
                 star_bools = recon_map["star_bools"][0]
                 galaxy_bools = recon_map["galaxy_bools"][0]
                 locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]
