@@ -1,7 +1,5 @@
 import pytest
 
-from bliss.train import train
-
 
 class TestBasicGalaxyMeasure:
     @pytest.fixture(scope="class")
@@ -10,7 +8,6 @@ class TestBasicGalaxyMeasure:
             "mode": "train",
             "training": "sdss_galaxy_encoder",
             "training.trainer.check_val_every_n_epoch": 1,
-            "training.trainer.logger": False,
             "training.n_epochs": 3,  # plotting coverage.
             "datasets.simulated.batch_size": 3,
         }
@@ -24,6 +21,5 @@ class TestBasicGalaxyMeasure:
             )
         return overrides
 
-    def test_simulated(self, devices, overrides, get_sdss_galaxies_config):
-        cfg = get_sdss_galaxies_config(overrides, devices)
-        train(cfg)
+    def test_simulated(self, overrides, sdss_galaxies_setup):
+        sdss_galaxies_setup.get_trained_model(overrides)

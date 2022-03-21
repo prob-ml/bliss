@@ -22,8 +22,3 @@ class SDSSGalaxiesSetup(ModelSetup):
 @pytest.fixture(scope="session")
 def sdss_galaxies_setup(devices):
     return SDSSGalaxiesSetup(devices)
-
-
-@pytest.fixture(scope="session")
-def get_sdss_galaxies_config():
-    return get_sdss_galaxies_cfg
