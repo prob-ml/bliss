@@ -24,7 +24,6 @@ def get_cfg(overrides, devices):
         {"training.weight_save_path": None, "paths.root": Path(__file__).parents[1].as_posix()}
     )
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
-    print()
     with initialize(config_path="../config"):
         cfg = compose("config", overrides=overrides)
     return cfg
