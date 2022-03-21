@@ -98,6 +98,7 @@ models:
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         galaxy_ae: ${models.galaxy_net}
         galaxy_ae_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+        psf_slen: 25
         sdss_bands:
             - 2
     encoder:
@@ -135,10 +136,10 @@ models:
         prob_galaxy: 0.7
         galaxy_prior:
             _target_: bliss.models.prior.GalaxyPrior
+            n_latent_batches: 160
             autoencoder: ${models.galaxy_net}
             autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
             latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
-            n_latent_batches: 160
             psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     sleep:
         _target_: bliss.sleep.SleepPhase

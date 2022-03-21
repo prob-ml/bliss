@@ -15,10 +15,10 @@ from bliss.models.galaxy_net import OneCenteredGalaxyAE
 class GalaxyPrior:
     def __init__(
         self,
+        n_latent_batches: int,
         autoencoder: Optional[OneCenteredGalaxyAE] = None,
         autoencoder_ckpt: str = None,
         latents_file: str = None,
-        n_latent_batches: int = 160,
         psf_image_file: Optional[str] = None,
     ):
         """Initializes GalaxyPrior.
