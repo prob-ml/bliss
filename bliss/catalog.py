@@ -19,6 +19,10 @@ class TileCatalog(UserDict):
         "galaxy_probs",
         "galaxy_blends",
         "star_bools",
+        "objid",
+        "hlr",
+        "ra",
+        "dec",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
@@ -92,7 +96,7 @@ class TileCatalog(UserDict):
             indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
             param = torch.gather(param, dim=1, index=indices_for_param)
             if param_name in param_names_to_mask:
-                param *= is_on_array.unsqueeze(-1)
+                param = param * is_on_array.unsqueeze(-1)
             params[param_name] = param
 
         params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
@@ -141,7 +145,7 @@ class TileCatalog(UserDict):
             For example, if we had 3 tiles with a maximum of two sources each,
             the elements of this tensor would take values from 0 up to and including 5.
         """
-        tile_is_on_array_sampled = get_is_on_from_n_sources(self.n_sources, self.max_sources)
+        tile_is_on_array_sampled = self.is_on_array
         n_sources = reduce(tile_is_on_array_sampled, "b nth ntw d -> b", "sum")
         max_sources = n_sources.max().int().item()
         tile_is_on_array = rearrange(tile_is_on_array_sampled, "b nth ntw d -> b (nth ntw d)")
@@ -206,6 +210,21 @@ class FullCatalog(UserDict):
         assert isinstance(x, Tensor)
         assert x.shape[:-1] == (self.batch_size, self.max_sources)
 
+    def equals(self, other, exclude=None):
+        assert self.batch_size == other.batch_size == 1
+        idx_self = self.plocs[0, :, 0].argsort()
+        idx_other: Tensor = other.plocs[0, :, 0].argsort()
+        exclude = set() if exclude is None else set(exclude)
+        keys = set(self.keys()).union(other.keys()).difference(exclude)
+        if not torch.allclose(self.plocs[:, idx_self, :], other.plocs[:, idx_other, :]):
+            return False
+        for k in keys:
+            self_value = self[k][:, idx_self, :].float()
+            other_value = other[k][:, idx_other, :].float()
+            if not torch.allclose(self_value, other_value, equal_nan=True):
+                return False
+        return True
+
     def apply_mag_cut(self, mag_cut: float):
         """Apply magnitude cut to given parameters."""
         assert self.batch_size == 1
@@ -228,29 +247,18 @@ class FullCatalog(UserDict):
         tile_is_on_array = torch.zeros(
             (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, 1)
         )
-        param_names_to_gather = {
-            "galaxy_bools",
-            "star_bools",
-            "galaxy_params",
-            "fluxes",
-            "log_fluxes",
-            "galaxy_fluxes",
-            "galaxy_probs",
-            "galaxy_blends",
-        }
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
-            if k in param_names_to_gather:
-                dim = v.shape[-1]
-                tile_params[k] = torch.zeros(
-                    (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, dim)
-                )
+            size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
+            tile_params[k] = torch.zeros(size, dtype=torch.float)
         n_sources = self.n_sources[0]
         for (idx, coords) in enumerate(tile_coords[:n_sources]):
             source_idx = tile_n_sources[0, coords[0], coords[1]]
             tile_n_sources[0, coords[0], coords[1]] = source_idx + 1
             tile_is_on_array[0, coords[0], coords[1]] = 1
-            tile_locs[0, coords[0], coords[1], source_idx] = self.plocs[0, idx] - coords * tile_slen
+            tile_locs[0, coords[0], coords[1], source_idx] = (
+                self.plocs[0, idx] - coords * tile_slen
+            ) / tile_slen
             for k, v in tile_params.items():
                 v[0, coords[0], coords[1], source_idx] = self[k][0, idx]
         tile_params.update(
