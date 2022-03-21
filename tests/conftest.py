@@ -7,6 +7,8 @@ import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 
+CONFIG_PATH = "../config"
+
 
 # command line arguments for tests
 def pytest_addoption(parser):
@@ -24,7 +26,7 @@ def get_cfg(overrides, devices):
         {"training.weight_save_path": None, "paths.root": Path(__file__).parents[1].as_posix()}
     )
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
-    with initialize(config_path="../config"):
+    with initialize(config_path=CONFIG_PATH):
         cfg = compose("config", overrides=overrides)
     return cfg
 
