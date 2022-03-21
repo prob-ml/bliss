@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import galsim
 import numpy as np
@@ -119,6 +120,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         pixel_scale,  # SDSS
         flux_sample,
         psf_image_file: str,
+        alpha: Optional[float] = None,
     ):
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
@@ -145,6 +147,9 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         self.flux_sample = flux_sample
 
         self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
+
+        if self.flux_sample == "pareto":
+            assert self.alpha is not None
 
     @staticmethod
     def _uniform(a, b):
