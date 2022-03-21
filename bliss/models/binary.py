@@ -8,15 +8,13 @@ from torch import Tensor
 from torch.nn import BCELoss
 from torch.optim import Adam
 
+from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.decoder import get_mgrid
 from bliss.models.galaxy_encoder import center_ptiles
 from bliss.models.location_encoder import (
     ConcatBackgroundTransform,
     EncoderCNN,
     LogBackgroundTransform,
-    get_full_params_from_tiles,
-    get_images_in_tiles,
-    get_is_on_from_n_sources,
     make_enc_final,
 )
 from bliss.reporting import plot_image_and_locs
@@ -221,15 +219,17 @@ class BinaryEncoder(pl.LightningModule):
 
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "background"}
-        true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params_from_tiles(true_tile_params, self.tile_slen)
+        true_tile_params = TileCatalog(
+            self.tile_slen, {k: v for k, v in batch.items() if k not in exclude}
+        )
+        true_params = true_tile_params.to_full_params()
         # prediction
         pred = self.get_prediction(batch)
-        tile_est = dict(true_tile_params.items())
+        tile_est = true_tile_params.copy()
         tile_est["galaxy_bools"] = pred["galaxy_bools"]
         tile_est["star_bools"] = pred["star_bools"]
         tile_est["galaxy_probs"] = pred["galaxy_probs"]
-        est = get_full_params_from_tiles(tile_est, self.tile_slen)
+        est = tile_est.to_full_params()
         # setup figure and axes
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()

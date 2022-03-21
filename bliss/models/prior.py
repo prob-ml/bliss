@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import pytorch_lightning as pl
 import torch
@@ -7,9 +7,9 @@ from einops import rearrange
 from torch import Tensor
 from torch.distributions import Poisson
 
+from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.datasets.galsim_galaxies import SDSSGalaxies
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.models.location_encoder import get_is_on_from_n_sources
 
 
 class GalaxyPrior:
@@ -111,10 +111,13 @@ class ImagePrior(pl.LightningModule):
         if self.prob_galaxy > 0.0:
             assert self.galaxy_prior is not None
 
-    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> Dict[str, Tensor]:
+    def sample_prior(
+        self, tile_slen: int, batch_size: int, n_tiles_h: int, n_tiles_w: int
+    ) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
 
         Args:
+            tile_slen: Side length of catalog tiles.
             batch_size: The number of samples to draw.
             n_tiles_h: Number of tiles height-wise.
             n_tiles_w: Number of tiles width-wise.
@@ -137,15 +140,18 @@ class ImagePrior(pl.LightningModule):
         log_fluxes = self._get_log_fluxes(fluxes)
 
         # per tile quantities.
-        return {
-            "n_sources": n_sources,
-            "locs": locs,
-            "galaxy_bools": galaxy_bools,
-            "star_bools": star_bools,
-            "galaxy_params": galaxy_params,
-            "fluxes": fluxes,
-            "log_fluxes": log_fluxes,
-        }
+        return TileCatalog(
+            tile_slen,
+            {
+                "n_sources": n_sources,
+                "locs": locs,
+                "galaxy_bools": galaxy_bools,
+                "star_bools": star_bools,
+                "galaxy_params": galaxy_params,
+                "fluxes": fluxes,
+                "log_fluxes": log_fluxes,
+            },
+        )
 
     @staticmethod
     def _get_log_fluxes(fluxes):

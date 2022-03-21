@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pytorch_lightning as pl
@@ -9,6 +8,7 @@ from torch.nn import functional as F
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
+from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
 from bliss.models.binary import BinaryEncoder
@@ -41,7 +41,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         w_start: Optional[int] = None,
         scene_size: Optional[int] = None,
         stride_factor: float = 0.5,
-        cache_path: Optional[str] = None,
         prerender_device: str = "cpu",
     ) -> None:
         """Initializes SDSSBlendedGalaxies.
@@ -62,7 +61,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             w_start: Starting width-point of image. If None, start at `bp`.
             scene_size: Total size of the scene to use. If None, use maximum possible size.
             stride_factor: How much should chunks overlap? If 1.0, no overlap.
-            cache_path: If not None, path where cached chunks and catalogs are saved.
             prerender_device: Device to use to prerender chunks.
         """
         super().__init__()
@@ -106,19 +104,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
         binary_encoder.load_state_dict(torch.load(binary_ckpt, map_location=torch.device("cpu")))
         self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
-        cache_file = (
-            Path(cache_path + f"_h{h_start}w{w_start}s{scene_size}.pt")
-            if cache_path is not None
-            else None
-        )
-        if (cache_file is not None) and cache_file.exists():
-            print(f"INFO: Loading cached chunks and catalog from {cache_file}")
-            self.chunks, self.catalogs = torch.load(cache_file)
-        else:
-            self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
-            if cache_file is not None:
-                print(f"INFO: Saving cached chunks and catalog to {cache_file}")
-                torch.save((self.chunks, self.catalogs), cache_file)
+        self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
 
     def __len__(self):
         return len(self.catalogs)
@@ -128,10 +114,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         bg = self.bgs[idx]
         tile_map = self.catalogs[idx]
         return {
+            **tile_map.to_dict(),
             "images": chunk.unsqueeze(0),
             "background": bg.unsqueeze(0),
-            **tile_map,
-            "slen": torch.tensor([self.slen]).unsqueeze(0),
         }
 
     @staticmethod
@@ -141,10 +126,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             out[k] = torch.cat([x[k] for x in tile_catalogs], dim=0)
         return out
 
-    def _prerender_chunks(self, image, background):
+    def _prerender_chunks(self, image, background) -> Tuple[Tensor, Tensor, List[TileCatalog]]:
         chunks = make_image_into_chunks(image, self.kernel_size, self.stride)
         bg_chunks = make_image_into_chunks(background, self.kernel_size, self.stride)
-        catalogs = []
+        catalogs: List[TileCatalog] = []
         chunks_with_galaxies = []
         bgs_with_galaxies = []
         encoder = self.encoder.to(self.prerender_device)
@@ -154,7 +139,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                 bg_device = bg.to(self.prerender_device).unsqueeze(0)
                 tile_map = encoder.max_a_post(chunk_device, bg_device)
                 if tile_map["galaxy_bools"].sum() > 0:
-                    catalogs.append(cpu(tile_map))
+                    catalogs.append(tile_map.cpu())
                     chunks_with_galaxies.append(chunk.cpu())
                     bgs_with_galaxies.append(bg.cpu())
         chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
@@ -186,10 +171,3 @@ def make_image_into_chunks(image, kernel_size, stride):
         h=kernel_size,
         w=kernel_size,
     )
-
-
-def cpu(x: Dict[str, Tensor]):
-    out = {}
-    for k, v in x.items():
-        out[k] = v.cpu()
-    return out

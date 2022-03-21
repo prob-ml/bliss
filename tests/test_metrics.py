@@ -1,5 +1,6 @@
 import torch
 
+from bliss.catalog import FullCatalog
 from bliss.reporting import ClassificationMetrics, DetectionMetrics
 
 
@@ -16,16 +17,24 @@ def test_metrics():
     true_galaxy_bools = torch.tensor([[1, 0], [1, 1]]).reshape(2, 2, 1)
     est_galaxy_bools = torch.tensor([[0, 1], [1, 0]]).reshape(2, 2, 1)
 
-    true_params = {
-        "n_sources": torch.tensor([1, 2]),
-        "plocs": true_locs * slen,
-        "galaxy_bools": true_galaxy_bools,
-    }
-    est_params = {
-        "n_sources": torch.tensor([2, 2]),
-        "plocs": est_locs * slen,
-        "galaxy_bools": est_galaxy_bools,
-    }
+    true_params = FullCatalog(
+        slen,
+        slen,
+        {
+            "n_sources": torch.tensor([1, 2]),
+            "plocs": true_locs * slen,
+            "galaxy_bools": true_galaxy_bools,
+        },
+    )
+    est_params = FullCatalog(
+        slen,
+        slen,
+        {
+            "n_sources": torch.tensor([2, 2]),
+            "plocs": est_locs * slen,
+            "galaxy_bools": est_galaxy_bools,
+        },
+    )
 
     results_detection = detect(true_params, est_params)
     precision = results_detection["precision"]
