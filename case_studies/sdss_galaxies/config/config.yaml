@@ -148,9 +148,9 @@ models:
         slack: 1.0
 
 generate:
-    dataset: ${datasets.SDSSGalaxies}
-    file: ${paths.project}/output/generate_output
-    n_plots: 25
+    dataset:
+    file:
+    n_plots:
 predict:
     sdss:
         _target_: bliss.datasets.sdss.SloanDigitalSkySurvey
