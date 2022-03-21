@@ -360,6 +360,7 @@ class SemiSyntheticFrame:
         dataset.to("cpu")
         self.bp = dataset.image_decoder.border_padding
         self.tile_slen = dataset.tile_slen
+        self.coadd_file = coadd
         if cache_dir is not None:
             sim_frame_path = Path(cache_dir) / "simulated_frame.pt"
         else:
@@ -368,10 +369,8 @@ class SemiSyntheticFrame:
             tile_catalog_dict, image, background = torch.load(sim_frame_path)
             tile_catalog = TileCatalog(self.tile_slen, tile_catalog_dict)
         else:
-            # hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
-            # wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
-            hlim = (0, n_tiles_h * self.tile_slen)
-            wlim = (0, n_tiles_w * self.tile_slen)
+            hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
+            wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
             full_coadd_cat = CoaddFullCatalog.from_file(coadd, hlim, wlim)
             full_coadd_cat["galaxy_params"] = (
                 torch.randn((1, full_coadd_cat.n_sources, 32)) * full_coadd_cat["galaxy_bools"]
@@ -382,6 +381,8 @@ class SemiSyntheticFrame:
             tile_catalog["galaxy_fluxes"] = dataset.image_decoder.get_galaxy_fluxes(
                 tile_catalog["galaxy_bools"], tile_catalog["galaxy_params"]
             )
+            fc = tile_catalog.to_full_params()
+            assert fc.equals(full_coadd_cat, exclude=("galaxy_fluxes",))
             print("INFO: started generating frame")
             image, background = dataset.simulate_image_from_catalog(tile_catalog)
             print("INFO: done generating frame")
@@ -395,23 +396,7 @@ class SemiSyntheticFrame:
         assert self.background.shape[0] == 1
 
     def get_catalog(self, hlims, wlims):
-        h, h_end = hlims[0], hlims[1]
-        w, w_end = wlims[0], wlims[1]
-        hlims_tile = int(np.floor(h / self.tile_slen)), int(np.ceil(h_end / self.tile_slen))
-        wlims_tile = int(np.floor(w / self.tile_slen)), int(np.ceil(w_end / self.tile_slen))
-        # tile_cat_cropped = {}
-        # for k, v in self.tile_catalog.items():
-        #     tile_cat_cropped[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
-        tile_cat_cropped = self.tile_catalog.crop(hlims_tile, wlims_tile)
-        full_cat = tile_cat_cropped.to_full_params()
-        full_cat["star_bools"] = 1 - full_cat["galaxy_bools"]
-        full_cat["fluxes"] = (
-            full_cat["galaxy_bools"] * full_cat["galaxy_fluxes"]
-            + full_cat["star_bools"] * full_cat["fluxes"]
-        )
-        full_cat["mags"] = convert_flux_to_mag(full_cat["fluxes"])
-        # full_cat.plocs = full_cat.plocs - 1.0
-        return full_cat
+        return CoaddFullCatalog.from_file(self.coadd_file, hlims, wlims)
 
 
 def apply_mask(image, background, regions, mask_bg_val=865.0):
