@@ -6,16 +6,37 @@ from astropy.table import Table
 from hydra.utils import instantiate
 
 from bliss import reporting
+from bliss.catalog import FullCatalog
 
 
 def test_scene_metrics():
-    true_params = {
-        "plocs": torch.tensor([[50.0, 50.0]]).float(),
-        "galaxy_bools": torch.tensor([1]).bool(),
-        "n_sources": torch.tensor([1]).long(),
-        "mags": torch.tensor([23.0]).float(),
-    }
+    true_params = FullCatalog(
+        100,
+        100,
+        {
+            "plocs": torch.tensor([[[50.0, 50.0]]]).float(),
+            "galaxy_bools": torch.tensor([[[1]]]).bool(),
+            "n_sources": torch.tensor([1]).long(),
+            "mags": torch.tensor([[[23.0]]]).float(),
+        },
+    )
     reporting.scene_metrics(true_params, true_params, mag_cut=25, slack=1.0, mag_slack=0.25)
+
+
+def test_catalog_conversion():
+    true_params = FullCatalog(
+        100,
+        100,
+        {
+            "plocs": torch.tensor([[[51.8, 49.6]]]).float(),
+            "galaxy_bools": torch.tensor([[[1]]]).bool(),
+            "n_sources": torch.tensor([1]).long(),
+            "mags": torch.tensor([[[23.0]]]).float(),
+        },
+    )
+    true_tile_params = true_params.to_tile_params(tile_slen=4, max_sources_per_tile=1)
+    tile_params_tilde = true_tile_params.to_full_params()
+    assert true_params.equals(tile_params_tilde)
 
 
 def test_coadd(devices, get_sdss_galaxies_config):
@@ -36,7 +57,7 @@ def test_coadd(devices, get_sdss_galaxies_config):
     h = 1489
     w = 2048
     bp = 24
-    reporting.get_params_from_coadd(coadd_cat, (bp, w - bp), (bp, h - bp))
+    reporting.CoaddFullCatalog.from_table(coadd_cat, (bp, h - bp), (bp, w - bp))
 
 
 def test_measurements():

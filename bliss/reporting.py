@@ -15,6 +15,7 @@ from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
 
+from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import convert_flux_to_mag, convert_mag_to_flux
 
 
@@ -53,21 +54,16 @@ class DetectionMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true_params: dict, est_params: dict):
+    def update(self, true: FullCatalog, est: FullCatalog):
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
-        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
-        true_locs, est_locs = true_params["plocs"], est_params["plocs"]  # plocs = pixel locs.
-        assert len(true_n_sources.shape) == len(est_n_sources.shape) == 1, "Not tiles."
-        assert true_n_sources.shape[0] == est_n_sources.shape[0]
-        assert len(true_locs.shape) == len(est_locs.shape) == 3
-        assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-        assert true_locs.shape[0] == est_locs.shape[0] == true_n_sources.shape[0]
-        batch_size = true_n_sources.shape[0]
+        assert isinstance(true, FullCatalog)
+        assert isinstance(est, FullCatalog)
+        assert true.batch_size == est.batch_size
 
         count = 0
-        for b in range(batch_size):
-            ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
-            tlocs, elocs = true_locs[b], est_locs[b]
+        for b in range(true.batch_size):
+            ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
+            tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
                 _, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
                 tp = len(elocs[mest][dkeep])  # n_matches
@@ -120,25 +116,15 @@ class ClassificationMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true_params: dict, est_params: dict):
+    def update(self, true: FullCatalog, est: FullCatalog):
         """Update the internal state of the metric including correct # of classifications."""
-        true_n_sources, est_n_sources = true_params["n_sources"], est_params["n_sources"]
-        true_locs, est_locs = true_params["plocs"], est_params["plocs"]
-        true_galaxy_bools, est_galaxy_bools = (
-            true_params["galaxy_bools"],
-            est_params["galaxy_bools"],
-        )
-        batch_size = len(true_n_sources)
-        assert len(true_galaxy_bools.shape) == len(est_galaxy_bools.shape) == 3
-        assert true_galaxy_bools.shape[0] == est_galaxy_bools.shape[0] == batch_size
-        assert len(true_locs.shape) == len(est_locs.shape) == 3
-        assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-        assert true_locs.shape[0] == est_locs.shape[0] == batch_size
-
-        for b in range(batch_size):
-            ntrue, nest = true_n_sources[b].int().item(), est_n_sources[b].int().item()
-            tlocs, elocs = true_locs[b], est_locs[b]
-            tgbool, egbool = true_galaxy_bools[b].reshape(-1), est_galaxy_bools[b].reshape(-1)
+        assert isinstance(true, FullCatalog)
+        assert isinstance(est, FullCatalog)
+        assert true.batch_size == est.batch_size
+        for b in range(true.batch_size):
+            ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
+            tlocs, elocs = true.plocs[b], est.plocs[b]
+            tgbool, egbool = true["galaxy_bools"].reshape(-1), est["galaxy_bools"][b].reshape(-1)
             if ntrue > 0 and nest > 0:
                 mtrue, mest, dkeep, _ = match_by_locs(tlocs, elocs, self.slack)
                 tgbool = tgbool[mtrue][dkeep].reshape(-1)
@@ -206,8 +192,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 
 
 def scene_metrics(
-    true_params: dict,
-    est_params: dict,
+    true_params: FullCatalog,
+    est_params: FullCatalog,
     mag_cut=25.0,
     slack=1.0,
     mag_slack=0.25,
@@ -236,12 +222,8 @@ def scene_metrics(
     # For calculating precision, we consider a wider bin for the 'true' objects, this way
     # we ensure that underestimating the magnitude of a true object close and above the
     # boundary does not mark this estimated object as FP, thus reducing our precision.
-    tparams = apply_mag_cut(true_params, mag_cut + mag_slack)
-    eparams = apply_mag_cut(est_params, mag_cut)
-
-    # collect params in correct format
-    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
-    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
+    tparams = true_params.apply_mag_cut(mag_cut + mag_slack)
+    eparams = est_params.apply_mag_cut(mag_cut)
 
     # update
     detection_metrics.update(tparams, eparams)
@@ -252,10 +234,8 @@ def scene_metrics(
     # For calculating recall, we consider a wider bin for the 'estimated' objects, this way
     # we ensure that overestimating the magnitude of a true object close and below the boundary
     # does not mean that we missed this object, reducing our TP, and reducing recall.
-    tparams = apply_mag_cut(true_params, mag_cut)
-    eparams = apply_mag_cut(est_params, mag_cut + mag_slack)
-    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
-    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
+    tparams = true_params.apply_mag_cut(mag_cut)
+    eparams = est_params.apply_mag_cut(mag_cut + mag_slack)
     detection_metrics.update(tparams, eparams)
     recall = detection_metrics.compute()["recall"]
     detection_metrics.reset()
@@ -265,12 +245,8 @@ def scene_metrics(
     detection_result = {"precision": precision, "recall": recall, "f1": f1}
 
     # compute classification metrics, these are only computed on matches so ignore mag_slack.
-    tparams = apply_mag_cut(true_params, mag_cut)
-    eparams = apply_mag_cut(est_params, mag_cut)
-    tparams["plocs"] = tparams["plocs"].reshape(1, -1, 2)
-    eparams["plocs"] = eparams["plocs"].reshape(1, -1, 2)
-    tparams["galaxy_bools"] = tparams["galaxy_bools"].reshape(1, -1, 1)
-    eparams["galaxy_bools"] = eparams["galaxy_bools"].reshape(1, -1, 1)
+    tparams = true_params.apply_mag_cut(mag_cut)
+    eparams = est_params.apply_mag_cut(mag_cut)
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
@@ -278,64 +254,65 @@ def scene_metrics(
     return {**detection_result, **classification_result}
 
 
-def apply_mag_cut(params: dict, mag_cut=25.0):
-    """Apply magnitude cut to given parameters."""
-    assert "mags" in params, "Magnitude parameter missing in `params` when trying to apply mag cut."
-    keep = params["mags"] < mag_cut
-    if len(keep.shape) == 3:
-        keep = rearrange(keep, "n s 1 -> n s")
-    d = {k: v[keep] for k, v in params.items() if k != "n_sources"}
-    d["n_sources"] = torch.tensor([len(d["mags"])])
-    return d
+class CoaddFullCatalog(FullCatalog):
+    coadd_names = {
+        "objid": "objid",
+        "galaxy_bools": "galaxy_bool",
+        "fluxes": "flux",
+        "mags": "mag",
+        "hlr": "hlr",
+        "ra": "ra",
+        "dec": "dec",
+    }
+    allowed_params = FullCatalog.allowed_params.union(coadd_names.keys())
+
+    @classmethod
+    def from_file(cls, coadd_file: str, hlim: Tuple[int, int], wlim: Tuple[int, int]):
+        coadd_table = Table.read(coadd_file, format="fits")
+        return cls.from_table(coadd_table, hlim, wlim)
+
+    @classmethod
+    def from_table(
+        cls,
+        coadd_table,
+        hlim: Tuple[int, int],
+        wlim: Tuple[int, int],
+    ):
+        """Load coadd catalog from file, add extra useful information, convert to tensors."""
+        assert set(cls.coadd_names.values()).issubset(set(coadd_table.columns))
+        # filter saturated objects
+        coadd_table = coadd_table[~coadd_table["is_saturated"].data]
+        # only return objects inside limits.
+        w, h = coadd_table["x"], coadd_table["y"]
+        keep = np.ones(len(coadd_table)).astype(bool)
+        keep &= (h > hlim[0]) & (h < hlim[1])
+        keep &= (w > wlim[0]) & (w < wlim[1])
+        height = hlim[1] - hlim[0]
+        width = wlim[1] - wlim[0]
+        data = {}
+        h = torch.from_numpy(np.array(h).astype(np.float32)[keep])
+        w = torch.from_numpy(np.array(w).astype(np.float32)[keep])
+        data["plocs"] = torch.stack((h - hlim[0], w - wlim[0]), dim=1).unsqueeze(0)
+        data["n_sources"] = torch.tensor(data["plocs"].shape[1]).reshape(1)
+
+        for bliss_name, coadd_name in cls.coadd_names.items():
+            arr = column_to_tensor(coadd_table, coadd_name)[keep]
+            data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
+        data["galaxy_bools"] = data["galaxy_bools"].bool()
+        return cls(height, width, data)
 
 
-def get_params_from_coadd(
-    coadd_cat,
-    xlim: Optional[Tuple[int, int]] = None,
-    ylim: Optional[Tuple[int, int]] = None,
-    shift_plocs_to_lim_start=False,
-    convert_xy_to_hw=False,
-):
-    """Load coadd catalog from file, add extra useful information, convert to tensors."""
-    coadd_names = {"objid", "x", "y", "galaxy_bool", "flux", "mag", "hlr", "ra", "dec"}
-    assert coadd_names.issubset(set(coadd_cat.columns))
-
-    # filter saturated objects
-    coadd_cat = coadd_cat[~coadd_cat["is_saturated"].data]
-
-    # only return objects inside limits.
-    x, y = coadd_cat["x"], coadd_cat["y"]
-    keep = np.ones(len(coadd_cat)).astype(bool)
-    if xlim:
-        keep &= (x > xlim[0]) & (x < xlim[1])
-    if ylim:
-        keep &= (y > ylim[0]) & (y < ylim[1])
-    coadd_cat = coadd_cat[keep]
-
-    # extract required arrays with correct byte order, otherwise torch error.
-    data = {}
-    for n in coadd_names:
-        arr = []
-        for v in coadd_cat[n]:
-            arr.append(v)
-        data[n] = torch.from_numpy(np.array(arr)).reshape(-1)
-
-    # final adjustments.
-    data["galaxy_bools"] = data["galaxy_bool"].bool()
-    x, y = data["x"].reshape(-1, 1), data["y"].reshape(-1, 1)
-    data["plocs"] = torch.hstack((x, y)).reshape(-1, 2)
-    data["n_sources"] = len(x)
-    data["fluxes"] = data["flux"]
-    data["hlrs"] = data["hlr"]
-    data["mags"] = data["mag"]
-
-    if shift_plocs_to_lim_start:
-        data["plocs"] = data["plocs"] - torch.tensor((xlim[0], ylim[0])).unsqueeze(0)
-
-    if convert_xy_to_hw:
-        data["plocs"] = torch.stack((data["plocs"][:, 1], data["plocs"][:, 0]), dim=1)
-
-    return data
+def column_to_tensor(table, colname):
+    dtypes = {
+        np.dtype(">i8"): int,
+        np.dtype("bool"): bool,
+        np.dtype(">f8"): np.float32,
+        np.dtype("float64"): np.dtype("float64"),
+    }
+    x = np.array(table[colname])
+    dtype = dtypes[x.dtype]
+    x = x.astype(dtype)
+    return torch.from_numpy(x)
 
 
 def get_flux_coadd(coadd_cat, nelec_per_nmgy=987.31, band="r"):
@@ -513,13 +490,13 @@ def plot_image_and_locs(
     ax: Axes,
     images,
     slen: int,
-    true_params: dict,
-    estimate: dict = None,
+    true_params: FullCatalog,
+    estimate: Optional[FullCatalog] = None,
     labels: list = None,
     annotate_axis: bool = False,
     add_borders: bool = False,
     vrange: tuple = None,
-    galaxy_probs: Tensor = None,
+    galaxy_probs: Optional[Tensor] = None,
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
@@ -531,8 +508,8 @@ def plot_image_and_locs(
     image = images[idx, 0].cpu().numpy()
 
     # true parameters on full image.
-    true_n_sources = true_params["n_sources"][idx].cpu().numpy()
-    true_locs = true_params["locs"][idx].cpu().numpy()
+    true_n_sources = true_params.n_sources[idx].cpu().numpy()
+    true_locs = true_params.plocs[idx].cpu().numpy()
     true_galaxy_bools = true_params["galaxy_bools"][idx].cpu().numpy()
     true_star_bools = true_params["star_bools"][idx].cpu().numpy()
     true_galaxy_locs = true_locs * true_galaxy_bools
@@ -540,8 +517,8 @@ def plot_image_and_locs(
 
     # convert tile estimates to full parameterization for plotting
     if estimate is not None:
-        n_sources = estimate["n_sources"][idx].cpu().numpy()
-        locs = estimate["locs"][idx].cpu().numpy()
+        n_sources = estimate.n_sources[idx].cpu().numpy()
+        locs = estimate.plocs[idx].cpu().numpy()
 
     if galaxy_probs is not None:
         galaxy_probs = galaxy_probs[idx].cpu().numpy().reshape(-1)

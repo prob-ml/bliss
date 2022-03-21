@@ -16,12 +16,9 @@ from matplotlib import pyplot as plt
 from torch.distributions import Normal
 from torch.optim import Adam
 
+from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import (
-    LocationEncoder,
-    get_full_params_from_tiles,
-    get_is_on_from_n_sources,
-)
+from bliss.models.location_encoder import LocationEncoder
 from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 plt.switch_backend("Agg")
@@ -158,15 +155,13 @@ class SleepPhase(pl.LightningModule):
         background = batch["background"]
         var_params = self.image_encoder.encode(images, background)
         tile_map = self.image_encoder.max_a_post(var_params)
-        tile_map["galaxy_params"] = batch["galaxy_params"]
-
         # FIXME: True galaxy params are not necessarily consistent with other MAP estimates
         # need to do some matching to ensure correctness of residual images?
         # maybe doesn't matter because only care about detection if not estimating
         # galaxy_parameters.
-        max_sources = tile_map["locs"].shape[2]
-        tile_map["galaxy_params"] = tile_map["galaxy_params"][:, :, :max_sources]
-        tile_map["galaxy_params"] = tile_map["galaxy_params"].contiguous()
+        max_sources = tile_map.max_sources
+        galaxy_params = batch["galaxy_params"]
+        tile_map["galaxy_params"] = galaxy_params[:, :, :, :max_sources].contiguous()
         return tile_map
 
     def _get_loss(self, batch):
@@ -332,13 +327,14 @@ class SleepPhase(pl.LightningModule):
     def _get_full_params(self, batch):
         # true
         exclude = {"images", "background"}
-
-        true_tile_params = {k: v for k, v in batch.items() if k not in exclude}
-        true_params = get_full_params_from_tiles(true_tile_params, self.image_encoder.tile_slen)
+        true_tile_params = TileCatalog(
+            self.image_encoder.tile_slen, {k: v for k, v in batch.items() if k not in exclude}
+        )
+        true_params = true_tile_params.to_full_params()
 
         # estimate
         tile_estimate = self.tile_map_estimate(batch)
-        est_params = get_full_params_from_tiles(tile_estimate, self.image_encoder.tile_slen)
+        est_params = tile_estimate.to_full_params()
         return true_params, est_params
 
     # pylint: disable=too-many-statements
