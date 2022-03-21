@@ -3,9 +3,9 @@
 from pathlib import Path
 from typing import Tuple, Union
 
-import torch
 import numpy as np
 import pandas as pd
+import torch
 from einops import rearrange, repeat
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
@@ -15,10 +15,10 @@ from bliss import reporting
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import (
-    infer_blends,
-    reconstruct_scene_at_coordinates,
     SDSSFrame,
     SimulatedFrame,
+    infer_blends,
+    reconstruct_scene_at_coordinates,
 )
 from bliss.models.decoder import ImageDecoder
 from bliss.models.location_encoder import get_full_params_from_tiles

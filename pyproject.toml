@@ -3,6 +3,7 @@ authors = ["Ismael Mendoza", "Runjing Liu", "Derek Hansen", "Ziteng Pang", "Zhe 
 description = "Bayesian Light Source Separator"
 license = "MIT"
 name = "bliss"
+packages = [{include = "bliss"}, {include = 'case_studies'}]
 version = "0.1.0"
 
 [tool.poetry.dependencies]
@@ -11,6 +12,7 @@ einops = "^0.3.0"
 galsim = "^2.2.4"
 hydra-core = "^1.0.4"
 matplotlib = "^3.3.3"
+nflows = "^0.14"
 numpy = "^1.18.5"
 python = "^3.8"
 pytorch-lightning = "^1.5.1"
@@ -18,7 +20,6 @@ scipy = "^1.4.1"
 seaborn = "^0.11.2"
 torch = "~1.8"
 torchmetrics = "^0.5.1"
-nflows = "^0.14"
 
 [tool.poetry.dev-dependencies]
 Cython = "^0.29.21"
@@ -68,6 +69,5 @@ filterwarnings = [
 ]
 minversion = "6.0"
 testpaths = [
-  "case_studies",
   "tests",
 ]

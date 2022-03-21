@@ -3,9 +3,9 @@ from os import environ, getenv
 from pathlib import Path
 
 import hydra
-from reconstruction import reconstruct
 
 from bliss.train import train
+from case_studies.sdss_galaxies_vae.reconstruction import reconstruct
 
 if not getenv("BLISS_HOME"):
     project_path = Path(__file__).resolve()

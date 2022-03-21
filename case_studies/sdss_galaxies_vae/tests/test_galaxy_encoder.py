@@ -1,1 +1,0 @@
-../../sdss_galaxies/tests/test_galaxy_encoder.py

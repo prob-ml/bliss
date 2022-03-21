@@ -1,4 +1,4 @@
-def test_galaxy_flow(model_setup):
+def test_galaxy_flow(vae_setup):
     overrides = {
         "mode": "train",
         "training": "sdss_vae_flow",
@@ -9,4 +9,4 @@ def test_galaxy_flow(model_setup):
     }
 
     # train galaxy_vae
-    model_setup.get_trained_model(overrides)
+    vae_setup.get_trained_model(overrides)
