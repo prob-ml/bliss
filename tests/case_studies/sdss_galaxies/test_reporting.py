@@ -39,10 +39,10 @@ def test_catalog_conversion():
     assert true_params.equals(tile_params_tilde)
 
 
-def test_coadd(devices, get_config):
+def test_coadd(devices, get_sdss_galaxies_config):
 
     # get psf
-    cfg = get_config({}, devices)
+    cfg = get_sdss_galaxies_config({}, devices)
     ds = instantiate(cfg.datasets.sdss_galaxies)
     psf = ds.psf
 
