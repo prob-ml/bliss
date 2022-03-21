@@ -411,6 +411,13 @@ class SemiSyntheticFrame:
         wlims_tile = (math.floor(wlims[0] / self.tile_slen), math.ceil(wlims[1] / self.tile_slen))
         tile_catalog_cropped = self.tile_catalog.crop(hlims_tile, wlims_tile)
         full_catalog_cropped = tile_catalog_cropped.to_full_params()
+        # Adjust for the fact that we cropped at the tile boundary
+        full_catalog_cropped = full_catalog_cropped.crop(
+            h_min=hlims[0] % self.tile_slen,
+            h_max=-hlims[1] % self.tile_slen,
+            w_min=wlims[0] % self.tile_slen,
+            w_max=-wlims[1] % self.tile_slen,
+        )
         full_catalog_cropped.plocs = full_catalog_cropped.plocs - 0.5
         return full_catalog_cropped
 
