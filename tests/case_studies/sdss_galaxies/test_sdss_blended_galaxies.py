@@ -1,7 +1,5 @@
 import pytest
 
-from bliss.train import train
-
 
 class TestSdssBlendedGalaxies:
     @pytest.fixture(scope="class")
@@ -20,6 +18,5 @@ class TestSdssBlendedGalaxies:
             "training.trainer.log_every_n_steps": 1,
         }
 
-    def test_sdss_blended_galaxies(self, devices, overrides, get_config):
-        cfg = get_config(overrides, devices)
-        train(cfg)
+    def test_sdss_blended_galaxies(self, overrides, sdss_galaxies_setup):
+        sdss_galaxies_setup.get_trained_model(overrides)

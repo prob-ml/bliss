@@ -1,5 +1,7 @@
 import pytest
 
+from bliss.train import train
+
 
 class TestSleepStarOneTile:
     @pytest.fixture(scope="class")
@@ -53,3 +55,7 @@ class TestSleepStarTiles:
         assert results["precision"] > 0.85
         assert results["f1"] > 0.8
         assert results["avg_distance"] < 1.0
+
+    def test_train(self, overrides, star_basic_model_setup):
+        cfg = star_basic_model_setup.get_cfg(overrides)
+        train(cfg)

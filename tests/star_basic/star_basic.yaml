@@ -135,4 +135,9 @@ training:
         min_epochs: ${training.n_epochs}
         gpus: ${gpus}
         log_every_n_steps: 10
+    testing:
+        file: null
+        batch_size: 32
+        num_workers: 0
+    weight_save_path: null
     seed: null

@@ -1,7 +1,5 @@
 import pytest
 
-from bliss.train import train
-
 
 class TestBasicGalaxyMeasure:
     @pytest.fixture(scope="class")
@@ -23,6 +21,5 @@ class TestBasicGalaxyMeasure:
             )
         return overrides
 
-    def test_simulated(self, devices, overrides, get_config):
-        cfg = get_config(overrides, devices)
-        train(cfg)
+    def test_simulated(self, overrides, sdss_galaxies_setup):
+        sdss_galaxies_setup.get_trained_model(overrides)

@@ -4,6 +4,9 @@ from pathlib import Path
 
 import hydra
 
+from bliss.generate import generate
+from bliss.train import train
+
 if not getenv("BLISS_HOME"):
     project_path = Path(__file__).resolve()
     bliss_home = project_path.parents[2]
@@ -13,14 +16,13 @@ if not getenv("BLISS_HOME"):
 @hydra.main(config_path="./config", config_name="config")
 def main(cfg):
     if cfg.mode == "train":
-        from bliss.train import train as task
+        train(cfg)
     elif cfg.mode == "generate":
-        from bliss.generate import generate as task
-    elif cfg.mode == "predict":
-        from bliss.predict import predict as task
+        filepath = cfg.generate.file + ".pt"
+        imagepath = cfg.generate.file + ".png"
+        generate(cfg.generate.dataset, filepath, imagepath, cfg.generate.n_plots)
     else:
         raise KeyError
-    task(cfg)
 
 
 if __name__ == "__main__":
