@@ -254,13 +254,13 @@ class FullCatalog(UserDict):
         n_sources = self.n_sources[0]
         for (idx, coords) in enumerate(tile_coords[:n_sources]):
             source_idx = tile_n_sources[0, coords[0], coords[1]]
-            tile_n_sources[0, coords[0], coords[1]] = source_idx + 1
             tile_is_on_array[0, coords[0], coords[1]] = 1
             tile_locs[0, coords[0], coords[1], source_idx] = (
                 self.plocs[0, idx] - coords * tile_slen
             ) / tile_slen
             for k, v in tile_params.items():
                 v[0, coords[0], coords[1], source_idx] = self[k][0, idx]
+            tile_n_sources[0, coords[0], coords[1]] = source_idx + 1
         tile_params.update(
             {
                 "locs": tile_locs,
