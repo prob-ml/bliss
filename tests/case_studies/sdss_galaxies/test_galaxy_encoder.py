@@ -10,6 +10,7 @@ class TestBasicGalaxyMeasure:
             "mode": "train",
             "training": "sdss_galaxy_encoder",
             "training.trainer.check_val_every_n_epoch": 1,
+            "training.trainer.logger": False,
             "training.n_epochs": 3,  # plotting coverage.
             "datasets.simulated.batch_size": 3,
         }
