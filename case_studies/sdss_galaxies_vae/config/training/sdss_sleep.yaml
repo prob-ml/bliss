@@ -9,4 +9,3 @@ training:
   save_top_k: 10
   trainer:
     enable_checkpointing: true
-

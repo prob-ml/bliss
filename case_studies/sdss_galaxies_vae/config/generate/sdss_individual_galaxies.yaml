@@ -2,7 +2,7 @@
 generate:
   dataset: ${datasets.sdss_galaxies}
   file: data/simulated_sdss_individual_galaxies.pt
-  common: 
+  common:
     - background
     - slen
 
@@ -12,4 +12,3 @@ datasets:
     n_batches: 20
     num_workers: 20
     flux_sample: uniform
-

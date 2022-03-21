@@ -3,7 +3,7 @@ name: docs
 on:
   push:
     branches: [master]
-    
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -61,4 +61,3 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         branch: refs/heads/master-sphinx
         force: true
-        

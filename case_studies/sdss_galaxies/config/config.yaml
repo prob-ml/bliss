@@ -148,9 +148,8 @@ models:
         slack: 1.0
 
 generate:
-    dataset:
-    file:
-    common: # What attributes of dataset items are in common and should not be stacked?
+    dataset: ${datasets.SDSSGalaxies}
+    file: ${paths.project}/output/generate_output
     n_plots: 25
 predict:
     sdss:
