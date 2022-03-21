@@ -22,7 +22,6 @@ from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.encoder import Encoder
 from bliss.inference import reconstruct_scene_at_coordinates
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.models.location_encoder import get_full_params_from_tiles
 
 pl.seed_everything(0)
 
@@ -496,10 +495,8 @@ class DetectionClassificationFigures(BlissFigures):
         wlims = (bp, w - bp)
 
         # load coadd catalog
-        coadd_params = reporting.get_params_from_coadd(
-            coadd_cat, wlims, hlims, shift_plocs_to_lim_start=True, convert_xy_to_hw=True
-        )
-        coadd_params["plocs"] += bp
+        coadd_params = reporting.CoaddFullCatalog.from_table(coadd_cat, hlims, wlims)
+        coadd_params.plocs += bp
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
@@ -521,8 +518,8 @@ class DetectionClassificationFigures(BlissFigures):
             slen=slen,
             device=device,
         )
-        est_params = get_full_params_from_tiles(tile_est_params, encoder.tile_slen)
-        est_params["plocs"] += bp - 0.5
+        est_params = tile_est_params.to_full_params()
+        est_params.plocs += bp - 0.5
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
             + est_params["star_bools"] * est_params["fluxes"]
@@ -650,15 +647,13 @@ class SDSSReconstructionFigures(BlissFigures):
             assert height >= bp and width >= bp
             assert xlim[0] >= bp
             assert ylim[0] >= bp
-            coadd_data = reporting.get_params_from_coadd(
-                coadd_cat, xlim, ylim, shift_plocs_to_lim_start=True, convert_xy_to_hw=True
-            )
+            coadd_data = reporting.CoaddFullCatalog.from_table(coadd_cat, ylim, xlim)
             with torch.no_grad():
                 recon_image, tile_recon_map = reconstruct_scene_at_coordinates(
                     encoder, decoder, scene, background, ylim, xlim, slen=slen, device=device
                 )
-            recon_map = get_full_params_from_tiles(tile_recon_map, encoder.tile_slen)
-            recon_map["plocs"] = recon_map["plocs"] - 0.5
+            recon_map = tile_recon_map.to_full_params()
+            recon_map.plocs = recon_map.plocs - 0.5
             # only keep section inside border padding
             true_image = scene[0, 0, ylim[0] : ylim[1], xlim[0] : xlim[1]].cpu()
             recon_image = recon_image[0, 0].cpu()
@@ -721,7 +716,7 @@ class SDSSReconstructionFigures(BlissFigures):
             if recon_map is not None:
                 s *= 0.75
                 lw *= 0.75
-                locs_pred = recon_map["plocs"][0]
+                locs_pred = recon_map.plocs[0]
                 star_bools = recon_map["star_bools"][0]
                 galaxy_bools = recon_map["galaxy_bools"][0]
                 locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]

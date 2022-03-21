@@ -1,27 +1,27 @@
 # flake8: noqa
 # pylint: skip-file
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
-import torch
 import numpy as np
 import pandas as pd
+import torch
 from einops import rearrange, repeat
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from torch.distributions import Normal
 
 from bliss import reporting
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import (
-    infer_blends,
-    reconstruct_scene_at_coordinates,
     SDSSFrame,
     SimulatedFrame,
+    infer_blends,
+    reconstruct_scene_at_coordinates,
 )
 from bliss.models.decoder import ImageDecoder
-from bliss.models.location_encoder import get_full_params_from_tiles
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
@@ -66,13 +66,13 @@ def reconstruct(cfg):
         print(
             f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image."
         )
-        map_recon = get_full_params_from_tiles(tile_map_recon, encoder.tile_slen)
+        map_recon = tile_map_recon.to_full_params()
         map_recon["fluxes"] = (
             map_recon["galaxy_bools"] * map_recon["galaxy_fluxes"]
             + map_recon["star_bools"] * map_recon["fluxes"]
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
-        map_recon["plocs"] = map_recon["plocs"] - 0.5
+        map_recon.plocs = map_recon.plocs - 0.5
 
         tile_map_recon["fluxes"] = (
             tile_map_recon["galaxy_bools"] * tile_map_recon["galaxy_fluxes"]
@@ -204,8 +204,8 @@ def create_figure(
     true,
     recon,
     res,
-    coadd_objects=None,
-    map_recon=None,
+    coadd_objects: Optional[FullCatalog] = None,
+    map_recon: Optional[FullCatalog] = None,
     include_residuals: bool = True,
     colorbar=True,
     scatter_size: int = 100,
@@ -248,7 +248,7 @@ def create_figure(
             fig, ax_recon, recon, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
         )
     else:
-        is_on_array = rearrange(tile_map["is_on_array"], "1 nth ntw 1 1 -> nth ntw 1 1")
+        is_on_array = rearrange(tile_map.is_on_array, "1 nth ntw 1 -> nth ntw 1 1")
         is_on_array = repeat(is_on_array, "nth ntw 1 1 -> nth ntw h w", h=4, w=4)
         is_on_array = rearrange(is_on_array, "nth ntw h w -> (nth h) (ntw w)")
         ax_recon.matshow(is_on_array, vmin=0, vmax=1, cmap="gist_gray")
@@ -263,7 +263,7 @@ def create_figure(
         reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
     if coadd_objects is not None:
-        locs_true = coadd_objects["plocs"]
+        locs_true = coadd_objects.plocs
         true_galaxy_bools = coadd_objects["galaxy_bools"]
         locs_galaxies_true = locs_true[true_galaxy_bools.squeeze(-1) > 0.5]
         locs_stars_true = locs_true[true_galaxy_bools.squeeze(-1) < 0.5]
@@ -321,7 +321,7 @@ def create_figure(
                 )
 
     if map_recon is not None:
-        locs_pred = map_recon["plocs"][0]
+        locs_pred = map_recon.plocs[0]
         star_bools = map_recon["star_bools"][0]
         galaxy_bools = map_recon["galaxy_bools"][0]
         locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]
@@ -422,18 +422,18 @@ def create_scene_metrics_table(scene_metrics_by_mag):
     return scene_metrics_df, tex_lines
 
 
-def expected_recall(tile_map):
-    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1).exp()
-    prob_if_on = source_probs * tile_map["is_on_array"]
-    prob_if_off = (1 - source_probs) * (1 - tile_map["is_on_array"])
+def expected_recall(tile_map: TileCatalog):
+    source_probs = tile_map.n_sources_log_prob.unsqueeze(-1).unsqueeze(-1).exp()
+    prob_if_on = source_probs * tile_map.is_on_array.unsqueeze(-1)
+    prob_if_off = (1 - source_probs) * (1 - tile_map.is_on_array.unsqueeze(-1))
     recall = prob_if_on.sum() / (prob_if_on.sum() + prob_if_off.sum())
     return recall
 
 
-def expected_precision(tile_map):
-    source_probs = tile_map["n_sources_log_prob"].unsqueeze(-1).unsqueeze(-1).exp()
-    prob_if_on = source_probs * tile_map["is_on_array"]
-    precision = prob_if_on.sum() / tile_map["is_on_array"].sum()
+def expected_precision(tile_map: TileCatalog):
+    source_probs = tile_map.n_sources_log_prob.unsqueeze(-1).unsqueeze(-1).exp()
+    prob_if_on = source_probs * tile_map.is_on_array.unsqueeze(-1)
+    precision = prob_if_on.sum() / tile_map.is_on_array.unsqueeze(-1).sum()
     return precision
 
 

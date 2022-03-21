@@ -49,4 +49,3 @@ poetry shell
 # References
 
 Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. *Variational Inference for Deblending Crowded Starfields.* [arXiv:2102.02409](https://arxiv.org/abs/2102.02409), 2021.
-

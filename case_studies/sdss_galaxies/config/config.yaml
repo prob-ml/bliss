@@ -150,8 +150,7 @@ models:
 generate:
     dataset:
     file:
-    common: # What attributes of dataset items are in common and should not be stacked?
-    n_plots: 25
+    n_plots:
 predict:
     sdss:
         _target_: bliss.datasets.sdss.SloanDigitalSkySurvey

@@ -8,6 +8,7 @@ from einops import rearrange
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
+from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
@@ -98,10 +99,10 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             generate_device
         )
 
-    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> Dict[str, Tensor]:
-        return self.image_prior.sample_prior(batch_size, n_tiles_h, n_tiles_w)
+    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> TileCatalog:
+        return self.image_prior.sample_prior(self.tile_slen, batch_size, n_tiles_h, n_tiles_w)
 
-    def simulate_image_from_catalog(self, tile_catalog: Dict[str, Tensor]) -> Tuple[Tensor, Tensor]:
+    def simulate_image_from_catalog(self, tile_catalog: TileCatalog) -> Tuple[Tensor, Tensor]:
         images = self.image_decoder.render_images(tile_catalog)
         background = self.background.sample(images.shape)
         images += background
@@ -136,7 +137,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         with torch.no_grad():
             tile_catalog = self.sample_prior(self.batch_size, self.n_tiles_h, self.n_tiles_w)
             images, background = self.simulate_image_from_catalog(tile_catalog)
-            return {**tile_catalog, "images": images, "background": background}
+            return {**tile_catalog.to_dict(), "images": images, "background": background}
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=0)
