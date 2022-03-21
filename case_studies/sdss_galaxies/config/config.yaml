@@ -141,6 +141,7 @@ models:
             autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
             latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
             psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+            galaxy_dataset: ${datasets.sdss_galaxies}
     sleep:
         _target_: bliss.sleep.SleepPhase
         encoder: ${models.encoder}
@@ -152,6 +153,7 @@ generate:
     dataset:
     file:
     n_plots:
+
 predict:
     sdss:
         _target_: bliss.datasets.sdss.SloanDigitalSkySurvey
