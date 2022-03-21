@@ -24,7 +24,7 @@ def train(cfg: DictConfig):
                 path.mkdir(parents=True)
             else:
                 raise FileNotFoundError(f"path for {key} ({path.as_posix()}) does not exist")
-    setup_seed(cfg)
+    pl.seed_everything(cfg.training.seed)
 
     # setup dataset.
     dataset = instantiate(cfg.training.dataset)
@@ -70,12 +70,6 @@ def train(cfg: DictConfig):
                 elif is_json_serializable(v):
                     data_to_write[k] = v
             fp.write(json.dumps(data_to_write))
-
-
-def setup_seed(cfg):
-    if cfg.training.trainer.deterministic:
-        assert cfg.training.seed is not None
-        pl.seed_everything(cfg.training.seed)
 
 
 def setup_logger(cfg, paths):

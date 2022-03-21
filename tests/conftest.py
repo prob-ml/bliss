@@ -1,3 +1,4 @@
+# pylint: skip-file
 from pathlib import Path
 
 import pytest
@@ -49,15 +50,13 @@ class ModelSetup:
         overrides.update(
             {
                 # Testing-specific overrides
-                "+training.seed": 42,
+                "training.seed": 42,
                 "training.trainer.logger": False,
                 "training.trainer.check_val_every_n_epoch": 1001,
-                "training.trainer.deterministic": not self.devices.use_cuda,
             }
         )
         cfg = self.get_cfg(overrides)
-        if cfg.training.trainer.deterministic:
-            pl.seed_everything(cfg.training.seed)
+        pl.seed_everything(cfg.training.seed)
         return instantiate(cfg.training.trainer)
 
     def get_dataset_for_training(self, overrides):

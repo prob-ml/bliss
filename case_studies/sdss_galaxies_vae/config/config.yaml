@@ -204,12 +204,12 @@ training:
         limit_val_batches: 1.0
         check_val_every_n_epoch: 10
         log_every_n_steps: 10 # correspond to n_batches
-        deterministic: False
     testing:
         file: null
         batch_size: 32
         num_workers: 0
     weight_save_path: ${paths.project}/models/${training.name}.pt
+    seed: null
 
 reconstruct:
     device: "cuda:0"
