@@ -58,6 +58,7 @@ decoders:
         ptile_slen: 10
         border_padding: 0
         psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
+        psf_slen: 25
         sdss_bands:
             - 2
 
@@ -67,8 +68,10 @@ decoders:
         tile_slen: 2
         ptile_slen: 6
         border_padding: 2
+        psf_slen: 25
         psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
-
+        sdss_bands:
+            - 2
 priors:
     star_single_tile:
         _target_: bliss.models.prior.ImagePrior

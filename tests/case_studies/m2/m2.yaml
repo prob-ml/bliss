@@ -43,6 +43,7 @@ models:
     tile_slen: 2
     ptile_slen: 26
     border_padding: 3
+    psf_slen: 25
     psf_params_file: data/sdss/2583/2/136/psField-002583-2-0136.fits
     sdss_bands:
       - 2
