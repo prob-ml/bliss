@@ -23,6 +23,6 @@ class TestBasicGalaxyMeasure:
             )
         return overrides
 
-    def test_simulated(self, devices, overrides, get_config):
-        cfg = get_config(overrides, devices)
+    def test_simulated(self, devices, overrides, get_sdss_galaxies_config):
+        cfg = get_sdss_galaxies_config(overrides, devices)
         train(cfg)

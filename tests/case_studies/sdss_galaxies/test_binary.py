@@ -21,19 +21,19 @@ def overrides(devices):
     return overrides
 
 
-def test_binary(model_setup, devices, overrides):
-    trained_binary = model_setup.get_trained_model(overrides)
-    results = model_setup.test_model(overrides, trained_binary)
+def test_binary(sdss_galaxies_setup, devices, overrides):
+    trained_binary = sdss_galaxies_setup.get_trained_model(overrides)
+    results = sdss_galaxies_setup.test_model(overrides, trained_binary)
 
     if devices.use_cuda:
         assert results["acc"] > 0.85
 
 
-def test_binary_plotting(model_setup, overrides):
+def test_binary_plotting(sdss_galaxies_setup, overrides):
     overrides.update(
         {
             "datasets.simulated.batch_size": 16,
             "training.trainer.log_every_n_steps": 1,
         }
     )
-    model_setup.get_trained_model(overrides)
+    sdss_galaxies_setup.get_trained_model(overrides)

@@ -20,6 +20,6 @@ class TestSdssBlendedGalaxies:
             "training.trainer.log_every_n_steps": 1,
         }
 
-    def test_sdss_blended_galaxies(self, devices, overrides, get_config):
-        cfg = get_config(overrides, devices)
+    def test_sdss_blended_galaxies(self, devices, overrides, get_sdss_galaxies_config):
+        cfg = get_sdss_galaxies_config(overrides, devices)
         train(cfg)
