@@ -399,7 +399,6 @@ class SemiSyntheticFrame:
                 torch.save((tile_catalog.to_dict(), image, background), sim_frame_path)
 
         self.tile_catalog = tile_catalog
-        # self.full_catalog = self.tile_catal
         self.image = image
         self.background = background
         assert self.image.shape[0] == 1
