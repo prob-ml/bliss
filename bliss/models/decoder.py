@@ -30,12 +30,12 @@ class ImageDecoder(pl.LightningModule):
         n_bands: int,
         tile_slen: int,
         ptile_slen: int,
-        border_padding: int = None,
+        psf_slen: int,
+        sdss_bands: Tuple[int, ...],
+        psf_params_file: str,
+        border_padding: Optional[int] = None,
         galaxy_ae: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
         galaxy_ae_ckpt: Optional[str] = None,
-        psf_params_file: str = None,
-        psf_slen: int = 25,
-        sdss_bands: Tuple[int, ...] = (2,),
     ):
         """Initializes ImageDecoder.
 
