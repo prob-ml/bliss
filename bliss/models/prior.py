@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional, Union
+from warnings import warn
 
 import pytorch_lightning as pl
 import torch
@@ -44,7 +45,8 @@ class GalaxyPrior:
             )
             dataloader = galaxy_dataset.train_dataloader()
             autoencoder = autoencoder.cuda()
-            print("INFO: Creating latents from Galsim galaxies...")
+            flux_sample = galaxy_dataset.flux_sample
+            warn(f"Creating latents from Galsim galaxies with {flux_sample} flux distribution...")
             latents = autoencoder.generate_latents(dataloader, n_latent_batches)
             torch.save(latents, latents_file)
         self.latents = latents
