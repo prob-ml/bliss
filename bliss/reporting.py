@@ -467,16 +467,15 @@ def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="viridis"):
         fig.colorbar(im, cax=cax, orientation="vertical")
 
 
-def plot_locs(ax, slen, bpad, locs, color="r", marker="x", s=20, galaxy_probs=None):
+def plot_locs(ax, bpad, locs, color="r", marker="x", s=20, galaxy_probs=None):
     assert len(locs.shape) == 2
     assert locs.shape[1] == 2
-    assert isinstance(slen, int)
     assert isinstance(bpad, int)
     if galaxy_probs is not None:
         assert len(galaxy_probs.shape) == 1
 
-    x = locs[:, 1] * slen - 0.5 + bpad
-    y = locs[:, 0] * slen - 0.5 + bpad
+    x = locs[:, 1] - 0.5 + bpad
+    y = locs[:, 0] - 0.5 + bpad
     for i, (xi, yi) in enumerate(zip(x, y)):
         if xi > bpad and yi > bpad:
             ax.scatter(xi, yi, color=color, marker=marker, s=s)
@@ -540,8 +539,8 @@ def plot_image_and_locs(
     plot_image(fig, ax, image, vrange=(vmin, vmax))
 
     # plot locations
-    plot_locs(ax, slen, bpad, true_galaxy_locs, "r", "x", s=20, galaxy_probs=None)
-    plot_locs(ax, slen, bpad, true_star_locs, "c", "x", s=20, galaxy_probs=None)
+    plot_locs(ax, bpad, true_galaxy_locs, "r", "x", s=20, galaxy_probs=None)
+    plot_locs(ax, bpad, true_star_locs, "c", "x", s=20, galaxy_probs=None)
 
     if estimate is not None:
         if use_galaxy_bools:
@@ -549,10 +548,10 @@ def plot_image_and_locs(
             star_bools = estimate["star_bools"][idx].cpu().numpy()
             galaxy_locs = locs * galaxy_bools
             star_locs = locs * star_bools
-            plot_locs(ax, slen, bpad, galaxy_locs, "b", "+", s=30, galaxy_probs=galaxy_probs)
-            plot_locs(ax, slen, bpad, star_locs, "m", "+", s=30, galaxy_probs=galaxy_probs)
+            plot_locs(ax, bpad, galaxy_locs, "b", "+", s=30, galaxy_probs=galaxy_probs)
+            plot_locs(ax, bpad, star_locs, "m", "+", s=30, galaxy_probs=galaxy_probs)
         else:
-            plot_locs(ax, slen, bpad, locs, "b", "+", s=30, galaxy_probs=None)
+            plot_locs(ax, bpad, locs, "b", "+", s=30, galaxy_probs=None)
 
     if labels is not None:
         colors = ["r", "b", "c", "m"]
