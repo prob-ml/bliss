@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Produce all figures. Save to nice PNG format."""
+"""Produce all figures. Save to PNG format."""
 import warnings
 from abc import abstractmethod
 from pathlib import Path
@@ -23,7 +23,7 @@ from bliss.encoder import Encoder
 from bliss.inference import reconstruct_scene_at_coordinates
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
-pl.seed_everything(0)
+pl.seed_everything(42)
 
 
 CB_color_cycle = [
@@ -156,14 +156,6 @@ def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: 
     coadd_cat["hlr"] = hlr
     coadd_cat.replace_column("is_saturated", coadd_cat["is_saturated"].data.astype(bool))
     coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
-
-
-def recreate_coadd_cat(self):
-    # NOTE: just in caes you need to recreate coadd with all information.
-    sdss_data = self.get_sdss_data()
-    wcs = sdss_data["wcs"]
-    pixel_scale = sdss_data["pixel_scale"]
-    add_extra_coadd_info(self.files["coadd_cat"], self.files["psf_image"], pixel_scale, wcs)
 
 
 class BlissFigures:
